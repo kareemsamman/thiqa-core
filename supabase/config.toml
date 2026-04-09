@@ -1,1 +1,13 @@
-project_id = "oxsxmvxtblcideimcgnr"
+project_id = "ijtybxpguieptamsikjq"
+
+[functions.register-agent]
+verify_jwt = false
+
+[functions.seed-agent-data]
+verify_jwt = false
+
+[functions.send-password-reset]
+verify_jwt = false
+
+[functions.test-platform-smtp]
+verify_jwt = false

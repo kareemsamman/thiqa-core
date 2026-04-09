@@ -1,0 +1,2 @@
+ALTER TABLE public.otp_codes DROP CONSTRAINT otp_codes_channel_check;
+ALTER TABLE public.otp_codes ADD CONSTRAINT otp_codes_channel_check CHECK (channel = ANY (ARRAY['email'::text, 'sms'::text, 'registration'::text]));

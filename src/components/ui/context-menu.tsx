@@ -4,7 +4,13 @@ import { Check, ChevronRight, Circle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-const ContextMenu = ContextMenuPrimitive.Root;
+interface ContextMenuProps extends React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Root> {
+  dir?: "rtl" | "ltr";
+}
+
+const ContextMenu: React.FC<ContextMenuProps> = ({ dir = "rtl", ...props }) => (
+  <ContextMenuPrimitive.Root dir={dir} {...props} />
+);
 
 const ContextMenuTrigger = ContextMenuPrimitive.Trigger;
 

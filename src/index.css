@@ -1,96 +1,78 @@
+@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* RTL: make the Switch thumb move LEFT when checked */
+[dir="rtl"] button[role="switch"] > span[data-state="checked"] {
+  --tw-translate-x: -1.25rem; /* equals translate-x-5 */
+}
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Optional: if you also want the unchecked position mirrored */
+[dir="rtl"] button[role="switch"] > span[data-state="unchecked"] {
+  --tw-translate-x: -0.125rem; /* equals -translate-x-0.5 */
+}
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Light theme - Professional blue-indigo */
+    --background: 220 20% 97%;
+    --foreground: 0 0% 9%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 0 0% 9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 0 0% 9%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 220 16% 94%;
+    --secondary-foreground: 0 0% 9%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 220 14% 93%;
+    --muted-foreground: 220 9% 46%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --success: 142 71% 40%;
+    --success-foreground: 0 0% 100%;
 
-    --radius: 0.5rem;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 9%;
 
-    --sidebar-background: 0 0% 98%;
+    --border: 220 13% 90%;
+    --input: 220 13% 91%;
+    --ring: 0 0% 9%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --radius: 0.75rem;
 
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    /* Sidebar - dark glass nav */
+    --sidebar-background: 220 15% 8%;
+    --sidebar-foreground: 220 15% 88%;
+    --sidebar-primary: 210 100% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 220 15% 14%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 220 10% 16%;
+    --sidebar-ring: 210 100% 60%;
+    --sidebar-active: 210 100% 60%;
+    --sidebar-active-foreground: 0 0% 100%;
+
+    /* Glass tokens */
+    --glass-bg: 0 0% 100% / 0.65;
+    --glass-border: 220 17% 92% / 0.5;
+    --glass-blur: 16px;
+    --glass-shadow: 0 8px 32px hsl(220 30% 15% / 0.08);
+
+    /* Sidebar glass tokens */
+    --sidebar-glass-bg: 220 20% 12% / 0.55;
+    --sidebar-glass-border: 220 15% 25% / 0.35;
   }
 }
 
@@ -99,7 +81,244 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
-  body {
-    @apply bg-background text-foreground;
+  html {
+    direction: rtl;
+    overflow-x: hidden;
   }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Cairo", sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* RTL: Radix ScrollArea viewport must inherit RTL */
+  [dir="rtl"] [data-radix-scroll-area-viewport] {
+    direction: rtl;
+  }
+
+  /* RTL: Tables default to right-aligned */
+  table th,
+  table td {
+    text-align: right;
+  }
+
+  /* RTL: Action columns centered */
+  table th.text-center,
+  table td.text-center {
+    text-align: center;
+  }
+
+  /* RTL: Ensure grids flow correctly */
+  .grid {
+    direction: rtl;
+  }
+
+  /* Glass effect - light */
+  .glass {
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid hsl(var(--glass-border));
+    box-shadow: var(--glass-shadow);
+  }
+
+  /* Glass effect - dark sidebar variant */
+  .glass-dark {
+    background: hsl(var(--sidebar-glass-bg));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid hsl(var(--sidebar-glass-border));
+    box-shadow: 0 8px 32px hsl(220 30% 5% / 0.25),
+                inset 0 1px 0 hsl(220 20% 40% / 0.08);
+  }
+
+  /* Glass card */
+  .glass-card {
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid hsl(var(--glass-border));
+    box-shadow: var(--glass-shadow);
+    transition: box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+
+  .glass-card:hover {
+    box-shadow: 0 12px 40px hsl(220 30% 15% / 0.12);
+    border-color: hsl(220 17% 85% / 0.7);
+  }
+
+  /* Custom scrollbar for light theme */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(220 20% 96%);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(220 13% 75%);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(220 13% 60%);
+  }
+}
+
+@layer utilities {
+  /* LTR numeric content */
+  .ltr-nums {
+    unicode-bidi: isolate;
+    direction: ltr;
+    display: inline-block;
+  }
+
+  /* Input fields that expect LTR content */
+  .ltr-input {
+    unicode-bidi: plaintext;
+    text-align: left;
+  }
+
+  /* Font mono with LTR isolation */
+  .font-mono-ltr {
+    unicode-bidi: isolate;
+    direction: ltr;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-out forwards;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.4s ease-out forwards;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.3s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.97); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .stagger-1 { animation-delay: 0.05s; }
+  .stagger-2 { animation-delay: 0.1s; }
+  .stagger-3 { animation-delay: 0.15s; }
+  .stagger-4 { animation-delay: 0.2s; }
+  .stagger-5 { animation-delay: 0.25s; }
+
+  /* Always-visible horizontal scrollbar */
+  .scrollbar-always-visible::-webkit-scrollbar { height: 10px; }
+  .scrollbar-always-visible::-webkit-scrollbar-track {
+    background: hsl(220 20% 96%);
+    border-radius: 5px;
+  }
+  .scrollbar-always-visible::-webkit-scrollbar-thumb {
+    background: hsl(225 65% 50%);
+    border-radius: 5px;
+  }
+  .scrollbar-always-visible {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(225, 65%, 50%) hsl(220, 20%, 96%);
+  }
+
+  /* Grey scrollbar variant */
+  .scrollbar-always-visible-grey::-webkit-scrollbar {
+    height: 10px;
+    width: 8px;
+  }
+  .scrollbar-always-visible-grey::-webkit-scrollbar-track {
+    background: hsl(220 20% 96%);
+    border-radius: 5px;
+  }
+  .scrollbar-always-visible-grey::-webkit-scrollbar-thumb {
+    background: hsl(220 13% 75%);
+    border-radius: 5px;
+  }
+  .scrollbar-always-visible-grey {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(220, 13%, 75%) hsl(220, 20%, 96%);
+  }
+}
+
+/* Print styles */
+@media print {
+  [data-sidebar],
+  nav,
+  .print\:hidden,
+  button,
+  .sidebar,
+  header[class*="border-b"] {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  main,
+  [role="main"],
+  .print\:p-0 {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .card,
+  [class*="rounded-lg"][class*="border"] {
+    border: 1px solid #e5e5e5 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 10pt !important;
+  }
+
+  th, td {
+    border: 1px solid #ddd !important;
+    padding: 6px 8px !important;
+  }
+
+  th {
+    background-color: #f5f5f5 !important;
+    font-weight: 600 !important;
+  }
+
+  .page-break-before { page-break-before: always; }
+  .page-break-after { page-break-after: always; }
+
+  .text-destructive { color: #dc2626 !important; }
+  .text-success { color: #16a34a !important; }
+
+  svg.print\:hidden,
+  .rounded-xl[class*="bg-"] {
+    display: none !important;
+  }
+
+  @page {
+    margin: 1cm;
+    size: A4;
+  }
+
+  .print\:block { display: block !important; }
 }

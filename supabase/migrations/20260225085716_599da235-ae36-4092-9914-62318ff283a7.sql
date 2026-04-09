@@ -1,0 +1,1 @@
+ALTER TABLE media_files ALTER COLUMN storage_path DROP NOT NULL;

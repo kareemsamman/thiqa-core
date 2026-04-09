@@ -1,0 +1,1 @@
+ALTER TABLE public.agents ADD COLUMN IF NOT EXISTS ai_assistant_prompt TEXT DEFAULT NULL;

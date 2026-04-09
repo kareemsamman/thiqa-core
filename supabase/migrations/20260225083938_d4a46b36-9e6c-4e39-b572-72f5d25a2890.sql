@@ -1,0 +1,1 @@
+ALTER TABLE xservice_settings ADD COLUMN IF NOT EXISTS invoice_base_url TEXT;

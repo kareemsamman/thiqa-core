@@ -1,0 +1,1 @@
+ALTER TABLE public.payment_settings ADD COLUMN sandbox_terminal_name text DEFAULT 'demo5964';

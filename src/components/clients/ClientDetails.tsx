@@ -1,0 +1,2319 @@
+import { useState, useEffect, useMemo } from 'react';
+import { Helmet } from 'react-helmet-async';
+import { MainLayout } from '@/components/layout/MainLayout';
+import { useRecentClient } from '@/hooks/useRecentClient';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  ArrowRight,
+  Edit,
+  User,
+  Phone,
+  Car,
+  FileText,
+  Plus,
+  Calendar,
+  Hash,
+  Banknote,
+  Users,
+  Save,
+  X,
+  Search,
+  Eye,
+  Wallet,
+  TrendingUp,
+  AlertCircle,
+  CheckCircle,
+  CreditCard,
+  Building2,
+  Trash2,
+  MoreHorizontal,
+  FileImage,
+  DollarSign,
+  MessageSquare,
+  Loader2,
+  Receipt,
+  Send,
+  AlertTriangle,
+} from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { CarDrawer } from '@/components/cars/CarDrawer';
+import { PolicyDetailsDrawer } from '@/components/policies/PolicyDetailsDrawer';
+import { TransferPolicyModal } from '@/components/policies/TransferPolicyModal';
+import { PolicyWizard } from '@/components/policies/PolicyWizard';
+import { ClientDrawer } from '@/components/clients/ClientDrawer';
+import { ClientSignatureSection } from '@/components/clients/ClientSignatureSection';
+import { PolicyYearTimeline } from '@/components/clients/PolicyYearTimeline';
+import { ClientReportModal } from '@/components/clients/ClientReportModal';
+import { CarFilterChips } from '@/components/clients/CarFilterChips';
+import { ExpiryBadge } from '@/components/shared/ExpiryBadge';
+import { ClickablePhone } from '@/components/shared/ClickablePhone';
+import { DebtIndicator } from '@/components/shared/DebtIndicator';
+import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
+import { DebtPaymentModal } from '@/components/debt/DebtPaymentModal';
+import { ClientNotesSection } from '@/components/clients/ClientNotesSection';
+import { PaymentEditDialog } from '@/components/clients/PaymentEditDialog';
+import { RefundsTab } from '@/components/clients/RefundsTab';
+import { AccidentReportWizard } from '@/components/accident-reports/AccidentReportWizard';
+import { ClientAccidentsTab } from '@/components/clients/ClientAccidentsTab';
+import { useClientAccidentInfo } from '@/hooks/useClientAccidentInfo';
+import { cn } from '@/lib/utils';
+import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
+import { ChequeImageGallery } from '@/components/shared/ChequeImageGallery';
+import { useBranches } from '@/hooks/useBranches';
+import { useAuth } from '@/hooks/useAuth';
+import type { RenewalData } from '@/components/policies/wizard/types';
+
+interface Client {
+  id: string;
+  full_name: string;
+  id_number: string;
+  file_number: string | null;
+  phone_number: string | null;
+  phone_number_2: string | null;
+  birth_date: string | null;
+  date_joined: string | null;
+  less_than_24: boolean | null;
+  under24_type: 'none' | 'client' | 'additional_driver' | null;
+  under24_driver_name: string | null;
+  under24_driver_id: string | null;
+  notes: string | null;
+  accident_notes: string | null;
+  image_url: string | null;
+  signature_url: string | null;
+  created_at: string;
+  broker_id: string | null;
+  branch_id: string | null;
+}
+
+interface Broker {
+  id: string;
+  name: string;
+  phone: string | null;
+}
+
+interface CarRecord {
+  id: string;
+  car_number: string;
+  client_id: string;
+  manufacturer_name: string | null;
+  model: string | null;
+  model_number: string | null;
+  year: number | null;
+  color: string | null;
+  car_type: string | null;
+  car_value: number | null;
+  license_type: string | null;
+  license_expiry: string | null;
+  last_license: string | null;
+}
+
+interface PolicyRecord {
+  id: string;
+  policy_number: string | null;
+  policy_type_parent: string;
+  policy_type_child: string | null;
+  start_date: string;
+  end_date: string;
+  insurance_price: number;
+  office_commission: number | null;
+  profit: number | null;
+  cancelled: boolean | null;
+  transferred: boolean | null;
+  transferred_car_number: string | null;
+  transferred_to_car_number: string | null;
+  transferred_from_policy_id: string | null;
+  group_id: string | null;
+  notes: string | null;
+  company: { name: string; name_ar: string | null } | null;
+  car: { id: string; car_number: string } | null;
+  creator: { full_name: string | null; email: string } | null;
+}
+
+interface PaymentSummary {
+  total_paid: number;
+  total_remaining: number;
+  total_profit: number;
+}
+
+interface WalletBalance {
+  total_refunds: number;
+  transaction_count: number;
+}
+
+interface PaymentRecord {
+  id: string;
+  amount: number;
+  payment_date: string;
+  payment_type: string;
+  cheque_number: string | null;
+  cheque_image_url: string | null;
+  card_last_four: string | null;
+  refused: boolean | null;
+  notes: string | null;
+  locked: boolean | null;
+  policy_id: string;
+  batch_id: string | null;
+  policy: {
+    id: string;
+    policy_type_parent: string;
+    insurance_price: number;
+  } | null;
+}
+
+// Grouped payment for display (combines payments with same batch_id)
+interface GroupedPayment {
+  id: string; // batch_id or individual payment id
+  totalAmount: number;
+  payment_date: string;
+  payment_type: string;
+  cheque_number: string | null;
+  cheque_image_url: string | null;
+  card_last_four: string | null;
+  refused: boolean | null;
+  notes: string | null;
+  locked: boolean | null;
+  payments: PaymentRecord[]; // Individual payments in this group
+  policyTypes: string[]; // Unique policy types in this group
+}
+
+interface ClientDetailsProps {
+  client: Client;
+  onBack: () => void;
+  onRefresh: () => void;
+  initialCarFilter?: string | null;
+  /** Path to return to (e.g., '/reports/policies') */
+  returnPath?: string | null;
+  /** Tab to restore when returning */
+  returnTab?: string | null;
+}
+
+const policyTypeLabels: Record<string, string> = {
+  ELZAMI: 'إلزامي',
+  THIRD_FULL: 'ثالث/شامل',
+  ROAD_SERVICE: 'خدمات الطريق',
+  ACCIDENT_FEE_EXEMPTION: 'إعفاء رسوم حادث',
+  HEALTH: 'تأمين صحي',
+  LIFE: 'تأمين حياة',
+  PROPERTY: 'تأمين ممتلكات',
+  TRAVEL: 'تأمين سفر',
+  BUSINESS: 'تأمين أعمال',
+  OTHER: 'أخرى',
+};
+
+const policyTypeColors: Record<string, string> = {
+  ELZAMI: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+  THIRD_FULL: 'bg-purple-500/10 text-purple-600 border-purple-500/20',
+  ROAD_SERVICE: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
+  ACCIDENT_FEE_EXEMPTION: 'bg-green-500/10 text-green-600 border-green-500/20',
+  HEALTH: 'bg-pink-500/10 text-pink-600 border-pink-500/20',
+  LIFE: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
+  PROPERTY: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+  TRAVEL: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20',
+  BUSINESS: 'bg-slate-500/10 text-slate-600 border-slate-500/20',
+  OTHER: 'bg-gray-500/10 text-gray-600 border-gray-500/20',
+};
+
+const carTypeLabels: Record<string, string> = {
+  car: 'خصوصي',
+  cargo: 'شحن',
+  small: 'اوتوبس زعير',
+  taxi: 'تاكسي',
+  tjeradown4: 'تجاري (أقل من 4 طن)',
+  tjeraup4: 'تجاري (أكثر من 4 طن)',
+};
+
+export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, returnPath, returnTab }: ClientDetailsProps) {
+  const { getBranchName } = useBranches();
+  const { isAdmin, isSuperAdmin, profile, user } = useAuth();
+  const { setRecentClient } = useRecentClient();
+  const { count: accidentCount, hasActiveReports } = useClientAccidentInfo(client.id);
+  const [cars, setCars] = useState<CarRecord[]>([]);
+  const [policies, setPolicies] = useState<PolicyRecord[]>([]);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [broker, setBroker] = useState<Broker | null>(null);
+  const [paymentSummary, setPaymentSummary] = useState<PaymentSummary>({ total_paid: 0, total_remaining: 0, total_profit: 0 });
+  const [walletBalance, setWalletBalance] = useState<WalletBalance>({ total_refunds: 0, transaction_count: 0 });
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingCars, setLoadingCars] = useState(true);
+  const [loadingPolicies, setLoadingPolicies] = useState(true);
+  const [loadingPayments, setLoadingPayments] = useState(true);
+  const [carDrawerOpen, setCarDrawerOpen] = useState(false);
+  const [policyDetailsOpen, setPolicyDetailsOpen] = useState(false);
+  const [selectedPolicyId, setSelectedPolicyId] = useState<string | null>(null);
+  const [policyWizardOpen, setPolicyWizardOpen] = useState(false);
+  const [clientDrawerOpen, setClientDrawerOpen] = useState(false);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [debtPaymentModalOpen, setDebtPaymentModalOpen] = useState(false);
+  
+  // Delete policy state (Super Admin only)
+  const [deletePolicyIds, setDeletePolicyIds] = useState<string[]>([]);
+  const [deletePolicyDialogOpen, setDeletePolicyDialogOpen] = useState(false);
+  const [deletingPolicy, setDeletingPolicy] = useState(false);
+  
+  // Car edit/delete state
+  const [editingCar, setEditingCar] = useState<CarRecord | null>(null);
+  const [deleteCarId, setDeleteCarId] = useState<string | null>(null);
+  const [deleteCarDialogOpen, setDeleteCarDialogOpen] = useState(false);
+  const [deletingCar, setDeletingCar] = useState(false);
+  const [carPolicyCounts, setCarPolicyCounts] = useState<Record<string, number>>({});
+  
+  // Policy metadata - fetched once, used for instant filtering
+  const [policyPaymentInfo, setPolicyPaymentInfo] = useState<Record<string, { paid: number; remaining: number }>>({});
+  const [policyAccidentCounts, setPolicyAccidentCounts] = useState<Record<string, number>>({});
+  const [policyChildrenCounts, setPolicyChildrenCounts] = useState<Record<string, number>>({});
+  
+  // Payment delete state
+  const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null);
+  const [deletePaymentDialogOpen, setDeletePaymentDialogOpen] = useState(false);
+  const [deletingPayment, setDeletingPayment] = useState(false);
+  
+  // Payment edit state
+  const [editPaymentDialogOpen, setEditPaymentDialogOpen] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<PaymentRecord | null>(null);
+  
+  // Notes editing
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState(client.notes || '');
+  const [savingNotes, setSavingNotes] = useState(false);
+  
+  // Policy filters
+  const [policySearch, setPolicySearch] = useState('');
+  const [policyTypeFilter, setPolicyTypeFilter] = useState<string>('all');
+  const [policyStatusFilter, setPolicyStatusFilter] = useState<string>('all');
+  const [policyCarFilter, setPolicyCarFilter] = useState<string>(initialCarFilter || 'all');
+
+  // Sync car filter when initialCarFilter prop changes (e.g. navigating between clients)
+  useEffect(() => {
+    setPolicyCarFilter(initialCarFilter || 'all');
+  }, [initialCarFilter]);
+
+  // Payment filters
+  const [paymentSearch, setPaymentSearch] = useState('');
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState<string>('all');
+  
+  // Comprehensive invoice state
+  const [generatingComprehensiveInvoice, setGeneratingComprehensiveInvoice] = useState(false);
+  const [sendingComprehensiveInvoiceSms, setSendingComprehensiveInvoiceSms] = useState(false);
+  
+  // Individual payment receipt state
+  const [generatingReceipt, setGeneratingReceipt] = useState<string | null>(null);
+  
+  // Accident report wizard state
+  const [accidentWizardOpen, setAccidentWizardOpen] = useState(false);
+
+  // Renewal state
+  const [renewalData, setRenewalData] = useState<RenewalData | null>(null);
+
+  const fetchBroker = async () => {
+    if (!client.broker_id) {
+      setBroker(null);
+      return;
+    }
+    try {
+      const { data } = await supabase
+        .from('brokers')
+        .select('id, name, phone')
+        .eq('id', client.broker_id)
+        .single();
+      if (data) setBroker(data);
+      else setBroker(null);
+    } catch (error) {
+      console.error('Error fetching broker:', error);
+      setBroker(null);
+    }
+  };
+
+  const fetchCars = async () => {
+    setLoadingCars(true);
+    try {
+      const { data, error } = await supabase
+        .from('cars')
+        .select('id, car_number, client_id, manufacturer_name, model, model_number, year, color, car_type, car_value, license_type, license_expiry, last_license')
+        .eq('client_id', client.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setCars(data || []);
+    } catch (error) {
+      console.error('Error fetching cars:', error);
+    } finally {
+      setLoadingCars(false);
+    }
+  };
+
+  // Fetch policy metadata (payments, accidents, children) - called once after policies load
+  const fetchPolicyMetadata = async (policyIds: string[], policiesData: PolicyRecord[]) => {
+    if (policyIds.length === 0) {
+      setPolicyPaymentInfo({});
+      setPolicyAccidentCounts({});
+      setPolicyChildrenCounts({});
+      return;
+    }
+
+    try {
+      // Fetch all three in parallel
+      const [paymentsRes, accidentsRes, childrenRes] = await Promise.all([
+        supabase
+          .from('policy_payments')
+          .select('policy_id, amount, refused')
+          .in('policy_id', policyIds),
+        supabase
+          .from('accident_reports')
+          .select('policy_id')
+          .in('policy_id', policyIds),
+        supabase
+          .from('policy_children')
+          .select('policy_id')
+          .in('policy_id', policyIds),
+      ]);
+
+      // Process payment info
+      const paymentInfo: Record<string, { paid: number; remaining: number }> = {};
+      policiesData.forEach(p => {
+        const policyPayments = (paymentsRes.data || [])
+          .filter(pay => pay.policy_id === p.id && !pay.refused);
+        const paid = policyPayments.reduce((sum, pay) => sum + pay.amount, 0);
+        paymentInfo[p.id] = {
+          paid,
+          remaining: (p.insurance_price + ((p as any).office_commission || 0)) - paid,
+        };
+      });
+      setPolicyPaymentInfo(paymentInfo);
+
+      // Process accident counts
+      const accCounts: Record<string, number> = {};
+      (accidentsRes.data || []).forEach(row => {
+        accCounts[row.policy_id] = (accCounts[row.policy_id] || 0) + 1;
+      });
+      setPolicyAccidentCounts(accCounts);
+
+      // Process children counts
+      const childCounts: Record<string, number> = {};
+      (childrenRes.data || []).forEach(row => {
+        childCounts[row.policy_id] = (childCounts[row.policy_id] || 0) + 1;
+      });
+      setPolicyChildrenCounts(childCounts);
+    } catch (error) {
+      console.error('Error fetching policy metadata:', error);
+    }
+  };
+
+  const fetchPolicies = async () => {
+    setLoadingPolicies(true);
+    try {
+      const { data, error } = await supabase
+        .from('policies')
+        .select(`
+          id, policy_number, policy_type_parent, policy_type_child, start_date, end_date, 
+          insurance_price, office_commission, profit, cancelled, transferred, group_id,
+          transferred_car_number, transferred_to_car_number, transferred_from_policy_id,
+          created_at, branch_id, notes,
+          company:insurance_companies(name, name_ar),
+          car:cars(id, car_number),
+          creator:profiles!policies_created_by_admin_id_fkey(full_name, email)
+        `)
+        .eq('client_id', client.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPolicies(data || []);
+      
+      // Fetch metadata once for all policies
+      if (data && data.length > 0) {
+        fetchPolicyMetadata(data.map(p => p.id), data);
+      } else {
+        setPolicyPaymentInfo({});
+        setPolicyAccidentCounts({});
+        setPolicyChildrenCounts({});
+      }
+    } catch (error) {
+      console.error('Error fetching policies:', error);
+    } finally {
+      setLoadingPolicies(false);
+    }
+  };
+
+  const fetchPaymentSummary = async () => {
+    try {
+      // Get ALL active policies for this client (including ELZAMI for complete view)
+      const { data: policiesData } = await supabase
+        .from('policies')
+        .select('id, insurance_price, office_commission, profit, policy_type_parent, cancelled, transferred')
+        .eq('client_id', client.id)
+        .eq('cancelled', false)
+        .eq('transferred', false)
+        .is('deleted_at', null);
+
+      if (!policiesData || policiesData.length === 0) {
+        setPaymentSummary({ total_paid: 0, total_remaining: 0, total_profit: 0 });
+        return;
+      }
+
+      // Total insurance = ALL policies INCLUDING ELZAMI (for customer view)
+      const totalInsurance = policiesData.reduce((sum, p) => sum + (p.insurance_price || 0) + (p.office_commission || 0), 0);
+      
+      // Total profit from all policies (ELZAMI profit = 0 by design)
+      const totalProfit = policiesData.reduce((sum, p) => sum + (p.profit || 0), 0);
+
+      // Get ALL payments for ALL policies (including ELZAMI)
+      const allPolicyIds = policiesData.map(p => p.id);
+      let totalPaid = 0;
+      
+      if (allPolicyIds.length > 0) {
+        const { data: paymentsData } = await supabase
+          .from('policy_payments')
+          .select('amount, refused')
+          .in('policy_id', allPolicyIds);
+
+        totalPaid = (paymentsData || [])
+          .filter(p => !p.refused)
+          .reduce((sum, p) => sum + (p.amount || 0), 0);
+      }
+
+      // Remaining = Total Insurance - Total Paid (simple and clear)
+      setPaymentSummary({
+        total_paid: totalPaid,
+        total_remaining: Math.max(0, totalInsurance - totalPaid),
+        total_profit: totalProfit,
+      });
+    } catch (error) {
+      console.error('Error fetching payment summary:', error);
+    }
+  };
+
+  const fetchWalletBalance = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('customer_wallet_transactions')
+        .select('amount, transaction_type')
+        .eq('client_id', client.id);
+
+      if (error) throw error;
+
+      // "refund" and "transfer_refund_owed" = We owe customer
+      // "transfer_adjustment_due" = Customer owes us
+      // "refund", "transfer_refund_owed", "manual_refund" = We owe customer
+      const weOweCustomer = (data || [])
+        .filter(t => 
+          t.transaction_type === 'refund' || 
+          t.transaction_type === 'transfer_refund_owed' ||
+          t.transaction_type === 'manual_refund'
+        )
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+      const customerOwesUs = (data || [])
+        .filter(t => t.transaction_type === 'transfer_adjustment_due')
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+      setWalletBalance({
+        total_refunds: weOweCustomer - customerOwesUs, // Net amount we owe
+        transaction_count: data?.length || 0,
+      });
+    } catch (error) {
+      console.error('Error fetching wallet balance:', error);
+    }
+  };
+
+  const fetchPayments = async () => {
+    setLoadingPayments(true);
+    try {
+      // Get all policies for this client first
+      const { data: policiesData } = await supabase
+        .from('policies')
+        .select('id, policy_type_parent, insurance_price')
+        .eq('client_id', client.id)
+        .is('deleted_at', null);
+
+      if (!policiesData || policiesData.length === 0) {
+        setPayments([]);
+        return;
+      }
+
+      const policyIds = policiesData.map(p => p.id);
+
+      // Get all payments for these policies (include batch_id for grouping)
+      const { data: paymentsData, error } = await supabase
+        .from('policy_payments')
+        .select('id, amount, payment_date, payment_type, cheque_number, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id')
+        .in('policy_id', policyIds)
+        .order('payment_date', { ascending: false });
+
+      if (error) throw error;
+
+      // Map payments with policy info
+      const paymentsWithPolicy = (paymentsData || []).map(payment => ({
+        ...payment,
+        policy: policiesData.find(p => p.id === payment.policy_id) || null,
+      }));
+
+      setPayments(paymentsWithPolicy);
+    } catch (error) {
+      console.error('Error fetching payments:', error);
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
+  // Set this client as the recent client for quick navigation
+  useEffect(() => {
+    setRecentClient({
+      id: client.id,
+      name: client.full_name,
+      initial: client.full_name.charAt(0),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client.id]);
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      setInitialLoading(true);
+      await Promise.all([
+        fetchCars(),
+        fetchPolicies(),
+        fetchBroker(),
+        fetchPaymentSummary(),
+        fetchPayments(),
+        fetchWalletBalance(),
+        fetchCarPolicyCounts(),
+      ]);
+      setNotesValue(client.notes || '');
+      setInitialLoading(false);
+    };
+    loadInitialData();
+  }, [client.id]);
+
+  // Watch for broker_id changes and refetch broker
+  useEffect(() => {
+    fetchBroker();
+  }, [client.broker_id]);
+
+
+  // Export functionality
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleDateString('en-GB');
+  };
+
+  const handleCarSaved = () => {
+    setCarDrawerOpen(false);
+    setEditingCar(null);
+    fetchCars();
+    fetchCarPolicyCounts();
+    onRefresh();
+  };
+
+  // Fetch policy count per car
+  const fetchCarPolicyCounts = async () => {
+    try {
+      const { data } = await supabase
+        .from('policies')
+        .select('car_id')
+        .eq('client_id', client.id)
+        .is('deleted_at', null)
+        .eq('cancelled', false);
+      
+      const counts: Record<string, number> = {};
+      (data || []).forEach(p => {
+        if (p.car_id) {
+          counts[p.car_id] = (counts[p.car_id] || 0) + 1;
+        }
+      });
+      setCarPolicyCounts(counts);
+    } catch (error) {
+      console.error('Error fetching car policy counts:', error);
+    }
+  };
+
+  // Delete car handler
+  const handleDeleteCar = async () => {
+    if (!deleteCarId) return;
+    
+    // Check if car has policies
+    if (carPolicyCounts[deleteCarId] > 0) {
+      toast.error('لا يمكن حذف السيارة لوجود وثائق مرتبطة بها');
+      setDeleteCarDialogOpen(false);
+      setDeleteCarId(null);
+      return;
+    }
+    
+    setDeletingCar(true);
+    try {
+      const { error } = await supabase
+        .from('cars')
+        .delete()
+        .eq('id', deleteCarId);
+      
+      if (error) throw error;
+      toast.success('تم حذف السيارة بنجاح');
+      fetchCars();
+      fetchCarPolicyCounts();
+    } catch (error) {
+      console.error('Error deleting car:', error);
+      toast.error('فشل حذف السيارة');
+    } finally {
+      setDeletingCar(false);
+      setDeleteCarDialogOpen(false);
+      setDeleteCarId(null);
+    }
+  };
+
+  // Delete payment handler
+  const handleDeletePayment = async () => {
+    if (!deletePaymentId) return;
+    
+    setDeletingPayment(true);
+    try {
+      const { error } = await supabase
+        .from('policy_payments')
+        .delete()
+        .eq('id', deletePaymentId);
+      
+      if (error) throw error;
+      toast.success('تم حذف الدفعة بنجاح');
+      fetchPayments();
+      fetchPaymentSummary();
+    } catch (error) {
+      console.error('Error deleting payment:', error);
+      toast.error('فشل حذف الدفعة');
+    } finally {
+      setDeletingPayment(false);
+      setDeletePaymentDialogOpen(false);
+      setDeletePaymentId(null);
+    }
+  };
+
+  // Open payment edit dialog directly
+  const handleEditPayment = (payment: PaymentRecord) => {
+    setEditingPayment(payment);
+    setEditPaymentDialogOpen(true);
+  };
+
+  const handleSaveNotes = async () => {
+    setSavingNotes(true);
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .update({ notes: notesValue || null, updated_at: new Date().toISOString() })
+        .eq('id', client.id);
+
+      if (error) throw error;
+      toast.success('تم حفظ الملاحظات');
+      setEditingNotes(false);
+      onRefresh();
+    } catch (error) {
+      console.error('Error saving notes:', error);
+      toast.error('فشل في حفظ الملاحظات');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const handlePolicyClick = (policyId: string) => {
+    setSelectedPolicyId(policyId);
+    setPolicyDetailsOpen(true);
+  };
+
+  // Super Admin: Handle policy deletion
+  const handleDeletePolicy = async () => {
+    if (!isAdmin || deletePolicyIds.length === 0) return;
+
+    setDeletingPolicy(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (!token) {
+        toast.error('يرجى تسجيل الدخول مرة أخرى');
+        return;
+      }
+
+      // Capture policy details before deletion for activity log
+      const { data: policyDetails } = await supabase
+        .from('policies')
+        .select('id, policy_number, policy_type_parent, insurance_price, client_id, agent_id, branch_id, insurance_companies(name_ar)')
+        .in('id', deletePolicyIds);
+
+      const response = await supabase.functions.invoke('delete-policy', {
+        body: { policyIds: deletePolicyIds },
+      });
+
+      if (response.error) {
+        let msg = response.error.message || 'فشل في حذف الوثيقة';
+        try {
+          const ctx: any = (response.error as any).context;
+          if (ctx?.body) {
+            const parsed = JSON.parse(ctx.body);
+            msg = parsed?.details || parsed?.error || msg;
+          }
+        } catch {
+          // ignore
+        }
+        throw new Error(msg);
+      }
+
+      const result = response.data;
+
+      if (result.success) {
+        // Log delete activity as notifications for audit trail
+        if (policyDetails && policyDetails.length > 0) {
+          const userName = profile?.full_name || profile?.email || 'مستخدم';
+          for (const pol of policyDetails) {
+            const companyName = (pol.insurance_companies as any)?.name_ar || '';
+            await supabase.from('notifications').insert({
+              user_id: user?.id,
+              agent_id: pol.agent_id,
+              type: 'policy_deleted',
+              title: 'حذف وثيقة',
+              message: `تم حذف وثيقة ${pol.policy_number || pol.id.slice(0, 8)} (${companyName}) بواسطة ${userName}`,
+              entity_type: 'policy',
+              entity_id: pol.id,
+              metadata: {
+                policy_number: pol.policy_number,
+                policy_type: pol.policy_type_parent,
+                insurance_price: pol.insurance_price,
+                company_name: companyName,
+                deleted_by: userName,
+                client_name: client?.full_name,
+              },
+            }).then(() => {});
+          }
+        }
+
+        toast.success(`تم حذف ${result.deletedCount} وثيقة نهائياً`);
+        setDeletePolicyDialogOpen(false);
+        setDeletePolicyIds([]);
+        // Refresh all data
+        fetchPolicies();
+        fetchPayments();
+        fetchPaymentSummary();
+        fetchWalletBalance();
+      } else {
+        throw new Error(result.error || 'فشل في حذف الوثيقة');
+      }
+    } catch (error: any) {
+      console.error('Delete policy error:', error);
+      toast.error(error.message || 'فشل في حذف الوثيقة');
+    } finally {
+      setDeletingPolicy(false);
+    }
+  };
+
+  // Handle policy renewal - single policy
+  const handleRenewPolicy = async (policyId: string) => {
+    try {
+      // Fetch policy details with children
+      const { data: policy, error } = await supabase
+        .from('policies')
+        .select(`
+          *,
+          policy_children(child_id)
+        `)
+        .eq('id', policyId)
+        .single();
+      
+      if (error || !policy) {
+        toast.error('فشل في جلب بيانات الوثيقة');
+        return;
+      }
+      
+      // Determine category slug
+      let categorySlug = policy.policy_type_parent;
+      if (policy.policy_type_parent === 'ELZAMI' || policy.policy_type_parent === 'THIRD_FULL') {
+        categorySlug = 'THIRD_FULL';
+      }
+      
+      setRenewalData({
+        clientId: policy.client_id,
+        carId: policy.car_id,
+        categorySlug,
+        policyTypeParent: policy.policy_type_parent,
+        policyTypeChild: policy.policy_type_child,
+        companyId: policy.company_id,
+        insurancePrice: policy.insurance_price,
+        brokerBuyPrice: policy.broker_buy_price,
+        notes: policy.notes,
+        childrenIds: policy.policy_children?.map((pc: any) => pc.child_id) || [],
+        originalEndDate: policy.end_date,
+      });
+      
+      setPolicyWizardOpen(true);
+    } catch (error) {
+      console.error('Error fetching policy for renewal:', error);
+      toast.error('فشل في جلب بيانات الوثيقة');
+    }
+  };
+
+  // Handle package renewal - multiple policies
+  const handleRenewPackage = async (policyIds: string[]) => {
+    try {
+      // Fetch all policies in the package
+      const { data: policiesData, error } = await supabase
+        .from('policies')
+        .select('*, policy_children(child_id)')
+        .in('id', policyIds);
+      
+      if (error || !policiesData?.length) {
+        toast.error('فشل في جلب بيانات الباقة');
+        return;
+      }
+      
+      // Find main policy (THIRD_FULL first, then ELZAMI, then others)
+      const mainPolicy = policiesData.find(p => p.policy_type_parent === 'THIRD_FULL') 
+        || policiesData.find(p => p.policy_type_parent === 'ELZAMI')
+        || policiesData[0];
+      
+      // Build addons from other policies
+      const addons = policiesData
+        .filter(p => p.id !== mainPolicy.id)
+        .map(p => ({
+          type: p.policy_type_parent.toLowerCase() as 'elzami' | 'third_full' | 'road_service' | 'accident_fee_exemption',
+          companyId: p.company_id,
+          insurancePrice: p.insurance_price,
+          roadServiceId: p.road_service_id,
+          accidentFeeServiceId: p.accident_fee_service_id,
+          policyTypeChild: p.policy_type_child,
+          brokerBuyPrice: p.broker_buy_price,
+        }));
+      
+      // Collect all children IDs (deduplicated)
+      const allChildrenIds = [...new Set(
+        policiesData.flatMap(p => p.policy_children?.map((pc: any) => pc.child_id) || [])
+      )];
+      
+      setRenewalData({
+        clientId: mainPolicy.client_id,
+        carId: mainPolicy.car_id,
+        categorySlug: 'THIRD_FULL',
+        policyTypeParent: mainPolicy.policy_type_parent,
+        policyTypeChild: mainPolicy.policy_type_child,
+        companyId: mainPolicy.company_id,
+        insurancePrice: mainPolicy.insurance_price,
+        brokerBuyPrice: mainPolicy.broker_buy_price,
+        notes: mainPolicy.notes,
+        packageAddons: addons,
+        childrenIds: allChildrenIds,
+        originalEndDate: mainPolicy.end_date,
+      });
+      
+      setPolicyWizardOpen(true);
+    } catch (error) {
+      console.error('Error fetching package for renewal:', error);
+      toast.error('فشل في جلب بيانات الباقة');
+    }
+  };
+
+  // Generate comprehensive invoice for all payments
+  const handleGenerateAllPaymentsInvoice = async () => {
+    setGeneratingComprehensiveInvoice(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-client-payments-invoice', {
+        body: { client_id: client.id }
+      });
+
+      if (error) throw error;
+
+      if (data?.invoice_url) {
+        window.open(data.invoice_url, '_blank');
+      } else {
+        toast.error("لم يتم العثور على رابط الفاتورة");
+      }
+    } catch (error) {
+      console.error('Generate invoice error:', error);
+      toast.error("فشل في توليد الفاتورة الشاملة");
+    } finally {
+      setGeneratingComprehensiveInvoice(false);
+    }
+  };
+
+  // Send comprehensive invoice via SMS
+  const handleSendComprehensiveInvoiceSms = async () => {
+    if (!client.phone_number) {
+      toast.error("رقم هاتف العميل مطلوب لإرسال SMS");
+      return;
+    }
+    
+    setSendingComprehensiveInvoiceSms(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-client-payments-invoice', {
+        body: { client_id: client.id, send_sms: true }
+      });
+
+      if (error) throw error;
+
+      toast.success("تم إرسال الفاتورة الشاملة للعميل عبر SMS");
+    } catch (error) {
+      console.error('Send invoice SMS error:', error);
+      toast.error("فشل في إرسال الفاتورة عبر SMS");
+    } finally {
+      setSendingComprehensiveInvoiceSms(false);
+    }
+  };
+
+  const handleGeneratePaymentReceipt = async (paymentId: string) => {
+    setGeneratingReceipt(paymentId);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-payment-receipt', {
+        body: { payment_id: paymentId }
+      });
+
+      if (error) throw error;
+
+      if (data?.receipt_url) {
+        window.open(data.receipt_url, '_blank');
+      } else {
+        toast.error("لم يتم العثور على رابط الإيصال");
+      }
+    } catch (error) {
+      console.error('Generate receipt error:', error);
+      toast.error("فشل في توليد الإيصال");
+    } finally {
+      setGeneratingReceipt(null);
+    }
+  };
+
+  const getPolicyStatus = (policy: PolicyRecord) => {
+    if (policy.cancelled) return { label: 'ملغاة', variant: 'destructive' as const, color: 'text-destructive' };
+    if (policy.transferred) return { label: 'محولة', variant: 'warning' as const, color: 'text-amber-600' };
+    const endDate = new Date(policy.end_date);
+    const today = new Date();
+    if (endDate < today) return { label: 'منتهية', variant: 'secondary' as const, color: 'text-muted-foreground' };
+    return { label: 'سارية', variant: 'success' as const, color: 'text-success' };
+  };
+
+  // Filtered policies
+  const filteredPolicies = useMemo(() => {
+    return policies.filter(policy => {
+      // Search filter
+      if (policySearch) {
+        const search = policySearch.toLowerCase();
+        const matchesSearch = 
+          (policy.policy_number?.toLowerCase().includes(search)) ||
+          (policy.company?.name?.toLowerCase().includes(search)) ||
+          (policy.company?.name_ar?.toLowerCase().includes(search)) ||
+          (policy.car?.car_number?.toLowerCase().includes(search)) ||
+          (getInsuranceTypeLabel(policy.policy_type_parent as any, policy.policy_type_child as any)?.toLowerCase().includes(search));
+        if (!matchesSearch) return false;
+      }
+      
+      // Type filter
+      if (policyTypeFilter !== 'all' && policy.policy_type_parent !== policyTypeFilter) {
+        return false;
+      }
+      
+      // Car filter
+      if (policyCarFilter !== 'all' && policy.car?.id !== policyCarFilter) {
+        return false;
+      }
+      
+      // Status filter
+      if (policyStatusFilter !== 'all') {
+        const status = getPolicyStatus(policy);
+        if (policyStatusFilter === 'active' && status.label !== 'سارية') return false;
+        if (policyStatusFilter === 'expired' && status.label !== 'منتهية') return false;
+        if (policyStatusFilter === 'cancelled' && status.label !== 'ملغاة') return false;
+        if (policyStatusFilter === 'transferred' && status.label !== 'محولة') return false;
+      }
+      
+      return true;
+    });
+  }, [policies, policySearch, policyTypeFilter, policyStatusFilter, policyCarFilter]);
+
+  // Get unique policy types for filter
+  const uniquePolicyTypes = useMemo(() => {
+    const types = new Set(policies.map(p => p.policy_type_parent));
+    return Array.from(types);
+  }, [policies]);
+
+  // Group payments by batch_id for unified display
+  const groupedPayments = useMemo((): GroupedPayment[] => {
+    const groups = new Map<string, GroupedPayment>();
+    
+    // Filter payments first based on search and type filter
+    const filteredPayments = payments.filter(payment => {
+      if (paymentSearch) {
+        const search = paymentSearch.toLowerCase();
+        if (!payment.cheque_number?.toLowerCase().includes(search) && 
+            !payment.notes?.toLowerCase().includes(search)) {
+          return false;
+        }
+      }
+      if (paymentTypeFilter !== 'all' && payment.payment_type !== paymentTypeFilter) {
+        return false;
+      }
+      return true;
+    });
+
+    for (const payment of filteredPayments) {
+      // Use batch_id if exists, otherwise use individual payment id
+      const groupKey = payment.batch_id || payment.id;
+      
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          id: groupKey,
+          totalAmount: 0,
+          payment_date: payment.payment_date,
+          payment_type: payment.payment_type,
+          cheque_number: payment.cheque_number,
+          cheque_image_url: payment.cheque_image_url,
+          card_last_four: payment.card_last_four,
+          refused: payment.refused,
+          notes: payment.notes,
+          locked: payment.locked,
+          payments: [],
+          policyTypes: [],
+        });
+      }
+      
+      const group = groups.get(groupKey)!;
+      group.payments.push(payment);
+      group.totalAmount += payment.amount;
+      
+      // Collect unique policy types
+      if (payment.policy?.policy_type_parent && !group.policyTypes.includes(payment.policy.policy_type_parent)) {
+        group.policyTypes.push(payment.policy.policy_type_parent);
+      }
+      
+      // Use earliest date if batched
+      if (payment.payment_date < group.payment_date) {
+        group.payment_date = payment.payment_date;
+      }
+      
+      // If any payment in batch is refused, mark whole batch
+      if (payment.refused) {
+        group.refused = true;
+      }
+      
+      // If any payment is locked, mark whole batch
+      if (payment.locked) {
+        group.locked = true;
+      }
+    }
+    
+    // Sort by date descending
+    return Array.from(groups.values()).sort((a, b) => 
+      new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()
+    );
+  }, [payments, paymentSearch, paymentTypeFilter]);
+
+  // Loading skeleton
+  if (initialLoading) {
+    return (
+      <MainLayout>
+        <Helmet>
+          <title>{client.full_name} | ثقة للتأمين</title>
+        </Helmet>
+        <div className="max-w-6xl mx-auto space-y-6">
+          {/* Header Skeleton */}
+          <Card className="overflow-hidden">
+            <div className="bg-gradient-to-l from-primary/10 via-primary/5 to-transparent p-6">
+              <div className="flex items-start gap-4">
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <Skeleton className="h-20 w-20 rounded-2xl" />
+                <div className="flex-1 space-y-3">
+                  <Skeleton className="h-8 w-48" />
+                  <div className="flex gap-4">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                  <div className="flex gap-2">
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                    <Skeleton className="h-6 w-28 rounded-full" />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Skeleton className="h-10 w-20" />
+                  <Skeleton className="h-10 w-20" />
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-y md:divide-y-0 divide-border border-t">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="p-4 text-center space-y-2">
+                  <Skeleton className="h-3 w-16 mx-auto" />
+                  <Skeleton className="h-6 w-12 mx-auto" />
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Financial Cards Skeleton */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <Card key={i} className="p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-10 w-10 rounded-xl" />
+                  <div className="flex-1 space-y-1">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-5 w-20" />
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {/* Tabs Skeleton */}
+          <Card className="p-6 space-y-4">
+            <div className="flex gap-2">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-9 w-24 rounded-lg" />
+              ))}
+            </div>
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
+            </div>
+          </Card>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  return (
+    <MainLayout>
+      <Helmet>
+        <title>{client.full_name} | ثقة للتأمين</title>
+      </Helmet>
+
+      <div className="max-w-6xl mx-auto space-y-6">
+        {/* Professional Header Card */}
+        <Card className="overflow-hidden">
+          <div className="bg-gradient-to-l from-primary/10 via-primary/5 to-transparent p-6">
+            <div className="flex items-start gap-4">
+              {returnPath ? (
+                <Button variant="outline" onClick={onBack} className="mt-1 gap-2">
+                  <ArrowRight className="h-4 w-4" />
+                  <span className="text-sm">
+                    {returnTab === 'renewed' ? 'العودة للتجديدات' : 
+                     returnTab === 'renewals' ? 'العودة للتجديدات' : 
+                     'العودة للتقارير'}
+                  </span>
+                </Button>
+              ) : (
+                <Button variant="ghost" size="icon" onClick={onBack} className="mt-1">
+                  <ArrowRight className="h-5 w-5" />
+                </Button>
+              )}
+              
+              {/* Avatar */}
+              <div className="relative">
+                {client.image_url ? (
+                  <img
+                    src={client.image_url}
+                    alt={client.full_name}
+                    className="h-20 w-20 rounded-2xl object-cover border-4 border-background shadow-lg"
+                  />
+                ) : (
+                  <div className="h-20 w-20 rounded-2xl bg-primary/10 border-4 border-background shadow-lg flex items-center justify-center">
+                    <User className="h-10 w-10 text-primary" />
+                  </div>
+                )}
+                {(client.under24_type !== 'none' && client.under24_type) && (
+                  <Badge className="absolute -bottom-2 -right-2 bg-amber-500 text-white text-[10px] px-1.5">-24</Badge>
+                )}
+              </div>
+              
+              {/* Client Info */}
+              <div className="flex-1 min-w-0">
+                <h1 className="text-2xl font-bold truncate">{client.full_name}</h1>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground mt-2">
+                  <span className="flex items-center gap-1.5 font-mono">
+                    <Hash className="h-3.5 w-3.5" />
+                    {client.id_number}
+                  </span>
+                  {client.phone_number && (
+                    <ClickablePhone phone={client.phone_number} />
+                  )}
+                  {client.phone_number_2 && (
+                    <ClickablePhone phone={client.phone_number_2} className="text-muted-foreground/70" />
+                  )}
+                  {client.file_number && (
+                    <span className="flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5" />
+                      ملف: {client.file_number}
+                    </span>
+                  )}
+                  {client.birth_date && (
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {formatDate(client.birth_date)}
+                    </span>
+                  )}
+                </div>
+                
+                {/* Badges row */}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {/* Branch Badge */}
+                  {client.branch_id && (
+                    <Badge variant="secondary" className="gap-1.5 bg-primary/10 text-primary border-primary/20">
+                      <Building2 className="h-3 w-3" />
+                      {getBranchName(client.branch_id)}
+                    </Badge>
+                  )}
+                  
+                  {/* Broker Badge */}
+                  {broker && (
+                    <Badge variant="outline" className="gap-1.5 bg-background">
+                      <Users className="h-3 w-3" />
+                      الوسيط: {broker.name}
+                      {broker.phone && <span className="text-muted-foreground mr-1"><bdi>({broker.phone})</bdi></span>}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex gap-2 shrink-0">
+                {(paymentSummary.total_remaining - walletBalance.total_refunds) > 0 && (
+                  <Button 
+                    variant="default" 
+                    className="gap-2"
+                    onClick={() => setDebtPaymentModalOpen(true)}
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    دفع
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setAccidentWizardOpen(true)}>
+                  <AlertTriangle className="h-4 w-4 ml-2" />
+                  بلاغ حادث
+                </Button>
+                <Button variant="outline" onClick={() => setReportModalOpen(true)}>
+                  <FileText className="h-4 w-4 ml-2" />
+                  تقرير
+                </Button>
+                <Button onClick={() => setClientDrawerOpen(true)}>
+                  <Edit className="h-4 w-4 ml-2" />
+                  تعديل
+                </Button>
+              </div>
+            </div>
+          </div>
+          
+          {/* Stats Row */}
+          <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-y md:divide-y-0 divide-border border-t">
+            <div className="p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-1">رقم الملف</p>
+              <p className="text-lg font-bold">{client.file_number || '-'}</p>
+            </div>
+            <div className="p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-1">تاريخ الانضمام</p>
+              <p className="text-lg font-bold">{formatDate(client.date_joined)}</p>
+            </div>
+            <div className="p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-1">السيارات</p>
+              <p className="text-lg font-bold text-blue-600">{cars.length}</p>
+            </div>
+            <div className="p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-1">الوثائق</p>
+              <p className="text-lg font-bold text-purple-600">{policies.length}</p>
+            </div>
+            <div className="p-4 text-center col-span-2 md:col-span-1">
+              <p className="text-xs text-muted-foreground mb-1">العمر</p>
+              {client.under24_type === 'additional_driver' ? (
+                <div className="space-y-1">
+                  <Badge variant="warning" className="text-xs">سائق إضافي -24</Badge>
+                  {client.under24_driver_name && (
+                    <p className="text-xs text-muted-foreground">
+                      {client.under24_driver_name}
+                      {client.under24_driver_id && <span className="font-mono mr-1">({client.under24_driver_id})</span>}
+                    </p>
+                  )}
+                </div>
+              ) : client.under24_type === 'client' || client.less_than_24 ? (
+                <Badge variant="warning" className="mt-1">أقل من 24</Badge>
+              ) : (
+                <Badge variant="outline" className="mt-1">24+</Badge>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        {/* Financial Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card className="p-4 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
+              <Wallet className="h-6 w-6 text-success" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">إجمالي المدفوع</p>
+              <p className="text-xl font-bold text-success">₪{paymentSummary.total_paid.toLocaleString()}</p>
+            </div>
+          </Card>
+          
+          <Card className="p-4 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
+              <AlertCircle className="h-6 w-6 text-destructive" />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs text-muted-foreground">إجمالي المتبقي</p>
+              {/* صافي المتبقي = الدين - المرتجعات */}
+              <p className={cn("text-xl font-bold", 
+                (paymentSummary.total_remaining - walletBalance.total_refunds) > 0 
+                  ? "text-destructive" 
+                  : "text-success"
+              )}>
+                ₪{Math.max(0, paymentSummary.total_remaining - walletBalance.total_refunds).toLocaleString()}
+              </p>
+              {/* عرض تفصيلي في حال وجود مرتجعات */}
+              {walletBalance.total_refunds > 0 && paymentSummary.total_remaining > 0 && (
+                <div className="text-[10px] text-muted-foreground space-y-0.5 mt-1">
+                  <p>المطلوب: ₪{paymentSummary.total_remaining.toLocaleString()}</p>
+                  <p className="text-amber-600">المرتجع: -₪{walletBalance.total_refunds.toLocaleString()}</p>
+                </div>
+              )}
+            </div>
+            <DebtIndicator
+              totalOwed={paymentSummary.total_paid + paymentSummary.total_remaining} 
+              totalPaid={paymentSummary.total_paid + walletBalance.total_refunds}
+              showAmount={false}
+            />
+          </Card>
+          
+          {/* Profit card - Admin only */}
+          {isAdmin && (
+            <Card className="p-4 flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <TrendingUp className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">إجمالي الأرباح</p>
+                <p className="text-xl font-bold text-primary">₪{paymentSummary.total_profit.toLocaleString()}</p>
+              </div>
+            </Card>
+          )}
+
+          {/* Wallet Balance - Show only if we owe customer MORE than their debt (net credit) */}
+          {(walletBalance.total_refunds - paymentSummary.total_remaining) > 0 && (
+            <Card className="p-4 flex items-center gap-4 border-amber-500/30 bg-amber-500/5">
+              <div className="h-12 w-12 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                <Banknote className="h-6 w-6 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs text-amber-700">مرتجع للعميل</p>
+                <p className="text-xl font-bold text-amber-600">₪{(walletBalance.total_refunds - paymentSummary.total_remaining).toLocaleString()}</p>
+                <p className="text-[10px] text-amber-600/70">نحن مدينون للعميل بهذا المبلغ</p>
+              </div>
+            </Card>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <Tabs defaultValue="policies" className="w-full" dir="rtl">
+          <TabsList className="w-full justify-start bg-muted/50 p-1 h-auto flex-wrap">
+            <TabsTrigger value="overview" className="gap-1.5">
+              <User className="h-4 w-4" />
+              نظرة عامة
+            </TabsTrigger>
+            <TabsTrigger value="policies" className="gap-1.5">
+              <FileText className="h-4 w-4" />
+              الوثائق ({policies.length})
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="gap-1.5">
+              <CreditCard className="h-4 w-4" />
+              سجل الدفعات ({payments.length})
+            </TabsTrigger>
+            <TabsTrigger value="cars" className="gap-1.5">
+              <Car className="h-4 w-4" />
+              السيارات ({cars.length})
+            </TabsTrigger>
+            <TabsTrigger value="notes" className="gap-1.5">
+              <MessageSquare className="h-4 w-4" />
+              الملاحظات
+            </TabsTrigger>
+            <TabsTrigger value="accidents" className="gap-1.5 relative">
+              <AlertTriangle className="h-4 w-4" />
+              بلاغات الحوادث ({accidentCount})
+              {hasActiveReports && (
+                <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="refunds" className="gap-1.5">
+              <Banknote className="h-4 w-4" />
+              المرتجعات
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="mt-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              <Card className="p-6">
+                <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                  <User className="h-5 w-5 text-primary" />
+                  بيانات العميل
+                </h3>
+                <dl className="space-y-4">
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <dt className="text-muted-foreground">الاسم الكامل</dt>
+                    <dd className="font-semibold">{client.full_name}</dd>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <dt className="text-muted-foreground">رقم الهوية</dt>
+                    <dd className="font-mono font-semibold ltr-nums">{client.id_number}</dd>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <dt className="text-muted-foreground">رقم الهاتف</dt>
+                    <dd className="font-mono ltr-nums">{client.phone_number || '-'}</dd>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <dt className="text-muted-foreground">رقم الملف</dt>
+                    <dd className="font-semibold">{client.file_number || '-'}</dd>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <dt className="text-muted-foreground">تاريخ الانضمام</dt>
+                    <dd>{formatDate(client.date_joined)}</dd>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
+                    <dt className="text-muted-foreground">الفئة العمرية</dt>
+                    <dd>
+                      {client.under24_type === 'additional_driver' ? (
+                        <div className="text-left">
+                          <Badge variant="warning">سائق إضافي أقل من 24</Badge>
+                          {client.under24_driver_name && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {client.under24_driver_name}
+                              {client.under24_driver_id && <span className="font-mono mr-1"> ({client.under24_driver_id})</span>}
+                            </p>
+                          )}
+                        </div>
+                      ) : client.under24_type === 'client' ? (
+                        <Badge variant="warning">العميل أقل من 24 سنة</Badge>
+                      ) : (
+                        <Badge variant="outline">24 سنة فأكثر</Badge>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              </Card>
+              
+              {/* Signature Section */}
+              <ClientSignatureSection
+                clientId={client.id}
+                clientName={client.full_name}
+                phoneNumber={client.phone_number}
+                signatureUrl={client.signature_url}
+                onSignatureSent={onRefresh}
+              />
+            </div>
+
+          </TabsContent>
+
+          {/* Policies Tab */}
+          <TabsContent value="policies" className="mt-6 space-y-4">
+            {/* Header with Add Button */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-lg">وثائق التأمين</h3>
+                <p className="text-sm text-muted-foreground">{policies.length} وثيقة مسجلة</p>
+              </div>
+              <Button onClick={() => setPolicyWizardOpen(true)}>
+                <Plus className="h-4 w-4 ml-2" />
+                إضافة وثيقة جديدة
+              </Button>
+            </div>
+            
+            {/* Car Filter Chips - Visual car selector */}
+            {cars.length > 0 && (
+              <Card className="p-4">
+                <p className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <Car className="h-4 w-4 text-primary" />
+                  فلترة حسب السيارة
+                </p>
+                <CarFilterChips
+                  cars={cars}
+                  policies={policies.map(p => ({
+                    car: p.car,
+                    end_date: p.end_date,
+                    cancelled: p.cancelled,
+                    transferred: p.transferred,
+                    group_id: p.group_id,
+                  }))}
+                  selectedCarId={policyCarFilter}
+                  onSelect={setPolicyCarFilter}
+                />
+              </Card>
+            )}
+            
+            {/* Additional Filters */}
+            <Card className="p-4">
+              <div className="flex flex-wrap gap-3">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="بحث برقم الوثيقة، الشركة..."
+                    value={policySearch}
+                    onChange={(e) => setPolicySearch(e.target.value)}
+                    className="pr-10"
+                  />
+                </div>
+                <Select value={policyTypeFilter} onValueChange={setPolicyTypeFilter}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="نوع التأمين" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الأنواع</SelectItem>
+                    {uniquePolicyTypes.map(type => (
+                      <SelectItem key={type} value={type}>
+                        {policyTypeLabels[type] || type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={policyStatusFilter} onValueChange={setPolicyStatusFilter}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="الحالة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الحالات</SelectItem>
+                    <SelectItem value="active">سارية</SelectItem>
+                    <SelectItem value="expired">منتهية</SelectItem>
+                    <SelectItem value="transferred">محولة</SelectItem>
+                    <SelectItem value="cancelled">ملغاة</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </Card>
+
+            {loadingPolicies ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : filteredPolicies.length === 0 ? (
+              <Card className="text-center py-12">
+                <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+                <p className="text-muted-foreground">
+                  {policies.length > 0 ? 'لا توجد وثائق تطابق معايير البحث' : 'لا توجد وثائق تأمين'}
+                </p>
+                {policyCarFilter !== 'all' && (
+                  <Button 
+                    variant="link" 
+                    onClick={() => setPolicyCarFilter('all')}
+                    className="mt-2"
+                  >
+                    إظهار كل السيارات
+                  </Button>
+                )}
+              </Card>
+            ) : (
+              <PolicyYearTimeline 
+                policies={filteredPolicies} 
+                paymentInfo={policyPaymentInfo}
+                accidentInfo={policyAccidentCounts}
+                childrenInfo={policyChildrenCounts}
+                onPolicyClick={handlePolicyClick}
+                onPaymentAdded={async () => {
+                  await Promise.all([
+                    fetchPaymentSummary(),
+                    fetchPayments(),
+                    fetchPolicies(),
+                    fetchWalletBalance(),
+                  ]);
+                }}
+                onTransferPolicy={(policyId) => {
+                  setSelectedPolicyId(policyId);
+                  setPolicyDetailsOpen(true);
+                }}
+                onCancelPolicy={(policyId) => {
+                  setSelectedPolicyId(policyId);
+                  setPolicyDetailsOpen(true);
+                }}
+                onTransferPackage={(policyIds) => {
+                  if (policyIds.length > 0) {
+                    setSelectedPolicyId(policyIds[0]);
+                    setTransferOpen(true);
+                  }
+                }}
+                onCancelPackage={(policyIds) => {
+                  if (policyIds.length > 0) {
+                    setSelectedPolicyId(policyIds[0]);
+                    setPolicyDetailsOpen(true);
+                  }
+                }}
+                onDeletePolicy={isAdmin ? (policyIds) => {
+                  setDeletePolicyIds(policyIds);
+                  setDeletePolicyDialogOpen(true);
+                } : undefined}
+                onPoliciesUpdate={fetchPolicies}
+                onRenewPolicy={handleRenewPolicy}
+                onRenewPackage={handleRenewPackage}
+              />
+            )}
+          </TabsContent>
+
+          {/* Payments Tab */}
+          <TabsContent value="payments" className="mt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-lg">سجل الدفعات</h3>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateAllPaymentsInvoice}
+                  disabled={payments.length === 0 || generatingComprehensiveInvoice}
+                >
+                  {generatingComprehensiveInvoice ? (
+                    <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4 ml-2" />
+                  )}
+                  فاتورة شاملة
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleSendComprehensiveInvoiceSms}
+                  disabled={payments.length === 0 || sendingComprehensiveInvoiceSms || !client.phone_number}
+                  title={!client.phone_number ? "يجب إضافة رقم هاتف العميل أولاً" : "إرسال الفاتورة الشاملة للعميل عبر SMS"}
+                >
+                  {sendingComprehensiveInvoiceSms ? (
+                    <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 ml-2" />
+                  )}
+                  إرسال SMS
+                </Button>
+              </div>
+            </div>
+            
+            {/* Payment Filters */}
+            <Card className="p-4">
+              <div className="flex flex-wrap gap-3">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="بحث في الدفعات..."
+                    value={paymentSearch}
+                    onChange={(e) => setPaymentSearch(e.target.value)}
+                    className="pr-10"
+                  />
+                </div>
+                <Select value={paymentTypeFilter} onValueChange={setPaymentTypeFilter}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="طريقة الدفع" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الطرق</SelectItem>
+                    <SelectItem value="cash">نقدي</SelectItem>
+                    <SelectItem value="cheque">شيك</SelectItem>
+                    <SelectItem value="visa">بطاقة</SelectItem>
+                    <SelectItem value="transfer">تحويل</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </Card>
+
+            {loadingPayments ? (
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : payments.length === 0 ? (
+              <Card className="text-center py-12">
+                <CreditCard className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+                <p className="text-muted-foreground">لا توجد دفعات مسجلة</p>
+              </Card>
+            ) : (
+              <Card className="overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-right">المبلغ</TableHead>
+                      <TableHead className="text-right">التاريخ</TableHead>
+                      <TableHead className="text-right">طريقة الدفع</TableHead>
+                      <TableHead className="text-right">نوع التأمين</TableHead>
+                      <TableHead className="text-right">رقم الشيك</TableHead>
+                      <TableHead className="text-right">الحالة</TableHead>
+                      <TableHead className="text-right">ملفات</TableHead>
+                      <TableHead className="text-right w-[60px]">إجراءات</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {groupedPayments.map((group) => (
+                      <TableRow key={group.id}>
+                        <TableCell className="font-semibold">
+                          <div className="flex items-center gap-1">
+                            ₪{group.totalAmount.toLocaleString()}
+                            {group.payments.length > 1 && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                {group.payments.length} دفعات
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{formatDate(group.payment_date)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="outline">
+                              {group.payment_type === 'cash' ? 'نقدي' :
+                               group.payment_type === 'cheque' ? 'شيك' :
+                               group.payment_type === 'visa' ? 'بطاقة' :
+                               group.payment_type === 'transfer' ? 'تحويل' : group.payment_type}
+                            </Badge>
+                            {group.payment_type === 'visa' && group.card_last_four && (
+                              <span className="text-xs text-muted-foreground font-mono">
+                                *{group.card_last_four}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {group.policyTypes.map(type => (
+                              <Badge key={type} className={cn("border", policyTypeColors[type])}>
+                                {getInsuranceTypeLabel(type as any, null)}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono">{group.cheque_number || '-'}</TableCell>
+                        <TableCell>
+                          {group.refused ? (
+                            <Badge variant="destructive">راجع</Badge>
+                          ) : (
+                            <Badge variant="success">مقبول</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <ChequeImageGallery
+                            primaryImageUrl={group.cheque_image_url}
+                            paymentId={group.payments[0]?.id || group.id}
+                            batchPaymentIds={group.payments.map(p => p.id)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {group.payments.length === 1 && (
+                                <>
+                                  <DropdownMenuItem 
+                                    onClick={() => handleGeneratePaymentReceipt(group.payments[0].id)}
+                                    disabled={generatingReceipt === group.payments[0].id}
+                                  >
+                                    {generatingReceipt === group.payments[0].id ? (
+                                      <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                                    ) : (
+                                      <Receipt className="h-4 w-4 ml-2" />
+                                    )}
+                                    إيصال
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleEditPayment(group.payments[0])}>
+                                    <Edit className="h-4 w-4 ml-2" />
+                                    تعديل
+                                  </DropdownMenuItem>
+                                  {!group.locked && (
+                                    <DropdownMenuItem 
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={() => {
+                                        setDeletePaymentId(group.payments[0].id);
+                                        setDeletePaymentDialogOpen(true);
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4 ml-2" />
+                                      حذف
+                                    </DropdownMenuItem>
+                                  )}
+                                </>
+                              )}
+                              {group.payments.length > 1 && (
+                                <>
+                                  <DropdownMenuItem disabled className="text-muted-foreground text-xs">
+                                    دفعة مجمعة ({group.payments.length} سجلات)
+                                  </DropdownMenuItem>
+                                  {group.payments.map((payment, idx) => (
+                                    <DropdownMenuItem 
+                                      key={payment.id}
+                                      onClick={() => handleEditPayment(payment)}
+                                      className="text-sm"
+                                    >
+                                      <Edit className="h-3 w-3 ml-2" />
+                                      تعديل: ₪{payment.amount} - {getInsuranceTypeLabel(payment.policy?.policy_type_parent as any || '', null)}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* Cars Tab */}
+          <TabsContent value="cars" className="mt-6 space-y-4">
+            <div className="flex justify-end">
+              <Button onClick={() => setCarDrawerOpen(true)}>
+                <Plus className="h-4 w-4 ml-2" />
+                إضافة سيارة
+              </Button>
+            </div>
+
+            {loadingCars ? (
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : cars.length === 0 ? (
+              <Card className="text-center py-12">
+                <Car className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+                <p className="text-muted-foreground">لا توجد سيارات مسجلة</p>
+                <Button variant="link" onClick={() => setCarDrawerOpen(true)}>
+                  إضافة سيارة جديدة
+                </Button>
+              </Card>
+            ) : (
+              <Card className="overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-right">رقم السيارة</TableHead>
+                      <TableHead className="text-right">الشركة المصنعة</TableHead>
+                      <TableHead className="text-right">الموديل</TableHead>
+                      <TableHead className="text-right">السنة</TableHead>
+                      <TableHead className="text-right">اللون</TableHead>
+                      <TableHead className="text-right">القيمة</TableHead>
+                      <TableHead className="text-right">النوع</TableHead>
+                      <TableHead className="text-right">الوثائق</TableHead>
+                      <TableHead className="text-right w-[60px]">إجراءات</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {cars.map((car) => {
+                      const policyCount = carPolicyCounts[car.id] || 0;
+                      const canDelete = policyCount === 0;
+                      
+                      return (
+                        <TableRow key={car.id}>
+                          <TableCell className="font-mono font-semibold"><bdi>{car.car_number}</bdi></TableCell>
+                          <TableCell>{car.manufacturer_name || '-'}</TableCell>
+                          <TableCell>{car.model || '-'}</TableCell>
+                          <TableCell>{car.year || '-'}</TableCell>
+                          <TableCell>{car.color || '-'}</TableCell>
+                          <TableCell>
+                            {car.car_value ? (
+                              <span className="font-semibold text-primary ltr-nums">₪{car.car_value.toLocaleString()}</span>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{carTypeLabels[car.car_type || ''] || car.car_type || 'خصوصي'}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {policyCount > 0 ? (
+                              <Badge variant="secondary">{policyCount} وثيقة</Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">لا يوجد</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => {
+                                  setEditingCar(car);
+                                  setCarDrawerOpen(true);
+                                }}>
+                                  <Edit className="h-4 w-4 ml-2" />
+                                  تعديل
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  className={cn(
+                                    "text-destructive focus:text-destructive",
+                                    !canDelete && "opacity-50 cursor-not-allowed"
+                                  )}
+                                  disabled={!canDelete}
+                                  onClick={() => {
+                                    if (canDelete) {
+                                      setDeleteCarId(car.id);
+                                      setDeleteCarDialogOpen(true);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 ml-2" />
+                                  حذف
+                                  {!canDelete && <span className="text-xs mr-2">(مرتبطة بوثائق)</span>}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* Notes Tab */}
+          <TabsContent value="notes" className="mt-6 space-y-6">
+            {/* Timestamped Notes Section */}
+            <div>
+              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-primary" />
+                سجل المتابعات والملاحظات
+              </h3>
+              <ClientNotesSection 
+                clientId={client.id} 
+                branchId={client.branch_id} 
+              />
+            </div>
+
+            {/* General Notes Section (legacy) */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <Edit className="h-5 w-5 text-primary" />
+                  ملاحظات عامة
+                </h3>
+                {!editingNotes ? (
+                  <Button variant="outline" size="sm" onClick={() => setEditingNotes(true)}>
+                    <Edit className="h-4 w-4 ml-2" />
+                    تعديل
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button 
+                      size="sm" 
+                      onClick={handleSaveNotes}
+                      disabled={savingNotes}
+                    >
+                      <Save className="h-4 w-4 ml-2" />
+                      {savingNotes ? 'جاري الحفظ...' : 'حفظ'}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        setEditingNotes(false);
+                        setNotesValue(client.notes || '');
+                      }}
+                    >
+                      <X className="h-4 w-4 ml-2" />
+                      إلغاء
+                    </Button>
+                  </div>
+                )}
+              </div>
+              
+              {editingNotes ? (
+                <Textarea
+                  value={notesValue}
+                  onChange={(e) => setNotesValue(e.target.value)}
+                  placeholder="أضف ملاحظات عامة عن العميل هنا..."
+                  className="min-h-[150px] resize-none"
+                  autoFocus
+                />
+              ) : (
+                <div className="min-h-[100px] p-4 bg-muted/30 rounded-lg">
+                  {client.notes ? (
+                    <p className="whitespace-pre-wrap">{client.notes}</p>
+                  ) : (
+                    <p className="text-muted-foreground text-center py-8">
+                      لا توجد ملاحظات عامة. اضغط "تعديل" لإضافة ملاحظات.
+                    </p>
+                  )}
+                </div>
+              )}
+            </Card>
+          </TabsContent>
+
+          {/* Accidents Tab */}
+          <TabsContent value="accidents" className="mt-6">
+            <ClientAccidentsTab
+              clientId={client.id}
+              accidentNotes={client.accident_notes}
+              onAccidentNotesUpdated={onRefresh}
+            />
+          </TabsContent>
+
+          {/* Refunds Tab */}
+          <TabsContent value="refunds" className="mt-6">
+            <RefundsTab 
+              clientId={client.id}
+              branchId={client.branch_id}
+              onRefundAdded={() => {
+                fetchWalletBalance();
+              }}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* Add/Edit Car Drawer */}
+      <CarDrawer
+        open={carDrawerOpen}
+        onOpenChange={(open) => {
+          setCarDrawerOpen(open);
+          if (!open) setEditingCar(null);
+        }}
+        clientId={client.id}
+        car={editingCar}
+        onSaved={handleCarSaved}
+      />
+
+      {/* Policy Details Drawer */}
+      <PolicyDetailsDrawer
+        open={policyDetailsOpen}
+        onOpenChange={setPolicyDetailsOpen}
+        policyId={selectedPolicyId}
+        onUpdated={() => {
+          fetchPolicies();
+          fetchPaymentSummary();
+          fetchPayments();
+        }}
+        onViewRelatedPolicy={(newPolicyId) => {
+          setSelectedPolicyId(newPolicyId);
+        }}
+      />
+
+      {/* Policy Wizard for creating new policy */}
+      <PolicyWizard
+        open={policyWizardOpen}
+        onOpenChange={(open) => {
+          setPolicyWizardOpen(open);
+          // Clear renewal data when wizard closes
+          if (!open) {
+            setRenewalData(null);
+          }
+        }}
+        preselectedClientId={client.id}
+        renewalData={renewalData}
+        onSaved={async () => {
+          setPolicyWizardOpen(false);
+          setRenewalData(null);
+          // Delay to ensure DB commits are complete before fetching
+          await new Promise(resolve => setTimeout(resolve, 200));
+          // Fetch all data in parallel
+          await Promise.all([
+            fetchPolicies(),
+            fetchPaymentSummary(),
+            fetchPayments(),
+            fetchCars(),
+          ]);
+          // Force state update and refresh
+          onRefresh();
+        }}
+      />
+
+      {/* Client Edit Drawer */}
+      <ClientDrawer
+        open={clientDrawerOpen}
+        onOpenChange={setClientDrawerOpen}
+        client={client}
+        onSaved={() => {
+          setClientDrawerOpen(false);
+          onRefresh();
+          fetchBroker();
+        }}
+      />
+
+      {/* Client Report Modal */}
+      <ClientReportModal
+        open={reportModalOpen}
+        onOpenChange={setReportModalOpen}
+        client={client}
+        cars={cars}
+        policies={policies}
+        paymentSummary={paymentSummary}
+        walletBalance={walletBalance}
+        broker={broker}
+        branchName={client.branch_id ? getBranchName(client.branch_id) : null}
+      />
+
+      {/* Transfer Policy Modal - for package/policy transfer from timeline */}
+      {selectedPolicyId && (() => {
+        const selectedPolicy = policies.find(p => p.id === selectedPolicyId);
+        const selectedCar = selectedPolicy?.car ? cars.find(c => c.id === selectedPolicy.car?.id) : null;
+        return (
+          <TransferPolicyModal
+            open={transferOpen}
+            onOpenChange={setTransferOpen}
+            policyId={selectedPolicyId}
+            policyNumber={selectedPolicy?.policy_number || null}
+            policyType={selectedPolicy?.policy_type_parent || ''}
+            groupId={selectedPolicy?.group_id || null}
+            clientId={client.id}
+            clientName={client.full_name}
+            clientPhone={client.phone_number}
+            branchId={client.branch_id}
+            currentCar={selectedCar ? {
+              id: selectedCar.id,
+              car_number: selectedCar.car_number,
+              model: selectedCar.model || null,
+              year: selectedCar.year || null,
+              manufacturer_name: selectedCar.manufacturer_name || null,
+            } : null}
+            onTransferred={async () => {
+              setTransferOpen(false);
+              // Small delay to ensure DB commits are complete
+              await new Promise(resolve => setTimeout(resolve, 100));
+              await Promise.all([
+                fetchPolicies(),
+                fetchPaymentSummary(),
+                fetchPayments(),
+              ]);
+              onRefresh();
+            }}
+          />
+        );
+      })()}
+
+      {/* Debt Payment Modal */}
+      <DebtPaymentModal
+        open={debtPaymentModalOpen}
+        onOpenChange={setDebtPaymentModalOpen}
+        clientId={client.id}
+        clientName={client.full_name}
+        clientPhone={client.phone_number}
+        totalOwed={paymentSummary.total_remaining}
+        onSuccess={async () => {
+          setDebtPaymentModalOpen(false);
+          // Refresh all payment-related data
+          await Promise.all([
+            fetchPaymentSummary(),
+            fetchPayments(),
+            fetchPolicies(),
+          ]);
+        }}
+      />
+
+      {/* Payment Edit Dialog */}
+      <PaymentEditDialog
+        open={editPaymentDialogOpen}
+        onOpenChange={setEditPaymentDialogOpen}
+        payment={editingPayment}
+        onSuccess={async () => {
+          setEditingPayment(null);
+          // Refresh payment-related data
+          await Promise.all([
+            fetchPaymentSummary(),
+            fetchPayments(),
+          ]);
+        }}
+      />
+
+      {/* Super Admin: Delete Policy Confirmation Dialog */}
+      <DeleteConfirmDialog
+        open={deletePolicyDialogOpen}
+        onOpenChange={(open) => {
+          setDeletePolicyDialogOpen(open);
+          if (!open) setDeletePolicyIds([]);
+        }}
+        onConfirm={handleDeletePolicy}
+        title="حذف الوثيقة نهائياً"
+        description={`هل أنت متأكد من حذف ${deletePolicyIds.length > 1 ? `${deletePolicyIds.length} وثائق` : 'هذه الوثيقة'} نهائياً؟ سيتم حذف جميع البيانات المرتبطة (الدفعات، القيود المحاسبية، الملفات). هذا الإجراء لا يمكن التراجع عنه!`}
+        loading={deletingPolicy}
+      />
+
+      {/* Delete Car Confirmation Dialog */}
+      <AlertDialog open={deleteCarDialogOpen} onOpenChange={setDeleteCarDialogOpen}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف السيارة</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل أنت متأكد من حذف هذه السيارة؟ لا يمكن التراجع عن هذا الإجراء.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex gap-2">
+            <AlertDialogCancel onClick={() => setDeleteCarId(null)}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteCar}
+              disabled={deletingCar}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingCar ? 'جاري الحذف...' : 'حذف'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Payment Confirmation Dialog */}
+      <AlertDialog open={deletePaymentDialogOpen} onOpenChange={setDeletePaymentDialogOpen}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف الدفعة</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل أنت متأكد من حذف هذه الدفعة؟ سيتم تحديث الرصيد المتبقي للعميل.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex gap-2">
+            <AlertDialogCancel onClick={() => setDeletePaymentId(null)}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeletePayment}
+              disabled={deletingPayment}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingPayment ? 'جاري الحذف...' : 'حذف'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Accident Report Wizard */}
+      <AccidentReportWizard
+        open={accidentWizardOpen}
+        onOpenChange={setAccidentWizardOpen}
+        preselectedClient={{
+          id: client.id,
+          full_name: client.full_name,
+          id_number: client.id_number,
+          file_number: client.file_number,
+          phone_number: client.phone_number,
+        }}
+      />
+    </MainLayout>
+  );
+}
