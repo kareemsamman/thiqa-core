@@ -76,7 +76,7 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
       setFormData({
         name: company.name,
         name_ar: company.name_ar || '',
-        category_parents: company.category_parent || [],
+        category_parents: (company.category_parent || []) as PolicyTypeParent[],
         active: company.active ?? true,
         elzami_commission: company.elzami_commission ?? 0,
         broker_id: company.broker_id || null,
