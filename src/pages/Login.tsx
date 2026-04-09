@@ -116,8 +116,11 @@ export default function Login() {
     if (isInIframe) { window.open(window.location.href, '_blank'); return; }
     try {
       setLoading(true);
-      const { error } = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+        },
       });
       if (error) {
         if (error.message.includes('provider is not enabled')) {
