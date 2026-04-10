@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, AlertCircle, Mail, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import thiqaLogoIcon from "@/assets/thiqa-logo-icon.svg";
+import thiqaLogoDark from "@/assets/thiqa-logo-dark.svg";
 import { OtpInput } from "@/components/auth/OtpInput";
 
 export default function VerifyEmail() {
@@ -148,9 +148,7 @@ export default function VerifyEmail() {
       <div className="w-full max-w-md animate-scale-in">
         <div className="rounded-3xl border border-white/20 bg-white/70 dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
           <div className="text-center pt-10 pb-4 px-8">
-            <div className="mx-auto h-14 w-14 rounded-xl bg-primary flex items-center justify-center mb-4">
-              <img src={thiqaLogoIcon} alt="Thiqa" className="h-9 w-9 object-contain" />
-            </div>
+            <img src={thiqaLogoDark} alt="Thiqa" className="mx-auto h-10 w-auto object-contain mb-4" />
             <h1 className="text-2xl font-bold tracking-tight text-foreground">تأكيد البريد الإلكتروني</h1>
             <p className="text-muted-foreground mt-2 text-sm">
               أرسلنا رمز تحقق مكون من 4 أرقام إلى
@@ -173,11 +171,11 @@ export default function VerifyEmail() {
             </div>
 
             <Button
-              className="w-full h-12 text-base gap-2 rounded-xl shadow-lg"
+              className="w-full h-12 text-base gap-2 rounded-xl shadow-lg flex-row-reverse"
               onClick={handleVerify}
               disabled={loading || code.replace(/\D/g, "").length < 4}
             >
-              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5 rotate-180" />}
               {loading ? "جاري التحقق..." : "تأكيد البريد الإلكتروني"}
             </Button>
 

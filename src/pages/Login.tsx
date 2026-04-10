@@ -327,17 +327,17 @@ export default function Login() {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:bg-gradient-to-br lg:from-muted/40 lg:to-background">
+      <div className="flex-1 flex items-center justify-center p-3 sm:p-6 lg:bg-gradient-to-br lg:from-muted/40 lg:to-background">
         <div className="w-full max-w-md animate-scale-in">
           <div className="rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 lg:bg-white/70 lg:dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
             {/* Header */}
-            <div className="text-center pt-8 sm:pt-10 pb-4 px-5 sm:px-8">
-              <img src={thiqaLogoDark} alt={siteTitle} className="mx-auto h-10 w-auto object-contain mb-1" />
-              <p className="text-muted-foreground mt-1 text-sm">{siteDesc}</p>
+            <div className="text-center pt-6 sm:pt-8 pb-2 sm:pb-4 px-4 sm:px-8">
+              <img src={thiqaLogoDark} alt={siteTitle} className="mx-auto h-9 sm:h-10 w-auto object-contain mb-0.5" />
+              <p className="text-muted-foreground mt-0.5 text-xs sm:text-sm">{siteDesc}</p>
             </div>
 
             {/* Content */}
-            <div className="px-5 sm:px-8 pb-8 sm:pb-10 space-y-5">
+            <div className="px-4 sm:px-8 pb-5 sm:pb-8 space-y-3 sm:space-y-5">
               {isInIframe && (
                 <Alert className="border-amber-300/60 bg-amber-50/80 dark:bg-amber-900/20 backdrop-blur-sm rounded-xl">
                   <AlertCircle className="h-4 w-4 text-amber-600" />
@@ -427,12 +427,12 @@ export default function Login() {
                     <>
                       <Button
                         variant="outline"
-                        className="w-full h-12 text-base gap-3 rounded-xl border-border/60 bg-white/60 dark:bg-card/60 backdrop-blur-sm hover:bg-white hover:border-primary/40 transition-all duration-200 shadow-sm"
+                        className="w-full h-10 sm:h-12 text-sm sm:text-base gap-2 sm:gap-3 rounded-xl border-border/60 bg-white/60 dark:bg-card/60 backdrop-blur-sm hover:bg-white hover:border-primary/40 transition-all duration-200 shadow-sm"
                         onClick={handleGoogleLogin}
                         disabled={loading}
                       >
-                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (
-                          <svg className="h-5 w-5" viewBox="0 0 24 24">
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+                          <svg className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24">
                             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
@@ -451,60 +451,55 @@ export default function Login() {
                     </>
                   )}
 
-                  {/* 35-day free trial banner */}
-                  <div className="rounded-xl bg-primary/10 border border-primary/20 p-3 text-center">
-                    <p className="text-sm font-bold text-primary">🎉 35 يوم مجاناً!</p>
-                    <p className="text-xs text-muted-foreground mt-1">لا حاجة لإدخال أي وسيلة دفع — هذا التسجيل ينشئ وكالة جديدة مستقلة</p>
+                  {/* Combined info banner */}
+                  <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 text-center">
+                    <p className="text-xs font-bold text-primary">35 يوم مجاناً! — تسجيل وكالة جديدة مستقلة</p>
                   </div>
 
-                  <div className="rounded-xl border border-border/60 bg-secondary/40 p-3 text-center">
-                    <p className="text-xs text-muted-foreground">هذا النموذج مخصص لتسجيل <span className="font-semibold text-foreground">وكالة جديدة</span> فقط، وليس لإضافة مستخدم داخل وكالة موجودة.</p>
-                  </div>
-
-                  <div className="space-y-4">
-                    {/* Full Name */}
-                    <div className="space-y-1.5">
-                      <Label className="text-sm font-medium">الاسم الكامل *</Label>
-                      <Input value={fullName} onChange={(e) => { setFullName(e.target.value); setSignupErrors(prev => ({ ...prev, fullName: "" })); setSignupFeedback(null); }} placeholder="مثال: محمد أحمد" className={`h-11 rounded-xl bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.fullName ? "border-destructive" : ""}`} disabled={loading} />
-                      {signupErrors.fullName && <p className="text-xs text-destructive">{signupErrors.fullName}</p>}
-                    </div>
-
-                    {/* Email */}
-                    <div className="space-y-1.5">
-                      <Label className="text-sm font-medium">البريد الإلكتروني *</Label>
-                      <Input type="email" value={signupEmail} onChange={(e) => { setSignupEmail(e.target.value); setSignupErrors(prev => ({ ...prev, signupEmail: "" })); setSignupFeedback(null); }} placeholder="your-email@example.com" className={`h-11 rounded-xl bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupEmail ? "border-destructive" : ""}`} disabled={loading} dir="ltr" />
-                      {signupErrors.signupEmail && <p className="text-xs text-destructive">{signupErrors.signupEmail}</p>}
+                  <div className="space-y-2.5">
+                    {/* Full Name + Email row */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">الاسم الكامل *</Label>
+                        <Input value={fullName} onChange={(e) => { setFullName(e.target.value); setSignupErrors(prev => ({ ...prev, fullName: "" })); setSignupFeedback(null); }} placeholder="محمد أحمد" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.fullName ? "border-destructive" : ""}`} disabled={loading} />
+                        {signupErrors.fullName && <p className="text-[10px] text-destructive">{signupErrors.fullName}</p>}
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">البريد الإلكتروني *</Label>
+                        <Input type="email" value={signupEmail} onChange={(e) => { setSignupEmail(e.target.value); setSignupErrors(prev => ({ ...prev, signupEmail: "" })); setSignupFeedback(null); }} placeholder="email@example.com" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupEmail ? "border-destructive" : ""}`} disabled={loading} dir="ltr" />
+                        {signupErrors.signupEmail && <p className="text-[10px] text-destructive">{signupErrors.signupEmail}</p>}
+                      </div>
                     </div>
 
                     {/* Phone */}
-                    <div className="space-y-1.5">
-                      <Label className="text-sm font-medium">رقم الهاتف <span className="text-muted-foreground font-normal">(اختياري - 10 أرقام)</span></Label>
-                      <Input type="tel" value={signupPhone} onChange={(e) => { setSignupPhone(digitsOnly(e.target.value).slice(0, 10)); setSignupErrors(prev => ({ ...prev, signupPhone: "" })); setSignupFeedback(null); }} placeholder="05xxxxxxxx" className={`h-11 rounded-xl bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupPhone ? "border-destructive" : ""}`} disabled={loading} dir="ltr" maxLength={10} />
-                      {signupErrors.signupPhone && <p className="text-xs text-destructive">{signupErrors.signupPhone}</p>}
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">رقم الهاتف <span className="text-muted-foreground font-normal">(اختياري)</span></Label>
+                      <Input type="tel" value={signupPhone} onChange={(e) => { setSignupPhone(digitsOnly(e.target.value).slice(0, 10)); setSignupErrors(prev => ({ ...prev, signupPhone: "" })); setSignupFeedback(null); }} placeholder="05xxxxxxxx" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupPhone ? "border-destructive" : ""}`} disabled={loading} dir="ltr" maxLength={10} />
+                      {signupErrors.signupPhone && <p className="text-[10px] text-destructive">{signupErrors.signupPhone}</p>}
                     </div>
 
-                    {/* Passwords */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-sm font-medium">كلمة المرور *</Label>
-                        <Input type="password" value={signupPassword} onChange={(e) => { setSignupPassword(e.target.value); setSignupErrors(prev => ({ ...prev, signupPassword: "" })); setSignupFeedback(null); }} placeholder="6 أحرف على الأقل" className={`h-11 rounded-xl bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupPassword ? "border-destructive" : ""}`} disabled={loading} dir="ltr" autoComplete="new-password" />
-                        {signupErrors.signupPassword && <p className="text-xs text-destructive">{signupErrors.signupPassword}</p>}
+                    {/* Passwords row */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">كلمة المرور *</Label>
+                        <Input type="password" value={signupPassword} onChange={(e) => { setSignupPassword(e.target.value); setSignupErrors(prev => ({ ...prev, signupPassword: "" })); setSignupFeedback(null); }} placeholder="6 أحرف على الأقل" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupPassword ? "border-destructive" : ""}`} disabled={loading} dir="ltr" autoComplete="new-password" />
+                        {signupErrors.signupPassword && <p className="text-[10px] text-destructive">{signupErrors.signupPassword}</p>}
                       </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-sm font-medium">تأكيد كلمة المرور *</Label>
-                        <Input type="password" value={signupConfirmPassword} onChange={(e) => { setSignupConfirmPassword(e.target.value); setSignupErrors(prev => ({ ...prev, signupConfirmPassword: "" })); setSignupFeedback(null); }} placeholder="أعد إدخال كلمة المرور" className={`h-11 rounded-xl bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupConfirmPassword ? "border-destructive" : ""}`} disabled={loading} dir="ltr" autoComplete="new-password" />
-                        {signupErrors.signupConfirmPassword && <p className="text-xs text-destructive">{signupErrors.signupConfirmPassword}</p>}
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">تأكيد كلمة المرور *</Label>
+                        <Input type="password" value={signupConfirmPassword} onChange={(e) => { setSignupConfirmPassword(e.target.value); setSignupErrors(prev => ({ ...prev, signupConfirmPassword: "" })); setSignupFeedback(null); }} placeholder="أعد إدخال كلمة المرور" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupConfirmPassword ? "border-destructive" : ""}`} disabled={loading} dir="ltr" autoComplete="new-password" />
+                        {signupErrors.signupConfirmPassword && <p className="text-[10px] text-destructive">{signupErrors.signupConfirmPassword}</p>}
                       </div>
                     </div>
 
-                    <Button className="w-full h-12 text-base gap-2 rounded-xl shadow-lg" onClick={handleSignup} disabled={!canSubmitSignup}>
-                      {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <UserPlus className="h-5 w-5" />}
+                    <Button className="w-full h-10 sm:h-11 text-sm sm:text-base gap-2 rounded-xl shadow-lg" onClick={handleSignup} disabled={!canSubmitSignup}>
+                      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
                       {loading ? "جاري التسجيل..." : "تسجيل وكيل جديد"}
                     </Button>
 
                     {signupFeedback && (
                       <div
-                        className={`rounded-xl border p-3 text-sm flex items-start gap-2 ${
+                        className={`rounded-lg border px-2.5 py-2 text-xs flex items-start gap-1.5 ${
                           signupFeedback.type === "success"
                             ? "border-success/30 bg-success/10 text-success"
                             : signupFeedback.type === "error"
@@ -513,22 +508,20 @@ export default function Login() {
                         }`}
                       >
                         {signupFeedback.type === "success" ? (
-                          <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                          <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                         ) : signupFeedback.type === "error" ? (
-                          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                          <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                         ) : (
-                          <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                         )}
-                        <p className="leading-5">{signupFeedback.message}</p>
+                        <p className="leading-4">{signupFeedback.message}</p>
                       </div>
                     )}
                   </div>
 
-                  <Separator />
-
-                  <div className="text-center">
-                    <p className="text-sm text-muted-foreground mb-2">لديك حساب بالفعل؟</p>
-                    <Button variant="ghost" className="w-full h-10 rounded-xl" onClick={() => setPageView("login")}>
+                  <div className="text-center pt-1">
+                    <p className="text-xs text-muted-foreground mb-1">لديك حساب بالفعل؟</p>
+                    <Button variant="ghost" size="sm" className="w-full h-8 rounded-lg text-xs" onClick={() => setPageView("login")}>
                       تسجيل الدخول
                     </Button>
                   </div>
