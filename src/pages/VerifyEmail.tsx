@@ -108,7 +108,17 @@ export default function VerifyEmail() {
       setFeedback({ type: "success", message: "تم تأكيد البريد الإلكتروني بنجاح!" });
       toast.success("تم تأكيد البريد الإلكتروني بنجاح!");
 
-      // Redirect to dashboard if already logged in, or to login
+      // Auto-login using password from URL params, then redirect to dashboard
+      const pw = searchParams.get("p");
+      if (pw) {
+        const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password: pw });
+        if (!loginErr) {
+          setTimeout(() => navigate("/", { replace: true }), 1000);
+          return;
+        }
+      }
+
+      // Fallback: check existing session or redirect to login
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setTimeout(() => navigate("/", { replace: true }), 1000);

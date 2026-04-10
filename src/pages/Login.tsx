@@ -11,7 +11,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import thiqaLogo from "@/assets/thiqa-logo-full.svg";
-import thiqaLogoIcon from "@/assets/thiqa-logo-icon.svg";
 import thiqaLogoDark from "@/assets/thiqa-logo-dark.svg";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
 import { isThiqaSuperAdminEmail } from "@/lib/superAdmin";
@@ -333,9 +332,6 @@ export default function Login() {
           <div className="rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 lg:bg-white/70 lg:dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
             {/* Header */}
             <div className="text-center pt-8 sm:pt-10 pb-4 px-5 sm:px-8">
-              <div className="mx-auto h-14 w-14 rounded-xl bg-primary flex items-center justify-center lg:hidden mb-4">
-                <img src={thiqaLogoIcon} alt={siteTitle} className="h-9 w-9 object-contain" />
-              </div>
               <img src={thiqaLogoDark} alt={siteTitle} className="mx-auto h-10 w-auto object-contain mb-1" />
               <p className="text-muted-foreground mt-1 text-sm">{siteDesc}</p>
             </div>

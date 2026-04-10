@@ -128,10 +128,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (!isMounted) return;
-        
+
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         // Defer profile fetch with setTimeout to avoid deadlock
         if (session?.user) {
           setTimeout(() => {
@@ -146,8 +146,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsAdmin(false);
           setBranchName(null);
           setProfileLoading(false);
+
+          // Force redirect to login on sign-out (handles cross-tab logout)
+          if (event === 'SIGNED_OUT' && window.location.pathname !== '/login' && window.location.pathname !== '/verify-email' && window.location.pathname !== '/forgot-password') {
+            window.location.href = '/login';
+          }
         }
-        
+
         setLoading(false);
       }
     );
