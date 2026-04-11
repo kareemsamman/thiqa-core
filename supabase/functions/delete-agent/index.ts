@@ -16,18 +16,14 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    const callerClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await callerClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) throw new Error("Unauthorized");
-
-    const callerId = claimsData.claims.sub;
     const adminClient = createClient(supabaseUrl, serviceKey);
 
-    const { data: isSA } = await adminClient.rpc("is_super_admin", { _user_id: callerId });
+    // Verify caller is a super admin using the JWT token
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user: caller }, error: callerError } = await adminClient.auth.getUser(token);
+    if (callerError || !caller) throw new Error("Unauthorized");
+
+    const { data: isSA } = await adminClient.rpc("is_super_admin", { _user_id: caller.id });
     if (!isSA) throw new Error("Not a super admin");
 
     const { agent_id } = await req.json();
