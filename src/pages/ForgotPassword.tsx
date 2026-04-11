@@ -31,15 +31,32 @@ export default function ForgotPassword() {
           redirectTo: `${window.location.origin}/reset-password`,
         },
       });
-      if (error) throw error;
-      if (data?.error) {
-        if (data.error.includes("Google") || data.error.includes("google") || data.error.includes("OAuth")) {
-          setIsGoogleAccount(true);
-          setSent(true);
-          return;
+
+      // Parse error from function response (may be in error.context for non-2xx)
+      let errorMsg = data?.error || "";
+      if (!errorMsg && error) {
+        try {
+          const ctx = (error as any)?.context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            errorMsg = body?.error || error.message || "";
+          } else {
+            errorMsg = error.message || "";
+          }
+        } catch {
+          errorMsg = error.message || "";
         }
-        throw new Error(data.error);
       }
+
+      // Detect Google-only account
+      if (errorMsg && (errorMsg.includes("Google") || errorMsg.includes("google") || errorMsg.includes("OAuth"))) {
+        setIsGoogleAccount(true);
+        setSent(true);
+        return;
+      }
+
+      if (error) throw new Error(errorMsg || "حدث خطأ");
+      if (data?.error) throw new Error(data.error);
       setSent(true);
     } catch (e: any) {
       toast.error(e.message || "حدث خطأ في إرسال رابط إعادة التعيين");
