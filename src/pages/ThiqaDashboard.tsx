@@ -200,7 +200,7 @@ export default function ThiqaDashboard() {
             <CardContent className="p-0">
               <div className="max-h-[400px] overflow-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-muted/50 sticky top-0">
+                  <thead className="bg-white dark:bg-card sticky top-0 z-10 border-b">
                     <tr>
                       <th className="text-right p-3 font-medium">الوكيل</th>
                       <th className="text-right p-3 font-medium">الخطة</th>
@@ -259,7 +259,7 @@ export default function ThiqaDashboard() {
                   <div className="p-8 text-center text-muted-foreground">لا توجد مدفوعات مسجلة</div>
                 ) : (
                   <table className="w-full text-sm">
-                    <thead className="bg-muted/50 sticky top-0">
+                    <thead className="bg-white dark:bg-card sticky top-0 z-10 border-b">
                       <tr>
                         <th className="text-right p-3 font-medium">التاريخ</th>
                         <th className="text-right p-3 font-medium">الوكيل</th>
