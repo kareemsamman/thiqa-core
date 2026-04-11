@@ -155,18 +155,23 @@ export default function Login() {
     if (isInIframe) { window.open(window.location.href, '_blank'); return; }
     try {
       setLoading(true);
+      sessionStorage.setItem('admin_session_active', 'true');
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: window.location.origin },
       });
       if (error) {
+        sessionStorage.removeItem('admin_session_active');
         if (error.message.includes('provider is not enabled')) {
           toast.error("مزود Google غير مفعل.");
         } else {
           toast.error("حدث خطأ في تسجيل الدخول");
         }
       }
-    } catch { toast.error("حدث خطأ غير متوقع"); }
+    } catch {
+      sessionStorage.removeItem('admin_session_active');
+      toast.error("حدث خطأ غير متوقع");
+    }
     finally { setLoading(false); }
   };
 

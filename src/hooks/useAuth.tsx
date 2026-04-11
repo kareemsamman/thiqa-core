@@ -142,6 +142,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
 
+        if (session?.user && (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY')) {
+          sessionStorage.setItem(SESSION_KEY, 'true');
+        }
+
         // Defer profile fetch with setTimeout to avoid deadlock
         if (session?.user) {
           setTimeout(() => {
