@@ -89,13 +89,36 @@ export default function Login() {
         return;
       }
 
-      const checkEmailConfirmed = async () => {
+      const checkAndSetupUser = async () => {
         try {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('email_confirmed')
+            .select('email_confirmed, agent_id')
             .eq('id', user.id)
             .maybeSingle();
+
+          // If no profile or no agent_id, this might be a Google OAuth user — set them up
+          if (!profile || !profile.agent_id) {
+            const isGoogleUser = user.app_metadata?.providers?.includes('google') ||
+              user.app_metadata?.provider === 'google';
+            if (isGoogleUser) {
+              toast.info("جاري إعداد حسابك...");
+              const { data: setupData, error: setupError } = await supabase.functions.invoke("setup-oauth-user");
+              if (setupError) {
+                console.error('[Login] setup-oauth-user error:', setupError);
+                navigate('/no-access', { replace: true });
+                return;
+              }
+              if (setupData?.already_setup && isSuperAdmin) {
+                navigate('/thiqa', { replace: true });
+                return;
+              }
+              // Refresh auth to pick up the new profile
+              toast.success(setupData?.message || "تم إعداد حسابك بنجاح!");
+              navigate('/', { replace: true });
+              return;
+            }
+          }
 
           let emailConfirmed = profile?.email_confirmed === true;
 
@@ -114,7 +137,7 @@ export default function Login() {
             navigate('/no-access', { replace: true });
           }
         } catch (err) {
-          console.error('[Login] checkEmailConfirmed error:', err);
+          console.error('[Login] checkAndSetupUser error:', err);
           if (isActive) {
             navigate('/', { replace: true });
           } else {
@@ -123,7 +146,7 @@ export default function Login() {
         }
       };
 
-      checkEmailConfirmed();
+      checkAndSetupUser();
     }
   }, [user, isActive, isSuperAdmin, authLoading, navigate, tryBypassEmailVerification]);
 
