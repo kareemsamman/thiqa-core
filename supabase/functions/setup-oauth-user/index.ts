@@ -134,6 +134,35 @@ Deno.serve(async (req) => {
 
     if (roleError) console.error("Role assignment error:", roleError);
 
+    // Initialize feature flags for trial (all features enabled)
+    await adminClient.rpc("set_features_for_plan", {
+      p_agent_id: agentId,
+      p_plan: "trial",
+    }).then(({ error: featErr }) => {
+      if (featErr) console.error("Feature flags init error:", featErr);
+    });
+
+    // Initialize SMS settings
+    await adminClient.from("sms_settings").upsert({
+      agent_id: agentId,
+      provider: "019",
+      sms_user: "",
+      sms_token: "",
+      sms_source: "",
+      is_enabled: false,
+    }, { onConflict: "agent_id" }).then(({ error: smsErr }) => {
+      if (smsErr) console.error("SMS settings init error:", smsErr);
+    });
+
+    // Initialize auth settings
+    await adminClient.from("auth_settings").upsert({
+      agent_id: agentId,
+      email_otp_enabled: true,
+      sms_otp_enabled: false,
+    }, { onConflict: "agent_id" }).then(({ error: authErr }) => {
+      if (authErr) console.error("Auth settings init error:", authErr);
+    });
+
     // Send welcome email + notify super admins (non-blocking)
     try {
       const { data: smtpRows } = await adminClient

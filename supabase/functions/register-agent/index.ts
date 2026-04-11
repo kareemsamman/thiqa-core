@@ -180,6 +180,35 @@ Deno.serve(async (req) => {
       console.error("Role assignment error:", roleError);
     }
 
+    // Initialize feature flags for trial (all features enabled)
+    await adminClient.rpc("set_features_for_plan", {
+      p_agent_id: agentData.id,
+      p_plan: "trial",
+    }).then(({ error: featErr }) => {
+      if (featErr) console.error("Feature flags init error:", featErr);
+    });
+
+    // Initialize SMS settings (disabled by default, no credentials)
+    await adminClient.from("sms_settings").upsert({
+      agent_id: agentData.id,
+      provider: "019",
+      sms_user: "",
+      sms_token: "",
+      sms_source: "",
+      is_enabled: false,
+    }, { onConflict: "agent_id" }).then(({ error: smsErr }) => {
+      if (smsErr) console.error("SMS settings init error:", smsErr);
+    });
+
+    // Initialize auth settings (email OTP enabled by default)
+    await adminClient.from("auth_settings").upsert({
+      agent_id: agentData.id,
+      email_otp_enabled: true,
+      sms_otp_enabled: false,
+    }, { onConflict: "agent_id" }).then(({ error: authErr }) => {
+      if (authErr) console.error("Auth settings init error:", authErr);
+    });
+
     const { error: otpError } = await adminClient.auth.admin.generateLink({
       type: "signup",
       email: normalizedEmail,

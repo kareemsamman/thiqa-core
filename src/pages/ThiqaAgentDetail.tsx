@@ -183,6 +183,7 @@ export default function ThiqaAgentDetail() {
   const { user } = useAuth();
   const { startImpersonation } = useAgentContext();
   const [agent, setAgent] = useState<AgentDetail | null>(null);
+  const [agents_original_plan, setOriginalPlan] = useState<string>("");
   const [features, setFeatures] = useState<Record<string, boolean>>({});
   const [payments, setPayments] = useState<any[]>([]);
   const [dbPlans, setDbPlans] = useState<{plan_key: string; name: string; monthly_price: number}[]>([]);
@@ -265,7 +266,10 @@ export default function ThiqaAgentDetail() {
         supabase.from('subscription_plans').select('plan_key, name, monthly_price').eq('is_active', true).order('sort_order'),
       ]);
 
-      if (agentRes.data) setAgent(agentRes.data as AgentDetail);
+      if (agentRes.data) {
+        setAgent(agentRes.data as AgentDetail);
+        setOriginalPlan((agentRes.data as AgentDetail).plan);
+      }
       const featureMap: Record<string, boolean> = {};
       if (flagsRes.data) flagsRes.data.forEach((f: any) => { featureMap[f.feature_key] = f.enabled; });
       setFeatures(featureMap);
@@ -310,6 +314,11 @@ export default function ThiqaAgentDetail() {
   const saveAgent = async () => {
     if (!agent) return;
     setSaving(true);
+
+    // Detect plan change to auto-update feature flags
+    const prevPlan = agents_original_plan;
+    const newPlan = agent.plan;
+
     const { error } = await supabase
       .from('agents')
       .update({
@@ -321,6 +330,26 @@ export default function ThiqaAgentDetail() {
         updated_at: new Date().toISOString(),
       })
       .eq('id', agent.id);
+
+    // Auto-set feature flags if plan changed
+    if (!error && prevPlan !== newPlan) {
+      const { error: featErr } = await supabase.rpc("set_features_for_plan", {
+        p_agent_id: agent.id,
+        p_plan: newPlan,
+      });
+      if (featErr) {
+        console.error("Feature flags update error:", featErr);
+      } else {
+        toast.info("تم تحديث الميزات تلقائياً حسب الخطة الجديدة");
+        // Refresh features
+        const { data: ff } = await supabase.from('agent_feature_flags').select('feature_key, enabled').eq('agent_id', agent.id);
+        const featureMap: Record<string, boolean> = {};
+        (ff || []).forEach((f: any) => { featureMap[f.feature_key] = f.enabled; });
+        setFeatures(featureMap);
+      }
+      setOriginalPlan(newPlan);
+    }
+
     setSaving(false);
     error ? toast.error('خطأ في الحفظ') : toast.success('تم الحفظ');
   };
