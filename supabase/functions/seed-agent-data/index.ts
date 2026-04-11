@@ -190,6 +190,19 @@ serve(async (req) => {
 
     const results: Record<string, number> = {};
 
+    // 0. Seed default branch if none exists
+    const { count: branchCount } = await supabase
+      .from("branches").select("id", { count: "exact", head: true }).eq("agent_id", agentId);
+    if ((branchCount ?? 0) === 0) {
+      const { data: branchData, error: branchErr } = await supabase
+        .from("branches")
+        .insert({ agent_id: agentId, name: "Beit Hanina", name_ar: "بيت حنينا", is_default: true })
+        .select("id");
+      if (!branchErr && branchData?.length) {
+        results.branches = 1;
+      }
+    }
+
     // Collect all seed company names for cleanup
     const seedCompanyNames = new Set(SEED_COMPANIES.map((c) => c.name));
 

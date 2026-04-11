@@ -17,6 +17,7 @@ import {
   Rocket,
   ListChecks,
   Loader2,
+  MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,6 +38,14 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     icon: <Palette className="h-5 w-5" />,
     targetRoute: "/admin/branding",
     emoji: "🎨",
+  },
+  {
+    id: "branches",
+    title: "الفروع",
+    description: "أضف فروع وكالتك ومواقعها",
+    icon: <MapPin className="h-5 w-5" />,
+    targetRoute: "/admin/branches",
+    emoji: "📍",
   },
   {
     id: "companies",
@@ -75,7 +84,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
 async function detectCompletedSteps(agentId: string): Promise<Set<string>> {
   const done = new Set<string>();
   try {
-    const [agentRes, siteSettingsRes, companiesRes, profilesRes, clientsRes, policiesRes] = await Promise.all([
+    const [agentRes, siteSettingsRes, companiesRes, profilesRes, clientsRes, policiesRes, branchesRes] = await Promise.all([
       supabase.from("agents").select("logo_url, name_ar").eq("id", agentId).single(),
       supabase
         .from("site_settings")
@@ -86,6 +95,7 @@ async function detectCompletedSteps(agentId: string): Promise<Set<string>> {
       supabase.from("profiles").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
       supabase.from("clients").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
       supabase.from("policies").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
+      supabase.from("branches").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
     ]);
 
     const agentBrandingReady =
@@ -98,6 +108,7 @@ async function detectCompletedSteps(agentId: string): Promise<Set<string>> {
       Boolean(siteSettingsRes.data?.site_description && siteSettingsRes.data.site_description.trim().length > 0);
 
     if (agentBrandingReady || siteBrandingReady) done.add("branding");
+    if ((branchesRes.count ?? 0) > 0) done.add("branches");
     if ((companiesRes.count ?? 0) > 0) done.add("companies");
     if ((profilesRes.count ?? 0) > 1) done.add("users");
     if ((clientsRes.count ?? 0) > 0) done.add("clients");
@@ -202,6 +213,7 @@ export function OnboardingWizard() {
 
       const seeded = data?.seeded || {};
       const parts: string[] = [];
+      if (seeded.branches) parts.push(`${seeded.branches} فرع`);
       if (seeded.insurance_companies) parts.push(`${seeded.insurance_companies} شركة تأمين`);
       if (seeded.insurance_categories) parts.push(`${seeded.insurance_categories} نوع تأمين`);
       if (seeded.road_services) parts.push(`${seeded.road_services} خدمة طريق`);
