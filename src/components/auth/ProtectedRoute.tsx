@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAgentContext } from '@/hooks/useAgentContext';
@@ -12,41 +12,45 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading, profileLoading, profile, isActive, isSuperAdmin, refreshProfile } = useAuth();
   const { isImpersonating, isSubscriptionActive, isSubscriptionPaused, loading: agentLoading } = useAgentContext();
-  const [settingUpOAuth, setSettingUpOAuth] = useState(false);
+  const [oauthSetupState, setOauthSetupState] = useState<'idle' | 'running' | 'done'>('idle');
+  const setupStartedRef = useRef(false);
 
   const location = useLocation();
 
-  // Auto-setup Google OAuth users who have no profile/agent
+  // Detect if this is a Google user who needs agent setup
+  const isGoogleUser = !!user && (
+    user.app_metadata?.providers?.includes('google') ||
+    user.app_metadata?.provider === 'google'
+  );
+  const needsOAuthSetup = isGoogleUser && !isSuperAdmin && !profile?.agent_id && !loading && !profileLoading;
+
+  // Run setup-oauth-user when needed
   useEffect(() => {
-    if (!user || loading || profileLoading || isSuperAdmin || settingUpOAuth) return;
-    if (profile?.agent_id) return; // Already set up
+    if (!needsOAuthSetup || oauthSetupState !== 'idle' || setupStartedRef.current) return;
+    setupStartedRef.current = true;
+    setOauthSetupState('running');
 
-    const isGoogleUser = user.app_metadata?.providers?.includes('google') ||
-      user.app_metadata?.provider === 'google';
-
-    if (!isGoogleUser) return;
-
-    setSettingUpOAuth(true);
     supabase.functions.invoke("setup-oauth-user").then(async ({ data, error }) => {
       if (error) {
         console.error('[ProtectedRoute] setup-oauth-user error:', error);
       } else if (data?.success) {
-        // Refresh profile to pick up the new agent
         await refreshProfile();
       }
-      setSettingUpOAuth(false);
+      setOauthSetupState('done');
     });
-  }, [user, loading, profileLoading, profile, isSuperAdmin, settingUpOAuth, refreshProfile]);
+  }, [needsOAuthSetup, oauthSetupState, refreshProfile]);
 
   // Super admin bypasses profile loading requirement
   const needsProfileLoading = user && !isSuperAdmin && profileLoading && !profile;
 
-  if (loading || needsProfileLoading || settingUpOAuth || (user && !isSuperAdmin && agentLoading)) {
+  // Show loading while: auth loading, profile loading, agent context loading, OR oauth setup running/needed
+  const isSettingUp = oauthSetupState === 'running' || (needsOAuthSetup && oauthSetupState === 'idle');
+  if (loading || needsProfileLoading || isSettingUp || (user && !isSuperAdmin && agentLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">{settingUpOAuth ? "جاري إعداد حسابك..." : "جاري التحميل..."}</p>
+          <p className="text-muted-foreground">{isSettingUp ? "جاري إعداد حسابك..." : "جاري التحميل..."}</p>
         </div>
       </div>
     );
