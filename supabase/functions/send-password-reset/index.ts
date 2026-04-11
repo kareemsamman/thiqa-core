@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
       type: "recovery",
       email: normalizedEmail,
       options: {
-        redirectTo: redirectTo || `${supabaseUrl.replace(".supabase.co", ".lovable.app")}/reset-password`,
+        redirectTo: redirectTo || "https://getthiqa.com/reset-password",
       },
     });
 
