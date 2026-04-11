@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,19 +18,17 @@ Deno.serve(async (req) => {
 
     console.log('Starting payment reminders check...');
 
-    // Get SMS settings
-    const { data: smsSettings, error: settingsError } = await supabase
+    // Get agent-level SMS settings row (for templates and feature flags)
+    const { data: agentSmsRow } = await supabase
       .from('sms_settings')
       .select('*')
       .limit(1)
       .maybeSingle();
 
-    if (settingsError) {
-      console.error('Error fetching SMS settings:', settingsError);
-      throw settingsError;
-    }
+    // Get SMS credentials (with Thiqa platform fallback)
+    const smsSettings = await resolveSmsSettings(supabase, agentSmsRow?.agent_id);
 
-    if (!smsSettings?.is_enabled || !smsSettings?.enable_auto_reminders) {
+    if (!smsSettings || !agentSmsRow?.enable_auto_reminders) {
       console.log('SMS or auto reminders not enabled');
       return new Response(
         JSON.stringify({ success: true, message: 'Auto reminders disabled', sent: 0 }),
@@ -112,10 +111,10 @@ Deno.serve(async (req) => {
 
       if (daysUntilExpiry <= 7 && !reminderSet.has(`${policy.id}_1week`)) {
         reminderType = '1week';
-        template = smsSettings.reminder_1week_template;
+        template = agentSmsRow.reminder_1week_template;
       } else if (daysUntilExpiry <= 30 && daysUntilExpiry > 7 && !reminderSet.has(`${policy.id}_1month`)) {
         reminderType = '1month';
-        template = smsSettings.reminder_1month_template;
+        template = agentSmsRow.reminder_1month_template;
       }
 
       if (!reminderType || !template) continue;

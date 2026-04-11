@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { resolveAgentId } from "../_shared/agent-branding.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -74,23 +76,27 @@ serve(async (req) => {
 
     console.log(`[send-renewal-reminders] ${isContinuation ? 'Continuation' : 'Initial'} call. days_remaining: ${days_remaining}, continuation IDs: ${continuation_policy_ids?.length || 0}`);
 
-    // Get SMS settings
-    const { data: smsSettings, error: smsError } = await supabase
-      .from('sms_settings')
-      .select('*')
-      .limit(1)
-      .maybeSingle();
+    // Get SMS credentials (with Thiqa platform fallback)
+    const agentId = await resolveAgentId(supabase, user.id);
+    const smsSettings = await resolveSmsSettings(supabase, agentId);
 
-    if (smsError || !smsSettings || !smsSettings.is_enabled) {
+    if (!smsSettings) {
       return new Response(
         JSON.stringify({ error: "خدمة الرسائل غير مفعلة" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const template = smsSettings.renewal_reminder_template || 
+    // Get agent-level settings for templates and cooldown
+    const { data: agentSmsRow } = await supabase
+      .from('sms_settings')
+      .select('renewal_reminder_template, renewal_reminder_cooldown_days')
+      .eq('agent_id', agentId)
+      .maybeSingle();
+
+    const template = agentSmsRow?.renewal_reminder_template ||
       'مرحباً {client_name}، نذكرك بأن تأمين سيارتك رقم {car_number} سينتهي بتاريخ {policy_end_date}. للتجديد تواصل معنا.';
-    const cooldownDays = smsSettings.renewal_reminder_cooldown_days || 7;
+    const cooldownDays = agentSmsRow?.renewal_reminder_cooldown_days || 7;
 
     const today = new Date();
     const cooldownDate = new Date(today);

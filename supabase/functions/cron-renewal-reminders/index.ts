@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,14 +39,17 @@ serve(async (req) => {
 
     console.log("[cron-renewal-reminders] Starting automatic renewal reminders...");
 
-    // Get SMS settings
-    const { data: smsSettings, error: smsError } = await supabase
+    // Get agent-level SMS settings row (for templates and feature flags)
+    const { data: agentSmsRow } = await supabase
       .from("sms_settings")
       .select("*")
       .limit(1)
       .maybeSingle();
 
-    if (smsError || !smsSettings || !smsSettings.is_enabled) {
+    // Get SMS credentials (with Thiqa platform fallback)
+    const smsSettings = await resolveSmsSettings(supabase, agentSmsRow?.agent_id);
+
+    if (!smsSettings) {
       console.log("[cron-renewal-reminders] SMS service disabled or not configured");
       return new Response(
         JSON.stringify({ success: false, message: "SMS service disabled" }),
@@ -53,7 +57,7 @@ serve(async (req) => {
       );
     }
 
-    if (!smsSettings.enable_auto_renewal_reminders) {
+    if (!agentSmsRow?.enable_auto_renewal_reminders) {
       console.log("[cron-renewal-reminders] Auto renewal reminders disabled");
       return new Response(
         JSON.stringify({ success: false, message: "Auto renewal reminders disabled" }),
@@ -61,12 +65,12 @@ serve(async (req) => {
       );
     }
 
-    const template1Month = smsSettings.reminder_1month_template || 
+    const template1Month = agentSmsRow?.reminder_1month_template ||
       "مرحباً {client_name}، نذكرك بأن وثيقة التأمين لسيارتك ({car_number}) ستنتهي بعد شهر تقريباً في تاريخ {end_date}. يرجى التواصل معنا للتجديد.";
-    const template1Week = smsSettings.reminder_1week_template || 
+    const template1Week = agentSmsRow?.reminder_1week_template ||
       "مرحباً {client_name}، تنبيه عاجل: وثيقة التأمين لسيارتك ({car_number}) ستنتهي خلال أسبوع في تاريخ {end_date}. يرجى التجديد قبل الانتهاء.";
 
-    const cooldownDays = smsSettings.renewal_reminder_cooldown_days || 7;
+    const cooldownDays = agentSmsRow?.renewal_reminder_cooldown_days || 7;
     const cooldownDate = new Date();
     cooldownDate.setDate(cooldownDate.getDate() - cooldownDays);
 
@@ -252,14 +256,14 @@ serve(async (req) => {
     };
 
     // Process 1 month reminders
-    if (smsSettings.renewal_reminder_1month_enabled !== false) {
+    if (agentSmsRow?.renewal_reminder_1month_enabled !== false) {
       for (const policy of (policiesOneMonth || [])) {
         await sendSms(policy, template1Month, '1month');
       }
     }
 
     // Process 1 week reminders  
-    if (smsSettings.renewal_reminder_1week_enabled !== false) {
+    if (agentSmsRow?.renewal_reminder_1week_enabled !== false) {
       for (const policy of (policiesOneWeek || [])) {
         await sendSms(policy, template1Week, '1week');
       }

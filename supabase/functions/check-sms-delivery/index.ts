@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -71,11 +72,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Get SMS settings for API credentials
-    const { data: smsSettings } = await supabase
+    // Get SMS credentials (with Thiqa platform fallback)
+    const { data: firstAgent } = await supabase
       .from('sms_settings')
-      .select('*')
-      .single();
+      .select('agent_id')
+      .limit(1)
+      .maybeSingle();
+    const smsSettings = await resolveSmsSettings(supabase, firstAgent?.agent_id);
 
     if (!smsSettings) {
       return new Response(JSON.stringify({ error: 'SMS settings not configured' }), {
