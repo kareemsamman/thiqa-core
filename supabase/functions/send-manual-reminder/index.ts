@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -106,24 +107,26 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get SMS settings for this agent
+    // Get SMS credentials for this agent (with Thiqa platform fallback)
     const tempAgentId = await resolveAgentId(supabase, user.id);
-    const { data: smsSettings, error: settingsError } = await supabase
-      .from('sms_settings')
-      .select('*')
-      .eq('agent_id', tempAgentId)
-      .maybeSingle();
+    const smsSettings = await resolveSmsSettings(supabase, tempAgentId);
 
-    if (settingsError || !smsSettings?.is_enabled) {
+    if (!smsSettings) {
       return new Response(
         JSON.stringify({ error: 'SMS service not enabled' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Get company footer info from SMS settings
-    const companyLocation = smsSettings.company_location || '';
-    const phoneLinks = (smsSettings.company_phone_links as any[]) || [];
+    // Get company footer info from agent's SMS settings row
+    const { data: agentSmsRow } = await supabase
+      .from('sms_settings')
+      .select('company_location, company_phone_links')
+      .eq('agent_id', tempAgentId)
+      .maybeSingle();
+
+    const companyLocation = agentSmsRow?.company_location || '';
+    const phoneLinks = (agentSmsRow?.company_phone_links as any[]) || [];
     const phones = phoneLinks.map((p: any) => p.phone).filter(Boolean).join(' | ');
 
     // Fetch dynamic branding

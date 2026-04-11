@@ -1,4 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { resolveAgentId } from "../_shared/agent-branding.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -186,13 +188,11 @@ Deno.serve(async (req) => {
         .eq('id', letter.id);
     }
 
-    // Get SMS settings
-    const { data: smsSettings } = await supabase
-      .from('sms_settings')
-      .select('*')
-      .single();
+    // Get SMS credentials (with Thiqa platform fallback)
+    const agentId = await resolveAgentId(supabase, user.id);
+    const smsSettings = await resolveSmsSettings(supabase, agentId);
 
-    if (!smsSettings || !smsSettings.is_enabled) {
+    if (!smsSettings) {
       return new Response(JSON.stringify({ error: 'SMS service is disabled' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

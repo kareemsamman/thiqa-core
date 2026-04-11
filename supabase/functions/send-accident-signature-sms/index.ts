@@ -1,5 +1,7 @@
  import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
  import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
+ import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+ import { resolveAgentId } from "../_shared/agent-branding.ts";
  
  const corsHeaders = {
    "Access-Control-Allow-Origin": "*",
@@ -131,22 +133,11 @@
        );
      }
  
-     // Get SMS settings
-     const { data: smsSettings, error: smsSettingsError } = await supabase
-       .from("sms_settings")
-       .select("*")
-       .limit(1)
-       .maybeSingle();
- 
-     if (smsSettingsError) {
-       console.error("[send-accident-signature-sms] Error fetching SMS settings:", smsSettingsError);
-       return new Response(
-         JSON.stringify({ error: "Failed to fetch SMS settings" }),
-         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-       );
-     }
- 
-     if (!smsSettings || !smsSettings.is_enabled) {
+     // Get SMS credentials (with Thiqa platform fallback)
+     const agentId = await resolveAgentId(supabase, user.id);
+     const smsSettings = await resolveSmsSettings(supabase, agentId);
+
+     if (!smsSettings) {
        return new Response(
          JSON.stringify({ error: "خدمة الرسائل النصية غير مفعلة" }),
          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }

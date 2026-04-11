@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -74,14 +75,10 @@ Deno.serve(async (req) => {
     const { data: agentUser } = await supabase.from('agent_users').select('agent_id').eq('user_id', user.id).maybeSingle();
     const agentId = agentUser?.agent_id;
 
-    // Get SMS settings for this agent
-    const { data: smsSettings, error: settingsError } = await supabase
-      .from('sms_settings')
-      .select('*')
-      .eq('agent_id', agentId)
-      .maybeSingle();
+    // Get SMS settings for this agent (with Thiqa platform fallback)
+    const smsSettings = await resolveSmsSettings(supabase, agentId);
 
-    if (settingsError || !smsSettings) {
+    if (!smsSettings) {
       return new Response(JSON.stringify({ error: 'SMS settings not configured' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

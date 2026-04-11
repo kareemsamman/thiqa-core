@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { resolveSmsSettings } from "../_shared/sms-settings.ts"
 
 // This edge function handles payment result pages for Tranzila
 // It returns simple HTML that posts a message to the parent window
@@ -144,6 +145,7 @@ Deno.serve(async (req) => {
                 policy:policies!policy_id (
                   id,
                   policy_number,
+                  agent_id,
                   client:clients!client_id (
                     id,
                     full_name,
@@ -361,14 +363,12 @@ async function sendPaymentReceiptSms(supabase: any, payment: any) {
       return
     }
 
-    // Get SMS settings
-    const { data: smsSettings } = await supabase
-      .from('sms_settings')
-      .select('*')
-      .single()
+    // Get SMS credentials (with Thiqa platform fallback)
+    const agentId = policy?.agent_id || null
+    const smsSettings = await resolveSmsSettings(supabase, agentId)
 
-    if (!smsSettings?.is_enabled) {
-      console.log('SMS is disabled, skipping receipt SMS')
+    if (!smsSettings) {
+      console.log('SMS is disabled or not configured, skipping receipt SMS')
       return
     }
 

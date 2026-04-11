@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { buildBunnyStorageUploadUrl, normalizeBunnyCdnUrl, resolveBunnyStorageZone } from "../_shared/bunny-storage.ts";
 import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -137,27 +138,22 @@ serve(async (req) => {
       );
     }
 
-    // Get SMS settings with template
-    const { data: smsSettings, error: smsSettingsError } = await supabase
-      .from("sms_settings")
-      .select("*, invoice_templates:default_signature_template_id(*)")
-      .limit(1)
-      .maybeSingle();
+    // Get SMS credentials (with Thiqa platform fallback)
+    const smsSettings = await resolveSmsSettings(supabase, agentId);
 
-    if (smsSettingsError) {
-      console.error("[send-signature-sms] Error fetching SMS settings:", smsSettingsError);
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch SMS settings" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (!smsSettings || !smsSettings.is_enabled) {
+    if (!smsSettings) {
       return new Response(
         JSON.stringify({ error: "SMS service is not enabled" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Get agent-level settings for template
+    const { data: agentSmsRow } = await supabase
+      .from("sms_settings")
+      .select("signature_sms_template, invoice_templates:default_signature_template_id(*)")
+      .eq("agent_id", agentId)
+      .maybeSingle();
 
     // Get template content from SMS settings
     let templateContent: TemplateContent = {
@@ -167,8 +163,8 @@ serve(async (req) => {
       footer_html: '<p>جميع الحقوق محفوظة</p>',
     };
 
-    if (smsSettings.invoice_templates) {
-      const template = smsSettings.invoice_templates as any;
+    if (agentSmsRow?.invoice_templates) {
+      const template = agentSmsRow.invoice_templates as any;
       templateContent = {
         logo_url: template.logo_url || null,
         header_html: template.header_html || templateContent.header_html,
@@ -251,7 +247,7 @@ serve(async (req) => {
     }
 
     // Build SMS message - use the CDN URL (ends in .html)
-    let smsMessage = smsSettings.signature_sms_template || 
+    let smsMessage = agentSmsRow?.signature_sms_template ||
       "مرحباً {{client_name}}، يرجى التوقيع على الرابط التالي: {{signature_url}}";
 
     smsMessage = smsMessage

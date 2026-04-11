@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { buildBunnyStorageUploadUrl, normalizeBunnyCdnUrl, resolveBunnyStorageZone } from "../_shared/bunny-storage.ts";
 import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -154,21 +155,13 @@ serve(async (req) => {
     const hasAnyFiles = insuranceFiles && insuranceFiles.length > 0;
     console.log(`[send-package-invoice-sms] Files found: ${insuranceFiles?.length || 0} for ${policies.length} policies`);
 
-    // Fetch SMS settings for this agent
+    // Fetch SMS credentials for this agent (with Thiqa platform fallback)
     const packageAgentId = policies?.[0]?.agent_id;
-    const { data: smsSettingsData, error: smsSettingsError } = await supabase
-      .from("sms_settings")
-      .select("*")
-      .eq("agent_id", packageAgentId)
-      .maybeSingle();
-
-    if (smsSettingsError) {
-      console.error("[send-package-invoice-sms] Error fetching SMS settings:", smsSettingsError);
-    }
+    const smsSettingsData = await resolveSmsSettings(supabase, packageAgentId);
 
     // For SMS sending, require enabled settings
     if (!skip_sms) {
-      if (!smsSettingsData || !smsSettingsData.is_enabled) {
+      if (!smsSettingsData) {
         return new Response(
           JSON.stringify({ error: "خدمة الرسائل غير مفعلة" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -176,11 +169,18 @@ serve(async (req) => {
       }
     }
 
+    // Get company settings from agent's SMS settings row
+    const { data: agentSmsRow } = await supabase
+      .from("sms_settings")
+      .select("company_email, company_phones, company_whatsapp, company_location")
+      .eq("agent_id", packageAgentId)
+      .maybeSingle();
+
     const companySettings = {
-      company_email: smsSettingsData?.company_email || '',
-      company_phones: smsSettingsData?.company_phones || [],
-      company_whatsapp: smsSettingsData?.company_whatsapp || '',
-      company_location: smsSettingsData?.company_location || '',
+      company_email: agentSmsRow?.company_email || '',
+      company_phones: agentSmsRow?.company_phones || [],
+      company_whatsapp: agentSmsRow?.company_whatsapp || '',
+      company_location: agentSmsRow?.company_location || '',
     };
 
     if (!bunnyApiKey || !bunnyStorageZone) {

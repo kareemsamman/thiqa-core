@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -81,14 +82,10 @@ Deno.serve(async (req) => {
 
     console.log(`Bulk SMS request - filter_days: ${filter_days}, search: ${search}`);
 
-    // Get SMS settings
-    const { data: smsSettings, error: settingsError } = await supabase
-      .from("sms_settings")
-      .select("*")
-      .single();
+    // Get SMS credentials (with Thiqa platform fallback)
+    const smsSettings = await resolveSmsSettings(supabase, agentId);
 
-    if (settingsError || !smsSettings) {
-      console.error("SMS settings error:", settingsError);
+    if (!smsSettings) {
       return new Response(
         JSON.stringify({ error: "SMS settings not configured" }),
         {
@@ -97,6 +94,13 @@ Deno.serve(async (req) => {
         }
       );
     }
+
+    // Get agent-level company settings
+    const { data: agentSmsRow } = await supabase
+      .from("sms_settings")
+      .select("company_location, company_phone_links")
+      .eq("agent_id", agentId)
+      .maybeSingle();
 
     // Get all clients matching the filter (no pagination limit)
     const { data: clientRows, error: clientError } = await supabase.rpc(
@@ -125,23 +129,13 @@ Deno.serve(async (req) => {
     console.log(`${clientsWithPhone.length} clients have phone numbers`);
 
     // Get company footer info
-    const companyLocation = smsSettings.company_location || '';
-    const phoneLinks = (smsSettings.company_phone_links as any[]) || [];
+    const companyLocation = agentSmsRow?.company_location || '';
+    const phoneLinks = (agentSmsRow?.company_phone_links as any[]) || [];
     const phones = phoneLinks.map((p: any) => p.phone).filter(Boolean).join(' | ');
 
     const smsUser = smsSettings.sms_user;
     const smsToken = smsSettings.sms_token;
-    const smsSource = smsSettings.sms_source || "Thiqa-Ins";
-
-    if (!smsUser || !smsToken) {
-      return new Response(
-        JSON.stringify({ error: "SMS credentials not configured" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
+    const smsSource = smsSettings.sms_source;
 
     let sentCount = 0;
     let failedCount = 0;
