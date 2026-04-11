@@ -545,15 +545,21 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile hamburger button - fixed top right */}
-      <Button
-        variant="outline"
-        size="icon"
-        className="fixed top-4 right-4 z-50 md:hidden bg-background shadow-md"
-        onClick={() => setMobileOpen(true)}
-      >
-        <Menu className="h-5 w-5" />
-      </Button>
+      {/* Mobile top navbar */}
+      <div className="fixed top-0 inset-x-0 z-50 md:hidden h-14 bg-[#122143] flex items-center justify-between px-4 shadow-lg" dir="rtl">
+        <div className="flex items-center gap-2.5">
+          <img src={thiqaLogoIcon} alt="Thiqa" className="h-7 w-7 object-contain" />
+          <span className="text-white/90 text-sm font-semibold">Thiqa</span>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-white/80 hover:text-white hover:bg-white/10 h-9 w-9"
+          onClick={() => setMobileOpen(true)}
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      </div>
 
       {/* Mobile drawer */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>

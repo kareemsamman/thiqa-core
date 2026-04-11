@@ -54,7 +54,7 @@ export function MainLayout({ children, onPolicyComplete }: MainLayoutProps) {
       <Sidebar />
 
       {/* Main content - responsive margins */}
-      <main className={`min-h-screen transition-all duration-300 p-3 pt-16 md:pt-6 md:p-6 ${sidebarMargin} ${isThiqaSuperAdmin ? 'pb-6' : 'pb-40'} ${isImpersonating ? 'mt-10' : ''}`}>
+      <main className={`min-h-screen transition-all duration-300 p-3 pt-[3.75rem] md:pt-6 md:p-6 ${sidebarMargin} ${isThiqaSuperAdmin ? 'pb-6' : 'pb-40'} ${isImpersonating ? 'mt-10' : ''}`}>
         <div className="max-w-full">{children}</div>
       </main>
 
