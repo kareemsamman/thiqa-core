@@ -13,18 +13,22 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const adminClient = createClient(supabaseUrl, serviceKey);
 
     // Get the authenticated user from the request JWT
     const authHeader = req.headers.get("authorization");
     if (!authHeader) throw new Error("غير مصرح");
 
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { authorization: authHeader } },
-    });
-
-    const { data: { user }, error: userError } = await anonClient.auth.getUser();
-    if (userError || !user) throw new Error("فشل في التحقق من المستخدم");
+    // Try to extract user from the JWT token directly using admin client
+    // This is more reliable than creating an anon client right after OAuth redirect
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userError } = await adminClient.auth.getUser(token);
+    
+    if (userError || !user) {
+      console.error("getUser error:", userError?.message);
+      throw new Error("فشل في التحقق من المستخدم");
+    }
 
     const userId = user.id;
     const userEmail = (user.email || "").trim().toLowerCase();
@@ -69,7 +73,6 @@ Deno.serve(async (req) => {
     let agentId: string;
 
     if (existingAgent) {
-      // Link to existing agent
       agentId = existingAgent.id;
     } else {
       // Create new agent with 35-day free trial
@@ -104,7 +107,7 @@ Deno.serve(async (req) => {
           full_name: fullName,
           status: "active",
           agent_id: agentId,
-          email_confirmed: true, // Google verifies email
+          email_confirmed: true,
         },
         { onConflict: "id" }
       );
@@ -131,7 +134,7 @@ Deno.serve(async (req) => {
 
     if (roleError) console.error("Role assignment error:", roleError);
 
-    // Send welcome email + notify super admins
+    // Send welcome email + notify super admins (non-blocking)
     try {
       const { data: smtpRows } = await adminClient
         .from("thiqa_platform_settings")
@@ -152,7 +155,6 @@ Deno.serve(async (req) => {
           auth: { user: smtpUser, pass: smtpPassword },
         });
 
-        // Welcome email to new user
         const htmlContent = buildEmailHtml({
           body: welcomeAgentEmailBody(fullName),
           footerText: "هذه الرسالة تم إرسالها تلقائياً عند إنشاء حسابك.",
@@ -166,7 +168,6 @@ Deno.serve(async (req) => {
           html: htmlContent,
         });
 
-        // Notify ALL super admins
         const { data: superAdmins } = await adminClient
           .from("thiqa_super_admins")
           .select("email");

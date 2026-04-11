@@ -9,6 +9,7 @@ interface UserProfile {
   status: 'pending' | 'active' | 'blocked';
   avatar_url: string | null;
   branch_id: string | null;
+  agent_id: string | null;
 }
 
 interface AuthContextType {
