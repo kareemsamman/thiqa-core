@@ -38,21 +38,46 @@ Deno.serve(async (req) => {
     const userIds = (agentUsers || []).map((u: any) => u.user_id);
 
     // Delete in dependency order
+    // All tables with agent_id — ordered so child tables are deleted before parents
     const agentTables = [
+      // Accident sub-tables
       "accident_report_files", "accident_report_notes", "accident_report_reminders",
       "accident_injured_persons", "accident_third_parties", "accident_reports",
-      "broker_settlement_items", "broker_settlements",
-      "policy_payments", "ab_ledger", "invoices",
-      "policies", "car_accidents", "cars",
-      "clients", "pricing_rules", "insurance_categories",
-      "brokers", "outside_cheques", "media_files",
-      "invoice_templates", "customer_signatures",
-      "notifications", "automated_sms_log", "sms_history",
+      // Broker/settlement sub-tables
+      "settlement_supplements", "broker_settlement_items", "broker_settlements",
+      "company_settlements", "company_accident_fee_prices", "company_accident_templates",
+      "company_road_service_prices",
+      // Policy sub-tables
+      "policy_children", "policy_reminders", "policy_renewal_tracking", "policy_transfers",
+      "policy_groups", "policy_payments",
+      // Client sub-tables
+      "client_children", "client_debits", "client_notes", "client_payments",
+      "customer_wallet_transactions",
+      // Repair sub-tables
+      "repair_claim_notes", "repair_claim_reminders", "repair_claims",
+      // Payment/invoice
+      "payment_images", "ab_ledger", "invoices", "invoice_templates",
+      // Lead/marketing
+      "lead_messages", "leads", "marketing_sms_recipients", "marketing_sms_campaigns",
+      // Main business tables
+      "policies", "car_accidents", "cars", "clients",
+      "pricing_rules", "insurance_categories", "insurance_companies", "insurance_company_groups",
+      "brokers", "outside_cheques", "media_files", "expenses",
+      "customer_signatures", "form_template_files", "form_template_folders",
+      // Communication
+      "notifications", "automated_sms_log", "sms_logs",
       "correspondence_letters", "tasks", "business_contacts",
-      "repair_claims", "road_services", "accident_fee_services",
-      "branches", "announcements", "announcement_dismissals",
+      // Services
+      "road_services", "accident_fee_services", "pbx_extensions",
+      // AI
+      "ai_chat_sessions",
+      // Announcements
+      "announcements",
+      // Branch
+      "branches",
+      // Agent config
       "agent_subscription_payments", "agent_feature_flags",
-      "sms_settings", "auth_settings", "payment_settings", "site_settings",
+      "sms_settings", "auth_settings", "payment_settings", "site_settings", "xservice_settings",
     ];
 
     for (const table of agentTables) {
