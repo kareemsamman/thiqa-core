@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,23 +18,20 @@ Deno.serve(async (req) => {
 
     console.log('Starting birthday and license expiry SMS cron job...');
 
-    // Get SMS settings
-    const { data: smsSettings, error: settingsError } = await supabase
+    // Get agent-level SMS settings row (for templates and feature flags)
+    const { data: agentSmsRow } = await supabase
       .from('sms_settings')
       .select('*')
-      .single();
+      .limit(1)
+      .maybeSingle();
 
-    if (settingsError || !smsSettings) {
-      console.error('SMS settings not found:', settingsError);
+    // Get SMS credentials (with Thiqa platform fallback)
+    const smsSettings = await resolveSmsSettings(supabase, agentSmsRow?.agent_id);
+
+    if (!smsSettings) {
+      console.error('SMS settings not configured');
       return new Response(JSON.stringify({ error: 'SMS settings not configured' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (!smsSettings.is_enabled) {
-      console.log('SMS service is disabled');
-      return new Response(JSON.stringify({ message: 'SMS service is disabled' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -107,7 +105,7 @@ Deno.serve(async (req) => {
     }
 
     // ===== BIRTHDAY SMS =====
-    if (smsSettings.birthday_sms_enabled) {
+    if (agentSmsRow?.birthday_sms_enabled) {
       console.log('Processing birthday SMS...');
 
       // Get clients with birthday today (matching month and day)
@@ -147,7 +145,7 @@ Deno.serve(async (req) => {
           }
 
           // Prepare message
-          const message = (smsSettings.birthday_sms_template || 'عيد ميلاد سعيد {client_name}!')
+          const message = (agentSmsRow?.birthday_sms_template || 'عيد ميلاد سعيد {client_name}!')
             .replace(/{client_name}/g, client.full_name);
 
           // Send SMS
@@ -191,7 +189,7 @@ Deno.serve(async (req) => {
     }
 
     // ===== LICENSE EXPIRY SMS =====
-    if (smsSettings.license_expiry_sms_enabled) {
+    if (agentSmsRow?.license_expiry_sms_enabled) {
       console.log('Processing license expiry SMS...');
 
       // Get cars with license expiring in 1 month (within 3 days window)
@@ -243,7 +241,7 @@ Deno.serve(async (req) => {
           }
 
           // Prepare message
-          const message = (smsSettings.license_expiry_sms_template || 'تنبيه: رخصة سيارتك {car_number} ستنتهي قريباً')
+          const message = (agentSmsRow?.license_expiry_sms_template || 'تنبيه: رخصة سيارتك {car_number} ستنتهي قريباً')
             .replace(/{client_name}/g, client.full_name)
             .replace(/{car_number}/g, car.car_number);
 

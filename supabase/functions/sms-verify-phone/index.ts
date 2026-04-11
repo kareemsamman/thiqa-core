@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -116,24 +117,28 @@ Deno.serve(async (req) => {
 
     // ═══ START VERIFICATION ═══
     if (action === "start_verify") {
-      // Get current settings
-      const { data: settings } = await adminClient
+      // Get current settings (with Thiqa platform fallback)
+      const settings = await resolveSmsSettings(adminClient, agentId);
+
+      if (!settings) {
+        throw new Error("يرجى تعبئة جميع حقول SMS (اسم المستخدم، التوكن، رقم المصدر)");
+      }
+
+      // Get the agent's sms_settings row for id and sms_source (for phone normalization)
+      const { data: agentRow } = await adminClient
         .from("sms_settings")
-        .select("*")
+        .select("id, sms_source")
         .eq("agent_id", agentId)
         .maybeSingle();
 
-      if (!settings) throw new Error("يرجى حفظ إعدادات SMS أولاً");
-      if (!settings.sms_user || !settings.sms_token || !settings.sms_source) {
-        throw new Error("يرجى تعبئة جميع حقول SMS (اسم المستخدم، التوكن، رقم المصدر)");
-      }
+      if (!agentRow) throw new Error("يرجى حفظ إعدادات SMS أولاً");
 
       // Update status to pending
       await adminClient.from("sms_settings").update({
         sms_verification_status: "pending",
         sms_verification_message: "جاري إرسال رسالة التحقق...",
         updated_at: new Date().toISOString(),
-      }).eq("id", settings.id);
+      }).eq("id", agentRow.id);
 
       // Send a test SMS via 019
       const testMessage = `رمز التحقق من ثقة: ${Math.floor(1000 + Math.random() * 9000)}. هذه رسالة اختبار لتفعيل خدمة SMS.`;
@@ -182,7 +187,7 @@ Deno.serve(async (req) => {
           sms_verified_at: new Date().toISOString(),
           is_enabled: true,
           updated_at: new Date().toISOString(),
-        }).eq("id", settings.id);
+        }).eq("id", agentRow.id);
 
         return jsonResponse({
           success: true,
@@ -196,7 +201,7 @@ Deno.serve(async (req) => {
           sms_verification_status: "failed",
           sms_verification_message: `فشل: ${errorMsg}`,
           updated_at: new Date().toISOString(),
-        }).eq("id", settings.id);
+        }).eq("id", agentRow.id);
 
         return jsonResponse({
           success: false,

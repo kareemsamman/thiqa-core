@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { getAgentBranding, resolveAgentId, buildLogoHtml, type AgentBranding } from "../_shared/agent-branding.ts";
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -653,14 +654,10 @@ serve(async (req) => {
 
     // Send SMS if requested
     if (send_sms && client.phone_number) {
-      // Fetch SMS settings
-      const { data: smsSettingsData } = await supabase
-        .from("sms_settings")
-        .select("*")
-        .limit(1)
-        .maybeSingle();
+      // Fetch SMS credentials (with Thiqa platform fallback)
+      const smsSettingsData = await resolveSmsSettings(supabase, agentId);
 
-      if (smsSettingsData?.is_enabled) {
+      if (smsSettingsData) {
         // Normalize phone for 019sms
         let cleanPhone = client.phone_number.replace(/[^0-9]/g, "");
         if (cleanPhone.startsWith("972")) {
