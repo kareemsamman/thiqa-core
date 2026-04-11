@@ -5411,33 +5411,6 @@ export type Database = {
           },
         ]
       }
-      thiqa_super_admins: {
-        Row: {
-          id: string
-          email: string
-          name: string | null
-          phone: string | null
-          added_by: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          email: string
-          name?: string | null
-          phone?: string | null
-          added_by?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          email?: string
-          name?: string | null
-          phone?: string | null
-          added_by?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
       thiqa_platform_settings: {
         Row: {
           id: string
@@ -5459,6 +5432,33 @@ export type Database = {
           setting_value?: string | null
           updated_at?: string | null
           updated_by?: string | null
+        }
+        Relationships: []
+      }
+      thiqa_super_admins: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          email: string
+          id: string
+          name: string | null
+          phone: string | null
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          name?: string | null
+          phone?: string | null
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string | null
+          phone?: string | null
         }
         Relationships: []
       }
