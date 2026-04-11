@@ -15,7 +15,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Settings, Mail, Save, Loader2, Eye, EyeOff, Shield, Send, CheckCircle2, XCircle, HardDrive, CreditCard, Plus, Trash2, GripVertical, Pencil, Bot } from "lucide-react";
+import { Settings, Mail, Save, Loader2, Eye, EyeOff, Shield, Send, CheckCircle2, XCircle, HardDrive, CreditCard, Plus, Trash2, GripVertical, Pencil, Bot, Users } from "lucide-react";
 
 function useThiqaPlatformSettings() {
   return useQuery({
@@ -32,19 +32,36 @@ function useThiqaPlatformSettings() {
   });
 }
 
+interface SuperAdmin {
+  id: string;
+  email: string;
+  name: string | null;
+  created_at: string;
+}
+
+function useSuperAdmins() {
+  return useQuery({
+    queryKey: ["thiqa-super-admins"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("thiqa_super_admins")
+        .select("*")
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data || []) as SuperAdmin[];
+    },
+  });
+}
+
 function GeneralSettingsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useThiqaPlatformSettings();
+  const { data: superAdmins = [], isLoading: saLoading } = useSuperAdmins();
   const skipVerification = settings?.skip_email_verification === "true";
-  const [superAdminEmail, setSuperAdminEmail] = useState("");
-  const [emailDirty, setEmailDirty] = useState(false);
 
-  useEffect(() => {
-    if (settings?.superadmin_email) {
-      setSuperAdminEmail(settings.superadmin_email);
-    }
-  }, [settings]);
+  const [newEmail, setNewEmail] = useState("");
+  const [newName, setNewName] = useState("");
 
   const toggleMutation = useMutation({
     mutationFn: async (newValue: boolean) => {
@@ -65,27 +82,45 @@ function GeneralSettingsTab() {
     },
   });
 
-  const saveEmailMutation = useMutation({
-    mutationFn: async (email: string) => {
+  const addSuperAdminMutation = useMutation({
+    mutationFn: async ({ email, name }: { email: string; name: string }) => {
       const { error } = await supabase
-        .from("thiqa_platform_settings")
-        .upsert(
-          { setting_key: "superadmin_email", setting_value: email.trim(), updated_at: new Date().toISOString() },
-          { onConflict: "setting_key" }
-        );
-      if (error) throw error;
+        .from("thiqa_super_admins")
+        .insert({ email: email.trim().toLowerCase(), name: name.trim() || null });
+      if (error) {
+        if (error.code === "23505") throw new Error("هذا البريد مضاف مسبقاً");
+        throw error;
+      }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["thiqa-platform-settings"] });
-      setEmailDirty(false);
-      toast({ title: "تم الحفظ", description: "تم تحديث بريد المدير بنجاح" });
+      queryClient.invalidateQueries({ queryKey: ["thiqa-super-admins"] });
+      setNewEmail("");
+      setNewName("");
+      toast({ title: "تمت الإضافة", description: "تمت إضافة مدير جديد بنجاح" });
     },
-    onError: () => {
-      toast({ title: "خطأ", description: "فشل في حفظ البريد", variant: "destructive" });
+    onError: (err: Error) => {
+      toast({ title: "خطأ", description: err.message || "فشل في إضافة المدير", variant: "destructive" });
     },
   });
 
-  if (isLoading) return <Skeleton className="h-32 w-full" />;
+  const removeSuperAdminMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("thiqa_super_admins")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["thiqa-super-admins"] });
+      toast({ title: "تمت الإزالة", description: "تمت إزالة المدير بنجاح" });
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل في إزالة المدير", variant: "destructive" });
+    },
+  });
+
+  if (isLoading || saLoading) return <Skeleton className="h-32 w-full" />;
 
   return (
     <div className="space-y-4">
@@ -117,34 +152,73 @@ function GeneralSettingsTab() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            بريد المدير (Super Admin)
+            <Users className="h-5 w-5" />
+            مديرو المنصة (Super Admins)
           </CardTitle>
-          <CardDescription>يتم إرسال إشعارات تسجيل الوكلاء الجدد لهذا البريد</CardDescription>
+          <CardDescription>جميع المديرين يحصلون على إشعارات تسجيل الوكلاء الجدد عبر البريد</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex gap-3 items-end">
-            <div className="flex-1 space-y-2">
-              <Label htmlFor="superadmin-email">البريد الإلكتروني</Label>
+        <CardContent className="space-y-4">
+          {/* Existing super admins */}
+          <div className="space-y-2">
+            {superAdmins.map((sa) => (
+              <div key={sa.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Shield className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{sa.name || "بدون اسم"}</p>
+                    <p className="text-xs text-muted-foreground" dir="ltr">{sa.email}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    if (superAdmins.length <= 1) {
+                      toast({ title: "تنبيه", description: "لا يمكن حذف آخر مدير", variant: "destructive" });
+                      return;
+                    }
+                    removeSuperAdminMutation.mutate(sa.id);
+                  }}
+                  disabled={removeSuperAdminMutation.isPending}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <Separator />
+
+          {/* Add new super admin */}
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">إضافة مدير جديد</Label>
+            <div className="flex gap-2">
               <Input
-                id="superadmin-email"
+                type="text"
+                placeholder="الاسم"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                className="flex-[0.4]"
+              />
+              <Input
                 type="email"
                 dir="ltr"
                 placeholder="admin@example.com"
-                value={superAdminEmail}
-                onChange={(e) => {
-                  setSuperAdminEmail(e.target.value);
-                  setEmailDirty(true);
-                }}
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                className="flex-[0.6]"
               />
+              <Button
+                onClick={() => addSuperAdminMutation.mutate({ email: newEmail, name: newName })}
+                disabled={!newEmail.includes("@") || addSuperAdminMutation.isPending}
+              >
+                {addSuperAdminMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 ml-2" />}
+                إضافة
+              </Button>
             </div>
-            <Button
-              onClick={() => saveEmailMutation.mutate(superAdminEmail)}
-              disabled={!emailDirty || saveEmailMutation.isPending}
-            >
-              {saveEmailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 ml-2" />}
-              حفظ
-            </Button>
           </div>
         </CardContent>
       </Card>

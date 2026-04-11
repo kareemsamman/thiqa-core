@@ -4,11 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ShieldX, Mail, LogOut, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function NoAccess() {
   const { user, profile, signOut, loading, isActive } = useAuth();
   const navigate = useNavigate();
   const [signingOut, setSigningOut] = useState(false);
+  const [adminEmails, setAdminEmails] = useState<string[]>([]);
+
+  useEffect(() => {
+    supabase.from("thiqa_super_admins").select("email").then(({ data }) => {
+      if (data) setAdminEmails(data.map((r) => r.email).filter((e) => e.includes("@")));
+    });
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -67,9 +75,17 @@ export default function NoAccess() {
             <p className="text-sm text-muted-foreground text-center">
               إذا كنت تعتقد أن هذا خطأ، يرجى التواصل مع:
             </p>
-            <p className="text-sm font-medium text-primary text-center">
-              <bdi>morshed500@gmail.com</bdi>
-            </p>
+            {adminEmails.length > 0 ? (
+              adminEmails.map((e) => (
+                <p key={e} className="text-sm font-medium text-primary text-center">
+                  <bdi>{e}</bdi>
+                </p>
+              ))
+            ) : (
+              <p className="text-sm font-medium text-primary text-center">
+                <bdi>الدعم الفني</bdi>
+              </p>
+            )}
           </div>
 
           <Button 

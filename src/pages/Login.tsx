@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { trackEvent } from "@/hooks/useAnalyticsTracker";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Loader2, ExternalLink, AlertCircle, ArrowRight, Eye, EyeOff, UserPlus, CheckCircle2, Info } from "lucide-react";
+import { Loader2, ExternalLink, AlertCircle, ArrowRight, Eye, EyeOff, UserPlus, CheckCircle2, Info, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,9 +12,16 @@ import { Label } from "@/components/ui/label";
 import thiqaLogo from "@/assets/thiqa-logo-full.svg";
 import thiqaLogoDark from "@/assets/thiqa-logo-dark.svg";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
-import { isThiqaSuperAdminEmail } from "@/lib/superAdmin";
 import { Separator } from "@/components/ui/separator";
 import { digitsOnly } from "@/lib/validation";
+import {
+  checkPasswordStrength,
+  isPasswordValid,
+  validateEmailFormat,
+  isLoginLocked,
+  recordFailedLogin,
+  resetLoginAttempts,
+} from "@/lib/authValidation";
 
 type PageView = "login" | "signup";
 type SignupFeedback = { type: "success" | "error" | "info"; message: string };
@@ -25,27 +31,39 @@ export default function Login() {
   const [isInIframe, setIsInIframe] = useState(false);
   const navigate = useNavigate();
   const { user, isActive, isSuperAdmin, loading: authLoading } = useAuth();
-  
+
   const [searchParams] = useState(() => new URLSearchParams(window.location.search));
   const [pageView, setPageView] = useState<PageView>(searchParams.get("view") === "signup" ? "signup" : "login");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
 
+  // Use refs for password fields to avoid exposing values in DOM
+  const loginPasswordRef = useRef<HTMLInputElement>(null);
+  const signupPasswordRef = useRef<HTMLInputElement>(null);
+  const signupConfirmPasswordRef = useRef<HTMLInputElement>(null);
 
   // Signup fields
   const [fullName, setFullName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
-  const [signupPassword, setSignupPassword] = useState("");
-  const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
   const [signupPhone, setSignupPhone] = useState("");
-  
-  // Signup validation errors (shown after attempted submit)
+  // Track password for strength indicator only (not bound to input value)
+  const [signupPasswordDisplay, setSignupPasswordDisplay] = useState("");
+
+  // Signup validation errors (shown per-field)
   const [signupErrors, setSignupErrors] = useState<Record<string, string>>({});
   const [signupFeedback, setSignupFeedback] = useState<SignupFeedback | null>(null);
 
+  // Rate limiting
+  const [lockoutMessage, setLockoutMessage] = useState("");
+
   useEffect(() => {
     try { setIsInIframe(window.self !== window.top); } catch { setIsInIframe(true); }
+    // Check if already locked out
+    const { locked, remainingMinutes } = isLoginLocked();
+    if (locked) {
+      setLockoutMessage(`تم تجاوز عدد المحاولات المسموح. حاول مجدداً بعد ${remainingMinutes} دقيقة.`);
+    }
   }, []);
 
   const tryBypassEmailVerification = useCallback(async (targetEmail: string) => {
@@ -62,12 +80,11 @@ export default function Login() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      if (!isThiqaSuperAdminEmail(user.email)) {
+      if (!isSuperAdmin) {
         sessionStorage.setItem('admin_session_active', 'true');
       }
 
-      // Super admin bypasses all checks
-      if (isThiqaSuperAdminEmail(user.email)) {
+      if (isSuperAdmin) {
         navigate('/thiqa', { replace: true });
         return;
       }
@@ -98,7 +115,6 @@ export default function Login() {
           }
         } catch (err) {
           console.error('[Login] checkEmailConfirmed error:', err);
-          // Fallback: navigate based on active status
           if (isActive) {
             navigate('/', { replace: true });
           } else {
@@ -117,9 +133,7 @@ export default function Login() {
       setLoading(true);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: {
-          redirectTo: window.location.origin,
-        },
+        options: { redirectTo: window.location.origin },
       });
       if (error) {
         if (error.message.includes('provider is not enabled')) {
@@ -133,8 +147,17 @@ export default function Login() {
   };
 
   const handleEmailPasswordLogin = async () => {
+    const password = loginPasswordRef.current?.value || "";
     if (!email || !email.includes("@")) { toast.error("يرجى إدخال بريد إلكتروني صحيح"); return; }
     if (!password || password.length < 6) { toast.error("كلمة المرور 6 أحرف على الأقل"); return; }
+
+    // Check rate limiting
+    const { locked, remainingMinutes } = isLoginLocked();
+    if (locked) {
+      setLockoutMessage(`تم تجاوز عدد المحاولات المسموح. حاول مجدداً بعد ${remainingMinutes} دقيقة.`);
+      return;
+    }
+
     setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
@@ -144,22 +167,23 @@ export default function Login() {
           error.message.includes("Email not confirmed");
 
         if (error.message.includes("Invalid login credentials")) {
-          toast.error("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+          const result = recordFailedLogin();
+          if (result.locked) {
+            setLockoutMessage("تم تجاوز عدد المحاولات المسموح. حاول مجدداً بعد 15 دقيقة.");
+            toast.error("تم قفل الحساب مؤقتاً. حاول بعد 15 دقيقة.");
+          } else {
+            toast.error(`البريد أو كلمة المرور غير صحيحة. متبقي ${result.attemptsLeft} محاولات.`);
+          }
         } else if (isEmailNotConfirmed) {
           toast.info("جاري محاولة تفعيل الحساب تلقائياً...");
           const bypassed = await tryBypassEmailVerification(email.trim());
-
           if (bypassed) {
-            const { error: retryError } = await supabase.auth.signInWithPassword({
-              email: email.trim(),
-              password,
-            });
-
+            const { error: retryError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
             if (retryError) {
               toast.error("فشل تسجيل الدخول بعد التفعيل");
             } else {
+              resetLoginAttempts();
               toast.success("تم تسجيل الدخول بنجاح");
-              // useEffect will handle navigation when user state updates
               return;
             }
           } else {
@@ -171,6 +195,7 @@ export default function Login() {
         }
         return;
       }
+      resetLoginAttempts();
       toast.success("تم تسجيل الدخول بنجاح");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "حدث خطأ غير متوقع");
@@ -183,36 +208,57 @@ export default function Login() {
     try {
       const payload = JSON.parse(match[0]);
       return payload?.error || payload?.message || raw;
-    } catch {
-      return raw;
-    }
+    } catch { return raw; }
   };
 
   const extractInvokeErrorMessage = async (rawError: unknown) => {
     if (!(rawError instanceof Error)) return "حدث خطأ غير متوقع";
-
     const response = (rawError as Error & { context?: Response }).context;
     if (response && typeof response.json === "function") {
       try {
         const payload = await response.clone().json();
-        if (payload?.error || payload?.message) {
-          return payload.error || payload.message;
-        }
-      } catch {
-        // noop - fallback to normal error parsing
-      }
+        if (payload?.error || payload?.message) return payload.error || payload.message;
+      } catch {}
     }
-
     return extractFunctionMessage(rawError.message);
   };
 
   const validateSignupForm = (): Record<string, string> => {
     const errors: Record<string, string> = {};
-    if (!fullName.trim()) errors.fullName = "الاسم الكامل مطلوب";
-    if (!signupEmail || !signupEmail.includes("@")) errors.signupEmail = "يرجى إدخال بريد إلكتروني صحيح";
-    if (signupPhone.trim() && digitsOnly(signupPhone).length !== 10) errors.signupPhone = "رقم الهاتف يجب أن يكون 10 أرقام";
-    if (!signupPassword || signupPassword.length < 6) errors.signupPassword = "كلمة المرور 6 أحرف على الأقل";
-    if (signupPassword !== signupConfirmPassword) errors.signupConfirmPassword = "كلمة المرور غير متطابقة";
+    const pw = signupPasswordRef.current?.value || "";
+    const confirmPw = signupConfirmPasswordRef.current?.value || "";
+
+    // Full name: require first + last
+    const nameParts = fullName.trim().split(/\s+/);
+    if (!fullName.trim()) {
+      errors.fullName = "الاسم الكامل مطلوب";
+    } else if (nameParts.length < 2) {
+      errors.fullName = "يرجى إدخال الاسم الأول والأخير";
+    }
+
+    // Email: strict validation
+    const emailError = validateEmailFormat(signupEmail);
+    if (emailError) errors.signupEmail = emailError;
+
+    // Phone
+    if (signupPhone.trim() && digitsOnly(signupPhone).length !== 10) {
+      errors.signupPhone = "رقم الهاتف يجب أن يكون 10 أرقام";
+    }
+
+    // Password: strong requirements
+    if (!pw) {
+      errors.signupPassword = "كلمة المرور مطلوبة";
+    } else if (!isPasswordValid(pw)) {
+      errors.signupPassword = "كلمة المرور يجب أن تحتوي على 8 أحرف، حرف كبير، رقم، ورمز";
+    }
+
+    // Confirm password
+    if (!confirmPw) {
+      errors.signupConfirmPassword = "تأكيد كلمة المرور مطلوب";
+    } else if (pw !== confirmPw) {
+      errors.signupConfirmPassword = "كلمة المرور غير متطابقة";
+    }
+
     return errors;
   };
 
@@ -221,10 +267,9 @@ export default function Login() {
 
     const errors = validateSignupForm();
     setSignupErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      setSignupFeedback({ type: "error", message: "يرجى تصحيح الأخطاء قبل إكمال التسجيل" });
-      return;
-    }
+    if (Object.keys(errors).length > 0) return;
+
+    const pw = signupPasswordRef.current?.value || "";
 
     setLoading(true);
     setSignupFeedback({ type: "info", message: "جارٍ إنشاء وكالة جديدة..." });
@@ -235,7 +280,7 @@ export default function Login() {
           first_name: fullName.trim().split(" ")[0] || fullName.trim(),
           last_name: fullName.trim().split(" ").slice(1).join(" ") || "",
           email: signupEmail.trim(),
-          password: signupPassword,
+          password: pw,
           phone: digitsOnly(signupPhone) || null,
         },
       });
@@ -244,7 +289,6 @@ export default function Login() {
         const parsedError = await extractInvokeErrorMessage(error);
         throw new Error(parsedError);
       }
-
       if (data?.error) throw new Error(data.error);
 
       const successMessage = data?.message || "تم تسجيل وكيل جديد بنجاح!";
@@ -254,7 +298,7 @@ export default function Login() {
       const normalizedEmail = signupEmail.trim();
       const { error: autoLoginError } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
-        password: signupPassword,
+        password: pw,
       });
 
       const requiresVerification =
@@ -266,17 +310,10 @@ export default function Login() {
       } else if (requiresVerification) {
         const bypassed = await tryBypassEmailVerification(normalizedEmail);
         if (bypassed) {
-          const { error: retryError } = await supabase.auth.signInWithPassword({
-            email: normalizedEmail,
-            password: signupPassword,
-          });
-          if (!retryError) {
-            navigate("/", { replace: true });
-            return;
-          }
+          const { error: retryError } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password: pw });
+          if (!retryError) { navigate("/", { replace: true }); return; }
         }
-
-        const params = new URLSearchParams({ email: normalizedEmail, p: signupPassword });
+        const params = new URLSearchParams({ email: normalizedEmail, p: pw });
         navigate(`/verify-email?${params.toString()}`, { replace: true });
       } else {
         throw new Error(autoLoginError.message || "تم إنشاء الحساب لكن تعذر تسجيل الدخول تلقائياً");
@@ -300,13 +337,7 @@ export default function Login() {
 
   const siteTitle = "Thiqa";
   const siteDesc = "نظام إدارة التأمين";
-  const canSubmitSignup =
-    !!fullName.trim() &&
-    signupEmail.includes("@") &&
-    signupPassword.length >= 6 &&
-    signupPassword === signupConfirmPassword &&
-    (!signupPhone.trim() || digitsOnly(signupPhone).length === 10) &&
-    !loading;
+  const passwordStrength = checkPasswordStrength(signupPasswordDisplay);
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row relative" dir="rtl">
@@ -327,17 +358,17 @@ export default function Login() {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center p-3 sm:p-6 lg:bg-gradient-to-br lg:from-muted/40 lg:to-background">
+      <div className="flex-1 flex items-start sm:items-center justify-center pt-6 sm:pt-0 px-3 sm:p-6 lg:bg-gradient-to-br lg:from-muted/40 lg:to-background">
         <div className="w-full max-w-md animate-scale-in">
-          <div className="rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 lg:bg-white/70 lg:dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
+          <div className="rounded-2xl sm:rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 lg:bg-white/70 lg:dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
             {/* Header */}
-            <div className="text-center pt-6 sm:pt-8 pb-2 sm:pb-4 px-4 sm:px-8">
-              <img src={thiqaLogoDark} alt={siteTitle} className="mx-auto h-9 sm:h-10 w-auto object-contain mb-0.5" />
-              <p className="text-muted-foreground mt-0.5 text-xs sm:text-sm">{siteDesc}</p>
+            <div className="text-center pt-5 sm:pt-8 pb-1 sm:pb-3 px-4 sm:px-8">
+              <img src={thiqaLogoDark} alt={siteTitle} className="mx-auto h-8 sm:h-10 w-auto object-contain" />
+              <p className="text-muted-foreground mt-0.5 text-[11px] sm:text-sm">{siteDesc}</p>
             </div>
 
             {/* Content */}
-            <div className="px-4 sm:px-8 pb-5 sm:pb-8 space-y-3 sm:space-y-5">
+            <div className="px-4 sm:px-8 pb-4 sm:pb-8 space-y-2.5 sm:space-y-4">
               {isInIframe && (
                 <Alert className="border-amber-300/60 bg-amber-50/80 dark:bg-amber-900/20 backdrop-blur-sm rounded-xl">
                   <AlertCircle className="h-4 w-4 text-amber-600" />
@@ -351,13 +382,13 @@ export default function Login() {
                 <>
                   {/* Google Login */}
                   {isInIframe ? (
-                    <Button className="w-full h-12 text-base gap-3 rounded-xl bg-foreground hover:bg-foreground/90 text-background shadow-lg" onClick={() => window.open(window.location.origin + '/login', '_blank')}>
+                    <Button className="w-full h-11 text-sm gap-3 rounded-xl bg-foreground hover:bg-foreground/90 text-background shadow-lg" onClick={() => window.open(window.location.origin + '/login', '_blank')}>
                       <ExternalLink className="h-5 w-5" />افتح في تبويب جديد
                     </Button>
                   ) : (
                     <Button
                       variant="outline"
-                      className="w-full h-12 text-base gap-3 rounded-xl border-border/60 bg-white/60 dark:bg-card/60 backdrop-blur-sm hover:bg-white hover:border-primary/40 transition-all duration-200 shadow-sm"
+                      className="w-full h-11 text-sm gap-3 rounded-xl border-border/60 bg-white/60 dark:bg-card/60 hover:bg-white hover:border-primary/40 transition-all duration-200 shadow-sm"
                       onClick={handleGoogleLogin}
                       disabled={loading}
                     >
@@ -376,33 +407,50 @@ export default function Login() {
                   <div className="relative">
                     <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border/40" /></div>
                     <div className="relative flex justify-center text-xs">
-                      <span className="bg-white/70 dark:bg-card/70 backdrop-blur-sm px-3 text-muted-foreground">أو</span>
+                      <span className="bg-white dark:bg-card px-3 text-muted-foreground">أو</span>
                     </div>
                   </div>
 
-                  {/* Email/Password Login */}
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="login-email" className="text-sm font-medium">البريد الإلكتروني</Label>
-                      <Input id="login-email" type="email" placeholder="your-email@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="ltr-input h-11 rounded-xl bg-white/60 dark:bg-card/60 backdrop-blur-sm border-border/60" disabled={loading} dir="ltr" />
+                  {/* Lockout warning */}
+                  {lockoutMessage && (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive flex items-center gap-2">
+                      <Lock className="h-3.5 w-3.5 shrink-0" />
+                      {lockoutMessage}
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="login-password" className="text-sm font-medium">كلمة المرور</Label>
+                  )}
+
+                  {/* Email/Password Login */}
+                  <div className="space-y-2.5">
+                    <div className="space-y-1">
+                      <Label htmlFor="login-email" className="text-xs sm:text-sm font-medium">البريد الإلكتروني</Label>
+                      <Input id="login-email" type="email" placeholder="your-email@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="h-10 text-sm rounded-xl bg-white/60 dark:bg-card/60 border-border/60" disabled={loading || !!lockoutMessage} dir="ltr" autoComplete="email" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="login-password" className="text-xs sm:text-sm font-medium">كلمة المرور</Label>
                       <div className="relative">
-                        <Input id="login-password" type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="h-11 rounded-xl bg-white/60 dark:bg-card/60 backdrop-blur-sm border-border/60 pl-10" disabled={loading} dir="ltr" />
+                        <input
+                          ref={loginPasswordRef}
+                          id="login-password"
+                          type={showPassword ? "text" : "password"}
+                          placeholder="••••••••"
+                          className="flex w-full border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 hover:border-primary/30 disabled:cursor-not-allowed disabled:opacity-50 h-10 rounded-xl bg-white/60 dark:bg-card/60 border-border/60 pl-10"
+                          disabled={loading || !!lockoutMessage}
+                          dir="ltr"
+                          autoComplete="current-password"
+                        />
                         <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
-                   </div>
-                    <Button className="w-full h-12 text-base gap-2 rounded-xl shadow-lg flex-row-reverse" onClick={handleEmailPasswordLogin} disabled={loading || !email || !password}>
+                    </div>
+                    <Button className="w-full h-11 text-sm gap-2 rounded-xl shadow-lg flex-row-reverse" onClick={handleEmailPasswordLogin} disabled={loading || !email || !!lockoutMessage}>
                       {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5 rotate-180" />}
                       {loading ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
                     </Button>
 
                     <button
                       type="button"
-                      className="w-full text-center text-sm text-primary hover:underline"
+                      className="w-full text-center text-xs sm:text-sm text-primary hover:underline"
                       onClick={() => navigate("/forgot-password")}
                     >
                       نسيت كلمة المرور؟
@@ -412,8 +460,8 @@ export default function Login() {
                   <Separator />
 
                   <div className="text-center">
-                    <p className="text-sm text-muted-foreground mb-2">ليس لديك حساب؟</p>
-                    <Button variant="outline" className="w-full h-11 rounded-xl gap-2" onClick={() => setPageView("signup")}>
+                    <p className="text-xs sm:text-sm text-muted-foreground mb-1.5">ليس لديك حساب؟</p>
+                    <Button variant="outline" className="w-full h-10 rounded-xl gap-2 text-sm" onClick={() => setPageView("signup")}>
                       <UserPlus className="h-4 w-4" />
                       إنشاء حساب وكيل جديد
                     </Button>
@@ -427,12 +475,12 @@ export default function Login() {
                     <>
                       <Button
                         variant="outline"
-                        className="w-full h-10 sm:h-12 text-sm sm:text-base gap-2 sm:gap-3 rounded-xl border-border/60 bg-white/60 dark:bg-card/60 backdrop-blur-sm hover:bg-white hover:border-primary/40 transition-all duration-200 shadow-sm"
+                        className="w-full h-10 text-sm gap-2 rounded-xl border-border/60 bg-white/60 dark:bg-card/60 hover:bg-white hover:border-primary/40 transition-all duration-200 shadow-sm"
                         onClick={handleGoogleLogin}
                         disabled={loading}
                       >
                         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
-                          <svg className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24">
+                          <svg className="h-4 w-4" viewBox="0 0 24 24">
                             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
@@ -445,54 +493,94 @@ export default function Login() {
                       <div className="relative">
                         <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border/40" /></div>
                         <div className="relative flex justify-center text-xs">
-                          <span className="bg-white/70 dark:bg-card/70 backdrop-blur-sm px-3 text-muted-foreground">أو سجّل وكالة جديدة يدوياً</span>
+                          <span className="bg-white dark:bg-card px-3 text-muted-foreground">أو سجّل يدوياً</span>
                         </div>
                       </div>
                     </>
                   )}
 
-                  {/* Combined info banner */}
-                  <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 text-center">
-                    <p className="text-xs font-bold text-primary">35 يوم مجاناً! — تسجيل وكالة جديدة مستقلة</p>
+                  {/* Trial banner */}
+                  <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-1.5 text-center">
+                    <p className="text-[11px] font-bold text-primary">35 يوم مجاناً — تسجيل وكالة جديدة مستقلة</p>
                   </div>
 
-                  <div className="space-y-2.5">
-                    {/* Full Name + Email row */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs font-medium">الاسم الكامل *</Label>
-                        <Input value={fullName} onChange={(e) => { setFullName(e.target.value); setSignupErrors(prev => ({ ...prev, fullName: "" })); setSignupFeedback(null); }} placeholder="محمد أحمد" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.fullName ? "border-destructive" : ""}`} disabled={loading} />
-                        {signupErrors.fullName && <p className="text-[10px] text-destructive">{signupErrors.fullName}</p>}
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs font-medium">البريد الإلكتروني *</Label>
-                        <Input type="email" value={signupEmail} onChange={(e) => { setSignupEmail(e.target.value); setSignupErrors(prev => ({ ...prev, signupEmail: "" })); setSignupFeedback(null); }} placeholder="email@example.com" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupEmail ? "border-destructive" : ""}`} disabled={loading} dir="ltr" />
-                        {signupErrors.signupEmail && <p className="text-[10px] text-destructive">{signupErrors.signupEmail}</p>}
-                      </div>
+                  <div className="space-y-2">
+                    {/* Full Name */}
+                    <div className="space-y-0.5">
+                      <Label className="text-xs font-medium">الاسم الكامل *</Label>
+                      <Input value={fullName} onChange={(e) => { setFullName(e.target.value); setSignupErrors(prev => ({ ...prev, fullName: "" })); }} placeholder="الاسم الأول والأخير" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.fullName ? "border-destructive" : ""}`} disabled={loading} />
+                      {signupErrors.fullName && <p className="text-[10px] text-destructive">{signupErrors.fullName}</p>}
+                    </div>
+
+                    {/* Email */}
+                    <div className="space-y-0.5">
+                      <Label className="text-xs font-medium">البريد الإلكتروني *</Label>
+                      <Input type="email" value={signupEmail} onChange={(e) => { setSignupEmail(e.target.value); setSignupErrors(prev => ({ ...prev, signupEmail: "" })); }} placeholder="your-email@example.com" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupEmail ? "border-destructive" : ""}`} disabled={loading} dir="ltr" autoComplete="email" />
+                      {signupErrors.signupEmail && <p className="text-[10px] text-destructive">{signupErrors.signupEmail}</p>}
                     </div>
 
                     {/* Phone */}
-                    <div className="space-y-1">
+                    <div className="space-y-0.5">
                       <Label className="text-xs font-medium">رقم الهاتف <span className="text-muted-foreground font-normal">(اختياري)</span></Label>
-                      <Input type="tel" value={signupPhone} onChange={(e) => { setSignupPhone(digitsOnly(e.target.value).slice(0, 10)); setSignupErrors(prev => ({ ...prev, signupPhone: "" })); setSignupFeedback(null); }} placeholder="05xxxxxxxx" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupPhone ? "border-destructive" : ""}`} disabled={loading} dir="ltr" maxLength={10} />
+                      <Input type="tel" value={signupPhone} onChange={(e) => { setSignupPhone(digitsOnly(e.target.value).slice(0, 10)); setSignupErrors(prev => ({ ...prev, signupPhone: "" })); }} placeholder="05xxxxxxxx" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupPhone ? "border-destructive" : ""}`} disabled={loading} dir="ltr" maxLength={10} />
                       {signupErrors.signupPhone && <p className="text-[10px] text-destructive">{signupErrors.signupPhone}</p>}
                     </div>
 
-                    {/* Passwords row */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs font-medium">كلمة المرور *</Label>
-                        <Input type="password" value={signupPassword} onChange={(e) => { setSignupPassword(e.target.value); setSignupErrors(prev => ({ ...prev, signupPassword: "" })); setSignupFeedback(null); }} placeholder="6 أحرف على الأقل" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupPassword ? "border-destructive" : ""}`} disabled={loading} dir="ltr" autoComplete="new-password" />
-                        {signupErrors.signupPassword && <p className="text-[10px] text-destructive">{signupErrors.signupPassword}</p>}
+                    {/* Password */}
+                    <div className="space-y-0.5">
+                      <Label className="text-xs font-medium">كلمة المرور *</Label>
+                      <div className="relative">
+                        <input
+                          ref={signupPasswordRef}
+                          type={showSignupPassword ? "text" : "password"}
+                          placeholder="8 أحرف، حرف كبير، رقم، ورمز"
+                          onChange={(e) => { setSignupPasswordDisplay(e.target.value); setSignupErrors(prev => ({ ...prev, signupPassword: "" })); }}
+                          className={`flex w-full border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 disabled:cursor-not-allowed disabled:opacity-50 h-9 rounded-lg bg-white/60 dark:bg-card/60 pl-10 ${signupErrors.signupPassword ? "border-destructive" : "border-border/60"}`}
+                          disabled={loading}
+                          dir="ltr"
+                          autoComplete="new-password"
+                        />
+                        <button type="button" onClick={() => setShowSignupPassword(!showSignupPassword)} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showSignupPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs font-medium">تأكيد كلمة المرور *</Label>
-                        <Input type="password" value={signupConfirmPassword} onChange={(e) => { setSignupConfirmPassword(e.target.value); setSignupErrors(prev => ({ ...prev, signupConfirmPassword: "" })); setSignupFeedback(null); }} placeholder="أعد إدخال كلمة المرور" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupConfirmPassword ? "border-destructive" : ""}`} disabled={loading} dir="ltr" autoComplete="new-password" />
-                        {signupErrors.signupConfirmPassword && <p className="text-[10px] text-destructive">{signupErrors.signupConfirmPassword}</p>}
-                      </div>
+                      {signupErrors.signupPassword && <p className="text-[10px] text-destructive">{signupErrors.signupPassword}</p>}
+
+                      {/* Password strength indicator */}
+                      {signupPasswordDisplay.length > 0 && (
+                        <div className="space-y-1 pt-0.5">
+                          <div className="flex gap-1">
+                            {[0, 1, 2, 3].map((i) => (
+                              <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i < passwordStrength.score ? passwordStrength.color : "bg-border"}`} />
+                            ))}
+                          </div>
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+                            <span className={passwordStrength.checks.minLength ? "text-green-600" : "text-muted-foreground"}>8+ أحرف {passwordStrength.checks.minLength ? "✓" : ""}</span>
+                            <span className={passwordStrength.checks.hasUpper ? "text-green-600" : "text-muted-foreground"}>حرف كبير {passwordStrength.checks.hasUpper ? "✓" : ""}</span>
+                            <span className={passwordStrength.checks.hasNumber ? "text-green-600" : "text-muted-foreground"}>رقم {passwordStrength.checks.hasNumber ? "✓" : ""}</span>
+                            <span className={passwordStrength.checks.hasSymbol ? "text-green-600" : "text-muted-foreground"}>رمز {passwordStrength.checks.hasSymbol ? "✓" : ""}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    <Button className="w-full h-10 sm:h-11 text-sm sm:text-base gap-2 rounded-xl shadow-lg" onClick={handleSignup} disabled={!canSubmitSignup}>
+                    {/* Confirm Password */}
+                    <div className="space-y-0.5">
+                      <Label className="text-xs font-medium">تأكيد كلمة المرور *</Label>
+                      <input
+                        ref={signupConfirmPasswordRef}
+                        type="password"
+                        placeholder="أعد إدخال كلمة المرور"
+                        onChange={() => setSignupErrors(prev => ({ ...prev, signupConfirmPassword: "" }))}
+                        className={`flex w-full border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 disabled:cursor-not-allowed disabled:opacity-50 h-9 rounded-lg bg-white/60 dark:bg-card/60 ${signupErrors.signupConfirmPassword ? "border-destructive" : "border-border/60"}`}
+                        disabled={loading}
+                        dir="ltr"
+                        autoComplete="new-password"
+                      />
+                      {signupErrors.signupConfirmPassword && <p className="text-[10px] text-destructive">{signupErrors.signupConfirmPassword}</p>}
+                    </div>
+
+                    <Button className="w-full h-10 text-sm gap-2 rounded-xl shadow-lg" onClick={handleSignup} disabled={loading}>
                       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
                       {loading ? "جاري التسجيل..." : "تسجيل وكيل جديد"}
                     </Button>
@@ -519,8 +607,8 @@ export default function Login() {
                     )}
                   </div>
 
-                  <div className="text-center pt-1">
-                    <p className="text-xs text-muted-foreground mb-1">لديك حساب بالفعل؟</p>
+                  <div className="text-center pt-0.5">
+                    <p className="text-[11px] text-muted-foreground mb-0.5">لديك حساب بالفعل؟</p>
                     <Button variant="ghost" size="sm" className="w-full h-8 rounded-lg text-xs" onClick={() => setPageView("login")}>
                       تسجيل الدخول
                     </Button>

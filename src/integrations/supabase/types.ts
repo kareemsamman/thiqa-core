@@ -5411,6 +5411,30 @@ export type Database = {
           },
         ]
       }
+      thiqa_super_admins: {
+        Row: {
+          id: string
+          email: string
+          name: string | null
+          added_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          name?: string | null
+          added_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          name?: string | null
+          added_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       thiqa_platform_settings: {
         Row: {
           id: string

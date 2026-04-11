@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { isThiqaSuperAdminEmail } from '@/lib/superAdmin';
 
 interface UserProfile {
   id: string;
@@ -38,9 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileLoading, setProfileLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [branchName, setBranchName] = useState<string | null>(null);
-
-  // Super admin check based on approved identifiers
-  const isSuperAdmin = isThiqaSuperAdminEmail(user?.email);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   const fetchUserProfile = async (userId: string, userEmail: string | undefined) => {
     setProfileLoading(true);
@@ -57,9 +54,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
       }
 
-      // Check if user has admin role OR is super admin
-      const isSuperAdminUser = isThiqaSuperAdminEmail(userEmail);
-      
+      // Check if user is super admin from DB
+      const { data: saData } = await supabase
+        .from('thiqa_super_admins')
+        .select('email')
+        .eq('email', (userEmail || '').toLowerCase())
+        .maybeSingle();
+      const isSuperAdminUser = !!saData;
+      setIsSuperAdmin(isSuperAdminUser);
+
       if (isSuperAdminUser) {
         // Super admin is always admin
         setIsAdmin(true);
@@ -106,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setProfile(null);
     setIsAdmin(false);
+    setIsSuperAdmin(false);
     setBranchName(null);
   };
 
@@ -113,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) {
       setProfile(null);
       setIsAdmin(false);
+      setIsSuperAdmin(false);
       setBranchName(null);
       return;
     }
@@ -144,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(null);
           setIsAdmin(false);
+          setIsSuperAdmin(false);
           setBranchName(null);
           setProfileLoading(false);
 

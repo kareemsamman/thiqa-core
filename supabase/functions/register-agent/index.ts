@@ -45,12 +45,22 @@ Deno.serve(async (req) => {
       throw new Error("جميع الحقول مطلوبة");
     }
 
-    if (password.length < 6) {
-      throw new Error("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
-    }
+    // Strong password validation
+    if (password.length < 8) throw new Error("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+    if (!/[A-Z]/.test(password)) throw new Error("كلمة المرور يجب أن تحتوي على حرف كبير واحد على الأقل");
+    if (!/[0-9]/.test(password)) throw new Error("كلمة المرور يجب أن تحتوي على رقم واحد على الأقل");
+    if (!/[^A-Za-z0-9]/.test(password)) throw new Error("كلمة المرور يجب أن تحتوي على رمز واحد على الأقل (!@#$...)");
 
     const normalizedEmail = String(email).trim().toLowerCase();
     const fullName = `${String(first_name).trim()} ${String(last_name).trim()}`;
+
+    // Block super admin emails from registering as agents
+    const { data: saCheck } = await adminClient
+      .from("thiqa_super_admins")
+      .select("email")
+      .eq("email", normalizedEmail)
+      .maybeSingle();
+    if (saCheck) throw new Error("لا يمكن التسجيل بهذا البريد الإلكتروني.");
 
     // Check if email verification is skipped
     const { data: skipSetting } = await adminClient
@@ -214,9 +224,15 @@ Deno.serve(async (req) => {
           html: htmlContent,
         });
 
-        // Notify super admin
-        const superAdminEmail = smtp.superadmin_email;
-        if (superAdminEmail && superAdminEmail.includes("@")) {
+        // Notify ALL super admins from thiqa_super_admins table
+        const { data: superAdmins } = await adminClient
+          .from("thiqa_super_admins")
+          .select("email");
+        const adminEmails = (superAdmins || [])
+          .map((sa: any) => sa.email)
+          .filter((e: string) => e && e.includes("@"));
+
+        if (adminEmails.length > 0) {
           const adminHtml = buildEmailHtml({
             body: newAgentAdminNotifyBody(fullName, normalizedEmail, phone?.trim() || null),
             footerText: "إشعار تلقائي من منصة ثقة للتأمين.",
@@ -224,7 +240,7 @@ Deno.serve(async (req) => {
 
           await transporter.sendMail({
             from: `"${smtp.smtp_sender_name || "Thiqa Insurance"}" <${smtpUser}>`,
-            to: superAdminEmail,
+            to: adminEmails.join(","),
             subject: "=?UTF-8?B?" + btoa(unescape(encodeURIComponent("وكيل جديد سجّل في المنصة 🆕"))) + "?=",
             text: `وكيل جديد: ${fullName} - ${normalizedEmail}`,
             html: adminHtml,

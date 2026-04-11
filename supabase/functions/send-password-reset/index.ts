@@ -47,6 +47,28 @@ Deno.serve(async (req) => {
 
     const normalizedEmail = String(email).trim().toLowerCase();
 
+    // Check if user signed up with Google only (no password set)
+    const perPage = 200;
+    let targetUser = null;
+    for (let page = 1; page <= 50; page++) {
+      const { data: usersData } = await adminClient.auth.admin.listUsers({ page, perPage });
+      const found = usersData?.users?.find((u: any) => (u.email || "").toLowerCase() === normalizedEmail);
+      if (found) { targetUser = found; break; }
+      if (!usersData?.users || usersData.users.length < perPage) break;
+    }
+
+    if (targetUser) {
+      const providers = targetUser.app_metadata?.providers || [];
+      const hasPassword = providers.includes("email");
+      const hasGoogle = providers.includes("google");
+      if (hasGoogle && !hasPassword) {
+        return new Response(
+          JSON.stringify({ error: "هذا الحساب مسجل عبر Google. استخدم تسجيل الدخول بـ Google بدلاً من كلمة المرور." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
       type: "recovery",
       email: normalizedEmail,
