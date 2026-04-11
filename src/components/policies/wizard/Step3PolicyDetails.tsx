@@ -1100,7 +1100,7 @@ export function Step3PolicyDetails({
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <ImageIcon className="h-4 w-4 text-primary" />
-              <Label className="font-semibold">ملفات التأمين</Label>
+              <Label className="font-semibold">ملفات العميل</Label>
             </div>
             <div className="flex items-center gap-1.5">
               {/* Scan Button */}
@@ -1176,7 +1176,7 @@ export function Step3PolicyDetails({
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <FolderOpen className="h-4 w-4 text-muted-foreground" />
-              <Label className="font-semibold">ملفات النظام</Label>
+              <Label className="font-semibold">ملفات داخلية</Label>
             </div>
             <div className="flex items-center gap-1.5">
               {/* Scan Button */}
@@ -1213,7 +1213,7 @@ export function Step3PolicyDetails({
             </div>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
-            هوية، رخصة، صور سيارة - ملفات داخلية
+            هوية، رخصة، صور سيارة - ملفات للاستخدام الداخلي فقط
           </p>
           <div className="space-y-2 max-h-32 overflow-y-auto">
             {crmFiles.length === 0 ? (

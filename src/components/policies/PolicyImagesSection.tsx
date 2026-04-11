@@ -252,11 +252,11 @@ export function PolicyImagesSection({ policyId }: PolicyImagesSectionProps) {
         <TabsList className="grid grid-cols-2 w-full" dir="rtl">
           <TabsTrigger value="insurance" className="text-xs gap-1">
             <ImageIcon className="h-3 w-3" />
-            ملفات التأمين ({insuranceFiles.length})
+            ملفات العميل ({insuranceFiles.length})
           </TabsTrigger>
           <TabsTrigger value="crm" className="text-xs gap-1">
             <FolderOpen className="h-3 w-3" />
-            ملفات النظام ({crmFiles.length})
+            ملفات داخلية ({crmFiles.length})
           </TabsTrigger>
         </TabsList>
 
@@ -266,11 +266,11 @@ export function PolicyImagesSection({ policyId }: PolicyImagesSectionProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-primary font-semibold">
                 <ImageIcon className="h-4 w-4" />
-                <span>ملفات التأمين</span>
+                <span>ملفات العميل</span>
               </div>
               {renderUploadButton('insurance')}
             </div>
-            <p className="text-xs text-muted-foreground">فواتير، إيصالات، وثائق ترسل للعميل</p>
+            <p className="text-xs text-muted-foreground">فواتير وإيصالات ترسل للعميل</p>
             {loading ? (
               <div className="text-center py-4 text-muted-foreground">جاري التحميل...</div>
             ) : (
@@ -285,11 +285,11 @@ export function PolicyImagesSection({ policyId }: PolicyImagesSectionProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-secondary-foreground font-semibold">
                 <FolderOpen className="h-4 w-4" />
-                <span>ملفات النظام</span>
+                <span>ملفات داخلية</span>
               </div>
               {renderUploadButton('crm')}
             </div>
-            <p className="text-xs text-muted-foreground">هوية، رخصة، صور سيارة - ملفات داخلية للنظام</p>
+            <p className="text-xs text-muted-foreground">هوية، رخصة، صور سيارة - ملفات للاستخدام الداخلي فقط</p>
             {loading ? (
               <div className="text-center py-4 text-muted-foreground">جاري التحميل...</div>
             ) : (

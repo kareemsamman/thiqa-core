@@ -162,17 +162,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setBranchName(null);
           setProfileLoading(false);
 
-          // Cross-tab sign-out: only hard-redirect if this was triggered
-          // externally (another tab). Same-tab logouts are handled by React Router.
-          if (event === 'SIGNED_OUT') {
-            const path = window.location.pathname;
-            const isAuthPage = path === '/login' || path === '/verify-email' || path === '/forgot-password';
-            if (!isAuthPage) {
-              // Use replaceState to avoid adding to history, then reload once
-              window.history.replaceState(null, '', '/login');
-              window.location.reload();
-            }
-          }
+          // No hard redirect needed — ProtectedRoute handles navigation
+          // when user becomes null (both same-tab and cross-tab logouts)
         }
 
         setLoading(false);
