@@ -92,18 +92,27 @@ serve(async (req) => {
       );
     }
 
-    if (!smsSettings || !smsSettings.is_enabled) {
-      return new Response(
-        JSON.stringify({ error: "SMS service is not enabled" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Agent-level credentials
+    let sms_user = smsSettings?.sms_user || "";
+    let sms_token = smsSettings?.sms_token || "";
+    let sms_source = smsSettings?.sms_source || "";
 
-    const { sms_user, sms_token, sms_source } = smsSettings as SmsSettings;
+    // Fallback to Thiqa platform default SMS credentials if agent has none
+    if (!sms_user || !sms_token) {
+      const { data: platformRows } = await supabase
+        .from("thiqa_platform_settings")
+        .select("setting_key, setting_value")
+        .in("setting_key", ["default_sms_019_user", "default_sms_019_token", "default_sms_019_source"]);
+      const platform: Record<string, string> = {};
+      (platformRows || []).forEach((r: any) => { platform[r.setting_key] = r.setting_value || ""; });
+      sms_user = sms_user || platform.default_sms_019_user || "";
+      sms_token = sms_token || platform.default_sms_019_token || "";
+      sms_source = sms_source || platform.default_sms_019_source || "";
+    }
 
     if (!sms_user || !sms_token || !sms_source) {
       return new Response(
-        JSON.stringify({ error: "SMS settings are incomplete" }),
+        JSON.stringify({ error: "SMS settings are incomplete. Please contact support." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

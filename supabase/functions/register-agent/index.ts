@@ -188,14 +188,14 @@ Deno.serve(async (req) => {
       if (featErr) console.error("Feature flags init error:", featErr);
     });
 
-    // Initialize SMS settings (disabled by default, no credentials)
+    // Initialize SMS settings (enabled, uses platform defaults until agent overrides)
     await adminClient.from("sms_settings").upsert({
       agent_id: agentData.id,
       provider: "019",
       sms_user: "",
       sms_token: "",
       sms_source: "",
-      is_enabled: false,
+      is_enabled: true,
     }, { onConflict: "agent_id" }).then(({ error: smsErr }) => {
       if (smsErr) console.error("SMS settings init error:", smsErr);
     });
