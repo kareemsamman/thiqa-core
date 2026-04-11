@@ -36,6 +36,7 @@ interface SuperAdmin {
   id: string;
   email: string;
   name: string | null;
+  phone: string | null;
   created_at: string;
 }
 
@@ -62,6 +63,7 @@ function GeneralSettingsTab() {
 
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
 
   const toggleMutation = useMutation({
     mutationFn: async (newValue: boolean) => {
@@ -83,10 +85,10 @@ function GeneralSettingsTab() {
   });
 
   const addSuperAdminMutation = useMutation({
-    mutationFn: async ({ email, name }: { email: string; name: string }) => {
+    mutationFn: async ({ email, name, phone }: { email: string; name: string; phone: string }) => {
       const { error } = await supabase
         .from("thiqa_super_admins")
-        .insert({ email: email.trim().toLowerCase(), name: name.trim() || null });
+        .insert({ email: email.trim().toLowerCase(), name: name.trim() || null, phone: phone.trim() || null });
       if (error) {
         if (error.code === "23505") throw new Error("هذا البريد مضاف مسبقاً");
         throw error;
@@ -96,6 +98,7 @@ function GeneralSettingsTab() {
       queryClient.invalidateQueries({ queryKey: ["thiqa-super-admins"] });
       setNewEmail("");
       setNewName("");
+      setNewPhone("");
       toast({ title: "تمت الإضافة", description: "تمت إضافة مدير جديد بنجاح" });
     },
     onError: (err: Error) => {
@@ -169,6 +172,7 @@ function GeneralSettingsTab() {
                   <div>
                     <p className="text-sm font-medium">{sa.name || "بدون اسم"}</p>
                     <p className="text-xs text-muted-foreground" dir="ltr">{sa.email}</p>
+                    {sa.phone && <p className="text-xs text-muted-foreground" dir="ltr">{sa.phone}</p>}
                   </div>
                 </div>
                 <Button
@@ -195,13 +199,12 @@ function GeneralSettingsTab() {
           {/* Add new super admin */}
           <div className="space-y-3">
             <Label className="text-sm font-medium">إضافة مدير جديد</Label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <Input
                 type="text"
                 placeholder="الاسم"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                className="flex-[0.4]"
               />
               <Input
                 type="email"
@@ -209,16 +212,23 @@ function GeneralSettingsTab() {
                 placeholder="admin@example.com"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
-                className="flex-[0.6]"
               />
-              <Button
-                onClick={() => addSuperAdminMutation.mutate({ email: newEmail, name: newName })}
-                disabled={!newEmail.includes("@") || addSuperAdminMutation.isPending}
-              >
-                {addSuperAdminMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 ml-2" />}
-                إضافة
-              </Button>
+              <Input
+                type="tel"
+                dir="ltr"
+                placeholder="05xxxxxxxx"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+              />
             </div>
+            <Button
+              className="w-full"
+              onClick={() => addSuperAdminMutation.mutate({ email: newEmail, name: newName, phone: newPhone })}
+              disabled={!newEmail.includes("@") || addSuperAdminMutation.isPending}
+            >
+              {addSuperAdminMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 ml-2" />}
+              إضافة مدير
+            </Button>
           </div>
         </CardContent>
       </Card>

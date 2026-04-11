@@ -42,6 +42,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchUserProfile = async (userId: string, userEmail: string | undefined) => {
     setProfileLoading(true);
     try {
+      // Check super admin FIRST — before profile, so it works even if profile doesn't exist
+      const { data: saData } = await supabase
+        .from('thiqa_super_admins')
+        .select('email')
+        .eq('email', (userEmail || '').toLowerCase())
+        .maybeSingle();
+      const isSuperAdminUser = !!saData;
+      setIsSuperAdmin(isSuperAdminUser);
+
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -50,18 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (profileError) {
         console.error('Error fetching profile:', profileError);
+        // Even without a profile, super admin should still work
+        if (isSuperAdminUser) {
+          setIsAdmin(true);
+        }
         setProfileLoading(false);
         return null;
       }
-
-      // Check if user is super admin from DB
-      const { data: saData } = await supabase
-        .from('thiqa_super_admins')
-        .select('email')
-        .eq('email', (userEmail || '').toLowerCase())
-        .maybeSingle();
-      const isSuperAdminUser = !!saData;
-      setIsSuperAdmin(isSuperAdminUser);
 
       if (isSuperAdminUser) {
         // Super admin is always admin

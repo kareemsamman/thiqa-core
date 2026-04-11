@@ -5416,6 +5416,7 @@ export type Database = {
           id: string
           email: string
           name: string | null
+          phone: string | null
           added_by: string | null
           created_at: string
         }
@@ -5423,6 +5424,7 @@ export type Database = {
           id?: string
           email: string
           name?: string | null
+          phone?: string | null
           added_by?: string | null
           created_at?: string
         }
@@ -5430,6 +5432,7 @@ export type Database = {
           id?: string
           email?: string
           name?: string | null
+          phone?: string | null
           added_by?: string | null
           created_at?: string
         }
