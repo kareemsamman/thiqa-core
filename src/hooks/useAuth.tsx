@@ -162,9 +162,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setBranchName(null);
           setProfileLoading(false);
 
-          // Force redirect to login on sign-out (handles cross-tab logout)
-          if (event === 'SIGNED_OUT' && window.location.pathname !== '/login' && window.location.pathname !== '/verify-email' && window.location.pathname !== '/forgot-password') {
-            window.location.href = '/login';
+          // Force redirect to login on cross-tab sign-out only
+          // Use a small delay to let React Router handle same-tab logouts first
+          if (event === 'SIGNED_OUT') {
+            const path = window.location.pathname;
+            if (path !== '/login' && path !== '/verify-email' && path !== '/forgot-password') {
+              setTimeout(() => {
+                // Only hard-redirect if still not on login (React Router didn't handle it)
+                if (window.location.pathname !== '/login') {
+                  window.location.href = '/login';
+                }
+              }, 500);
+            }
           }
         }
 

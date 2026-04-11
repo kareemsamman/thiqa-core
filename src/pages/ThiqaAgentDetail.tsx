@@ -1240,16 +1240,6 @@ export default function ThiqaAgentDetail() {
               </CardContent>
             </Card>
 
-            {/* Usage Limits */}
-            <Card className="mt-4">
-              <CardHeader>
-                <CardTitle>حدود الاستخدام</CardTitle>
-                <CardDescription>تحديد عدد الرسائل النصية ومحادثات الذكاء الاصطناعي المسموح بها</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <UsageLimitsEditor agentId={agentId!} />
-              </CardContent>
-            </Card>
           </TabsContent>
 
            {/* ═══════════ PAYMENTS TAB ═══════════ */}
@@ -1459,6 +1449,17 @@ export default function ThiqaAgentDetail() {
 
           {/* ═══════════ STATS TAB ═══════════ */}
           <TabsContent value="stats">
+            {/* Usage Limits */}
+            <Card className="mb-4">
+              <CardHeader>
+                <CardTitle>حدود الاستخدام</CardTitle>
+                <CardDescription>تحديد عدد الرسائل النصية ومحادثات الذكاء الاصطناعي المسموح بها</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <UsageLimitsEditor agentId={agentId!} />
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />إحصائيات الوكيل</CardTitle>

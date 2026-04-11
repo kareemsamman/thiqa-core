@@ -538,13 +538,23 @@ Deno.serve(async (req) => {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", sessionId);
 
-    // Track usage
-    await adminClient.from("agent_usage_log").upsert({
-      agent_id: agentId,
-      usage_type: "ai_chat",
-      period: currentMonth,
-      count: ((await adminClient.from("agent_usage_log").select("count").eq("agent_id", agentId).eq("usage_type", "ai_chat").eq("period", currentMonth).maybeSingle())?.data?.count || 0) + 1,
-    }, { onConflict: "agent_id,usage_type,period" });
+    // Track usage — atomic increment via SQL to avoid race conditions
+    await adminClient.rpc("increment_usage_log", {
+      p_agent_id: agentId,
+      p_usage_type: "ai_chat",
+      p_period: currentMonth,
+    }).then(({ error }) => {
+      if (error) {
+        // Fallback: upsert if RPC doesn't exist yet
+        console.log("increment_usage_log RPC failed, using fallback:", error.message);
+        return adminClient.from("agent_usage_log").upsert({
+          agent_id: agentId,
+          usage_type: "ai_chat",
+          period: currentMonth,
+          count: 1,
+        }, { onConflict: "agent_id,usage_type,period" });
+      }
+    });
 
     return new Response(
       JSON.stringify({ reply, session_id: sessionId }),
