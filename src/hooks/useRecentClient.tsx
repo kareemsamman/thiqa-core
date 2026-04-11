@@ -14,7 +14,17 @@ interface RecentClientContextType {
 
 const RecentClientContext = createContext<RecentClientContextType | null>(null);
 
-const STORAGE_KEY = 'ab_recent_client';
+const STORAGE_KEY_PREFIX = 'ab_recent_client';
+
+function getStorageKey(): string {
+  // Scope by user to prevent cross-agent leaks
+  try {
+    const session = JSON.parse(localStorage.getItem('sb-oxsxmvxtblcideimcgnr-auth-token') || '{}');
+    const userId = session?.user?.id;
+    if (userId) return `${STORAGE_KEY_PREFIX}_${userId}`;
+  } catch {}
+  return STORAGE_KEY_PREFIX;
+}
 
 export function RecentClientProvider({ children }: { children: ReactNode }) {
   const [recentClient, setRecentClientState] = useState<RecentClient | null>(null);
@@ -22,7 +32,7 @@ export function RecentClientProvider({ children }: { children: ReactNode }) {
   // Load from localStorage on mount
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(getStorageKey());
       if (stored) {
         setRecentClientState(JSON.parse(stored));
       }
@@ -33,16 +43,17 @@ export function RecentClientProvider({ children }: { children: ReactNode }) {
 
   const setRecentClient = useCallback((client: RecentClient | null) => {
     setRecentClientState(client);
+    const key = getStorageKey();
     if (client) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(client));
+      localStorage.setItem(key, JSON.stringify(client));
     } else {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(key);
     }
   }, []);
 
   const clearRecentClient = useCallback(() => {
     setRecentClientState(null);
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(getStorageKey());
   }, []);
 
   const value = useMemo(() => ({

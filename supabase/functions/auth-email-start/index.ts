@@ -180,35 +180,48 @@ Deno.serve(async (req) => {
     }
 
     const agentId = existingProfile.agent_id;
-    let authSettingsQuery = supabase.from("auth_settings").select("*");
+
+    // Try agent-level auth settings first
+    let authSettings: any = null;
     if (agentId) {
-      authSettingsQuery = authSettingsQuery.eq("agent_id", agentId);
-    }
-    const { data: authSettings, error: settingsError } = await authSettingsQuery.limit(1).single();
-
-    if (settingsError || !authSettings) {
-      console.error("Auth settings error for agent:", agentId, settingsError);
-      return new Response(
-        JSON.stringify({ success: false, error: "خطأ في إعدادات المصادقة. يرجى التواصل مع المدير." }),
-        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      const { data } = await supabase.from("auth_settings").select("*").eq("agent_id", agentId).limit(1).maybeSingle();
+      authSettings = data;
     }
 
-    if (!authSettings.email_otp_enabled) {
+    // Check if email OTP is enabled (if agent has settings)
+    if (authSettings && !authSettings.email_otp_enabled) {
       return new Response(
         JSON.stringify({ success: false, error: "تسجيل الدخول بالبريد غير مفعل. يرجى التواصل مع المدير لتفعيله." }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    const smtpHost = authSettings.smtp_host || "smtp.hostinger.com";
-    const smtpPort = authSettings.smtp_port || 465;
-    const smtpUser = authSettings.smtp_user;
-    const smtpPassword = authSettings.smtp_password;
+    // Get SMTP: agent settings → Thiqa platform settings → env vars → defaults
+    let smtpHost = authSettings?.smtp_host;
+    let smtpPort = authSettings?.smtp_port;
+    let smtpUser = authSettings?.smtp_user;
+    let smtpPassword = authSettings?.smtp_password;
+
+    // Fallback to Thiqa platform SMTP if agent has no SMTP configured
+    if (!smtpUser || !smtpPassword) {
+      const { data: platformRows } = await supabase
+        .from("thiqa_platform_settings")
+        .select("setting_key, setting_value")
+        .in("setting_key", ["smtp_host", "smtp_port", "smtp_user", "smtp_password"]);
+      const platform: Record<string, string> = {};
+      (platformRows || []).forEach((r: any) => { platform[r.setting_key] = r.setting_value || ""; });
+      smtpHost = smtpHost || platform.smtp_host;
+      smtpPort = smtpPort || (platform.smtp_port ? parseInt(platform.smtp_port) : null);
+      smtpUser = smtpUser || platform.smtp_user;
+      smtpPassword = smtpPassword || platform.smtp_password;
+    }
+
+    smtpHost = smtpHost || "smtp.hostinger.com";
+    smtpPort = smtpPort || 465;
 
     if (!smtpUser || !smtpPassword) {
       return new Response(
-        JSON.stringify({ success: false, error: "SMTP غير مكتمل. يرجى إعداد بيانات SMTP في إعدادات المصادقة." }),
+        JSON.stringify({ success: false, error: "SMTP غير مكتمل. يرجى التواصل مع مدير المنصة." }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
