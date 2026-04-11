@@ -100,7 +100,8 @@ export default function Login() {
           // If no profile or no agent_id, this might be a Google OAuth user — set them up
           if (!profile || !profile.agent_id) {
             const isGoogleUser = user.app_metadata?.providers?.includes('google') ||
-              user.app_metadata?.provider === 'google';
+              user.app_metadata?.provider === 'google' ||
+              (user.user_metadata as any)?.iss === 'https://accounts.google.com';
             if (isGoogleUser) {
               toast.info("جاري إعداد حسابك...");
               const { data: setupData, error: setupError } = await supabase.functions.invoke("setup-oauth-user");

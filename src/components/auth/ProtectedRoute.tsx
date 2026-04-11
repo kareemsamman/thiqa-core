@@ -17,12 +17,14 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   const location = useLocation();
 
-  // Detect if this is a Google user who needs agent setup
-  const isGoogleUser = !!user && (
+  // Detect if this is a Google/OAuth user who needs agent setup
+  const isOAuthUser = !!user && (
     user.app_metadata?.providers?.includes('google') ||
-    user.app_metadata?.provider === 'google'
+    user.app_metadata?.provider === 'google' ||
+    (user.user_metadata as any)?.iss === 'https://accounts.google.com'
   );
-  const needsOAuthSetup = isGoogleUser && !isSuperAdmin && !profile?.agent_id && !loading && !profileLoading;
+  // Need setup if: OAuth user, not super admin, no agent, and done loading
+  const needsOAuthSetup = isOAuthUser && !isSuperAdmin && !profile?.agent_id && !loading && !profileLoading;
 
   // Run setup-oauth-user when needed
   useEffect(() => {
