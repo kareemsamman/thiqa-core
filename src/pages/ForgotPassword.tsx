@@ -126,16 +126,18 @@ export default function ForgotPassword() {
                   </>
                 )}
                 <div className="flex flex-col gap-2 pt-2">
+                  {!isGoogleAccount && (
+                    <Button
+                      variant="outline"
+                      className="w-full h-11 rounded-xl gap-2"
+                      onClick={() => { setSent(false); setEmail(""); }}
+                    >
+                      <Mail className="h-4 w-4" />
+                      إرسال مرة أخرى
+                    </Button>
+                  )}
                   <Button
-                    variant="outline"
-                    className="w-full h-11 rounded-xl gap-2"
-                    onClick={() => { setSent(false); setEmail(""); }}
-                  >
-                    <Mail className="h-4 w-4" />
-                    إرسال مرة أخرى
-                  </Button>
-                  <Button
-                    variant="ghost"
+                    variant={isGoogleAccount ? "default" : "ghost"}
                     className="w-full h-11 rounded-xl gap-2"
                     onClick={() => navigate("/login")}
                   >

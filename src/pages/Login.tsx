@@ -387,17 +387,17 @@ export default function Login() {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-end sm:items-center justify-center pb-4 sm:pb-0 px-4 sm:p-6 lg:bg-gradient-to-br lg:from-muted/40 lg:to-background">
+      <div className="flex-1 flex items-end sm:items-center justify-center pb-6 sm:pb-0 px-5 sm:p-6 lg:bg-gradient-to-br lg:from-muted/40 lg:to-background">
         <div className="w-full max-w-md animate-scale-in">
           <div className="rounded-2xl sm:rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 lg:bg-white/70 lg:dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
             {/* Header */}
-            <div className="text-center pt-6 sm:pt-8 pb-2 sm:pb-3 px-5 sm:px-8">
-              <img src={thiqaLogoDark} alt={siteTitle} className="mx-auto h-8 sm:h-10 w-auto object-contain" />
-              <p className="text-muted-foreground mt-0.5 text-[11px] sm:text-sm">{siteDesc}</p>
+            <div className="text-center pt-8 sm:pt-8 pb-3 sm:pb-3 px-6 sm:px-8">
+              <img src={thiqaLogoDark} alt={siteTitle} className="mx-auto h-9 sm:h-10 w-auto object-contain" />
+              <p className="text-muted-foreground mt-1 text-xs sm:text-sm">{siteDesc}</p>
             </div>
 
             {/* Content */}
-            <div className="px-5 sm:px-8 pb-6 sm:pb-8 space-y-3 sm:space-y-4">
+            <div className="px-6 sm:px-8 pb-8 sm:pb-8 space-y-4 sm:space-y-4">
               {isInIframe && (
                 <Alert className="border-amber-300/60 bg-amber-50/80 dark:bg-amber-900/20 backdrop-blur-sm rounded-xl">
                   <AlertCircle className="h-4 w-4 text-amber-600" />
