@@ -490,8 +490,8 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             </DropdownMenuItem>
             {!isThiqaSuperAdmin && (
               <DropdownMenuItem onClick={() => navigate('/subscription')} className="gap-2 cursor-pointer">
-                <CreditCard className="h-4 w-4" />
-                <span>الاشتراك</span>
+                <Settings className="h-4 w-4" />
+                <span>الإعدادات</span>
               </DropdownMenuItem>
             )}
             {isAdmin && !isThiqaSuperAdmin && (

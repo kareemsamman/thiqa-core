@@ -8,11 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
   Crown, CreditCard, Calendar, Clock, AlertTriangle, Check, X, MessageCircle,
   Sparkles, ShieldCheck, Pause, Info, ArrowUp, ArrowDown,
-  Rocket, Shield, Trash2, XCircle, Loader2,
+  Rocket, Shield, Trash2, XCircle, Loader2, Settings, BarChart3, Receipt, UserCog,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -102,55 +103,108 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
   const aiMax = limits.ai_limit_type === 'unlimited' ? '∞' : limits.ai_limit_count;
   const typeLabel = (t: string) => t === 'monthly' ? 'شهرياً' : t === 'yearly' ? 'سنوياً' : 'غير محدود';
 
+  const renderUsageCard = (opts: {
+    title: string;
+    icon: typeof MessageCircle;
+    limitType: string;
+    used: number;
+    max: number | string;
+    limitCount: number;
+  }) => {
+    const Icon = opts.icon;
+    const pct = opts.limitType === 'unlimited' ? 0 : Math.min(100, (opts.used / Math.max(1, opts.limitCount)) * 100);
+    const nearLimit = pct >= 80 && opts.limitType !== 'unlimited';
+    const atLimit = pct >= 100 && opts.limitType !== 'unlimited';
+    return (
+      <Card className="shadow-sm hover:shadow-md transition-shadow">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "h-11 w-11 rounded-xl flex items-center justify-center shrink-0",
+                atLimit ? "bg-destructive/10 text-destructive" :
+                nearLimit ? "bg-amber-100 text-amber-600" :
+                "bg-primary/10 text-primary"
+              )}>
+                <Icon className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">{opts.title}</p>
+                <p className="text-[11px] text-muted-foreground">الحد {typeLabel(opts.limitType)}</p>
+              </div>
+            </div>
+            {atLimit ? (
+              <Badge variant="destructive" className="text-[10px]">مكتمل</Badge>
+            ) : nearLimit ? (
+              <Badge className="text-[10px] bg-amber-100 text-amber-700 border-amber-200">اقترب من الحد</Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px]">متاح</Badge>
+            )}
+          </div>
+
+          <div className="flex items-baseline justify-between">
+            <div className="flex items-baseline gap-1">
+              <span className={cn(
+                "text-3xl font-bold tabular-nums",
+                atLimit ? "text-destructive" : nearLimit ? "text-amber-600" : ""
+              )}>
+                {opts.used}
+              </span>
+              <span className="text-muted-foreground text-sm">/ {opts.max}</span>
+            </div>
+            {opts.limitType !== 'unlimited' && (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {Math.round(pct)}%
+              </span>
+            )}
+          </div>
+
+          {opts.limitType !== 'unlimited' && (
+            <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all duration-500",
+                  atLimit ? "bg-destructive" :
+                  nearLimit ? "bg-amber-500" :
+                  "bg-primary"
+                )}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-bold">استخدام الخدمات</h2>
+      <div>
+        <h2 className="text-lg font-bold flex items-center gap-2">
+          <BarChart3 className="h-5 w-5 text-primary" />
+          استخدام الخدمات
+        </h2>
+        <p className="text-xs text-muted-foreground mt-1">
+          الحدود التي حددتها إدارة ثقة لحسابك واستهلاكك الحالي. لزيادة الحدود تواصل مع الإدارة.
+        </p>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="shadow-sm">
-          <CardContent className="pt-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <MessageCircle className="h-4 w-4 text-primary" />
-                </div>
-                <span className="font-bold text-sm">رسائل SMS</span>
-              </div>
-              <Badge variant="outline" className="text-xs">{typeLabel(limits.sms_limit_type)}</Badge>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold">{smsUsed}</span>
-              <span className="text-muted-foreground text-sm">/ {smsMax}</span>
-            </div>
-            {limits.sms_limit_type !== 'unlimited' && (
-              <div className="h-2 w-full bg-muted rounded-full overflow-hidden mt-2">
-                <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(100, (smsUsed / limits.sms_limit_count) * 100)}%` }} />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm">
-          <CardContent className="pt-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Crown className="h-4 w-4 text-primary" />
-                </div>
-                <span className="font-bold text-sm">المساعد الذكي</span>
-              </div>
-              <Badge variant="outline" className="text-xs">{typeLabel(limits.ai_limit_type)}</Badge>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold">{aiUsed}</span>
-              <span className="text-muted-foreground text-sm">/ {aiMax}</span>
-            </div>
-            {limits.ai_limit_type !== 'unlimited' && (
-              <div className="h-2 w-full bg-muted rounded-full overflow-hidden mt-2">
-                <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(100, (aiUsed / limits.ai_limit_count) * 100)}%` }} />
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {renderUsageCard({
+          title: "رسائل SMS",
+          icon: MessageCircle,
+          limitType: limits.sms_limit_type,
+          used: smsUsed,
+          max: smsMax,
+          limitCount: limits.sms_limit_count,
+        })}
+        {renderUsageCard({
+          title: "المساعد الذكي (ثاقب)",
+          icon: Sparkles,
+          limitType: limits.ai_limit_type,
+          used: aiUsed,
+          max: aiMax,
+          limitCount: limits.ai_limit_count,
+        })}
       </div>
     </div>
   );
@@ -300,14 +354,49 @@ export default function Subscription() {
     <MainLayout>
       <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto" dir="rtl">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Crown className="h-6 w-6 text-primary" />
-            إدارة الاشتراك
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">عرض وإدارة اشتراكك وتغيير خطتك</p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <Settings className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">الإعدادات</h1>
+              <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">
+                اشتراكك، استخدامك للخدمات، ومدفوعاتك السابقة
+              </p>
+            </div>
+          </div>
+          <a href="https://wa.me/972525143581" target="_blank" rel="noopener noreferrer" className="shrink-0">
+            <Button variant="outline" size="sm" className="gap-2">
+              <MessageCircle className="h-4 w-4" />
+              <span className="hidden sm:inline">تواصل مع إدارة ثقة</span>
+              <span className="sm:hidden">المساعدة</span>
+            </Button>
+          </a>
         </div>
 
+        {/* Tabs */}
+        <Tabs defaultValue="plan" dir="rtl" className="w-full">
+          <TabsList className="w-full justify-start bg-muted/50 p-1 h-auto flex-nowrap overflow-x-auto sm:flex-wrap">
+            <TabsTrigger value="plan" className="gap-1.5 shrink-0 whitespace-nowrap">
+              <Crown className="h-4 w-4" />
+              الخطة والاشتراك
+            </TabsTrigger>
+            <TabsTrigger value="usage" className="gap-1.5 shrink-0 whitespace-nowrap">
+              <BarChart3 className="h-4 w-4" />
+              الاستخدام
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="gap-1.5 shrink-0 whitespace-nowrap">
+              <Receipt className="h-4 w-4" />
+              المدفوعات ({payments.length})
+            </TabsTrigger>
+            <TabsTrigger value="account" className="gap-1.5 shrink-0 whitespace-nowrap">
+              <UserCog className="h-4 w-4" />
+              الحساب
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="plan" className="mt-5 space-y-5">
         {/* ═══ Current Status Card ═══ */}
         {!sub ? <Skeleton className="h-48 w-full rounded-xl" /> : (
           <Card className="overflow-hidden shadow-sm">
@@ -405,16 +494,6 @@ export default function Subscription() {
                       )}
                     </div>
                   )}
-                </div>
-
-                <div className="flex flex-col items-center gap-2 shrink-0">
-                  <a href="https://wa.me/972525143581" target="_blank" rel="noopener noreferrer">
-                    <Button variant="outline" className="gap-2">
-                      <MessageCircle className="h-4 w-4" />
-                      تواصل مع إدارة ثقة
-                    </Button>
-                  </a>
-                  <p className="text-xs text-muted-foreground">للمساعدة والاستفسارات</p>
                 </div>
               </div>
             </CardContent>
@@ -566,75 +645,131 @@ export default function Subscription() {
           )}
         </div>
 
-        {/* ═══ Usage Stats ═══ */}
-        <UsageStatsSection agentId={agentId} />
+          </TabsContent>
 
-        {/* ═══ Payment History ═══ */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <CreditCard className="h-5 w-5 text-primary" />
-            سجل المدفوعات
-          </h2>
+          {/* ═══ Usage Tab ═══ */}
+          <TabsContent value="usage" className="mt-5 space-y-5">
+            <UsageStatsSection agentId={agentId} />
+          </TabsContent>
 
-          {loadingPayments ? (
-            <Skeleton className="h-40 w-full rounded-xl" />
-          ) : payments.length === 0 ? (
+          {/* ═══ Payments Tab ═══ */}
+          <TabsContent value="payments" className="mt-5 space-y-5">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-lg font-bold flex items-center gap-2">
+                  <Receipt className="h-5 w-5 text-primary" />
+                  سجل المدفوعات
+                </h2>
+                <p className="text-xs text-muted-foreground mt-1">جميع المدفوعات التي سجّلتها إدارة ثقة على حسابك</p>
+              </div>
+
+              {loadingPayments ? (
+                <Skeleton className="h-40 w-full rounded-xl" />
+              ) : payments.length === 0 ? (
+                <Card className="shadow-sm">
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    <Receipt className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p className="font-medium">لا توجد مدفوعات مسجلة</p>
+                    <p className="text-xs mt-1">ستظهر مدفوعاتك هنا عند تسجيلها من قبل إدارة ثقة</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/30">
+                          <th className="text-right p-3 font-medium text-muted-foreground">تاريخ الدفع</th>
+                          <th className="text-right p-3 font-medium text-muted-foreground">المبلغ</th>
+                          <th className="text-right p-3 font-medium text-muted-foreground">الخطة</th>
+                          <th className="text-right p-3 font-medium text-muted-foreground">ملاحظات</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payments.map(p => (
+                          <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20">
+                            <td className="p-3">{format(new Date(p.payment_date), "dd/MM/yyyy")}</td>
+                            <td className="p-3 font-semibold">₪{p.amount?.toLocaleString()}</td>
+                            <td className="p-3"><Badge variant="secondary" className="text-xs">{p.plan}</Badge></td>
+                            <td className="p-3 text-muted-foreground text-xs truncate max-w-[200px]">{p.notes || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ═══ Account Tab ═══ */}
+          <TabsContent value="account" className="mt-5 space-y-5">
+            <div>
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <UserCog className="h-5 w-5 text-primary" />
+                إعدادات الحساب
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1">إدارة حالة حسابك ومعلومات التواصل مع الدعم</p>
+            </div>
+
+            {/* Support card */}
             <Card className="shadow-sm">
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <CreditCard className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                <p>لا توجد مدفوعات مسجلة</p>
+              <CardContent className="py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <MessageCircle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold">الدعم والمساعدة</h3>
+                    <p className="text-xs text-muted-foreground mt-1">للاستفسارات وتغييرات الخطة، تواصل مع إدارة ثقة</p>
+                  </div>
+                </div>
+                <a href="https://wa.me/972525143581" target="_blank" rel="noopener noreferrer" className="shrink-0">
+                  <Button variant="outline" className="gap-2">
+                    <MessageCircle className="h-4 w-4" />
+                    تواصل معنا
+                  </Button>
+                </a>
               </CardContent>
             </Card>
-          ) : (
-            <Card className="shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-right p-3 font-medium text-muted-foreground">تاريخ الدفع</th>
-                      <th className="text-right p-3 font-medium text-muted-foreground">المبلغ</th>
-                      <th className="text-right p-3 font-medium text-muted-foreground">الخطة</th>
-                      <th className="text-right p-3 font-medium text-muted-foreground">ملاحظات</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {payments.map(p => (
-                      <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20">
-                        <td className="p-3">{format(new Date(p.payment_date), "dd/MM/yyyy")}</td>
-                        <td className="p-3 font-semibold">₪{p.amount?.toLocaleString()}</td>
-                        <td className="p-3"><Badge variant="secondary" className="text-xs">{p.plan}</Badge></td>
-                        <td className="p-3 text-muted-foreground text-xs truncate max-w-[200px]">{p.notes || "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
-        </div>
 
-        {/* ═══ Danger Zone ═══ */}
-        {isAdmin && (
-          <Card className="border border-destructive/20">
-            <CardContent className="py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="font-bold text-destructive flex items-center gap-2"><XCircle className="h-4 w-4" />منطقة الخطر</h3>
-                <p className="text-xs text-muted-foreground mt-1">إلغاء الاشتراك أو حذف الحساب بالكامل</p>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {sub?.isActive && !sub.isCancelled && !sub.isTrial && (
-                  <Button variant="outline" size="sm" className="text-yellow-600 border-yellow-300 hover:bg-yellow-50"
-                    onClick={() => setConfirmDialog({ type: "cancel" })}>
-                    <Pause className="h-3.5 w-3.5 ml-1" />إلغاء الاشتراك
-                  </Button>
-                )}
-                <Button variant="destructive" size="sm" onClick={() => setDeleteDialog(true)}>
-                  <Trash2 className="h-3.5 w-3.5 ml-1" />حذف الحساب
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+            {/* Danger zone — admin only */}
+            {isAdmin && (
+              <Card className="border border-destructive/30 shadow-sm">
+                <CardContent className="py-5 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center shrink-0">
+                      <AlertTriangle className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-destructive">منطقة الخطر</h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        هذه الإجراءات نهائية ولا يمكن التراجع عنها. راجع قبل المتابعة.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 flex-wrap pt-2 border-t">
+                    {sub?.isActive && !sub.isCancelled && !sub.isTrial && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-yellow-600 border-yellow-300 hover:bg-yellow-50"
+                        onClick={() => setConfirmDialog({ type: "cancel" })}
+                      >
+                        <Pause className="h-3.5 w-3.5 ml-1" />
+                        إلغاء الاشتراك
+                      </Button>
+                    )}
+                    <Button variant="destructive" size="sm" onClick={() => setDeleteDialog(true)}>
+                      <Trash2 className="h-3.5 w-3.5 ml-1" />
+                      حذف الحساب نهائياً
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
 
         {/* ═══ Confirm Dialog ═══ */}
         <Dialog open={!!confirmDialog} onOpenChange={() => setConfirmDialog(null)}>
