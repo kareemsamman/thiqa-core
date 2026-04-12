@@ -7,6 +7,7 @@ import { Package, Route, Shield, FileCheck, Loader2, Check, AlertCircle, Car, Ca
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
+import { SelectEmptyHint } from "./SelectEmptyHint";
 import type { PackageAddon, Company, RoadService, AccidentFeeService } from "./types";
 
 // Addon Card Component - extracted outside to prevent re-creation on parent re-render
@@ -445,7 +446,11 @@ export function PackageBuilderSection({
                   </SelectTrigger>
                   <SelectContent>
                     {elzamiCompanies.length === 0 ? (
-                      <div className="p-2 text-center text-sm text-muted-foreground">لا توجد شركات</div>
+                      <SelectEmptyHint
+                        label="شركات إلزامي"
+                        adminPath="/companies"
+                        onNavigate={onMinimizeAndNavigate}
+                      />
                     ) : (
                       elzamiCompanies.map(c => (
                         <SelectItem key={c.id} value={c.id}>
@@ -584,7 +589,11 @@ export function PackageBuilderSection({
                   </SelectTrigger>
                   <SelectContent>
                     {thirdFullCompanies.length === 0 ? (
-                      <div className="p-2 text-center text-sm text-muted-foreground">لا توجد شركات</div>
+                      <SelectEmptyHint
+                        label="شركات ثالث/شامل"
+                        adminPath="/companies"
+                        onNavigate={onMinimizeAndNavigate}
+                      />
                     ) : (
                       thirdFullCompanies.map(c => (
                         <SelectItem key={c.id} value={c.id}>
@@ -677,9 +686,11 @@ export function PackageBuilderSection({
                   </SelectTrigger>
                   <SelectContent>
                     {availableRoadServices.length === 0 ? (
-                      <div className="p-2 text-center text-sm text-muted-foreground">
-                        لا توجد خدمات متاحة لهذه الشركة
-                      </div>
+                      <SelectEmptyHint
+                        label="خدمات طريق"
+                        adminPath="/admin/road-services"
+                        onNavigate={onMinimizeAndNavigate}
+                      />
                     ) : (
                       availableRoadServices.map(rs => (
                         <SelectItem key={rs.id} value={rs.id}>
@@ -722,7 +733,11 @@ export function PackageBuilderSection({
                   </SelectTrigger>
                   <SelectContent>
                     {roadServiceCompanies.length === 0 ? (
-                      <div className="p-2 text-center text-sm text-muted-foreground">لا توجد شركات</div>
+                      <SelectEmptyHint
+                        label="شركات خدمات الطريق"
+                        adminPath="/companies"
+                        onNavigate={onMinimizeAndNavigate}
+                      />
                     ) : (
                       roadServiceCompanies.map(c => (
                         <SelectItem key={c.id} value={c.id}>
@@ -818,11 +833,19 @@ export function PackageBuilderSection({
                     <SelectValue placeholder="اختر الخدمة" />
                   </SelectTrigger>
                   <SelectContent>
-                    {accidentFeeServices.map(s => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name_ar || s.name}
-                      </SelectItem>
-                    ))}
+                    {accidentFeeServices.length === 0 ? (
+                      <SelectEmptyHint
+                        label="إعفاءات رسوم حادث"
+                        adminPath="/admin/accident-fee-services"
+                        onNavigate={onMinimizeAndNavigate}
+                      />
+                    ) : (
+                      accidentFeeServices.map(s => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name_ar || s.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
                 {errors.addon_accident_service && (
@@ -858,7 +881,11 @@ export function PackageBuilderSection({
                   </SelectTrigger>
                   <SelectContent>
                     {accidentFeeCompanies.length === 0 ? (
-                      <div className="p-2 text-center text-sm text-muted-foreground">لا توجد شركات</div>
+                      <SelectEmptyHint
+                        label="شركات إعفاء حادث"
+                        adminPath="/companies"
+                        onNavigate={onMinimizeAndNavigate}
+                      />
                     ) : (
                       accidentFeeCompanies.map(c => (
                         <SelectItem key={c.id} value={c.id}>

@@ -16,6 +16,7 @@ import '@/types/scanner.d.ts';
 import { cn } from "@/lib/utils";
 import { PricingCard } from "./PricingCard";
 import { PackageBuilderSection } from "./PackageBuilderSection";
+import { SelectEmptyHint } from "./SelectEmptyHint";
 import type {
   InsuranceCategory,
   Company,
@@ -729,11 +730,19 @@ export function Step3PolicyDetails({
               <SelectValue placeholder="اختر خدمة الطريق" />
             </SelectTrigger>
             <SelectContent>
-              {roadServices.map((rs) => (
-                <SelectItem key={rs.id} value={rs.id}>
-                  {rs.name_ar || rs.name}
-                </SelectItem>
-              ))}
+              {roadServices.length === 0 ? (
+                <SelectEmptyHint
+                  label="خدمات طريق"
+                  adminPath="/admin/road-services"
+                  onNavigate={onMinimizeAndNavigate}
+                />
+              ) : (
+                roadServices.map((rs) => (
+                  <SelectItem key={rs.id} value={rs.id}>
+                    {rs.name_ar || rs.name}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
           <FieldError error={errors.road_service_id} />
@@ -752,11 +761,19 @@ export function Step3PolicyDetails({
               <SelectValue placeholder="اختر نوع الإعفاء" />
             </SelectTrigger>
             <SelectContent>
-              {accidentFeeServices.map((afs) => (
-                <SelectItem key={afs.id} value={afs.id}>
-                  {afs.name_ar || afs.name}
-                </SelectItem>
-              ))}
+              {accidentFeeServices.length === 0 ? (
+                <SelectEmptyHint
+                  label="إعفاءات رسوم حادث"
+                  adminPath="/admin/accident-fee-services"
+                  onNavigate={onMinimizeAndNavigate}
+                />
+              ) : (
+                accidentFeeServices.map((afs) => (
+                  <SelectItem key={afs.id} value={afs.id}>
+                    {afs.name_ar || afs.name}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
           <FieldError error={errors.accident_fee_service_id} />
@@ -796,7 +813,11 @@ export function Step3PolicyDetails({
               {loadingCompanies ? (
                 <div className="p-2 text-center text-sm text-muted-foreground">جاري التحميل...</div>
               ) : companies.length === 0 ? (
-                <div className="p-2 text-center text-sm text-muted-foreground">لا توجد شركات لهذا النوع</div>
+                <SelectEmptyHint
+                  label="شركات تأمين لهذا النوع"
+                  adminPath="/companies"
+                  onNavigate={onMinimizeAndNavigate}
+                />
               ) : (
                 companies.map(c => (
                   <SelectItem key={c.id} value={c.id}>
@@ -903,10 +924,14 @@ export function Step3PolicyDetails({
 
         return (
           <Card className={cn(
-            "p-4 transition-colors",
-            packageMode ? "border-primary bg-primary/5" : "bg-secondary/30",
+            "p-4 transition-all relative overflow-hidden",
+            packageMode
+              ? "border-primary/60 bg-gradient-to-br from-primary/15 via-primary/8 to-amber-400/10 shadow-md shadow-primary/10"
+              : "border-primary/20 bg-gradient-to-br from-primary/8 via-amber-400/5 to-transparent hover:from-primary/12 hover:via-amber-400/8",
             !canEnablePackage && "opacity-60"
           )}>
+            {/* Subtle corner highlight */}
+            <div className="pointer-events-none absolute -top-10 -left-10 h-32 w-32 rounded-full bg-gradient-to-br from-primary/20 to-transparent blur-2xl" />
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Package className="h-5 w-5 text-primary" />
@@ -1011,9 +1036,17 @@ export function Step3PolicyDetails({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">بدون وسيط</SelectItem>
-                      {brokers.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                      ))}
+                      {brokers.length === 0 ? (
+                        <SelectEmptyHint
+                          label="وسطاء"
+                          adminPath="/brokers"
+                          onNavigate={onMinimizeAndNavigate}
+                        />
+                      ) : (
+                        brokers.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
