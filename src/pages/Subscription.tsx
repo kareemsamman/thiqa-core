@@ -54,11 +54,33 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
   useEffect(() => {
     if (!agentId) return;
     (async () => {
-      const [limitsRes, usageRes] = await Promise.all([
+      const [limitsRes, usageRes, platformRes] = await Promise.all([
         supabase.from("agent_usage_limits" as any).select("*").eq("agent_id", agentId).maybeSingle(),
         supabase.from("agent_usage_log" as any).select("*").eq("agent_id", agentId).order("period", { ascending: false }).limit(12),
+        supabase
+          .from("thiqa_platform_settings" as any)
+          .select("setting_key, setting_value")
+          .in("setting_key", [
+            "default_sms_limit_type",
+            "default_sms_limit_count",
+            "default_ai_limit_type",
+            "default_ai_limit_count",
+          ]),
       ]);
-      setLimits(limitsRes.data || { sms_limit_type: 'unlimited', sms_limit_count: 0, ai_limit_type: 'unlimited', ai_limit_count: 0 });
+
+      // Build platform defaults map
+      const platformMap: Record<string, string> = {};
+      ((platformRes.data as any) || []).forEach((r: any) => {
+        platformMap[r.setting_key] = r.setting_value || "";
+      });
+      const platformDefaults = {
+        sms_limit_type: platformMap.default_sms_limit_type || "monthly",
+        sms_limit_count: parseInt(platformMap.default_sms_limit_count || "100", 10),
+        ai_limit_type: platformMap.default_ai_limit_type || "monthly",
+        ai_limit_count: parseInt(platformMap.default_ai_limit_count || "100", 10),
+      };
+
+      setLimits(limitsRes.data || platformDefaults);
       setUsage((usageRes.data as any) || []);
     })();
   }, [agentId]);

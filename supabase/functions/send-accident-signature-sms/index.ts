@@ -2,6 +2,7 @@
  import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
  import { resolveSmsSettings } from "../_shared/sms-settings.ts";
  import { resolveAgentId } from "../_shared/agent-branding.ts";
+ import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
  
  const corsHeaders = {
    "Access-Control-Allow-Origin": "*",
@@ -142,6 +143,12 @@
          JSON.stringify({ error: "خدمة الرسائل النصية غير مفعلة" }),
          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
        );
+     }
+
+     // Enforce SMS quota
+     const smsCheck = await checkUsageLimit(supabase, agentId, "sms");
+     if (!smsCheck.allowed) {
+       return limitReachedResponse("sms", smsCheck, corsHeaders);
      }
  
      // Generate secure token
@@ -287,7 +294,10 @@
        created_by: user.id,
        branch_id: report.branch_id,
      });
- 
+
+     // Track usage for quota enforcement
+     await logUsage(supabase, agentId, "sms");
+
      const duration = Date.now() - startTime;
      console.log(`[send-accident-signature-sms] Completed in ${duration}ms`);
  

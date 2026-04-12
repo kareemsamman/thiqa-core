@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
+import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -66,6 +67,19 @@ serve(async (req) => {
 
     // Resolve agent_id
     const agentId = profile.agent_id || (await supabase.from("agent_users").select("agent_id").eq("user_id", user.id).maybeSingle())?.data?.agent_id;
+
+    if (!agentId) {
+      return new Response(
+        JSON.stringify({ error: "Agent not found" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Enforce per-agent SMS quota (falls back to platform defaults if no per-agent row exists)
+    const smsCheck = await checkUsageLimit(supabase, agentId, "sms");
+    if (!smsCheck.allowed) {
+      return limitReachedResponse("sms", smsCheck, corsHeaders);
+    }
 
     // Parse request body
     const { phone, message, client_id }: SmsRequest & { client_id?: string } = await req.json();
@@ -191,6 +205,9 @@ serve(async (req) => {
     if (logError) {
       console.error("Error logging SMS:", logError);
     }
+
+    // Track usage for quota enforcement
+    await logUsage(supabase, agentId, "sms");
 
     return new Response(
       JSON.stringify({

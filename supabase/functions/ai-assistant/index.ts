@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -406,31 +407,10 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!featureFlag?.enabled) throw new Error("ميزة المساعد الذكي غير مفعّلة لهذا الحساب");
 
-    // Check usage limits
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const currentYear = String(now.getFullYear());
-
-    const { data: limitsData } = await adminClient
-      .from("agent_usage_limits")
-      .select("ai_limit_type, ai_limit_count")
-      .eq("agent_id", agentId)
-      .maybeSingle();
-
-    if (limitsData && limitsData.ai_limit_type !== 'unlimited') {
-      const period = limitsData.ai_limit_type === 'monthly' ? currentMonth : currentYear;
-      const { data: usageData } = await adminClient
-        .from("agent_usage_log")
-        .select("count")
-        .eq("agent_id", agentId)
-        .eq("usage_type", "ai_chat")
-        .eq("period", period)
-        .maybeSingle();
-
-      const currentUsage = usageData?.count || 0;
-      if (currentUsage >= limitsData.ai_limit_count) {
-        throw new Error(`لقد وصلت للحد الأقصى لاستخدام المساعد الذكي (${limitsData.ai_limit_count} ${limitsData.ai_limit_type === 'monthly' ? 'شهرياً' : 'سنوياً'}). تواصل مع إدارة ثقة لزيادة الحد.`);
-      }
+    // Check usage limits (falls back to platform defaults when no per-agent row exists)
+    const aiCheck = await checkUsageLimit(adminClient, agentId, "ai_chat");
+    if (!aiCheck.allowed) {
+      return limitReachedResponse("ai_chat", aiCheck, corsHeaders);
     }
 
     // Determine role
@@ -538,23 +518,8 @@ Deno.serve(async (req) => {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", sessionId);
 
-    // Track usage — atomic increment via SQL to avoid race conditions
-    await adminClient.rpc("increment_usage_log", {
-      p_agent_id: agentId,
-      p_usage_type: "ai_chat",
-      p_period: currentMonth,
-    }).then(({ error }) => {
-      if (error) {
-        // Fallback: upsert if RPC doesn't exist yet
-        console.log("increment_usage_log RPC failed, using fallback:", error.message);
-        return adminClient.from("agent_usage_log").upsert({
-          agent_id: agentId,
-          usage_type: "ai_chat",
-          period: currentMonth,
-          count: 1,
-        }, { onConflict: "agent_id,usage_type,period" });
-      }
-    });
+    // Track usage via shared helper (atomic RPC with upsert fallback)
+    await logUsage(adminClient, agentId, "ai_chat");
 
     return new Response(
       JSON.stringify({ reply, session_id: sessionId }),

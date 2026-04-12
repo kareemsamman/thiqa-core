@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -118,6 +119,12 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Enforce SMS quota
+    const smsCheck = await checkUsageLimit(supabase, tempAgentId, "sms");
+    if (!smsCheck.allowed) {
+      return limitReachedResponse("sms", smsCheck, corsHeaders);
+    }
+
     // Get company footer info from agent's SMS settings row
     const { data: agentSmsRow } = await supabase
       .from('sms_settings')
@@ -231,6 +238,9 @@ ${branding.companyName}`;
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Track usage for quota enforcement
+    await logUsage(supabase, tempAgentId, "sms");
 
     return new Response(
       JSON.stringify({

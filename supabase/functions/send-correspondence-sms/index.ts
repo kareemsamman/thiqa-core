@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 import { resolveAgentId } from "../_shared/agent-branding.ts";
+import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -199,6 +200,12 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Enforce SMS quota
+    const smsCheck = await checkUsageLimit(supabase, agentId, "sms");
+    if (!smsCheck.allowed) {
+      return limitReachedResponse("sms", smsCheck, corsHeaders);
+    }
+
     // Normalize phone
     let phone = phone_number.replace(/\D/g, '');
     if (phone.startsWith('972')) {
@@ -278,10 +285,13 @@ ${letterUrl}`;
       });
     }
 
+    // Track usage for quota enforcement
+    await logUsage(supabase, agentId, "sms");
+
     // Update letter status
     await supabase
       .from('correspondence_letters')
-      .update({ 
+      .update({
         status: 'sent',
         sent_at: new Date().toISOString(),
         recipient_phone: phone,

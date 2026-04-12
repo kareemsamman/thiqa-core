@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -104,6 +105,27 @@ Deno.serve(async (req) => {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      }
+
+      // Enforce SMS quota — the whole campaign must fit within the agent's remaining budget
+      const smsCheck = await checkUsageLimit(supabase, agentId, "sms");
+      if (!smsCheck.allowed) {
+        return limitReachedResponse("sms", smsCheck, corsHeaders);
+      }
+      if (smsCheck.limit_type !== "unlimited") {
+        const remaining = Math.max(0, smsCheck.limit - smsCheck.used);
+        if (recipients.length > remaining) {
+          return new Response(
+            JSON.stringify({
+              error: `رصيد الرسائل غير كافٍ: متاح ${remaining} من ${smsCheck.limit} ${smsCheck.period_label}، والحملة تحتاج ${recipients.length} رسالة. تواصل مع إدارة ثقة لزيادة الحد.`,
+              error_code: "sms_limit_insufficient",
+              available: remaining,
+              requested: recipients.length,
+              limit: smsCheck.limit,
+            }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
 
       campaignMessage = message;
@@ -224,6 +246,10 @@ Deno.serve(async (req) => {
           entity_id: currentCampaignId,
           client_id: recipient.client_id || null,
         });
+
+        if (isAccepted) {
+          await logUsage(supabase, agentId, "sms");
+        }
 
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {

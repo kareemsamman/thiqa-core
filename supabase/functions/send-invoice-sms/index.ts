@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { buildBunnyStorageUploadUrl, normalizeBunnyCdnUrl, resolveBunnyStorageZone } from "../_shared/bunny-storage.ts";
 import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -182,6 +183,12 @@ serve(async (req) => {
           JSON.stringify({ error: "خدمة الرسائل غير مفعلة" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+
+      // Enforce SMS quota for the agent who owns this policy
+      const smsCheck = await checkUsageLimit(supabase, policyAgentId, "sms");
+      if (!smsCheck.allowed) {
+        return limitReachedResponse("sms", smsCheck, corsHeaders);
       }
     }
 
@@ -395,6 +402,9 @@ serve(async (req) => {
     if (logError) {
       console.error("[send-invoice-sms] Error logging SMS:", logError);
     }
+
+    // Track usage for quota enforcement
+    await logUsage(supabase, policyAgentId, "sms");
 
     // Mark as sent
     const { error: updateError } = await supabase

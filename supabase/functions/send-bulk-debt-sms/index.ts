@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -128,6 +129,27 @@ Deno.serve(async (req) => {
 
     console.log(`${clientsWithPhone.length} clients have phone numbers`);
 
+    // Enforce SMS quota — must have enough budget for the whole batch
+    const smsCheck = await checkUsageLimit(supabase, agentId, "sms");
+    if (!smsCheck.allowed) {
+      return limitReachedResponse("sms", smsCheck, corsHeaders);
+    }
+    if (smsCheck.limit_type !== "unlimited") {
+      const remaining = Math.max(0, smsCheck.limit - smsCheck.used);
+      if (clientsWithPhone.length > remaining) {
+        return new Response(
+          JSON.stringify({
+            error: `رصيد الرسائل غير كافٍ: متاح ${remaining} من ${smsCheck.limit} ${smsCheck.period_label}، والمطلوب ${clientsWithPhone.length} رسالة. تواصل مع إدارة ثقة لزيادة الحد.`,
+            error_code: "sms_limit_insufficient",
+            available: remaining,
+            requested: clientsWithPhone.length,
+            limit: smsCheck.limit,
+          }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Get company footer info
     const companyLocation = agentSmsRow?.company_location || '';
     const phoneLinks = (agentSmsRow?.company_phone_links as any[]) || [];
@@ -241,6 +263,7 @@ ${siteTitle}`;
 
         if (isSuccess) {
           sentCount++;
+          await logUsage(supabase, agentId, "sms");
         } else {
           failedCount++;
         }
