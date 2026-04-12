@@ -1597,13 +1597,13 @@ export function PolicyWizard({
               }}
               title="تصغير"
               aria-label="تصغير"
-              className="h-7 w-7 flex items-center justify-center rounded-md opacity-70 hover:opacity-100 hover:bg-accent transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              className="h-7 w-7 flex items-center justify-center rounded-md border border-transparent opacity-70 hover:opacity-100 hover:bg-white hover:border-border hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             >
               <Minus className="h-4 w-4" strokeWidth={2.5} />
               <span className="sr-only">تصغير</span>
             </button>
             <DialogClose
-              className="h-7 w-7 flex items-center justify-center rounded-md opacity-70 hover:opacity-100 hover:bg-accent transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              className="h-7 w-7 flex items-center justify-center rounded-md border border-transparent opacity-70 hover:opacity-100 hover:bg-white hover:border-border hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
               aria-label="إغلاق"
             >
               <X className="h-4 w-4" strokeWidth={2.5} />
