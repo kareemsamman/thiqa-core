@@ -8,6 +8,7 @@ import { Loader2, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import thiqaLogoDark from "@/assets/thiqa-logo-dark.svg";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
+import { checkPasswordStrength, isPasswordValid } from "@/lib/authValidation";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -42,8 +43,8 @@ export default function ResetPassword() {
   }, []);
 
   const handleReset = async () => {
-    if (password.length < 6) {
-      toast.error("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+    if (!isPasswordValid(password)) {
+      toast.error("كلمة المرور يجب أن تحتوي على 8 أحرف، حرف كبير، رقم، ورمز");
       return;
     }
     if (password !== confirmPassword) {
@@ -116,9 +117,10 @@ export default function ResetPassword() {
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => { setPassword(e.target.value); setSamePasswordError(false); }}
-                      placeholder="6 أحرف على الأقل"
+                      placeholder="8 أحرف، حرف كبير، رقم، ورمز"
                       className="h-11 rounded-xl pl-10"
                       dir="ltr"
+                      autoComplete="new-password"
                     />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -126,6 +128,46 @@ export default function ResetPassword() {
                   </div>
                   {samePasswordError && (
                     <p className="text-xs text-destructive">لا يمكنك استخدام نفس كلمة المرور السابقة</p>
+                  )}
+
+                  {/* Password strength indicator */}
+                  {password.length > 0 && (
+                    <div className="space-y-1 pt-1">
+                      <div className="flex gap-1">
+                        {[0, 1, 2, 3].map((i) => {
+                          const strength = checkPasswordStrength(password);
+                          return (
+                            <div
+                              key={i}
+                              className={`h-1 flex-1 rounded-full transition-colors ${
+                                i < strength.score ? strength.color : "bg-border"
+                              }`}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+                        {(() => {
+                          const { checks } = checkPasswordStrength(password);
+                          return (
+                            <>
+                              <span className={checks.minLength ? "text-green-600" : "text-muted-foreground"}>
+                                8+ أحرف {checks.minLength ? "✓" : ""}
+                              </span>
+                              <span className={checks.hasUpper ? "text-green-600" : "text-muted-foreground"}>
+                                حرف كبير {checks.hasUpper ? "✓" : ""}
+                              </span>
+                              <span className={checks.hasNumber ? "text-green-600" : "text-muted-foreground"}>
+                                رقم {checks.hasNumber ? "✓" : ""}
+                              </span>
+                              <span className={checks.hasSymbol ? "text-green-600" : "text-muted-foreground"}>
+                                رمز {checks.hasSymbol ? "✓" : ""}
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -138,6 +180,7 @@ export default function ResetPassword() {
                       placeholder="أعد إدخال كلمة المرور"
                       className="h-11 rounded-xl pl-10"
                       dir="ltr"
+                      autoComplete="new-password"
                     />
                     <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                       {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -150,7 +193,7 @@ export default function ResetPassword() {
                 <Button
                   className="w-full h-12 text-base rounded-xl shadow-lg"
                   onClick={handleReset}
-                  disabled={loading || password.length < 6 || password !== confirmPassword}
+                  disabled={loading || !isPasswordValid(password) || password !== confirmPassword}
                 >
                   {loading ? <Loader2 className="h-5 w-5 animate-spin ml-2" /> : null}
                   {loading ? "جاري التحديث..." : "تحديث كلمة المرور"}
