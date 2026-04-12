@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Plus, Check, User, Phone, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -121,9 +121,34 @@ export function PolicyChildrenSelector({
     return childErrors;
   };
 
+  // Track how many new-child rows we last saw so we can scroll to the
+  // freshly-added one and briefly highlight it.
+  const prevNewChildrenLengthRef = useRef(newChildren.length);
+  const [highlightedChildId, setHighlightedChildId] = useState<string | null>(null);
+
   const handleAddChild = () => {
     onNewChildrenChange([...newChildren, createEmptyChildForm()]);
   };
+
+  useEffect(() => {
+    if (newChildren.length > prevNewChildrenLengthRef.current) {
+      const lastChild = newChildren[newChildren.length - 1];
+      setHighlightedChildId(lastChild.id);
+      // Wait one frame so the new card is in the DOM, then scroll to it.
+      requestAnimationFrame(() => {
+        const el = document.querySelector(
+          `[data-child-card-id="${lastChild.id}"]`,
+        );
+        if (el instanceof HTMLElement) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      });
+      const timer = setTimeout(() => setHighlightedChildId(null), 1500);
+      prevNewChildrenLengthRef.current = newChildren.length;
+      return () => clearTimeout(timer);
+    }
+    prevNewChildrenLengthRef.current = newChildren.length;
+  }, [newChildren]);
 
   const handleUpdateChild = (index: number, field: keyof NewChildForm, value: string) => {
     const updated = [...newChildren];
@@ -241,7 +266,12 @@ export function PolicyChildrenSelector({
             return (
               <div
                 key={child.id}
-                className="p-3 rounded-lg border bg-background space-y-3"
+                data-child-card-id={child.id}
+                className={cn(
+                  "p-3 rounded-lg border bg-background space-y-3 transition-all duration-500 scroll-mt-20",
+                  highlightedChildId === child.id &&
+                    "ring-2 ring-primary ring-offset-2 shadow-lg border-primary/60",
+                )}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">
