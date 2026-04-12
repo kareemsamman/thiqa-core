@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
-import { Plus, Trash2, CreditCard, AlertCircle, Loader2, Split, Upload, X, ImageIcon, Lock, Scan } from "lucide-react";
+import { Plus, Trash2, CreditCard, AlertCircle, Loader2, Split, Upload, X, ImageIcon, Lock, Scan, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { PaymentSummaryBar } from "./PaymentSummaryBar";
 import { TranzilaPaymentModal } from "@/components/payments/TranzilaPaymentModal";
@@ -464,6 +465,28 @@ export function Step4Payments({
                   {/* Inline receipt strip — thin, no divider, same card. */}
                   {(payment.payment_type === 'cash' || payment.payment_type === 'cheque' || payment.payment_type === 'transfer') && !visaPaid && (
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
+                        <span>
+                          {payment.payment_type === 'cheque'
+                            ? 'صور الشيك'
+                            : payment.payment_type === 'transfer'
+                              ? 'صور إيصال التحويل'
+                              : 'صور إيصال الدفع'}
+                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button type="button" className="hover:text-foreground">
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            <p className="text-xs max-w-[220px]">
+                              أرفق صورة الإيصال أو ملف PDF كإثبات للدفعة. يمكنك إضافة أكثر من ملف.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+
                       {payment.cheque_image_url && (
                         <img
                           src={payment.cheque_image_url}
@@ -487,7 +510,10 @@ export function Step4Payments({
                           </button>
                         </div>
                       ))}
-                      <label className="h-10 w-14 border border-dashed rounded flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors text-muted-foreground">
+                      <label
+                        className="h-10 px-2.5 border border-dashed rounded flex items-center gap-1.5 cursor-pointer hover:bg-muted/50 hover:border-primary/40 hover:text-foreground transition-colors text-muted-foreground"
+                        title="إضافة صورة إيصال"
+                      >
                         <input
                           type="file"
                           accept="image/*,application/pdf"
@@ -496,6 +522,7 @@ export function Step4Payments({
                           className="hidden"
                         />
                         <Upload className="h-3.5 w-3.5" />
+                        <span className="text-[10px] whitespace-nowrap">إضافة إيصال</span>
                       </label>
                       {payment.pendingImages && payment.pendingImages.length > 0 && (
                         <span className="text-[10px] text-muted-foreground flex items-center gap-1 mr-auto">
