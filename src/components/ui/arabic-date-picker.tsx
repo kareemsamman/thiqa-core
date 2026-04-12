@@ -366,13 +366,14 @@ export function ArabicDatePicker({
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0 pointer-events-auto" align="start" dir="rtl">
           <div className="p-3 space-y-3">
-            {/* Month/Year Header */}
+            {/* Month/Year Header — RTL: right arrow = previous, left arrow = next. */}
             <div className="flex items-center justify-between gap-2">
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={handleNextMonth}
+                onClick={handlePrevMonth}
+                aria-label="الشهر السابق"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -415,7 +416,8 @@ export function ArabicDatePicker({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={handlePrevMonth}
+                onClick={handleNextMonth}
+                aria-label="الشهر التالي"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>

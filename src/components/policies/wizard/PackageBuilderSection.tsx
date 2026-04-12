@@ -17,6 +17,8 @@ interface AddonCardProps {
   iconColor: string;
   bgColor: string;
   borderColor: string;
+  /** Tailwind gradient classes applied when the card is enabled. Falls back to bgColor if not provided. */
+  gradientClass?: string;
   addon: PackageAddon;
   isCost?: boolean;
   disabled?: boolean;
@@ -24,52 +26,63 @@ interface AddonCardProps {
   children: React.ReactNode;
 }
 
-const AddonCard = memo(function AddonCard({ 
-  type, 
-  title, 
-  icon: Icon, 
-  iconColor, 
-  bgColor, 
+const AddonCard = memo(function AddonCard({
+  type,
+  title,
+  icon: Icon,
+  iconColor,
+  bgColor,
   borderColor,
+  gradientClass,
   addon,
   isCost = false,
   disabled,
   onToggle,
-  children 
+  children
 }: AddonCardProps) {
   return (
-    <Card 
+    <Card
       className={cn(
-        "relative p-4 cursor-pointer transition-all duration-200 border-2 min-h-[180px]",
-        addon.enabled 
-          ? `${bgColor} ${borderColor} shadow-md` 
-          : "bg-muted/20 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 hover:bg-muted/30"
+        "relative p-4 cursor-pointer transition-all duration-200 border-2 min-h-[180px] overflow-hidden",
+        addon.enabled
+          ? cn(gradientClass || bgColor, borderColor, "shadow-lg")
+          : "bg-muted/20 border-dashed border-muted-foreground/25 hover:border-muted-foreground/40 hover:bg-muted/30"
       )}
       onClick={() => !disabled && onToggle()}
     >
+      {/* Decorative corner glow when enabled */}
+      {addon.enabled && (
+        <div
+          className={cn(
+            "pointer-events-none absolute -top-6 -right-6 h-20 w-20 rounded-full blur-2xl opacity-40",
+            isCost ? "bg-destructive/30" : "bg-primary/30"
+          )}
+        />
+      )}
+
       {/* Selection Indicator */}
       <div className={cn(
         "absolute top-3 left-3 w-6 h-6 rounded-full flex items-center justify-center transition-all shadow-sm",
-        addon.enabled 
-          ? `${isCost ? 'bg-destructive' : 'bg-primary'} text-white` 
+        addon.enabled
+          ? `${isCost ? 'bg-destructive' : 'bg-primary'} text-white`
           : "bg-background border-2 border-muted-foreground/30"
       )}>
         {addon.enabled && <Check className="h-3.5 w-3.5" />}
       </div>
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-3 pr-2">
-        <div className={cn("p-1.5 rounded-md", addon.enabled ? bgColor : "bg-muted/50")}>
+      <div className="relative flex items-center gap-2 mb-3 pr-2">
+        <div className={cn("p-1.5 rounded-md shadow-sm", addon.enabled ? "bg-white/70 dark:bg-white/10" : "bg-muted/50")}>
           <Icon className={cn("h-4 w-4", addon.enabled ? iconColor : "text-muted-foreground")} />
         </div>
         <span className={cn("font-semibold text-sm", addon.enabled ? "text-foreground" : "text-muted-foreground")}>{title}</span>
         {isCost && addon.enabled && (
-          <span className="text-xs text-destructive font-bold mr-auto">(تكلفة)</span>
+          <span className="text-[10px] text-destructive font-bold mr-auto bg-destructive/10 px-1.5 py-0.5 rounded-full">(تكلفة)</span>
         )}
       </div>
 
       {/* Content */}
-      <div onClick={(e) => e.stopPropagation()}>
+      <div className="relative" onClick={(e) => e.stopPropagation()}>
         {addon.enabled ? children : (
           <p className="text-xs text-muted-foreground text-center py-6">اضغط لإضافة</p>
         )}
@@ -398,6 +411,7 @@ export function PackageBuilderSection({
             iconColor="text-destructive"
             bgColor="bg-destructive/5"
             borderColor="border-destructive/40"
+            gradientClass="bg-gradient-to-br from-destructive/10 via-destructive/5 to-transparent"
             addon={elzamiAddon}
             isCost={true}
             disabled={disabled}
@@ -411,7 +425,7 @@ export function PackageBuilderSection({
                   onValueChange={(v) => updateAddon('elzami', { company_id: v })}
                   disabled={disabled}
                 >
-                  <SelectTrigger className={cn("h-8 text-xs", errors.addon_elzami_company && "border-destructive")}>
+                  <SelectTrigger className={cn("h-9 text-sm", errors.addon_elzami_company && "border-destructive")}>
                     <SelectValue placeholder="اختر الشركة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -441,7 +455,7 @@ export function PackageBuilderSection({
                     value={elzamiAddon.insurance_price}
                     onChange={(e) => updateAddon('elzami', { insurance_price: e.target.value })}
                     placeholder="0"
-                    className={cn("h-8 text-xs text-destructive font-bold", errors.addon_elzami_price && "border-destructive")}
+                    className={cn("h-9 text-sm text-destructive font-bold", errors.addon_elzami_price && "border-destructive")}
                     disabled={disabled || loadingElzamiCommission}
                   />
                   {loadingElzamiCommission && (
@@ -457,12 +471,12 @@ export function PackageBuilderSection({
                   value={elzamiAddon.office_commission || '0'}
                   onChange={(e) => updateAddon('elzami', { office_commission: e.target.value })}
                   placeholder="0"
-                  className="h-8 text-xs text-amber-600 font-medium"
+                  className="h-9 text-sm text-amber-600 font-medium"
                   disabled={disabled}
                 />
               </div>
               {/* Date Fields */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed">
+              <div className="space-y-2 pt-2 border-t border-dashed">
                 <div>
                   <Label className="text-xs mb-1 block flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
@@ -501,6 +515,7 @@ export function PackageBuilderSection({
             iconColor="text-blue-600"
             bgColor="bg-blue-50 dark:bg-blue-950/30"
             borderColor="border-blue-300 dark:border-blue-800"
+            gradientClass="bg-gradient-to-br from-blue-100/70 via-blue-50/60 to-transparent dark:from-blue-950/40 dark:via-blue-950/20 dark:to-transparent"
             addon={thirdFullAddon}
             disabled={disabled}
             onToggle={() => updateAddon('third_full', { enabled: !thirdFullAddon.enabled })}
@@ -513,7 +528,7 @@ export function PackageBuilderSection({
                   onValueChange={(v) => updateAddon('third_full', { policy_type_child: v as 'THIRD' | 'FULL' })}
                   disabled={disabled}
                 >
-                  <SelectTrigger className={cn("h-8 text-xs", errors.addon_thirdfull_child && "border-destructive")}>
+                  <SelectTrigger className={cn("h-9 text-sm", errors.addon_thirdfull_child && "border-destructive")}>
                     <SelectValue placeholder="اختر النوع" />
                   </SelectTrigger>
                   <SelectContent>
@@ -535,7 +550,7 @@ export function PackageBuilderSection({
                   onValueChange={(v) => updateAddon('third_full', { company_id: v })}
                   disabled={disabled}
                 >
-                  <SelectTrigger className={cn("h-8 text-xs", errors.addon_thirdfull_company && "border-destructive")}>
+                  <SelectTrigger className={cn("h-9 text-sm", errors.addon_thirdfull_company && "border-destructive")}>
                     <SelectValue placeholder="اختر الشركة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -565,7 +580,7 @@ export function PackageBuilderSection({
                   value={thirdFullAddon.insurance_price}
                   onChange={(e) => updateAddon('third_full', { insurance_price: e.target.value })}
                   placeholder="0"
-                  className={cn("h-8 text-xs font-bold", errors.addon_thirdfull_price && "border-destructive")}
+                  className={cn("h-9 text-sm font-bold", errors.addon_thirdfull_price && "border-destructive")}
                   disabled={disabled}
                 />
                 {errors.addon_thirdfull_price && (
@@ -576,7 +591,7 @@ export function PackageBuilderSection({
                 )}
               </div>
               {/* Date Fields */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed">
+              <div className="space-y-2 pt-2 border-t border-dashed">
                 <div>
                   <Label className="text-xs mb-1 block flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
@@ -615,6 +630,7 @@ export function PackageBuilderSection({
             iconColor="text-orange-600"
             bgColor="bg-orange-50 dark:bg-orange-950/30"
             borderColor="border-orange-300 dark:border-orange-800"
+            gradientClass="bg-gradient-to-br from-orange-100/70 via-orange-50/60 to-transparent dark:from-orange-950/40 dark:via-orange-950/20 dark:to-transparent"
             addon={roadServiceAddon}
             disabled={disabled}
             onToggle={() => updateAddon('road_service', { enabled: !roadServiceAddon.enabled })}
@@ -627,7 +643,7 @@ export function PackageBuilderSection({
                   onValueChange={(v) => updateAddon('road_service', { road_service_id: v })}
                   disabled={disabled}
                 >
-                  <SelectTrigger className={cn("h-8 text-xs", errors.addon_road_service && "border-destructive")}>
+                  <SelectTrigger className={cn("h-9 text-sm", errors.addon_road_service && "border-destructive")}>
                     <SelectValue placeholder="اختر الخدمة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -658,7 +674,7 @@ export function PackageBuilderSection({
                   onValueChange={(v) => updateAddon('road_service', { company_id: v })}
                   disabled={disabled}
                 >
-                  <SelectTrigger className={cn("h-8 text-xs", errors.addon_road_company && "border-destructive")}>
+                  <SelectTrigger className={cn("h-9 text-sm", errors.addon_road_company && "border-destructive")}>
                     <SelectValue placeholder="اختر الشركة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -688,7 +704,7 @@ export function PackageBuilderSection({
                     value={roadServiceAddon.insurance_price}
                     onChange={(e) => updateAddon('road_service', { insurance_price: e.target.value })}
                     placeholder="0"
-                    className={cn("h-8 text-xs font-bold", errors.addon_road_price && "border-destructive")}
+                    className={cn("h-9 text-sm font-bold", errors.addon_road_price && "border-destructive")}
                     disabled={disabled || loadingRoadPrice}
                   />
                   {loadingRoadPrice && (
@@ -703,7 +719,7 @@ export function PackageBuilderSection({
                 )}
               </div>
               {/* Date Fields */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed">
+              <div className="space-y-2 pt-2 border-t border-dashed">
                 <div>
                   <Label className="text-xs mb-1 block flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
@@ -742,6 +758,7 @@ export function PackageBuilderSection({
             iconColor="text-emerald-600"
             bgColor="bg-emerald-50 dark:bg-emerald-950/30"
             borderColor="border-emerald-300 dark:border-emerald-800"
+            gradientClass="bg-gradient-to-br from-emerald-100/70 via-emerald-50/60 to-transparent dark:from-emerald-950/40 dark:via-emerald-950/20 dark:to-transparent"
             addon={accidentFeeAddon}
             disabled={disabled}
             onToggle={() => updateAddon('accident_fee_exemption', { enabled: !accidentFeeAddon.enabled })}
@@ -754,7 +771,7 @@ export function PackageBuilderSection({
                   onValueChange={(v) => updateAddon('accident_fee_exemption', { accident_fee_service_id: v })}
                   disabled={disabled}
                 >
-                  <SelectTrigger className={cn("h-8 text-xs", errors.addon_accident_service && "border-destructive")}>
+                  <SelectTrigger className={cn("h-9 text-sm", errors.addon_accident_service && "border-destructive")}>
                     <SelectValue placeholder="اختر الخدمة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -779,7 +796,7 @@ export function PackageBuilderSection({
                   onValueChange={(v) => updateAddon('accident_fee_exemption', { company_id: v })}
                   disabled={disabled}
                 >
-                  <SelectTrigger className={cn("h-8 text-xs", errors.addon_accident_company && "border-destructive")}>
+                  <SelectTrigger className={cn("h-9 text-sm", errors.addon_accident_company && "border-destructive")}>
                     <SelectValue placeholder="اختر الشركة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -809,7 +826,7 @@ export function PackageBuilderSection({
                     value={accidentFeeAddon.insurance_price}
                     onChange={(e) => updateAddon('accident_fee_exemption', { insurance_price: e.target.value })}
                     placeholder="0"
-                    className={cn("h-8 text-xs font-bold", errors.addon_accident_price && "border-destructive")}
+                    className={cn("h-9 text-sm font-bold", errors.addon_accident_price && "border-destructive")}
                     disabled={disabled || loadingAccidentPrice}
                   />
                   {loadingAccidentPrice && (
@@ -824,7 +841,7 @@ export function PackageBuilderSection({
                 )}
               </div>
               {/* Date Fields */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed">
+              <div className="space-y-2 pt-2 border-t border-dashed">
                 <div>
                   <Label className="text-xs mb-1 block flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
