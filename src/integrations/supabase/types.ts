@@ -686,6 +686,35 @@ export type Database = {
           },
         ]
       }
+      agent_credit_wallet: {
+        Row: {
+          agent_id: string
+          ai_credit_balance: number
+          sms_credit_balance: number
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          ai_credit_balance?: number
+          sms_credit_balance?: number
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          ai_credit_balance?: number
+          sms_credit_balance?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_credit_wallet_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: true
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_feature_flags: {
         Row: {
           agent_id: string
@@ -758,6 +787,135 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "agent_subscription_payments_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_usage_limits: {
+        Row: {
+          agent_id: string
+          ai_limit_count: number
+          ai_limit_type: string
+          created_at: string | null
+          id: string
+          sms_limit_count: number
+          sms_limit_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          agent_id: string
+          ai_limit_count?: number
+          ai_limit_type?: string
+          created_at?: string | null
+          id?: string
+          sms_limit_count?: number
+          sms_limit_type?: string
+          updated_at?: string | null
+        }
+        Update: {
+          agent_id?: string
+          ai_limit_count?: number
+          ai_limit_type?: string
+          created_at?: string | null
+          id?: string
+          sms_limit_count?: number
+          sms_limit_type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_usage_limits_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: true
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_usage_log: {
+        Row: {
+          agent_id: string
+          count: number
+          id: string
+          period: string
+          updated_at: string | null
+          usage_type: string
+        }
+        Insert: {
+          agent_id: string
+          count?: number
+          id?: string
+          period: string
+          updated_at?: string | null
+          usage_type: string
+        }
+        Update: {
+          agent_id?: string
+          count?: number
+          id?: string
+          period?: string
+          updated_at?: string | null
+          usage_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_usage_log_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_usage_overages: {
+        Row: {
+          agent_id: string
+          billed: boolean
+          created_at: string
+          extra_count: number
+          id: string
+          notes: string | null
+          period: string
+          purchased_by: string | null
+          source: string | null
+          total_amount: number
+          unit_price: number
+          usage_type: string
+        }
+        Insert: {
+          agent_id: string
+          billed?: boolean
+          created_at?: string
+          extra_count: number
+          id?: string
+          notes?: string | null
+          period: string
+          purchased_by?: string | null
+          source?: string | null
+          total_amount: number
+          unit_price: number
+          usage_type: string
+        }
+        Update: {
+          agent_id?: string
+          billed?: boolean
+          created_at?: string
+          extra_count?: number
+          id?: string
+          notes?: string | null
+          period?: string
+          purchased_by?: string | null
+          source?: string | null
+          total_amount?: number
+          unit_price?: number
+          usage_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_usage_overages_agent_id_fkey"
             columns: ["agent_id"]
             isOneToOne: false
             referencedRelation: "agents"
@@ -5724,6 +5882,7 @@ export type Database = {
         Returns: number
       }
       dashboard_total_client_debt: { Args: never; Returns: number }
+      delete_agent_cascade: { Args: { p_agent_id: string }; Returns: undefined }
       enforce_agent_isolation: { Args: { _agent_id: string }; Returns: boolean }
       enforce_agent_isolation_insert: {
         Args: { _agent_id: string }
@@ -5943,6 +6102,15 @@ export type Database = {
       is_active_user: { Args: { _user_id: string }; Returns: boolean }
       is_agent_active: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
+      log_usage_with_credit: {
+        Args: {
+          p_agent_id: string
+          p_base_limit: number
+          p_period: string
+          p_usage_type: string
+        }
+        Returns: string
+      }
       report_client_debts:
         | {
             Args: {

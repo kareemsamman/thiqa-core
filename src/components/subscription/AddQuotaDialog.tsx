@@ -62,18 +62,22 @@ export function AddQuotaDialog({
     setQuantity(PRESET_QUANTITIES[usageType][1]);
     setLoadingPrice(true);
     const key = usageType === "sms" ? "sms_overage_unit_price" : "ai_overage_unit_price";
-    supabase
-      .from("thiqa_platform_settings" as any)
-      .select("setting_value")
-      .eq("setting_key", key)
-      .maybeSingle()
-      .then(({ data }: any) => {
-        const raw = (data as any)?.setting_value;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("thiqa_platform_settings" as any)
+          .select("setting_value")
+          .eq("setting_key", key)
+          .maybeSingle() as any;
+        const raw = data?.setting_value;
         const parsed = raw != null ? parseFloat(String(raw)) : NaN;
         setUnitPrice(Number.isFinite(parsed) && parsed >= 0 ? parsed : FALLBACK_UNIT_PRICE[usageType]);
-      })
-      .catch(() => setUnitPrice(FALLBACK_UNIT_PRICE[usageType]))
-      .finally(() => setLoadingPrice(false));
+      } catch {
+        setUnitPrice(FALLBACK_UNIT_PRICE[usageType]);
+      } finally {
+        setLoadingPrice(false);
+      }
+    })();
   }, [open, usageType]);
 
   const totalAmount = useMemo(() => {
