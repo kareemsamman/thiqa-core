@@ -1,27 +1,84 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, FileText, ChevronUp, X } from "lucide-react";
+import { Plus, FileText, X, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationsDropdown } from "./NotificationsDropdown";
-import { PolicyWizard } from "@/components/policies/PolicyWizard";
 import { cn } from "@/lib/utils";
 import { useRecentClient } from "@/hooks/useRecentClient";
+import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
 import { BottomToolbarInlineSearch } from "./BottomToolbarInlineSearch";
 
-interface BottomToolbarProps {
-  onPolicyComplete?: () => void;
-}
-
-export function BottomToolbar({ onPolicyComplete }: BottomToolbarProps) {
+export function BottomToolbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { recentClient, clearRecentClient } = useRecentClient();
+  const {
+    isOpen: wizardOpen,
+    isCollapsed: wizardCollapsed,
+    openWizard,
+    restoreWizard,
+    draftSummary,
+    consumeDockOrigin,
+  } = usePolicyWizardController();
 
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [wizardCollapsed, setWizardCollapsed] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isOverContent, setIsOverContent] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const draftChipRef = useRef<HTMLButtonElement>(null);
+
+  // FLIP animation: when the chip appears after a minimize click, capture
+  // the click origin (from the dialog's minimize button) and animate the
+  // chip from that exact point to its final position in the toolbar.
+  // Falls back to a subtle scale-in when there is no origin (e.g. the
+  // toolbar remounted on page navigation while the wizard was minimized).
+  useLayoutEffect(() => {
+    if (!wizardOpen || !wizardCollapsed) return;
+    const chip = draftChipRef.current;
+    if (!chip) return;
+    const origin = consumeDockOrigin();
+
+    let startTransform = "translate(0, 0) scale(0.9)";
+    let startOpacity = "0";
+    let duration = 280;
+    let easing = "cubic-bezier(0.34, 1.56, 0.64, 1)";
+
+    if (origin) {
+      const rect = chip.getBoundingClientRect();
+      const targetX = rect.left + rect.width / 2;
+      const targetY = rect.top + rect.height / 2;
+      const dx = origin.x - targetX;
+      const dy = origin.y - targetY;
+      startTransform = `translate(${dx}px, ${dy}px) scale(0.35)`;
+      startOpacity = "0.6";
+      duration = 620;
+    }
+
+    chip.style.transition = "none";
+    chip.style.transformOrigin = "center";
+    chip.style.transform = startTransform;
+    chip.style.opacity = startOpacity;
+
+    // Force reflow so the browser commits the starting state before we
+    // switch to the target transform. Without this, the transition is
+    // skipped entirely.
+    void chip.offsetWidth;
+
+    chip.style.transition = `transform ${duration}ms ${easing}, opacity ${Math.min(duration, 300)}ms ease-out`;
+    chip.style.transform = "translate(0, 0) scale(1)";
+    chip.style.opacity = "1";
+
+    const clearInline = () => {
+      chip.style.transition = "";
+      chip.style.transform = "";
+      chip.style.opacity = "";
+      chip.style.transformOrigin = "";
+      chip.removeEventListener("transitionend", clearInline);
+    };
+    chip.addEventListener("transitionend", clearInline);
+    return () => {
+      chip.removeEventListener("transitionend", clearInline);
+    };
+  }, [wizardOpen, wizardCollapsed, consumeDockOrigin]);
 
   // Detect if toolbar is overlapping content
   useEffect(() => {
@@ -62,18 +119,11 @@ export function BottomToolbar({ onPolicyComplete }: BottomToolbarProps) {
     };
   }, [location.pathname]);
 
-  const handleWizardOpenChange = (open: boolean) => {
-    setWizardOpen(open);
-    if (!open) {
-      setWizardCollapsed(false);
-    }
-  };
-
   // Check if user is on a client profile page (viewing client details)
   // The ClientDetails component sets recentClient when viewing a client
   // URL params are cleared after opening, so we check if we're on /clients with a recentClient set
   const isOnClientProfilePage = (location.pathname === "/clients" || location.pathname.startsWith("/clients/")) && !!recentClient;
-  
+
   const showRecentClient =
     !!recentClient && location.pathname !== "/clients" && location.pathname !== "/login" && location.pathname !== "/no-access";
 
@@ -128,17 +178,50 @@ export function BottomToolbar({ onPolicyComplete }: BottomToolbarProps) {
             </div>
           )}
 
-          {/* Show expand button when wizard is collapsed */}
+          {/* Minimized wizard draft chip — docks into the toolbar when the
+              user minimizes the policy dialog. Lives inside the toolbar so
+              it's always reachable on every page. */}
           {wizardOpen && wizardCollapsed && (
             <>
-              <Button
-                onClick={() => setWizardCollapsed(false)}
-                className="rounded-full gap-2 bg-primary"
-                size="sm"
+              <button
+                ref={draftChipRef}
+                type="button"
+                onClick={restoreWizard}
+                title={
+                  draftSummary
+                    ? `استئناف: ${draftSummary.clientName || "وثيقة جديدة"} — ${draftSummary.stepTitle}`
+                    : "استئناف وثيقة جديدة"
+                }
+                className={cn(
+                  "group relative flex items-center gap-2 h-9 pr-2 pl-3 rounded-full overflow-hidden",
+                  "bg-primary text-primary-foreground shadow-md shadow-primary/20",
+                  "hover:shadow-lg hover:shadow-primary/30",
+                  "max-w-[260px]"
+                )}
               >
-                <ChevronUp className="h-4 w-4" />
-                <span className="hidden sm:inline">إظهار النموذج</span>
-              </Button>
+                {/* Shimmer sweep on hover */}
+                <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent group-hover:translate-x-full transition-transform duration-700 ease-out" />
+
+                <span className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15">
+                  <FileText className="h-3.5 w-3.5" />
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-primary animate-pulse" />
+                </span>
+
+                <span className="hidden sm:flex flex-col items-start min-w-0 leading-tight">
+                  <span className="text-[10px] font-semibold opacity-80 truncate max-w-[150px]">
+                    {draftSummary?.clientName || "مسودة وثيقة"}
+                  </span>
+                  <span className="text-[9px] opacity-70 truncate max-w-[150px]">
+                    {draftSummary
+                      ? `${draftSummary.stepNumber}/${draftSummary.totalSteps} · ${draftSummary.stepTitle}`
+                      : "اضغط للاستئناف"}
+                  </span>
+                </span>
+
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 group-hover:bg-primary-foreground/25 group-hover:rotate-12 transition-all duration-300">
+                  <Maximize2 className="h-3 w-3" />
+                </span>
+              </button>
               <div className="h-6 w-px bg-border/50" />
             </>
           )}
@@ -147,9 +230,11 @@ export function BottomToolbar({ onPolicyComplete }: BottomToolbarProps) {
           <Button
             onClick={() => {
               if (wizardOpen && wizardCollapsed) {
-                setWizardCollapsed(false);
+                restoreWizard();
               } else {
-                setWizardOpen(true);
+                openWizard({
+                  clientId: isOnClientProfilePage ? recentClient?.id : undefined,
+                });
               }
             }}
             className={cn("rounded-full gap-2", wizardOpen && wizardCollapsed && "hidden")}
@@ -173,18 +258,6 @@ export function BottomToolbar({ onPolicyComplete }: BottomToolbarProps) {
           <NotificationsDropdown />
         </div>
       </div>
-
-      {/* Policy Wizard */}
-      <PolicyWizard
-        open={wizardOpen}
-        onOpenChange={handleWizardOpenChange}
-        onComplete={() => {
-          onPolicyComplete?.();
-        }}
-        isCollapsed={wizardCollapsed}
-        onCollapsedChange={setWizardCollapsed}
-        preselectedClientId={isOnClientProfilePage ? recentClient?.id : undefined}
-      />
     </>
   );
 }

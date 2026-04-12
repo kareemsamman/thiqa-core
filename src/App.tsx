@@ -7,6 +7,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "@/hooks/useAuth";
 import { RecentClientProvider } from "@/hooks/useRecentClient";
+import { PolicyWizardControllerProvider } from "@/hooks/usePolicyWizardController";
+import { GlobalPolicyWizardHost } from "@/components/policies/GlobalPolicyWizardHost";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
 import { SidebarStateProvider } from "@/hooks/useSidebarState";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -116,6 +118,8 @@ const App = () => (
             <SiteHelmet />
             <SidebarStateProvider>
             <RecentClientProvider>
+            <PolicyWizardControllerProvider>
+            <GlobalPolicyWizardHost />
             <Routes>
               <Route path="/landing" element={<Landing />} />
               <Route path="/pricing" element={<Pricing />} />
@@ -418,6 +422,7 @@ const App = () => (
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </PolicyWizardControllerProvider>
             </RecentClientProvider>
             </SidebarStateProvider>
             </AgentProvider>

@@ -201,14 +201,18 @@ export default function Dashboard() {
   // Company debts total
   const companyDebtsTotal = companyDebts.reduce((sum, d) => sum + Number(d.outstanding), 0);
 
-  const handlePolicyComplete = () => {
-    refetchProfit();
-    fetchProduction();
-    fetchCompanyDebts();
-  };
+  useEffect(() => {
+    const handler = () => {
+      refetchProfit();
+      fetchProduction();
+      fetchCompanyDebts();
+    };
+    window.addEventListener("thiqa:policy-created", handler);
+    return () => window.removeEventListener("thiqa:policy-created", handler);
+  }, [refetchProfit, fetchProduction, fetchCompanyDebts]);
 
   return (
-    <MainLayout onPolicyComplete={handlePolicyComplete}>
+    <MainLayout>
       <Header
         title="لوحة التحكم"
         subtitle={`مرحباً بك، ${profile?.full_name || 'مستخدم'}`}

@@ -13,10 +13,9 @@ import { ArrowRight, Building2 } from "lucide-react";
 
 interface MainLayoutProps {
   children: ReactNode;
-  onPolicyComplete?: () => void;
 }
 
-export function MainLayout({ children, onPolicyComplete }: MainLayoutProps) {
+export function MainLayout({ children }: MainLayoutProps) {
   const { isThiqaSuperAdmin, isImpersonating, impersonatedAgent, stopImpersonation } = useAgentContext();
   const { collapsed } = useSidebarState();
   const navigate = useNavigate();
@@ -59,7 +58,7 @@ export function MainLayout({ children, onPolicyComplete }: MainLayoutProps) {
       </main>
 
       {/* Sticky bottom toolbar - hidden for Thiqa super admin */}
-      {!isThiqaSuperAdmin && <BottomToolbar onPolicyComplete={onPolicyComplete} />}
+      {!isThiqaSuperAdmin && <BottomToolbar />}
 
       {/* Announcement popup */}
       {!isThiqaSuperAdmin && <AnnouncementPopup />}

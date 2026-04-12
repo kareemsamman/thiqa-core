@@ -196,6 +196,12 @@ export default function Policies() {
     fetchPolicies();
   }, [fetchPolicies]);
 
+  useEffect(() => {
+    const handler = () => fetchPolicies();
+    window.addEventListener("thiqa:policy-created", handler);
+    return () => window.removeEventListener("thiqa:policy-created", handler);
+  }, [fetchPolicies]);
+
   // Optimistic delete - remove from UI immediately
   const handleDelete = async () => {
     if (!deletingPolicy) return;
@@ -381,7 +387,7 @@ export default function Policies() {
   };
 
   return (
-    <MainLayout onPolicyComplete={fetchPolicies}>
+    <MainLayout>
       <Header
         title="الوثائق"
         subtitle="إدارة وثائق التأمين"

@@ -4,7 +4,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Save, ArrowRight, ArrowLeft, Minimize2, Maximize2, FileText } from "lucide-react";
+import { Loader2, Save, ArrowRight, ArrowLeft, Minus } from "lucide-react";
+import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
 import { cn } from "@/lib/utils";
 import { calculatePolicyProfit } from "@/lib/pricingCalculator";
 import { digitsOnly } from "@/lib/validation";
@@ -197,6 +198,28 @@ export function PolicyWizard({
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const isCollapsed = controlledCollapsed ?? internalCollapsed;
   const setIsCollapsed = onCollapsedChange ?? setInternalCollapsed;
+
+  // Push a compact draft summary into the global controller so the bottom
+  // toolbar can render a live "minimized" chip on every page.
+  const { setDraftSummary, minimizeWizard } = usePolicyWizardController();
+  useEffect(() => {
+    if (!open) {
+      setDraftSummary(null);
+      return;
+    }
+    const clientName =
+      selectedClient?.full_name
+      || (createNewClient && newClient.full_name)
+      || "";
+    const stepTitle = steps.find((s) => s.id === currentStep)?.title || "";
+    setDraftSummary({
+      clientName,
+      stepTitle,
+      stepNumber: currentStep,
+      totalSteps: steps.length,
+      categoryName: selectedCategory?.name_ar || selectedCategory?.name || null,
+    });
+  }, [open, selectedClient, createNewClient, newClient.full_name, currentStep, steps, selectedCategory, setDraftSummary]);
 
   // Success dialog state
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
@@ -1528,57 +1551,19 @@ export function PolicyWizard({
     onOpenChange(false);
   };
 
-  // Helper: minimize the wizard and optionally navigate. The wizard lives
-  // inside MainLayout via BottomToolbar, so navigating doesn't unmount it —
-  // the user's draft survives until they reopen.
+  // Helper: minimize the wizard and optionally navigate. The wizard is
+  // mounted globally above the router (via GlobalPolicyWizardHost), so
+  // navigating never unmounts it — the draft survives until the user closes.
   const minimizeAndNavigate = (path?: string) => {
     setIsCollapsed(true);
     if (path) navigate(path);
   };
 
-  // When collapsed, render a small floating restore card at the bottom-left
-  // instead of nothing. The card gives the agent a persistent reminder that
-  // there's a draft waiting and a one-click way to reopen it.
+  // When collapsed we render nothing from the wizard itself — the bottom
+  // toolbar takes over and shows the inline "draft chip". This keeps the
+  // minimized state visually anchored to the toolbar on every page.
   if (isCollapsed && open) {
-    const clientName = selectedClient?.full_name
-      || (createNewClient && newClient.full_name)
-      || "";
-    const currentStepTitle = steps.find((s) => s.id === currentStep)?.title || "";
-
-    return (
-      <div
-        className="fixed bottom-4 left-4 z-50 animate-in slide-in-from-bottom-3 fade-in duration-200"
-        dir="rtl"
-      >
-        <button
-          type="button"
-          onClick={() => setIsCollapsed(false)}
-          className="flex items-center gap-3 pr-4 pl-3 py-3 rounded-2xl border border-primary/30 bg-background/95 backdrop-blur-xl shadow-xl shadow-primary/10 hover:shadow-primary/20 hover:border-primary/50 transition-all group max-w-[280px]"
-        >
-          <div className="relative shrink-0">
-            <div className="h-11 w-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-md shadow-primary/30">
-              <FileText className="h-5 w-5" />
-            </div>
-            <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-amber-500 border-2 border-background animate-pulse" />
-          </div>
-          <div className="flex-1 min-w-0 text-right">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-              وثيقة جديدة — مسودة
-            </p>
-            <p className="text-sm font-bold truncate text-foreground">
-              {clientName || "جاري الإنشاء"}
-            </p>
-            <p className="text-[10px] text-muted-foreground truncate">
-              الخطوة: {currentStepTitle}
-              {selectedCategory && ` — ${selectedCategory.name_ar || selectedCategory.name}`}
-            </p>
-          </div>
-          <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
-            <Maximize2 className="h-4 w-4" />
-          </div>
-        </button>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -1588,28 +1573,33 @@ export function PolicyWizard({
           className="max-w-6xl w-[96vw] sm:max-h-[95vh] max-h-[100dvh] overflow-hidden flex flex-col sm:rounded-2xl rounded-none p-3 sm:p-6"
           dir="rtl"
         >
+          <button
+            type="button"
+            onClick={(e) => {
+              // Capture the minimize button's on-screen rect so the toolbar
+              // chip can animate from the exact click point.
+              const rect = e.currentTarget.getBoundingClientRect();
+              minimizeWizard({
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2,
+              });
+            }}
+            title="تصغير"
+            aria-label="تصغير"
+            className="absolute left-11 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          >
+            <Minus className="h-4 w-4" />
+            <span className="sr-only">تصغير</span>
+          </button>
           <DialogHeader className="flex-shrink-0 pb-2 sm:pb-4 border-b">
-            <div className="flex items-center justify-between gap-2">
-              <DialogTitle className="text-base sm:text-xl font-bold flex items-center gap-2 min-w-0 flex-1">
-                <span className="truncate">إضافة وثيقة جديدة</span>
-                {selectedCategory && (
-                  <span className="text-xs sm:text-sm font-normal text-muted-foreground truncate">
-                    ({selectedCategory.name_ar || selectedCategory.name})
-                  </span>
-                )}
-              </DialogTitle>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 shrink-0"
-                onClick={() => setIsCollapsed(true)}
-                title="تصغير"
-                aria-label="تصغير"
-              >
-                <Minimize2 className="h-4 w-4" />
-              </Button>
-            </div>
+            <DialogTitle className="text-base sm:text-xl font-bold flex items-center gap-2 min-w-0 pl-16">
+              <span className="truncate">إضافة وثيقة جديدة</span>
+              {selectedCategory && (
+                <span className="text-xs sm:text-sm font-normal text-muted-foreground truncate">
+                  ({selectedCategory.name_ar || selectedCategory.name})
+                </span>
+              )}
+            </DialogTitle>
           </DialogHeader>
 
           {/* Wizard Stepper */}

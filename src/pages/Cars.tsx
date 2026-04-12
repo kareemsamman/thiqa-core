@@ -125,6 +125,12 @@ export default function Cars() {
     fetchCars();
   }, [fetchCars]);
 
+  useEffect(() => {
+    const handler = () => fetchCars();
+    window.addEventListener("thiqa:policy-created", handler);
+    return () => window.removeEventListener("thiqa:policy-created", handler);
+  }, [fetchCars]);
+
   const handleDelete = async () => {
     if (!deletingCar) return;
     setDeleteLoading(true);
@@ -167,7 +173,7 @@ export default function Cars() {
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
-    <MainLayout onPolicyComplete={fetchCars}>
+    <MainLayout>
       <Header
         title="السيارات"
         subtitle="إدارة قاعدة بيانات المركبات"
