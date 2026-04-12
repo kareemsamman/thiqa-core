@@ -387,7 +387,7 @@ export default function Login() {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-end sm:items-center justify-center pb-6 sm:pb-0 px-5 sm:p-6 lg:bg-gradient-to-br lg:from-muted/40 lg:to-background">
+      <div className="flex-1 flex items-center justify-center py-6 px-5 sm:p-6 lg:bg-gradient-to-br lg:from-muted/40 lg:to-background">
         <div className="w-full max-w-md animate-scale-in">
           <div className="rounded-2xl sm:rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 lg:bg-white/70 lg:dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
             {/* Header */}
