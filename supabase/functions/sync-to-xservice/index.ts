@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
 
     if (policyErr || !policy) {
       console.error("Policy not found", policyErr);
-      await logSync(supabase, policy_id, "failed", null, "Policy not found", {}, null);
+      await logSync(supabase, policy_id, "failed", null, "Policy not found", {}, null, null);
       return new Response(JSON.stringify({ error: "Policy not found" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -171,7 +171,7 @@ Deno.serve(async (req) => {
 
     if (!response.ok) {
       const errMsg = responseBody?.error || `HTTP ${response.status}`;
-      await logSync(supabase, policy_id, "failed", null, errMsg, requestPayload, responseBody);
+      await logSync(supabase, policy_id, "failed", null, errMsg, requestPayload, responseBody, policy.agent_id);
       return new Response(JSON.stringify({ error: errMsg }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
     }
 
     const xservicePolicyId = responseBody?.policy_id || responseBody?.policy_number || null;
-    await logSync(supabase, policy_id, "success", xservicePolicyId, null, requestPayload, responseBody);
+    await logSync(supabase, policy_id, "success", xservicePolicyId, null, requestPayload, responseBody, policy.agent_id);
 
     // Auto-save X-Service invoice URL to policy files
     if (xservicePolicyId && settings.invoice_base_url) {
@@ -221,7 +221,8 @@ async function logSync(
   xservicePolicyId: string | null,
   errorMessage: string | null,
   requestPayload: any,
-  responsePayload: any
+  responsePayload: any,
+  agentId?: string | null
 ) {
   try {
     await supabase.from("xservice_sync_log").insert({
@@ -231,6 +232,7 @@ async function logSync(
       error_message: errorMessage,
       request_payload: requestPayload,
       response_payload: responsePayload,
+      agent_id: agentId || null,
     });
   } catch (e) {
     console.error("[sync-to-xservice] Failed to log sync:", e);
