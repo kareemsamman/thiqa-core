@@ -233,11 +233,17 @@ Deno.serve(async (req) => {
       const smtpPassword = smtp.smtp_password;
 
       if (smtpUser && smtpPassword) {
+        const smtpPortResolved = Number(smtp.smtp_port) || 465;
         const transporter = nodemailer.createTransport({
           host: smtp.smtp_host || "smtp.hostinger.com",
-          port: Number(smtp.smtp_port) || 465,
-          secure: (Number(smtp.smtp_port) || 465) === 465,
+          port: smtpPortResolved,
+          // Port 465 uses implicit TLS; everything else (587, 25, …) must
+          // upgrade via STARTTLS before AUTH or Office 365 rejects with
+          // "5.7.3 STARTTLS is required to send mail".
+          secure: smtpPortResolved === 465,
+          requireTLS: smtpPortResolved !== 465,
           auth: { user: smtpUser, pass: smtpPassword },
+          tls: { minVersion: "TLSv1.2" },
         });
 
         const htmlContent = buildEmailHtml({
