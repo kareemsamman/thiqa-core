@@ -782,10 +782,60 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
             );
           })
         )}
+
+        {/* Account & help — mirrors the desktop profile dropdown so mobile
+            users can reach the same links without the profile menu. */}
+        {!query && !isThiqaSuperAdmin && (
+          <div className="mb-3">
+            <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+              <UserCircle className="h-3 w-3" />
+              <span>الحساب والمساعدة</span>
+            </div>
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                onClick={() => {
+                  navigate('/subscription');
+                  onNavigate();
+                }}
+                className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/60 text-foreground text-right"
+              >
+                <div className="h-9 w-9 rounded-lg bg-muted text-muted-foreground flex items-center justify-center shrink-0">
+                  <Settings className="h-4 w-4" />
+                </div>
+                <span className="flex-1 truncate">الإعدادات</span>
+              </button>
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onNavigate();
+                    if (location.pathname === '/' || location.pathname === '') {
+                      window.dispatchEvent(new Event('show-onboarding'));
+                    } else {
+                      navigate('/');
+                      setTimeout(() => {
+                        window.dispatchEvent(new Event('show-onboarding'));
+                      }, 150);
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/60 text-foreground text-right"
+                >
+                  <div className="h-9 w-9 rounded-lg bg-muted text-muted-foreground flex items-center justify-center shrink-0">
+                    <HelpCircle className="h-4 w-4" />
+                  </div>
+                  <span className="flex-1 truncate">دليل البداية</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </nav>
 
-      {/* Sign out footer */}
-      <div className="p-3 border-t">
+      {/* Sign out footer — extra bottom padding so the button clears the
+          iOS home indicator / mobile browser chrome. */}
+      <div className="px-3 pt-3 pb-6 border-t">
         <Button
           variant="outline"
           onClick={handleSignOut}

@@ -260,6 +260,14 @@ export default function Subscription() {
     })();
   }, [agentId]);
 
+  // Tick state — forces the trial countdown to recalculate every minute
+  // so users see a live "X days Y hours" readout instead of a stale one.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNowTick(Date.now()), 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const sub = useMemo(() => {
     if (!agent) return null;
     const status = agent.subscription_status;
@@ -267,15 +275,33 @@ export default function Subscription() {
     const trialEnd = agent.trial_ends_at ? new Date(agent.trial_ends_at) : (isTrial && agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null);
     const expiresAt = agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null;
     const endDate = isTrial ? trialEnd : expiresAt;
-    const now = new Date();
-    const daysRemaining = endDate ? Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / 86400000)) : null;
-    const isExpired = endDate ? endDate < now : false;
+    const now = new Date(nowTick);
+    const msRemaining = endDate ? Math.max(0, endDate.getTime() - now.getTime()) : 0;
+    // Use floor so "35 days 2 hours" doesn't round up to 36.
+    const daysRemaining = endDate ? Math.floor(msRemaining / 86400000) : null;
+    const hoursRemaining = endDate ? Math.floor((msRemaining % 86400000) / 3600000) : 0;
+    const minutesRemaining = endDate ? Math.floor((msRemaining % 3600000) / 60000) : 0;
+    const isExpired = endDate ? endDate.getTime() <= now.getTime() : false;
     const isActive = (status === "active" || status === "trial") && !isExpired;
     const isPaused = status === "paused" || status === "suspended";
     const isCancelled = status === "cancelled";
-    const trialProgress = isTrial && daysRemaining !== null ? Math.min(100, Math.max(0, ((35 - daysRemaining) / 35) * 100)) : 0;
-    return { isTrial, trialEnd, expiresAt: endDate, daysRemaining, isExpired, isActive, isPaused, isCancelled, trialProgress };
-  }, [agent]);
+    const trialProgress = isTrial && daysRemaining !== null
+      ? Math.min(100, Math.max(0, ((35 * 86400000 - msRemaining) / (35 * 86400000)) * 100))
+      : 0;
+    return {
+      isTrial,
+      trialEnd,
+      expiresAt: endDate,
+      daysRemaining,
+      hoursRemaining,
+      minutesRemaining,
+      isExpired,
+      isActive,
+      isPaused,
+      isCancelled,
+      trialProgress,
+    };
+  }, [agent, nowTick]);
 
   const handlePlanChange = async (targetPlan: PlanData) => {
     if (!agent || !agentId) return;
@@ -352,7 +378,7 @@ export default function Subscription() {
 
   return (
     <MainLayout>
-      <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto" dir="rtl">
+      <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto" dir="rtl">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
@@ -440,25 +466,43 @@ export default function Subscription() {
                     </div>
                   </div>
 
-                  {/* Trial progress */}
+                  {/* Trial progress — full width, live countdown */}
                   {sub.isTrial && sub.daysRemaining !== null && (
-                    <div className="space-y-2 max-w-md">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">الفترة التجريبية</span>
-                        <span className={cn("font-bold", sub.daysRemaining <= 7 ? "text-destructive" : "text-primary")}>
-                          {sub.daysRemaining} يوم متبقي من 35
-                        </span>
+                    <div className="space-y-3 w-full">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <p className="text-xs text-muted-foreground">الفترة التجريبية</p>
+                          <p className={cn("text-base font-bold mt-0.5", sub.daysRemaining <= 7 ? "text-destructive" : "text-primary")}>
+                            متبقي {sub.daysRemaining} يوم
+                            <span className="text-xs font-medium text-muted-foreground mr-2">
+                              و {sub.hoursRemaining} ساعة و {sub.minutesRemaining} دقيقة
+                            </span>
+                          </p>
+                        </div>
+                        {sub.trialEnd && (
+                          <div className="text-left">
+                            <p className="text-[10px] text-muted-foreground">تنتهي في</p>
+                            <p className="text-xs font-semibold tabular-nums">
+                              {format(sub.trialEnd, "dd/MM/yyyy HH:mm")}
+                            </p>
+                          </div>
+                        )}
                       </div>
                       <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
                         <div
-                          className={cn("h-full rounded-full transition-all",
+                          className={cn("h-full rounded-full transition-all duration-500",
                             sub.daysRemaining <= 7 ? "bg-destructive" : "bg-primary"
                           )}
                           style={{ width: `${sub.trialProgress}%` }}
                         />
                       </div>
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                        <span>اليوم 0</span>
+                        <span className="font-medium">{Math.round(sub.trialProgress)}% منتهية</span>
+                        <span>اليوم 35</span>
+                      </div>
                       {agent.pending_plan && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 pt-1">
                           <Info className="h-3.5 w-3.5" />
                           تم اختيار خطة {agent.pending_plan === "pro" ? "Pro" : "Basic"} — ستبدأ تلقائياً بعد انتهاء التجربة
                         </p>
