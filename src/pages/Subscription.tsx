@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import {
   Crown, CreditCard, Calendar, Clock, AlertTriangle, Check, X, MessageCircle,
   Sparkles, ShieldCheck, Pause, Info, ArrowUp, ArrowDown,
-  Rocket, Shield, Trash2, XCircle, Loader2, Settings, BarChart3, Receipt, UserCog, Plus,
+  Rocket, Shield, Trash2, XCircle, Loader2, Settings, BarChart3, Receipt, UserCog, Plus, ChevronDown,
 } from "lucide-react";
 import { AddQuotaDialog, type OverageUsageType } from "@/components/subscription/AddQuotaDialog";
 import { format } from "date-fns";
@@ -39,6 +39,15 @@ interface PaymentRecord {
   plan: string;
   payment_date: string;
   notes: string | null;
+  created_at: string;
+}
+
+interface UnbilledOverage {
+  id: string;
+  usage_type: "sms" | "ai_chat";
+  extra_count: number;
+  unit_price: number;
+  total_amount: number;
   created_at: string;
 }
 
@@ -290,6 +299,7 @@ export default function Subscription() {
   const { agent, agentId } = useAgentContext();
   const [plans, setPlans] = useState<PlanData[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [unbilledOverages, setUnbilledOverages] = useState<UnbilledOverage[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [loadingPayments, setLoadingPayments] = useState(true);
   const [changingPlan, setChangingPlan] = useState(false);
@@ -324,13 +334,22 @@ export default function Subscription() {
     (async () => {
       setLoadingPayments(true);
       try {
-        const { data } = await supabase
-          .from("agent_subscription_payments")
-          .select("id, amount, plan, payment_date, notes, created_at")
-          .eq("agent_id", agentId)
-          .order("payment_date", { ascending: false })
-          .limit(50);
-        if (data) setPayments(data);
+        const [paymentsRes, overagesRes] = await Promise.all([
+          supabase
+            .from("agent_subscription_payments")
+            .select("id, amount, plan, payment_date, notes, created_at")
+            .eq("agent_id", agentId)
+            .order("payment_date", { ascending: false })
+            .limit(50),
+          supabase
+            .from("agent_usage_overages" as any)
+            .select("id, usage_type, extra_count, unit_price, total_amount, created_at")
+            .eq("agent_id", agentId)
+            .eq("billed", false)
+            .order("created_at", { ascending: false }),
+        ]);
+        if (paymentsRes.data) setPayments(paymentsRes.data);
+        if (overagesRes.data) setUnbilledOverages(overagesRes.data as any);
       } catch { /* silent */ } finally { setLoadingPayments(false); }
     })();
   }, [agentId]);
@@ -773,6 +792,157 @@ export default function Subscription() {
 
           {/* ═══ Payments Tab ═══ */}
           <TabsContent value="payments" className="mt-5 space-y-5">
+            {/* Next billing summary — only shown for paying agents */}
+            {!sub?.isTrial && (agent.monthly_price || 0) > 0 && (() => {
+              const basePrice = agent.monthly_price || 0;
+              const extrasTotal = unbilledOverages.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+              const nextTotal = basePrice + extrasTotal;
+              const smsExtras = unbilledOverages.filter(o => o.usage_type === 'sms');
+              const aiExtras = unbilledOverages.filter(o => o.usage_type === 'ai_chat');
+              const smsCount = smsExtras.reduce((s, o) => s + o.extra_count, 0);
+              const smsTotal = smsExtras.reduce((s, o) => s + Number(o.total_amount), 0);
+              const aiCount = aiExtras.reduce((s, o) => s + o.extra_count, 0);
+              const aiTotal = aiExtras.reduce((s, o) => s + Number(o.total_amount), 0);
+
+              return (
+                <Card className="overflow-hidden shadow-sm border-primary/20">
+                  <div className="h-1 w-full bg-primary" />
+                  <CardContent className="p-5 md:p-6 space-y-5">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div className="flex items-center gap-3">
+                        <div className="h-11 w-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                          <CreditCard className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold">الفاتورة القادمة</h3>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {sub?.expiresAt
+                              ? `تاريخ الإصدار المتوقع ${format(sub.expiresAt, "dd/MM/yyyy")}`
+                              : "تفاصيل ما سيُحسب عليك في الفاتورة القادمة"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-left">
+                        <p className="text-[10px] text-muted-foreground">الإجمالي المتوقع</p>
+                        <p className="text-3xl font-bold text-primary tabular-nums">
+                          ₪{nextTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {/* Base plan row */}
+                      <div className="flex items-center justify-between py-2.5 border-b">
+                        <div className="flex items-center gap-2">
+                          <Crown className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">
+                              خطة {agent.plan === "pro" ? "Pro" : agent.plan === "basic" ? "Basic" : agent.plan}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">اشتراك شهري</p>
+                          </div>
+                        </div>
+                        <span className="font-semibold tabular-nums">
+                          ₪{basePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      {/* SMS overage row */}
+                      {smsCount > 0 && (
+                        <div className="flex items-center justify-between py-2.5 border-b">
+                          <div className="flex items-center gap-2">
+                            <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="text-sm font-medium">رصيد SMS إضافي</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {smsCount.toLocaleString()} رسالة مضافة هذا الشهر
+                              </p>
+                            </div>
+                          </div>
+                          <span className="font-semibold tabular-nums">
+                            +₪{smsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* AI overage row */}
+                      {aiCount > 0 && (
+                        <div className="flex items-center justify-between py-2.5 border-b">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="text-sm font-medium">رصيد المساعد الذكي إضافي</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {aiCount.toLocaleString()} محادثة مضافة هذا الشهر
+                              </p>
+                            </div>
+                          </div>
+                          <span className="font-semibold tabular-nums">
+                            +₪{aiTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Final total */}
+                      <div className="flex items-center justify-between pt-3">
+                        <span className="text-base font-bold">الإجمالي</span>
+                        <span className="text-xl font-bold tabular-nums text-primary">
+                          ₪{nextTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Per-purchase details, collapsed below a header */}
+                    {unbilledOverages.length > 0 && (
+                      <details className="group rounded-lg border bg-muted/20 p-3">
+                        <summary className="cursor-pointer text-xs font-medium text-muted-foreground flex items-center justify-between">
+                          <span>تفاصيل عمليات الشراء ({unbilledOverages.length})</span>
+                          <ChevronDown className="h-3.5 w-3.5 group-open:rotate-180 transition-transform" />
+                        </summary>
+                        <div className="mt-3 space-y-2">
+                          {unbilledOverages.map((o) => (
+                            <div
+                              key={o.id}
+                              className="flex items-center justify-between text-xs py-2 border-b last:border-0"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                {o.usage_type === 'sms' ? (
+                                  <MessageCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                ) : (
+                                  <Sparkles className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                )}
+                                <span className="truncate">
+                                  +{o.extra_count.toLocaleString()} {o.usage_type === 'sms' ? 'رسالة' : 'محادثة'}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  ({format(new Date(o.created_at), "dd/MM")})
+                                </span>
+                              </div>
+                              <div className="text-muted-foreground tabular-nums shrink-0">
+                                {o.extra_count} × ₪{Number(o.unit_price).toFixed(2)}
+                                <span className="mr-2 font-semibold text-foreground">
+                                  = ₪{Number(o.total_amount).toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+
+                    <div className="flex items-start gap-2 text-[11px] text-muted-foreground bg-muted/30 rounded-lg p-3">
+                      <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <span>
+                        هذه التفاصيل أولية. إدارة ثقة تصدر الفاتورة النهائية وتسجّلها في سجل المدفوعات أدناه.
+                        للاستفسار عن الدفع تواصل مع الإدارة.
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            {/* Payment history — recorded by super admin */}
             <div className="space-y-4">
               <div>
                 <h2 className="text-lg font-bold flex items-center gap-2">
