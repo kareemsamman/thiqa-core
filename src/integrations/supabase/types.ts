@@ -5900,6 +5900,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_usage_log: {
+        Args: { p_agent_id: string; p_period: string; p_usage_type: string }
+        Returns: undefined
+      }
       insert_ledger_entry: {
         Args: {
           p_admin_id?: string
@@ -6362,6 +6366,10 @@ export type Database = {
       reverse_ledger_entry: {
         Args: { p_admin_id?: string; p_entry_id: string; p_reason?: string }
         Returns: string
+      }
+      set_features_for_plan: {
+        Args: { p_agent_id: string; p_plan: string }
+        Returns: undefined
       }
       user_belongs_to_agent: {
         Args: { _agent_id: string; _user_id: string }
