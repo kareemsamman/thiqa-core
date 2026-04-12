@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { extractFunctionErrorMessage } from "@/lib/functionError";
+import { extractFunctionErrorMessage, toastFunctionError } from "@/lib/functionError";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Save, Loader2, MessageSquare, Send, Settings2, FileSignature, Image, Upload, X, Building2, Plus, Trash2 } from "lucide-react";
@@ -355,12 +355,7 @@ export default function SmsSettings() {
       toast({ title: "تم الإرسال", description: data?.message || "تم إرسال رسالة الاختبار بنجاح" });
     } catch (error: any) {
       console.error("Error sending test SMS:", error);
-      const description = await extractFunctionErrorMessage(error);
-      toast({
-        title: "خطأ",
-        description: description || "فشل في إرسال رسالة الاختبار",
-        variant: "destructive",
-      });
+      await toastFunctionError(error, "فشل في إرسال رسالة الاختبار");
     } finally {
       setTesting(false);
     }

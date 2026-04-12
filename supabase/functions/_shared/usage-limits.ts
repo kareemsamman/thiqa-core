@@ -108,8 +108,36 @@ export async function resolveLimitConfig(
 }
 
 /**
+ * Sum active overages purchased by the agent for the given usage type + period.
+ * Falls back to 0 on any error so a failed lookup never blocks a legitimate
+ * send — the base limit still applies.
+ */
+async function sumOverageCount(
+  supabase: any,
+  agentId: string,
+  usageType: UsageType,
+  period: string,
+): Promise<number> {
+  try {
+    const { data } = await supabase
+      .from("agent_usage_overages")
+      .select("extra_count")
+      .eq("agent_id", agentId)
+      .eq("usage_type", usageType)
+      .eq("period", period);
+    if (!data) return 0;
+    return data.reduce((total: number, row: any) => total + (row.extra_count ?? 0), 0);
+  } catch (err) {
+    console.warn("[usage-limits] agent_usage_overages lookup failed:", err);
+    return 0;
+  }
+}
+
+/**
  * Check whether the given agent is within their quota for this usage type.
- * If the agent has `unlimited`, always returns allowed with used=0.
+ * The effective limit is `config.limit_count + sum(active overages)` so a
+ * fresh overage purchase unblocks subsequent calls immediately. If the agent
+ * has `unlimited`, always returns allowed with used=0.
  */
 export async function checkUsageLimit(
   supabase: any,
@@ -145,10 +173,13 @@ export async function checkUsageLimit(
     console.warn("[usage-limits] agent_usage_log lookup failed:", err);
   }
 
+  const overageCount = await sumOverageCount(supabase, agentId, usageType, period);
+  const effectiveLimit = config.limit_count + overageCount;
+
   return {
-    allowed: used < config.limit_count,
+    allowed: used < effectiveLimit,
     used,
-    limit: config.limit_count,
+    limit: effectiveLimit,
     limit_type: config.limit_type,
     period,
     period_label: periodLabel(config.limit_type),

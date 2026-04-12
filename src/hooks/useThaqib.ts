@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { extractFunctionErrorMessage } from "@/lib/functionError";
+import { extractFunctionErrorMessage, parseFunctionError, isQuotaReachedError, openQuotaDialog } from "@/lib/functionError";
+import { toast } from "sonner";
 
 export interface ChatMessage {
   id: string;
@@ -94,14 +95,28 @@ export function useThaqib() {
 
       return data?.reply;
     } catch (e: any) {
-      const content = await extractFunctionErrorMessage(e);
+      const parsed = await parseFunctionError(e);
+      const content = parsed.message || "حدث خطأ. يرجى المحاولة مرة أخرى.";
       const errorMsg: ChatMessage = {
         id: `err-${Date.now()}`,
         role: "assistant",
-        content: content || "حدث خطأ. يرجى المحاولة مرة أخرى.",
+        content,
         created_at: new Date().toISOString(),
       };
       setMessages(prev => [...prev, errorMsg]);
+
+      // If the AI quota is exhausted, also show a toast with a "buy more"
+      // action so the user can unblock themselves in one click.
+      const { quotaReached, usageType } = isQuotaReachedError(parsed);
+      if (quotaReached && usageType) {
+        toast.error(content, {
+          duration: 12000,
+          action: {
+            label: "شراء رصيد إضافي",
+            onClick: () => openQuotaDialog(usageType),
+          },
+        });
+      }
     } finally {
       setLoading(false);
     }

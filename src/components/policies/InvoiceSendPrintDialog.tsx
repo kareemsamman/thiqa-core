@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Send, Printer, X, FileText } from "lucide-react";
 import { toast } from "sonner";
+import { extractFunctionErrorMessage, toastFunctionError } from "@/lib/functionError";
 
 interface InvoiceSendPrintDialogProps {
   open: boolean;
@@ -39,26 +40,20 @@ export function InvoiceSendPrintDialog({
       const { data, error } = await supabase.functions.invoke(functionName, { body });
 
       if (error) {
-        let errorMsg = "فشل في الإرسال";
-        try {
-          if (error.context && typeof error.context === "object") {
-            const ctx = error.context as any;
-            if (ctx.body) {
-              const parsed = JSON.parse(ctx.body);
-              if (parsed.error) errorMsg = parsed.error;
-            }
-          }
-        } catch {
-          // Use default error message
-        }
-        throw new Error(errorMsg);
+        // Pass the raw invoke error straight to the helper so it can
+        // parse context.json() and detect the sms_limit_reached code.
+        await toastFunctionError(error, "فشل في الإرسال");
+        return;
       }
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
 
       toast.success(isPackage ? "تم إرسال الفواتير للعميل" : "تم إرسال الفاتورة للعميل");
       onOpenChange(false);
     } catch (err: any) {
-      toast.error(err.message || "فشل في الإرسال");
+      toast.error(err?.message || "فشل في الإرسال");
     } finally {
       setSendingType(null);
     }
@@ -76,21 +71,13 @@ export function InvoiceSendPrintDialog({
       const { data, error } = await supabase.functions.invoke(functionName, { body });
 
       if (error) {
-        let errorMsg = "فشل في تحميل الفاتورة";
-        try {
-          if (error.context && typeof error.context === "object") {
-            const ctx = error.context as any;
-            if (ctx.body) {
-              const parsed = JSON.parse(ctx.body);
-              if (parsed.error) errorMsg = parsed.error;
-            }
-          }
-        } catch {
-          // Use default error message
-        }
-        throw new Error(errorMsg);
+        await toastFunctionError(error, "فشل في تحميل الفاتورة");
+        return;
       }
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
 
       // Open the invoice URL in a new tab for printing
       const invoiceUrl = data?.ab_invoice_url || data?.package_invoice_url || data?.invoice_url;

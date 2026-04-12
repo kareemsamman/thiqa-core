@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { extractFunctionErrorMessage } from "@/lib/functionError";
+import { extractFunctionErrorMessage, toastFunctionError } from "@/lib/functionError";
 import { MessageSquare, Send, Loader2 } from "lucide-react";
 
 interface BrokerSmsModalProps {
@@ -98,11 +98,8 @@ export function BrokerSmsModal({
         branch_id: profile?.branch_id,
       });
 
-      toast({
-        title: "خطأ",
-        description: description || "فشل في إرسال الرسالة",
-        variant: "destructive",
-      });
+      // Shows a sonner toast with a "buy more" action if this is a quota error.
+      await toastFunctionError(error, "فشل في إرسال الرسالة");
     } finally {
       setSending(false);
     }

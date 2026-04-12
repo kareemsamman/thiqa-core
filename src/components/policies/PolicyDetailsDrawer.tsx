@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { extractFunctionErrorMessage } from "@/lib/functionError";
+import { extractFunctionErrorMessage, toastFunctionError } from "@/lib/functionError";
 import {
   User,
   Car,
@@ -300,12 +300,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
       });
     } catch (error: any) {
       console.error("Error sending signature SMS:", error);
-      const description = await extractFunctionErrorMessage(error);
-      toast({
-        title: "خطأ",
-        description: description || "فشل في إرسال طلب التوقيع",
-        variant: "destructive"
-      });
+      await toastFunctionError(error, "فشل في إرسال طلب التوقيع");
     } finally {
       setSendingSignatureSms(false);
     }
@@ -340,12 +335,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
       });
     } catch (error: any) {
       console.error("Error sending policy SMS:", error);
-      const description = await extractFunctionErrorMessage(error);
-      toast({
-        title: "خطأ",
-        description: description || "فشل في إرسال الملفات",
-        variant: "destructive"
-      });
+      await toastFunctionError(error, "فشل في إرسال الملفات");
     } finally {
       setSendingPolicySms(false);
     }

@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
-import { extractFunctionErrorMessage } from "@/lib/functionError";
+import { extractFunctionErrorMessage, toastFunctionError } from "@/lib/functionError";
 import { useToast } from "@/hooks/use-toast";
 import { format, differenceInDays } from "date-fns";
 
@@ -255,12 +255,9 @@ export default function DebtTracking() {
       });
     } catch (error) {
       console.error("Error sending reminder:", error);
-      const description = await extractFunctionErrorMessage(error);
-      toast({
-        title: "فشل في الإرسال",
-        description: description || "حدث خطأ أثناء إرسال التذكير",
-        variant: "destructive",
-      });
+      // Action-aware toast: surfaces the Arabic message and adds a
+      // "buy more quota" button if the server returned a 429.
+      await toastFunctionError(error, "حدث خطأ أثناء إرسال التذكير");
     }
   };
 
@@ -313,12 +310,7 @@ export default function DebtTracking() {
       setBulkSmsMessage("");
     } catch (error: any) {
       console.error("Error sending bulk SMS:", error);
-      const description = await extractFunctionErrorMessage(error);
-      toast({
-        title: "خطأ",
-        description: description || "فشل في إرسال الرسائل",
-        variant: "destructive",
-      });
+      await toastFunctionError(error, "فشل في إرسال الرسائل");
     } finally {
       setSendingBulkSms(false);
     }

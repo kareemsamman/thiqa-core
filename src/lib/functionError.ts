@@ -77,3 +77,71 @@ export async function extractFunctionErrorMessage(rawError: unknown): Promise<st
   const parsed = await parseFunctionError(rawError);
   return parsed.message;
 }
+
+/**
+ * True if the parsed error represents a usage-quota-reached response that the
+ * agent can resolve by purchasing more quota.
+ */
+export function isQuotaReachedError(parsed: ParsedFunctionError): {
+  quotaReached: boolean;
+  usageType: "sms" | "ai_chat" | null;
+} {
+  const code = parsed.code;
+  if (
+    code === "sms_limit_reached" ||
+    code === "sms_limit_insufficient"
+  ) {
+    return { quotaReached: true, usageType: "sms" };
+  }
+  if (code === "ai_limit_reached") {
+    return { quotaReached: true, usageType: "ai_chat" };
+  }
+  return { quotaReached: false, usageType: null };
+}
+
+/**
+ * Ask the globally-mounted quota dialog host to open for the given usage type.
+ * Use as the `action.onClick` on a toast, or standalone.
+ */
+export function openQuotaDialog(usageType: "sms" | "ai_chat"): void {
+  window.dispatchEvent(
+    new CustomEvent("thiqa:open-quota-dialog", { detail: { type: usageType } }),
+  );
+}
+
+/**
+ * Parse an edge-function error and show a sonner toast with the Arabic
+ * message. When the error is a usage-quota-reached response, the toast
+ * gets an action button that opens the AddQuotaDialog so the agent can
+ * resolve the block without leaving the page.
+ *
+ * Callers should prefer this over manually calling
+ * `toast.error(await extractFunctionErrorMessage(err))` so quota errors
+ * surface the purchase flow consistently everywhere.
+ */
+export async function toastFunctionError(
+  rawError: unknown,
+  fallback?: string,
+): Promise<ParsedFunctionError> {
+  // Lazy import keeps the helper free of a hard dep on sonner's runtime
+  // when used server-side (Vite tree-shakes this fine in client bundles).
+  const { toast } = await import("sonner");
+  const parsed = await parseFunctionError(rawError);
+  const { quotaReached, usageType } = isQuotaReachedError(parsed);
+
+  const description = parsed.message || fallback || "حدث خطأ غير متوقع";
+
+  if (quotaReached && usageType) {
+    toast.error(description, {
+      duration: 12000,
+      action: {
+        label: "شراء رصيد إضافي",
+        onClick: () => openQuotaDialog(usageType),
+      },
+    });
+  } else {
+    toast.error(description);
+  }
+
+  return parsed;
+}

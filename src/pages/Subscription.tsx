@@ -13,8 +13,9 @@ import { cn } from "@/lib/utils";
 import {
   Crown, CreditCard, Calendar, Clock, AlertTriangle, Check, X, MessageCircle,
   Sparkles, ShieldCheck, Pause, Info, ArrowUp, ArrowDown,
-  Rocket, Shield, Trash2, XCircle, Loader2, Settings, BarChart3, Receipt, UserCog,
+  Rocket, Shield, Trash2, XCircle, Loader2, Settings, BarChart3, Receipt, UserCog, Plus,
 } from "lucide-react";
+import { AddQuotaDialog, type OverageUsageType } from "@/components/subscription/AddQuotaDialog";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -51,11 +52,14 @@ const PLAN_ICONS: Record<string, typeof Rocket> = {
 function UsageStatsSection({ agentId }: { agentId: string | null }) {
   const [limits, setLimits] = useState<any>(null);
   const [usage, setUsage] = useState<any[]>([]);
+  const [overages, setOverages] = useState<any[]>([]);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [quotaDialogType, setQuotaDialogType] = useState<OverageUsageType | null>(null);
 
   useEffect(() => {
     if (!agentId) return;
     (async () => {
-      const [limitsRes, usageRes, platformRes] = await Promise.all([
+      const [limitsRes, usageRes, platformRes, overagesRes] = await Promise.all([
         supabase.from("agent_usage_limits" as any).select("*").eq("agent_id", agentId).maybeSingle(),
         supabase.from("agent_usage_log" as any).select("*").eq("agent_id", agentId).order("period", { ascending: false }).limit(12),
         supabase
@@ -67,6 +71,10 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
             "default_ai_limit_type",
             "default_ai_limit_count",
           ]),
+        supabase
+          .from("agent_usage_overages" as any)
+          .select("usage_type, period, extra_count, total_amount")
+          .eq("agent_id", agentId),
       ]);
 
       // Build platform defaults map
@@ -83,8 +91,9 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
 
       setLimits(limitsRes.data || platformDefaults);
       setUsage((usageRes.data as any) || []);
+      setOverages((overagesRes.data as any) || []);
     })();
-  }, [agentId]);
+  }, [agentId, reloadToken]);
 
   if (!limits) return null;
 
@@ -97,10 +106,21 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
     return usage.find((u: any) => u.usage_type === type && u.period === period)?.count || 0;
   };
 
+  const getOverage = (type: string) =>
+    overages
+      .filter((o: any) => o.usage_type === type && o.period === currentMonth)
+      .reduce((s: number, o: any) => s + (o.extra_count || 0), 0);
+
   const smsUsed = limits.sms_limit_type === 'monthly' ? getUsage('sms', currentMonth) : getUsage('sms', currentYear);
   const aiUsed = limits.ai_limit_type === 'monthly' ? getUsage('ai_chat', currentMonth) : getUsage('ai_chat', currentYear);
-  const smsMax = limits.sms_limit_type === 'unlimited' ? '∞' : limits.sms_limit_count;
-  const aiMax = limits.ai_limit_type === 'unlimited' ? '∞' : limits.ai_limit_count;
+  const smsOverage = getOverage('sms');
+  const aiOverage = getOverage('ai_chat');
+  const smsBaseLimit = limits.sms_limit_count ?? 0;
+  const aiBaseLimit = limits.ai_limit_count ?? 0;
+  const smsEffectiveLimit = smsBaseLimit + smsOverage;
+  const aiEffectiveLimit = aiBaseLimit + aiOverage;
+  const smsMax = limits.sms_limit_type === 'unlimited' ? '∞' : smsEffectiveLimit;
+  const aiMax = limits.ai_limit_type === 'unlimited' ? '∞' : aiEffectiveLimit;
   const typeLabel = (t: string) => t === 'monthly' ? 'شهرياً' : t === 'yearly' ? 'سنوياً' : 'غير محدود';
 
   const renderUsageCard = (opts: {
@@ -110,9 +130,12 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
     used: number;
     max: number | string;
     limitCount: number;
+    overage: number;
+    purchaseType: OverageUsageType;
   }) => {
     const Icon = opts.icon;
-    const pct = opts.limitType === 'unlimited' ? 0 : Math.min(100, (opts.used / Math.max(1, opts.limitCount)) * 100);
+    const effectiveLimit = opts.limitCount;
+    const pct = opts.limitType === 'unlimited' ? 0 : Math.min(100, (opts.used / Math.max(1, effectiveLimit)) * 100);
     const nearLimit = pct >= 80 && opts.limitType !== 'unlimited';
     const atLimit = pct >= 100 && opts.limitType !== 'unlimited';
     return (
@@ -172,6 +195,28 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
               />
             </div>
           )}
+
+          {opts.overage > 0 && (
+            <div className="flex items-center gap-2 text-[11px] text-primary bg-primary/5 border border-primary/15 rounded-lg px-2.5 py-1.5">
+              <Plus className="h-3 w-3" />
+              <span>
+                تم شراء <span className="font-bold">+{opts.overage}</span> إضافية لهذا الشهر
+              </span>
+            </div>
+          )}
+
+          {opts.limitType !== 'unlimited' && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full gap-2"
+              onClick={() => setQuotaDialogType(opts.purchaseType)}
+            >
+              <Plus className="h-4 w-4" />
+              شراء رصيد إضافي
+            </Button>
+          )}
         </CardContent>
       </Card>
     );
@@ -185,7 +230,7 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
           استخدام الخدمات
         </h2>
         <p className="text-xs text-muted-foreground mt-1">
-          الحدود التي حددتها إدارة ثقة لحسابك واستهلاكك الحالي. لزيادة الحدود تواصل مع الإدارة.
+          الحدود المحددة لحسابك واستهلاكك الحالي. يمكنك شراء رصيد إضافي لهذا الشهر ويُضاف إلى فاتورتك الشهرية.
         </p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -195,7 +240,9 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
           limitType: limits.sms_limit_type,
           used: smsUsed,
           max: smsMax,
-          limitCount: limits.sms_limit_count,
+          limitCount: smsEffectiveLimit,
+          overage: smsOverage,
+          purchaseType: "sms",
         })}
         {renderUsageCard({
           title: "المساعد الذكي (ثاقب)",
@@ -203,9 +250,20 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
           limitType: limits.ai_limit_type,
           used: aiUsed,
           max: aiMax,
-          limitCount: limits.ai_limit_count,
+          limitCount: aiEffectiveLimit,
+          overage: aiOverage,
+          purchaseType: "ai_chat",
         })}
       </div>
+
+      {quotaDialogType && (
+        <AddQuotaDialog
+          open={!!quotaDialogType}
+          onOpenChange={(open) => { if (!open) setQuotaDialogType(null); }}
+          usageType={quotaDialogType}
+          onPurchased={() => setReloadToken((t) => t + 1)}
+        />
+      )}
     </div>
   );
 }

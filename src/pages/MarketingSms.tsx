@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, Send, Image, Users, CheckCircle, XCircle, Clock, Loader2, Upload, Link, History, Copy, Eye, Video, RefreshCw, AlertTriangle, Phone, User } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { extractFunctionErrorMessage } from '@/lib/functionError';
+import { extractFunctionErrorMessage, toastFunctionError } from '@/lib/functionError';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -380,8 +380,7 @@ export default function MarketingSms() {
       setActiveTab('history');
     } catch (error) {
       console.error('Error sending campaign:', error);
-      const msg = await extractFunctionErrorMessage(error);
-      toast.error(msg || 'فشل إرسال الحملة');
+      await toastFunctionError(error, 'فشل إرسال الحملة');
     } finally {
       setIsSending(false);
     }
