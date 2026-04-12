@@ -10,7 +10,7 @@ interface WizardStepperProps {
 
 export function WizardStepper({ steps, currentStep, onStepClick }: WizardStepperProps) {
   return (
-    <div className="flex items-center justify-center gap-1 sm:gap-2 mb-2 sm:mb-6 overflow-x-auto">
+    <div className="flex items-center justify-center gap-1 sm:gap-2 mb-2 sm:mb-6">
       {steps.map((step, index) => {
         const Icon = step.icon;
         const isActive = step.id === currentStep;

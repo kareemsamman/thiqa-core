@@ -76,9 +76,6 @@ const AddonCard = memo(function AddonCard({
           <Icon className={cn("h-4 w-4", addon.enabled ? iconColor : "text-muted-foreground")} />
         </div>
         <span className={cn("font-semibold text-sm", addon.enabled ? "text-foreground" : "text-muted-foreground")}>{title}</span>
-        {isCost && addon.enabled && (
-          <span className="text-[10px] text-destructive font-bold mr-auto bg-destructive/10 px-1.5 py-0.5 rounded-full">(تكلفة)</span>
-        )}
       </div>
 
       {/* Content */}

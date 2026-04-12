@@ -337,12 +337,37 @@ export function Step4Payments({
               const isLocked = payment.locked === true;
               const isDisabled = visaPaid || isLocked;
               
+              // Actions column only needs to exist when there's something to put in it —
+              // cheque number input, visa pay button, or a paid/locked badge. Cash payments
+              // have nothing here, so we drop the whole column and save a row on mobile.
+              const hasActionsColumn =
+                (payment.payment_type === 'cheque' && !isLocked) ||
+                isVisa ||
+                isLocked;
+
               return (
-                <Card key={payment.id} className={cn(
-                  "p-3",
-                  visaPaid && "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800",
-                  isLocked && "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
-                )}>
+                <Card
+                  key={payment.id}
+                  className={cn(
+                    "relative p-3",
+                    visaPaid && "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800",
+                    isLocked && "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
+                  )}
+                >
+                  {/* Delete button — absolute top-left so it never claims its own row on mobile */}
+                  {!visaPaid && !isLocked && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removePayment(payment.id)}
+                      className="absolute top-1.5 left-1.5 h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10 z-10"
+                      aria-label="حذف الدفعة"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+
                   {/* Locked Payment Badge */}
                   {isLocked && payment.locked_label && (
                     <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-200 dark:border-amber-700">
@@ -356,9 +381,8 @@ export function Step4Payments({
                     </div>
                   )}
 
-                  {/* Main row: Type / Amount / Date / Actions.
-                      On mobile we give the actions column its own row to keep the three fields readable. */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 items-end">
+                  {/* Main row: Type / Amount / Date / (Actions only when relevant). */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 items-end pl-8">
                     {/* Payment Type */}
                     <div>
                       <Label className="text-[10px] mb-1 block text-muted-foreground">نوع الدفع</Label>
@@ -398,7 +422,7 @@ export function Step4Payments({
                     </div>
 
                     {/* Date */}
-                    <div className="col-span-2 lg:col-span-1">
+                    <div className={cn("col-span-2 lg:col-span-1", !hasActionsColumn && "lg:col-span-2")}>
                       <Label className="text-[10px] mb-1 block text-muted-foreground">التاريخ</Label>
                       <ArabicDatePicker
                         value={payment.payment_date}
@@ -408,58 +432,49 @@ export function Step4Payments({
                       />
                     </div>
 
-                    {/* Actions (cheque# inline + visa pay / delete) */}
-                    <div className="col-span-2 lg:col-span-1 flex items-center gap-2">
-                      {payment.payment_type === 'cheque' && !isLocked && (
-                        <Input
-                          value={payment.cheque_number || ''}
-                          onChange={(e) => updatePayment(payment.id, 'cheque_number', sanitizeChequeNumber(e.target.value))}
-                          placeholder="رقم الشيك"
-                          maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                          className="h-9 flex-1 font-mono ltr-input"
-                          disabled={isDisabled}
-                        />
-                      )}
+                    {/* Actions — cheque# input, visa pay, paid/locked badge. Delete lives
+                        as an absolute button on the card, not here. */}
+                    {hasActionsColumn && (
+                      <div className="col-span-2 lg:col-span-1 flex items-center gap-2">
+                        {payment.payment_type === 'cheque' && !isLocked && (
+                          <Input
+                            value={payment.cheque_number || ''}
+                            onChange={(e) => updatePayment(payment.id, 'cheque_number', sanitizeChequeNumber(e.target.value))}
+                            placeholder="رقم الشيك"
+                            maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                            className="h-9 flex-1 font-mono ltr-input"
+                            disabled={isDisabled}
+                          />
+                        )}
 
-                      {isVisa && !visaPaid && !isLocked && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => handleVisaPayClick(index)}
-                          disabled={visaAmount <= 0 || isProcessing}
-                          className="gap-1.5 bg-primary hover:bg-primary/90 flex-1 lg:flex-initial"
-                        >
-                          {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                          {isProcessing ? 'جاري التحضير...' : 'ادفع'}
-                        </Button>
-                      )}
+                        {isVisa && !visaPaid && !isLocked && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => handleVisaPayClick(index)}
+                            disabled={visaAmount <= 0 || isProcessing}
+                            className="gap-1.5 bg-primary hover:bg-primary/90 flex-1 lg:flex-initial"
+                          >
+                            {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                            {isProcessing ? 'جاري التحضير...' : 'ادفع'}
+                          </Button>
+                        )}
 
-                      {isVisa && visaPaid && (
-                        <span className="text-xs text-green-600 font-medium flex items-center gap-1 flex-1">
-                          <CreditCard className="h-3.5 w-3.5" />
-                          تم الدفع
-                        </span>
-                      )}
+                        {isVisa && visaPaid && (
+                          <span className="text-xs text-green-600 font-medium flex items-center gap-1 flex-1">
+                            <CreditCard className="h-3.5 w-3.5" />
+                            تم الدفع
+                          </span>
+                        )}
 
-                      {isLocked && (
-                        <span className="text-xs text-amber-600 font-medium flex items-center gap-1 flex-1">
-                          <Lock className="h-3.5 w-3.5" />
-                          مقفلة
-                        </span>
-                      )}
-
-                      {!visaPaid && !isLocked && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removePayment(payment.id)}
-                          className="h-9 w-9 mr-auto text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
+                        {isLocked && (
+                          <span className="text-xs text-amber-600 font-medium flex items-center gap-1 flex-1">
+                            <Lock className="h-3.5 w-3.5" />
+                            مقفلة
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Inline receipt strip — thin, no divider, same card. */}
