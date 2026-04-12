@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { Search, Plus, User, AlertCircle, CheckCircle, AlertTriangle } from "lucide-react";
+import { Search, Plus, User, AlertCircle, CheckCircle, AlertTriangle, Building2, Settings, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InsuranceTypeCards } from "./InsuranceTypeCards";
 import { CreateClientForm } from "./CreateClientForm";
@@ -15,6 +15,8 @@ import { PolicyChildrenSelector } from "./PolicyChildrenSelector";
 import { useClientAccidentInfo } from "@/hooks/useClientAccidentInfo";
 import type { InsuranceCategory, Client, Broker, NewClientForm, ValidationErrors } from "./types";
 import type { ClientChild, NewChildForm } from "@/types/clientChildren";
+import { BranchQuickFormDialog } from "@/components/branches/BranchQuickFormDialog";
+import { CategoryQuickFormDialog } from "@/components/insurance-categories/CategoryQuickFormDialog";
 
 interface Step1Props {
   // Branch
@@ -22,11 +24,13 @@ interface Step1Props {
   branches: Array<{ id: string; name: string; name_ar: string | null }>;
   selectedBranchId: string;
   setSelectedBranchId: (id: string) => void;
-  
+  onBranchesChanged?: (createdId?: string) => void | Promise<void>;
+
   // Category
   categories: InsuranceCategory[];
   selectedCategory: InsuranceCategory | null;
   onCategoryChange: (category: InsuranceCategory) => void;
+  onCategoriesChanged?: (createdId?: string) => void | Promise<void>;
   
   // Client
   clientSearch: string;
@@ -60,9 +64,11 @@ export function Step1BranchTypeClient({
   branches,
   selectedBranchId,
   setSelectedBranchId,
+  onBranchesChanged,
   categories,
   selectedCategory,
   onCategoryChange,
+  onCategoriesChanged,
   clientSearch,
   setClientSearch,
   clients,
@@ -84,6 +90,34 @@ export function Step1BranchTypeClient({
   errors,
   setErrors,
 }: Step1Props) {
+  // Quick-add dialogs
+  const [branchDialogOpen, setBranchDialogOpen] = useState(false);
+  const [branchDialogStartInCreate, setBranchDialogStartInCreate] = useState(false);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [categoryDialogStartInCreate, setCategoryDialogStartInCreate] = useState(false);
+  const [categoryDialogInitial, setCategoryDialogInitial] = useState<
+    { name?: string; name_ar?: string; name_he?: string; slug?: string; mode?: "FULL" | "LIGHT"; is_default?: boolean } | undefined
+  >(undefined);
+
+  const openBranchManage = () => {
+    setBranchDialogStartInCreate(false);
+    setBranchDialogOpen(true);
+  };
+  const openBranchCreate = () => {
+    setBranchDialogStartInCreate(true);
+    setBranchDialogOpen(true);
+  };
+  const openCategoryManage = () => {
+    setCategoryDialogInitial(undefined);
+    setCategoryDialogStartInCreate(false);
+    setCategoryDialogOpen(true);
+  };
+  const openCategoryCreate = (initial?: typeof categoryDialogInitial) => {
+    setCategoryDialogInitial(initial);
+    setCategoryDialogStartInCreate(true);
+    setCategoryDialogOpen(true);
+  };
+
   // Search clients
   const searchClients = async (query: string) => {
     if (query.length < 2) {
@@ -199,33 +233,163 @@ export function Step1BranchTypeClient({
 
   return (
     <div className="space-y-6">
-      {/* Branch Selection - Admin Only */}
-      {isAdmin && branches.length > 1 && (
+      {/* Branch Selection - Admin Only (always visible for admin) */}
+      {isAdmin && (
         <div>
-          <Label className="text-base font-semibold mb-3 block">الفرع *</Label>
-          <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
-            <SelectTrigger className={cn(!selectedBranchId && "border-destructive")}>
-              <SelectValue placeholder="اختر الفرع" />
-            </SelectTrigger>
-            <SelectContent>
-              {branches.map((branch) => (
-                <SelectItem key={branch.id} value={branch.id}>
-                  {branch.name_ar || branch.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center justify-between mb-3">
+            <Label className="text-base font-semibold block">الفرع *</Label>
+            {branches.length > 0 && (
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1 text-xs"
+                  onClick={openBranchManage}
+                  title="إدارة الفروع"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                  إدارة
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1 text-xs"
+                  onClick={openBranchCreate}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  إضافة
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {branches.length === 0 ? (
+            <Card className="p-4 border-dashed bg-muted/20">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
+                  <Building2 className="h-5 w-5 text-amber-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm">لا توجد فروع بعد</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    أضف فرعك الأول لتتمكن من إنشاء الوثائق
+                  </p>
+                </div>
+                <Button type="button" size="sm" className="gap-2 shrink-0" onClick={openBranchCreate}>
+                  <Plus className="h-4 w-4" />
+                  اضغط للإضافة
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
+              <SelectTrigger className={cn(!selectedBranchId && "border-destructive")}>
+                <SelectValue placeholder="اختر الفرع" />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((branch) => (
+                  <SelectItem key={branch.id} value={branch.id}>
+                    {branch.name_ar || branch.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       )}
 
       {/* Insurance Type Selection */}
       <div>
-        <Label className="text-base font-semibold mb-3 block">نوع التأمين *</Label>
-        <InsuranceTypeCards
-          categories={categories}
-          selectedCategory={selectedCategory}
-          onSelect={onCategoryChange}
-        />
+        <div className="flex items-center justify-between mb-3">
+          <Label className="text-base font-semibold block">نوع التأمين *</Label>
+          {isAdmin && categories.length > 0 && (
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 text-xs"
+                onClick={openCategoryManage}
+                title="إدارة أنواع التأمين"
+              >
+                <Settings className="h-3.5 w-3.5" />
+                إدارة
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1 text-xs"
+                onClick={() => openCategoryCreate()}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                إضافة
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {categories.length === 0 ? (
+          isAdmin ? (
+            <Card className="p-4 border-dashed bg-primary/5">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm">لا توجد أنواع تأمين بعد</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    نقترح البدء بـ <span className="font-medium">تأمين السيارات (تأمين كامل)</span>
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() =>
+                    openCategoryCreate({
+                      name: "Car Insurance",
+                      name_ar: "تأمين السيارات",
+                      name_he: "ביטוח רכב",
+                      slug: "THIRD_FULL",
+                      mode: "FULL",
+                      is_default: true,
+                    })
+                  }
+                >
+                  <Plus className="h-4 w-4" />
+                  إضافة تأمين السيارات
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => openCategoryCreate()}
+                >
+                  <Plus className="h-4 w-4" />
+                  نوع مخصص
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <Card className="p-4 border-dashed bg-muted/20">
+              <p className="text-sm text-muted-foreground text-center">
+                لا توجد أنواع تأمين متاحة. يرجى التواصل مع المدير.
+              </p>
+            </Card>
+          )
+        ) : (
+          <InsuranceTypeCards
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onSelect={onCategoryChange}
+          />
+        )}
         <FieldError error={errors.category} />
       </div>
 
@@ -362,6 +526,26 @@ export function Step1BranchTypeClient({
             />
           )}
         </div>
+      )}
+
+      {/* Quick-add / manage dialogs (admin only) */}
+      {isAdmin && (
+        <>
+          <BranchQuickFormDialog
+            open={branchDialogOpen}
+            onOpenChange={setBranchDialogOpen}
+            startInCreate={branchDialogStartInCreate}
+            initialForm={branches.length === 0 ? { is_default: true } : undefined}
+            onChanged={(createdId) => onBranchesChanged?.(createdId)}
+          />
+          <CategoryQuickFormDialog
+            open={categoryDialogOpen}
+            onOpenChange={setCategoryDialogOpen}
+            startInCreate={categoryDialogStartInCreate}
+            initialForm={categoryDialogInitial}
+            onChanged={(createdId) => onCategoriesChanged?.(createdId)}
+          />
+        </>
       )}
     </div>
   );

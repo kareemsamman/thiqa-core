@@ -2,19 +2,21 @@ import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { Plus, Edit, Trash2, GripVertical, Car, FileText, Loader2, Star, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Edit, Trash2, Car, FileText, Loader2, Star, ChevronUp, ChevronDown } from "lucide-react";
+import {
+  CategoryFormFields,
+  CategoryFormValue,
+  emptyCategoryForm,
+} from "@/components/insurance-categories/CategoryFormFields";
 
 interface InsuranceCategory {
   id: string;
@@ -40,15 +42,7 @@ export default function InsuranceCategories() {
   const [editingCategory, setEditingCategory] = useState<InsuranceCategory | null>(null);
   const [showEditor, setShowEditor] = useState(false);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    name_ar: '',
-    name_he: '',
-    slug: '',
-    mode: 'LIGHT' as 'FULL' | 'LIGHT',
-    is_active: true,
-    is_default: false,
-  });
+  const [formData, setFormData] = useState<CategoryFormValue>(emptyCategoryForm);
 
   useEffect(() => {
     fetchCategories();
@@ -107,15 +101,7 @@ export default function InsuranceCategories() {
 
   const handleCreate = () => {
     setEditingCategory(null);
-    setFormData({
-      name: '',
-      name_ar: '',
-      name_he: '',
-      slug: '',
-      mode: 'LIGHT',
-      is_active: true,
-      is_default: false,
-    });
+    setFormData(emptyCategoryForm);
     setShowEditor(true);
   };
 
@@ -428,88 +414,12 @@ export default function InsuranceCategories() {
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label>الاسم (إنجليزي) *</Label>
-                <Input
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Car Insurance"
-                  className="ltr-input"
-                />
-              </div>
-              <div>
-                <Label>الاسم (عربي)</Label>
-                <Input
-                  value={formData.name_ar}
-                  onChange={(e) => setFormData({ ...formData, name_ar: e.target.value })}
-                  placeholder="تأمين السيارات"
-                />
-              </div>
-              <div>
-                <Label>الاسم (عبري)</Label>
-                <Input
-                  value={formData.name_he}
-                  onChange={(e) => setFormData({ ...formData, name_he: e.target.value })}
-                  placeholder="ביטוח רכב"
-                  dir="rtl"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label>المعرف (Slug) *</Label>
-              <Input
-                value={formData.slug}
-                onChange={(e) => setFormData({ ...formData, slug: e.target.value.toUpperCase().replace(/[^A-Z_]/g, '') })}
-                placeholder="NEW_TYPE"
-                className="ltr-input"
-                disabled={!!editingCategory} // Don't allow changing slug for existing categories
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                معرف فريد بالإنجليزية الكبيرة (لا يمكن تغييره لاحقاً)
-              </p>
-            </div>
-
-            <div>
-              <Label>نوع المعالجة</Label>
-              <Select value={formData.mode} onValueChange={(v: 'FULL' | 'LIGHT') => setFormData({ ...formData, mode: v })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="FULL">
-                    <div className="flex items-center gap-2">
-                      <Car className="h-4 w-4" />
-                      FULL - تأمين كامل مع سيارة
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="LIGHT">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      LIGHT - تأمين بسيط
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label>نشط</Label>
-              <Switch
-                checked={formData.is_active}
-                onCheckedChange={(c) => setFormData({ ...formData, is_active: c })}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label>افتراضي</Label>
-              <Switch
-                checked={formData.is_default}
-                onCheckedChange={(c) => setFormData({ ...formData, is_default: c })}
-              />
-            </div>
+          <div className="py-4">
+            <CategoryFormFields
+              value={formData}
+              onChange={setFormData}
+              slugLocked={!!editingCategory}
+            />
           </div>
 
           <DialogFooter>

@@ -36,7 +36,7 @@ interface UsePolicyWizardStateProps {
 
 export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirection, preselectedClientId, renewalData }: UsePolicyWizardStateProps) {
   const { user, isAdmin, branchId: userBranchId } = useAuth();
-  const { branches } = useBranches();
+  const { branches, refetch: refetchBranches } = useBranches();
   const initialBrokerDirection = defaultBrokerDirection || "";
 
   // Core wizard state
@@ -44,12 +44,14 @@ export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirec
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [saving, setSaving] = useState(false);
 
-  // Branch - default to Beit Hanina for admin
-  const BEIT_HANINA_ID = "146727e4-170a-4f65-b3f8-679a9beb3016";
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
-    // Default to Beit Hanina for admin if it exists in branches
-    return isAdmin ? BEIT_HANINA_ID : "";
-  });
+  // Branch — admin default comes from the DB `is_default` flag.
+  // Non-admins are always locked to their own branch.
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("");
+  useEffect(() => {
+    if (!isAdmin || selectedBranchId || branches.length === 0) return;
+    const defaultBranch = branches.find((b) => b.is_default) ?? branches[0];
+    if (defaultBranch) setSelectedBranchId(defaultBranch.id);
+  }, [isAdmin, branches, selectedBranchId]);
   const effectiveBranchId = isAdmin ? selectedBranchId : userBranchId;
 
   // Insurance Category
@@ -684,6 +686,7 @@ export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirec
     setSelectedBranchId,
     effectiveBranchId,
     branches,
+    refetchBranches,
     isAdmin,
 
     // Category

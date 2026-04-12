@@ -175,6 +175,7 @@ export function PolicyWizard({
     isAdmin,
     userBranchId,
     branches,
+    refetchBranches,
   } = wizardState;
 
   // Reset warning dialog state
@@ -205,30 +206,26 @@ export function PolicyWizard({
     isPackage: boolean;
   } | null>(null);
 
+  // Fetch categories (stable ref so the quick-add dialog can refresh in place)
+  const fetchCategories = useCallback(async () => {
+    const { data } = await supabase
+      .from('insurance_categories')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+
+    if (data) {
+      const typedCategories = data.map(c => ({
+        ...c,
+        mode: c.mode as 'FULL' | 'LIGHT',
+      }));
+      setCategories(typedCategories);
+    }
+  }, [setCategories]);
+
   // Fetch categories and brokers on open
   useEffect(() => {
     if (!open) return;
-
-    const fetchCategories = async () => {
-      const { data } = await supabase
-        .from('insurance_categories')
-        .select('*')
-        .eq('is_active', true)
-        .order('sort_order', { ascending: true });
-      
-      if (data) {
-        const typedCategories = data.map(c => ({
-          ...c,
-          mode: c.mode as 'FULL' | 'LIGHT',
-        }));
-        setCategories(typedCategories);
-        
-        const defaultCat = typedCategories.find(c => c.is_default);
-        if (defaultCat && !selectedCategory) {
-          setSelectedCategory(defaultCat);
-        }
-      }
-    };
 
     const fetchBrokers = async () => {
       const { data } = await supabase
@@ -241,7 +238,14 @@ export function PolicyWizard({
     fetchCategories();
     fetchBrokers();
     checkTranzilaEnabled();
-  }, [open, selectedCategory, setCategories, setSelectedCategory, setBrokers]);
+  }, [open, fetchCategories, setBrokers]);
+
+  // Auto-select the default category once categories load (only if none selected yet)
+  useEffect(() => {
+    if (!open || selectedCategory || categories.length === 0) return;
+    const defaultCat = categories.find(c => c.is_default);
+    if (defaultCat) setSelectedCategory(defaultCat);
+  }, [open, categories, selectedCategory, setSelectedCategory]);
 
   // Check if Tranzila is enabled
   const checkTranzilaEnabled = useCallback(async () => {
@@ -1574,9 +1578,34 @@ export function PolicyWizard({
                 branches={branches}
                 selectedBranchId={selectedBranchId}
                 setSelectedBranchId={handleBranchChange}
+                onBranchesChanged={async (createdId) => {
+                  await refetchBranches();
+                  if (createdId) handleBranchChange(createdId);
+                }}
                 categories={categories}
                 selectedCategory={selectedCategory}
                 onCategoryChange={handleCategoryChange}
+                onCategoriesChanged={async (createdId) => {
+                  await fetchCategories();
+                  if (createdId) {
+                    const { data } = await supabase
+                      .from('insurance_categories')
+                      .select('id, name, name_ar, slug, mode, is_active, is_default')
+                      .eq('id', createdId)
+                      .single();
+                    if (data) {
+                      handleCategoryChange({
+                        id: data.id,
+                        name: data.name,
+                        name_ar: data.name_ar,
+                        slug: data.slug,
+                        mode: data.mode as 'FULL' | 'LIGHT',
+                        is_active: data.is_active,
+                        is_default: data.is_default,
+                      });
+                    }
+                  }
+                }}
                 clientSearch={clientSearch}
                 setClientSearch={setClientSearch}
                 clients={clients}

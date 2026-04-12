@@ -1176,6 +1176,7 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          is_default: boolean
           name: string
           name_ar: string | null
           slug: string
@@ -1186,6 +1187,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          is_default?: boolean
           name: string
           name_ar?: string | null
           slug: string
@@ -1196,6 +1198,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          is_default?: boolean
           name?: string
           name_ar?: string | null
           slug?: string

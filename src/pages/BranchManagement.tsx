@@ -3,17 +3,15 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Building2, Plus, Pencil, Trash2, Users, Save, Loader2, MapPin } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Users, Save, Loader2, MapPin, Star } from "lucide-react";
 import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { BranchFormFields, BranchFormValue, emptyBranchForm } from "@/components/branches/BranchFormFields";
 
 interface Branch {
   id: string;
@@ -21,6 +19,7 @@ interface Branch {
   name_ar: string | null;
   slug: string;
   is_active: boolean;
+  is_default: boolean;
   created_at: string;
   user_count?: number;
   client_count?: number;
@@ -39,9 +38,7 @@ export default function BranchManagement() {
   const [deleting, setDeleting] = useState(false);
 
   // Form state
-  const [formName, setFormName] = useState("");
-  const [formNameAr, setFormNameAr] = useState("");
-  const [formActive, setFormActive] = useState(true);
+  const [form, setForm] = useState<BranchFormValue>(emptyBranchForm);
 
   const fetchBranches = async () => {
     if (!agentId) return;
@@ -91,22 +88,23 @@ export default function BranchManagement() {
 
   const openNew = () => {
     setEditBranch(null);
-    setFormName("");
-    setFormNameAr("");
-    setFormActive(true);
+    setForm(emptyBranchForm);
     setDialogOpen(true);
   };
 
   const openEdit = (branch: Branch) => {
     setEditBranch(branch);
-    setFormName(branch.name);
-    setFormNameAr(branch.name_ar || "");
-    setFormActive(branch.is_active);
+    setForm({
+      name: branch.name,
+      name_ar: branch.name_ar || "",
+      is_active: branch.is_active,
+      is_default: branch.is_default,
+    });
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
-    if (!formName.trim() && !formNameAr.trim()) {
+    if (!form.name.trim() && !form.name_ar.trim()) {
       toast.error("يرجى إدخال اسم الفرع");
       return;
     }
@@ -114,7 +112,7 @@ export default function BranchManagement() {
 
     setSaving(true);
     try {
-      const name = formName.trim() || formNameAr.trim();
+      const name = form.name.trim() || form.name_ar.trim();
       const slug = name.toLowerCase().replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "-").replace(/-+/g, "-");
 
       if (editBranch) {
@@ -122,9 +120,10 @@ export default function BranchManagement() {
           .from("branches")
           .update({
             name,
-            name_ar: formNameAr.trim() || null,
+            name_ar: form.name_ar.trim() || null,
             slug,
-            is_active: formActive,
+            is_active: form.is_active,
+            is_default: form.is_default,
           })
           .eq("id", editBranch.id);
         if (error) throw error;
@@ -134,9 +133,10 @@ export default function BranchManagement() {
           .from("branches")
           .insert({
             name,
-            name_ar: formNameAr.trim() || null,
+            name_ar: form.name_ar.trim() || null,
             slug: `${slug}-${Date.now()}`,
-            is_active: formActive,
+            is_active: form.is_active,
+            is_default: form.is_default,
             agent_id: agentId,
           });
         if (error) throw error;
@@ -230,6 +230,12 @@ export default function BranchManagement() {
                         {branch.name_ar && branch.name !== branch.name_ar && (
                           <span className="text-sm text-muted-foreground">({branch.name})</span>
                         )}
+                        {branch.is_default && (
+                          <Badge className="bg-amber-100 text-amber-800 gap-1 text-xs">
+                            <Star className="h-3 w-3 fill-current" />
+                            افتراضي
+                          </Badge>
+                        )}
                         {!branch.is_active && (
                           <Badge variant="secondary" className="text-xs">غير فعال</Badge>
                         )}
@@ -267,29 +273,7 @@ export default function BranchManagement() {
             <DialogHeader>
               <DialogTitle>{editBranch ? "تعديل الفرع" : "إضافة فرع جديد"}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>اسم الفرع (عربي)</Label>
-                <Input
-                  value={formNameAr}
-                  onChange={e => setFormNameAr(e.target.value)}
-                  placeholder="مثال: فرع بيت حنينا"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>اسم الفرع (English)</Label>
-                <Input
-                  value={formName}
-                  onChange={e => setFormName(e.target.value)}
-                  placeholder="e.g. Beit Hanina Branch"
-                  dir="ltr"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={formActive} onCheckedChange={setFormActive} />
-                <Label>فعال</Label>
-              </div>
-            </div>
+            <BranchFormFields value={form} onChange={setForm} />
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
               <Button onClick={handleSave} disabled={saving}>

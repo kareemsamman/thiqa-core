@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface Branch {
@@ -7,33 +7,34 @@ export interface Branch {
   name_ar: string | null;
   slug: string;
   is_active: boolean;
+  is_default: boolean;
 }
 
 export function useBranches() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchBranches = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('branches')
-          .select('*')
-          .eq('is_active', true)
-          .order('name');
+  const fetchBranches = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('branches')
+        .select('id, name, name_ar, slug, is_active, is_default')
+        .eq('is_active', true)
+        .order('name');
 
-        if (error) throw error;
-        setBranches(data || []);
-      } catch (error) {
-        console.error('Error fetching branches:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchBranches();
+      if (error) throw error;
+      setBranches(data || []);
+    } catch (error) {
+      console.error('Error fetching branches:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchBranches();
+  }, [fetchBranches]);
 
   const getBranchName = (branchId: string | null) => {
     if (!branchId) return '-';
@@ -41,5 +42,5 @@ export function useBranches() {
     return branch?.name_ar || branch?.name || '-';
   };
 
-  return { branches, loading, getBranchName };
+  return { branches, loading, getBranchName, refetch: fetchBranches };
 }
