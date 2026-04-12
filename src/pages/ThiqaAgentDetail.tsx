@@ -186,6 +186,8 @@ export default function ThiqaAgentDetail() {
   const [agents_original_plan, setOriginalPlan] = useState<string>("");
   const [features, setFeatures] = useState<Record<string, boolean>>({});
   const [payments, setPayments] = useState<any[]>([]);
+  const [unbilledOverages, setUnbilledOverages] = useState<any[]>([]);
+  const [includeOveragesInPayment, setIncludeOveragesInPayment] = useState(false);
   const [dbPlans, setDbPlans] = useState<{plan_key: string; name: string; monthly_price: number}[]>([]);
   const [agentStats, setAgentStats] = useState<{clients: number; cars: number; policies: number} | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -252,7 +254,7 @@ export default function ThiqaAgentDetail() {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [agentRes, flagsRes, paymentsRes, usersRes, smsRes, authRes, payRes, siteRes, rolesRes, branchRes, plansRes] = await Promise.all([
+      const [agentRes, flagsRes, paymentsRes, usersRes, smsRes, authRes, payRes, siteRes, rolesRes, branchRes, plansRes, overagesRes] = await Promise.all([
         supabase.from('agents').select('*').eq('id', agentId!).single(),
         supabase.from('agent_feature_flags').select('feature_key, enabled').eq('agent_id', agentId!),
         supabase.from('agent_subscription_payments').select('*').eq('agent_id', agentId!).order('payment_date', { ascending: false }).limit(50),
@@ -264,6 +266,12 @@ export default function ThiqaAgentDetail() {
         supabase.from('user_roles').select('user_id, role').eq('agent_id', agentId!),
         supabase.from('branches').select('id, name, name_ar').eq('agent_id', agentId!),
         supabase.from('subscription_plans').select('plan_key, name, monthly_price').eq('is_active', true).order('sort_order'),
+        supabase
+          .from('agent_usage_overages' as any)
+          .select('id, usage_type, extra_count, unit_price, total_amount, created_at')
+          .eq('agent_id', agentId!)
+          .eq('billed', false)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (agentRes.data) {
@@ -284,6 +292,7 @@ export default function ThiqaAgentDetail() {
       setUserRoles(rm);
       if (branchRes.data) setBranches(branchRes.data);
       if (plansRes.data && plansRes.data.length > 0) setDbPlans(plansRes.data);
+      setUnbilledOverages(((overagesRes.data as any) || []));
       // Fetch stats in background
       fetchAgentStats();
     } catch (error) {
@@ -397,6 +406,21 @@ export default function ThiqaAgentDetail() {
       status: 'active',
     } as any);
     if (!error) {
+      // If the admin ticked "include unbilled overages", mark every unbilled
+      // overage row for this agent as billed so the agent's next-billing
+      // preview clears and we don't double-charge them next month.
+      if (includeOveragesInPayment && unbilledOverages.length > 0) {
+        const ids = unbilledOverages.map((o) => o.id);
+        const { error: markErr } = await supabase
+          .from('agent_usage_overages' as any)
+          .update({ billed: true } as any)
+          .in('id', ids);
+        if (markErr) {
+          console.error('[record-payment] failed to mark overages billed:', markErr);
+          toast.error('تم تسجيل الدفعة لكن فشل تحديث حالة الإضافات');
+        }
+      }
+
       // Always update agent expiry to the new period_end
       const periodEndStr = format(periodEnd, 'yyyy-MM-dd');
       await supabase.from('agents').update({
@@ -405,12 +429,29 @@ export default function ThiqaAgentDetail() {
         updated_at: new Date().toISOString(),
       }).eq('id', agent.id);
       setAgent(prev => prev ? { ...prev, subscription_expires_at: new Date(periodEndStr).toISOString(), subscription_status: 'active' } : null);
-      
+
       toast.success('تم تسجيل الدفعة');
       setPaymentAmount(""); setPaymentNotes(""); setPaymentDate(new Date());
+      setIncludeOveragesInPayment(false);
       const d = new Date(); setPeriodStart(d); const e = new Date(d); e.setMonth(e.getMonth() + 1); setPeriodEnd(e);
       fetchAll();
     }
+  };
+
+  // ─── Mark unbilled overages as billed without recording a new payment ───
+  const markOveragesAsBilled = async () => {
+    if (!agentId || unbilledOverages.length === 0) return;
+    const ids = unbilledOverages.map((o) => o.id);
+    const { error } = await supabase
+      .from('agent_usage_overages' as any)
+      .update({ billed: true } as any)
+      .in('id', ids);
+    if (error) {
+      toast.error('فشل في تحديث حالة الإضافات');
+      return;
+    }
+    toast.success(`تم تسوية ${ids.length} من الإضافات`);
+    fetchAll();
   };
 
   // ─── Auto-calc period end when start changes ───
@@ -1272,7 +1313,120 @@ export default function ThiqaAgentDetail() {
           </TabsContent>
 
            {/* ═══════════ PAYMENTS TAB ═══════════ */}
-          <TabsContent value="payments">
+          <TabsContent value="payments" className="space-y-4">
+            {/* Pending unbilled overages — credit top-ups the agent bought that
+                haven't been rolled into an invoice yet. The admin can tick
+                "include in this payment" to bundle them into the next invoice
+                and mark them billed, or use the standalone button to just
+                clear the pending state without recording a new payment. */}
+            {unbilledOverages.length > 0 && (() => {
+              const total = unbilledOverages.reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
+              const smsRows = unbilledOverages.filter((o) => o.usage_type === 'sms');
+              const aiRows = unbilledOverages.filter((o) => o.usage_type === 'ai_chat');
+              const smsCount = smsRows.reduce((s, o) => s + o.extra_count, 0);
+              const smsTotal = smsRows.reduce((s, o) => s + Number(o.total_amount), 0);
+              const aiCount = aiRows.reduce((s, o) => s + o.extra_count, 0);
+              const aiTotal = aiRows.reduce((s, o) => s + Number(o.total_amount), 0);
+              return (
+                <Card className="border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/10">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="h-5 w-5 text-amber-600" />
+                        <span>إضافات غير مفوترة ({unbilledOverages.length})</span>
+                      </div>
+                      <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-sm">
+                        ₪{total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Badge>
+                    </CardTitle>
+                    <CardDescription>
+                      شحنات الرصيد التي اشتراها الوكيل ولم تُدرج بعد في أي فاتورة. شمّلها في
+                      الدفعة التالية أو اضغط "تسوية" لتحديدها كمفوترة بدون دفعة.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {smsCount > 0 && (
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-background border">
+                        <div>
+                          <p className="text-sm font-semibold">رسائل SMS إضافية</p>
+                          <p className="text-xs text-muted-foreground">
+                            {smsCount.toLocaleString()} رسالة عبر {smsRows.length} عملية شراء
+                          </p>
+                        </div>
+                        <span className="text-base font-bold tabular-nums">
+                          ₪{smsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                    {aiCount > 0 && (
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-background border">
+                        <div>
+                          <p className="text-sm font-semibold">محادثات المساعد الذكي إضافية</p>
+                          <p className="text-xs text-muted-foreground">
+                            {aiCount.toLocaleString()} محادثة عبر {aiRows.length} عملية شراء
+                          </p>
+                        </div>
+                        <span className="text-base font-bold tabular-nums">
+                          ₪{aiTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Per-purchase details */}
+                    <details className="rounded-lg border bg-background">
+                      <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
+                        تفاصيل كل عملية شراء
+                      </summary>
+                      <div className="border-t divide-y text-xs">
+                        {unbilledOverages.map((o) => (
+                          <div key={o.id} className="flex items-center justify-between px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">
+                                +{o.extra_count} {o.usage_type === 'sms' ? 'رسالة' : 'محادثة'}
+                              </span>
+                              <span className="text-muted-foreground">
+                                ({format(new Date(o.created_at), 'dd/MM/yyyy')})
+                              </span>
+                            </div>
+                            <span className="tabular-nums text-muted-foreground">
+                              {o.extra_count} × ₪{Number(o.unit_price).toFixed(2)} =
+                              <span className="text-foreground font-semibold mr-1">
+                                ₪{Number(o.total_amount).toFixed(2)}
+                              </span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const base = parseFloat(paymentAmount) || (agent.monthly_price || 0);
+                          setPaymentAmount((base + total).toFixed(2));
+                          setIncludeOveragesInPayment(true);
+                          toast.success("تم إضافة المبلغ إلى الدفعة — اضغط تسجيل الدفعة لإتمامها");
+                        }}
+                      >
+                        تضمين في الدفعة التالية
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={markOveragesAsBilled}
+                      >
+                        تسوية بدون دفعة
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><CreditCard className="h-5 w-5" />سجل المدفوعات</CardTitle>
@@ -1297,6 +1451,23 @@ export default function ThiqaAgentDetail() {
                   </div>
                   <Button onClick={recordPayment} disabled={!paymentAmount} className="w-full text-xs md:text-sm whitespace-nowrap">تسجيل الدفعة</Button>
                 </div>
+
+                {/* Checkbox to also mark unbilled overages as billed when saving */}
+                {unbilledOverages.length > 0 && (
+                  <label className="flex items-start gap-2 text-sm p-3 rounded-lg border border-amber-200 bg-amber-50/60 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeOveragesInPayment}
+                      onChange={(e) => setIncludeOveragesInPayment(e.target.checked)}
+                      className="mt-0.5 accent-amber-600"
+                    />
+                    <span>
+                      تضمين الإضافات غير المفوترة في هذه الدفعة (₪
+                      {unbilledOverages.reduce((s, o) => s + Number(o.total_amount), 0).toFixed(2)}) —
+                      سيتم تعليمها كمفوترة عند الحفظ.
+                    </span>
+                  </label>
+                )}
 
                 {/* No active payment warning */}
                 {payments.length > 0 && !payments.some((p: any) => p.status === 'active') && (
