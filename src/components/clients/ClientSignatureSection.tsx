@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { getFullCdnUrl } from "@/lib/utils";
 import { FileSignature, Send, Loader2, CheckCircle2, AlertTriangle, ExternalLink } from "lucide-react";
 import DOMPurify from "dompurify";
@@ -102,29 +103,11 @@ export function ClientSignatureSection({
         body: { client_id: clientId },
       });
 
-      // Parse edge function error response
+      // Parse edge function error response via shared helper, then fall back
+      // to the local English→Arabic translation map for any legacy messages.
       if (error) {
-        let errorMessage = "فشل في إرسال طلب التوقيع";
-        try {
-          const errorBody = typeof error.message === 'string' && error.message.includes('{') 
-            ? JSON.parse(error.message) 
-            : null;
-          if (errorBody?.error) {
-            errorMessage = getArabicErrorMessage(errorBody.error);
-          }
-        } catch {
-          if (error.context?.body) {
-            try {
-              const body = typeof error.context.body === 'string' 
-                ? JSON.parse(error.context.body) 
-                : error.context.body;
-              if (body?.error) {
-                errorMessage = getArabicErrorMessage(body.error);
-              }
-            } catch {}
-          }
-        }
-        throw new Error(errorMessage);
+        const extracted = await extractFunctionErrorMessage(error);
+        throw new Error(getArabicErrorMessage(extracted) || "فشل في إرسال طلب التوقيع");
       }
 
       // Check if response indicates the client already signed

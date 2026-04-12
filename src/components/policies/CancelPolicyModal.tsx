@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { Loader2, XCircle, Send, AlertTriangle } from "lucide-react";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { useAuth } from "@/hooks/useAuth";
@@ -173,15 +174,20 @@ export function CancelPolicyModal({
 
           if (smsError) {
             console.error("SMS send error:", smsError);
-            toast({ 
-              title: "تحذير", 
-              description: "تم إلغاء الوثيقة لكن فشل إرسال الرسالة"
+            const smsMsg = await extractFunctionErrorMessage(smsError);
+            toast({
+              title: "تحذير",
+              description: smsMsg || "تم إلغاء الوثيقة لكن فشل إرسال الرسالة"
             });
           } else if (smsData?.success) {
             toast({ title: "تم", description: "تم إرسال رسالة الإلغاء للعميل" });
           }
         } catch (smsErr) {
           console.error("SMS error:", smsErr);
+          const smsMsg = await extractFunctionErrorMessage(smsErr);
+          if (smsMsg) {
+            toast({ title: "تحذير", description: smsMsg });
+          }
         }
       }
 

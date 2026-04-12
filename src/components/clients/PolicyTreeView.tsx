@@ -36,6 +36,7 @@ import { ExpiryBadge } from '@/components/shared/ExpiryBadge';
 import { PackagePaymentModal } from './PackagePaymentModal';
 import { SinglePolicyPaymentModal } from './SinglePolicyPaymentModal';
 import { supabase } from '@/integrations/supabase/client';
+import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -418,26 +419,16 @@ export function PolicyTreeView({
       const { data, error } = await supabase.functions.invoke('send-package-invoice-sms', {
         body: { policy_ids: policyIds }
       });
-      
+
       if (error) {
-        let errorMessage = 'فشل في الإرسال';
-        try {
-          if (error.context?.body) {
-            const body = typeof error.context.body === 'string' 
-              ? JSON.parse(error.context.body) 
-              : error.context.body;
-            errorMessage = body?.error || errorMessage;
-          }
-        } catch {
-          // Keep default
-        }
+        const errorMessage = (await extractFunctionErrorMessage(error)) || 'فشل في الإرسال';
         throw new Error(errorMessage);
       }
-      
+
       if (data?.error) {
         throw new Error(data.error);
       }
-      
+
       if (data?.success) {
         toast.success('تم إرسال الفواتير للعميل');
       } else {
@@ -459,26 +450,16 @@ export function PolicyTreeView({
       const { data, error } = await supabase.functions.invoke('send-invoice-sms', {
         body: { policy_id: policyId, force_resend: true }
       });
-      
+
       if (error) {
-        let errorMessage = 'فشل في الإرسال';
-        try {
-          if (error.context?.body) {
-            const body = typeof error.context.body === 'string' 
-              ? JSON.parse(error.context.body) 
-              : error.context.body;
-            errorMessage = body?.error || errorMessage;
-          }
-        } catch {
-          // Keep default error message
-        }
+        const errorMessage = (await extractFunctionErrorMessage(error)) || 'فشل في الإرسال';
         throw new Error(errorMessage);
       }
-      
+
       if (data?.error) {
         throw new Error(data.error);
       }
-      
+
       if (data?.success) {
         toast.success('تم إرسال الفاتورة للعميل');
       } else {

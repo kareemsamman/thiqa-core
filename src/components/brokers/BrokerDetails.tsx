@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { ClientDrawer } from "@/components/clients/ClientDrawer";
 import { PolicyWizard } from "@/components/policies/PolicyWizard";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
@@ -290,9 +291,11 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
       }
     } catch (error: any) {
       console.error("Error exporting PDF:", error);
+      const fallback = sendSms ? "فشل في إرسال التقرير" : "فشل في تصدير التقرير";
+      const description = await extractFunctionErrorMessage(error);
       toast({
         title: "خطأ",
-        description: sendSms ? "فشل في إرسال التقرير" : "فشل في تصدير التقرير",
+        description: description || fallback,
         variant: "destructive",
       });
     } finally {

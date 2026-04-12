@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2, CreditCard, Banknote, Wallet, AlertCircle, CheckCircle, DollarSign, Plus, Trash2, Split, Upload, X, ImageIcon, HelpCircle, Car, Package, FileText, Info, Scan } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { TranzilaPaymentModal } from '@/components/payments/TranzilaPaymentModal';
@@ -623,17 +624,21 @@ export function DebtPaymentModal({
       
       const message = `مرحباً ${clientName}، تم استلام دفعة بمبلغ ₪${paidAmount.toLocaleString()}. شكراً لك!\n\nلعرض وصل الدفع:\n${receiptUrl || 'غير متوفر'}`;
       
-      await supabase.functions.invoke('send-sms', {
+      const { error: smsError } = await supabase.functions.invoke('send-sms', {
         body: {
           phone: clientPhone,
           message,
           sms_type: 'payment_confirmation'
         }
       });
-      
+
+      if (smsError) throw smsError;
+
       toast.success('تم إرسال رسالة التأكيد للعميل');
     } catch (error) {
       console.error('Error sending payment confirmation SMS:', error);
+      const msg = await extractFunctionErrorMessage(error);
+      if (msg) toast.error(msg);
     }
   };
 

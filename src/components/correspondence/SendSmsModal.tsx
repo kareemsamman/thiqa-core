@@ -13,6 +13,7 @@ import { Loader2, Send } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { digitsOnly } from '@/lib/validation';
+import { extractFunctionErrorMessage } from '@/lib/functionError';
 
 interface SendSmsModalProps {
   open: boolean;
@@ -64,7 +65,8 @@ export function SendSmsModal({
       onOpenChange(false);
     } catch (error) {
       console.error('Error sending SMS:', error);
-      toast.error('فشل إرسال الرسالة');
+      const msg = await extractFunctionErrorMessage(error);
+      toast.error(msg || 'فشل إرسال الرسالة');
     } finally {
       setSending(false);
     }

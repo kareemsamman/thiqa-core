@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { 
   Loader2, 
   ArrowLeftRight, 
@@ -466,15 +467,20 @@ export function TransferPolicyModal({
 
           if (smsError) {
             console.error("SMS send error:", smsError);
-            toast({ 
-              title: "تحذير", 
-              description: "تم تحويل الوثيقة لكن فشل إرسال الرسالة"
+            const smsMsg = await extractFunctionErrorMessage(smsError);
+            toast({
+              title: "تحذير",
+              description: smsMsg || "تم تحويل الوثيقة لكن فشل إرسال الرسالة"
             });
           } else {
             toast({ title: "تم", description: "تم إرسال رسالة التحويل للعميل" });
           }
         } catch (smsErr) {
           console.error("SMS error:", smsErr);
+          const smsMsg = await extractFunctionErrorMessage(smsErr);
+          if (smsMsg) {
+            toast({ title: "تحذير", description: smsMsg });
+          }
         }
       }
 

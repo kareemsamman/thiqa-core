@@ -6,6 +6,7 @@
  import { Badge } from "@/components/ui/badge";
  import { supabase } from "@/integrations/supabase/client";
  import { useToast } from "@/hooks/use-toast";
+ import { extractFunctionErrorMessage } from "@/lib/functionError";
  import {
    Send,
    Loader2,
@@ -82,9 +83,10 @@
        }
      } catch (error: any) {
        console.error("Error sending signature link:", error);
+       const description = await extractFunctionErrorMessage(error);
        toast({
          title: "خطأ",
-         description: error.message || "فشل في إرسال رابط التوقيع",
+         description: description || "فشل في إرسال رابط التوقيع",
          variant: "destructive",
        });
      } finally {

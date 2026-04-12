@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { toast } from 'sonner';
 import { 
   PolicyRecord, 
@@ -186,8 +187,11 @@ export function PolicyCardsView({
       const { data, error } = await supabase.functions.invoke('send-invoice-sms', {
         body: { policy_id: policyId, force_resend: true }
       });
-      
-      if (error) throw new Error('فشل في الإرسال');
+
+      if (error) {
+        const msg = (await extractFunctionErrorMessage(error)) || 'فشل في الإرسال';
+        throw new Error(msg);
+      }
       if (data?.success) {
         toast.success('تم إرسال الفاتورة للعميل');
       }

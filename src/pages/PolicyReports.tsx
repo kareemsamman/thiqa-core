@@ -58,6 +58,7 @@ import {
   Package,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
@@ -730,7 +731,8 @@ export default function PolicyReports() {
       fetchRenewals();
     } catch (error: any) {
       console.error('Error sending reminders:', error);
-      toast.error(error.message || 'فشل في إرسال التذكيرات');
+      const msg = await extractFunctionErrorMessage(error);
+      toast.error(msg || 'فشل في إرسال التذكيرات');
     } finally {
       setSendingReminders(false);
     }
@@ -774,7 +776,8 @@ export default function PolicyReports() {
       fetchRenewals();
     } catch (error: any) {
       console.error('Error sending SMS:', error);
-      toast.error(error.message || 'فشل في إرسال الرسالة');
+      const msg = await extractFunctionErrorMessage(error);
+      toast.error(msg || 'فشل في إرسال الرسالة');
     } finally {
       setSendingSingleSms(null);
     }

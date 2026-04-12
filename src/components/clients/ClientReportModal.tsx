@@ -35,6 +35,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
@@ -492,7 +493,8 @@ export function ClientReportModal({
       toast.success('تم إرسال رابط التقرير عبر SMS بنجاح');
     } catch (error) {
       console.error('Error sending SMS:', error);
-      toast.error('فشل في إرسال الرسالة');
+      const msg = await extractFunctionErrorMessage(error);
+      toast.error(msg || 'فشل في إرسال الرسالة');
     } finally {
       setSendingSms(false);
     }

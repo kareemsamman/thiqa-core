@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
+import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { toast } from "sonner";
 import { Printer, MessageSquare, X, Loader2, Check, AlertCircle, Receipt } from "lucide-react";
 
@@ -86,9 +87,8 @@ export function PolicySuccessDialog({
 
   const extractErrorMessage = async (result: { data: any; error: any }): Promise<string> => {
     if (result.error) {
-      if (typeof result.error === 'string') return result.error;
-      if (result.error.message) return result.error.message;
-      return 'حدث خطأ غير متوقع';
+      const parsed = await extractFunctionErrorMessage(result.error);
+      return parsed || 'حدث خطأ غير متوقع';
     }
     if (result.data?.error) return result.data.error;
     return 'حدث خطأ غير متوقع';

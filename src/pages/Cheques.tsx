@@ -59,6 +59,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { useToast } from "@/hooks/use-toast";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH, getEffectiveChequeStatus, isChequeOverdue } from "@/lib/chequeUtils";
@@ -459,7 +460,7 @@ export default function Cheques() {
           const autoMessage = `مرحباً ${clientName}، نود إعلامك بأن الشيك رقم ${chequeNum} بمبلغ ${formatCurrency(cheque.amount)} قد تم إرجاعه. يرجى التواصل معنا لتسوية الأمر.`;
           
           try {
-            await supabase.functions.invoke('send-sms', {
+            const { error: autoSmsError } = await supabase.functions.invoke('send-sms', {
               body: {
                 phone: cheque.policy.client.phone_number,
                 message: autoMessage,
@@ -468,9 +469,14 @@ export default function Cheques() {
                 smsType: 'manual',
               }
             });
+            if (autoSmsError) throw autoSmsError;
             toast({ title: "تم إرسال SMS", description: "تم إرسال إشعار للعميل بالشيك المرتجع" });
           } catch (smsError) {
             console.error('Failed to send auto SMS:', smsError);
+            const msg = await extractFunctionErrorMessage(smsError);
+            if (msg) {
+              toast({ title: "تنبيه", description: msg });
+            }
           }
         }
       }
@@ -582,7 +588,8 @@ export default function Cheques() {
       setSmsDialogOpen(false);
       setSmsCheque(null);
     } catch (error) {
-      toast({ title: "خطأ", description: "فشل في إرسال الرسالة", variant: "destructive" });
+      const description = await extractFunctionErrorMessage(error);
+      toast({ title: "خطأ", description: description || "فشل في إرسال الرسالة", variant: "destructive" });
     } finally {
       setSendingSms(false);
     }
