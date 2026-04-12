@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
       .select(`
         id, policy_type_parent, policy_number, start_date, end_date,
         insurance_price, payed_for_company, notes, car_id, client_id,
-        road_service_id, accident_fee_service_id, branch_id
+        road_service_id, accident_fee_service_id, branch_id, agent_id
       `)
       .eq("id", policy_id)
       .single();
