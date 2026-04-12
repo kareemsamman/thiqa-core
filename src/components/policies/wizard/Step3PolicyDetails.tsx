@@ -1176,7 +1176,7 @@ export function Step3PolicyDetails({
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <FolderOpen className="h-4 w-4 text-muted-foreground" />
-              <Label className="font-semibold">ملفات داخلية</Label>
+              <Label className="font-semibold">ملفات داخلية / أوراق ثبوتية</Label>
             </div>
             <div className="flex items-center gap-1.5">
               {/* Scan Button */}
