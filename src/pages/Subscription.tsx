@@ -792,9 +792,24 @@ export default function Subscription() {
 
           {/* ═══ Payments Tab ═══ */}
           <TabsContent value="payments" className="mt-5 space-y-5">
-            {/* Next billing summary — only shown for paying agents */}
-            {!sub?.isTrial && (agent.monthly_price || 0) > 0 && (() => {
-              const basePrice = agent.monthly_price || 0;
+            {/* Next billing summary — visible for both trial and paying
+                agents. For trial agents we use the pending plan (if chosen)
+                or fall back to the currently selected plan to preview what
+                the first real bill will look like once the trial ends. */}
+            {(() => {
+              // Resolve the plan this agent will be billed under next.
+              const billingPlanKey = sub?.isTrial
+                ? (agent.pending_plan || agent.plan)
+                : agent.plan;
+              const billingPlan = plans.find(p => p.plan_key === billingPlanKey);
+              const basePrice = sub?.isTrial
+                ? (billingPlan?.monthly_price ?? 0)
+                : (agent.monthly_price || 0);
+
+              // Nothing useful to show if we can't resolve any base price
+              // (e.g. custom plan awaiting quote). Hide the card entirely.
+              if (basePrice <= 0 && unbilledOverages.length === 0) return null;
+
               const extrasTotal = unbilledOverages.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
               const nextTotal = basePrice + extrasTotal;
               const smsExtras = unbilledOverages.filter(o => o.usage_type === 'sms');
@@ -803,6 +818,14 @@ export default function Subscription() {
               const smsTotal = smsExtras.reduce((s, o) => s + Number(o.total_amount), 0);
               const aiCount = aiExtras.reduce((s, o) => s + o.extra_count, 0);
               const aiTotal = aiExtras.reduce((s, o) => s + Number(o.total_amount), 0);
+
+              const subtitle = sub?.isTrial
+                ? (agent.pending_plan
+                    ? `أول فاتورة بعد انتهاء التجربة — خطة ${billingPlan?.name || agent.pending_plan}`
+                    : "معاينة تقديرية لأول فاتورة بعد انتهاء التجربة. غيّر خطتك من تبويب \"الخطة والاشتراك\".")
+                : sub?.expiresAt
+                  ? `تاريخ الإصدار المتوقع ${format(sub.expiresAt, "dd/MM/yyyy")}`
+                  : "تفاصيل ما سيُحسب عليك في الفاتورة القادمة";
 
               return (
                 <Card className="overflow-hidden shadow-sm border-primary/20">
@@ -814,16 +837,18 @@ export default function Subscription() {
                           <CreditCard className="h-5 w-5" />
                         </div>
                         <div>
-                          <h3 className="text-lg font-bold">الفاتورة القادمة</h3>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {sub?.expiresAt
-                              ? `تاريخ الإصدار المتوقع ${format(sub.expiresAt, "dd/MM/yyyy")}`
-                              : "تفاصيل ما سيُحسب عليك في الفاتورة القادمة"}
+                          <h3 className="text-lg font-bold">
+                            {sub?.isTrial ? "فاتورتك الأولى المتوقعة" : "الفاتورة القادمة"}
+                          </h3>
+                          <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
+                            {subtitle}
                           </p>
                         </div>
                       </div>
                       <div className="text-left">
-                        <p className="text-[10px] text-muted-foreground">الإجمالي المتوقع</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {sub?.isTrial ? "الإجمالي التقديري" : "الإجمالي المتوقع"}
+                        </p>
                         <p className="text-3xl font-bold text-primary tabular-nums">
                           ₪{nextTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
@@ -837,9 +862,11 @@ export default function Subscription() {
                           <Crown className="h-4 w-4 text-muted-foreground" />
                           <div>
                             <p className="text-sm font-medium">
-                              خطة {agent.plan === "pro" ? "Pro" : agent.plan === "basic" ? "Basic" : agent.plan}
+                              خطة {billingPlan?.name || (billingPlanKey === "pro" ? "Pro" : billingPlanKey === "basic" ? "Basic" : billingPlanKey)}
                             </p>
-                            <p className="text-[10px] text-muted-foreground">اشتراك شهري</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {sub?.isTrial ? "اشتراك شهري — يبدأ بعد انتهاء التجربة" : "اشتراك شهري"}
+                            </p>
                           </div>
                         </div>
                         <span className="font-semibold tabular-nums">
