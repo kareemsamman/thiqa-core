@@ -1545,9 +1545,14 @@ export function PolicyWizard({
     }
   };
 
-  // Handle dialog close
+  // Handle dialog close. Closing always discards the draft — the user has
+  // to use the minimize button if they want to preserve it. Outside-click
+  // and Escape are disabled below, so this only fires from the X button or
+  // the programmatic onOpenChange path after success.
   const handleClose = () => {
     if (saving) return;
+    resetForm();
+    clearDraft();
     onOpenChange(false);
   };
 
@@ -1573,6 +1578,9 @@ export function PolicyWizard({
           hideCloseButton
           className="max-w-6xl w-[96vw] sm:max-h-[95vh] max-h-[100dvh] overflow-hidden flex flex-col sm:rounded-2xl rounded-none p-3 sm:p-6"
           dir="rtl"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
         >
           {/* Window-style controls: minimize + close on the same line */}
           <div className="absolute left-4 top-4 flex items-center gap-1 z-10">

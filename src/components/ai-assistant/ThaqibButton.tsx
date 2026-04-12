@@ -11,7 +11,7 @@ export function ThaqibButton({ onClick, visible }: ThaqibButtonProps) {
     <button
       onClick={onClick}
       className={cn(
-        "fixed bottom-28 left-4 z-50 h-12 w-12 rounded-full shadow-lg",
+        "fixed bottom-28 md:bottom-4 left-4 z-50 h-12 w-12 rounded-full shadow-lg",
         "bg-[#122143] hover:bg-[#1a3260] text-white",
         "flex items-center justify-center transition-all duration-300",
         "hover:scale-110 active:scale-95",
