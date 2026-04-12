@@ -674,15 +674,23 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground">
-      {/* Header: logo + site title */}
-      <div className="flex items-center gap-3 px-4 py-4 border-b">
-        {isThiqaSuperAdmin ? (
-          <img src={thiqaLogo} alt="Thiqa" className="h-9 w-9 rounded-lg object-contain" />
-        ) : siteSettings?.logo_url ? (
-          <img src={siteSettings.logo_url} alt="Logo" className="h-9 w-9 rounded-lg object-contain" />
-        ) : (
-          <img src={thiqaLogoIcon} alt="ثقة" className="h-9 w-9 rounded-lg object-contain" />
-        )}
+      {/* Grab handle — iOS-style bottom sheet affordance */}
+      <div className="flex justify-center pt-2 pb-1 shrink-0">
+        <div className="h-1 w-10 rounded-full bg-muted-foreground/25" />
+      </div>
+
+      {/* Header: logo + site title. Logo sits on a tinted circle so white
+          or light-colored logos stay visible against the white sheet bg. */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b">
+        <div className="h-11 w-11 rounded-full bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0 p-1.5">
+          {isThiqaSuperAdmin ? (
+            <img src={thiqaLogo} alt="Thiqa" className="max-h-full max-w-full object-contain" />
+          ) : siteSettings?.logo_url ? (
+            <img src={siteSettings.logo_url} alt="Logo" className="max-h-full max-w-full object-contain" />
+          ) : (
+            <img src={thiqaLogoIcon} alt="ثقة" className="max-h-full max-w-full object-contain" />
+          )}
+        </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">
             {siteSettings?.site_title || 'Thiqa'}
@@ -818,11 +826,11 @@ export function Sidebar() {
       {/* Mobile top navbar */}
       <MobileTopBar onOpenMenu={() => setMobileOpen(true)} />
 
-      {/* Mobile drawer — light themed redesign */}
+      {/* Mobile drawer — light themed bottom sheet (slides up) */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent
-          side="right"
-          className="w-[320px] sm:w-[340px] p-0 border-l bg-background text-foreground"
+          side="bottom"
+          className="w-full h-[90vh] max-h-[90vh] p-0 border-t rounded-t-2xl bg-background text-foreground"
         >
           <MobileSidebarContent onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
