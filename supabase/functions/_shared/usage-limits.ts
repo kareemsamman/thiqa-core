@@ -22,7 +22,12 @@ export interface LimitConfig {
 export interface LimitCheck {
   allowed: boolean;
   used: number;
+  /** Base monthly allowance for this usage type. */
   limit: number;
+  /** Persistent credit balance (never expires). */
+  credit_balance: number;
+  /** base_limit + credit_balance — how many more calls the agent can make right now. */
+  effective_limit: number;
   limit_type: LimitType;
   period: string;
   /** Arabic label for the period, e.g. "شهرياً" / "سنوياً". */
@@ -108,36 +113,37 @@ export async function resolveLimitConfig(
 }
 
 /**
- * Sum active overages purchased by the agent for the given usage type + period.
- * Falls back to 0 on any error so a failed lookup never blocks a legitimate
- * send — the base limit still applies.
+ * Read the persistent credit balance for an agent + usage type from the
+ * credit wallet. Falls back to 0 on any error so a failed lookup doesn't
+ * erroneously over-charge the agent's quota.
  */
-async function sumOverageCount(
+async function getCreditBalance(
   supabase: any,
   agentId: string,
   usageType: UsageType,
-  period: string,
 ): Promise<number> {
   try {
     const { data } = await supabase
-      .from("agent_usage_overages")
-      .select("extra_count")
+      .from("agent_credit_wallet")
+      .select("sms_credit_balance, ai_credit_balance")
       .eq("agent_id", agentId)
-      .eq("usage_type", usageType)
-      .eq("period", period);
+      .maybeSingle();
     if (!data) return 0;
-    return data.reduce((total: number, row: any) => total + (row.extra_count ?? 0), 0);
+    return usageType === "sms"
+      ? (data.sms_credit_balance ?? 0)
+      : (data.ai_credit_balance ?? 0);
   } catch (err) {
-    console.warn("[usage-limits] agent_usage_overages lookup failed:", err);
+    console.warn("[usage-limits] agent_credit_wallet lookup failed:", err);
     return 0;
   }
 }
 
 /**
- * Check whether the given agent is within their quota for this usage type.
- * The effective limit is `config.limit_count + sum(active overages)` so a
- * fresh overage purchase unblocks subsequent calls immediately. If the agent
- * has `unlimited`, always returns allowed with used=0.
+ * Check whether the given agent is within their quota. The agent is allowed
+ * if they haven't exhausted the base monthly allowance OR if they have any
+ * credit balance left in the wallet. Credits are persistent — they only
+ * decrement when the base allowance for the current period is already spent.
+ * If the agent has `unlimited`, always returns allowed with used=0.
  */
 export async function checkUsageLimit(
   supabase: any,
@@ -151,6 +157,8 @@ export async function checkUsageLimit(
       allowed: true,
       used: 0,
       limit: 0,
+      credit_balance: 0,
+      effective_limit: 0,
       limit_type: "unlimited",
       period: currentPeriod("monthly"),
       period_label: periodLabel("unlimited"),
@@ -173,13 +181,19 @@ export async function checkUsageLimit(
     console.warn("[usage-limits] agent_usage_log lookup failed:", err);
   }
 
-  const overageCount = await sumOverageCount(supabase, agentId, usageType, period);
-  const effectiveLimit = config.limit_count + overageCount;
+  const creditBalance = await getCreditBalance(supabase, agentId, usageType);
+  const baseLimit = config.limit_count;
+  const effectiveLimit = baseLimit + creditBalance;
+
+  // Allowed if we still have room in the base allowance OR credits to spend.
+  const allowed = used < baseLimit || creditBalance > 0;
 
   return {
-    allowed: used < effectiveLimit,
+    allowed,
     used,
-    limit: effectiveLimit,
+    limit: baseLimit,
+    credit_balance: creditBalance,
+    effective_limit: effectiveLimit,
     limit_type: config.limit_type,
     period,
     period_label: periodLabel(config.limit_type),
@@ -187,10 +201,11 @@ export async function checkUsageLimit(
 }
 
 /**
- * Increment the usage counter for this agent + type.
- * Uses `increment_usage_log` RPC with an upsert fallback if the RPC errors.
- * Never throws — logs warnings instead, since a failed tracking write should
- * not block a successful SMS/AI send.
+ * Increment the usage counter for this agent + type and, if the base monthly
+ * allowance is already exhausted, consume one credit from the wallet. Uses
+ * the `log_usage_with_credit` RPC for atomicity. Falls back to the simple
+ * `increment_usage_log` RPC (and then a raw upsert) so a failed bookkeeping
+ * write never blocks a successful send.
  */
 export async function logUsage(
   supabase: any,
@@ -198,32 +213,61 @@ export async function logUsage(
   usageType: UsageType,
 ): Promise<void> {
   const config = await resolveLimitConfig(supabase, agentId, usageType);
-  // Log against whichever period the agent is billed in. Default to monthly
-  // for unlimited so we still get a usage history to display.
   const effectiveType: LimitType = config.limit_type === "unlimited" ? "monthly" : config.limit_type;
   const period = currentPeriod(effectiveType);
 
+  // Unlimited agents skip the credit plumbing entirely.
+  if (config.limit_type === "unlimited") {
+    try {
+      await supabase.rpc("increment_usage_log", {
+        p_agent_id: agentId,
+        p_usage_type: usageType,
+        p_period: period,
+      });
+    } catch (err) {
+      console.warn("[usage-limits] increment_usage_log failed for unlimited agent:", err);
+    }
+    return;
+  }
+
   try {
-    const { error } = await supabase.rpc("increment_usage_log", {
+    const { error } = await supabase.rpc("log_usage_with_credit", {
       p_agent_id: agentId,
       p_usage_type: usageType,
       p_period: period,
+      p_base_limit: config.limit_count,
     });
     if (error) throw error;
   } catch (err: any) {
-    console.warn("[usage-limits] increment_usage_log RPC failed, using upsert fallback:", err?.message ?? err);
+    const msg = String(err?.message ?? err ?? "");
+    // `insufficient_credits` shouldn't normally happen because checkUsageLimit
+    // is called before the send, but log it just in case.
+    if (msg.includes("insufficient_credits")) {
+      console.warn("[usage-limits] log_usage_with_credit reported insufficient credits");
+      return;
+    }
+    console.warn("[usage-limits] log_usage_with_credit failed, falling back to increment_usage_log:", msg);
     try {
-      await supabase.from("agent_usage_log").upsert(
-        {
-          agent_id: agentId,
-          usage_type: usageType,
-          period,
-          count: 1,
-        },
-        { onConflict: "agent_id,usage_type,period" },
-      );
-    } catch (upsertErr) {
-      console.error("[usage-limits] upsert fallback also failed:", upsertErr);
+      await supabase.rpc("increment_usage_log", {
+        p_agent_id: agentId,
+        p_usage_type: usageType,
+        p_period: period,
+      });
+    } catch (rpcErr) {
+      console.warn("[usage-limits] increment_usage_log fallback failed, upserting directly:", rpcErr);
+      try {
+        await supabase.from("agent_usage_log").upsert(
+          {
+            agent_id: agentId,
+            usage_type: usageType,
+            period,
+            count: 1,
+          },
+          { onConflict: "agent_id,usage_type,period" },
+        );
+      } catch (upsertErr) {
+        console.error("[usage-limits] upsert fallback also failed:", upsertErr);
+      }
     }
   }
 }

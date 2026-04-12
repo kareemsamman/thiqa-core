@@ -159,7 +159,8 @@ Deno.serve(async (req) => {
     const totalAmount = Math.round(extraCount * unitPrice * 100) / 100;
     const period = currentMonthPeriod();
 
-    // Insert the overage row
+    // 1. Insert the audit row. `period` is now just metadata for "when was
+    //    this bought" — the quota itself lives in the wallet below.
     const { data: overageRow, error: insertErr } = await adminClient
       .from("agent_usage_overages")
       .insert({
@@ -170,6 +171,7 @@ Deno.serve(async (req) => {
         unit_price: unitPrice,
         total_amount: totalAmount,
         purchased_by: user.id,
+        source: "wallet",
       })
       .select("id, created_at")
       .single();
@@ -177,6 +179,31 @@ Deno.serve(async (req) => {
     if (insertErr) {
       console.error("[purchase-usage-overage] insert failed:", insertErr);
       throw new Error("فشل في تسجيل عملية الشراء");
+    }
+
+    // 2. Add the credit to the agent's wallet. Upsert so the first purchase
+    //    also seeds the row.
+    const { data: walletRow } = await adminClient
+      .from("agent_credit_wallet")
+      .select("sms_credit_balance, ai_credit_balance")
+      .eq("agent_id", agentId)
+      .maybeSingle();
+
+    if (!walletRow) {
+      await adminClient.from("agent_credit_wallet").insert({
+        agent_id: agentId,
+        sms_credit_balance: usageType === "sms" ? extraCount : 0,
+        ai_credit_balance: usageType === "ai_chat" ? extraCount : 0,
+      });
+    } else {
+      const update =
+        usageType === "sms"
+          ? { sms_credit_balance: (walletRow.sms_credit_balance || 0) + extraCount }
+          : { ai_credit_balance: (walletRow.ai_credit_balance || 0) + extraCount };
+      await adminClient
+        .from("agent_credit_wallet")
+        .update({ ...update, updated_at: new Date().toISOString() })
+        .eq("agent_id", agentId);
     }
 
     // Fetch agent info for the email
@@ -298,7 +325,7 @@ Deno.serve(async (req) => {
         unit_price: unitPrice,
         total_amount: totalAmount,
         period,
-        message: `تم إضافة ${extraCount} ${usageType === "sms" ? "رسالة" : "محادثة"} بنجاح. المبلغ ₪${totalAmount.toFixed(2)} سيُضاف إلى فاتورتك الشهرية.`,
+        message: `تم إضافة ${extraCount} ${usageType === "sms" ? "رسالة" : "محادثة"} إلى رصيدك. الرصيد لا ينتهي شهرياً ويُستخدم تلقائياً بعد استنفاد الحد المجاني. المبلغ ₪${totalAmount.toFixed(2)} سيُضاف إلى فاتورتك القادمة.`,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

@@ -52,14 +52,17 @@ const PLAN_ICONS: Record<string, typeof Rocket> = {
 function UsageStatsSection({ agentId }: { agentId: string | null }) {
   const [limits, setLimits] = useState<any>(null);
   const [usage, setUsage] = useState<any[]>([]);
-  const [overages, setOverages] = useState<any[]>([]);
+  const [wallet, setWallet] = useState<{ sms_credit_balance: number; ai_credit_balance: number }>({
+    sms_credit_balance: 0,
+    ai_credit_balance: 0,
+  });
   const [reloadToken, setReloadToken] = useState(0);
   const [quotaDialogType, setQuotaDialogType] = useState<OverageUsageType | null>(null);
 
   useEffect(() => {
     if (!agentId) return;
     (async () => {
-      const [limitsRes, usageRes, platformRes, overagesRes] = await Promise.all([
+      const [limitsRes, usageRes, platformRes, walletRes] = await Promise.all([
         supabase.from("agent_usage_limits" as any).select("*").eq("agent_id", agentId).maybeSingle(),
         supabase.from("agent_usage_log" as any).select("*").eq("agent_id", agentId).order("period", { ascending: false }).limit(12),
         supabase
@@ -72,9 +75,10 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
             "default_ai_limit_count",
           ]),
         supabase
-          .from("agent_usage_overages" as any)
-          .select("usage_type, period, extra_count, total_amount")
-          .eq("agent_id", agentId),
+          .from("agent_credit_wallet" as any)
+          .select("sms_credit_balance, ai_credit_balance")
+          .eq("agent_id", agentId)
+          .maybeSingle(),
       ]);
 
       // Build platform defaults map
@@ -91,7 +95,10 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
 
       setLimits(limitsRes.data || platformDefaults);
       setUsage((usageRes.data as any) || []);
-      setOverages((overagesRes.data as any) || []);
+      setWallet({
+        sms_credit_balance: (walletRes.data as any)?.sms_credit_balance ?? 0,
+        ai_credit_balance: (walletRes.data as any)?.ai_credit_balance ?? 0,
+      });
     })();
   }, [agentId, reloadToken]);
 
@@ -106,21 +113,14 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
     return usage.find((u: any) => u.usage_type === type && u.period === period)?.count || 0;
   };
 
-  const getOverage = (type: string) =>
-    overages
-      .filter((o: any) => o.usage_type === type && o.period === currentMonth)
-      .reduce((s: number, o: any) => s + (o.extra_count || 0), 0);
-
   const smsUsed = limits.sms_limit_type === 'monthly' ? getUsage('sms', currentMonth) : getUsage('sms', currentYear);
   const aiUsed = limits.ai_limit_type === 'monthly' ? getUsage('ai_chat', currentMonth) : getUsage('ai_chat', currentYear);
-  const smsOverage = getOverage('sms');
-  const aiOverage = getOverage('ai_chat');
   const smsBaseLimit = limits.sms_limit_count ?? 0;
   const aiBaseLimit = limits.ai_limit_count ?? 0;
-  const smsEffectiveLimit = smsBaseLimit + smsOverage;
-  const aiEffectiveLimit = aiBaseLimit + aiOverage;
-  const smsMax = limits.sms_limit_type === 'unlimited' ? '∞' : smsEffectiveLimit;
-  const aiMax = limits.ai_limit_type === 'unlimited' ? '∞' : aiEffectiveLimit;
+  const smsCredits = wallet.sms_credit_balance;
+  const aiCredits = wallet.ai_credit_balance;
+  const smsMax = limits.sms_limit_type === 'unlimited' ? '∞' : smsBaseLimit;
+  const aiMax = limits.ai_limit_type === 'unlimited' ? '∞' : aiBaseLimit;
   const typeLabel = (t: string) => t === 'monthly' ? 'شهرياً' : t === 'yearly' ? 'سنوياً' : 'غير محدود';
 
   const renderUsageCard = (opts: {
@@ -129,15 +129,18 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
     limitType: string;
     used: number;
     max: number | string;
-    limitCount: number;
-    overage: number;
+    baseLimit: number;
+    credits: number;
     purchaseType: OverageUsageType;
   }) => {
     const Icon = opts.icon;
-    const effectiveLimit = opts.limitCount;
-    const pct = opts.limitType === 'unlimited' ? 0 : Math.min(100, (opts.used / Math.max(1, effectiveLimit)) * 100);
+    const pct = opts.limitType === 'unlimited' ? 0 : Math.min(100, (opts.used / Math.max(1, opts.baseLimit)) * 100);
     const nearLimit = pct >= 80 && opts.limitType !== 'unlimited';
     const atLimit = pct >= 100 && opts.limitType !== 'unlimited';
+    // If the base is used up but we still have credits, the state is "using credits" — not "at limit".
+    const usingCredits = atLimit && opts.credits > 0;
+    const hardBlocked = atLimit && opts.credits <= 0;
+
     return (
       <Card className="shadow-sm hover:shadow-md transition-shadow">
         <CardContent className="p-5 space-y-4">
@@ -145,7 +148,8 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
             <div className="flex items-center gap-3">
               <div className={cn(
                 "h-11 w-11 rounded-xl flex items-center justify-center shrink-0",
-                atLimit ? "bg-destructive/10 text-destructive" :
+                hardBlocked ? "bg-destructive/10 text-destructive" :
+                usingCredits ? "bg-blue-100 text-blue-600" :
                 nearLimit ? "bg-amber-100 text-amber-600" :
                 "bg-primary/10 text-primary"
               )}>
@@ -153,11 +157,13 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
               </div>
               <div>
                 <p className="font-semibold text-sm">{opts.title}</p>
-                <p className="text-[11px] text-muted-foreground">الحد {typeLabel(opts.limitType)}</p>
+                <p className="text-[11px] text-muted-foreground">الحد الشهري {typeLabel(opts.limitType)}</p>
               </div>
             </div>
-            {atLimit ? (
+            {hardBlocked ? (
               <Badge variant="destructive" className="text-[10px]">مكتمل</Badge>
+            ) : usingCredits ? (
+              <Badge className="text-[10px] bg-blue-100 text-blue-700 border-blue-200">يعمل من الرصيد</Badge>
             ) : nearLimit ? (
               <Badge className="text-[10px] bg-amber-100 text-amber-700 border-amber-200">اقترب من الحد</Badge>
             ) : (
@@ -169,7 +175,7 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
             <div className="flex items-baseline gap-1">
               <span className={cn(
                 "text-3xl font-bold tabular-nums",
-                atLimit ? "text-destructive" : nearLimit ? "text-amber-600" : ""
+                hardBlocked ? "text-destructive" : nearLimit && !usingCredits ? "text-amber-600" : ""
               )}>
                 {opts.used}
               </span>
@@ -187,8 +193,8 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
               <div
                 className={cn(
                   "h-full rounded-full transition-all duration-500",
-                  atLimit ? "bg-destructive" :
-                  nearLimit ? "bg-amber-500" :
+                  hardBlocked ? "bg-destructive" :
+                  nearLimit && !usingCredits ? "bg-amber-500" :
                   "bg-primary"
                 )}
                 style={{ width: `${pct}%` }}
@@ -196,11 +202,22 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
             </div>
           )}
 
-          {opts.overage > 0 && (
-            <div className="flex items-center gap-2 text-[11px] text-primary bg-primary/5 border border-primary/15 rounded-lg px-2.5 py-1.5">
-              <Plus className="h-3 w-3" />
-              <span>
-                تم شراء <span className="font-bold">+{opts.overage}</span> إضافية لهذا الشهر
+          {/* Credit wallet row — shown whenever there's a balance, or when
+              the user has hit the base limit (so they know WHY it's blocked). */}
+          {opts.limitType !== 'unlimited' && (opts.credits > 0 || hardBlocked) && (
+            <div className={cn(
+              "flex items-center justify-between rounded-lg px-3 py-2 text-xs",
+              opts.credits > 0
+                ? "bg-blue-50 border border-blue-200 text-blue-900"
+                : "bg-destructive/5 border border-destructive/30 text-destructive"
+            )}>
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="font-medium">الرصيد المشحون</span>
+              </div>
+              <span className="font-bold tabular-nums">
+                {opts.credits.toLocaleString()}
+                <span className="text-[10px] font-normal mr-1">لا ينتهي</span>
               </span>
             </div>
           )}
@@ -208,13 +225,13 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
           {opts.limitType !== 'unlimited' && (
             <Button
               type="button"
-              variant="outline"
+              variant={hardBlocked ? "default" : "outline"}
               size="sm"
               className="w-full gap-2"
               onClick={() => setQuotaDialogType(opts.purchaseType)}
             >
               <Plus className="h-4 w-4" />
-              شراء رصيد إضافي
+              {opts.credits > 0 ? "شراء المزيد من الرصيد" : "شراء رصيد إضافي"}
             </Button>
           )}
         </CardContent>
@@ -230,7 +247,7 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
           استخدام الخدمات
         </h2>
         <p className="text-xs text-muted-foreground mt-1">
-          الحدود المحددة لحسابك واستهلاكك الحالي. يمكنك شراء رصيد إضافي لهذا الشهر ويُضاف إلى فاتورتك الشهرية.
+          لكل حساب حد شهري مجاني يتجدد كل شهر. عند استنفاده يمكنك شحن رصيد إضافي يبقى معك ولا ينتهي حتى تستخدمه كاملاً.
         </p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -240,8 +257,8 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
           limitType: limits.sms_limit_type,
           used: smsUsed,
           max: smsMax,
-          limitCount: smsEffectiveLimit,
-          overage: smsOverage,
+          baseLimit: smsBaseLimit,
+          credits: smsCredits,
           purchaseType: "sms",
         })}
         {renderUsageCard({
@@ -250,8 +267,8 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
           limitType: limits.ai_limit_type,
           used: aiUsed,
           max: aiMax,
-          limitCount: aiEffectiveLimit,
-          overage: aiOverage,
+          baseLimit: aiBaseLimit,
+          credits: aiCredits,
           purchaseType: "ai_chat",
         })}
       </div>

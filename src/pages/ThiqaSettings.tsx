@@ -1079,6 +1079,8 @@ function AgentDefaultsTab() {
     default_sms_limit_count: "100",
     default_ai_limit_type: "monthly",
     default_ai_limit_count: "100",
+    sms_overage_unit_price: "0.3",
+    ai_overage_unit_price: "0.5",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showToken, setShowToken] = useState(false);
@@ -1097,6 +1099,8 @@ function AgentDefaultsTab() {
         default_sms_limit_count: settings.default_sms_limit_count || "100",
         default_ai_limit_type: settings.default_ai_limit_type || "monthly",
         default_ai_limit_count: settings.default_ai_limit_count || "100",
+        sms_overage_unit_price: settings.sms_overage_unit_price || "0.3",
+        ai_overage_unit_price: settings.ai_overage_unit_price || "0.5",
       });
     }
   }, [settings]);
@@ -1245,6 +1249,63 @@ function AgentDefaultsTab() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Overage pricing — what the agent pays per extra SMS / AI message
+          when they top up their credit wallet. Stored as unit price in ₪. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5" />
+            أسعار شراء الرصيد الإضافي
+          </CardTitle>
+          <CardDescription>
+            السعر لكل وحدة عندما يشتري الوكيل رصيداً إضافياً بعد انتهاء الحد المجاني الشهري.
+            الرصيد المشحون لا ينتهي شهرياً ويُستخدم تلقائياً.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="border rounded-lg p-4 space-y-3">
+              <Label className="font-bold">سعر رسالة SMS</Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.sms_overage_unit_price}
+                  onChange={e => setForm(f => ({ ...f, sms_overage_unit_price: e.target.value }))}
+                  className="pl-10"
+                />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  ₪ / رسالة
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                مثال: 0.3 = ثلث شيكل لكل رسالة. شراء +100 رسالة يكلف ₪{(parseFloat(form.sms_overage_unit_price || "0") * 100).toFixed(2)}.
+              </p>
+            </div>
+            <div className="border rounded-lg p-4 space-y-3">
+              <Label className="font-bold">سعر محادثة المساعد الذكي</Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.ai_overage_unit_price}
+                  onChange={e => setForm(f => ({ ...f, ai_overage_unit_price: e.target.value }))}
+                  className="pl-10"
+                />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  ₪ / محادثة
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                مثال: 0.5 = نصف شيكل لكل محادثة. شراء +100 محادثة يكلف ₪{(parseFloat(form.ai_overage_unit_price || "0") * 100).toFixed(2)}.
+              </p>
             </div>
           </div>
         </CardContent>
