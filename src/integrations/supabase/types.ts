@@ -5608,6 +5608,7 @@ export type Database = {
       }
       xservice_sync_log: {
         Row: {
+          agent_id: string | null
           created_at: string
           error_message: string | null
           id: string
@@ -5619,6 +5620,7 @@ export type Database = {
           xservice_policy_id: string | null
         }
         Insert: {
+          agent_id?: string | null
           created_at?: string
           error_message?: string | null
           id?: string
@@ -5630,6 +5632,7 @@ export type Database = {
           xservice_policy_id?: string | null
         }
         Update: {
+          agent_id?: string | null
           created_at?: string
           error_message?: string | null
           id?: string
@@ -5641,6 +5644,13 @@ export type Database = {
           xservice_policy_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "xservice_sync_log_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "xservice_sync_log_policy_id_fkey"
             columns: ["policy_id"]
@@ -5752,6 +5762,12 @@ export type Database = {
           email: string
           full_name: string
           id: string
+        }[]
+      }
+      get_admin_contact_emails: {
+        Args: never
+        Returns: {
+          email: string
         }[]
       }
       get_all_companies_wallet_summary: {
