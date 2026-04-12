@@ -8,7 +8,9 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { supabase } from "@/integrations/supabase/client";
-import { AlertCircle, Package, ArrowLeftRight, ImageIcon, FolderOpen, Upload, X, ChevronDown, ChevronUp, Printer, Loader2 } from "lucide-react";
+import { AlertCircle, Package, ArrowLeftRight, ImageIcon, FolderOpen, Upload, X, ChevronDown, ChevronUp, Printer, Loader2, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import '@/types/scanner.d.ts';
 import { cn } from "@/lib/utils";
@@ -825,15 +827,24 @@ export function Step3PolicyDetails({
 
       {/* Issue Date - before start/end dates, for all types */}
       <div>
-        <Label>تاريخ الإصدار</Label>
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Label className="mb-0">تاريخ الإصدار</Label>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" className="text-muted-foreground hover:text-foreground">
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p className="text-xs">التاريخ الذي تحسبه الشركة (افتراضياً = تاريخ البداية)</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
         <ArabicDatePicker
           value={policy.issue_date}
           onChange={(date) => setPolicy({ ...policy, issue_date: date })}
           placeholder="تاريخ الإصدار (افتراضي = تاريخ البداية)"
         />
-        <p className="text-xs text-muted-foreground mt-1">
-          التاريخ الذي تحسبه الشركة (افتراضياً = تاريخ البداية)
-        </p>
       </div>
 
       {/* Dates - Before Package Section to clarify these are for main policy */}
@@ -1093,160 +1104,173 @@ export function Step3PolicyDetails({
         />
       </div>
 
-      {/* File Uploaders */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Insurance Files */}
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <ImageIcon className="h-4 w-4 text-primary" />
-              <Label className="font-semibold">ملفات العميل</Label>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {/* Scan Button */}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="gap-1.5"
-                onClick={() => handleDirectScan('insurance')}
-                disabled={scanning === 'insurance'}
-              >
-                {scanning === 'insurance' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Printer className="h-4 w-4" />
-                )}
-                مسح
-              </Button>
-              {/* Upload Button */}
-              <div className="relative">
-                <input
-                  ref={insuranceInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,.pdf,video/*"
-                  onChange={(e) => handleFileSelect(e, 'insurance')}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full"
-                />
-                <Button type="button" size="sm" variant="outline" className="gap-1.5">
-                  <Upload className="h-4 w-4" />
-                  رفع ملف
-                </Button>
-              </div>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground mb-3">
-            فواتير وإيصالات ترسل للعميل
-          </p>
-          <div className="space-y-2 max-h-32 overflow-y-auto">
-            {insuranceFiles.length === 0 ? (
-              <div className="text-center py-4 text-muted-foreground text-sm">
-                لا توجد ملفات
-              </div>
-            ) : (
-              insuranceFiles.map((file, index) => (
-                <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {file.type.startsWith('image/') ? (
-                      <ImageIcon className="h-4 w-4 text-primary flex-shrink-0" />
-                    ) : (
-                      <FolderOpen className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    )}
-                    <span className="text-sm truncate">{file.name}</span>
-                    <span className="text-xs text-muted-foreground">({formatFileSize(file.size)})</span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-destructive hover:text-destructive flex-shrink-0"
-                    onClick={() => removeFile(index, 'insurance')}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
+      {/* File Uploaders — tabbed to save vertical space */}
+      <Card className="p-4">
+        <Tabs defaultValue="insurance" className="w-full">
+          <TabsList className="grid grid-cols-2 w-full">
+            <TabsTrigger value="insurance" className="gap-2">
+              <ImageIcon className="h-4 w-4" />
+              ملفات العميل
+              {insuranceFiles.length > 0 && (
+                <span className="text-[10px] bg-primary/15 text-primary rounded-full px-1.5 py-0.5 ml-1">
+                  {insuranceFiles.length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="crm" className="gap-2">
+              <FolderOpen className="h-4 w-4" />
+              ملفات داخلية
+              {crmFiles.length > 0 && (
+                <span className="text-[10px] bg-primary/15 text-primary rounded-full px-1.5 py-0.5 ml-1">
+                  {crmFiles.length}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
 
-        {/* CRM Files */}
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <FolderOpen className="h-4 w-4 text-muted-foreground" />
-              <Label className="font-semibold">ملفات داخلية / أوراق ثبوتية</Label>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {/* Scan Button */}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="gap-1.5"
-                onClick={() => handleDirectScan('crm')}
-                disabled={scanning === 'crm'}
-              >
-                {scanning === 'crm' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Printer className="h-4 w-4" />
-                )}
-                مسح
-              </Button>
-              {/* Upload Button */}
-              <div className="relative">
-                <input
-                  ref={crmInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,.pdf,video/*"
-                  onChange={(e) => handleFileSelect(e, 'crm')}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full"
-                />
-                <Button type="button" size="sm" variant="outline" className="gap-1.5">
-                  <Upload className="h-4 w-4" />
-                  رفع ملف
+          {/* Insurance Files Tab */}
+          <TabsContent value="insurance" className="mt-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                فواتير وإيصالات ترسل للعميل
+              </p>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 px-2 sm:px-3"
+                  onClick={() => handleDirectScan('insurance')}
+                  disabled={scanning === 'insurance'}
+                  title="مسح"
+                >
+                  {scanning === 'insurance' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Printer className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">مسح</span>
                 </Button>
-              </div>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground mb-3">
-            هوية، رخصة، صور سيارة - ملفات للاستخدام الداخلي فقط
-          </p>
-          <div className="space-y-2 max-h-32 overflow-y-auto">
-            {crmFiles.length === 0 ? (
-              <div className="text-center py-4 text-muted-foreground text-sm">
-                لا توجد ملفات
-              </div>
-            ) : (
-              crmFiles.map((file, index) => (
-                <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {file.type.startsWith('image/') ? (
-                      <ImageIcon className="h-4 w-4 text-primary flex-shrink-0" />
-                    ) : (
-                      <FolderOpen className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    )}
-                    <span className="text-sm truncate">{file.name}</span>
-                    <span className="text-xs text-muted-foreground">({formatFileSize(file.size)})</span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-destructive hover:text-destructive flex-shrink-0"
-                    onClick={() => removeFile(index, 'crm')}
-                  >
-                    <X className="h-3.5 w-3.5" />
+                <div className="relative">
+                  <input
+                    ref={insuranceInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf,video/*"
+                    onChange={(e) => handleFileSelect(e, 'insurance')}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                  />
+                  <Button type="button" size="sm" variant="outline" className="gap-1.5 px-2 sm:px-3" title="رفع ملف">
+                    <Upload className="h-4 w-4" />
+                    <span className="hidden sm:inline">رفع ملف</span>
                   </Button>
                 </div>
-              ))
-            )}
-          </div>
-        </Card>
-      </div>
+              </div>
+            </div>
+            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+              {insuranceFiles.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground text-sm border border-dashed rounded-lg">
+                  لا توجد ملفات
+                </div>
+              ) : (
+                insuranceFiles.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {file.type.startsWith('image/') ? (
+                        <ImageIcon className="h-4 w-4 text-primary flex-shrink-0" />
+                      ) : (
+                        <FolderOpen className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      )}
+                      <span className="text-sm truncate">{file.name}</span>
+                      <span className="text-xs text-muted-foreground">({formatFileSize(file.size)})</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive flex-shrink-0"
+                      onClick={() => removeFile(index, 'insurance')}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </TabsContent>
+
+          {/* CRM Files Tab */}
+          <TabsContent value="crm" className="mt-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                هوية، رخصة، صور سيارة - ملفات للاستخدام الداخلي فقط
+              </p>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 px-2 sm:px-3"
+                  onClick={() => handleDirectScan('crm')}
+                  disabled={scanning === 'crm'}
+                  title="مسح"
+                >
+                  {scanning === 'crm' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Printer className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">مسح</span>
+                </Button>
+                <div className="relative">
+                  <input
+                    ref={crmInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf,video/*"
+                    onChange={(e) => handleFileSelect(e, 'crm')}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                  />
+                  <Button type="button" size="sm" variant="outline" className="gap-1.5 px-2 sm:px-3" title="رفع ملف">
+                    <Upload className="h-4 w-4" />
+                    <span className="hidden sm:inline">رفع ملف</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+              {crmFiles.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground text-sm border border-dashed rounded-lg">
+                  لا توجد ملفات
+                </div>
+              ) : (
+                crmFiles.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {file.type.startsWith('image/') ? (
+                        <ImageIcon className="h-4 w-4 text-primary flex-shrink-0" />
+                      ) : (
+                        <FolderOpen className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      )}
+                      <span className="text-sm truncate">{file.name}</span>
+                      <span className="text-xs text-muted-foreground">({formatFileSize(file.size)})</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive flex-shrink-0"
+                      onClick={() => removeFile(index, 'crm')}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </Card>
     </div>
   );
 }

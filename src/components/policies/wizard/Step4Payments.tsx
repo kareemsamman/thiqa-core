@@ -253,11 +253,12 @@ export function Step4Payments({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="gap-2"
+                  className="gap-1.5 px-2 sm:px-3"
                   disabled={remainingToPay <= 0}
+                  title="تقسيط"
                 >
                   <Split className="h-4 w-4" />
-                  تقسيط
+                  <span className="hidden sm:inline">تقسيط</span>
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-64" align="end" dir="rtl">
@@ -297,22 +298,24 @@ export function Step4Payments({
               variant="outline"
               size="sm"
               onClick={() => setShowChequeScannerModal(true)}
-              className="gap-2"
+              className="gap-1.5 px-2 sm:px-3"
+              title="مسح شيكات"
             >
               <Scan className="h-4 w-4" />
-              مسح شيكات
+              <span className="hidden sm:inline">مسح شيكات</span>
             </Button>
-            
+
             {/* Add Payment Button - always show */}
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={addPayment}
-              className="gap-2"
+              className="gap-1.5 px-2 sm:px-3"
+              title="إضافة دفعة"
             >
               <Plus className="h-4 w-4" />
-              إضافة دفعة
+              <span className="hidden sm:inline">إضافة دفعة</span>
             </Button>
           </div>
         </div>
@@ -335,27 +338,29 @@ export function Step4Payments({
               
               return (
                 <Card key={payment.id} className={cn(
-                  "p-4",
+                  "p-3",
                   visaPaid && "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800",
                   isLocked && "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
                 )}>
                   {/* Locked Payment Badge */}
                   {isLocked && payment.locked_label && (
-                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-amber-200 dark:border-amber-700">
+                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-200 dark:border-amber-700">
                       <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                       <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
                         {payment.locked_label}
                       </span>
-                      <span className="text-xs text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded-full">
                         محسوبة تلقائيًا
                       </span>
                     </div>
                   )}
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+
+                  {/* Main row: Type / Amount / Date / Actions.
+                      On mobile we give the actions column its own row to keep the three fields readable. */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 items-end">
                     {/* Payment Type */}
                     <div>
-                      <Label className="text-xs mb-1.5 block">نوع الدفع</Label>
+                      <Label className="text-[10px] mb-1 block text-muted-foreground">نوع الدفع</Label>
                       <Select
                         value={payment.payment_type}
                         onValueChange={(v) => updatePayment(payment.id, 'payment_type', v)}
@@ -376,7 +381,7 @@ export function Step4Payments({
 
                     {/* Amount */}
                     <div>
-                      <Label className="text-xs mb-1.5 block">المبلغ (₪)</Label>
+                      <Label className="text-[10px] mb-1 block text-muted-foreground">المبلغ (₪)</Label>
                       <Input
                         type="number"
                         value={payment.amount || ''}
@@ -392,8 +397,8 @@ export function Step4Payments({
                     </div>
 
                     {/* Date */}
-                    <div>
-                      <Label className="text-xs mb-1.5 block">التاريخ</Label>
+                    <div className="col-span-2 lg:col-span-1">
+                      <Label className="text-[10px] mb-1 block text-muted-foreground">التاريخ</Label>
                       <ArabicDatePicker
                         value={payment.payment_date}
                         onChange={(date) => updatePayment(payment.id, 'payment_date', date)}
@@ -402,9 +407,8 @@ export function Step4Payments({
                       />
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-2">
-                      {/* Cheque Number (if cheque) */}
+                    {/* Actions (cheque# inline + visa pay / delete) */}
+                    <div className="col-span-2 lg:col-span-1 flex items-center gap-2">
                       {payment.payment_type === 'cheque' && !isLocked && (
                         <Input
                           value={payment.cheque_number || ''}
@@ -415,113 +419,90 @@ export function Step4Payments({
                           disabled={isDisabled}
                         />
                       )}
-                      
-                      {/* Visa Pay Button - only show if not locked */}
+
                       {isVisa && !visaPaid && !isLocked && (
                         <Button
                           type="button"
                           size="sm"
                           onClick={() => handleVisaPayClick(index)}
                           disabled={visaAmount <= 0 || isProcessing}
-                          className="gap-1.5 bg-primary hover:bg-primary/90"
+                          className="gap-1.5 bg-primary hover:bg-primary/90 flex-1 lg:flex-initial"
                         >
-                          {isProcessing ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <CreditCard className="h-4 w-4" />
-                          )}
+                          {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
                           {isProcessing ? 'جاري التحضير...' : 'ادفع'}
                         </Button>
                       )}
-                      
-                      {/* Paid Badge */}
+
                       {isVisa && visaPaid && (
-                        <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                        <span className="text-xs text-green-600 font-medium flex items-center gap-1 flex-1">
                           <CreditCard className="h-3.5 w-3.5" />
                           تم الدفع
                         </span>
                       )}
-                      
-                      {/* Locked Badge (for ELZAMI) */}
+
                       {isLocked && (
-                        <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                        <span className="text-xs text-amber-600 font-medium flex items-center gap-1 flex-1">
                           <Lock className="h-3.5 w-3.5" />
                           مقفلة
                         </span>
                       )}
-                      
-                      {/* Delete Button - hide for locked payments */}
+
                       {!visaPaid && !isLocked && (
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
                           onClick={() => removePayment(payment.id)}
-                          className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          className="h-9 w-9 mr-auto text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       )}
                     </div>
                   </div>
-                  
-                  {/* Image Upload Section for Cash/Cheque/Transfer */}
+
+                  {/* Inline receipt strip — thin, no divider, same card. */}
                   {(payment.payment_type === 'cash' || payment.payment_type === 'cheque' || payment.payment_type === 'transfer') && !visaPaid && (
-                    <div className="mt-3 pt-3 border-t border-border/50">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1">
-                          <Label className="text-xs text-muted-foreground mb-2 block">
-                            {payment.payment_type === 'cheque' ? 'صور الشيك (أمامي/خلفي)' : payment.payment_type === 'transfer' ? 'صور إيصال التحويل' : 'صور إيصال الدفع'}
-                          </Label>
-                          <div className="flex flex-wrap gap-2">
-                            {/* Display cheque image from scanner (CDN URL) */}
-                            {payment.cheque_image_url && (
-                              <div className="relative group">
-                                <img 
-                                  src={payment.cheque_image_url} 
-                                  alt="صورة الشيك" 
-                                  className="h-14 w-18 object-cover rounded border"
-                                />
-                              </div>
-                            )}
-                            {/* Preview existing images */}
-                            {getPreviewUrls(payment.id).map((url, imgIndex) => (
-                              <div key={imgIndex} className="relative group">
-                                <img 
-                                  src={url} 
-                                  alt="" 
-                                  className="h-14 w-18 object-cover rounded border"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => removeImage(payment.id, imgIndex)}
-                                  className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                            ))}
-                            {/* Upload button */}
-                            <label className="h-14 w-18 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors">
-                              <input 
-                                type="file" 
-                                accept="image/*,application/pdf" 
-                                multiple 
-                                onChange={(e) => handleImageSelect(payment.id, e)} 
-                                className="hidden" 
-                              />
-                              <Upload className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-[10px] text-muted-foreground mt-0.5">إضافة</span>
-                            </label>
-                          </div>
-                          {payment.pendingImages && payment.pendingImages.length > 0 && (
-                            <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-                              <ImageIcon className="h-3 w-3" />
-                              {payment.pendingImages.length} ملفات سيتم رفعها عند الحفظ
-                            </p>
-                          )}
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {payment.cheque_image_url && (
+                        <img
+                          src={payment.cheque_image_url}
+                          alt="صورة الشيك"
+                          className="h-10 w-14 object-cover rounded border"
+                        />
+                      )}
+                      {getPreviewUrls(payment.id).map((url, imgIndex) => (
+                        <div key={imgIndex} className="relative group">
+                          <img
+                            src={url}
+                            alt=""
+                            className="h-10 w-14 object-cover rounded border"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeImage(payment.id, imgIndex)}
+                            className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
                         </div>
-                      </div>
+                      ))}
+                      <label className="h-10 w-14 border border-dashed rounded flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors text-muted-foreground">
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          multiple
+                          onChange={(e) => handleImageSelect(payment.id, e)}
+                          className="hidden"
+                        />
+                        <Upload className="h-3.5 w-3.5" />
+                      </label>
+                      {payment.pendingImages && payment.pendingImages.length > 0 && (
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-1 mr-auto">
+                          <ImageIcon className="h-3 w-3" />
+                          {payment.pendingImages.length} ملفات سيتم رفعها
+                        </span>
+                      )}
                     </div>
                   )}
                 </Card>
