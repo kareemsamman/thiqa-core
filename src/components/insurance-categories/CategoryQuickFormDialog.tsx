@@ -3,7 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FileText, Plus, Pencil, Trash2, Save, Loader2, Star, ArrowRight, Car } from "lucide-react";
+import { FileText, Plus, Pencil, Trash2, Save, Loader2, Star, ArrowRight, Car, GripVertical } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -54,6 +55,9 @@ export function CategoryQuickFormDialog({
   const [deleting, setDeleting] = useState(false);
   const [mode, setMode] = useState<Mode>({ kind: "list" });
   const [form, setForm] = useState<CategoryFormValue>(emptyCategoryForm);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [reordering, setReordering] = useState(false);
 
   const fetchCategories = useCallback(async () => {
     setLoading(true);
@@ -183,6 +187,63 @@ export function CategoryQuickFormDialog({
     }
   };
 
+  const persistOrder = async (ordered: CategoryRow[]) => {
+    // Assign dense sort_order based on new position.
+    setReordering(true);
+    // Optimistic local update so the UI doesn't flicker back.
+    setCategories(ordered.map((c, i) => ({ ...c, sort_order: i + 1 })));
+    try {
+      await Promise.all(
+        ordered.map((c, i) =>
+          supabase
+            .from("insurance_categories")
+            .update({ sort_order: i + 1 })
+            .eq("id", c.id),
+        ),
+      );
+      onChanged?.();
+    } catch (e: any) {
+      toast.error(e.message || "فشل في تحديث الترتيب");
+      await fetchCategories();
+    } finally {
+      setReordering(false);
+    }
+  };
+
+  const handleDragStart = (index: number) => {
+    setDragIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === index) return;
+    setDragOverIndex(index);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === index) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    const next = [...categories];
+    const [moved] = next.splice(dragIndex, 1);
+    next.splice(index, 0, moved);
+    setDragIndex(null);
+    setDragOverIndex(null);
+    persistOrder(next);
+  };
+
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
   const showList = mode.kind === "list";
   const showForm = mode.kind === "create" || mode.kind === "edit";
 
@@ -220,14 +281,33 @@ export function CategoryQuickFormDialog({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {categories.map((category) => (
+                  {reordering && (
+                    <p className="text-xs text-muted-foreground text-center">جاري حفظ الترتيب...</p>
+                  )}
+                  {categories.map((category, index) => (
                     <div
                       key={category.id}
-                      className={
-                        "flex items-center justify-between gap-3 p-3 rounded-lg border bg-card " +
-                        (!category.is_active ? "opacity-60" : "")
-                      }
+                      draggable
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, index)}
+                      onDragEnd={handleDragEnd}
+                      className={cn(
+                        "flex items-center justify-between gap-3 p-3 rounded-lg border bg-card transition-all",
+                        !category.is_active && "opacity-60",
+                        dragIndex === index && "opacity-40",
+                        dragOverIndex === index && "border-primary border-2 bg-primary/5",
+                      )}
                     >
+                      <button
+                        type="button"
+                        className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0"
+                        title="اسحب لإعادة الترتيب"
+                        aria-label="drag handle"
+                      >
+                        <GripVertical className="h-4 w-4" />
+                      </button>
                       <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
                         {category.mode === "FULL" ? (
                           <Car className="h-4 w-4 text-muted-foreground shrink-0" />

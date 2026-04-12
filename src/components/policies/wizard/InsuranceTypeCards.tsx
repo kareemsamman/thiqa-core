@@ -34,10 +34,9 @@ export function InsuranceTypeCards({ categories, selectedCategory, onSelect }: I
             onClick={() => onSelect(category)}
             className={cn(
               "flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all whitespace-nowrap flex-shrink-0",
-              "hover:bg-muted/50",
-              isSelected 
-                ? "bg-primary text-primary-foreground border-primary shadow-sm" 
-                : "bg-card border-border text-foreground"
+              isSelected
+                ? "bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90"
+                : "bg-card border-border text-foreground hover:bg-muted/50"
             )}
           >
             <span className={cn(

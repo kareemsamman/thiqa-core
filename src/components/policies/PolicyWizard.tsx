@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Save, ArrowRight, ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Save, ArrowRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { calculatePolicyProfit } from "@/lib/pricingCalculator";
 import { digitsOnly } from "@/lib/validation";
@@ -1540,25 +1540,14 @@ export function PolicyWizard({
           dir="rtl"
         >
           <DialogHeader className="flex-shrink-0 pb-2 sm:pb-4 border-b">
-            <div className="flex items-center justify-between">
-              <DialogTitle className="text-base sm:text-xl font-bold flex items-center gap-2">
-                إضافة وثيقة جديدة
-                {selectedCategory && (
-                  <span className="text-xs sm:text-sm font-normal text-muted-foreground">
-                    ({selectedCategory.name_ar || selectedCategory.name})
-                  </span>
-                )}
-              </DialogTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsCollapsed(true)}
-                className="h-8 w-8 p-0 rounded-full"
-                title="إخفاء"
-              >
-                <ChevronDown className="h-5 w-5" />
-              </Button>
-            </div>
+            <DialogTitle className="text-base sm:text-xl font-bold flex items-center gap-2">
+              إضافة وثيقة جديدة
+              {selectedCategory && (
+                <span className="text-xs sm:text-sm font-normal text-muted-foreground">
+                  ({selectedCategory.name_ar || selectedCategory.name})
+                </span>
+              )}
+            </DialogTitle>
           </DialogHeader>
 
           {/* Wizard Stepper */}
