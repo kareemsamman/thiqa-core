@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, Route, Shield, FileCheck, Loader2, Check, AlertCircle, Car, Calendar } from "lucide-react";
+import { Package, Route, Shield, FileCheck, Loader2, Check, AlertCircle, Car, Calendar, ExternalLink, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
@@ -107,6 +107,9 @@ interface PackageBuilderSectionProps {
   disabled?: boolean;
   errors?: Record<string, string>;
   ageBand?: 'UNDER_24' | 'UP_24' | 'ANY';
+  /** Minimize the wizard and optionally navigate away — used by the
+   *  "manage companies" links on the addon company selectors. */
+  onMinimizeAndNavigate?: (path?: string) => void;
 }
 
 export function PackageBuilderSection({
@@ -125,6 +128,7 @@ export function PackageBuilderSection({
   disabled,
   errors = {},
   ageBand = 'ANY',
+  onMinimizeAndNavigate,
 }: PackageBuilderSectionProps) {
   const [loadingRoadPrice, setLoadingRoadPrice] = useState(false);
   const [loadingAccidentPrice, setLoadingAccidentPrice] = useState(false);
@@ -416,7 +420,21 @@ export function PackageBuilderSection({
           >
             <div className="space-y-2.5">
               <div>
-                <Label className="text-xs mb-1 block">الشركة</Label>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <Label className="text-xs mb-0">الشركة</Label>
+                  {onMinimizeAndNavigate && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onMinimizeAndNavigate("/companies"); }}
+                      className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 hover:underline font-medium"
+                      title="إدارة الشركات"
+                    >
+                      <Settings className="h-2.5 w-2.5" />
+                      إدارة
+                      <ExternalLink className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
                 <Select
                   value={elzamiAddon.company_id || ""}
                   onValueChange={(v) => updateAddon('elzami', { company_id: v })}
@@ -541,7 +559,21 @@ export function PackageBuilderSection({
                 )}
               </div>
               <div>
-                <Label className="text-xs mb-1 block">الشركة</Label>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <Label className="text-xs mb-0">الشركة</Label>
+                  {onMinimizeAndNavigate && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onMinimizeAndNavigate("/companies"); }}
+                      className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 hover:underline font-medium"
+                      title="إدارة الشركات"
+                    >
+                      <Settings className="h-2.5 w-2.5" />
+                      إدارة
+                      <ExternalLink className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
                 <Select
                   value={thirdFullAddon.company_id || ""}
                   onValueChange={(v) => updateAddon('third_full', { company_id: v })}
@@ -665,7 +697,21 @@ export function PackageBuilderSection({
                 )}
               </div>
               <div>
-                <Label className="text-xs mb-1 block">الشركة</Label>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <Label className="text-xs mb-0">الشركة</Label>
+                  {onMinimizeAndNavigate && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onMinimizeAndNavigate("/companies"); }}
+                      className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 hover:underline font-medium"
+                      title="إدارة الشركات"
+                    >
+                      <Settings className="h-2.5 w-2.5" />
+                      إدارة
+                      <ExternalLink className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
                 <Select
                   value={roadServiceAddon.company_id || ""}
                   onValueChange={(v) => updateAddon('road_service', { company_id: v })}
@@ -787,7 +833,21 @@ export function PackageBuilderSection({
                 )}
               </div>
               <div>
-                <Label className="text-xs mb-1 block">الشركة</Label>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <Label className="text-xs mb-0">الشركة</Label>
+                  {onMinimizeAndNavigate && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onMinimizeAndNavigate("/companies"); }}
+                      className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 hover:underline font-medium"
+                      title="إدارة الشركات"
+                    >
+                      <Settings className="h-2.5 w-2.5" />
+                      إدارة
+                      <ExternalLink className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
                 <Select
                   value={accidentFeeAddon.company_id || ""}
                   onValueChange={(v) => updateAddon('accident_fee_exemption', { company_id: v })}

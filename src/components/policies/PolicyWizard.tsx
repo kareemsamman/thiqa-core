@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Save, ArrowRight, ArrowLeft } from "lucide-react";
+import { Loader2, Save, ArrowRight, ArrowLeft, Minimize2, Maximize2, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { calculatePolicyProfit } from "@/lib/pricingCalculator";
 import { digitsOnly } from "@/lib/validation";
@@ -1528,9 +1528,57 @@ export function PolicyWizard({
     onOpenChange(false);
   };
 
-  // Don't render dialog when collapsed (the expand button is in the BottomToolbar)
+  // Helper: minimize the wizard and optionally navigate. The wizard lives
+  // inside MainLayout via BottomToolbar, so navigating doesn't unmount it —
+  // the user's draft survives until they reopen.
+  const minimizeAndNavigate = (path?: string) => {
+    setIsCollapsed(true);
+    if (path) navigate(path);
+  };
+
+  // When collapsed, render a small floating restore card at the bottom-left
+  // instead of nothing. The card gives the agent a persistent reminder that
+  // there's a draft waiting and a one-click way to reopen it.
   if (isCollapsed && open) {
-    return null;
+    const clientName = selectedClient?.full_name
+      || (createNewClient && newClient.full_name)
+      || "";
+    const currentStepTitle = steps.find((s) => s.id === currentStep)?.title || "";
+
+    return (
+      <div
+        className="fixed bottom-4 left-4 z-50 animate-in slide-in-from-bottom-3 fade-in duration-200"
+        dir="rtl"
+      >
+        <button
+          type="button"
+          onClick={() => setIsCollapsed(false)}
+          className="flex items-center gap-3 pr-4 pl-3 py-3 rounded-2xl border border-primary/30 bg-background/95 backdrop-blur-xl shadow-xl shadow-primary/10 hover:shadow-primary/20 hover:border-primary/50 transition-all group max-w-[280px]"
+        >
+          <div className="relative shrink-0">
+            <div className="h-11 w-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-md shadow-primary/30">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-amber-500 border-2 border-background animate-pulse" />
+          </div>
+          <div className="flex-1 min-w-0 text-right">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              وثيقة جديدة — مسودة
+            </p>
+            <p className="text-sm font-bold truncate text-foreground">
+              {clientName || "جاري الإنشاء"}
+            </p>
+            <p className="text-[10px] text-muted-foreground truncate">
+              الخطوة: {currentStepTitle}
+              {selectedCategory && ` — ${selectedCategory.name_ar || selectedCategory.name}`}
+            </p>
+          </div>
+          <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+            <Maximize2 className="h-4 w-4" />
+          </div>
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -1541,14 +1589,27 @@ export function PolicyWizard({
           dir="rtl"
         >
           <DialogHeader className="flex-shrink-0 pb-2 sm:pb-4 border-b">
-            <DialogTitle className="text-base sm:text-xl font-bold flex items-center gap-2">
-              إضافة وثيقة جديدة
-              {selectedCategory && (
-                <span className="text-xs sm:text-sm font-normal text-muted-foreground">
-                  ({selectedCategory.name_ar || selectedCategory.name})
-                </span>
-              )}
-            </DialogTitle>
+            <div className="flex items-center justify-between gap-2">
+              <DialogTitle className="text-base sm:text-xl font-bold flex items-center gap-2 min-w-0 flex-1">
+                <span className="truncate">إضافة وثيقة جديدة</span>
+                {selectedCategory && (
+                  <span className="text-xs sm:text-sm font-normal text-muted-foreground truncate">
+                    ({selectedCategory.name_ar || selectedCategory.name})
+                  </span>
+                )}
+              </DialogTitle>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                onClick={() => setIsCollapsed(true)}
+                title="تصغير"
+                aria-label="تصغير"
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+            </div>
           </DialogHeader>
 
           {/* Wizard Stepper */}
@@ -1690,6 +1751,7 @@ export function PolicyWizard({
                 setCrmFiles={setCrmFiles}
                 errors={errors}
                 clientLessThan24={selectedClient?.less_than_24 ?? newClient?.under24_type !== 'none'}
+                onMinimizeAndNavigate={minimizeAndNavigate}
               />
             )}
 

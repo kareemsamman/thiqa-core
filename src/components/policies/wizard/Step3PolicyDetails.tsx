@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { supabase } from "@/integrations/supabase/client";
-import { AlertCircle, Package, ArrowLeftRight, ImageIcon, FolderOpen, Upload, X, ChevronDown, ChevronUp, Printer, Loader2, Info } from "lucide-react";
+import { AlertCircle, Package, ArrowLeftRight, ImageIcon, FolderOpen, Upload, X, ChevronDown, ChevronUp, Printer, Loader2, Info, ExternalLink, Settings } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
@@ -98,6 +98,10 @@ interface Step3Props {
   
   // Client age band for pricing
   clientLessThan24?: boolean;
+  /** Minimize the wizard and optionally navigate away. Used by the
+   *  "manage companies" links so an agent can jump to the companies page
+   *  without losing their draft. */
+  onMinimizeAndNavigate?: (path?: string) => void;
 }
 
 export function Step3PolicyDetails({
@@ -145,6 +149,7 @@ export function Step3PolicyDetails({
   setCrmFiles,
   errors,
   clientLessThan24,
+  onMinimizeAndNavigate,
 }: Step3Props) {
   
   const insuranceInputRef = useRef<HTMLInputElement>(null);
@@ -761,9 +766,23 @@ export function Step3PolicyDetails({
       {/* Company Selection */}
       {!isLightMode && (
         <div>
-          <Label>شركة التأمين *</Label>
-          <Select 
-            value={policy.company_id} 
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <Label className="mb-0">شركة التأمين *</Label>
+            {onMinimizeAndNavigate && (
+              <button
+                type="button"
+                onClick={() => onMinimizeAndNavigate("/companies")}
+                className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 hover:underline font-medium transition-colors"
+                title="إدارة شركات التأمين"
+              >
+                <Settings className="h-3 w-3" />
+                إدارة الشركات
+                <ExternalLink className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          <Select
+            value={policy.company_id}
             onValueChange={handleCompanyChange}
             disabled={!policy.policy_type_parent}
           >
@@ -930,6 +949,7 @@ export function Step3PolicyDetails({
                   carType={getCarType() || undefined}
                   errors={errors}
                   ageBand={clientLessThan24 ? 'UNDER_24' : 'UP_24'}
+                  onMinimizeAndNavigate={onMinimizeAndNavigate}
                 />
               </div>
             )}
