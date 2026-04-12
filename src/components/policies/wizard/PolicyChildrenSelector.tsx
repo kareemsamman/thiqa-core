@@ -134,44 +134,20 @@ export function PolicyChildrenSelector({
     if (newChildren.length > prevNewChildrenLengthRef.current) {
       const lastChild = newChildren[newChildren.length - 1];
       setHighlightedChildId(lastChild.id);
-      // Wait two frames so layout is flushed (card is fully mounted AND
-      // measured) before scrolling. A single rAF sometimes fires before
-      // the new card contributes its height to scrollHeight.
+      // Double rAF so layout is flushed (card mounted AND measured) before
+      // scrolling — a single frame sometimes fires before the new row has
+      // contributed its height to the scroll container.
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const el = document.querySelector(
             `[data-child-card-id="${lastChild.id}"]`,
           );
-          if (!(el instanceof HTMLElement)) return;
-
-          // Find the nearest scrollable ancestor (the wizard's step scroll
-          // region) and manually position the card so its full height sits
-          // comfortably inside the viewport. Using scrollIntoView({block:
-          // "center"}) leaves tall cards clipped when they're the last
-          // item, so we do the math ourselves and leave a 32px pad above.
-          let scroller: HTMLElement | null = el.parentElement;
-          while (scroller) {
-            const style = window.getComputedStyle(scroller);
-            const overflowY = style.overflowY;
-            if (
-              (overflowY === "auto" || overflowY === "scroll") &&
-              scroller.scrollHeight > scroller.clientHeight
-            ) {
-              break;
-            }
-            scroller = scroller.parentElement;
+          if (el instanceof HTMLElement) {
+            // "end" aligns the card's bottom with the viewport bottom so
+            // the whole card stays visible without leaving a giant empty
+            // area below. The card's `scroll-mb-6` gives breathing room.
+            el.scrollIntoView({ behavior: "smooth", block: "end" });
           }
-
-          if (!scroller) {
-            el.scrollIntoView({ behavior: "smooth", block: "start" });
-            return;
-          }
-
-          const scrollerRect = scroller.getBoundingClientRect();
-          const elRect = el.getBoundingClientRect();
-          const topPad = 32;
-          const delta = elRect.top - scrollerRect.top - topPad;
-          scroller.scrollBy({ top: delta, behavior: "smooth" });
         });
       });
       const timer = setTimeout(() => setHighlightedChildId(null), 1500);
@@ -299,7 +275,7 @@ export function PolicyChildrenSelector({
                 key={child.id}
                 data-child-card-id={child.id}
                 className={cn(
-                  "p-3 rounded-lg border bg-background space-y-3 transition-all duration-500 scroll-mt-20",
+                  "p-3 rounded-lg border bg-background space-y-3 transition-all duration-500 scroll-mb-6",
                   highlightedChildId === child.id &&
                     "ring-2 ring-primary ring-offset-2 shadow-lg border-primary/60",
                 )}
@@ -408,11 +384,6 @@ export function PolicyChildrenSelector({
           لا يوجد تابعين لهذا العميل. اضغط "إضافة جديد" لإضافة سائق إضافي.
         </p>
       )}
-
-      {/* Scroll headroom: gives the step scroller enough slack to scroll
-          the last-added new-child card to the top of the viewport instead
-          of bottoming out with it half-hidden behind the footer. */}
-      {newChildren.length > 0 && <div aria-hidden className="h-[45vh]" />}
     </div>
   );
 }
