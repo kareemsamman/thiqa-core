@@ -823,9 +823,28 @@ export default function Subscription() {
                 ? (agent.pending_plan
                     ? `أول فاتورة بعد انتهاء التجربة — خطة ${billingPlan?.name || agent.pending_plan}`
                     : "معاينة تقديرية لأول فاتورة بعد انتهاء التجربة. غيّر خطتك من تبويب \"الخطة والاشتراك\".")
-                : sub?.expiresAt
-                  ? `تاريخ الإصدار المتوقع ${format(sub.expiresAt, "dd/MM/yyyy")}`
-                  : "تفاصيل ما سيُحسب عليك في الفاتورة القادمة";
+                : "تفاصيل ما سيُحسب عليك في الفاتورة القادمة";
+
+              // The date we expect the agent to be charged on: trial end for
+              // trial agents, otherwise the subscription expiry (end of the
+              // current billing cycle).
+              const billingDate: Date | null = sub?.isTrial
+                ? (sub.trialEnd ?? null)
+                : (sub?.expiresAt ?? (agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null));
+
+              // Arabic month names so we don't have to add a date-fns locale
+              // dependency just for this one display.
+              const arabicMonths = [
+                "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+                "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
+              ];
+              const formatBillingDate = (d: Date) =>
+                `${d.getDate()} ${arabicMonths[d.getMonth()]} ${d.getFullYear()}`;
+
+              // Days until the billing date.
+              const daysUntilBilling = billingDate
+                ? Math.max(0, Math.ceil((billingDate.getTime() - Date.now()) / 86400000))
+                : null;
 
               return (
                 <Card className="overflow-hidden shadow-sm border-primary/20">
@@ -854,6 +873,41 @@ export default function Subscription() {
                         </p>
                       </div>
                     </div>
+
+                    {/* Hero billing date — big and prominent so the agent
+                        knows exactly when they'll be charged. */}
+                    {billingDate && (
+                      <div className="rounded-2xl bg-gradient-to-l from-primary/10 via-primary/5 to-transparent border border-primary/15 p-4 sm:p-5">
+                        <div className="flex items-center justify-between gap-4 flex-wrap">
+                          <div className="flex items-center gap-3">
+                            <div className="h-12 w-12 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+                              <Calendar className="h-6 w-6" />
+                            </div>
+                            <div>
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                                {sub?.isTrial ? "تاريخ أول فاتورة" : "تاريخ الفاتورة القادمة"}
+                              </p>
+                              <p className="text-2xl sm:text-3xl font-extrabold text-foreground mt-0.5">
+                                {formatBillingDate(billingDate)}
+                              </p>
+                            </div>
+                          </div>
+                          {daysUntilBilling !== null && (
+                            <div className="text-left shrink-0">
+                              <p className="text-[11px] text-muted-foreground">متبقي</p>
+                              <p className={cn(
+                                "text-xl sm:text-2xl font-bold tabular-nums",
+                                daysUntilBilling <= 7 ? "text-destructive" :
+                                daysUntilBilling <= 14 ? "text-amber-600" :
+                                "text-primary"
+                              )}>
+                                {daysUntilBilling} {daysUntilBilling === 1 ? "يوم" : "يوم"}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-2.5">
                       {/* Base plan row */}
