@@ -89,9 +89,9 @@ export function BottomToolbar({ onPolicyComplete }: BottomToolbarProps) {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <div 
+        <div
           className={cn(
-            "flex items-center gap-2 px-4 py-2.5 rounded-full border border-border/50 bg-background/80 backdrop-blur-xl shadow-lg",
+            "flex items-center gap-2 px-4 py-2.5 rounded-full border border-border bg-muted/95 backdrop-blur-xl shadow-lg shadow-foreground/5 ring-1 ring-foreground/5",
             "transition-opacity duration-300",
             shouldFade ? "opacity-30 hover:opacity-100" : "opacity-100"
           )}
