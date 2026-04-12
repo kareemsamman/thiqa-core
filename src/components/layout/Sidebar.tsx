@@ -1,6 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Search } from "lucide-react";
 import {
   LayoutDashboard,
   Users,
@@ -533,6 +536,273 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
   );
 }
 
+// ============================================================================
+// MobileTopBar — fixed top bar on mobile with logo, a profile avatar button
+// that opens the profile edit drawer, and a hamburger that opens the nav.
+// ============================================================================
+function MobileTopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
+  const { profile, isAdmin } = useAuth();
+  const { data: siteSettings } = useSiteSettings();
+  const { isThiqaSuperAdmin } = useAgentContext();
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  const userName = profile?.full_name || profile?.email?.split('@')[0] || 'مستخدم';
+  const userInitial = (userName.charAt(0) || '?').toUpperCase();
+
+  return (
+    <>
+      <div
+        className="fixed top-0 inset-x-0 z-50 md:hidden h-14 bg-[#122143] flex items-center justify-between px-3 shadow-lg"
+        dir="rtl"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          {isThiqaSuperAdmin ? (
+            <img src={thiqaLogoIcon} alt="Thiqa" className="h-7 w-7 object-contain shrink-0" />
+          ) : siteSettings?.logo_url ? (
+            <img src={siteSettings.logo_url} alt="Logo" className="h-7 w-7 rounded object-contain shrink-0" />
+          ) : (
+            <img src={thiqaLogoIcon} alt="ثقة" className="h-7 w-7 object-contain shrink-0" />
+          )}
+          <span className="text-white/90 text-sm font-semibold truncate">
+            {siteSettings?.site_title || 'Thiqa'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setProfileOpen(true)}
+            className="h-9 w-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors"
+            aria-label="الملف الشخصي"
+          >
+            <Avatar className="h-8 w-8 border border-white/20">
+              {profile?.avatar_url && <AvatarImage src={profile.avatar_url} alt={userName} />}
+              <AvatarFallback className="bg-white/10 text-white text-xs font-semibold">
+                {userInitial}
+              </AvatarFallback>
+            </Avatar>
+          </button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white/80 hover:text-white hover:bg-white/10 h-9 w-9"
+            onClick={onOpenMenu}
+            aria-label="فتح القائمة"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        </div>
+      </div>
+
+      <ProfileEditDrawer open={profileOpen} onOpenChange={setProfileOpen} />
+    </>
+  );
+}
+
+// ============================================================================
+// MobileSidebarContent — redesigned mobile nav: light theme, clean rows,
+// profile header, inline search, and an always-visible sign out at the bottom.
+// The desktop sidebar still uses the dark SidebarContent above.
+// ============================================================================
+function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
+  const [signingOut, setSigningOut] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { profile, signOut, isAdmin, branchName, isSuperAdmin } = useAuth();
+  const { data: siteSettings } = useSiteSettings();
+  const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
+
+  const filteredGroups = useMemo(() => {
+    return navigationGroups
+      .filter(group => {
+        if (isThiqaSuperAdmin) return group.name === 'إدارة ثقة';
+        if (group.adminOnly && !isAdmin) return false;
+        return true;
+      })
+      .map(group => ({
+        ...group,
+        items: group.items.filter(item => {
+          if (isThiqaSuperAdmin) return true;
+          if (item.thiqaSuperAdminOnly && !isThiqaSuperAdmin) return false;
+          if (item.superAdminOnly && !isSuperAdmin) return false;
+          if (item.adminOnly && !isAdmin) return false;
+          if (item.featureKey && !hasFeature(item.featureKey)) return false;
+          return true;
+        }),
+      }))
+      .filter(group => group.items.length > 0);
+  }, [isAdmin, isSuperAdmin, isThiqaSuperAdmin, hasFeature]);
+
+  // Apply text-search filter
+  const visibleGroups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return filteredGroups;
+    return filteredGroups
+      .map(group => ({
+        ...group,
+        items: group.items.filter(item => item.name.toLowerCase().includes(q)),
+      }))
+      .filter(group => group.items.length > 0);
+  }, [filteredGroups, query]);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+      navigate('/login', { replace: true });
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
+  const userName = profile?.full_name || profile?.email?.split('@')[0] || 'مستخدم';
+  const userInitial = (userName.charAt(0) || '?').toUpperCase();
+  const userRole = isAdmin ? 'مدير' : 'موظف';
+
+  const renderBadge = (item: NavItem) => {
+    if (!item.badge) return null;
+    if (item.badge === 'notifications') return <SidebarNotificationBadge collapsed={false} />;
+    if (item.badge === 'debt') return <SidebarDebtBadge collapsed={false} />;
+    if (item.badge === 'tasks') return <SidebarTaskBadge collapsed={false} />;
+    if (item.badge === 'claims') return <SidebarClaimsBadge collapsed={false} />;
+    if (item.badge === 'accidents') return <SidebarAccidentsBadge collapsed={false} />;
+    if (item.badge === 'renewals') return <SidebarRenewalsBadge collapsed={false} />;
+    return null;
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-background text-foreground">
+      {/* Header: logo + site title */}
+      <div className="flex items-center gap-3 px-4 py-4 border-b">
+        {isThiqaSuperAdmin ? (
+          <img src={thiqaLogo} alt="Thiqa" className="h-9 w-9 rounded-lg object-contain" />
+        ) : siteSettings?.logo_url ? (
+          <img src={siteSettings.logo_url} alt="Logo" className="h-9 w-9 rounded-lg object-contain" />
+        ) : (
+          <img src={thiqaLogoIcon} alt="ثقة" className="h-9 w-9 rounded-lg object-contain" />
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm truncate">
+            {siteSettings?.site_title || 'Thiqa'}
+          </p>
+          <p className="text-[11px] text-muted-foreground">نظام إدارة التأمين</p>
+        </div>
+      </div>
+
+      {/* Profile card */}
+      <button
+        type="button"
+        onClick={() => setProfileOpen(true)}
+        className="flex items-center gap-3 px-4 py-3 border-b hover:bg-muted/40 transition-colors text-right"
+      >
+        <Avatar className="h-11 w-11 border">
+          {profile?.avatar_url && <AvatarImage src={profile.avatar_url} alt={userName} />}
+          <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+            {userInitial}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm truncate">{userName}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {userRole}
+            {branchName && <span className="mx-1">·</span>}
+            {branchName}
+          </p>
+        </div>
+        <ChevronLeft className="h-4 w-4 text-muted-foreground shrink-0" />
+      </button>
+
+      {/* Search */}
+      <div className="p-3 border-b">
+        <div className="relative">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="ابحث عن صفحة..."
+            className="h-10 pr-9 text-sm"
+          />
+        </div>
+      </div>
+
+      {/* Nav list */}
+      <nav className="flex-1 overflow-y-auto p-2">
+        {visibleGroups.length === 0 ? (
+          <div className="text-center text-sm text-muted-foreground py-8">
+            لا توجد نتائج
+          </div>
+        ) : (
+          visibleGroups.map((group) => {
+            const GroupIcon = group.icon;
+            return (
+              <div key={group.name} className="mb-3">
+                <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  <GroupIcon className="h-3 w-3" />
+                  <span>{group.name}</span>
+                </div>
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const isActiveRoute = location.pathname === item.href;
+                    const ItemIcon = item.icon;
+                    return (
+                      <NavLink
+                        key={item.name}
+                        to={item.href}
+                        onClick={onNavigate}
+                        className={cn(
+                          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                          isActiveRoute
+                            ? "bg-primary/10 text-primary"
+                            : "hover:bg-muted/60 text-foreground"
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                            isActiveRoute
+                              ? "bg-primary/15 text-primary"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          <ItemIcon className="h-4 w-4" />
+                        </div>
+                        <span className="flex-1 truncate">{item.name}</span>
+                        {renderBadge(item)}
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </nav>
+
+      {/* Sign out footer */}
+      <div className="p-3 border-t">
+        <Button
+          variant="outline"
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className="w-full gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20"
+        >
+          {signingOut ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <LogOut className="h-4 w-4" />
+          )}
+          تسجيل الخروج
+        </Button>
+      </div>
+
+      {/* Profile Edit Drawer */}
+      <ProfileEditDrawer open={profileOpen} onOpenChange={setProfileOpen} />
+    </div>
+  );
+}
+
 export function Sidebar() {
   const { collapsed, setCollapsed } = useSidebarState();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -546,31 +816,15 @@ export function Sidebar() {
   return (
     <>
       {/* Mobile top navbar */}
-      <div className="fixed top-0 inset-x-0 z-50 md:hidden h-14 bg-[#122143] flex items-center justify-between px-4 shadow-lg" dir="rtl">
-        <div className="flex items-center gap-2.5">
-          <img src={thiqaLogoIcon} alt="Thiqa" className="h-7 w-7 object-contain" />
-          <span className="text-white/90 text-sm font-semibold">Thiqa</span>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-white/80 hover:text-white hover:bg-white/10 h-9 w-9"
-          onClick={() => setMobileOpen(true)}
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
-      </div>
+      <MobileTopBar onOpenMenu={() => setMobileOpen(true)} />
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer — light themed redesign */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent 
-          side="right" 
-          className="w-64 p-0 border-l bg-[#122143] border-white/[0.08] text-white/85"
+        <SheetContent
+          side="right"
+          className="w-[320px] sm:w-[340px] p-0 border-l bg-background text-foreground"
         >
-          <SidebarContent 
-            collapsed={false} 
-            onNavigate={() => setMobileOpen(false)}
-          />
+          <MobileSidebarContent onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
       </Sheet>
 
