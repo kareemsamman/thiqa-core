@@ -408,6 +408,11 @@ export function PolicyChildrenSelector({
           لا يوجد تابعين لهذا العميل. اضغط "إضافة جديد" لإضافة سائق إضافي.
         </p>
       )}
+
+      {/* Scroll headroom: gives the step scroller enough slack to scroll
+          the last-added new-child card to the top of the viewport instead
+          of bottoming out with it half-hidden behind the footer. */}
+      {newChildren.length > 0 && <div aria-hidden className="h-[45vh]" />}
     </div>
   );
 }
