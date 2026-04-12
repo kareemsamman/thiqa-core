@@ -77,10 +77,18 @@ export default function ForgotPassword() {
         <div className="rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 lg:bg-white/70 lg:dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
           <div className="text-center pt-8 pb-4 px-5 sm:px-8">
             <img src={thiqaLogoDark} alt="ثقة" className="mx-auto h-10 w-auto object-contain mb-2" />
-            <h1 className="text-2xl font-bold text-foreground">نسيت كلمة المرور؟</h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              {sent ? "تم إرسال رابط إعادة التعيين" : "أدخل بريدك الإلكتروني وسنرسل لك رابط لإعادة تعيين كلمة المرور"}
-            </p>
+            <h1 className="text-2xl font-bold text-foreground">
+              {isGoogleAccount ? "حساب Google" : "نسيت كلمة المرور؟"}
+            </h1>
+            {/* Hide the "reset link sent" subtitle for Google-only accounts
+                since no reset email was actually sent to them. */}
+            {!isGoogleAccount && (
+              <p className="text-muted-foreground mt-1 text-sm">
+                {sent
+                  ? "تم إرسال رابط إعادة التعيين"
+                  : "أدخل بريدك الإلكتروني وسنرسل لك رابط لإعادة تعيين كلمة المرور"}
+              </p>
+            )}
           </div>
 
           <div className="px-5 sm:px-8 pb-8 space-y-4">

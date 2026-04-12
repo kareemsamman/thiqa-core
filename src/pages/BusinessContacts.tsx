@@ -152,12 +152,16 @@ export default function BusinessContacts() {
     },
   });
 
-  const handleCopy = async (phone: string) => {
+  const handleCopy = async (contact: BusinessContact) => {
     try {
-      await navigator.clipboard.writeText(phone);
-      toast.success("تم نسخ الرقم");
+      // Copy "Name — phone" so the recipient can identify the contact at a glance.
+      const text = contact.phone
+        ? `${contact.name} — ${contact.phone}`
+        : contact.name;
+      await navigator.clipboard.writeText(text);
+      toast.success("تم نسخ جهة الاتصال");
     } catch {
-      toast.error("فشل نسخ الرقم");
+      toast.error("فشل النسخ");
     }
   };
 
@@ -383,7 +387,7 @@ export default function BusinessContacts() {
                             size="sm"
                             variant="outline"
                             className="gap-1.5"
-                            onClick={() => handleCopy(contact.phone!)}
+                            onClick={() => handleCopy(contact)}
                           >
                             <Copy className="h-4 w-4" />
                             نسخ
