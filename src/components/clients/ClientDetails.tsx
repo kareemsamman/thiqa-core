@@ -1211,115 +1211,131 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         <title>{client.full_name} | ثقة للتأمين</title>
       </Helmet>
 
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6">
         {/* Professional Header Card */}
         <Card className="overflow-hidden">
-          <div className="bg-gradient-to-l from-primary/10 via-primary/5 to-transparent p-6">
-            <div className="flex items-start gap-4">
-              {returnPath ? (
-                <Button variant="outline" onClick={onBack} className="mt-1 gap-2">
-                  <ArrowRight className="h-4 w-4" />
-                  <span className="text-sm">
-                    {returnTab === 'renewed' ? 'العودة للتجديدات' : 
-                     returnTab === 'renewals' ? 'العودة للتجديدات' : 
-                     'العودة للتقارير'}
-                  </span>
-                </Button>
-              ) : (
-                <Button variant="ghost" size="icon" onClick={onBack} className="mt-1">
-                  <ArrowRight className="h-5 w-5" />
-                </Button>
-              )}
-              
-              {/* Avatar */}
-              <div className="relative">
-                {client.image_url ? (
-                  <img
-                    src={client.image_url}
-                    alt={client.full_name}
-                    className="h-20 w-20 rounded-2xl object-cover border-4 border-background shadow-lg"
-                  />
+          <div className="bg-gradient-to-l from-primary/10 via-primary/5 to-transparent p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+              {/* Identity block — back button + avatar + client info */}
+              <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                {returnPath ? (
+                  <Button variant="outline" onClick={onBack} className="mt-1 gap-2 px-2 sm:px-3 shrink-0" size="sm">
+                    <ArrowRight className="h-4 w-4" />
+                    <span className="text-sm hidden sm:inline">
+                      {returnTab === 'renewed' ? 'العودة للتجديدات' :
+                       returnTab === 'renewals' ? 'العودة للتجديدات' :
+                       'العودة للتقارير'}
+                    </span>
+                  </Button>
                 ) : (
-                  <div className="h-20 w-20 rounded-2xl bg-primary/10 border-4 border-background shadow-lg flex items-center justify-center">
-                    <User className="h-10 w-10 text-primary" />
+                  <Button variant="ghost" size="icon" onClick={onBack} className="mt-1 shrink-0">
+                    <ArrowRight className="h-5 w-5" />
+                  </Button>
+                )}
+
+                {/* Avatar */}
+                <div className="relative shrink-0">
+                  {client.image_url ? (
+                    <img
+                      src={client.image_url}
+                      alt={client.full_name}
+                      className="h-14 w-14 sm:h-20 sm:w-20 rounded-2xl object-cover border-4 border-background shadow-lg"
+                    />
+                  ) : (
+                    <div className="h-14 w-14 sm:h-20 sm:w-20 rounded-2xl bg-primary/10 border-4 border-background shadow-lg flex items-center justify-center">
+                      <User className="h-7 w-7 sm:h-10 sm:w-10 text-primary" />
+                    </div>
+                  )}
+                  {(client.under24_type !== 'none' && client.under24_type) && (
+                    <Badge className="absolute -bottom-2 -right-2 bg-amber-500 text-white text-[10px] px-1.5">-24</Badge>
+                  )}
+                </div>
+
+                {/* Client Info */}
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-lg sm:text-2xl font-bold truncate">{client.full_name}</h1>
+                  <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-muted-foreground mt-1 sm:mt-2">
+                    <span className="flex items-center gap-1.5 font-mono">
+                      <Hash className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                      {client.id_number}
+                    </span>
+                    {client.phone_number && (
+                      <ClickablePhone phone={client.phone_number} />
+                    )}
+                    {client.phone_number_2 && (
+                      <ClickablePhone phone={client.phone_number_2} className="text-muted-foreground/70" />
+                    )}
+                    {client.file_number && (
+                      <span className="flex items-center gap-1.5">
+                        <FileText className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                        ملف: {client.file_number}
+                      </span>
+                    )}
+                    {client.birth_date && (
+                      <span className="flex items-center gap-1.5">
+                        <Calendar className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                        {formatDate(client.birth_date)}
+                      </span>
+                    )}
                   </div>
-                )}
-                {(client.under24_type !== 'none' && client.under24_type) && (
-                  <Badge className="absolute -bottom-2 -right-2 bg-amber-500 text-white text-[10px] px-1.5">-24</Badge>
-                )}
-              </div>
-              
-              {/* Client Info */}
-              <div className="flex-1 min-w-0">
-                <h1 className="text-2xl font-bold truncate">{client.full_name}</h1>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground mt-2">
-                  <span className="flex items-center gap-1.5 font-mono">
-                    <Hash className="h-3.5 w-3.5" />
-                    {client.id_number}
-                  </span>
-                  {client.phone_number && (
-                    <ClickablePhone phone={client.phone_number} />
-                  )}
-                  {client.phone_number_2 && (
-                    <ClickablePhone phone={client.phone_number_2} className="text-muted-foreground/70" />
-                  )}
-                  {client.file_number && (
-                    <span className="flex items-center gap-1.5">
-                      <FileText className="h-3.5 w-3.5" />
-                      ملف: {client.file_number}
-                    </span>
-                  )}
-                  {client.birth_date && (
-                    <span className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {formatDate(client.birth_date)}
-                    </span>
-                  )}
-                </div>
-                
-                {/* Badges row */}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {/* Branch Badge */}
-                  {client.branch_id && (
-                    <Badge variant="secondary" className="gap-1.5 bg-primary/10 text-primary border-primary/20">
-                      <Building2 className="h-3 w-3" />
-                      {getBranchName(client.branch_id)}
-                    </Badge>
-                  )}
-                  
-                  {/* Broker Badge */}
-                  {broker && (
-                    <Badge variant="outline" className="gap-1.5 bg-background">
-                      <Users className="h-3 w-3" />
-                      الوسيط: {broker.name}
-                      {broker.phone && <span className="text-muted-foreground mr-1"><bdi>({broker.phone})</bdi></span>}
-                    </Badge>
-                  )}
+
+                  {/* Badges row */}
+                  <div className="mt-2 sm:mt-3 flex flex-wrap gap-1.5 sm:gap-2">
+                    {client.branch_id && (
+                      <Badge variant="secondary" className="gap-1.5 bg-primary/10 text-primary border-primary/20 text-[10px] sm:text-xs">
+                        <Building2 className="h-3 w-3" />
+                        {getBranchName(client.branch_id)}
+                      </Badge>
+                    )}
+                    {broker && (
+                      <Badge variant="outline" className="gap-1.5 bg-background text-[10px] sm:text-xs">
+                        <Users className="h-3 w-3" />
+                        الوسيط: {broker.name}
+                        {broker.phone && <span className="text-muted-foreground mr-1"><bdi>({broker.phone})</bdi></span>}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
-              
-              <div className="flex gap-2 shrink-0">
+
+              {/* Actions — wraps below header on mobile, sits next to it on desktop */}
+              <div className="flex flex-wrap gap-2 shrink-0">
                 {(paymentSummary.total_remaining - walletBalance.total_refunds) > 0 && (
-                  <Button 
-                    variant="default" 
-                    className="gap-2"
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="gap-1.5 flex-1 sm:flex-none sm:size-default"
                     onClick={() => setDebtPaymentModalOpen(true)}
                   >
                     <CreditCard className="h-4 w-4" />
                     دفع
                   </Button>
                 )}
-                <Button variant="outline" onClick={() => setAccidentWizardOpen(true)}>
-                  <AlertTriangle className="h-4 w-4 ml-2" />
-                  بلاغ حادث
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 flex-1 sm:flex-none sm:size-default"
+                  onClick={() => setAccidentWizardOpen(true)}
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                  <span>بلاغ حادث</span>
                 </Button>
-                <Button variant="outline" onClick={() => setReportModalOpen(true)}>
-                  <FileText className="h-4 w-4 ml-2" />
-                  تقرير
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 flex-1 sm:flex-none sm:size-default"
+                  onClick={() => setReportModalOpen(true)}
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>تقرير</span>
                 </Button>
-                <Button onClick={() => setClientDrawerOpen(true)}>
-                  <Edit className="h-4 w-4 ml-2" />
-                  تعديل
+                <Button
+                  size="sm"
+                  className="gap-1.5 flex-1 sm:flex-none sm:size-default"
+                  onClick={() => setClientDrawerOpen(true)}
+                >
+                  <Edit className="h-4 w-4" />
+                  <span>تعديل</span>
                 </Button>
               </div>
             </div>
@@ -1327,24 +1343,24 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           
           {/* Stats Row */}
           <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-y md:divide-y-0 divide-border border-t">
-            <div className="p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">رقم الملف</p>
-              <p className="text-lg font-bold">{client.file_number || '-'}</p>
+            <div className="p-3 sm:p-4 text-center">
+              <p className="text-[10px] sm:text-xs text-muted-foreground mb-1">رقم الملف</p>
+              <p className="text-sm sm:text-lg font-bold truncate">{client.file_number || '-'}</p>
             </div>
-            <div className="p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">تاريخ الانضمام</p>
-              <p className="text-lg font-bold">{formatDate(client.date_joined)}</p>
+            <div className="p-3 sm:p-4 text-center">
+              <p className="text-[10px] sm:text-xs text-muted-foreground mb-1">تاريخ الانضمام</p>
+              <p className="text-sm sm:text-lg font-bold">{formatDate(client.date_joined)}</p>
             </div>
-            <div className="p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">السيارات</p>
-              <p className="text-lg font-bold text-blue-600">{cars.length}</p>
+            <div className="p-3 sm:p-4 text-center">
+              <p className="text-[10px] sm:text-xs text-muted-foreground mb-1">السيارات</p>
+              <p className="text-sm sm:text-lg font-bold text-blue-600">{cars.length}</p>
             </div>
-            <div className="p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">الوثائق</p>
-              <p className="text-lg font-bold text-purple-600">{policies.length}</p>
+            <div className="p-3 sm:p-4 text-center">
+              <p className="text-[10px] sm:text-xs text-muted-foreground mb-1">الوثائق</p>
+              <p className="text-sm sm:text-lg font-bold text-purple-600">{policies.length}</p>
             </div>
-            <div className="p-4 text-center col-span-2 md:col-span-1">
-              <p className="text-xs text-muted-foreground mb-1">العمر</p>
+            <div className="p-3 sm:p-4 text-center col-span-2 md:col-span-1">
+              <p className="text-[10px] sm:text-xs text-muted-foreground mb-1">العمر</p>
               {client.under24_type === 'additional_driver' ? (
                 <div className="space-y-1">
                   <Badge variant="warning" className="text-xs">سائق إضافي -24</Badge>
@@ -1365,32 +1381,30 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         </Card>
 
         {/* Financial Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
-              <Wallet className="h-6 w-6 text-success" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <Card className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
+            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
+              <Wallet className="h-5 w-5 sm:h-6 sm:w-6 text-success" />
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">إجمالي المدفوع</p>
-              <p className="text-xl font-bold text-success">₪{paymentSummary.total_paid.toLocaleString()}</p>
+            <div className="min-w-0">
+              <p className="text-[10px] sm:text-xs text-muted-foreground">إجمالي المدفوع</p>
+              <p className="text-base sm:text-xl font-bold text-success truncate">₪{paymentSummary.total_paid.toLocaleString()}</p>
             </div>
           </Card>
-          
-          <Card className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
-              <AlertCircle className="h-6 w-6 text-destructive" />
+
+          <Card className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
+            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
+              <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-destructive" />
             </div>
-            <div className="flex-1">
-              <p className="text-xs text-muted-foreground">إجمالي المتبقي</p>
-              {/* صافي المتبقي = الدين - المرتجعات */}
-              <p className={cn("text-xl font-bold", 
-                (paymentSummary.total_remaining - walletBalance.total_refunds) > 0 
-                  ? "text-destructive" 
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] sm:text-xs text-muted-foreground">إجمالي المتبقي</p>
+              <p className={cn("text-base sm:text-xl font-bold truncate",
+                (paymentSummary.total_remaining - walletBalance.total_refunds) > 0
+                  ? "text-destructive"
                   : "text-success"
               )}>
                 ₪{Math.max(0, paymentSummary.total_remaining - walletBalance.total_refunds).toLocaleString()}
               </p>
-              {/* عرض تفصيلي في حال وجود مرتجعات */}
               {walletBalance.total_refunds > 0 && paymentSummary.total_remaining > 0 && (
                 <div className="text-[10px] text-muted-foreground space-y-0.5 mt-1">
                   <p>المطلوب: ₪{paymentSummary.total_remaining.toLocaleString()}</p>
@@ -1399,71 +1413,71 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
               )}
             </div>
             <DebtIndicator
-              totalOwed={paymentSummary.total_paid + paymentSummary.total_remaining} 
+              totalOwed={paymentSummary.total_paid + paymentSummary.total_remaining}
               totalPaid={paymentSummary.total_paid + walletBalance.total_refunds}
               showAmount={false}
             />
           </Card>
-          
+
           {/* Profit card - Admin only */}
           {isAdmin && (
-            <Card className="p-4 flex items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <TrendingUp className="h-6 w-6 text-primary" />
+            <Card className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">إجمالي الأرباح</p>
-                <p className="text-xl font-bold text-primary">₪{paymentSummary.total_profit.toLocaleString()}</p>
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-xs text-muted-foreground">إجمالي الأرباح</p>
+                <p className="text-base sm:text-xl font-bold text-primary truncate">₪{paymentSummary.total_profit.toLocaleString()}</p>
               </div>
             </Card>
           )}
 
           {/* Wallet Balance - Show only if we owe customer MORE than their debt (net credit) */}
           {(walletBalance.total_refunds - paymentSummary.total_remaining) > 0 && (
-            <Card className="p-4 flex items-center gap-4 border-amber-500/30 bg-amber-500/5">
-              <div className="h-12 w-12 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
-                <Banknote className="h-6 w-6 text-amber-600" />
+            <Card className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4 border-amber-500/30 bg-amber-500/5">
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-amber-600" />
               </div>
-              <div>
-                <p className="text-xs text-amber-700">مرتجع للعميل</p>
-                <p className="text-xl font-bold text-amber-600">₪{(walletBalance.total_refunds - paymentSummary.total_remaining).toLocaleString()}</p>
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-xs text-amber-700">مرتجع للعميل</p>
+                <p className="text-base sm:text-xl font-bold text-amber-600 truncate">₪{(walletBalance.total_refunds - paymentSummary.total_remaining).toLocaleString()}</p>
                 <p className="text-[10px] text-amber-600/70">نحن مدينون للعميل بهذا المبلغ</p>
               </div>
             </Card>
           )}
         </div>
 
-        {/* Tabs */}
+        {/* Tabs — horizontal scroll on mobile, wrap on desktop */}
         <Tabs defaultValue="policies" className="w-full" dir="rtl">
-          <TabsList className="w-full justify-start bg-muted/50 p-1 h-auto flex-wrap">
-            <TabsTrigger value="overview" className="gap-1.5">
+          <TabsList className="w-full justify-start bg-muted/50 p-1 h-auto flex-nowrap overflow-x-auto sm:flex-wrap">
+            <TabsTrigger value="overview" className="gap-1.5 shrink-0 whitespace-nowrap">
               <User className="h-4 w-4" />
               نظرة عامة
             </TabsTrigger>
-            <TabsTrigger value="policies" className="gap-1.5">
+            <TabsTrigger value="policies" className="gap-1.5 shrink-0 whitespace-nowrap">
               <FileText className="h-4 w-4" />
               الوثائق ({policies.length})
             </TabsTrigger>
-            <TabsTrigger value="payments" className="gap-1.5">
+            <TabsTrigger value="payments" className="gap-1.5 shrink-0 whitespace-nowrap">
               <CreditCard className="h-4 w-4" />
               سجل الدفعات ({payments.length})
             </TabsTrigger>
-            <TabsTrigger value="cars" className="gap-1.5">
+            <TabsTrigger value="cars" className="gap-1.5 shrink-0 whitespace-nowrap">
               <Car className="h-4 w-4" />
               السيارات ({cars.length})
             </TabsTrigger>
-            <TabsTrigger value="notes" className="gap-1.5">
+            <TabsTrigger value="notes" className="gap-1.5 shrink-0 whitespace-nowrap">
               <MessageSquare className="h-4 w-4" />
               الملاحظات
             </TabsTrigger>
-            <TabsTrigger value="accidents" className="gap-1.5 relative">
+            <TabsTrigger value="accidents" className="gap-1.5 shrink-0 whitespace-nowrap relative">
               <AlertTriangle className="h-4 w-4" />
               بلاغات الحوادث ({accidentCount})
               {hasActiveReports && (
                 <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
               )}
             </TabsTrigger>
-            <TabsTrigger value="refunds" className="gap-1.5">
+            <TabsTrigger value="refunds" className="gap-1.5 shrink-0 whitespace-nowrap">
               <Banknote className="h-4 w-4" />
               المرتجعات
             </TabsTrigger>
