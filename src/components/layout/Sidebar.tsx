@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   DropdownMenu,
@@ -674,14 +674,10 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground">
-      {/* Grab handle — iOS-style bottom sheet affordance */}
-      <div className="flex justify-center pt-2 pb-1 shrink-0">
-        <div className="h-1 w-10 rounded-full bg-muted-foreground/25" />
-      </div>
-
       {/* Header: logo + site title. Logo sits on a tinted circle so white
-          or light-colored logos stay visible against the white sheet bg. */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b">
+          or light-colored logos stay visible against the white sheet bg.
+          Drawer adds its own grab handle above this automatically. */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b mt-2">
         <div className="h-11 w-11 rounded-full bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0 p-1.5">
           {isThiqaSuperAdmin ? (
             <img src={thiqaLogo} alt="Thiqa" className="max-h-full max-w-full object-contain" />
@@ -826,15 +822,12 @@ export function Sidebar() {
       {/* Mobile top navbar */}
       <MobileTopBar onOpenMenu={() => setMobileOpen(true)} />
 
-      {/* Mobile drawer — light themed bottom sheet (slides up) */}
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent
-          side="bottom"
-          className="w-full h-[90vh] max-h-[90vh] p-0 border-t rounded-t-2xl bg-background text-foreground"
-        >
+      {/* Mobile nav — vaul-powered bottom drawer with native swipe-to-dismiss */}
+      <Drawer open={mobileOpen} onOpenChange={setMobileOpen}>
+        <DrawerContent className="h-[90vh] max-h-[90vh] p-0 bg-background text-foreground" dir="rtl">
           <MobileSidebarContent onNavigate={() => setMobileOpen(false)} />
-        </SheetContent>
-      </Sheet>
+        </DrawerContent>
+      </Drawer>
 
       {/* Desktop sidebar - floating with margin */}
       <aside
