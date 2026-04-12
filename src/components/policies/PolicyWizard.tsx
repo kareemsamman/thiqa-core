@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Save, ArrowRight, ArrowLeft, Minus } from "lucide-react";
+import { Loader2, Save, ArrowRight, ArrowLeft, Minus, X } from "lucide-react";
 import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
 import { cn } from "@/lib/utils";
 import { calculatePolicyProfit } from "@/lib/pricingCalculator";
@@ -1570,29 +1570,40 @@ export function PolicyWizard({
     <>
       <Dialog open={open && !isCollapsed} onOpenChange={handleClose}>
         <DialogContent
+          hideCloseButton
           className="max-w-6xl w-[96vw] sm:max-h-[95vh] max-h-[100dvh] overflow-hidden flex flex-col sm:rounded-2xl rounded-none p-3 sm:p-6"
           dir="rtl"
         >
-          <button
-            type="button"
-            onClick={(e) => {
-              // Capture the minimize button's on-screen rect so the toolbar
-              // chip can animate from the exact click point.
-              const rect = e.currentTarget.getBoundingClientRect();
-              minimizeWizard({
-                x: rect.left + rect.width / 2,
-                y: rect.top + rect.height / 2,
-              });
-            }}
-            title="تصغير"
-            aria-label="تصغير"
-            className="absolute left-11 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-          >
-            <Minus className="h-4 w-4" />
-            <span className="sr-only">تصغير</span>
-          </button>
+          {/* Window-style controls: minimize + close on the same line */}
+          <div className="absolute left-4 top-4 flex items-center gap-1 z-10">
+            <button
+              type="button"
+              onClick={(e) => {
+                // Capture the button's on-screen rect so the toolbar chip can
+                // animate from the exact click point.
+                const rect = e.currentTarget.getBoundingClientRect();
+                minimizeWizard({
+                  x: rect.left + rect.width / 2,
+                  y: rect.top + rect.height / 2,
+                });
+              }}
+              title="تصغير"
+              aria-label="تصغير"
+              className="h-7 w-7 flex items-center justify-center rounded-md opacity-70 hover:opacity-100 hover:bg-accent transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              <Minus className="h-4 w-4" strokeWidth={2.5} />
+              <span className="sr-only">تصغير</span>
+            </button>
+            <DialogClose
+              className="h-7 w-7 flex items-center justify-center rounded-md opacity-70 hover:opacity-100 hover:bg-accent transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              aria-label="إغلاق"
+            >
+              <X className="h-4 w-4" strokeWidth={2.5} />
+              <span className="sr-only">إغلاق</span>
+            </DialogClose>
+          </div>
           <DialogHeader className="flex-shrink-0 pb-2 sm:pb-4 border-b">
-            <DialogTitle className="text-base sm:text-xl font-bold flex items-center gap-2 min-w-0 pl-16">
+            <DialogTitle className="text-base sm:text-xl font-bold flex items-center gap-2 min-w-0 pl-20">
               <span className="truncate">إضافة وثيقة جديدة</span>
               {selectedCategory && (
                 <span className="text-xs sm:text-sm font-normal text-muted-foreground truncate">
