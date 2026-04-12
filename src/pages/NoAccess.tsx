@@ -13,11 +13,8 @@ export default function NoAccess() {
   const [adminEmails, setAdminEmails] = useState<string[]>([]);
 
   useEffect(() => {
-    supabase.from("thiqa_super_admins").select("email, name").then(({ data }) => {
-      if (data) setAdminEmails(
-        data.map((r) => r.email)
-          .filter((e) => e.includes("@") && !e.endsWith("@phone.local"))
-      );
+    supabase.rpc("get_admin_contact_emails").then(({ data }) => {
+      if (data) setAdminEmails(data.map((r: { email: string }) => r.email));
     });
   }, []);
 
