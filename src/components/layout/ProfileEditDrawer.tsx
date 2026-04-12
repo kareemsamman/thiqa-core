@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useAgentContext } from "@/hooks/useAgentContext";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,9 +13,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { User, Phone, Mail, Save, Loader2, Lock, Eye, EyeOff, ChevronDown, ChevronUp } from "lucide-react";
+import { User, Phone, Mail, Save, Loader2, Lock, Eye, EyeOff, ChevronDown, ChevronUp, Sparkles, ArrowLeft, ShieldCheck, AlertTriangle } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 interface ProfileEditDrawerProps {
   open: boolean;
@@ -22,6 +25,8 @@ interface ProfileEditDrawerProps {
 
 export function ProfileEditDrawer({ open, onOpenChange }: ProfileEditDrawerProps) {
   const { user, profile, refreshProfile } = useAuth();
+  const { agent, isThiqaSuperAdmin } = useAgentContext();
+  const navigate = useNavigate();
 
   // Detect if user signed up with Google only (no email/password provider)
   const providers: string[] = user?.app_metadata?.providers || [];
@@ -29,6 +34,57 @@ export function ProfileEditDrawer({ open, onOpenChange }: ProfileEditDrawerProps
   const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState(profile?.full_name || "");
   const [phone, setPhone] = useState((profile as any)?.phone || "");
+
+  // Live countdown: re-tick once a minute so the trial time stays fresh
+  // while the drawer is open.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!open) return;
+    const interval = setInterval(() => setNowTick(Date.now()), 60 * 1000);
+    return () => clearInterval(interval);
+  }, [open]);
+
+  // Compact subscription summary — mirrors the Subscription page math so
+  // the drawer shows the same "34 days, 2 hours" countdown as the inner
+  // subscription view.
+  const sub = useMemo(() => {
+    if (!agent) return null;
+    const status = agent.subscription_status;
+    const isTrial = status === "trial" || (agent.monthly_price === 0 && status === "active");
+    const trialEnd = agent.trial_ends_at
+      ? new Date(agent.trial_ends_at)
+      : (isTrial && agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null);
+    const expiresAt = agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null;
+    const endDate = isTrial ? trialEnd : expiresAt;
+    const now = new Date(nowTick);
+    const msRemaining = endDate ? Math.max(0, endDate.getTime() - now.getTime()) : 0;
+    const daysRemaining = endDate ? Math.floor(msRemaining / 86400000) : null;
+    const hoursRemaining = endDate ? Math.floor((msRemaining % 86400000) / 3600000) : 0;
+    const minutesRemaining = endDate ? Math.floor((msRemaining % 3600000) / 60000) : 0;
+    const isExpired = endDate ? endDate.getTime() <= now.getTime() : false;
+    const isPaused = status === "paused" || status === "suspended";
+    const isCancelled = status === "cancelled";
+    const trialProgress = isTrial && daysRemaining !== null
+      ? Math.min(100, Math.max(0, ((35 * 86400000 - msRemaining) / (35 * 86400000)) * 100))
+      : 0;
+    return {
+      isTrial,
+      trialEnd,
+      expiresAt: endDate,
+      daysRemaining,
+      hoursRemaining,
+      minutesRemaining,
+      isExpired,
+      isPaused,
+      isCancelled,
+      trialProgress,
+    };
+  }, [agent, nowTick]);
+
+  const goToSubscription = () => {
+    onOpenChange(false);
+    navigate('/subscription');
+  };
 
   // Password change
   const [newPassword, setNewPassword] = useState("");
@@ -138,6 +194,98 @@ export function ProfileEditDrawer({ open, onOpenChange }: ProfileEditDrawerProps
             <p className="text-[10px] text-muted-foreground/60">حساب مسجل عبر Google</p>
           )}
         </div>
+
+        {/* Subscription / trial status — mirrors the inner subscription page */}
+        {!isThiqaSuperAdmin && sub && agent && (
+          <button
+            type="button"
+            onClick={goToSubscription}
+            className={cn(
+              "group mb-6 w-full rounded-xl border p-4 text-right transition-all hover:shadow-md overflow-hidden relative",
+              sub.isTrial && !sub.isExpired
+                ? "border-primary/40 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent hover:border-primary/60"
+                : sub.isPaused
+                  ? "border-yellow-500/40 bg-gradient-to-br from-yellow-50 to-transparent"
+                  : sub.isExpired || sub.isCancelled
+                    ? "border-destructive/40 bg-gradient-to-br from-destructive/10 to-transparent"
+                    : "border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent"
+            )}
+          >
+            <div className="pointer-events-none absolute -top-8 -left-8 h-24 w-24 rounded-full bg-primary/20 blur-2xl opacity-60" />
+
+            <div className="relative flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className={cn(
+                  "h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
+                  sub.isTrial ? "bg-primary/15 text-primary" :
+                  sub.isPaused ? "bg-yellow-100 text-yellow-600" :
+                  sub.isExpired || sub.isCancelled ? "bg-destructive/10 text-destructive" :
+                  "bg-primary/15 text-primary"
+                )}>
+                  {sub.isTrial ? <Sparkles className="h-4 w-4" /> :
+                   sub.isExpired || sub.isCancelled ? <AlertTriangle className="h-4 w-4" /> :
+                   <ShieldCheck className="h-4 w-4" />}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold truncate">
+                    {sub.isTrial ? "فترة تجريبية مجانية" :
+                     sub.isCancelled ? "اشتراك ملغي" :
+                     `خطة ${agent.plan === "pro" ? "Pro" : agent.plan === "basic" ? "Basic" : agent.plan}`}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {sub.isTrial ? "جميع ميزات Pro متاحة" :
+                     sub.isPaused ? "معلّق" :
+                     sub.isExpired ? "منتهي" :
+                     sub.isCancelled ? "ملغي" : "فعال"}
+                  </p>
+                </div>
+              </div>
+              <ArrowLeft className="h-3.5 w-3.5 text-muted-foreground group-hover:-translate-x-0.5 transition-transform shrink-0" />
+            </div>
+
+            {sub.isTrial && sub.daysRemaining !== null && (
+              <div className="relative space-y-1.5">
+                <div className="flex items-end justify-between gap-2">
+                  <p className={cn(
+                    "text-sm font-bold",
+                    sub.daysRemaining <= 7 ? "text-destructive" : "text-primary"
+                  )}>
+                    متبقي {sub.daysRemaining} يوم
+                    <span className="text-[10px] font-medium text-muted-foreground mr-1">
+                      {sub.hoursRemaining}س {sub.minutesRemaining}د
+                    </span>
+                  </p>
+                  {sub.trialEnd && (
+                    <p className="text-[10px] text-muted-foreground tabular-nums">
+                      {format(sub.trialEnd, "dd/MM/yyyy")}
+                    </p>
+                  )}
+                </div>
+                <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-500",
+                      sub.daysRemaining <= 7 ? "bg-destructive" : "bg-primary"
+                    )}
+                    style={{ width: `${sub.trialProgress}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center">
+                  {Math.round(sub.trialProgress)}% منتهية · اضغط للترقية
+                </p>
+              </div>
+            )}
+
+            {!sub.isTrial && sub.expiresAt && !sub.isExpired && (
+              <div className="relative flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">التجديد القادم</span>
+                <span className="font-semibold tabular-nums">
+                  {format(sub.expiresAt, "dd/MM/yyyy")}
+                </span>
+              </div>
+            )}
+          </button>
+        )}
 
         {/* Profile Fields */}
         <div className="space-y-4">
