@@ -157,6 +157,7 @@ export function PolicyWizard({
     setNewChildren,
     steps,
     currentStepData,
+    missingFields,
     effectiveBranchId,
     isLightMode,
     pricing,
@@ -1727,17 +1728,24 @@ export function PolicyWizard({
                 )}
               </div>
 
-              <div>
+              <div className="flex flex-col items-end gap-1">
                 {currentStep < steps.length ? (
-                  <Button
-                    onClick={handleNext}
-                    disabled={!canGoNext || saving}
-                    size="sm"
-                    className="sm:size-default"
-                  >
-                    التالي
-                    <ArrowLeft className="h-4 w-4 mr-1 sm:mr-2" />
-                  </Button>
+                  <>
+                    <Button
+                      onClick={handleNext}
+                      disabled={!canGoNext || saving}
+                      size="sm"
+                      className="sm:size-default"
+                    >
+                      التالي
+                      <ArrowLeft className="h-4 w-4 mr-1 sm:mr-2" />
+                    </Button>
+                    {!canGoNext && missingFields.length > 0 && (
+                      <p className="text-[10px] sm:text-xs text-destructive text-right max-w-[260px] leading-tight">
+                        يجب إدخال: {missingFields.join("، ")}
+                      </p>
+                    )}
+                  </>
                 ) : (
                   <Button
                     onClick={handleSave}

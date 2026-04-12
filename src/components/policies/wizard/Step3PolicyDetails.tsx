@@ -1119,7 +1119,7 @@ export function Step3PolicyDetails({
             </TabsTrigger>
             <TabsTrigger value="crm" className="gap-2">
               <FolderOpen className="h-4 w-4" />
-              ملفات داخلية
+              <span className="truncate">ملفات داخلية / أوراق ثبوتية</span>
               {crmFiles.length > 0 && (
                 <span className="text-[10px] bg-primary/15 text-primary rounded-full px-1.5 py-0.5 ml-1">
                   {crmFiles.length}

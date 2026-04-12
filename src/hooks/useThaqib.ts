@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { extractFunctionErrorMessage } from "@/lib/functionError";
 
 export interface ChatMessage {
   id: string;
@@ -93,10 +94,11 @@ export function useThaqib() {
 
       return data?.reply;
     } catch (e: any) {
+      const content = await extractFunctionErrorMessage(e);
       const errorMsg: ChatMessage = {
         id: `err-${Date.now()}`,
         role: "assistant",
-        content: e.message || "حدث خطأ. يرجى المحاولة مرة أخرى.",
+        content: content || "حدث خطأ. يرجى المحاولة مرة أخرى.",
         created_at: new Date().toISOString(),
       };
       setMessages(prev => [...prev, errorMsg]);

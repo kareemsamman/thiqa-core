@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { MessageSquare, Send, Loader2 } from "lucide-react";
 
 interface BrokerSmsModalProps {
@@ -84,21 +85,22 @@ export function BrokerSmsModal({
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error sending SMS:", error);
-      
+      const description = await extractFunctionErrorMessage(error);
+
       // Log failed SMS
       await supabase.from("sms_logs").insert({
         phone_number: phone,
         message,
         sms_type: "manual",
         status: "failed",
-        error_message: error?.message || "فشل في الإرسال",
+        error_message: description || "فشل في الإرسال",
         created_by: user?.id,
         branch_id: profile?.branch_id,
       });
 
       toast({
         title: "خطأ",
-        description: error?.message || "فشل في إرسال الرسالة",
+        description: description || "فشل في إرسال الرسالة",
         variant: "destructive",
       });
     } finally {

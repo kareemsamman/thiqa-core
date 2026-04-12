@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 import { resolveAgentId } from "../_shared/agent-branding.ts";
+import { checkUsageLimit, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -183,8 +184,28 @@ serve(async (req) => {
     // Fetch policy details for current batch
     const { data: batchPolicies } = await supabase
       .from('policies')
-      .select('id, end_date, policy_type_parent, client_id, car_id, company_id')
+      .select('id, end_date, policy_type_parent, client_id, car_id, company_id, agent_id')
       .in('id', currentBatch);
+
+    // Per-agent SMS quota cache — resolve each agent's remaining budget once
+    // per invocation and decrement as we send, so the cron can't blow past
+    // the agent's configured limit.
+    const agentQuotaCache = new Map<string, { remaining: number; unlimited: boolean }>();
+    const getAgentQuota = async (agentId: string) => {
+      let cached = agentQuotaCache.get(agentId);
+      if (!cached) {
+        const check = await checkUsageLimit(supabase, agentId, "sms");
+        cached = {
+          remaining:
+            check.limit_type === "unlimited"
+              ? Number.MAX_SAFE_INTEGER
+              : Math.max(0, check.limit - check.used),
+          unlimited: check.limit_type === "unlimited",
+        };
+        agentQuotaCache.set(agentId, cached);
+      }
+      return cached;
+    };
 
     const clientIds = [...new Set((batchPolicies || []).map(p => p.client_id).filter(Boolean))];
     const carIds = [...new Set((batchPolicies || []).map(p => p.car_id).filter(Boolean))];
@@ -213,6 +234,18 @@ serve(async (req) => {
         if (!client?.phone_number) {
           batchSkipped++;
           continue;
+        }
+
+        // Enforce per-agent SMS quota (best-effort: if the policy lacks an
+        // agent_id, skip the check since we can't attribute the send).
+        const policyAgentId = (policy as any).agent_id as string | null;
+        if (policyAgentId) {
+          const quota = await getAgentQuota(policyAgentId);
+          if (quota.remaining <= 0) {
+            batchSkipped++;
+            console.log(`[send-renewal-reminders] Skipping policy ${policy.id}: agent ${policyAgentId} SMS quota exhausted`);
+            continue;
+          }
         }
 
         const endDate = new Date(policy.end_date).toLocaleDateString('en-GB');
@@ -273,6 +306,12 @@ serve(async (req) => {
             renewal_status: 'sms_sent',
             reminder_sent_at: new Date().toISOString()
           }, { onConflict: 'policy_id' });
+          const policyAgentIdForLog = (policy as any).agent_id as string | null;
+          if (policyAgentIdForLog) {
+            const quota = agentQuotaCache.get(policyAgentIdForLog);
+            if (quota) quota.remaining -= 1;
+            await logUsage(supabase, policyAgentIdForLog, "sms");
+          }
         } else {
           batchErrors++;
         }

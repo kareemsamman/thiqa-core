@@ -480,7 +480,7 @@ export function PackageBuilderSection({
                 <div>
                   <Label className="text-xs mb-1 block flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    البداية
+                    تاريخ البداية
                   </Label>
                   <ArabicDatePicker
                     value={elzamiAddon.start_date}
@@ -492,7 +492,7 @@ export function PackageBuilderSection({
                 <div>
                   <Label className="text-xs mb-1 block flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    النهاية
+                    تاريخ النهاية
                   </Label>
                   <ArabicDatePicker
                     value={elzamiAddon.end_date}
@@ -595,7 +595,7 @@ export function PackageBuilderSection({
                 <div>
                   <Label className="text-xs mb-1 block flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    البداية
+                    تاريخ البداية
                   </Label>
                   <ArabicDatePicker
                     value={thirdFullAddon.start_date}
@@ -607,7 +607,7 @@ export function PackageBuilderSection({
                 <div>
                   <Label className="text-xs mb-1 block flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    النهاية
+                    تاريخ النهاية
                   </Label>
                   <ArabicDatePicker
                     value={thirdFullAddon.end_date}
@@ -723,7 +723,7 @@ export function PackageBuilderSection({
                 <div>
                   <Label className="text-xs mb-1 block flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    البداية
+                    تاريخ البداية
                   </Label>
                   <ArabicDatePicker
                     value={roadServiceAddon.start_date}
@@ -735,7 +735,7 @@ export function PackageBuilderSection({
                 <div>
                   <Label className="text-xs mb-1 block flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    النهاية
+                    تاريخ النهاية
                   </Label>
                   <ArabicDatePicker
                     value={roadServiceAddon.end_date}
@@ -845,7 +845,7 @@ export function PackageBuilderSection({
                 <div>
                   <Label className="text-xs mb-1 block flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    البداية
+                    تاريخ البداية
                   </Label>
                   <ArabicDatePicker
                     value={accidentFeeAddon.start_date}
@@ -857,7 +857,7 @@ export function PackageBuilderSection({
                 <div>
                   <Label className="text-xs mb-1 block flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    النهاية
+                    تاريخ النهاية
                   </Label>
                   <ArabicDatePicker
                     value={accidentFeeAddon.end_date}

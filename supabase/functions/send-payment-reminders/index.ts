@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { checkUsageLimit, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -57,6 +58,7 @@ Deno.serve(async (req) => {
         insurance_price,
         branch_id,
         client_id,
+        agent_id,
         clients!inner(id, full_name, phone_number),
         policy_payments(amount, refused)
       `)
@@ -87,11 +89,44 @@ Deno.serve(async (req) => {
     const smsLogs: any[] = [];
     const remindersToInsert: any[] = [];
     let sentCount = 0;
+    let skippedQuota = 0;
+
+    // Per-agent quota cache — resolve each agent's SMS budget once per run and
+    // decrement locally as we send, so we don't re-query `agent_usage_log`
+    // for every policy.
+    const agentQuotaCache = new Map<string, { remaining: number; unlimited: boolean }>();
+    const getAgentQuota = async (agentId: string) => {
+      let cached = agentQuotaCache.get(agentId);
+      if (!cached) {
+        const check = await checkUsageLimit(supabase, agentId, "sms");
+        cached = {
+          remaining:
+            check.limit_type === "unlimited"
+              ? Number.MAX_SAFE_INTEGER
+              : Math.max(0, check.limit - check.used),
+          unlimited: check.limit_type === "unlimited",
+        };
+        agentQuotaCache.set(agentId, cached);
+      }
+      return cached;
+    };
 
     for (const policy of policies || []) {
       const client = policy.clients as any;
       const clientPhone = client?.phone_number;
       if (!clientPhone) continue;
+
+      // Enforce per-agent SMS quota (best-effort: if policy lacks an agent_id,
+      // skip the check since we can't attribute the send).
+      const policyAgentId = (policy as any).agent_id as string | null;
+      if (policyAgentId) {
+        const quota = await getAgentQuota(policyAgentId);
+        if (quota.remaining <= 0) {
+          skippedQuota++;
+          console.log(`[payment-reminders] Skipping policy ${policy.id}: agent ${policyAgentId} SMS quota exhausted`);
+          continue;
+        }
+      }
 
       // Calculate remaining balance
       const totalPaid = (policy.policy_payments || [])
@@ -151,6 +186,11 @@ Deno.serve(async (req) => {
             sms_log_id: smsLogId,
           });
           sentCount++;
+          if (policyAgentId) {
+            const quota = agentQuotaCache.get(policyAgentId);
+            if (quota) quota.remaining -= 1;
+            await logUsage(supabase, policyAgentId, "sms");
+          }
         }
 
         // Create notification for admins
@@ -219,6 +259,7 @@ Deno.serve(async (req) => {
         success: true,
         message: `Sent ${sentCount} payment reminders`,
         sent: sentCount,
+        skipped_quota: skippedQuota,
         total_checked: policies?.length || 0,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -333,7 +333,7 @@ export function ArabicDatePicker({
   }
 
   return (
-    <div className={cn("flex gap-1 items-center", className)}>
+    <div className={cn("flex gap-1 items-center w-full", className)}>
       {/* Text Input for manual entry */}
       <Input
         type="text"
@@ -345,8 +345,8 @@ export function ArabicDatePicker({
         disabled={disabled}
         dir="ltr"
         className={cn(
-          "font-mono text-center ltr-nums",
-          compact ? "h-8 text-xs w-[100px]" : "h-9 text-sm flex-1",
+          "font-mono text-center ltr-nums flex-1 min-w-0",
+          compact ? "h-8 text-xs" : "h-9 text-sm",
           inputError && "border-destructive focus-visible:ring-destructive"
         )}
       />

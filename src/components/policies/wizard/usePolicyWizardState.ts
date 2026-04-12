@@ -448,6 +448,104 @@ export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirec
   // Get current step index for the steps array
   const currentStepData = steps.find((s) => s.id === currentStep);
 
+  // Human-readable list of fields still missing on the current step — used to
+  // show a dynamic hint under the disabled "التالي" button.
+  const missingFields = useMemo<string[]>(() => {
+    const missing: string[] = [];
+
+    const isPolicyStep =
+      (currentStep === 3 && !isLightMode) || (currentStep === 2 && isLightMode);
+    const isCarStep = currentStep === 2 && !isLightMode;
+    const isPaymentStep = currentStep === (isLightMode ? 3 : 4);
+
+    if (currentStep === 1) {
+      if (!selectedCategory) missing.push("نوع التأمين");
+      const hasClient = !!(
+        selectedClient ||
+        (createNewClient &&
+          newClient.full_name.trim() &&
+          digitsOnly(newClient.id_number).length === 9)
+      );
+      if (!hasClient) {
+        if (createNewClient) {
+          if (!newClient.full_name.trim()) missing.push("اسم العميل");
+          if (digitsOnly(newClient.id_number).length !== 9) missing.push("رقم الهوية");
+        } else {
+          missing.push("العميل");
+        }
+      }
+    } else if (isCarStep) {
+      const hasCar = !!(
+        selectedCar ||
+        existingCar ||
+        (createNewCar && newCar.car_number && !carConflict)
+      );
+      if (!hasCar) missing.push("بيانات السيارة");
+    } else if (isPolicyStep) {
+      if (!policy.company_id) missing.push("شركة التأمين");
+      if (!policy.start_date) missing.push("تاريخ البداية");
+      if (!policy.end_date) missing.push("تاريخ النهاية");
+      if (!policy.insurance_price) missing.push("السعر");
+      if (
+        policy.policy_type_parent === "THIRD_FULL" &&
+        policy.policy_type_child === "FULL" &&
+        !(policy.full_car_value && parseFloat(policy.full_car_value) > 0)
+      ) {
+        missing.push("قيمة السيارة");
+      }
+      if (packageMode) {
+        const elzami = packageAddons.find((a) => a.type === "elzami");
+        if (
+          elzami?.enabled &&
+          !(elzami.company_id && parseFloat(elzami.insurance_price) > 0)
+        ) {
+          missing.push("إكمال إلزامي في الباقة");
+        }
+        const tf = packageAddons.find((a) => a.type === "third_full");
+        if (
+          tf?.enabled &&
+          !(tf.company_id && tf.policy_type_child && parseFloat(tf.insurance_price) > 0)
+        ) {
+          missing.push("إكمال ثالث/شامل في الباقة");
+        }
+        const rs = packageAddons.find((a) => a.type === "road_service");
+        if (
+          rs?.enabled &&
+          !(rs.road_service_id && rs.company_id && parseFloat(rs.insurance_price) > 0)
+        ) {
+          missing.push("إكمال خدمات الطريق");
+        }
+        const af = packageAddons.find((a) => a.type === "accident_fee_exemption");
+        if (
+          af?.enabled &&
+          !(af.accident_fee_service_id && af.company_id && parseFloat(af.insurance_price) > 0)
+        ) {
+          missing.push("إكمال إعفاء رسوم الحادث");
+        }
+      }
+    } else if (isPaymentStep) {
+      if (paymentsExceedPrice) missing.push("مجموع الدفعات يتجاوز السعر");
+    }
+
+    return missing;
+  }, [
+    currentStep,
+    isLightMode,
+    selectedCategory,
+    selectedClient,
+    createNewClient,
+    newClient,
+    selectedCar,
+    existingCar,
+    createNewCar,
+    newCar,
+    carConflict,
+    policy,
+    packageMode,
+    packageAddons,
+    paymentsExceedPrice,
+  ]);
+
   // Reset functions
   const resetCarData = useCallback(() => {
     setSelectedCar(null);
@@ -679,6 +777,7 @@ export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirec
     setSaving,
     steps,
     currentStepData,
+    missingFields,
     goToStep,
 
     // Branch

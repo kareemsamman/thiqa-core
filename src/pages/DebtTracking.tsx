@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { useToast } from "@/hooks/use-toast";
 import { format, differenceInDays } from "date-fns";
 
@@ -230,27 +231,37 @@ export default function DebtTracking() {
     });
   };
 
-  const handleSendReminder = () => {
+  const handleSendReminder = async () => {
     if (!selectedClient) return;
     
-    // Fire and forget - show success immediately and close dialog
-    toast({
-      title: "تم الإرسال",
-      description: `تم إرسال التذكير إلى ${selectedClient.client_name}`,
-    });
+    const targetClientName = selectedClient.client_name;
     setSmsDialogOpen(false);
     setCustomMessage("");
 
-    // Send SMS in background without waiting
-    supabase.functions.invoke("send-manual-reminder", {
-      body: {
-        client_id: selectedClient.client_id,
-        message: customMessage || undefined,
-        sms_type: "payment_request",
-      },
-    }).catch((error) => {
+    // Await the result so we can show quota-reached errors instead of a
+    // silent failure. Keep it non-blocking on the UI with a short pending toast.
+    try {
+      const { error } = await supabase.functions.invoke("send-manual-reminder", {
+        body: {
+          client_id: selectedClient.client_id,
+          message: customMessage || undefined,
+          sms_type: "payment_request",
+        },
+      });
+      if (error) throw error;
+      toast({
+        title: "تم الإرسال",
+        description: `تم إرسال التذكير إلى ${targetClientName}`,
+      });
+    } catch (error) {
       console.error("Error sending reminder:", error);
-    });
+      const description = await extractFunctionErrorMessage(error);
+      toast({
+        title: "فشل في الإرسال",
+        description: description || "حدث خطأ أثناء إرسال التذكير",
+        variant: "destructive",
+      });
+    }
   };
 
   const openSmsDialog = (client: ClientDebt) => {
@@ -302,9 +313,10 @@ export default function DebtTracking() {
       setBulkSmsMessage("");
     } catch (error: any) {
       console.error("Error sending bulk SMS:", error);
+      const description = await extractFunctionErrorMessage(error);
       toast({
         title: "خطأ",
-        description: error.message || "فشل في إرسال الرسائل",
+        description: description || "فشل في إرسال الرسائل",
         variant: "destructive",
       });
     } finally {
