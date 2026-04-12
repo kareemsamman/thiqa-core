@@ -134,14 +134,45 @@ export function PolicyChildrenSelector({
     if (newChildren.length > prevNewChildrenLengthRef.current) {
       const lastChild = newChildren[newChildren.length - 1];
       setHighlightedChildId(lastChild.id);
-      // Wait one frame so the new card is in the DOM, then scroll to it.
+      // Wait two frames so layout is flushed (card is fully mounted AND
+      // measured) before scrolling. A single rAF sometimes fires before
+      // the new card contributes its height to scrollHeight.
       requestAnimationFrame(() => {
-        const el = document.querySelector(
-          `[data-child-card-id="${lastChild.id}"]`,
-        );
-        if (el instanceof HTMLElement) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
+        requestAnimationFrame(() => {
+          const el = document.querySelector(
+            `[data-child-card-id="${lastChild.id}"]`,
+          );
+          if (!(el instanceof HTMLElement)) return;
+
+          // Find the nearest scrollable ancestor (the wizard's step scroll
+          // region) and manually position the card so its full height sits
+          // comfortably inside the viewport. Using scrollIntoView({block:
+          // "center"}) leaves tall cards clipped when they're the last
+          // item, so we do the math ourselves and leave a 32px pad above.
+          let scroller: HTMLElement | null = el.parentElement;
+          while (scroller) {
+            const style = window.getComputedStyle(scroller);
+            const overflowY = style.overflowY;
+            if (
+              (overflowY === "auto" || overflowY === "scroll") &&
+              scroller.scrollHeight > scroller.clientHeight
+            ) {
+              break;
+            }
+            scroller = scroller.parentElement;
+          }
+
+          if (!scroller) {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+            return;
+          }
+
+          const scrollerRect = scroller.getBoundingClientRect();
+          const elRect = el.getBoundingClientRect();
+          const topPad = 32;
+          const delta = elRect.top - scrollerRect.top - topPad;
+          scroller.scrollBy({ top: delta, behavior: "smooth" });
+        });
       });
       const timer = setTimeout(() => setHighlightedChildId(null), 1500);
       prevNewChildrenLengthRef.current = newChildren.length;
