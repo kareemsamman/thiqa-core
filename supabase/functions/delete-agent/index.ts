@@ -61,9 +61,10 @@ Deno.serve(async (req) => {
     });
     if (cascadeErr) {
       console.error("[delete-agent] cascade failed:", cascadeErr);
-      throw new Error(
-        cascadeErr.message || "فشل في حذف البيانات المرتبطة بالوكيل. راجع لوحة Supabase.",
-      );
+      const detail = [cascadeErr.message, cascadeErr.details, cascadeErr.hint]
+        .filter(Boolean)
+        .join(" | ");
+      throw new Error(detail || "فشل في حذف البيانات المرتبطة بالوكيل.");
     }
 
     // 3. Delete the auth.users. These must be done through the admin API
@@ -75,6 +76,14 @@ Deno.serve(async (req) => {
         console.error(`[delete-agent] Failed to delete auth user ${uid}:`, authDelErr);
         failedAuthDeletes.push({ userId: uid, error: authDelErr.message });
       }
+    }
+
+    if (failedAuthDeletes.length > 0) {
+      throw new Error(
+        `فشل حذف ${failedAuthDeletes.length} مستخدم: ${failedAuthDeletes
+          .map((f) => f.error)
+          .join("; ")}`,
+      );
     }
 
     return new Response(

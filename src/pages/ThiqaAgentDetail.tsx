@@ -683,12 +683,30 @@ export default function ThiqaAgentDetail() {
       const { data, error } = await supabase.functions.invoke('delete-agent', {
         body: { agent_id: agentId },
       });
-      if (error) throw error;
+      // supabase-js wraps 4xx/5xx responses in a generic FunctionsHttpError
+      // whose .message is "Edge Function returned a non-2xx status code".
+      // The real error is on error.context (a Response). Read it explicitly
+      // so the user sees which table/constraint actually blocked the delete.
+      if (error) {
+        let realMessage = error.message;
+        const resp: Response | undefined = (error as any).context;
+        if (resp && typeof resp.text === 'function') {
+          try {
+            const text = await resp.text();
+            const parsed = JSON.parse(text);
+            if (parsed?.error) realMessage = parsed.error;
+          } catch {
+            // fall back to generic message
+          }
+        }
+        throw new Error(realMessage);
+      }
       if (data?.error) throw new Error(data.error);
       toast.success('تم حذف الوكيل بنجاح');
       navigate('/thiqa/agents');
     } catch (err: any) {
-      toast.error(err.message || 'خطأ في حذف الوكيل');
+      console.error('[delete-agent] failed:', err);
+      toast.error(err.message || 'خطأ في حذف الوكيل', { duration: 10000 });
     } finally {
       setDeletingAgent(false);
       setDeleteAgentOpen(false);
