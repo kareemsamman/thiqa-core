@@ -219,6 +219,17 @@ export function PolicyWizard({
   // Programmatic closes (e.g. after a successful save) skip the dirty check.
   const skipCloseConfirmRef = useRef(false);
 
+  // Keep the draft-summary callback in a ref so the effect below doesn't
+  // re-run every time the host renders a new inline function. Without this
+  // indirection the effect's deps change on every host render, it calls
+  // setInstanceDraft which re-renders the host which creates a new inline
+  // function which changes the deps again → infinite loop → React crashes
+  // the subtree and the app goes blank.
+  const onDraftSummaryChangeRef = useRef(onDraftSummaryChange);
+  useEffect(() => {
+    onDraftSummaryChangeRef.current = onDraftSummaryChange;
+  });
+
   // Push a compact draft summary up to the host so the tab strip can show
   // what this wizard is working on. The host stores it per-instance, so we
   // only report updates while the wizard is the active one — that way the
@@ -231,7 +242,7 @@ export function PolicyWizard({
       || (createNewClient && newClient.full_name)
       || "";
     const stepTitle = steps.find((s) => s.id === currentStep)?.title || "";
-    onDraftSummaryChange?.({
+    onDraftSummaryChangeRef.current?.({
       clientName,
       stepTitle,
       stepNumber: currentStep,
@@ -247,7 +258,6 @@ export function PolicyWizard({
     currentStep,
     steps,
     selectedCategory,
-    onDraftSummaryChange,
   ]);
 
   // Success dialog state
