@@ -1111,8 +1111,19 @@ function PolicyPackageCard({
                 "text-lg font-bold ltr-nums",
                 isActive ? "text-primary" : "text-muted-foreground"
               )}>
-                ₪{pkg.totalPrice.toLocaleString()}
+                ₪{pkg.totalPrice.toLocaleString('en-US')}
               </p>
+              {(() => {
+                const totalCommission = (isPkg
+                  ? [pkg.mainPolicy, ...pkg.addons].filter(Boolean) as PolicyRecord[]
+                  : [policy]
+                ).reduce((sum, p) => sum + (p.office_commission || 0), 0);
+                return totalCommission > 0 ? (
+                  <p className="text-[9px] text-amber-700 font-semibold ltr-nums mt-0.5">
+                    منها ₪{totalCommission.toLocaleString('en-US')} عمولة مكتب
+                  </p>
+                ) : null;
+              })()}
             </div>
           </div>
         </div>
@@ -1218,16 +1229,17 @@ function PolicyPackageCard({
 }
 
 // Compact row component for package component details
-function PackageComponentRow({ 
-  policy, 
-  isActive 
-}: { 
-  policy: PolicyRecord; 
+function PackageComponentRow({
+  policy,
+  isActive,
+}: {
+  policy: PolicyRecord;
   isActive: boolean;
 }) {
   const typeLabel = getDisplayLabel(policy);
   const typeColor = policyTypeColors[policy.policy_type_parent];
-  
+  const commission = policy.office_commission || 0;
+
   // Get company/service name based on policy type
   const getProviderName = () => {
     // For road service or accident fee policies, the company field should contain the service provider
@@ -1258,12 +1270,19 @@ function PackageComponentRow({
         )}>
           {formatDate(policy.end_date)} ← {formatDate(policy.start_date)}
         </span>
-        <span className={cn(
-          "font-semibold ltr-nums min-w-[60px] text-left",
-          isActive ? "text-foreground" : "text-muted-foreground"
-        )}>
-          ₪{policy.insurance_price.toLocaleString()}
-        </span>
+        <div className="flex flex-col items-end min-w-[70px]">
+          <span className={cn(
+            "font-semibold ltr-nums text-left",
+            isActive ? "text-foreground" : "text-muted-foreground"
+          )}>
+            ₪{policy.insurance_price.toLocaleString('en-US')}
+          </span>
+          {commission > 0 && (
+            <span className="text-[9px] text-amber-700 font-semibold ltr-nums">
+              + ₪{commission.toLocaleString('en-US')} عمولة
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
