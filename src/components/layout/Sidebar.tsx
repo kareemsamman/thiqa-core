@@ -486,7 +486,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
               {!isThiqaSuperAdmin && agent && (() => {
                 const isTrial = agent.subscription_status === 'trial' || (agent.monthly_price === 0 && agent.subscription_status === 'active');
                 const endDate = agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null;
-                const days = endDate ? Math.max(0, Math.ceil((endDate.getTime() - Date.now()) / 86400000)) : null;
+                const days = endDate ? Math.max(0, Math.floor((endDate.getTime() - Date.now()) / 86400000)) : null;
                 const trialProgress = isTrial && days !== null ? Math.min(100, ((35 - days) / 35) * 100) : 0;
 
                 return (
