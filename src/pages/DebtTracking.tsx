@@ -54,6 +54,26 @@ interface PolicyDebt {
   group_id: string | null;
 }
 
+// Aggregated row for the debt table. One per package (group_id) or one per
+// standalone policy. ELZAMI policies that belong to a package are merged
+// into the parent row so their price doesn't clutter the list; only their
+// office_commission is surfaced as a "+ عمولة مكتب" badge on the row.
+interface DebtRow {
+  key: string;
+  isPackage: boolean;
+  typeLabel: string;
+  hasCommission: boolean;
+  commissionTotal: number;
+  price: number;
+  paid: number;
+  remaining: number;
+  endDate: string;
+  daysUntilExpiry: number;
+  status: 'active' | 'expiring_soon' | 'expired';
+  carNumber: string | null;
+  primaryPolicyId: string;
+}
+
 const POLICY_TYPE_LABELS: Record<string, string> = {
   'ELZAMI': 'إلزامي',
   'THIRD_FULL': 'ثالث/شامل',
@@ -70,6 +90,108 @@ const getPolicyTypeLabel = (parent: string | null, child: string | null): string
     return childLabel; // Just show child label for THIRD_FULL
   }
   return parentLabel;
+};
+
+// Collapse per-policy debt rows into per-package rows. For packages, ELZAMI
+// price is excluded from the total (compulsory coverage is passed through
+// to the insurance company, not owed to the agent), but its
+// office_commission IS counted as part of the package's debt to the office.
+const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
+  const groups = new Map<string, PolicyDebt[]>();
+  const rows: DebtRow[] = [];
+
+  for (const p of policies) {
+    if (p.group_id) {
+      const list = groups.get(p.group_id) || [];
+      list.push(p);
+      groups.set(p.group_id, list);
+    } else {
+      // Standalone policy — treat as its own "row".
+      // Skip bare ELZAMI with no commission (it's already fully handled by
+      // the company, nothing for the agent to collect).
+      if (p.policy_type_parent === 'ELZAMI' && (p.office_commission || 0) === 0) continue;
+
+      const isElzami = p.policy_type_parent === 'ELZAMI';
+      const commission = p.office_commission || 0;
+      const price = isElzami ? commission : (p.insurance_price + commission);
+      const remaining = Math.max(0, price - p.paid);
+      if (remaining <= 0) continue;
+
+      rows.push({
+        key: p.id,
+        isPackage: false,
+        typeLabel: isElzami
+          ? 'عمولة مكتب'
+          : getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child),
+        hasCommission: commission > 0 && !isElzami,
+        commissionTotal: commission,
+        price,
+        paid: Math.min(p.paid, price),
+        remaining,
+        endDate: p.end_date,
+        daysUntilExpiry: p.days_until_expiry,
+        status: p.status,
+        carNumber: p.car_number,
+        primaryPolicyId: p.id,
+      });
+    }
+  }
+
+  for (const [groupId, items] of groups) {
+    const nonElzami = items.filter((p) => p.policy_type_parent !== 'ELZAMI');
+    const elzami = items.filter((p) => p.policy_type_parent === 'ELZAMI');
+
+    // Non-ELZAMI contribute their insurance_price (commission on these is
+    // ignored everywhere by get_client_balance). ELZAMI contributes only
+    // its office_commission as a separate charge owed to the office.
+    const nonElzamiPrice = nonElzami.reduce((sum, p) => sum + p.insurance_price, 0);
+    const elzamiCommission = elzami.reduce((sum, p) => sum + (p.office_commission || 0), 0);
+    const packagePrice = nonElzamiPrice + elzamiCommission;
+
+    const nonElzamiPaid = nonElzami.reduce((sum, p) => sum + p.paid, 0);
+    // ELZAMI insurance_price is collected by the company directly — only
+    // payments that exceed the base price are credited against the
+    // office commission.
+    const elzamiPaidTowardCommission = elzami.reduce((sum, p) => {
+      return sum + Math.max(0, p.paid - p.insurance_price);
+    }, 0);
+    const packagePaid = nonElzamiPaid + elzamiPaidTowardCommission;
+    const packageRemaining = Math.max(0, packagePrice - packagePaid);
+    if (packageRemaining <= 0) continue;
+
+    const typeLabels = nonElzami
+      .map((p) => getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child))
+      .filter(Boolean);
+    const hasCommission = elzamiCommission > 0;
+    const combined = typeLabels.join(' + ') + (hasCommission ? ' + عمولة مكتب' : '');
+
+    // Earliest end date across the package drives expiry status.
+    const earliest = items.reduce(
+      (best, p) => (!best || new Date(p.end_date) < new Date(best.end_date) ? p : best),
+      items[0],
+    );
+
+    rows.push({
+      key: groupId,
+      isPackage: true,
+      typeLabel: combined || 'باقة',
+      hasCommission,
+      commissionTotal: elzamiCommission,
+      price: packagePrice,
+      paid: packagePaid,
+      remaining: packageRemaining,
+      endDate: earliest.end_date,
+      daysUntilExpiry: earliest.days_until_expiry,
+      status: earliest.status,
+      carNumber: earliest.car_number,
+      // Open the first non-ELZAMI policy's drawer when the user clicks view.
+      primaryPolicyId: (nonElzami[0] || items[0]).id,
+    });
+  }
+
+  // Keep deterministic ordering: earliest expiry first.
+  rows.sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+  return rows;
 };
 
 export default function DebtTracking() {
@@ -320,7 +442,7 @@ export default function DebtTracking() {
 
   const getWhatsAppUrl = (client: ClientDebt): string | null => {
     if (!client.phone_number) return null;
-    
+
     let phone = client.phone_number.replace(/[\s\-\(\)]/g, '');
     if (phone.startsWith('0')) {
       phone = '972' + phone.slice(1);
@@ -328,22 +450,22 @@ export default function DebtTracking() {
       phone = '972' + phone;
     }
     phone = phone.replace('+', '');
-    
-    // Build policy details for the message
-    const policyDetails = client.policies
-      .filter(p => p.remaining > 0)
+
+    // Build policy details by aggregating into package rows so packages
+    // appear as a single line and ELZAMI commission is surfaced inline.
+    const rows = aggregateDebtRows(client.policies);
+    const policyDetails = rows
       .slice(0, 5)
-      .map(p => {
-        const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
-        const carNum = p.car_number || '';
-        const remaining = Math.round(p.remaining);
-        return `• ${typeLabel}${carNum ? ` - ${carNum}` : ''} - ₪${remaining.toLocaleString()}`;
+      .map((r) => {
+        const car = r.carNumber || '';
+        const remaining = Math.round(r.remaining);
+        return `• ${r.typeLabel}${car ? ` - ${car}` : ''} - ₪${remaining.toLocaleString('en-US')}`;
       })
       .join('\n');
-    
+
     const message = `مرحباً ${client.client_name}،
 
-عليك تسديد المبلغ: ${client.total_remaining.toLocaleString()} شيكل
+عليك تسديد المبلغ: ${client.total_remaining.toLocaleString('en-US')} شيكل
 
 الوثائق:
 ${policyDetails}
@@ -613,80 +735,71 @@ ${policyDetails}
                       </div>
                     </div>
 
-                    {/* Expanded Policies */}
-                    {expandedClients.has(client.client_id) && (
-                      <div className="border-t">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="text-right">رقم الوثيقة</TableHead>
-                              <TableHead className="text-right">نوع الوثيقة</TableHead>
-                              <TableHead className="text-right">رقم السيارة</TableHead>
-                              <TableHead className="text-right">سعر التأمين</TableHead>
-                              <TableHead className="text-right">عمولة المكتب</TableHead>
-                              <TableHead className="text-right">المدفوع</TableHead>
-                              <TableHead className="text-right">المتبقي</TableHead>
-                              <TableHead className="text-right">تاريخ الانتهاء</TableHead>
-                              <TableHead className="text-right">الحالة</TableHead>
-                              <TableHead className="text-right">إجراءات</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {client.policies.map((policy) => {
-                              const isPartOfPackage = policy.group_id && client.policies.filter(p => p.group_id === policy.group_id).length > 1;
-                              return (
-                                <TableRow key={policy.id} className={isPartOfPackage ? 'bg-muted/20' : ''}>
-                                  <TableCell className="font-medium">
-                                    <div className="flex items-center gap-2">
-                                      {policy.policy_number || policy.id.substring(0, 8)}
-                                      {isPartOfPackage && (
-                                        <Badge variant="outline" className="text-xs">باقة</Badge>
+                    {/* Expanded aggregated rows — one per package or standalone policy */}
+                    {expandedClients.has(client.client_id) && (() => {
+                      const rows = aggregateDebtRows(client.policies);
+                      return (
+                        <div className="border-t">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-right">نوع الوثيقة</TableHead>
+                                <TableHead className="text-right">رقم السيارة</TableHead>
+                                <TableHead className="text-right">السعر</TableHead>
+                                <TableHead className="text-right">المدفوع</TableHead>
+                                <TableHead className="text-right">المتبقي</TableHead>
+                                <TableHead className="text-right">تاريخ الانتهاء</TableHead>
+                                <TableHead className="text-right">الحالة</TableHead>
+                                <TableHead className="text-right">إجراءات</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {rows.map((row) => (
+                                <TableRow key={row.key}>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-medium">{row.typeLabel}</span>
+                                      {row.isPackage && (
+                                        <Badge variant="outline" className="text-[10px]">باقة</Badge>
+                                      )}
+                                      {row.hasCommission && row.commissionTotal > 0 && (
+                                        <Badge className="text-[10px] bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-100">
+                                          + {formatCurrency(row.commissionTotal)} عمولة
+                                        </Badge>
                                       )}
                                     </div>
                                   </TableCell>
-                                  <TableCell>
-                                    {getPolicyTypeLabel(policy.policy_type_parent, policy.policy_type_child)}
-                                  </TableCell>
                                   <TableCell className="font-mono">
-                                    {policy.car_number || '-'}
+                                    {row.carNumber || '-'}
                                   </TableCell>
-                                  <TableCell>{formatCurrency(policy.insurance_price)}</TableCell>
-                                  <TableCell>
-                                    {policy.office_commission > 0 ? (
-                                      <span className="text-amber-700 font-semibold">
-                                        {formatCurrency(policy.office_commission)}
-                                      </span>
-                                    ) : (
-                                      <span className="text-muted-foreground">-</span>
-                                    )}
-                                  </TableCell>
+                                  <TableCell className="font-semibold">{formatCurrency(row.price)}</TableCell>
                                   <TableCell className="text-green-600">
-                                    {formatCurrency(policy.paid)}
+                                    {formatCurrency(row.paid)}
                                   </TableCell>
                                   <TableCell className="text-destructive font-medium">
-                                    {formatCurrency(policy.remaining)}
+                                    {formatCurrency(row.remaining)}
                                   </TableCell>
                                   <TableCell>
-                                    {format(new Date(policy.end_date), "dd/MM/yyyy")}
+                                    {format(new Date(row.endDate), "dd/MM/yyyy")}
                                   </TableCell>
-                                  <TableCell>{getExpiryBadge(policy.days_until_expiry)}</TableCell>
+                                  <TableCell>{getExpiryBadge(row.daysUntilExpiry)}</TableCell>
                                   <TableCell>
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      onClick={() => openPolicyDetails(policy.id)}
+                                      onClick={() => openPolicyDetails(row.primaryPolicyId)}
                                     >
                                       <Eye className="h-4 w-4 ml-1" />
                                       عرض
                                     </Button>
                                   </TableCell>
                                 </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
 

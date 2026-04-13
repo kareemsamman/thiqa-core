@@ -174,17 +174,84 @@ Deno.serve(async (req) => {
         { p_client_ids: [client_id] }
       );
 
-      // Build policy lines (max 5 to keep SMS short)
-      const policyLines = (policies || [])
-        .filter((p: any) => (p.remaining || 0) > 0)
-        .map((p: any) => {
-          const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
-          const car = p.car_number || '';
-          const remaining = Math.round(p.remaining || 0);
-          return `• ${typeLabel}${car ? ` - ${car}` : ''} - ₪${remaining.toLocaleString()}`;
-        })
-        .slice(0, 5)
-        .join('\n');
+      // Build policy lines (max 5 to keep SMS short). Group by group_id so
+      // packages appear as a single combined entry, ELZAMI is hidden unless
+      // it has office_commission, and the commission is surfaced as a "+
+      // عمولة مكتب" suffix instead of a standalone line.
+      type DebtPolicy = {
+        policy_type_parent: string;
+        policy_type_child: string | null;
+        car_number: string | null;
+        insurance_price: number;
+        office_commission: number;
+        paid: number;
+        group_id: string | null;
+      };
+      const allPolicies: DebtPolicy[] = (policies || []).map((p: any) => ({
+        policy_type_parent: p.policy_type_parent,
+        policy_type_child: p.policy_type_child,
+        car_number: p.car_number,
+        insurance_price: Number(p.insurance_price) || 0,
+        office_commission: Number(p.office_commission) || 0,
+        paid: Number(p.paid) || 0,
+        group_id: p.group_id,
+      }));
+
+      const groups = new Map<string, DebtPolicy[]>();
+      const standalone: DebtPolicy[] = [];
+      for (const p of allPolicies) {
+        if (p.group_id) {
+          const list = groups.get(p.group_id) || [];
+          list.push(p);
+          groups.set(p.group_id, list);
+        } else {
+          standalone.push(p);
+        }
+      }
+
+      const lines: string[] = [];
+
+      // Package lines
+      for (const items of groups.values()) {
+        const nonElzami = items.filter((i) => i.policy_type_parent !== 'ELZAMI');
+        const elzami = items.filter((i) => i.policy_type_parent === 'ELZAMI');
+        const nonElzamiPrice = nonElzami.reduce((s, i) => s + i.insurance_price + i.office_commission, 0);
+        const elzamiCommission = elzami.reduce((s, i) => s + i.office_commission, 0);
+        const nonElzamiPaid = nonElzami.reduce((s, i) => s + i.paid, 0);
+        const elzamiPaidTowardCommission = elzami.reduce(
+          (s, i) => s + Math.max(0, i.paid - i.insurance_price),
+          0,
+        );
+        const price = nonElzamiPrice + elzamiCommission;
+        const paid = nonElzamiPaid + elzamiPaidTowardCommission;
+        const remaining = Math.round(Math.max(0, price - paid));
+        if (remaining <= 0) continue;
+        const labels = nonElzami
+          .map((i) => getPolicyTypeLabel(i.policy_type_parent, i.policy_type_child))
+          .filter(Boolean)
+          .join(' + ');
+        const combined = labels + (elzamiCommission > 0 ? ' + عمولة مكتب' : '');
+        const car = items[0].car_number || '';
+        lines.push(`• ${combined}${car ? ` - ${car}` : ''} - ₪${remaining.toLocaleString('en-US')}`);
+      }
+
+      // Standalone lines (skip bare ELZAMI with no commission)
+      for (const p of standalone) {
+        const isElzami = p.policy_type_parent === 'ELZAMI';
+        const commission = p.office_commission || 0;
+        if (isElzami && commission === 0) continue;
+        const price = isElzami ? commission : p.insurance_price + commission;
+        const remaining = Math.round(Math.max(0, price - p.paid));
+        if (remaining <= 0) continue;
+        const typeLabel = isElzami
+          ? 'عمولة مكتب'
+          : getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child) +
+            (commission > 0 ? ' + عمولة مكتب' : '');
+        const car = p.car_number || '';
+        lines.push(`• ${typeLabel}${car ? ` - ${car}` : ''} - ₪${remaining.toLocaleString('en-US')}`);
+      }
+
+      const policyLines = lines.slice(0, 5).join('\n');
 
       // Build policy section only if there are policies with remaining balance
       const policySection = policyLines.length > 0 
@@ -194,7 +261,7 @@ Deno.serve(async (req) => {
       // Build final message with policy details and footer
       finalMessage = `مرحباً ${client.full_name}،
 
-عليك تسديد المبلغ: ₪${totalRemaining.toLocaleString()}${policySection}
+عليك تسديد المبلغ: ₪${totalRemaining.toLocaleString('en-US')}${policySection}
 
 ${branding.companyName}`;
 
