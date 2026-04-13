@@ -158,14 +158,19 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
     const elzami = items.filter((p) => p.policy_type_parent === 'ELZAMI');
     const nonElzamiPrice = nonElzami.reduce((sum, p) => sum + p.insurance_price, 0);
     const elzamiCommission = elzami.reduce((sum, p) => sum + (p.office_commission || 0), 0);
+    const elzamiBasePrice = elzami.reduce((sum, p) => sum + p.insurance_price, 0);
     const packagePrice = nonElzamiPrice + elzamiCommission;
-    const nonElzamiPaid = nonElzami.reduce((sum, p) => sum + p.paid, 0);
-    const elzamiPaidTowardCommission = elzami.reduce(
-      (sum, p) => sum + Math.max(0, p.paid - p.insurance_price),
-      0,
-    );
-    const packagePaid = nonElzamiPaid + elzamiPaidTowardCommission;
-    const packageRemaining = Math.max(0, packagePrice - packagePaid);
+
+    // Waterfall allocation across the whole package pool: the elzami base is a
+    // passthrough to the insurance company, so the customer's payments cover
+    // it first. Only what remains in the pool counts as paid toward the office
+    // debt (non-elzami price + elzami commission). This way a 1650 payment on
+    // a شامل+إلزامي package is attributed to the elzami base (company money),
+    // not to the office, and the debt row shows paid=0 / remaining=full.
+    const totalPaidPool = items.reduce((sum, p) => sum + p.paid, 0);
+    const officePaidRaw = totalPaidPool - elzamiBasePrice;
+    const packagePaid = Math.max(0, Math.min(packagePrice, officePaidRaw));
+    const packageRemaining = packagePrice - packagePaid;
     if (packageRemaining <= 0) continue;
 
     const typeLabels = nonElzami
