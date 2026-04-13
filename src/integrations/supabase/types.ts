@@ -2981,6 +2981,7 @@ export type Database = {
           created_at: string
           elzami_commission: number | null
           id: string
+          is_seed: boolean
           legacy_wp_id: number | null
           name: string
           name_ar: string | null
@@ -2994,6 +2995,7 @@ export type Database = {
           created_at?: string
           elzami_commission?: number | null
           id?: string
+          is_seed?: boolean
           legacy_wp_id?: number | null
           name: string
           name_ar?: string | null
@@ -3007,6 +3009,7 @@ export type Database = {
           created_at?: string
           elzami_commission?: number | null
           id?: string
+          is_seed?: boolean
           legacy_wp_id?: number | null
           name?: string
           name_ar?: string | null
@@ -5200,7 +5203,7 @@ export type Database = {
       }
       sms_logs: {
         Row: {
-          agent_id: string | null
+          agent_id: string
           branch_id: string | null
           client_id: string | null
           created_at: string
@@ -5215,7 +5218,7 @@ export type Database = {
           status: string
         }
         Insert: {
-          agent_id?: string | null
+          agent_id: string
           branch_id?: string | null
           client_id?: string | null
           created_at?: string
@@ -5230,7 +5233,7 @@ export type Database = {
           status?: string
         }
         Update: {
-          agent_id?: string | null
+          agent_id?: string
           branch_id?: string | null
           client_id?: string | null
           created_at?: string
@@ -5657,6 +5660,7 @@ export type Database = {
       }
       user_sessions: {
         Row: {
+          agent_id: string
           browser_name: string | null
           browser_version: string | null
           city: string | null
@@ -5674,6 +5678,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          agent_id: string
           browser_name?: string | null
           browser_version?: string | null
           city?: string | null
@@ -5691,6 +5696,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          agent_id?: string
           browser_name?: string | null
           browser_version?: string | null
           city?: string | null
@@ -5708,6 +5714,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "user_sessions_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "user_sessions_user_id_profiles_fkey"
             columns: ["user_id"]
