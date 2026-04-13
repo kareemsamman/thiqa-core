@@ -145,9 +145,10 @@ const getTypeName = (p: PackagePolicy) => {
   const totalProfit = policies
     .filter((p) => p.policy_type_parent !== 'ELZAMI')
     .reduce((sum, p) => sum + (p.profit || 0), 0);
-  const totalCommission = policies
-    .filter((p) => p.policy_type_parent === 'ELZAMI')
-    .reduce((sum, p) => sum + ((p as any).office_commission || 0), 0);
+  const totalCommission = policies.reduce(
+    (sum, p) => sum + ((p as any).office_commission || 0),
+    0,
+  );
 
   return (
     <TooltipProvider>
@@ -211,7 +212,7 @@ const getTypeName = (p: PackagePolicy) => {
                 <TableCell className="text-left">
                   <div className="flex flex-col items-end">
                     <span className="font-bold text-lg ltr-nums">{formatCurrency(policy.insurance_price)}</span>
-                    {isElzami && ((policy as any).office_commission || 0) > 0 && (
+                    {((policy as any).office_commission || 0) > 0 && (
                       <span className="text-[11px] text-amber-700 font-semibold ltr-nums mt-0.5">
                         + {formatCurrency((policy as any).office_commission)} عمولة مكتب
                       </span>
