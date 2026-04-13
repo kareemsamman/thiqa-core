@@ -1105,23 +1105,23 @@ function PolicyPackageCard({
 
           {/* Amount */}
           <div className="flex items-start gap-2 justify-end">
-            <div className="text-left">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">المبلغ</p>
-              <p className={cn(
+            <div className="flex flex-col items-start leading-tight">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المبلغ</span>
+              <span className={cn(
                 "text-lg font-bold ltr-nums",
                 isActive ? "text-primary" : "text-muted-foreground"
               )}>
                 ₪{pkg.totalPrice.toLocaleString('en-US')}
-              </p>
+              </span>
               {(() => {
                 const totalCommission = (isPkg
                   ? [pkg.mainPolicy, ...pkg.addons].filter(Boolean) as PolicyRecord[]
                   : [policy]
                 ).reduce((sum, p) => sum + (p.office_commission || 0), 0);
                 return totalCommission > 0 ? (
-                  <p className="text-[9px] text-amber-700 font-semibold ltr-nums mt-0.5">
+                  <span className="text-[9px] text-amber-700 font-semibold ltr-nums mt-0.5">
                     منها ₪{totalCommission.toLocaleString('en-US')} عمولة مكتب
-                  </p>
+                  </span>
                 ) : null;
               })()}
             </div>
