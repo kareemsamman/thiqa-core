@@ -24,6 +24,7 @@ import {
   Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { normalizeArabic } from "@/lib/arabicNormalize";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ClientDrawer } from "@/components/clients/ClientDrawer";
@@ -120,8 +121,9 @@ export default function Clients() {
         .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
 
       if (searchQuery) {
+        const normalized = normalizeArabic(searchQuery);
         query = query.or(
-          `full_name.ilike.%${searchQuery}%,id_number.ilike.%${searchQuery}%,file_number.ilike.%${searchQuery}%,phone_number.ilike.%${searchQuery}%`
+          `full_name_normalized.ilike.%${normalized}%,id_number.ilike.%${searchQuery}%,file_number.ilike.%${searchQuery}%,phone_number.ilike.%${searchQuery}%`
         );
       }
 

@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { Search, User, Car, Phone, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { normalizeArabic } from "@/lib/arabicNormalize";
 
 interface ClientSearchResult {
   id: string;
@@ -64,7 +65,7 @@ export function GlobalPolicySearch({ open, onOpenChange }: GlobalPolicySearchPro
           phone_number
         `)
         .is("deleted_at", null)
-        .or(`full_name.ilike.%${searchTerm}%,phone_number.ilike.%${searchTerm}%,id_number.ilike.%${searchTerm}%`)
+        .or(`full_name_normalized.ilike.%${normalizeArabic(searchTerm)}%,phone_number.ilike.%${searchTerm}%,id_number.ilike.%${searchTerm}%`)
         .limit(10);
 
       if (clientsError) throw clientsError;

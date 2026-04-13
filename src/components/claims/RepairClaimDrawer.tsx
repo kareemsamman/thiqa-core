@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeArabic } from "@/lib/arabicNormalize";
 import {
   Sheet,
   SheetContent,
@@ -165,11 +166,12 @@ export function RepairClaimDrawer({ open, onOpenChange, claim }: RepairClaimDraw
       
       // Use textSearch approach for better results
       const searchTerm = `%${clientSearch}%`;
+      const normalizedName = `%${normalizeArabic(clientSearch)}%`;
       const { data, error } = await supabase
         .from("clients")
         .select("id, full_name, id_number, phone_number")
         .is("deleted_at", null)
-        .or(`full_name.ilike.${searchTerm},id_number.ilike.${searchTerm},phone_number.ilike.${searchTerm}`)
+        .or(`full_name_normalized.ilike.${normalizedName},id_number.ilike.${searchTerm},phone_number.ilike.${searchTerm}`)
         .limit(15);
       
       if (error) {

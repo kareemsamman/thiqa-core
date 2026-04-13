@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeArabic } from "@/lib/arabicNormalize";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -136,7 +137,7 @@ export default function AccidentReports() {
 
       // Search
       if (search.trim()) {
-        query = query.or(`clients.full_name.ilike.%${search}%,cars.car_number.ilike.%${search}%,policies.policy_number.ilike.%${search}%`);
+        query = query.or(`clients.full_name_normalized.ilike.%${normalizeArabic(search)}%,cars.car_number.ilike.%${search}%,policies.policy_number.ilike.%${search}%`);
       }
 
       // Status filter

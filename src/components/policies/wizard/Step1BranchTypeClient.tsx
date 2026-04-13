@@ -17,6 +17,7 @@ import type { InsuranceCategory, Client, Broker, NewClientForm, ValidationErrors
 import type { ClientChild, NewChildForm } from "@/types/clientChildren";
 import { BranchQuickFormDialog } from "@/components/branches/BranchQuickFormDialog";
 import { CategoryQuickFormDialog } from "@/components/insurance-categories/CategoryQuickFormDialog";
+import { normalizeArabic } from "@/lib/arabicNormalize";
 
 interface Step1Props {
   // Branch
@@ -125,11 +126,12 @@ export function Step1BranchTypeClient({
       return;
     }
     setLoadingClients(true);
+    const normalized = normalizeArabic(query);
     const { data, error } = await supabase
       .from('clients')
       .select('id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes')
       .is('deleted_at', null)
-      .or(`full_name.ilike.%${query}%,id_number.ilike.%${query}%,file_number.ilike.%${query}%,phone_number.ilike.%${query}%`)
+      .or(`full_name_normalized.ilike.%${normalized}%,id_number.ilike.%${query}%,file_number.ilike.%${query}%,phone_number.ilike.%${query}%`)
       .limit(10);
     
     setLoadingClients(false);

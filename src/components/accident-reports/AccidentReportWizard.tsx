@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { normalizeArabic } from '@/lib/arabicNormalize';
 import { Search, User, ArrowRight, AlertTriangle, FileText } from 'lucide-react';
 import { PolicySelectionCards } from './PolicySelectionCards';
 
@@ -96,7 +97,7 @@ export function AccidentReportWizard({
         .from('clients')
         .select('id, full_name, id_number, file_number, phone_number')
         .is('deleted_at', null)
-        .or(`full_name.ilike.%${query}%,id_number.ilike.%${query}%,phone_number.ilike.%${query}%,file_number.ilike.%${query}%`)
+        .or(`full_name_normalized.ilike.%${normalizeArabic(query)}%,id_number.ilike.%${query}%,phone_number.ilike.%${query}%,file_number.ilike.%${query}%`)
         .limit(20);
 
       if (error) throw error;

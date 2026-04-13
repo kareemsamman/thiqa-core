@@ -2055,6 +2055,7 @@ export type Database = {
           deleted_at: string | null
           file_number: string | null
           full_name: string
+          full_name_normalized: string | null
           id: string
           id_number: string
           image_url: string | null
@@ -2080,6 +2081,7 @@ export type Database = {
           deleted_at?: string | null
           file_number?: string | null
           full_name: string
+          full_name_normalized?: string | null
           id?: string
           id_number: string
           image_url?: string | null
@@ -2105,6 +2107,7 @@ export type Database = {
           deleted_at?: string | null
           file_number?: string | null
           full_name?: string
+          full_name_normalized?: string | null
           id?: string
           id_number?: string
           image_url?: string | null
@@ -6125,6 +6128,7 @@ export type Database = {
         }
         Returns: string
       }
+      normalize_arabic: { Args: { p_text: string }; Returns: string }
       report_client_debts:
         | {
             Args: {
@@ -6572,6 +6576,8 @@ export type Database = {
         Args: { p_agent_id: string; p_plan: string }
         Returns: undefined
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       user_belongs_to_agent: {
         Args: { _agent_id: string; _user_id: string }
         Returns: boolean

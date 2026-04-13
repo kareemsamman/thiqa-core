@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { normalizeArabic } from "@/lib/arabicNormalize";
 
 interface ClientResult {
   id: string;
@@ -59,7 +60,7 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
           .select("id, full_name, id_number, phone_number")
           .is("deleted_at", null)
           .or(
-            `full_name.ilike.%${searchTerm}%,phone_number.ilike.%${searchTerm}%,id_number.ilike.%${searchTerm}%,file_number.ilike.%${searchTerm}%`,
+            `full_name_normalized.ilike.%${normalizeArabic(searchTerm)}%,phone_number.ilike.%${searchTerm}%,id_number.ilike.%${searchTerm}%,file_number.ilike.%${searchTerm}%`,
           )
           .limit(10),
         supabase
