@@ -454,11 +454,16 @@ function buildPackageInvoiceHtml(
     ? `<img class="logo" src="${branding.logoUrl}" alt="${branding.companyName}" />`
     : `<div class="logo-fallback">Thiqa</div>`;
 
-  // Additional drivers — flat comma-separated list in the bill-to section.
+  // Additional drivers — flat comma-separated list.
   const additionalDrivers = policyChildren
     .map((pc: any) => pc?.child?.full_name)
     .filter(Boolean)
     .join('، ');
+
+  // Unique car numbers across all policies in this invoice.
+  const carNumbers = Array.from(new Set(
+    policies.map((p: any) => p.car?.car_number).filter(Boolean)
+  )).join('، ');
 
   // Normalize attachment CDN urls.
   const normalizedFiles = policyFiles.map(f => ({
@@ -565,16 +570,16 @@ function buildPackageInvoiceHtml(
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>فاتورة - ${client.full_name || 'عميل'}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    @page { size: A4; margin: 12mm; }
+    @page { size: A4; margin: 14mm; }
     html, body {
-      font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif;
-      font-size: 13px;
-      line-height: 1.6;
-      color: #000;
-      background: #ededed;
+      font-family: 'IBM Plex Sans Arabic', 'Tajawal', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-size: 12px;
+      line-height: 1.65;
+      color: #18181b;
+      background: #f4f4f5;
       direction: rtl;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
@@ -582,152 +587,168 @@ function buildPackageInvoiceHtml(
     }
     body { padding: 32px 16px; }
     .invoice {
-      max-width: 820px;
+      max-width: 800px;
       margin: 0 auto;
       background: #ffffff;
-      padding: 42px 44px;
-      border: 3px double #000;
-      position: relative;
+      padding: 44px 48px;
+      border: 1px solid #e4e4e7;
     }
-    .invoice::before {
-      content: '';
-      position: absolute;
-      inset: 6px;
-      border: 1px solid #000;
-      pointer-events: none;
-    }
-    .invoice > * { position: relative; }
     a { color: inherit; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    a:hover { color: #18181b; }
 
-    /* ── Header: brand (right, RTL visual-right) + meta (left) ── */
+    /* ── Header ── */
     .invoice-top {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       gap: 24px;
-      padding-bottom: 22px;
-      border-bottom: 3px double #000;
-      margin-bottom: 26px;
+      padding-bottom: 28px;
+      border-bottom: 1px solid #e4e4e7;
+      margin-bottom: 28px;
     }
     .brand { max-width: 55%; }
     .brand .logo {
-      max-height: 76px;
-      max-width: 240px;
+      max-height: 64px;
+      max-width: 200px;
       object-fit: contain;
       display: block;
       margin-bottom: 10px;
     }
     .brand .logo-fallback {
-      font-size: 32px;
-      font-weight: 900;
-      letter-spacing: 2px;
-      margin-bottom: 10px;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      margin-bottom: 6px;
+      color: #18181b;
     }
-    .brand .name { font-size: 19px; font-weight: 800; letter-spacing: 0.3px; }
-    .brand .tagline { font-size: 11px; color: #444; margin-top: 3px; font-weight: 500; }
-    .brand .address { font-size: 11px; color: #444; margin-top: 8px; max-width: 340px; line-height: 1.5; }
+    .brand .name { font-size: 14px; font-weight: 600; color: #27272a; }
+    .brand .tagline { font-size: 11px; color: #71717a; margin-top: 2px; font-weight: 400; }
+    .brand .address { font-size: 11px; color: #71717a; margin-top: 8px; max-width: 320px; line-height: 1.55; }
 
-    .invoice-meta { text-align: left; min-width: 280px; }
+    .invoice-meta { text-align: left; min-width: 240px; }
     .invoice-meta h1 {
-      font-size: 46px;
-      font-weight: 900;
-      letter-spacing: 4px;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
       margin-bottom: 16px;
+      color: #18181b;
       line-height: 1;
     }
     .meta-rows {
       width: 100%;
-      border: 2px solid #000;
-      font-size: 12px;
+      border: 1px solid #e4e4e7;
+      font-size: 11px;
     }
     .meta-rows .row { display: flex; }
-    .meta-rows .row + .row { border-top: 1px solid #000; }
+    .meta-rows .row + .row { border-top: 1px solid #e4e4e7; }
     .meta-rows .label {
       flex: 0 0 110px;
-      background: #000;
-      color: #fff;
-      font-weight: 700;
       padding: 8px 12px;
-      letter-spacing: 0.5px;
-      font-size: 11px;
+      background: #fafafa;
+      font-weight: 500;
+      color: #71717a;
+      font-size: 10.5px;
       text-align: right;
+      border-left: 1px solid #e4e4e7;
+      letter-spacing: 0.3px;
     }
     .meta-rows .val {
       flex: 1;
       padding: 8px 12px;
-      text-align: center;
+      text-align: left;
       direction: ltr;
-      font-weight: 700;
+      font-weight: 600;
+      color: #18181b;
       font-variant-numeric: tabular-nums;
     }
 
-    /* ── Bill-to ── */
-    .bill-to {
-      margin-bottom: 22px;
+    /* ── Customer info ── */
+    .customer {
+      margin-bottom: 24px;
+      border: 1px solid #e4e4e7;
     }
-    .section-header {
-      background: #000;
-      color: #fff;
-      padding: 9px 14px;
-      font-weight: 700;
-      font-size: 12px;
+    .section-title {
+      padding: 10px 14px;
+      border-bottom: 1px solid #e4e4e7;
+      background: #fafafa;
+      font-size: 10px;
+      font-weight: 600;
+      color: #71717a;
       letter-spacing: 1.5px;
+      text-transform: uppercase;
     }
-    .section-body {
+    .customer-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    .customer-grid .cell {
       padding: 12px 14px;
-      border: 2px solid #000;
-      border-top: none;
-      font-size: 12px;
     }
-    .bill-to .name { font-weight: 800; font-size: 15px; margin-bottom: 3px; }
-    .bill-to .meta { color: #333; font-weight: 500; font-variant-numeric: tabular-nums; }
-    .bill-to .drivers {
-      color: #444;
-      margin-top: 6px;
-      padding-top: 6px;
-      border-top: 1px dashed #999;
+    .customer-grid .cell:nth-child(odd) { border-left: 1px solid #f4f4f5; }
+    .customer-grid .cell:nth-child(n+3) { border-top: 1px solid #f4f4f5; }
+    .customer-grid .cell.full { grid-column: 1 / -1; }
+    .customer-grid .label {
+      font-size: 9.5px;
+      font-weight: 500;
+      color: #a1a1aa;
+      margin-bottom: 4px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    .customer-grid .value {
+      font-size: 13px;
+      font-weight: 600;
+      color: #18181b;
+    }
+    .customer-grid .value.tabular {
+      font-variant-numeric: tabular-nums;
+      direction: ltr;
+      text-align: right;
     }
 
     /* ── Items table ── */
     .items {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 22px;
-      border: 2px solid #000;
+      margin-bottom: 24px;
+      border: 1px solid #e4e4e7;
     }
     .items thead th {
-      background: #000;
-      color: #fff;
-      padding: 11px 12px;
+      background: #fafafa;
+      color: #71717a;
+      padding: 11px 14px;
       text-align: right;
-      font-size: 11px;
+      font-size: 10px;
       letter-spacing: 1.5px;
-      font-weight: 700;
-      border-left: 1px solid #444;
+      font-weight: 600;
+      text-transform: uppercase;
+      border-bottom: 1px solid #e4e4e7;
+      border-left: 1px solid #f4f4f5;
     }
     .items thead th:last-child { border-left: none; }
     .items tbody td {
-      padding: 12px;
-      border-top: 1px solid #000;
-      border-left: 1px solid #000;
+      padding: 13px 14px;
+      border-top: 1px solid #f4f4f5;
+      border-left: 1px solid #f4f4f5;
       font-size: 12px;
+      color: #27272a;
       text-align: right;
       vertical-align: top;
     }
     .items tbody td:last-child { border-left: none; }
-    .items tbody tr:nth-child(even) td { background: #f7f7f7; }
+    .items tbody tr:first-child td { border-top: none; }
     .items tbody td.num {
-      text-align: center;
+      text-align: left;
       direction: ltr;
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
-      font-weight: 700;
+      font-weight: 600;
+      color: #18181b;
     }
-    .items tbody .item-title { font-weight: 700; font-size: 13px; }
-    .items tbody .item-meta { color: #555; font-size: 11px; margin-top: 3px; }
+    .items tbody .item-title { font-weight: 600; font-size: 12.5px; color: #18181b; }
+    .items tbody .item-meta { color: #71717a; font-size: 10.5px; margin-top: 3px; font-weight: 400; }
 
-    /* ── Bottom row: notes (left / visual-right in RTL) + totals ── */
+    /* ── Bottom row ── */
     .bottom {
       display: flex;
       justify-content: space-between;
@@ -740,16 +761,15 @@ function buildPackageInvoiceHtml(
       font-size: 11px;
       display: flex;
       flex-direction: column;
+      border: 1px solid #e4e4e7;
     }
     .notes .body {
       padding: 12px 14px;
-      border: 2px solid #000;
-      border-top: none;
       flex: 1;
-      min-height: 140px;
+      min-height: 130px;
     }
-    .notes-line { margin-bottom: 5px; }
-    .notes-line.muted { color: #666; }
+    .notes-line { margin-bottom: 5px; color: #27272a; }
+    .notes-line.muted { color: #a1a1aa; }
     .notes-list {
       list-style: none;
       padding: 0;
@@ -757,51 +777,67 @@ function buildPackageInvoiceHtml(
     }
     .notes-list li {
       padding: 5px 0;
-      border-bottom: 1px dashed #aaa;
+      border-bottom: 1px dashed #e4e4e7;
       font-size: 11px;
+      color: #3f3f46;
       font-variant-numeric: tabular-nums;
     }
     .notes-list li:last-child { border-bottom: none; }
 
     .totals {
-      width: 290px;
+      width: 280px;
       border-collapse: collapse;
-      font-size: 13px;
+      font-size: 12px;
       align-self: flex-start;
-      border: 2px solid #000;
+      border: 1px solid #e4e4e7;
     }
     .totals td {
-      padding: 10px 14px;
-      border-top: 1px solid #000;
-      border-left: 1px solid #000;
+      padding: 11px 14px;
+      border-top: 1px solid #f4f4f5;
+      border-left: 1px solid #f4f4f5;
     }
     .totals tr:first-child td { border-top: none; }
     .totals td:last-child { border-left: none; }
-    .totals td.label { font-weight: 700; background: #fff; letter-spacing: 0.5px; }
+    .totals td.label {
+      font-weight: 500;
+      background: #fafafa;
+      color: #71717a;
+      font-size: 10.5px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
     .totals td.val {
       text-align: left;
       direction: ltr;
-      font-weight: 700;
+      font-weight: 600;
+      color: #18181b;
       font-variant-numeric: tabular-nums;
     }
     .totals tr.total td {
-      font-weight: 900;
-      background: #000;
-      color: #fff;
-      font-size: 15px;
-      border-top: 3px double #fff;
-      padding: 13px 14px;
+      font-weight: 700;
+      background: #fafafa;
+      color: #18181b;
+      font-size: 14px;
+      border-top: 1px solid #e4e4e7;
+      padding: 14px;
+    }
+    .totals tr.total td.label {
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.5px;
     }
 
     /* ── Files ── */
     .files-section { margin-bottom: 24px; }
     .section-label {
-      font-weight: 800;
-      font-size: 12px;
+      font-weight: 600;
+      font-size: 10px;
+      color: #71717a;
       padding: 8px 0;
-      border-bottom: 2px solid #000;
+      border-bottom: 1px solid #e4e4e7;
       margin-bottom: 12px;
       letter-spacing: 1.5px;
+      text-transform: uppercase;
     }
     .files-grid {
       display: grid;
@@ -814,13 +850,14 @@ function buildPackageInvoiceHtml(
       align-items: center;
       gap: 7px;
       padding: 10px;
-      border: 1.5px solid #000;
+      border: 1px solid #e4e4e7;
       font-size: 10px;
       text-align: center;
       word-break: break-word;
       background: #fff;
+      color: #52525b;
     }
-    .file-link:hover { background: #f5f5f5; }
+    .file-link:hover { background: #fafafa; border-color: #d4d4d8; }
     .file-link img {
       max-width: 100%;
       max-height: 90px;
@@ -832,55 +869,57 @@ function buildPackageInvoiceHtml(
       display: flex;
       align-items: center;
       justify-content: center;
-      border: 1.5px solid #000;
-      font-weight: 800;
-      font-size: 14px;
-      letter-spacing: 2px;
-      background: #000;
-      color: #fff;
+      border: 1px solid #e4e4e7;
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 1px;
+      color: #71717a;
+      background: #fafafa;
     }
 
     /* ── Footer ── */
     .footer {
       margin-top: 32px;
-      padding-top: 18px;
-      border-top: 3px double #000;
+      padding-top: 20px;
+      border-top: 1px solid #e4e4e7;
       text-align: center;
       font-size: 11px;
     }
     .footer .thanks {
-      font-weight: 800;
-      font-size: 15px;
-      margin-bottom: 8px;
-      letter-spacing: 2px;
+      font-weight: 600;
+      font-size: 13px;
+      color: #18181b;
+      margin-bottom: 6px;
+      letter-spacing: 0.3px;
     }
-    .footer .contact { color: #333; margin-top: 6px; font-weight: 500; }
+    .footer .contact { color: #71717a; margin-top: 6px; font-weight: 400; }
     .footer .issued {
-      color: #666;
+      color: #a1a1aa;
       margin-top: 8px;
       font-size: 10px;
       font-variant-numeric: tabular-nums;
     }
 
-    /* ── Action buttons (only on screen, hidden in print) ── */
+    /* ── Actions ── */
     .actions {
       text-align: center;
-      margin-top: 26px;
+      margin-top: 28px;
     }
     .actions button {
-      background: #000;
+      background: #18181b;
       color: #fff;
-      border: 1.5px solid #000;
-      padding: 11px 28px;
+      border: 1px solid #18181b;
+      padding: 10px 26px;
       font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 1.5px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
       cursor: pointer;
       font-family: inherit;
       margin: 0 5px;
+      border-radius: 4px;
       transition: background 0.15s, color 0.15s;
     }
-    .actions button:hover { background: #fff; color: #000; }
+    .actions button:hover { background: #fff; color: #18181b; }
 
     /* ── Lightbox ── */
     .lightbox {
@@ -910,14 +949,14 @@ function buildPackageInvoiceHtml(
       .no-print { display: none !important; }
       .invoice {
         max-width: 100%;
-        padding: 18px 22px;
-        border: 3px double #000;
+        padding: 20px 24px;
+        border: 1px solid #d4d4d8;
       }
       .items thead th,
-      .items tbody tr:nth-child(even) td,
-      .totals tr.total td,
-      .section-header,
       .meta-rows .label,
+      .section-title,
+      .totals td.label,
+      .totals tr.total td,
       .file-placeholder {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
@@ -926,12 +965,13 @@ function buildPackageInvoiceHtml(
 
     @media (max-width: 640px) {
       body { padding: 14px 8px; font-size: 12px; }
-      .invoice { padding: 22px 18px; }
-      .invoice::before { inset: 4px; }
+      .invoice { padding: 24px 20px; }
       .invoice-top { flex-direction: column; gap: 18px; }
       .invoice-meta { text-align: right; min-width: 0; }
-      .invoice-meta h1 { font-size: 34px; letter-spacing: 2px; }
-      .meta-rows { margin-left: 0; margin-right: 0; }
+      .invoice-meta h1 { font-size: 24px; }
+      .customer-grid { grid-template-columns: 1fr; }
+      .customer-grid .cell:nth-child(odd) { border-left: none; }
+      .customer-grid .cell:nth-child(n+2) { border-top: 1px solid #f4f4f5; }
       .bottom { flex-direction: column; }
       .totals { width: 100%; }
       .files-grid { grid-template-columns: repeat(2, 1fr); }
@@ -960,23 +1000,36 @@ function buildPackageInvoiceHtml(
             <div class="label">رقم الفاتورة</div>
             <div class="val">${invoiceNumber}</div>
           </div>
-          ${client.id_number ? `
-          <div class="row">
-            <div class="label">هوية العميل</div>
-            <div class="val">${client.id_number}</div>
-          </div>
-          ` : ''}
         </div>
       </div>
     </div>
 
-    <!-- Bill to -->
-    <div class="bill-to">
-      <div class="section-header">إلى</div>
-      <div class="section-body">
-        <div class="name">${client.full_name || '-'}</div>
-        ${client.phone_number ? `<div class="meta">${client.phone_number}</div>` : ''}
-        ${additionalDrivers ? `<div class="drivers">سائقون إضافيون: ${additionalDrivers}</div>` : ''}
+    <!-- Customer info -->
+    <div class="customer">
+      <div class="section-title">معلومات العميل</div>
+      <div class="customer-grid">
+        <div class="cell">
+          <div class="label">الاسم</div>
+          <div class="value">${client.full_name || '-'}</div>
+        </div>
+        <div class="cell">
+          <div class="label">رقم الهوية</div>
+          <div class="value tabular">${client.id_number || '-'}</div>
+        </div>
+        <div class="cell">
+          <div class="label">رقم الهاتف</div>
+          <div class="value tabular">${client.phone_number || '-'}</div>
+        </div>
+        <div class="cell">
+          <div class="label">${policies.length > 1 ? 'السيارات' : 'السيارة'}</div>
+          <div class="value tabular">${carNumbers || '-'}</div>
+        </div>
+        ${additionalDrivers ? `
+        <div class="cell full">
+          <div class="label">سائقون إضافيون</div>
+          <div class="value">${additionalDrivers}</div>
+        </div>
+        ` : ''}
       </div>
     </div>
 
@@ -997,7 +1050,7 @@ function buildPackageInvoiceHtml(
     <!-- Notes (left of page-bottom in LTR, right in RTL) + totals -->
     <div class="bottom">
       <div class="notes">
-        <div class="section-header">ملاحظات</div>
+        <div class="section-title">ملاحظات</div>
         <div class="body">
           ${paymentsNoteHtml}
         </div>
