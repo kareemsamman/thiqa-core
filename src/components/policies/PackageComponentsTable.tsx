@@ -209,7 +209,14 @@ const getTypeName = (p: PackagePolicy) => {
                   </div>
                 </TableCell>
                 <TableCell className="text-left">
-                  <span className="font-bold text-lg ltr-nums">{formatCurrency(policy.insurance_price)}</span>
+                  <div className="flex flex-col items-end">
+                    <span className="font-bold text-lg ltr-nums">{formatCurrency(policy.insurance_price)}</span>
+                    {isElzami && ((policy as any).office_commission || 0) > 0 && (
+                      <span className="text-[11px] text-amber-700 font-semibold ltr-nums mt-0.5">
+                        + {formatCurrency((policy as any).office_commission)} عمولة مكتب
+                      </span>
+                    )}
+                  </div>
                 </TableCell>
                 {isAdmin && (
                   <TableCell className="text-left">
@@ -256,7 +263,14 @@ const getTypeName = (p: PackagePolicy) => {
               <span className="text-lg">المجموع</span>
             </TableCell>
             <TableCell className="text-left">
-              <span className="text-xl font-bold text-primary ltr-nums">{formatCurrency(totalPrice)}</span>
+              <div className="flex flex-col items-end">
+                <span className="text-xl font-bold text-primary ltr-nums">{formatCurrency(totalPrice)}</span>
+                {totalCommission > 0 && (
+                  <span className="text-[11px] text-amber-700 font-semibold ltr-nums mt-0.5">
+                    منها {formatCurrency(totalCommission)} عمولة مكتب
+                  </span>
+                )}
+              </div>
             </TableCell>
             {isAdmin && (
               <TableCell className="text-left">
