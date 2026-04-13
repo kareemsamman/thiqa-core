@@ -43,6 +43,7 @@ import {
   DollarSign,
   Layers,
   Users,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PolicyEditDrawer } from "./PolicyEditDrawer";
@@ -682,6 +683,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
+          hideCloseButton
           className="max-w-6xl max-h-[95vh] p-0 overflow-hidden gap-0"
           dir="rtl"
         >
@@ -707,6 +709,19 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                   <div className="absolute top-0 left-0 w-32 h-32 bg-white rounded-full -translate-x-1/2 -translate-y-1/2" />
                   <div className="absolute bottom-0 right-0 w-48 h-48 bg-white rounded-full translate-x-1/4 translate-y-1/4" />
                 </div>
+
+                {/* White close button — the default dialog X is dark on
+                    dark here because of the navy hero gradient, so we
+                    hide it via hideCloseButton and render our own. */}
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  aria-label="إغلاق"
+                  title="إغلاق"
+                  className="absolute left-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-md text-white/80 hover:text-white hover:bg-white/10 transition focus:outline-none focus:ring-2 focus:ring-white/40"
+                >
+                  <X className="h-4 w-4" />
+                </button>
                 
                 <div className="relative px-6 py-5">
                   <div className="flex items-start justify-between gap-4">
