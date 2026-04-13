@@ -42,6 +42,7 @@ interface PolicyDebt {
   id: string;
   policy_number: string | null;
   insurance_price: number;
+  office_commission: number;
   paid: number;
   remaining: number;
   end_date: string;
@@ -185,6 +186,7 @@ export default function DebtTracking() {
           id: row.policy_id,
           policy_number: row.policy_number,
           insurance_price: Number(row.insurance_price) || 0,
+          office_commission: Number(row.office_commission) || 0,
           paid: Number(row.paid) || 0,
           remaining: Number(row.remaining) || 0,
           end_date: String(row.end_date),
@@ -621,6 +623,7 @@ ${policyDetails}
                               <TableHead className="text-right">نوع الوثيقة</TableHead>
                               <TableHead className="text-right">رقم السيارة</TableHead>
                               <TableHead className="text-right">سعر التأمين</TableHead>
+                              <TableHead className="text-right">عمولة المكتب</TableHead>
                               <TableHead className="text-right">المدفوع</TableHead>
                               <TableHead className="text-right">المتبقي</TableHead>
                               <TableHead className="text-right">تاريخ الانتهاء</TableHead>
@@ -648,6 +651,15 @@ ${policyDetails}
                                     {policy.car_number || '-'}
                                   </TableCell>
                                   <TableCell>{formatCurrency(policy.insurance_price)}</TableCell>
+                                  <TableCell>
+                                    {policy.office_commission > 0 ? (
+                                      <span className="text-amber-700 font-semibold">
+                                        {formatCurrency(policy.office_commission)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-muted-foreground">-</span>
+                                    )}
+                                  </TableCell>
                                   <TableCell className="text-green-600">
                                     {formatCurrency(policy.paid)}
                                   </TableCell>

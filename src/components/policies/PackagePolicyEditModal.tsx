@@ -101,6 +101,12 @@ interface EditState {
   endDate: string;
   issueDate: string;
   insurancePrice: string;
+  companyId: string;
+}
+
+interface LookupOption {
+  id: string;
+  label: string;
 }
 
 const policyTypeLabels: Record<string, string> = {
@@ -153,6 +159,24 @@ export function PackagePolicyEditModal({
   const [newChildren, setNewChildren] = useState<NewChildForm[]>([]);
   const [childErrors, setChildErrors] = useState<Record<string, Record<string, string>>>({});
 
+  // Company / provider lookup lists keyed by policy type so the select for
+  // each row shows only the right pool.
+  const [elzamiCompanies, setElzamiCompanies] = useState<LookupOption[]>([]);
+  const [thirdFullCompanies, setThirdFullCompanies] = useState<LookupOption[]>([]);
+  const [roadServices, setRoadServices] = useState<LookupOption[]>([]);
+  const [accidentFeeServices, setAccidentFeeServices] = useState<LookupOption[]>([]);
+
+  const getCompanyOptions = useCallback(
+    (policyType: string): LookupOption[] => {
+      if (policyType === 'ELZAMI') return elzamiCompanies;
+      if (policyType === 'THIRD_FULL') return thirdFullCompanies;
+      if (policyType === 'ROAD_SERVICE') return roadServices;
+      if (policyType === 'ACCIDENT_FEE_EXEMPTION') return accidentFeeServices;
+      return [];
+    },
+    [elzamiCompanies, thirdFullCompanies, roadServices, accidentFeeServices],
+  );
+
   // Fetch all policies in the package
   const fetchPolicies = useCallback(async () => {
     if (!groupId || !open) return;
@@ -195,14 +219,51 @@ export function PackagePolicyEditModal({
       // Initialize edit states
       const states: Record<string, EditState> = {};
       sortedData.forEach((p) => {
+        let currentCompanyId = '';
+        if (p.policy_type_parent === 'ROAD_SERVICE') currentCompanyId = p.road_services?.id || '';
+        else if (p.policy_type_parent === 'ACCIDENT_FEE_EXEMPTION') currentCompanyId = p.accident_fee_services?.id || '';
+        else currentCompanyId = p.insurance_companies?.id || '';
         states[p.id] = {
           startDate: p.start_date || "",
           endDate: p.end_date || "",
           issueDate: (p as any).issue_date || p.start_date || "",
           insurancePrice: p.insurance_price?.toString() || "0",
+          companyId: currentCompanyId,
         };
       });
       setEditStates(states);
+
+      // Fetch the lookup tables in parallel so the selects populate before
+      // the user starts editing.
+      const [icRes, rsRes, afRes] = await Promise.all([
+        supabase
+          .from('insurance_companies')
+          .select('id, name, name_ar, category_parent')
+          .order('name_ar', { ascending: true }),
+        supabase
+          .from('road_services')
+          .select('id, name, name_ar')
+          .order('name_ar', { ascending: true }),
+        supabase
+          .from('accident_fee_services')
+          .select('id, name, name_ar')
+          .order('name_ar', { ascending: true }),
+      ]);
+
+      const toOption = (row: any): LookupOption => ({
+        id: row.id,
+        label: row.name_ar || row.name,
+      });
+
+      const icRows = (icRes.data || []) as any[];
+      setElzamiCompanies(
+        icRows.filter((r) => r.category_parent === 'ELZAMI').map(toOption),
+      );
+      setThirdFullCompanies(
+        icRows.filter((r) => r.category_parent === 'THIRD_FULL' || r.category_parent === null).map(toOption),
+      );
+      setRoadServices((rsRes.data || []).map(toOption));
+      setAccidentFeeServices((afRes.data || []).map(toOption));
 
       // Get client name, car number, and client_id from first policy
       if (sortedData.length > 0) {
@@ -468,40 +529,46 @@ export function PackagePolicyEditModal({
         let companyPayment = price;
         let profit = 0;
 
-        // Recalculate profit based on policy type
+        // Resolve the selected company/provider id for this policy type.
+        const selectedId = state.companyId || '';
+
+        // Recalculate profit based on policy type using the edited company.
         if (policy.policy_type_parent === "ELZAMI") {
           const { data: companyData } = await supabase
             .from("insurance_companies")
             .select("elzami_commission")
-            .eq("id", policy.insurance_companies?.id || "")
+            .eq("id", selectedId)
             .single();
           profit = companyData?.elzami_commission || 0;
           companyPayment = price;
-        } else if (["ROAD_SERVICE", "ACCIDENT_FEE_EXEMPTION"].includes(policy.policy_type_parent)) {
-          if (policy.policy_type_parent === "ROAD_SERVICE" && policy.road_services?.id) {
+        } else if (policy.policy_type_parent === "ROAD_SERVICE") {
+          if (selectedId) {
             const { data: priceData } = await supabase
               .from("company_road_service_prices")
               .select("company_cost")
-              .eq("road_service_id", policy.road_services.id)
+              .eq("road_service_id", selectedId)
               .limit(1)
-              .single();
-            companyPayment = priceData?.company_cost || price;
-          } else if (policy.policy_type_parent === "ACCIDENT_FEE_EXEMPTION" && policy.accident_fee_services?.id) {
-            const { data: priceData } = await supabase
-              .from("company_accident_fee_prices")
-              .select("company_cost")
-              .eq("accident_fee_service_id", policy.accident_fee_services.id)
-              .limit(1)
-              .single();
+              .maybeSingle();
             companyPayment = priceData?.company_cost || price;
           }
           profit = price - companyPayment;
-        } else if (policy.policy_type_parent === "THIRD_FULL" && policy.insurance_companies?.id) {
+        } else if (policy.policy_type_parent === "ACCIDENT_FEE_EXEMPTION") {
+          if (selectedId) {
+            const { data: priceData } = await supabase
+              .from("company_accident_fee_prices")
+              .select("company_cost")
+              .eq("accident_fee_service_id", selectedId)
+              .limit(1)
+              .maybeSingle();
+            companyPayment = priceData?.company_cost || price;
+          }
+          profit = price - companyPayment;
+        } else if (policy.policy_type_parent === "THIRD_FULL" && selectedId) {
           const ageBand: Enums<"age_band"> = policy.is_under_24 ? "UNDER_24" : "UP_24";
           const result = await calculatePolicyProfit({
             policyTypeParent: policy.policy_type_parent as Enums<"policy_type_parent">,
             policyTypeChild: (policy.policy_type_child || null) as Enums<"policy_type_child"> | null,
-            companyId: policy.insurance_companies.id,
+            companyId: selectedId,
             carType: (policy.cars?.car_type || "car") as Enums<"car_type">,
             ageBand,
             carValue: policy.cars?.car_value || null,
@@ -512,18 +579,28 @@ export function PackagePolicyEditModal({
           profit = result.profit;
         }
 
-        // Update the policy
+        // Build the update payload — route the selected id to the correct
+        // foreign-key column depending on policy type.
+        const updatePayload: Record<string, any> = {
+          start_date: state.startDate,
+          end_date: state.endDate,
+          issue_date: state.issueDate || state.startDate,
+          insurance_price: price,
+          payed_for_company: companyPayment,
+          profit,
+          updated_at: new Date().toISOString(),
+        };
+        if (policy.policy_type_parent === 'ROAD_SERVICE') {
+          updatePayload.road_service_id = selectedId || null;
+        } else if (policy.policy_type_parent === 'ACCIDENT_FEE_EXEMPTION') {
+          updatePayload.accident_fee_service_id = selectedId || null;
+        } else {
+          updatePayload.company_id = selectedId || null;
+        }
+
         const { error } = await supabase
           .from("policies")
-          .update({
-            start_date: state.startDate,
-            end_date: state.endDate,
-            issue_date: state.issueDate || state.startDate,
-            insurance_price: price,
-            payed_for_company: companyPayment,
-            profit,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updatePayload)
           .eq("id", policy.id);
 
         if (error) throw error;
@@ -548,7 +625,7 @@ export function PackagePolicyEditModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden !flex !flex-col p-6" dir="rtl">
+      <DialogContent className="max-w-4xl max-h-[92vh] overflow-hidden !flex !flex-col p-6" dir="rtl">
         <DialogHeader className="text-right shrink-0">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-primary/10">
@@ -587,34 +664,60 @@ export function PackagePolicyEditModal({
                   const Icon = config.icon;
                   const state = editStates[policy.id];
 
+                  const companyOptions = getCompanyOptions(policy.policy_type_parent);
+                  const companyLabel = policy.policy_type_parent === 'ROAD_SERVICE'
+                    ? 'الخدمة'
+                    : policy.policy_type_parent === 'ACCIDENT_FEE_EXEMPTION'
+                      ? 'الخدمة'
+                      : 'شركة التأمين';
+
                   return (
                     <div
                       key={policy.id}
                       className={cn(
-                        "rounded-lg border p-2 space-y-1.5",
+                        "rounded-xl border p-3 space-y-3",
                         config.border,
-                        config.bg
+                        config.bg,
                       )}
                     >
                       {/* Header */}
                       <div className="flex items-center gap-2">
-                        <div className={cn("w-7 h-7 rounded-md flex items-center justify-center", config.bg)}>
-                          <Icon className={cn("h-3.5 w-3.5", config.text)} />
+                        <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center bg-white/70 border", config.border)}>
+                          <Icon className={cn("h-4 w-4", config.text)} />
                         </div>
-                        <div className="flex-1">
-                          <Badge className={cn("text-xs", config.bg, config.text, "border", config.border)}>
-                            {getTypeName(policy)}
-                          </Badge>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          الشركة: <span className="font-medium text-foreground">{getCompanyName(policy)}</span>
-                        </div>
+                        <Badge className={cn("text-xs font-bold", config.bg, config.text, "border", config.border)}>
+                          {getTypeName(policy)}
+                        </Badge>
                       </div>
 
-                      {/* Editable Fields */}
+                      {/* Company selector */}
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-foreground/80">{companyLabel}</Label>
+                        <Select
+                          value={state?.companyId || ''}
+                          onValueChange={(v) => updateEditState(policy.id, 'companyId', v)}
+                        >
+                          <SelectTrigger className="h-9 text-sm bg-background">
+                            <SelectValue placeholder="اختر..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {companyOptions.length === 0 ? (
+                              <div className="px-2 py-1.5 text-xs text-muted-foreground">لا توجد خيارات متاحة</div>
+                            ) : (
+                              companyOptions.map((opt) => (
+                                <SelectItem key={opt.id} value={opt.id}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Dates + Price */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">تاريخ الإصدار</Label>
+                          <Label className="text-xs font-semibold text-foreground/80">تاريخ الإصدار</Label>
                           <ArabicDatePicker
                             value={state?.issueDate || ""}
                             onChange={(v) => updateEditState(policy.id, "issueDate", v)}
@@ -622,7 +725,7 @@ export function PackagePolicyEditModal({
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">تاريخ البدء</Label>
+                          <Label className="text-xs font-semibold text-foreground/80">تاريخ البدء</Label>
                           <ArabicDatePicker
                             value={state?.startDate || ""}
                             onChange={(v) => updateEditState(policy.id, "startDate", v)}
@@ -630,7 +733,7 @@ export function PackagePolicyEditModal({
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">تاريخ الانتهاء</Label>
+                          <Label className="text-xs font-semibold text-foreground/80">تاريخ الانتهاء</Label>
                           <ArabicDatePicker
                             value={state?.endDate || ""}
                             onChange={(v) => updateEditState(policy.id, "endDate", v)}
@@ -638,12 +741,12 @@ export function PackagePolicyEditModal({
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">السعر (₪)</Label>
+                          <Label className="text-xs font-semibold text-foreground/80">السعر (₪)</Label>
                           <Input
                             type="number"
                             value={state?.insurancePrice || "0"}
                             onChange={(e) => updateEditState(policy.id, "insurancePrice", e.target.value)}
-                            className="h-8 text-left ltr-nums text-sm"
+                            className="h-9 text-left ltr-nums text-sm font-semibold bg-background"
                             min="0"
                           />
                         </div>

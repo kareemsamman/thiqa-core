@@ -66,9 +66,9 @@ serve(async (req) => {
     }
 
     const template1Month = agentSmsRow?.reminder_1month_template ||
-      "مرحباً {client_name}، نذكرك بأن وثيقة التأمين لسيارتك ({car_number}) ستنتهي بعد شهر تقريباً في تاريخ {end_date}. يرجى التواصل معنا للتجديد.";
+      "مرحباً {client_name}، نذكرك بأن وثيقة التأمين لسيارتك ({car_number}) ستنتهي بعد شهر تقريباً في تاريخ {end_date}.{price_line} يرجى التواصل معنا للتجديد.";
     const template1Week = agentSmsRow?.reminder_1week_template ||
-      "مرحباً {client_name}، تنبيه عاجل: وثيقة التأمين لسيارتك ({car_number}) ستنتهي خلال أسبوع في تاريخ {end_date}. يرجى التجديد قبل الانتهاء.";
+      "مرحباً {client_name}، تنبيه عاجل: وثيقة التأمين لسيارتك ({car_number}) ستنتهي خلال أسبوع في تاريخ {end_date}.{price_line} يرجى التجديد قبل الانتهاء.";
 
     const cooldownDays = agentSmsRow?.renewal_reminder_cooldown_days || 7;
     const cooldownDate = new Date();
@@ -97,6 +97,8 @@ serve(async (req) => {
         end_date,
         policy_type_parent,
         policy_type_child,
+        insurance_price,
+        office_commission,
         client:clients(id, full_name, phone_number),
         car:cars(car_number)
       `)
@@ -114,6 +116,8 @@ serve(async (req) => {
         end_date,
         policy_type_parent,
         policy_type_child,
+        insurance_price,
+        office_commission,
         client:clients(id, full_name, phone_number),
         car:cars(car_number)
       `)
@@ -157,16 +161,32 @@ serve(async (req) => {
       }
 
       // Build message
-      const endDate = new Date(policy.end_date).toLocaleDateString('en-GB', { 
+      const endDate = new Date(policy.end_date).toLocaleDateString('en-GB', {
         year: 'numeric', month: '2-digit', day: '2-digit'
       });
       const policyType = getDisplayLabel(policy.policy_type_parent, policy.policy_type_child);
+
+      // Price / commission line — only rendered when there's something to
+      // show, so agents who don't use {price_line} or {commission} don't
+      // see stray punctuation in their messages.
+      const policyPrice = (policy.insurance_price || 0) + (policy.office_commission || 0);
+      const policyCommission = policy.office_commission || 0;
+      let priceLine = '';
+      if (policyPrice > 0) {
+        priceLine = ` السعر: ₪${policyPrice.toLocaleString('en-US')}.`;
+        if (policyCommission > 0) {
+          priceLine += ` عمولة المكتب: ₪${policyCommission.toLocaleString('en-US')}.`;
+        }
+      }
 
       const message = template
         .replace(/{client_name}/g, client.full_name || 'عميل')
         .replace(/{car_number}/g, car?.car_number || '-')
         .replace(/{end_date}/g, endDate)
-        .replace(/{policy_type}/g, policyType);
+        .replace(/{policy_type}/g, policyType)
+        .replace(/{price}/g, policyPrice > 0 ? `₪${policyPrice.toLocaleString('en-US')}` : '')
+        .replace(/{commission}/g, policyCommission > 0 ? `₪${policyCommission.toLocaleString('en-US')}` : '')
+        .replace(/{price_line}/g, priceLine);
 
       // Normalize phone
       let cleanPhone = client.phone_number.replace(/[^0-9]/g, "");

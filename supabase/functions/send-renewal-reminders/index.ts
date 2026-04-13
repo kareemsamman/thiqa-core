@@ -96,7 +96,7 @@ serve(async (req) => {
       .maybeSingle();
 
     const template = agentSmsRow?.renewal_reminder_template ||
-      'مرحباً {client_name}، نذكرك بأن تأمين سيارتك رقم {car_number} سينتهي بتاريخ {policy_end_date}. للتجديد تواصل معنا.';
+      'مرحباً {client_name}، نذكرك بأن تأمين سيارتك رقم {car_number} سينتهي بتاريخ {policy_end_date}.{price_line} للتجديد تواصل معنا.';
     const cooldownDays = agentSmsRow?.renewal_reminder_cooldown_days || 7;
 
     const today = new Date();
@@ -184,7 +184,7 @@ serve(async (req) => {
     // Fetch policy details for current batch
     const { data: batchPolicies } = await supabase
       .from('policies')
-      .select('id, end_date, policy_type_parent, client_id, car_id, company_id, agent_id')
+      .select('id, end_date, policy_type_parent, insurance_price, office_commission, client_id, car_id, company_id, agent_id')
       .in('id', currentBatch);
 
     // Per-agent SMS quota cache — resolve each agent's remaining budget once
@@ -249,12 +249,24 @@ serve(async (req) => {
         }
 
         const endDate = new Date(policy.end_date).toLocaleDateString('en-GB');
+        const policyPrice = ((policy as any).insurance_price || 0) + ((policy as any).office_commission || 0);
+        const policyCommission = (policy as any).office_commission || 0;
+        let priceLine = '';
+        if (policyPrice > 0) {
+          priceLine = ` السعر: ₪${policyPrice.toLocaleString('en-US')}.`;
+          if (policyCommission > 0) {
+            priceLine += ` عمولة المكتب: ₪${policyCommission.toLocaleString('en-US')}.`;
+          }
+        }
         const message = template
           .replace('{client_name}', client.full_name || 'العميل')
           .replace('{car_number}', car?.car_number || '')
           .replace('{policy_end_date}', endDate)
           .replace('{policy_type}', policy.policy_type_parent)
-          .replace('{company}', company?.name_ar || company?.name || '');
+          .replace('{company}', company?.name_ar || company?.name || '')
+          .replace('{price}', policyPrice > 0 ? `₪${policyPrice.toLocaleString('en-US')}` : '')
+          .replace('{commission}', policyCommission > 0 ? `₪${policyCommission.toLocaleString('en-US')}` : '')
+          .replace('{price_line}', priceLine);
 
         let phone = client.phone_number.replace(/[\s\-\(\)]/g, '');
         if (phone.startsWith('0')) {

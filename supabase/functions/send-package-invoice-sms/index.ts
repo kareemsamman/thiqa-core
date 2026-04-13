@@ -308,12 +308,26 @@ serve(async (req) => {
 
     // Build SMS message with ALL files included
     let smsMessage = `مرحباً ${client.full_name}، تم إصدار وثيقة التأمين`;
-    
+
+    // Include a price summary so the customer sees what they owe, including
+    // office commission (the ELZAMI markup) rolled into the grand total.
+    const smsTotalCommission = policies.reduce(
+      (sum: number, p: any) => sum + (p.office_commission || 0),
+      0,
+    );
+    smsMessage += `\n\nالمبلغ الإجمالي: ₪${totalPrice.toLocaleString('en-US')}`;
+    if (smsTotalCommission > 0) {
+      smsMessage += `\nمنها عمولة المكتب: ₪${smsTotalCommission.toLocaleString('en-US')}`;
+    }
+    if (totalRemaining > 0) {
+      smsMessage += `\nالمتبقي: ₪${totalRemaining.toLocaleString('en-US')}`;
+    }
+
     // Add policy files if available
     if (allPolicyUrlsText) {
       smsMessage += `\n\n${allPolicyUrlsText}`;
     }
-    
+
     // Always add invoice URL
     smsMessage += `\n\nفاتورة شركة التأمين: ${packageInvoiceUrl}`;
 
@@ -469,14 +483,24 @@ function buildPackageInvoiceHtml(
     ? `<img class="logo" src="${branding.logoUrl}" alt="${branding.companyName}" />`
     : `<div class="logo logo-svg">${THIQA_LOGO_SVG}</div>`;
 
-  // Group additional drivers per policy so each item row can show its own.
-  const driversByPolicy: Record<string, string[]> = {};
+  // Unique additional drivers across the package. Each child may appear
+  // linked to multiple policies (policy_children is a join table); we
+  // deduplicate by id_number so they show once in the drivers table.
+  const uniqueDriversMap = new Map<string, { name: string; id_number: string; phone: string; relation: string }>();
   policyChildren.forEach((pc: any) => {
-    const name = pc?.child?.full_name;
-    if (!name || !pc.policy_id) return;
-    if (!driversByPolicy[pc.policy_id]) driversByPolicy[pc.policy_id] = [];
-    driversByPolicy[pc.policy_id].push(name);
+    const child = pc?.child;
+    if (!child?.full_name) return;
+    const key = child.id_number || child.full_name;
+    if (!uniqueDriversMap.has(key)) {
+      uniqueDriversMap.set(key, {
+        name: child.full_name,
+        id_number: child.id_number || '',
+        phone: child.phone || '',
+        relation: child.relation || '',
+      });
+    }
   });
+  const uniqueDrivers = Array.from(uniqueDriversMap.values());
 
   // Unique car details across all policies in this invoice.
   const uniqueCarNumbers = Array.from(new Set(
@@ -517,6 +541,35 @@ function buildPackageInvoiceHtml(
     invoiceSubtitle = 'وثائق التأمين والخدمات';
   }
 
+  // Extra drivers block — dedicated table right after customer info.
+  const driversHtml = uniqueDrivers.length > 0 ? `
+    <div class="drivers">
+      <div class="section-title">السائقون الإضافيون</div>
+      <table class="drivers-table">
+        <thead>
+          <tr>
+            <th style="width: 40px;">#</th>
+            <th>الاسم</th>
+            <th>رقم الهوية</th>
+            <th>رقم الهاتف</th>
+            <th>صلة القرابة</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${uniqueDrivers.map((d, i) => `
+            <tr>
+              <td class="num">${i + 1}</td>
+              <td>${d.name}</td>
+              <td class="tabular">${d.id_number || '-'}</td>
+              <td class="tabular">${d.phone || '-'}</td>
+              <td>${d.relation || '-'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  ` : '';
+
   // Normalize attachment CDN urls.
   const normalizedFiles = policyFiles.map(f => ({
     ...f,
@@ -539,10 +592,6 @@ function buildPackageInvoiceHtml(
     }
 
     const companyName = p.company?.name_ar || p.company?.name || '-';
-    const policyDrivers = driversByPolicy[p.id] || [];
-    const driversLine = policyDrivers.length > 0
-      ? `<div class="item-drivers">سائقون إضافيون: ${policyDrivers.join('، ')}</div>`
-      : '';
     const periodText = (p.start_date && p.end_date)
       ? `${formatDate(p.start_date)} → ${formatDate(p.end_date)}`
       : '-';
@@ -559,7 +608,6 @@ function buildPackageInvoiceHtml(
           <div class="item-title">${policyType}</div>
           <div class="item-meta">${companyName}</div>
           ${commissionLine}
-          ${driversLine}
         </td>
         <td class="period">${periodText}</td>
         <td class="num">₪${lineTotal.toLocaleString('en-US')}</td>
@@ -830,19 +878,55 @@ function buildPackageInvoiceHtml(
     }
     .items tbody .item-title { font-weight: 700; font-size: 14px; color: #1a1a1a; }
     .items tbody .item-meta { color: #1a1a1a; font-size: 11.5px; margin-top: 3px; font-weight: 500; }
-    .items tbody .item-drivers {
-      color: #1a1a1a;
-      font-size: 11.5px;
-      margin-top: 5px;
-      padding-top: 4px;
-      border-top: 1px dashed #1a1a1a;
-      font-weight: 500;
-    }
     .items tbody .item-commission {
       color: #1a1a1a;
       font-size: 11.5px;
       margin-top: 3px;
       font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Extra drivers table ── */
+    .drivers {
+      margin-bottom: 20px;
+      border: 1px solid #1a1a1a;
+    }
+    .drivers-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .drivers-table thead th {
+      background: #f4f4f5;
+      color: #1a1a1a;
+      padding: 8px 12px;
+      text-align: right;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      border-bottom: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+    }
+    .drivers-table thead th:last-child { border-left: none; }
+    .drivers-table tbody td {
+      padding: 9px 12px;
+      border-top: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+      font-size: 13px;
+      color: #1a1a1a;
+      text-align: right;
+      font-weight: 500;
+    }
+    .drivers-table tbody td:last-child { border-left: none; }
+    .drivers-table tbody tr:first-child td { border-top: none; }
+    .drivers-table tbody td.num {
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+    .drivers-table tbody td.tabular {
+      direction: ltr;
+      text-align: right;
       font-variant-numeric: tabular-nums;
     }
 
@@ -1184,6 +1268,8 @@ function buildPackageInvoiceHtml(
         </div>
       </div>
     </div>
+
+    ${driversHtml}
 
     <!-- Items table -->
     <table class="items">
