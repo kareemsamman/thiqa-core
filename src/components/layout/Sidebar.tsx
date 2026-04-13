@@ -192,21 +192,20 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
   const navigate = useNavigate();
 
   // Callback ref attached to the active NavLink. Fires the moment the
-  // element mounts in the DOM — so it works for both "navigate to a new
+  // element mounts in the DOM so it works for both "navigate to a new
   // page" and "land directly on a page after the auth profile loads and
-  // the group expands". Re-scrolls a few times to absorb late layout
-  // shifts from the collapsible expand animation and badge data loading.
+  // the group expands". Uses block: 'nearest' so it's a no-op when the
+  // active item is already in view — we don't want every click to yank
+  // the sidebar's scroll position to recenter the row.
   const activeNavLinkRef = useCallback(
     (node: HTMLAnchorElement | null) => {
       if (!node) return;
       if (lastScrolledPathRef.current === location.pathname) return;
       lastScrolledPathRef.current = location.pathname;
-      const scroll = () => node.scrollIntoView({ block: 'center', behavior: 'auto' });
+      const scroll = () => node.scrollIntoView({ block: 'nearest', behavior: 'auto' });
       requestAnimationFrame(scroll);
       const t1 = window.setTimeout(scroll, 150);
       const t2 = window.setTimeout(scroll, 450);
-      // Best-effort cleanup — refs can't really cancel, but if the user
-      // navigates again immediately we at least won't fight ourselves.
       lastScrollTimersRef.current.forEach((id) => window.clearTimeout(id));
       lastScrollTimersRef.current = [t1, t2];
     },
