@@ -93,28 +93,42 @@ const getPolicyTypeLabel = (parent: string | null, child: string | null): string
 };
 
 // Collapse per-policy debt rows into per-package rows. For packages, ELZAMI
-// price is excluded from the total (compulsory coverage is passed through
-// to the insurance company, not owed to the agent), but its
-// office_commission IS counted as part of the package's debt to the office.
+// price is excluded from the total (compulsory coverage is collected by the
+// company via visa, not owed to the agent) — only its office_commission
+// counts toward the debt.
+//
+// Grouping keys: prefer group_id when set; otherwise fall back to
+// car_number so two policies for the same car still collapse into one
+// package row.
 const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
-  const groups = new Map<string, PolicyDebt[]>();
   const rows: DebtRow[] = [];
+  const buckets = new Map<string, PolicyDebt[]>();
+
+  const bucketKeyFor = (p: PolicyDebt): string => {
+    if (p.group_id) return `g:${p.group_id}`;
+    if (p.car_number) return `c:${p.car_number}`;
+    return `p:${p.id}`;
+  };
 
   for (const p of policies) {
-    if (p.group_id) {
-      const list = groups.get(p.group_id) || [];
-      list.push(p);
-      groups.set(p.group_id, list);
-    } else {
-      // Standalone policy — treat as its own "row".
-      // Skip bare ELZAMI with no commission (it's already fully handled by
-      // the company, nothing for the agent to collect).
+    const key = bucketKeyFor(p);
+    const list = buckets.get(key) || [];
+    list.push(p);
+    buckets.set(key, list);
+  }
+
+  for (const [key, items] of buckets) {
+    // Standalone branch: single policy in the bucket.
+    if (items.length === 1) {
+      const p = items[0];
+      // Skip bare ELZAMI with no commission — nothing for the agent.
       if (p.policy_type_parent === 'ELZAMI' && (p.office_commission || 0) === 0) continue;
 
       const isElzami = p.policy_type_parent === 'ELZAMI';
       const commission = p.office_commission || 0;
       const price = isElzami ? commission : (p.insurance_price + commission);
-      const remaining = Math.max(0, price - p.paid);
+      const effectivePaid = isElzami ? Math.max(0, p.paid - p.insurance_price) : p.paid;
+      const remaining = Math.max(0, price - effectivePaid);
       if (remaining <= 0) continue;
 
       rows.push({
@@ -122,11 +136,12 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
         isPackage: false,
         typeLabel: isElzami
           ? 'عمولة مكتب'
-          : getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child),
-        hasCommission: commission > 0 && !isElzami,
+          : getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child) +
+            (commission > 0 ? ' + عمولة مكتب' : ''),
+        hasCommission: commission > 0,
         commissionTotal: commission,
         price,
-        paid: Math.min(p.paid, price),
+        paid: Math.min(effectivePaid, price),
         remaining,
         endDate: p.end_date,
         daysUntilExpiry: p.days_until_expiry,
@@ -134,27 +149,21 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
         carNumber: p.car_number,
         primaryPolicyId: p.id,
       });
+      continue;
     }
-  }
 
-  for (const [groupId, items] of groups) {
+    // Package branch: multiple policies share a group_id (or car).
+    // ELZAMI contributes only office_commission, never its insurance_price.
     const nonElzami = items.filter((p) => p.policy_type_parent !== 'ELZAMI');
     const elzami = items.filter((p) => p.policy_type_parent === 'ELZAMI');
-
-    // Non-ELZAMI contribute their insurance_price (commission on these is
-    // ignored everywhere by get_client_balance). ELZAMI contributes only
-    // its office_commission as a separate charge owed to the office.
     const nonElzamiPrice = nonElzami.reduce((sum, p) => sum + p.insurance_price, 0);
     const elzamiCommission = elzami.reduce((sum, p) => sum + (p.office_commission || 0), 0);
     const packagePrice = nonElzamiPrice + elzamiCommission;
-
     const nonElzamiPaid = nonElzami.reduce((sum, p) => sum + p.paid, 0);
-    // ELZAMI insurance_price is collected by the company directly — only
-    // payments that exceed the base price are credited against the
-    // office commission.
-    const elzamiPaidTowardCommission = elzami.reduce((sum, p) => {
-      return sum + Math.max(0, p.paid - p.insurance_price);
-    }, 0);
+    const elzamiPaidTowardCommission = elzami.reduce(
+      (sum, p) => sum + Math.max(0, p.paid - p.insurance_price),
+      0,
+    );
     const packagePaid = nonElzamiPaid + elzamiPaidTowardCommission;
     const packageRemaining = Math.max(0, packagePrice - packagePaid);
     if (packageRemaining <= 0) continue;
@@ -165,14 +174,13 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
     const hasCommission = elzamiCommission > 0;
     const combined = typeLabels.join(' + ') + (hasCommission ? ' + عمولة مكتب' : '');
 
-    // Earliest end date across the package drives expiry status.
     const earliest = items.reduce(
       (best, p) => (!best || new Date(p.end_date) < new Date(best.end_date) ? p : best),
       items[0],
     );
 
     rows.push({
-      key: groupId,
+      key,
       isPackage: true,
       typeLabel: combined || 'باقة',
       hasCommission,
@@ -184,7 +192,6 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
       daysUntilExpiry: earliest.days_until_expiry,
       status: earliest.status,
       carNumber: earliest.car_number,
-      // Open the first non-ELZAMI policy's drawer when the user clicks view.
       primaryPolicyId: (nonElzami[0] || items[0]).id,
     });
   }
