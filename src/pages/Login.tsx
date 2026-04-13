@@ -526,7 +526,7 @@ export default function Login() {
                       <div className="relative">
                         <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border/40" /></div>
                         <div className="relative flex justify-center text-xs">
-                          <span className="bg-white dark:bg-card px-3 text-muted-foreground">أو سجّل يدوياً</span>
+                          <span className="dark:bg-card px-3 text-muted-foreground">أو سجّل يدوياً</span>
                         </div>
                       </div>
                     </>
