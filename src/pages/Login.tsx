@@ -67,7 +67,7 @@ export default function Login() {
 
   // Google-only account hint
   const [googleHintOpen, setGoogleHintOpen] = useState(false);
-  const [checkedEmails, setCheckedEmails] = useState<Set<string>>(new Set());
+  const lastCheckedEmailRef = useRef<string>("");
 
   useEffect(() => {
     try { setIsInIframe(window.self !== window.top); } catch { setIsInIframe(true); }
@@ -169,22 +169,21 @@ export default function Login() {
   const handleEmailBlur = async () => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !normalizedEmail.includes("@")) return;
-    if (checkedEmails.has(normalizedEmail)) return;
-
-    // Mark as checked immediately so re-blurring the same value doesn't spam
-    // the edge function.
-    setCheckedEmails((prev) => new Set(prev).add(normalizedEmail));
+    if (lastCheckedEmailRef.current === normalizedEmail) return;
+    lastCheckedEmailRef.current = normalizedEmail;
 
     try {
       const { data, error } = await supabase.rpc("check_email_provider_public", {
         p_email: normalizedEmail,
       });
+      console.info("[login] email provider check", { email: normalizedEmail, data, error });
       if (error) return;
-      if ((data as { is_google_only?: boolean } | null)?.is_google_only) {
+      const result = data as { exists?: boolean; providers?: string[]; is_google_only?: boolean } | null;
+      if (result?.is_google_only) {
         setGoogleHintOpen(true);
       }
-    } catch {
-      // Non-fatal — the normal sign-in flow still works.
+    } catch (err) {
+      console.warn("[login] email provider check failed", err);
     }
   };
 
