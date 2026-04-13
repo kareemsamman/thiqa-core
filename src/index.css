@@ -200,6 +200,37 @@
     animation: scaleIn 0.3s ease-out forwards;
   }
 
+  /* Attention pulse: draws a glowing ring around an element for ~3s,
+     used when the user clicks a legend/chip and we want to show which
+     concrete part of the card it maps to. */
+  .highlight-pulse {
+    animation: highlightPulse 3s ease-out 1;
+    border-radius: 6px;
+  }
+
+  @keyframes highlightPulse {
+    0% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.65);
+      background-color: hsl(var(--primary) / 0.18);
+    }
+    20% {
+      box-shadow: 0 0 0 6px hsl(var(--primary) / 0.35);
+      background-color: hsl(var(--primary) / 0.22);
+    }
+    45% {
+      box-shadow: 0 0 0 2px hsl(var(--primary) / 0.25);
+      background-color: hsl(var(--primary) / 0.1);
+    }
+    70% {
+      box-shadow: 0 0 0 6px hsl(var(--primary) / 0.3);
+      background-color: hsl(var(--primary) / 0.18);
+    }
+    100% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+      background-color: transparent;
+    }
+  }
+
   @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }

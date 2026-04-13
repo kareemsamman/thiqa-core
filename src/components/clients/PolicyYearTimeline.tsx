@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -857,6 +857,19 @@ function PolicyPackageCard({
   const isPkg = isPackageProp || (pkg.addons.length > 0 && pkg.mainPolicy !== null);
   const hasUnpaid = !paymentStatus.isPaid;
 
+  // Ref on the coverage-period cell so clicking the status badge can flash
+  // the date to tell the user "this is what سارية is referring to".
+  const periodRef = useRef<HTMLDivElement>(null);
+  const handleStatusClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const el = periodRef.current;
+    if (!el) return;
+    el.classList.remove('highlight-pulse');
+    void el.offsetWidth;
+    el.classList.add('highlight-pulse');
+    window.setTimeout(() => el.classList.remove('highlight-pulse'), 3100);
+  };
+
   // Check if this policy was created from a transfer (has transferred_car_number = FROM which car)
   const wasTransferredFrom = policy.transferred_car_number;
   // Check if this policy was transferred TO another car (has transferred_to_car_number)
@@ -891,10 +904,17 @@ function PolicyPackageCard({
         <div className="flex items-center gap-2 flex-wrap mb-3">
           {/* Status Badge */}
           {isActive && (
-            <Badge variant="success" className="gap-1 font-bold">
-              <CheckCircle className="h-3.5 w-3.5" />
-              سارية
-            </Badge>
+            <button
+              type="button"
+              onClick={handleStatusClick}
+              className="focus:outline-none"
+              title="اضغط لإبراز فترة السريان"
+            >
+              <Badge variant="success" className="gap-1 font-bold cursor-pointer">
+                <CheckCircle className="h-3.5 w-3.5" />
+                سارية
+              </Badge>
+            </button>
           )}
           {pkg.status === 'ended' && (
             <Badge variant="secondary" className="gap-1">
@@ -1124,7 +1144,7 @@ function PolicyPackageCard({
           </div>
 
           {/* Coverage Period */}
-          <div className="flex items-start gap-2">
+          <div ref={periodRef} className="flex items-start gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
             <div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">الفترة</p>
@@ -1301,6 +1321,7 @@ function PackageComponentRow({
   const rowTotal = policy.insurance_price + commission;
   const paid = payment?.paid ?? 0;
   const remaining = Math.max(0, rowTotal - paid);
+  const rowRef = useRef<HTMLDivElement>(null);
 
   // Get company/service name based on policy type
   const getProviderName = () => {
@@ -1309,20 +1330,45 @@ function PackageComponentRow({
     return policy.company?.name_ar || policy.company?.name || '-';
   };
 
+  // Pulse the whole row when the user clicks the type badge so they can see
+  // which physical line corresponds to the type they tapped.
+  const handleTypeBadgeClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const el = rowRef.current;
+    if (!el) return;
+    el.classList.remove('highlight-pulse');
+    void el.offsetWidth;
+    el.classList.add('highlight-pulse');
+    window.setTimeout(() => el.classList.remove('highlight-pulse'), 3100);
+  };
+
   return (
-    <div className={cn(
-      "flex items-center justify-between text-xs rounded-md px-2.5 py-1.5",
-      isActive ? "bg-muted/40" : "bg-muted/20"
-    )}>
+    <div
+      ref={rowRef}
+      className={cn(
+        "flex items-center justify-between text-xs rounded-md px-2.5 py-1.5",
+        isActive ? "bg-muted/40" : "bg-muted/20"
+      )}
+    >
       <div className="flex items-center gap-2 min-w-0">
         {index !== undefined && (
-          <span className="text-[10px] font-bold text-muted-foreground ltr-nums w-5 text-center">
+          <span
+            data-doc-number
+            className="text-[10px] font-bold text-muted-foreground ltr-nums w-5 text-center"
+          >
             #{index}
           </span>
         )}
-        <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border", typeColor)}>
-          {typeLabel}
-        </Badge>
+        <button
+          type="button"
+          onClick={handleTypeBadgeClick}
+          className="focus:outline-none"
+          title="اضغط لإبراز هذه الوثيقة"
+        >
+          <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border cursor-pointer", typeColor)}>
+            {typeLabel}
+          </Badge>
+        </button>
         {policy.policy_type_parent === 'ROAD_SERVICE' && (policy.road_service?.name_ar || policy.road_service?.name) && (
           <span className="text-[10px] font-semibold text-orange-700 bg-orange-500/10 border border-orange-500/30 rounded px-1.5 py-0 h-5 inline-flex items-center">
             {policy.road_service?.name_ar || policy.road_service?.name}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useRecentClient } from '@/hooks/useRecentClient';
@@ -262,6 +262,26 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const { count: accidentCount, hasActiveReports } = useClientAccidentInfo(client.id);
   const [cars, setCars] = useState<CarRecord[]>([]);
   const [policies, setPolicies] = useState<PolicyRecord[]>([]);
+  const policiesHeaderRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to the policies section and run a 3-second attention pulse on
+  // every #N document-number chip so the user can see which concrete rows
+  // the "الوثائق" stat is counting. Re-clicks restart the animation via a
+  // forced reflow between remove/add.
+  const handleRevealDocs = () => {
+    policiesHeaderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => {
+      const targets = document.querySelectorAll<HTMLElement>('[data-doc-number]');
+      targets.forEach((el) => {
+        el.classList.remove('highlight-pulse');
+        void el.offsetWidth;
+        el.classList.add('highlight-pulse');
+      });
+      window.setTimeout(() => {
+        targets.forEach((el) => el.classList.remove('highlight-pulse'));
+      }, 3100);
+    }, 350);
+  };
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [broker, setBroker] = useState<Broker | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary>({ total_paid: 0, total_remaining: 0, total_profit: 0 });
@@ -1391,6 +1411,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             <div className="p-3 sm:p-4 text-center">
               <p className="text-[10px] sm:text-xs text-muted-foreground mb-1">الوثائق</p>
               <p className="text-sm sm:text-lg font-bold text-purple-600">{dedupedPolicyCount}</p>
+              <button
+                type="button"
+                onClick={handleRevealDocs}
+                className="mt-0.5 text-[10px] text-purple-600 hover:text-purple-700 underline underline-offset-2 transition-colors"
+              >
+                عرض التفاصيل
+              </button>
             </div>
             <div className="p-3 sm:p-4 text-center col-span-2 md:col-span-1">
               <p className="text-[10px] sm:text-xs text-muted-foreground mb-1">العمر</p>
@@ -1583,10 +1610,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           {/* Policies Tab */}
           <TabsContent value="policies" className="mt-6 space-y-4">
             {/* Header with Add Button */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div ref={policiesHeaderRef} className="flex flex-wrap items-center justify-between gap-3 scroll-mt-20">
               <div>
                 <h3 className="font-semibold text-lg">وثائق التأمين</h3>
-                <p className="text-sm text-muted-foreground">{policies.length} وثيقة مسجلة</p>
+                <button
+                  type="button"
+                  onClick={handleRevealDocs}
+                  className="text-sm text-muted-foreground hover:text-purple-600 underline underline-offset-2 transition-colors"
+                >
+                  {dedupedPolicyCount} وثيقة مسجلة
+                </button>
               </div>
               <Button onClick={() => setPolicyWizardOpen(true)}>
                 <Plus className="h-4 w-4 ml-2" />
