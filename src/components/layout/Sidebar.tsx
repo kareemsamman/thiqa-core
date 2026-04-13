@@ -343,26 +343,23 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             >
               <CollapsibleTrigger
                 className={cn(
-                  "group flex flex-col items-stretch w-full px-3 pt-3 pb-1.5 rounded-lg transition-all duration-200",
-                  "hover:bg-white/[0.04]",
+                  "group flex items-center w-full px-3 py-2 rounded-md transition-all duration-200 gap-2.5",
+                  "hover:bg-white/[0.05]",
+                  isOpen && "bg-white/[0.03]",
                 )}
               >
-                <div className="flex items-center gap-2 w-full">
-                  <GroupIcon className="h-4 w-4 text-white shrink-0" strokeWidth={2.5} />
-                  <span className="text-[12px] font-extrabold tracking-[0.14em] text-white whitespace-nowrap">
-                    {group.name}
-                  </span>
-                  <div className="flex-1 h-px bg-gradient-to-l from-white/25 to-transparent" />
-                </div>
-                <div className="flex items-center justify-center mt-1">
-                  <ChevronDown
-                    className={cn(
-                      "h-[18px] w-[18px] text-white transition-transform duration-300",
-                      isOpen && "rotate-180",
-                    )}
-                    strokeWidth={2.75}
-                  />
-                </div>
+                <GroupIcon className="h-[15px] w-[15px] text-white shrink-0" strokeWidth={2.5} />
+                <span className="text-[11.5px] font-extrabold tracking-[0.18em] text-white whitespace-nowrap">
+                  {group.name}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "h-[14px] w-[14px] text-white shrink-0 transition-transform duration-300",
+                    isOpen && "rotate-180",
+                  )}
+                  strokeWidth={2.75}
+                />
+                <div className="flex-1 h-px bg-gradient-to-l from-white/15 to-transparent" />
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-1 mr-2 space-y-0.5">
                 {group.items.map((item) => {
