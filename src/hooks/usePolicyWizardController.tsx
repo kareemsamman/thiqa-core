@@ -11,8 +11,8 @@ import {
 
 // Persist the list of open/minimized wizard instances across a page
 // refresh so the tab strip in the bottom toolbar survives a reload.
-// Stored in sessionStorage: stays for the tab's lifetime but doesn't
-// leak between browser sessions or other tabs.
+// Stored in localStorage so drafts also survive closing and reopening
+// the browser tab, not just a single session.
 const INSTANCES_STORAGE_KEY = "abcrm:policyWizardInstances:v1";
 
 export interface WizardDraftSummary {
@@ -70,7 +70,7 @@ function generateId(): string {
 function loadPersistedInstances(): WizardInstance[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = sessionStorage.getItem(INSTANCES_STORAGE_KEY);
+    const raw = localStorage.getItem(INSTANCES_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -88,9 +88,9 @@ function persistInstances(instances: WizardInstance[]): void {
   if (typeof window === "undefined") return;
   try {
     if (instances.length === 0) {
-      sessionStorage.removeItem(INSTANCES_STORAGE_KEY);
+      localStorage.removeItem(INSTANCES_STORAGE_KEY);
     } else {
-      sessionStorage.setItem(INSTANCES_STORAGE_KEY, JSON.stringify(instances));
+      localStorage.setItem(INSTANCES_STORAGE_KEY, JSON.stringify(instances));
     }
   } catch {
     // storage full / disabled — non-fatal

@@ -1945,8 +1945,8 @@ export function PolicyWizard({
               ذلك تصغير النافذة للعودة إليها لاحقاً.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>البقاء في الوثيقة</AlertDialogCancel>
+          <AlertDialogFooter className="gap-2 sm:gap-3">
+            <AlertDialogCancel className="mt-0">البقاء في الوثيقة</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 setCloseConfirmOpen(false);
