@@ -4,6 +4,8 @@ import { Search, X, User, Car, Phone } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { normalizeArabic } from "@/lib/arabicNormalize";
@@ -24,13 +26,16 @@ interface BottomToolbarInlineSearchProps {
 export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSearchProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useIsMobile();
 
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ClientResult[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const mobileInputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const latestRequestRef = useRef(0);
 
@@ -175,12 +180,20 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
 
   const handleSelect = (clientId: string, matchedCarId?: string) => {
     clearSearch();
+    setMobileOpen(false);
     // Navigate with car filter if a car was matched
-    const url = matchedCarId 
+    const url = matchedCarId
       ? `/clients/${clientId}?car=${matchedCarId}`
       : `/clients/${clientId}`;
     navigate(url);
   };
+
+  // When the mobile dialog opens, autofocus the input and reset query.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const t = setTimeout(() => mobileInputRef.current?.focus(), 50);
+    return () => clearTimeout(t);
+  }, [mobileOpen]);
 
   const handleFocus = () => {
     if (query.trim().length >= 2 && results.length > 0) {
@@ -190,6 +203,132 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
 
   if (!canShow) return null;
 
+  // Shared renderer for the result list — used by both the desktop
+  // inline dropdown and the mobile dialog body.
+  const renderResults = () => (
+    loading ? (
+      <div className="space-y-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-md border border-border/60 p-2">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="mt-2 h-3 w-56" />
+          </div>
+        ))}
+      </div>
+    ) : results.length > 0 ? (
+      <div className="space-y-1">
+        {results.map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            className={cn(
+              "w-full text-right rounded-md border border-border/60 p-2 transition-colors",
+              "hover:bg-accent/40 focus:bg-accent/40 focus:outline-none"
+            )}
+            onMouseDown={(e) => {
+              // Use mouseDown to prevent input blur before navigation
+              e.preventDefault();
+              handleSelect(r.id, r.matchedCarId);
+            }}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium truncate">{r.full_name}</span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  {r.phone_number && (
+                    <span className="flex items-center gap-1">
+                      <Phone className="h-3.5 w-3.5" />
+                      <bdi className="ltr-nums">{r.phone_number}</bdi>
+                    </span>
+                  )}
+                  {r.cars.length > 0 && (
+                    <span className="flex items-center gap-1">
+                      <Car className="h-3.5 w-3.5" />
+                      <bdi className="ltr-nums">{r.cars.join(", ")}</bdi>
+                    </span>
+                  )}
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground ltr-nums">{r.id_number}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+    ) : query.trim().length >= 2 ? (
+      <div className="py-6 text-center text-sm text-muted-foreground">لا توجد نتائج</div>
+    ) : (
+      <div className="py-6 text-center text-sm text-muted-foreground">
+        اكتب حرفين أو أكثر للبحث
+      </div>
+    )
+  );
+
+  // ─── Mobile: icon-only trigger + full-screen search dialog ──────────
+  if (isMobile) {
+    return (
+      <>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={cn("h-9 w-9 rounded-full", className)}
+          onClick={() => setMobileOpen(true)}
+          aria-label="بحث"
+          title="بحث"
+        >
+          <Search className="h-4 w-4" />
+        </Button>
+
+        <Dialog
+          open={mobileOpen}
+          onOpenChange={(o) => {
+            setMobileOpen(o);
+            if (!o) clearSearch();
+          }}
+        >
+          <DialogContent
+            className="max-w-[96vw] max-h-[92dvh] p-0 gap-0 rounded-2xl overflow-hidden flex flex-col"
+            dir="rtl"
+          >
+            <DialogHeader className="p-4 pb-3 border-b">
+              <DialogTitle className="text-base">بحث</DialogTitle>
+            </DialogHeader>
+            <div className="p-3 border-b">
+              <div className="relative">
+                <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <Input
+                  ref={mobileInputRef}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="ابحث بالاسم، رقم الهوية، رقم الهاتف..."
+                  className="h-10 rounded-xl pr-9 pl-8 bg-background border-border/60"
+                />
+                {query && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute left-1 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full"
+                    onClick={clearSearch}
+                    aria-label="مسح"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3">
+              {renderResults()}
+            </div>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
+
+  // ─── Desktop: inline input + upward dropdown ────────────────────────
   return (
     <div ref={containerRef} className={cn("relative flex items-center", className)}>
       {/* Always visible search input */}
@@ -229,60 +368,7 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
             "rounded-lg border border-border bg-popover p-2 shadow-lg"
           )}
         >
-          {loading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="rounded-md border border-border/60 p-2">
-                  <Skeleton className="h-4 w-40" />
-                  <Skeleton className="mt-2 h-3 w-56" />
-                </div>
-              ))}
-            </div>
-          ) : results.length > 0 ? (
-            <div className="space-y-1">
-              {results.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  className={cn(
-                    "w-full text-right rounded-md border border-border/60 p-2 transition-colors",
-                    "hover:bg-accent/40 focus:bg-accent/40 focus:outline-none"
-                  )}
-                  onMouseDown={(e) => {
-                    // Use mouseDown to prevent input blur before navigation
-                    e.preventDefault();
-                    handleSelect(r.id, r.matchedCarId);
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium truncate">{r.full_name}</span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                        {r.phone_number && (
-                          <span className="flex items-center gap-1">
-                            <Phone className="h-3.5 w-3.5" />
-                            <bdi className="ltr-nums">{r.phone_number}</bdi>
-                          </span>
-                        )}
-                        {r.cars.length > 0 && (
-                          <span className="flex items-center gap-1">
-                            <Car className="h-3.5 w-3.5" />
-                            <bdi className="ltr-nums">{r.cars.join(", ")}</bdi>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-xs text-muted-foreground ltr-nums">{r.id_number}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="py-6 text-center text-sm text-muted-foreground">لا توجد نتائج</div>
-          )}
+          {renderResults()}
         </div>
       )}
     </div>
