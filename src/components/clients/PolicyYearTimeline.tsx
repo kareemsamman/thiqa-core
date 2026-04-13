@@ -14,7 +14,6 @@ import {
   Banknote,
   FileText,
   CheckCircle,
-  AlertCircle,
   XCircle,
   ArrowRightLeft,
   MoreVertical,
@@ -932,13 +931,7 @@ function PolicyPackageCard({
             </Badge>
           )}
 
-          {/* Payment Status */}
-          {hasUnpaid && isActive && (
-            <Badge variant="destructive" className="gap-1">
-              <AlertCircle className="h-3 w-3" />
-              متبقي ₪{paymentStatus.remaining.toLocaleString()}
-            </Badge>
-          )}
+          {/* Payment Status — amounts moved to the summary strip below the grid */}
           {paymentStatus.isPaid && (
             <Badge variant="outline" className="gap-1 text-success border-success/30 bg-success/5">
               <CheckCircle className="h-3 w-3" />
@@ -1127,6 +1120,36 @@ function PolicyPackageCard({
             </div>
           </div>
         </div>
+
+        {/* Payment Summary Strip */}
+        {isActive && (
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className="rounded-lg border bg-muted/30 px-3 py-2 text-center">
+              <p className="text-[10px] text-muted-foreground mb-0.5">السعر</p>
+              <p className="text-sm font-bold ltr-nums">₪{pkg.totalPrice.toLocaleString('en-US')}</p>
+            </div>
+            <div className="rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-center">
+              <p className="text-[10px] text-muted-foreground mb-0.5">المدفوع</p>
+              <p className="text-sm font-bold text-success ltr-nums">
+                ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
+              </p>
+            </div>
+            <div className={cn(
+              "rounded-lg border px-3 py-2 text-center",
+              paymentStatus.remaining > 0
+                ? "border-destructive/30 bg-destructive/5"
+                : "border-success/30 bg-success/5"
+            )}>
+              <p className="text-[10px] text-muted-foreground mb-0.5">الباقي</p>
+              <p className={cn(
+                "text-sm font-bold ltr-nums",
+                paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
+              )}>
+                ₪{paymentStatus.remaining.toLocaleString('en-US')}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Package Components Section - Shows details for each policy in the package */}
         {isPkg && pkg.mainPolicy && (
