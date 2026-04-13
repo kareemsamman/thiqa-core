@@ -1181,6 +1181,29 @@ function PolicyPackageCard({
           </div>
         </div>
 
+        {/* Payment Summary — 2 cols aligned left via margin-right: auto */}
+        {isActive && (
+          <div className="mt-3 pt-3 border-t border-border/50 flex">
+            <div className="grid grid-cols-2 gap-6 mr-auto">
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</p>
+                <p className="text-lg font-bold text-success ltr-nums">
+                  ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">الباقي</p>
+                <p className={cn(
+                  "text-lg font-bold ltr-nums",
+                  paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
+                )}>
+                  ₪{paymentStatus.remaining.toLocaleString('en-US')}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Package Components Section - Shows details for each policy in the package */}
         {isPkg && pkg.mainPolicy && (
           <div className="mt-3 pt-3 border-t border-border/50">
@@ -1206,24 +1229,6 @@ function PolicyPackageCard({
                   payment={getPolicyPayment?.(addon.id)}
                 />
               ))}
-              {/* Package totals footer — aligned left */}
-              <div className="flex items-center text-xs rounded-md px-2.5 py-1.5">
-                <div className="flex items-center gap-4 ltr-nums" dir="ltr">
-                  <span className="text-muted-foreground">
-                    المدفوع <span className="font-bold text-success">₪{paymentStatus.totalPaid.toLocaleString('en-US')}</span>
-                  </span>
-                  <span className="text-muted-foreground/40">·</span>
-                  <span className="text-muted-foreground">
-                    الباقي{' '}
-                    <span className={cn(
-                      "font-bold",
-                      paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
-                    )}>
-                      ₪{paymentStatus.remaining.toLocaleString('en-US')}
-                    </span>
-                  </span>
-                </div>
-              </div>
             </div>
           </div>
         )}
@@ -1319,8 +1324,7 @@ function PackageComponentRow({
   const typeColor = policyTypeColors[policy.policy_type_parent];
   const commission = policy.office_commission || 0;
   const rowTotal = policy.insurance_price + commission;
-  const paid = payment?.paid ?? 0;
-  const remaining = Math.max(0, rowTotal - paid);
+  const remaining = Math.max(0, rowTotal - (payment?.paid ?? 0));
   const rowRef = useRef<HTMLDivElement>(null);
 
   // Get company/service name based on policy type
@@ -1401,11 +1405,7 @@ function PackageComponentRow({
             </span>
           )}
           {payment && (
-            <div className="flex items-center gap-1.5 text-[9px] ltr-nums mt-0.5">
-              <span className="text-success font-semibold">
-                مدفوع ₪{paid.toLocaleString('en-US')}
-              </span>
-              <span className="text-muted-foreground/50">·</span>
+            <div className="text-[9px] ltr-nums mt-0.5">
               <span className={cn(
                 "font-semibold",
                 remaining > 0 ? "text-destructive" : "text-success"
