@@ -12,22 +12,6 @@ const EMAIL_EXISTS_REGEX = /already been registered|email_exists/i;
 
 type AdminClient = ReturnType<typeof createClient>;
 
-async function findAuthUserByEmail(adminClient: AdminClient, normalizedEmail: string) {
-  const perPage = 200;
-
-  for (let page = 1; page <= 50; page++) {
-    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
-    if (error) throw error;
-
-    const found = data.users.find((u) => (u.email || "").toLowerCase() === normalizedEmail);
-    if (found) return found;
-
-    if (data.users.length < perPage) break;
-  }
-
-  return null;
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -82,40 +66,19 @@ Deno.serve(async (req) => {
     });
 
     if (createError) {
-      if (!EMAIL_EXISTS_REGEX.test(createError.message || "")) {
-        throw createError;
-      }
-
-      const { data: existingProfile, error: profileLookupError } = await adminClient
-        .from("profiles")
-        .select("id")
-        .eq("email", normalizedEmail)
-        .maybeSingle();
-
-      if (profileLookupError) throw profileLookupError;
-
-      if (existingProfile?.id) {
+      // An existing email must always bounce back to the sign-in flow. Never
+      // silently overwrite the password on an existing auth.users row —
+      // that's an account takeover path for Google-OAuth accounts, orphaned
+      // auth users, and super admins whose email may not yet have a row in
+      // public.profiles.
+      if (EMAIL_EXISTS_REGEX.test(createError.message || "")) {
         throw new Error("هذا البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول.");
       }
-
-      const existingAuthUser = await findAuthUserByEmail(adminClient, normalizedEmail);
-      if (!existingAuthUser) {
-        throw new Error("هذا البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول.");
-      }
-
-      userId = existingAuthUser.id;
-
-      const { error: updateAuthError } = await adminClient.auth.admin.updateUserById(userId, {
-        password,
-        email_confirm: skipEmailVerification,
-        user_metadata: { full_name: fullName },
-      });
-
-      if (updateAuthError) throw updateAuthError;
-    } else {
-      userId = createdUser.user.id;
-      createdAuthUserId = userId;
+      throw createError;
     }
+
+    userId = createdUser.user.id;
+    createdAuthUserId = userId;
 
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + 35);

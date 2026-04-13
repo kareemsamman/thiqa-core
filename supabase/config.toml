@@ -3,6 +3,9 @@ project_id = "ijtybxpguieptamsikjq"
 [functions.register-agent]
 verify_jwt = false
 
+[functions.check-email-provider]
+verify_jwt = false
+
 [functions.seed-agent-data]
 verify_jwt = false
 
