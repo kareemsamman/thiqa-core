@@ -85,29 +85,31 @@ async function detectCompletedSteps(agentId: string): Promise<Set<string>> {
   const done = new Set<string>();
   try {
     const [agentRes, siteSettingsRes, companiesRes, profilesRes, clientsRes, policiesRes, branchesRes] = await Promise.all([
-      supabase.from("agents").select("logo_url, name_ar").eq("id", agentId).single(),
+      supabase.from("agents").select("logo_url").eq("id", agentId).single(),
       supabase
         .from("site_settings")
-        .select("logo_url, site_title, site_description")
+        .select("logo_url")
         .eq("agent_id", agentId)
         .maybeSingle(),
-      supabase.from("insurance_companies").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
+      // Only count user-added companies, not the auto-seeded samples.
+      supabase
+        .from("insurance_companies")
+        .select("id", { count: "exact", head: true })
+        .eq("agent_id", agentId)
+        .eq("is_seed", false),
       supabase.from("profiles").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
       supabase.from("clients").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
       supabase.from("policies").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
       supabase.from("branches").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
     ]);
 
-    const agentBrandingReady =
-      Boolean(agentRes.data?.logo_url) ||
-      Boolean(agentRes.data?.name_ar && agentRes.data.name_ar.trim().length > 2);
+    // Branding is "done" only when the user has actually uploaded a logo.
+    // name_ar and site_title/description get auto-populated on signup, so
+    // they can't be used as a signal of user activity.
+    const brandingReady =
+      Boolean(agentRes.data?.logo_url) || Boolean(siteSettingsRes.data?.logo_url);
 
-    const siteBrandingReady =
-      Boolean(siteSettingsRes.data?.logo_url) ||
-      Boolean(siteSettingsRes.data?.site_title && siteSettingsRes.data.site_title.trim().length > 0) ||
-      Boolean(siteSettingsRes.data?.site_description && siteSettingsRes.data.site_description.trim().length > 0);
-
-    if (agentBrandingReady || siteBrandingReady) done.add("branding");
+    if (brandingReady) done.add("branding");
     if ((branchesRes.count ?? 0) > 0) done.add("branches");
     if ((companiesRes.count ?? 0) > 0) done.add("companies");
     if ((profilesRes.count ?? 0) > 1) done.add("users");

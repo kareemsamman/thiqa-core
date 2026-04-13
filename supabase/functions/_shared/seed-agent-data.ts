@@ -6,11 +6,11 @@
 
 export const SEED_COMPANIES = [
   // 1 ELZAMI company
-  { name: "כלל", name_ar: "כלל", category_parent: ["ELZAMI"], elzami_commission: 100 },
+  { name: "כלל", name_ar: "כלל", category_parent: ["ELZAMI"], elzami_commission: 100, is_seed: true },
   // 1 THIRD_FULL company (with pricing rules)
-  { name: "اراضي مقدسة", name_ar: "اراضي مقدسة", category_parent: ["THIRD_FULL"], elzami_commission: 0 },
+  { name: "اراضي مقدسة", name_ar: "اراضي مقدسة", category_parent: ["THIRD_FULL"], elzami_commission: 0, is_seed: true },
   // 1 ROAD_SERVICE company (X Service - with service & accident fee prices)
-  { name: "شركة اكس", name_ar: "شركة اكس", category_parent: ["ROAD_SERVICE"], elzami_commission: 0 },
+  { name: "شركة اكس", name_ar: "شركة اكس", category_parent: ["ROAD_SERVICE"], elzami_commission: 0, is_seed: true },
 ];
 
 export const SEED_INSURANCE_CATEGORIES = [
