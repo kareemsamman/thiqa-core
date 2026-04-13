@@ -1,11 +1,21 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Save, ArrowRight, ArrowLeft, Minus, X } from "lucide-react";
-import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
+import type { WizardDraftSummary } from "@/hooks/usePolicyWizardController";
 import { cn } from "@/lib/utils";
 import { calculatePolicyProfit } from "@/lib/pricingCalculator";
 import { digitsOnly } from "@/lib/validation";
@@ -38,31 +48,40 @@ interface PolicyWizardProps {
   defaultBrokerDirection?: 'from_broker' | 'to_broker';
   preselectedClientId?: string;
   isCollapsed?: boolean;
-  onCollapsedChange?: (collapsed: boolean) => void;
+  // New multi-instance host wiring: the host tells the wizard to minimize
+  // (flight origin included) and receives draft summary updates so it can
+  // store them on the instance record for the tab strip.
+  onMinimize?: (origin?: { x: number; y: number }) => void;
+  onDraftSummaryChange?: (summary: WizardDraftSummary | null) => void;
   renewalData?: RenewalData | null;
 }
 
-export function PolicyWizard({ 
-  open, 
-  onOpenChange, 
-  onComplete, 
-  onSaved, 
-  defaultBrokerId, 
-  defaultBrokerDirection, 
+export function PolicyWizard({
+  open,
+  onOpenChange,
+  onComplete,
+  onSaved,
+  defaultBrokerId,
+  defaultBrokerDirection,
   preselectedClientId,
-  isCollapsed: controlledCollapsed,
-  onCollapsedChange,
+  isCollapsed = false,
+  onMinimize,
+  onDraftSummaryChange,
   renewalData,
 }: PolicyWizardProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Use the centralized wizard state hook
+  // Use the centralized wizard state hook. In the multi-instance model
+  // this wizard stays mounted while it is minimized, so we always pass
+  // open=true to the hook — its `!open` branches are resets that should
+  // only fire on real close, and component unmount is the real close
+  // signal now.
   const wizardState = usePolicyWizardState({
     defaultBrokerId,
     defaultBrokerDirection,
     preselectedClientId,
-    open,
+    open: true,
     renewalData: renewalData || undefined,
   });
 
@@ -194,32 +213,42 @@ export function PolicyWizard({
   const [activeTranzilaPaymentId, setActiveTranzilaPaymentId] = useState<string | null>(null);
   const [tempPolicyId, setTempPolicyId] = useState<string | null>(null);
   
-  // Collapse state for minimizing dialog - controlled or internal
-  const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const isCollapsed = controlledCollapsed ?? internalCollapsed;
-  const setIsCollapsed = onCollapsedChange ?? setInternalCollapsed;
+  // Close-confirmation dialog state. Shown when the user tries to dismiss
+  // the wizard while it holds any unsaved draft data.
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  // Programmatic closes (e.g. after a successful save) skip the dirty check.
+  const skipCloseConfirmRef = useRef(false);
 
-  // Push a compact draft summary into the global controller so the bottom
-  // toolbar can render a live "minimized" chip on every page.
-  const { setDraftSummary, minimizeWizard } = usePolicyWizardController();
+  // Push a compact draft summary up to the host so the tab strip can show
+  // what this wizard is working on. The host stores it per-instance, so we
+  // only report updates while the wizard is the active one — that way the
+  // last-known summary stays frozen on the tab while the user is busy in
+  // another minimized wizard.
   useEffect(() => {
-    if (!open) {
-      setDraftSummary(null);
-      return;
-    }
+    if (!open || isCollapsed) return;
     const clientName =
       selectedClient?.full_name
       || (createNewClient && newClient.full_name)
       || "";
     const stepTitle = steps.find((s) => s.id === currentStep)?.title || "";
-    setDraftSummary({
+    onDraftSummaryChange?.({
       clientName,
       stepTitle,
       stepNumber: currentStep,
       totalSteps: steps.length,
       categoryName: selectedCategory?.name_ar || selectedCategory?.name || null,
     });
-  }, [open, selectedClient, createNewClient, newClient.full_name, currentStep, steps, selectedCategory, setDraftSummary]);
+  }, [
+    open,
+    isCollapsed,
+    selectedClient,
+    createNewClient,
+    newClient.full_name,
+    currentStep,
+    steps,
+    selectedCategory,
+    onDraftSummaryChange,
+  ]);
 
   // Success dialog state
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
@@ -1545,35 +1574,75 @@ export function PolicyWizard({
     }
   };
 
-  // Handle dialog close. Closing always discards the draft — the user has
-  // to use the minimize button if they want to preserve it. Outside-click
-  // and Escape are disabled below, so this only fires from the X button or
-  // the programmatic onOpenChange path after success.
-  const handleClose = () => {
-    if (saving) return;
+  // Dirty check: is there any user input we would lose on close? Used to
+  // decide whether to show the "your data will be lost" confirmation.
+  const isDirty = useCallback(() => {
+    return !!(
+      selectedClient ||
+      createNewClient ||
+      selectedCategory ||
+      currentStep > 1 ||
+      newClient.full_name?.trim() ||
+      newClient.id_number?.trim() ||
+      newClient.phone_number?.trim() ||
+      newCar?.car_number?.trim()
+    );
+  }, [
+    selectedClient,
+    createNewClient,
+    selectedCategory,
+    currentStep,
+    newClient.full_name,
+    newClient.id_number,
+    newClient.phone_number,
+    newCar?.car_number,
+  ]);
+
+  const performClose = useCallback(() => {
     resetForm();
     clearDraft();
+    skipCloseConfirmRef.current = true;
     onOpenChange(false);
-  };
+  }, [resetForm, clearDraft, onOpenChange]);
 
-  // Helper: minimize the wizard and optionally navigate. The wizard is
-  // mounted globally above the router (via GlobalPolicyWizardHost), so
-  // navigating never unmounts it — the draft survives until the user closes.
+  // Close-button handler. Shows a confirm if there is unsaved data so the
+  // user can't accidentally throw away a half-filled wizard.
+  const handleCloseRequest = useCallback(() => {
+    if (saving) return;
+    if (isDirty() && !skipCloseConfirmRef.current) {
+      setCloseConfirmOpen(true);
+      return;
+    }
+    performClose();
+  }, [saving, isDirty, performClose]);
+
+  // Helper: minimize the wizard and optionally navigate. The wizard stays
+  // mounted via GlobalPolicyWizardHost so the draft survives navigation.
   const minimizeAndNavigate = (path?: string) => {
-    setIsCollapsed(true);
+    onMinimize?.();
     if (path) navigate(path);
   };
 
-  // When collapsed we render nothing from the wizard itself — the bottom
-  // toolbar takes over and shows the inline "draft chip". This keeps the
-  // minimized state visually anchored to the toolbar on every page.
-  if (isCollapsed && open) {
+  // When this wizard isn't the active one, render null so the host's tab
+  // strip takes over for minimized instances. Hook state stays alive
+  // because the component itself doesn't unmount.
+  if (isCollapsed) {
     return null;
   }
 
   return (
     <>
-      <Dialog open={open && !isCollapsed} onOpenChange={handleClose}>
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          // Radix can still trigger this on programmatic close. ESC and
+          // outside-click are prevented below, so the only way a user
+          // dismisses the dialog is via the custom X button we render,
+          // which calls handleCloseRequest directly. Treat any other
+          // close signal as programmatic and let it through.
+          if (!o) performClose();
+        }}
+      >
         <DialogContent
           hideCloseButton
           className="max-w-6xl w-[96vw] sm:max-h-[95vh] max-h-[100dvh] overflow-hidden flex flex-col sm:rounded-2xl rounded-none p-3 sm:p-6"
@@ -1590,7 +1659,7 @@ export function PolicyWizard({
                 // Capture the button's on-screen rect so the toolbar chip can
                 // animate from the exact click point.
                 const rect = e.currentTarget.getBoundingClientRect();
-                minimizeWizard({
+                onMinimize?.({
                   x: rect.left + rect.width / 2,
                   y: rect.top + rect.height / 2,
                 });
@@ -1602,13 +1671,16 @@ export function PolicyWizard({
               <Minus className="h-4 w-4" strokeWidth={2.5} />
               <span className="sr-only">تصغير</span>
             </button>
-            <DialogClose
-              className="h-7 w-7 flex items-center justify-center rounded-md border border-transparent opacity-70 hover:opacity-100 hover:bg-white hover:border-border hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            <button
+              type="button"
+              onClick={handleCloseRequest}
+              title="إغلاق"
               aria-label="إغلاق"
+              className="h-7 w-7 flex items-center justify-center rounded-md border border-transparent opacity-70 hover:opacity-100 hover:bg-white hover:border-border hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             >
               <X className="h-4 w-4" strokeWidth={2.5} />
               <span className="sr-only">إغلاق</span>
-            </DialogClose>
+            </button>
           </div>
           <DialogHeader className="flex-shrink-0 pb-2 sm:pb-4 border-b">
             <DialogTitle className="text-base sm:text-xl font-bold flex items-center gap-2 min-w-0 pl-20">
@@ -1852,6 +1924,31 @@ export function PolicyWizard({
         description={resetWarning.description}
         onConfirm={resetWarning.onConfirm}
       />
+
+      {/* Close confirmation — "your unsaved data will be lost" */}
+      <AlertDialog open={closeConfirmOpen} onOpenChange={setCloseConfirmOpen}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تجاهل الوثيقة؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              ستفقد جميع البيانات التي أدخلتها في هذه الوثيقة. يمكنك بدلاً من
+              ذلك تصغير النافذة للعودة إليها لاحقاً.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>البقاء في الوثيقة</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setCloseConfirmOpen(false);
+                performClose();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              تجاهل وإغلاق
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Tranzila Payment Modal */}
       {tranzilaModalOpen && tempPolicyId && activeTranzilaPaymentId && (

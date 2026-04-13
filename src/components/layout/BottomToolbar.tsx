@@ -13,26 +13,31 @@ export function BottomToolbar() {
   const location = useLocation();
   const { recentClient, clearRecentClient } = useRecentClient();
   const {
-    isOpen: wizardOpen,
-    isCollapsed: wizardCollapsed,
+    instances,
+    activeId,
     openWizard,
-    restoreWizard,
-    draftSummary,
+    restoreInstance,
+    closeInstance,
     consumeDockOrigin,
   } = usePolicyWizardController();
+
+  // Everything except the active instance is "minimized" from the user's
+  // perspective — these become tabs in the toolbar that can be restored
+  // or closed individually.
+  const minimizedInstances = instances.filter((i) => i.id !== activeId);
+  const lastMinimizedId = minimizedInstances[minimizedInstances.length - 1]?.id ?? null;
 
   const [isHovered, setIsHovered] = useState(false);
   const [isOverContent, setIsOverContent] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const draftChipRef = useRef<HTMLButtonElement>(null);
 
-  // FLIP animation: when the chip appears after a minimize click, capture
-  // the click origin (from the dialog's minimize button) and animate the
-  // chip from that exact point to its final position in the toolbar.
-  // Falls back to a subtle scale-in when there is no origin (e.g. the
-  // toolbar remounted on page navigation while the wizard was minimized).
+  // FLIP animation: when a new minimized chip appears, capture the click
+  // origin (from the dialog's minimize button) and animate the newest chip
+  // from that exact point to its final position in the toolbar. Only the
+  // most recently minimized instance consumes the dock origin.
   useLayoutEffect(() => {
-    if (!wizardOpen || !wizardCollapsed) return;
+    if (!lastMinimizedId) return;
     const chip = draftChipRef.current;
     if (!chip) return;
     const origin = consumeDockOrigin();
@@ -78,7 +83,7 @@ export function BottomToolbar() {
     return () => {
       chip.removeEventListener("transitionend", clearInline);
     };
-  }, [wizardOpen, wizardCollapsed, consumeDockOrigin]);
+  }, [lastMinimizedId, consumeDockOrigin]);
 
   // Detect if toolbar is overlapping content
   useEffect(() => {
@@ -178,66 +183,87 @@ export function BottomToolbar() {
             </div>
           )}
 
-          {/* Minimized wizard draft chip — docks into the toolbar when the
-              user minimizes the policy dialog. Lives inside the toolbar so
-              it's always reachable on every page. */}
-          {wizardOpen && wizardCollapsed && (
+          {/* Minimized wizard tab strip — one chip per minimized instance,
+              each with its own restore + close buttons. Clicking the chip
+              body restores that instance, clicking the X closes it. */}
+          {minimizedInstances.length > 0 && (
             <>
-              <button
-                ref={draftChipRef}
-                type="button"
-                onClick={restoreWizard}
-                title={
-                  draftSummary
-                    ? `استئناف: ${draftSummary.clientName || "وثيقة جديدة"} — ${draftSummary.stepTitle}`
-                    : "استئناف وثيقة جديدة"
-                }
-                className={cn(
-                  "group relative flex items-center gap-2 h-9 pr-2 pl-3 rounded-full overflow-hidden",
-                  "bg-primary text-primary-foreground shadow-md shadow-primary/20",
-                  "hover:shadow-lg hover:shadow-primary/30",
-                  "max-w-[260px]"
-                )}
-              >
-                {/* Shimmer sweep on hover */}
-                <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent group-hover:translate-x-full transition-transform duration-700 ease-out" />
+              <div className="flex items-center gap-1.5">
+                {minimizedInstances.map((instance) => {
+                  const summary = instance.draftSummary;
+                  const isLast = instance.id === lastMinimizedId;
+                  return (
+                    <div
+                      key={instance.id}
+                      className={cn(
+                        "group relative flex items-center rounded-full overflow-hidden",
+                        "bg-primary text-primary-foreground shadow-md shadow-primary/20",
+                        "hover:shadow-lg hover:shadow-primary/30",
+                      )}
+                    >
+                      <button
+                        ref={isLast ? draftChipRef : undefined}
+                        type="button"
+                        onClick={() => restoreInstance(instance.id)}
+                        title={
+                          summary
+                            ? `استئناف: ${summary.clientName || "وثيقة جديدة"} — ${summary.stepTitle}`
+                            : "استئناف وثيقة جديدة"
+                        }
+                        className="relative flex items-center gap-2 h-9 pr-2 pl-2 max-w-[240px]"
+                      >
+                        {/* Shimmer sweep on hover */}
+                        <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent group-hover:translate-x-full transition-transform duration-700 ease-out" />
 
-                <span className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15">
-                  <FileText className="h-3.5 w-3.5" />
-                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-primary animate-pulse" />
-                </span>
+                        <span className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15">
+                          <FileText className="h-3.5 w-3.5" />
+                          <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-primary animate-pulse" />
+                        </span>
 
-                <span className="hidden sm:flex flex-col items-start min-w-0 leading-tight">
-                  <span className="text-[10px] font-semibold opacity-80 truncate max-w-[150px]">
-                    {draftSummary?.clientName || "مسودة وثيقة"}
-                  </span>
-                  <span className="text-[9px] opacity-70 truncate max-w-[150px]">
-                    {draftSummary
-                      ? `${draftSummary.stepNumber}/${draftSummary.totalSteps} · ${draftSummary.stepTitle}`
-                      : "اضغط للاستئناف"}
-                  </span>
-                </span>
+                        <span className="hidden sm:flex flex-col items-start min-w-0 leading-tight">
+                          <span className="text-[10px] font-semibold opacity-80 truncate max-w-[140px]">
+                            {summary?.clientName || "مسودة وثيقة"}
+                          </span>
+                          <span className="text-[9px] opacity-70 truncate max-w-[140px]">
+                            {summary
+                              ? `${summary.stepNumber}/${summary.totalSteps} · ${summary.stepTitle}`
+                              : "اضغط للاستئناف"}
+                          </span>
+                        </span>
 
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 group-hover:bg-primary-foreground/25 group-hover:rotate-12 transition-all duration-300">
-                  <Maximize2 className="h-3 w-3" />
-                </span>
-              </button>
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 group-hover:bg-primary-foreground/25 group-hover:rotate-12 transition-all duration-300">
+                          <Maximize2 className="h-3 w-3" />
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeInstance(instance.id);
+                        }}
+                        title="إغلاق هذه المسودة"
+                        aria-label="إغلاق هذه المسودة"
+                        className="flex h-9 w-7 items-center justify-center border-r border-primary-foreground/20 hover:bg-primary-foreground/15"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
               <div className="h-6 w-px bg-border/50" />
             </>
           )}
 
-          {/* Create Insurance Button */}
+          {/* Create Insurance Button — always opens a fresh wizard instance
+              so the user can have several drafts going at once. */}
           <Button
             onClick={() => {
-              if (wizardOpen && wizardCollapsed) {
-                restoreWizard();
-              } else {
-                openWizard({
-                  clientId: isOnClientProfilePage ? recentClient?.id : undefined,
-                });
-              }
+              openWizard({
+                clientId: isOnClientProfilePage ? recentClient?.id : undefined,
+              });
             }}
-            className={cn("rounded-full gap-2", wizardOpen && wizardCollapsed && "hidden")}
+            className="rounded-full gap-2"
             size="sm"
           >
             <Plus className="h-4 w-4" />

@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  ReactNode,
+} from "react";
 
 export interface WizardDraftSummary {
   clientName: string;
@@ -13,53 +21,84 @@ interface DockOrigin {
   y: number;
 }
 
+export interface WizardInstance {
+  id: string;
+  preselectedClientId?: string;
+  draftSummary: WizardDraftSummary | null;
+}
+
 interface PolicyWizardControllerState {
+  // Multi-instance API
+  instances: WizardInstance[];
+  activeId: string | null;
+  openWizard: (opts?: { clientId?: string }) => string;
+  closeInstance: (id: string) => void;
+  minimizeInstance: (id: string, origin?: DockOrigin) => void;
+  restoreInstance: (id: string) => void;
+  setInstanceDraft: (id: string, summary: WizardDraftSummary | null) => void;
+  consumeDockOrigin: () => DockOrigin | null;
+
+  // Convenience accessors for the currently active instance
   isOpen: boolean;
   isCollapsed: boolean;
   preselectedClientId: string | undefined;
   draftSummary: WizardDraftSummary | null;
-  openWizard: (opts?: { clientId?: string }) => void;
+
+  // Backward-compat shims operating on the active instance
   closeWizard: () => void;
   minimizeWizard: (origin?: DockOrigin) => void;
   restoreWizard: () => void;
-  setCollapsed: (collapsed: boolean) => void;
   setDraftSummary: (summary: WizardDraftSummary | null) => void;
-  consumeDockOrigin: () => DockOrigin | null;
+  setCollapsed: (collapsed: boolean) => void;
 }
 
 const PolicyWizardControllerContext = createContext<PolicyWizardControllerState | null>(null);
 
+function generateId(): string {
+  return (
+    Math.random().toString(36).slice(2, 11) + Date.now().toString(36).slice(-4)
+  );
+}
+
 export function PolicyWizardControllerProvider({ children }: { children: ReactNode }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [preselectedClientId, setPreselectedClientId] = useState<string | undefined>(undefined);
-  const [draftSummary, setDraftSummary] = useState<WizardDraftSummary | null>(null);
-  // Dock origin is stored in a ref, not state: it's consumed exactly once
-  // by the next chip render and must not trigger re-renders on its own.
+  const [instances, setInstances] = useState<WizardInstance[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  // Dock origin for the minimize→chip flight animation. Consumed exactly
+  // once by the next chip render so it must not drive re-renders itself.
   const dockOriginRef = useRef<DockOrigin | null>(null);
 
-  const openWizard = useCallback((opts?: { clientId?: string }) => {
-    setPreselectedClientId(opts?.clientId);
-    setIsCollapsed(false);
-    setIsOpen(true);
+  const openWizard = useCallback((opts?: { clientId?: string }): string => {
+    const id = generateId();
+    setInstances((prev) => [
+      ...prev,
+      { id, preselectedClientId: opts?.clientId, draftSummary: null },
+    ]);
+    setActiveId(id);
+    return id;
   }, []);
 
-  const closeWizard = useCallback(() => {
-    setIsOpen(false);
-    setIsCollapsed(false);
-    setPreselectedClientId(undefined);
-    setDraftSummary(null);
-    dockOriginRef.current = null;
+  const closeInstance = useCallback((id: string) => {
+    setInstances((prev) => prev.filter((i) => i.id !== id));
+    setActiveId((prev) => (prev === id ? null : prev));
   }, []);
 
-  const minimizeWizard = useCallback((origin?: DockOrigin) => {
+  const minimizeInstance = useCallback((id: string, origin?: DockOrigin) => {
     if (origin) dockOriginRef.current = origin;
-    setIsCollapsed(true);
+    setActiveId((prev) => (prev === id ? null : prev));
   }, []);
 
-  const restoreWizard = useCallback(() => {
-    setIsCollapsed(false);
+  const restoreInstance = useCallback((id: string) => {
+    setActiveId(id);
   }, []);
+
+  const setInstanceDraft = useCallback(
+    (id: string, summary: WizardDraftSummary | null) => {
+      setInstances((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, draftSummary: summary } : i)),
+      );
+    },
+    [],
+  );
 
   const consumeDockOrigin = useCallback(() => {
     const origin = dockOriginRef.current;
@@ -67,21 +106,93 @@ export function PolicyWizardControllerProvider({ children }: { children: ReactNo
     return origin;
   }, []);
 
+  // Convenience accessors — always look up the active instance fresh so the
+  // values track as the user restores/minimizes/closes wizards.
+  const activeInstance = instances.find((i) => i.id === activeId) || null;
+  const isOpen = instances.length > 0;
+  const isCollapsed = activeId === null && instances.length > 0;
+  const preselectedClientId = activeInstance?.preselectedClientId;
+  const draftSummary = activeInstance?.draftSummary || null;
+
+  // Backward-compat single-wizard operations (all route through the active
+  // instance). Existing callers — BottomToolbar, GlobalPolicyWizardHost,
+  // Policies page — can keep using these until they migrate.
+  const closeWizard = useCallback(() => {
+    if (activeId) closeInstance(activeId);
+  }, [activeId, closeInstance]);
+
+  const minimizeWizard = useCallback(
+    (origin?: DockOrigin) => {
+      if (activeId) minimizeInstance(activeId, origin);
+    },
+    [activeId, minimizeInstance],
+  );
+
+  const restoreWizard = useCallback(() => {
+    // Restore the first minimized instance (there is usually only one in
+    // the single-wizard code path).
+    const candidate = instances.find((i) => i.id !== activeId);
+    if (candidate) setActiveId(candidate.id);
+  }, [instances, activeId]);
+
+  const setDraftSummary = useCallback(
+    (summary: WizardDraftSummary | null) => {
+      if (activeId) setInstanceDraft(activeId, summary);
+    },
+    [activeId, setInstanceDraft],
+  );
+
+  const setCollapsed = useCallback(
+    (collapsed: boolean) => {
+      if (collapsed && activeId) {
+        minimizeInstance(activeId);
+      } else if (!collapsed && instances.length > 0) {
+        const first = instances[0];
+        if (first) setActiveId(first.id);
+      }
+    },
+    [activeId, instances, minimizeInstance],
+  );
+
   const value = useMemo<PolicyWizardControllerState>(
     () => ({
+      instances,
+      activeId,
+      openWizard,
+      closeInstance,
+      minimizeInstance,
+      restoreInstance,
+      setInstanceDraft,
+      consumeDockOrigin,
       isOpen,
       isCollapsed,
       preselectedClientId,
       draftSummary,
-      openWizard,
       closeWizard,
       minimizeWizard,
       restoreWizard,
-      setCollapsed: setIsCollapsed,
       setDraftSummary,
-      consumeDockOrigin,
+      setCollapsed,
     }),
-    [isOpen, isCollapsed, preselectedClientId, draftSummary, openWizard, closeWizard, minimizeWizard, restoreWizard, consumeDockOrigin],
+    [
+      instances,
+      activeId,
+      openWizard,
+      closeInstance,
+      minimizeInstance,
+      restoreInstance,
+      setInstanceDraft,
+      consumeDockOrigin,
+      isOpen,
+      isCollapsed,
+      preselectedClientId,
+      draftSummary,
+      closeWizard,
+      minimizeWizard,
+      restoreWizard,
+      setDraftSummary,
+      setCollapsed,
+    ],
   );
 
   return (
