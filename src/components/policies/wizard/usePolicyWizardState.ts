@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useBranches } from "@/hooks/useBranches";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,17 +24,25 @@ import type {
 import { User, Car, FileText, CreditCard, Building2 } from "lucide-react";
 import type { ClientChild, NewChildForm } from "@/types/clientChildren";
 
-const DRAFT_KEY = "abcrm:policyWizardDraft:v3";
+const DRAFT_KEY_PREFIX = "abcrm:policyWizardDraft:v4";
+
+// Build the localStorage key for a given wizard instance. When instanceId
+// is undefined (legacy direct usages of the wizard), persistence is
+// skipped entirely — the controller-driven host always supplies one.
+function draftKeyFor(instanceId: string | undefined): string | null {
+  return instanceId ? `${DRAFT_KEY_PREFIX}:${instanceId}` : null;
+}
 
 interface UsePolicyWizardStateProps {
   open: boolean;
+  instanceId?: string;
   defaultBrokerId?: string;
   defaultBrokerDirection?: 'from_broker' | 'to_broker';
   preselectedClientId?: string;
   renewalData?: RenewalData;
 }
 
-export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirection, preselectedClientId, renewalData }: UsePolicyWizardStateProps) {
+export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaultBrokerDirection, preselectedClientId, renewalData }: UsePolicyWizardStateProps) {
   const { user, isAdmin, branchId: userBranchId } = useAuth();
   const { branches, refetch: refetchBranches } = useBranches();
   const initialBrokerDirection = defaultBrokerDirection || "";
@@ -788,14 +796,168 @@ export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirec
     }
   }, [steps]);
 
-  // Clear draft
+  // ─── Per-instance draft persistence ──────────────────────────────────
+  // Serialize the form state to localStorage keyed by the wizard instance
+  // id so a page refresh (or closing + reopening the browser) restores the
+  // same client, car, policy fields, payments, etc. the user was editing.
+  // Loading happens once on mount; saving is debounced on every change.
+  const draftKey = draftKeyFor(instanceId);
+  const hasHydratedRef = useRef(false);
+
+  // Load snapshot on mount (once, keyed by instanceId). Primitive fields
+  // are applied synchronously; selectedCategory / selectedClient / selectedCar
+  // are re-fetched asynchronously by id and then the ref flips so the save
+  // effect starts writing again.
+  useEffect(() => {
+    if (!draftKey) {
+      hasHydratedRef.current = true;
+      return;
+    }
+    let cancelled = false;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) {
+        hasHydratedRef.current = true;
+        return;
+      }
+      const snap = JSON.parse(raw);
+      if (typeof snap.currentStep === "number") setCurrentStep(snap.currentStep);
+      if (typeof snap.selectedBranchId === "string") setSelectedBranchId(snap.selectedBranchId);
+      if (typeof snap.createNewClient === "boolean") setCreateNewClient(snap.createNewClient);
+      if (snap.newClient) setNewClient(snap.newClient);
+      if (typeof snap.createNewCar === "boolean") setCreateNewCar(snap.createNewCar);
+      if (snap.newCar) setNewCar(snap.newCar);
+      if (snap.policy) setPolicy(snap.policy);
+      if (typeof snap.policyBrokerId === "string") setPolicyBrokerId(snap.policyBrokerId);
+      if (snap.brokerDirection) setBrokerDirection(snap.brokerDirection);
+      if (typeof snap.packageMode === "boolean") setPackageMode(snap.packageMode);
+      if (Array.isArray(snap.packageAddons)) setPackageAddons(snap.packageAddons);
+      if (Array.isArray(snap.payments)) setPayments(snap.payments);
+      if (Array.isArray(snap.selectedChildIds)) setSelectedChildIds(snap.selectedChildIds);
+      if (Array.isArray(snap.newChildren)) setNewChildren(snap.newChildren);
+
+      const asyncHydrate = async () => {
+        const tasks: Promise<void>[] = [];
+        if (snap.selectedCategoryId) {
+          tasks.push(
+            supabase
+              .from("insurance_categories")
+              .select("*")
+              .eq("id", snap.selectedCategoryId)
+              .maybeSingle()
+              .then(({ data }) => {
+                if (!cancelled && data) {
+                  setSelectedCategory({
+                    ...(data as any),
+                    mode: (data as any).mode as "FULL" | "LIGHT",
+                  });
+                }
+              }),
+          );
+        }
+        if (snap.selectedClientId) {
+          tasks.push(
+            supabase
+              .from("clients")
+              .select(
+                "id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes",
+              )
+              .eq("id", snap.selectedClientId)
+              .maybeSingle()
+              .then(({ data }) => {
+                if (!cancelled && data) setSelectedClient(data as Client);
+              }),
+          );
+        }
+        if (snap.selectedCarId) {
+          tasks.push(
+            supabase
+              .from("cars")
+              .select("*")
+              .eq("id", snap.selectedCarId)
+              .maybeSingle()
+              .then(({ data }) => {
+                if (!cancelled && data) setSelectedCar(data as CarRecord);
+              }),
+          );
+        }
+        await Promise.all(tasks);
+        if (!cancelled) hasHydratedRef.current = true;
+      };
+      asyncHydrate();
+    } catch {
+      hasHydratedRef.current = true;
+    }
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  // Save snapshot on any relevant state change (debounced). Drops File
+  // uploads from payments since they aren't JSON-serializable.
+  useEffect(() => {
+    if (!draftKey || !hasHydratedRef.current) return;
+    const handle = window.setTimeout(() => {
+      try {
+        const snap = {
+          currentStep,
+          selectedBranchId,
+          selectedCategoryId: selectedCategory?.id ?? null,
+          selectedClientId: selectedClient?.id ?? null,
+          createNewClient,
+          newClient,
+          selectedCarId: (selectedCar as any)?.id ?? null,
+          createNewCar,
+          newCar,
+          policy,
+          policyBrokerId,
+          brokerDirection,
+          packageMode,
+          packageAddons,
+          payments: payments.map((p) => {
+            const { cheque_image, ...rest } = p as any;
+            return rest;
+          }),
+          selectedChildIds,
+          newChildren,
+        };
+        localStorage.setItem(draftKey, JSON.stringify(snap));
+      } catch {
+        // ignore quota / parse errors
+      }
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [
+    draftKey,
+    currentStep,
+    selectedBranchId,
+    selectedCategory,
+    selectedClient,
+    createNewClient,
+    newClient,
+    selectedCar,
+    createNewCar,
+    newCar,
+    policy,
+    policyBrokerId,
+    brokerDirection,
+    packageMode,
+    packageAddons,
+    payments,
+    selectedChildIds,
+    newChildren,
+  ]);
+
+  // Clear draft (called on explicit close / after save)
   const clearDraft = useCallback(() => {
     try {
-      sessionStorage.removeItem(DRAFT_KEY);
+      if (draftKey) localStorage.removeItem(draftKey);
     } catch {
       // ignore
     }
-  }, []);
+  }, [draftKey]);
 
   return {
     // Core state

@@ -15,6 +15,11 @@ import {
 // the browser tab, not just a single session.
 const INSTANCES_STORAGE_KEY = "abcrm:policyWizardInstances:v1";
 
+// Per-instance form draft key prefix. Kept in sync with the one in
+// usePolicyWizardState so the controller can clean up orphaned drafts
+// when the user closes a tab from the toolbar without opening it first.
+const DRAFT_KEY_PREFIX = "abcrm:policyWizardDraft:v4";
+
 export interface WizardDraftSummary {
   clientName: string;
   stepTitle: string;
@@ -124,6 +129,13 @@ export function PolicyWizardControllerProvider({ children }: { children: ReactNo
   const closeInstance = useCallback((id: string) => {
     setInstances((prev) => prev.filter((i) => i.id !== id));
     setActiveId((prev) => (prev === id ? null : prev));
+    // Remove the orphaned per-instance form draft so it doesn't leak
+    // localStorage after closing a minimized tab from the toolbar.
+    try {
+      localStorage.removeItem(`${DRAFT_KEY_PREFIX}:${id}`);
+    } catch {
+      // ignore
+    }
   }, []);
 
   const minimizeInstance = useCallback((id: string, origin?: DockOrigin) => {

@@ -25,6 +25,7 @@ export function GlobalPolicyWizardHost() {
       {instances.map((instance) => (
         <PolicyWizard
           key={instance.id}
+          instanceId={instance.id}
           open={activeId === instance.id}
           isCollapsed={activeId !== instance.id}
           onOpenChange={(open) => {

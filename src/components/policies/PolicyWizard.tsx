@@ -51,6 +51,7 @@ interface PolicyWizardProps {
   // New multi-instance host wiring: the host tells the wizard to minimize
   // (flight origin included) and receives draft summary updates so it can
   // store them on the instance record for the tab strip.
+  instanceId?: string;
   onMinimize?: (origin?: { x: number; y: number }) => void;
   onDraftSummaryChange?: (summary: WizardDraftSummary | null) => void;
   renewalData?: RenewalData | null;
@@ -65,6 +66,7 @@ export function PolicyWizard({
   defaultBrokerDirection,
   preselectedClientId,
   isCollapsed = false,
+  instanceId,
   onMinimize,
   onDraftSummaryChange,
   renewalData,
@@ -76,12 +78,13 @@ export function PolicyWizard({
   // this wizard stays mounted while it is minimized, so we always pass
   // open=true to the hook — its `!open` branches are resets that should
   // only fire on real close, and component unmount is the real close
-  // signal now.
+  // signal now. instanceId activates per-instance draft persistence.
   const wizardState = usePolicyWizardState({
     defaultBrokerId,
     defaultBrokerDirection,
     preselectedClientId,
     open: true,
+    instanceId,
     renewalData: renewalData || undefined,
   });
 
