@@ -565,22 +565,38 @@ function buildPackageInvoiceHtml(
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>فاتورة - ${client.full_name || 'عميل'}</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap');
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    @page { size: A4; margin: 15mm; }
+    @page { size: A4; margin: 12mm; }
     html, body {
-      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif;
       font-size: 13px;
-      line-height: 1.55;
+      line-height: 1.6;
       color: #000;
-      background: #ffffff;
+      background: #ededed;
       direction: rtl;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-feature-settings: "kern" 1, "liga" 1;
     }
-    body { padding: 28px 20px; }
+    body { padding: 32px 16px; }
     .invoice {
-      max-width: 780px;
+      max-width: 820px;
       margin: 0 auto;
       background: #ffffff;
+      padding: 42px 44px;
+      border: 3px double #000;
+      position: relative;
     }
+    .invoice::before {
+      content: '';
+      position: absolute;
+      inset: 6px;
+      border: 1px solid #000;
+      pointer-events: none;
+    }
+    .invoice > * { position: relative; }
     a { color: inherit; text-decoration: none; }
     a:hover { text-decoration: underline; }
 
@@ -589,183 +605,222 @@ function buildPackageInvoiceHtml(
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: 20px;
-      padding-bottom: 18px;
-      border-bottom: 2px solid #000;
-      margin-bottom: 22px;
+      gap: 24px;
+      padding-bottom: 22px;
+      border-bottom: 3px double #000;
+      margin-bottom: 26px;
     }
     .brand { max-width: 55%; }
     .brand .logo {
-      max-height: 70px;
-      max-width: 220px;
+      max-height: 76px;
+      max-width: 240px;
       object-fit: contain;
       display: block;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     .brand .logo-fallback {
-      font-size: 26px;
-      font-weight: 800;
-      letter-spacing: 1px;
-      margin-bottom: 8px;
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      margin-bottom: 10px;
     }
-    .brand .name { font-size: 18px; font-weight: 700; }
-    .brand .tagline { font-size: 11px; color: #555; margin-top: 2px; }
-    .brand .address { font-size: 11px; color: #555; margin-top: 6px; max-width: 340px; }
+    .brand .name { font-size: 19px; font-weight: 800; letter-spacing: 0.3px; }
+    .brand .tagline { font-size: 11px; color: #444; margin-top: 3px; font-weight: 500; }
+    .brand .address { font-size: 11px; color: #444; margin-top: 8px; max-width: 340px; line-height: 1.5; }
 
-    .invoice-meta { text-align: left; min-width: 220px; }
+    .invoice-meta { text-align: left; min-width: 280px; }
     .invoice-meta h1 {
-      font-size: 36px;
-      font-weight: 800;
-      letter-spacing: 3px;
-      margin-bottom: 14px;
+      font-size: 46px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      margin-bottom: 16px;
+      line-height: 1;
     }
     .meta-rows {
-      display: table;
-      border-spacing: 0;
-      margin-left: auto;
+      width: 100%;
+      border: 2px solid #000;
       font-size: 12px;
     }
-    .meta-rows .row { display: table-row; }
+    .meta-rows .row { display: flex; }
+    .meta-rows .row + .row { border-top: 1px solid #000; }
     .meta-rows .label {
-      display: table-cell;
+      flex: 0 0 110px;
+      background: #000;
+      color: #fff;
       font-weight: 700;
-      padding: 4px 12px 4px 0;
-      text-align: left;
-      text-transform: uppercase;
-      letter-spacing: 1px;
+      padding: 8px 12px;
+      letter-spacing: 0.5px;
+      font-size: 11px;
+      text-align: right;
     }
     .meta-rows .val {
-      display: table-cell;
-      border: 1px solid #000;
-      padding: 4px 10px;
-      min-width: 110px;
+      flex: 1;
+      padding: 8px 12px;
       text-align: center;
       direction: ltr;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
     }
 
     /* ── Bill-to ── */
     .bill-to {
-      margin-bottom: 20px;
+      margin-bottom: 22px;
     }
     .section-header {
       background: #000;
       color: #fff;
-      padding: 6px 12px;
+      padding: 9px 14px;
       font-weight: 700;
       font-size: 12px;
-      letter-spacing: 1px;
+      letter-spacing: 1.5px;
     }
     .section-body {
-      padding: 10px 12px;
-      border: 1px solid #000;
+      padding: 12px 14px;
+      border: 2px solid #000;
       border-top: none;
       font-size: 12px;
     }
-    .bill-to .name { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
-    .bill-to .meta { color: #555; }
-    .bill-to .drivers { color: #555; margin-top: 4px; font-style: italic; }
+    .bill-to .name { font-weight: 800; font-size: 15px; margin-bottom: 3px; }
+    .bill-to .meta { color: #333; font-weight: 500; font-variant-numeric: tabular-nums; }
+    .bill-to .drivers {
+      color: #444;
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px dashed #999;
+    }
 
     /* ── Items table ── */
     .items {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 18px;
+      margin-bottom: 22px;
+      border: 2px solid #000;
     }
     .items thead th {
       background: #000;
       color: #fff;
-      padding: 9px 10px;
+      padding: 11px 12px;
       text-align: right;
       font-size: 11px;
-      letter-spacing: 1px;
+      letter-spacing: 1.5px;
       font-weight: 700;
+      border-left: 1px solid #444;
     }
+    .items thead th:last-child { border-left: none; }
     .items tbody td {
-      padding: 10px;
-      border: 1px solid #000;
+      padding: 12px;
+      border-top: 1px solid #000;
+      border-left: 1px solid #000;
       font-size: 12px;
       text-align: right;
       vertical-align: top;
     }
+    .items tbody td:last-child { border-left: none; }
+    .items tbody tr:nth-child(even) td { background: #f7f7f7; }
     .items tbody td.num {
-      text-align: left;
+      text-align: center;
       direction: ltr;
       white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
     }
-    .items tbody .item-title { font-weight: 700; }
-    .items tbody .item-meta { color: #555; font-size: 11px; margin-top: 2px; }
+    .items tbody .item-title { font-weight: 700; font-size: 13px; }
+    .items tbody .item-meta { color: #555; font-size: 11px; margin-top: 3px; }
 
     /* ── Bottom row: notes (left / visual-right in RTL) + totals ── */
     .bottom {
       display: flex;
       justify-content: space-between;
-      gap: 18px;
-      align-items: flex-start;
-      margin-bottom: 18px;
+      gap: 20px;
+      align-items: stretch;
+      margin-bottom: 24px;
     }
     .notes {
       flex: 1;
       font-size: 11px;
+      display: flex;
+      flex-direction: column;
     }
     .notes .body {
-      padding: 10px 12px;
-      border: 1px solid #000;
+      padding: 12px 14px;
+      border: 2px solid #000;
       border-top: none;
-      min-height: 120px;
+      flex: 1;
+      min-height: 140px;
     }
-    .notes-line { margin-bottom: 4px; }
-    .notes-line.muted { color: #555; }
+    .notes-line { margin-bottom: 5px; }
+    .notes-line.muted { color: #666; }
     .notes-list {
       list-style: none;
       padding: 0;
-      margin: 4px 0 0 0;
+      margin: 6px 0 0 0;
     }
     .notes-list li {
-      padding: 3px 0;
-      border-bottom: 1px dashed #bbb;
+      padding: 5px 0;
+      border-bottom: 1px dashed #aaa;
       font-size: 11px;
+      font-variant-numeric: tabular-nums;
     }
     .notes-list li:last-child { border-bottom: none; }
 
     .totals {
-      width: 260px;
+      width: 290px;
       border-collapse: collapse;
-      font-size: 12px;
+      font-size: 13px;
+      align-self: flex-start;
+      border: 2px solid #000;
     }
     .totals td {
-      padding: 7px 10px;
-      border: 1px solid #000;
+      padding: 10px 14px;
+      border-top: 1px solid #000;
+      border-left: 1px solid #000;
     }
-    .totals td.label { font-weight: 700; background: #fff; }
-    .totals td.val { text-align: left; direction: ltr; }
-    .totals tr.total td { font-weight: 800; background: #000; color: #fff; font-size: 13px; }
+    .totals tr:first-child td { border-top: none; }
+    .totals td:last-child { border-left: none; }
+    .totals td.label { font-weight: 700; background: #fff; letter-spacing: 0.5px; }
+    .totals td.val {
+      text-align: left;
+      direction: ltr;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .totals tr.total td {
+      font-weight: 900;
+      background: #000;
+      color: #fff;
+      font-size: 15px;
+      border-top: 3px double #fff;
+      padding: 13px 14px;
+    }
 
     /* ── Files ── */
-    .files-section { margin-bottom: 22px; }
+    .files-section { margin-bottom: 24px; }
     .section-label {
-      font-weight: 700;
+      font-weight: 800;
       font-size: 12px;
-      padding: 6px 0;
-      border-bottom: 1px solid #000;
-      margin-bottom: 10px;
-      letter-spacing: 1px;
+      padding: 8px 0;
+      border-bottom: 2px solid #000;
+      margin-bottom: 12px;
+      letter-spacing: 1.5px;
     }
     .files-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
+      gap: 12px;
     }
     .file-link {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 6px;
-      padding: 8px;
-      border: 1px solid #000;
+      gap: 7px;
+      padding: 10px;
+      border: 1.5px solid #000;
       font-size: 10px;
       text-align: center;
       word-break: break-word;
+      background: #fff;
     }
+    .file-link:hover { background: #f5f5f5; }
     .file-link img {
       max-width: 100%;
       max-height: 90px;
@@ -773,55 +828,57 @@ function buildPackageInvoiceHtml(
     }
     .file-placeholder {
       width: 100%;
-      height: 70px;
+      height: 72px;
       display: flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid #000;
-      font-weight: 700;
+      border: 1.5px solid #000;
+      font-weight: 800;
       font-size: 14px;
       letter-spacing: 2px;
+      background: #000;
+      color: #fff;
     }
 
     /* ── Footer ── */
     .footer {
-      margin-top: 28px;
-      padding-top: 14px;
-      border-top: 1px solid #000;
+      margin-top: 32px;
+      padding-top: 18px;
+      border-top: 3px double #000;
       text-align: center;
       font-size: 11px;
     }
     .footer .thanks {
-      font-weight: 700;
-      font-size: 13px;
-      margin-bottom: 6px;
+      font-weight: 800;
+      font-size: 15px;
+      margin-bottom: 8px;
+      letter-spacing: 2px;
     }
-    .footer .contact {
-      color: #555;
-      margin-top: 4px;
-    }
+    .footer .contact { color: #333; margin-top: 6px; font-weight: 500; }
     .footer .issued {
-      color: #555;
-      margin-top: 6px;
+      color: #666;
+      margin-top: 8px;
       font-size: 10px;
+      font-variant-numeric: tabular-nums;
     }
 
     /* ── Action buttons (only on screen, hidden in print) ── */
     .actions {
       text-align: center;
-      margin-top: 22px;
+      margin-top: 26px;
     }
     .actions button {
       background: #000;
       color: #fff;
-      border: 1px solid #000;
-      padding: 9px 22px;
+      border: 1.5px solid #000;
+      padding: 11px 28px;
       font-size: 12px;
       font-weight: 700;
-      letter-spacing: 1px;
+      letter-spacing: 1.5px;
       cursor: pointer;
       font-family: inherit;
-      margin: 0 4px;
+      margin: 0 5px;
+      transition: background 0.15s, color 0.15s;
     }
     .actions button:hover { background: #fff; color: #000; }
 
@@ -830,7 +887,7 @@ function buildPackageInvoiceHtml(
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.92);
+      background: rgba(0, 0, 0, 0.94);
       z-index: 9999;
       justify-content: center;
       align-items: center;
@@ -849,17 +906,32 @@ function buildPackageInvoiceHtml(
     }
 
     @media print {
-      body { padding: 0; }
+      body { padding: 0; background: #fff; }
       .no-print { display: none !important; }
-      .invoice { max-width: 100%; }
+      .invoice {
+        max-width: 100%;
+        padding: 18px 22px;
+        border: 3px double #000;
+      }
+      .items thead th,
+      .items tbody tr:nth-child(even) td,
+      .totals tr.total td,
+      .section-header,
+      .meta-rows .label,
+      .file-placeholder {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
     }
 
     @media (max-width: 640px) {
-      body { padding: 14px 10px; font-size: 12px; }
-      .invoice-top { flex-direction: column; gap: 16px; }
-      .invoice-meta { text-align: right; }
-      .invoice-meta h1 { font-size: 28px; letter-spacing: 2px; }
-      .meta-rows { margin-left: 0; margin-right: auto; }
+      body { padding: 14px 8px; font-size: 12px; }
+      .invoice { padding: 22px 18px; }
+      .invoice::before { inset: 4px; }
+      .invoice-top { flex-direction: column; gap: 18px; }
+      .invoice-meta { text-align: right; min-width: 0; }
+      .invoice-meta h1 { font-size: 34px; letter-spacing: 2px; }
+      .meta-rows { margin-left: 0; margin-right: 0; }
       .bottom { flex-direction: column; }
       .totals { width: 100%; }
       .files-grid { grid-template-columns: repeat(2, 1fr); }

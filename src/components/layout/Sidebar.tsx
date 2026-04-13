@@ -343,24 +343,26 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             >
               <CollapsibleTrigger
                 className={cn(
-                  "flex items-center justify-between w-full px-3 py-2.5 rounded-lg transition-all duration-200",
-                  "text-sm font-semibold text-white",
-                  "bg-white/[0.04] border border-white/[0.06]",
-                  "hover:bg-white/[0.08] hover:border-white/10",
-                  isOpen && "bg-white/[0.07] border-white/10",
+                  "group flex flex-col items-stretch w-full px-3 pt-3 pb-1.5 rounded-lg transition-all duration-200",
+                  "hover:bg-white/[0.04]",
                 )}
               >
-                <div className="flex items-center gap-2.5">
-                  <GroupIcon className="h-4 w-4 text-white/80" />
-                  <span className="tracking-wide">{group.name}</span>
+                <div className="flex items-center gap-2 w-full">
+                  <GroupIcon className="h-4 w-4 text-white shrink-0" strokeWidth={2.5} />
+                  <span className="text-[12px] font-extrabold tracking-[0.14em] text-white whitespace-nowrap">
+                    {group.name}
+                  </span>
+                  <div className="flex-1 h-px bg-gradient-to-l from-white/25 to-transparent" />
                 </div>
-                <ChevronDown
-                  className={cn(
-                    "h-5 w-5 transition-transform duration-300 text-white/70 shrink-0",
-                    isOpen && "rotate-180 text-white",
-                  )}
-                  strokeWidth={2.25}
-                />
+                <div className="flex items-center justify-center mt-1">
+                  <ChevronDown
+                    className={cn(
+                      "h-[18px] w-[18px] text-white transition-transform duration-300",
+                      isOpen && "rotate-180",
+                    )}
+                    strokeWidth={2.75}
+                  />
+                </div>
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-1 mr-2 space-y-0.5">
                 {group.items.map((item) => {
@@ -371,13 +373,13 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                       to={item.href}
                       onClick={handleNavClick}
                       className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[15px] font-medium transition-all duration-200 relative group",
+                        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium transition-all duration-200 relative group",
                         isActiveRoute
                           ? "glass-dark bg-[hsl(var(--sidebar-active))]/10 text-[hsl(var(--sidebar-active))] border-r-2 border-[hsl(var(--sidebar-active))]"
-                          : "text-sidebar-foreground hover:bg-[hsl(var(--sidebar-glass-bg))] hover:text-sidebar-accent-foreground"
+                          : "text-slate-300 hover:bg-white/[0.06] hover:text-white"
                       )}
                     >
-                      <item.icon className={cn("h-4 w-4 flex-shrink-0 transition-colors", isActiveRoute ? "text-[hsl(var(--sidebar-active))]" : "group-hover:text-sidebar-accent-foreground")} />
+                      <item.icon className={cn("h-[18px] w-[18px] flex-shrink-0 transition-colors", isActiveRoute ? "text-[hsl(var(--sidebar-active))]" : "text-slate-400 group-hover:text-white")} />
                       <span>{item.name}</span>
                       {item.badge === 'renewals' && (
                         <span className="text-xs text-sidebar-foreground/40">| التجديدات</span>
