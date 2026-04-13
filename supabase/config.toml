@@ -6,6 +6,12 @@ verify_jwt = false
 [functions.check-email-provider]
 verify_jwt = false
 
+[functions.send-package-invoice-sms]
+verify_jwt = false
+
+[functions.send-invoice-sms]
+verify_jwt = false
+
 [functions.seed-agent-data]
 verify_jwt = false
 
