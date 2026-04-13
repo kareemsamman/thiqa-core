@@ -32,9 +32,11 @@ export function BottomToolbar() {
   // perspective — these become tabs in the toolbar that can be restored
   // or closed individually. Above a threshold the trailing chips collapse
   // into a "+N" overflow popover so the toolbar never wraps or blows out
-  // its width — 1 inline on mobile, 3 inline on desktop.
+  // its width. On mobile we skip inline chips entirely and put every
+  // minimized draft behind a single compact +N button; desktop shows up
+  // to 3 inline and spills the rest into the same popover.
   const minimizedInstances = instances.filter((i) => i.id !== activeId);
-  const inlineLimit = isMobile ? 1 : 3;
+  const inlineLimit = isMobile ? 0 : 3;
   const inlineChips = minimizedInstances.slice(0, inlineLimit);
   const overflowChips = minimizedInstances.slice(inlineLimit);
   const lastMinimizedId = minimizedInstances[minimizedInstances.length - 1]?.id ?? null;
@@ -217,9 +219,13 @@ export function BottomToolbar() {
                   <Popover>
                     <PopoverTrigger asChild>
                       <button
+                        // When there are no inline chips (mobile), the
+                        // overflow button becomes the dock target for the
+                        // minimize→chip flight animation.
+                        ref={inlineChips.length === 0 ? draftChipRef : undefined}
                         type="button"
-                        title={`${overflowChips.length} مسودات أخرى`}
-                        aria-label="المزيد من المسودات"
+                        title={`${overflowChips.length} مسودات${overflowChips.length > 2 ? "" : " أخرى"}`}
+                        aria-label="المسودات المصغرة"
                         className={cn(
                           "flex items-center gap-1 h-9 px-3 rounded-full",
                           "bg-primary text-primary-foreground shadow-md shadow-primary/20",
@@ -255,7 +261,10 @@ export function BottomToolbar() {
                   </Popover>
                 )}
               </div>
-              <div className="h-6 w-px bg-border/50" />
+              {/* Hide the trailing separator on mobile so the compact
+                  overflow button sits flush against the "new policy"
+                  button — there's no inline chip to separate from. */}
+              <div className="hidden sm:block h-6 w-px bg-border/50" />
             </>
           )}
 
