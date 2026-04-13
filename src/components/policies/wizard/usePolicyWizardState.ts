@@ -401,7 +401,12 @@ export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirec
     const branchValid = isAdmin
       ? !!selectedBranchId && branches.length > 0
       : !!userBranchId;
-    const step1Valid = branchValid && !!(selectedClient || (createNewClient && newClient.full_name.trim() && digitsOnly(newClient.id_number).length === 9));
+    const newClientValid =
+      createNewClient &&
+      newClient.full_name.trim().length > 0 &&
+      digitsOnly(newClient.id_number).length === 9 &&
+      isValidPhoneNumber10(digitsOnly(newClient.phone_number));
+    const step1Valid = branchValid && !!(selectedClient || newClientValid);
     const step2Valid = isLightMode ? true : !!(selectedCar || existingCar || (createNewCar && newCar.car_number && !carConflict));
     
     // Package addons validation - find by type instead of index
@@ -474,12 +479,14 @@ export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirec
         selectedClient ||
         (createNewClient &&
           newClient.full_name.trim() &&
-          digitsOnly(newClient.id_number).length === 9)
+          digitsOnly(newClient.id_number).length === 9 &&
+          isValidPhoneNumber10(digitsOnly(newClient.phone_number)))
       );
       if (!hasClient) {
         if (createNewClient) {
           if (!newClient.full_name.trim()) missing.push("اسم العميل");
           if (digitsOnly(newClient.id_number).length !== 9) missing.push("رقم الهوية");
+          if (!isValidPhoneNumber10(digitsOnly(newClient.phone_number))) missing.push("رقم الهاتف");
         } else {
           missing.push("العميل");
         }

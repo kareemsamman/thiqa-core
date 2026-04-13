@@ -315,10 +315,12 @@ export default function Dashboard() {
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-muted-foreground">إجمالي الإنتاج</p>
                   <p className="text-2xl font-bold text-primary ltr-nums">
-                    {productionLoading ? '...' : `${productionTotals.total_count} وثيقة`}
+                    {productionLoading ? '...' : productionTotals.total_count}
                   </p>
-                  <p className="text-sm text-muted-foreground ltr-nums">
-                    {productionLoading ? '' : `₪${productionTotals.total_amount.toLocaleString('en-US')}`}
+                  <p className="text-xs text-muted-foreground ltr-nums">
+                    {productionLoading
+                      ? ''
+                      : `وثيقة · ₪${productionTotals.total_amount.toLocaleString('en-US')}`}
                   </p>
                 </div>
                 <div className="rounded-xl bg-primary/10 p-3">
