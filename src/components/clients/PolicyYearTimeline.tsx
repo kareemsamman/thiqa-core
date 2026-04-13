@@ -1160,16 +1160,18 @@ function PolicyPackageCard({
             </div>
             <div className="space-y-1">
               {/* Main policy */}
-              <PackageComponentRow 
-                policy={pkg.mainPolicy} 
+              <PackageComponentRow
+                policy={pkg.mainPolicy}
                 isActive={isActive}
+                index={1}
               />
               {/* Addons */}
-              {pkg.addons.map(addon => (
-                <PackageComponentRow 
-                  key={addon.id} 
-                  policy={addon} 
+              {pkg.addons.map((addon, i) => (
+                <PackageComponentRow
+                  key={addon.id}
+                  policy={addon}
                   isActive={isActive}
+                  index={i + 2}
                 />
               ))}
             </div>
@@ -1255,9 +1257,11 @@ function PolicyPackageCard({
 function PackageComponentRow({
   policy,
   isActive,
+  index,
 }: {
   policy: PolicyRecord;
   isActive: boolean;
+  index?: number;
 }) {
   const typeLabel = getDisplayLabel(policy);
   const typeColor = policyTypeColors[policy.policy_type_parent];
@@ -1276,6 +1280,11 @@ function PackageComponentRow({
       isActive ? "bg-muted/40" : "bg-muted/20"
     )}>
       <div className="flex items-center gap-2 min-w-0">
+        {index !== undefined && (
+          <span className="text-[10px] font-bold text-muted-foreground ltr-nums w-5 text-center">
+            #{index}
+          </span>
+        )}
         <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border", typeColor)}>
           {typeLabel}
         </Badge>

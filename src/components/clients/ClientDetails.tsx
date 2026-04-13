@@ -1059,6 +1059,27 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     return Array.from(types);
   }, [policies]);
 
+  // "الوثائق" count — within a package, policies from the same company
+  // collapse into a single document (e.g. ثالث + خدمات طريق from المشرق
+  // = 1 doc). Standalone policies are counted one each.
+  const dedupedPolicyCount = useMemo(() => {
+    const packageCompanies = new Map<string, Set<string>>();
+    let standalone = 0;
+    for (const p of policies) {
+      const companyKey = p.company?.name_ar || p.company?.name || `no-company:${p.id}`;
+      if (p.group_id) {
+        const set = packageCompanies.get(p.group_id) || new Set<string>();
+        set.add(companyKey);
+        packageCompanies.set(p.group_id, set);
+      } else {
+        standalone += 1;
+      }
+    }
+    let packageTotal = 0;
+    for (const [, companies] of packageCompanies) packageTotal += companies.size;
+    return standalone + packageTotal;
+  }, [policies]);
+
   // Group payments by batch_id for unified display
   const groupedPayments = useMemo((): GroupedPayment[] => {
     const groups = new Map<string, GroupedPayment>();
@@ -1357,7 +1378,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             </div>
             <div className="p-3 sm:p-4 text-center">
               <p className="text-[10px] sm:text-xs text-muted-foreground mb-1">الوثائق</p>
-              <p className="text-sm sm:text-lg font-bold text-purple-600">{policies.length}</p>
+              <p className="text-sm sm:text-lg font-bold text-purple-600">{dedupedPolicyCount}</p>
             </div>
             <div className="p-3 sm:p-4 text-center col-span-2 md:col-span-1">
               <p className="text-[10px] sm:text-xs text-muted-foreground mb-1">العمر</p>
@@ -1456,7 +1477,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             </TabsTrigger>
             <TabsTrigger value="policies" className="gap-1.5 shrink-0 whitespace-nowrap">
               <FileText className="h-4 w-4" />
-              الوثائق ({policies.length})
+              الوثائق ({dedupedPolicyCount})
             </TabsTrigger>
             <TabsTrigger value="payments" className="gap-1.5 shrink-0 whitespace-nowrap">
               <CreditCard className="h-4 w-4" />
