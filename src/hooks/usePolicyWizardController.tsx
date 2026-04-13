@@ -2,11 +2,18 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   ReactNode,
 } from "react";
+
+// Persist the list of open/minimized wizard instances across a page
+// refresh so the tab strip in the bottom toolbar survives a reload.
+// Stored in sessionStorage: stays for the tab's lifetime but doesn't
+// leak between browser sessions or other tabs.
+const INSTANCES_STORAGE_KEY = "abcrm:policyWizardInstances:v1";
 
 export interface WizardDraftSummary {
   clientName: string;
@@ -60,9 +67,46 @@ function generateId(): string {
   );
 }
 
+function loadPersistedInstances(): WizardInstance[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = sessionStorage.getItem(INSTANCES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // Filter to well-shaped entries and ignore anything that looks broken.
+    return parsed.filter(
+      (entry): entry is WizardInstance =>
+        entry && typeof entry === "object" && typeof entry.id === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function persistInstances(instances: WizardInstance[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (instances.length === 0) {
+      sessionStorage.removeItem(INSTANCES_STORAGE_KEY);
+    } else {
+      sessionStorage.setItem(INSTANCES_STORAGE_KEY, JSON.stringify(instances));
+    }
+  } catch {
+    // storage full / disabled — non-fatal
+  }
+}
+
 export function PolicyWizardControllerProvider({ children }: { children: ReactNode }) {
-  const [instances, setInstances] = useState<WizardInstance[]>([]);
+  // Rehydrate from sessionStorage on mount so a page refresh doesn't
+  // drop the user's minimized drafts. Everything reloads as "minimized"
+  // (activeId stays null) — the user explicitly clicks a tab to restore.
+  const [instances, setInstances] = useState<WizardInstance[]>(() => loadPersistedInstances());
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  useEffect(() => {
+    persistInstances(instances);
+  }, [instances]);
   // Dock origin for the minimize→chip flight animation. Consumed exactly
   // once by the next chip render so it must not drive re-renders itself.
   const dockOriginRef = useRef<DockOrigin | null>(null);
