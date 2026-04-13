@@ -5868,6 +5868,7 @@ export type Database = {
         Args: { _attempt_user_id: string }
         Returns: boolean
       }
+      check_email_provider_public: { Args: { p_email: string }; Returns: Json }
       clear_data_for_import: { Args: never; Returns: Json }
       dashboard_company_debts: {
         Args: never

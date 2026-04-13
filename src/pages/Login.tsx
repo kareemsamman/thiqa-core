@@ -176,11 +176,11 @@ export default function Login() {
     setCheckedEmails((prev) => new Set(prev).add(normalizedEmail));
 
     try {
-      const { data, error } = await supabase.functions.invoke("check-email-provider", {
-        body: { email: normalizedEmail },
+      const { data, error } = await supabase.rpc("check_email_provider_public", {
+        p_email: normalizedEmail,
       });
       if (error) return;
-      if (data?.is_google_only) {
+      if ((data as { is_google_only?: boolean } | null)?.is_google_only) {
         setGoogleHintOpen(true);
       }
     } catch {
