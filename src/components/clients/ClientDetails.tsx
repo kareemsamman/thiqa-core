@@ -1059,24 +1059,34 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     return Array.from(types);
   }, [policies]);
 
-  // "الوثائق" count — within a package, policies from the same company
-  // collapse into a single document (e.g. ثالث + خدمات طريق from المشرق
-  // = 1 doc). Standalone policies are counted one each.
+  // "الوثائق" count — within a package, non-ELZAMI policies from the same
+  // company collapse into a single document (e.g. ثالث + خدمات طريق from
+  // المشرق = 1 doc). ELZAMI is always its own doc because it's legally
+  // distinct from the rest of the package even when the company matches.
+  // Standalone policies are counted one each.
   const dedupedPolicyCount = useMemo(() => {
-    const packageCompanies = new Map<string, Set<string>>();
+    const packageGroups = new Map<string, PolicyRecord[]>();
     let standalone = 0;
     for (const p of policies) {
-      const companyKey = p.company?.name_ar || p.company?.name || `no-company:${p.id}`;
       if (p.group_id) {
-        const set = packageCompanies.get(p.group_id) || new Set<string>();
-        set.add(companyKey);
-        packageCompanies.set(p.group_id, set);
+        const arr = packageGroups.get(p.group_id) || [];
+        arr.push(p);
+        packageGroups.set(p.group_id, arr);
       } else {
         standalone += 1;
       }
     }
     let packageTotal = 0;
-    for (const [, companies] of packageCompanies) packageTotal += companies.size;
+    for (const [, groupPolicies] of packageGroups) {
+      const elzami = groupPolicies.filter(p => p.policy_type_parent === 'ELZAMI');
+      const nonElzami = groupPolicies.filter(p => p.policy_type_parent !== 'ELZAMI');
+      packageTotal += elzami.length;
+      const companies = new Set<string>();
+      for (const p of nonElzami) {
+        companies.add(p.company?.name_ar || p.company?.name || `no-company:${p.id}`);
+      }
+      packageTotal += companies.size;
+    }
     return standalone + packageTotal;
   }, [policies]);
 

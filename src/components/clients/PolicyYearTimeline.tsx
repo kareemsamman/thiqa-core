@@ -505,6 +505,39 @@ export function PolicyYearTimeline({
     return groups;
   }, [policies]);
 
+  // Assign a global "document number" to each policy id. Walk packages in the
+  // same order they render (newest year → oldest, sorted within year). Inside
+  // each package: ELZAMI policies each get their own number (legally distinct
+  // from non-ELZAMI), while non-ELZAMI policies from the same company share a
+  // single number (an addon like خدمات طريق tucked under ثالث doesn't bump
+  // the counter). Example: [ثالث+خدمات طريق same company] → #1,#1 then
+  // [شامل+إلزامي same company] → #2,#3.
+  const policyDocNumbers = useMemo(() => {
+    const map = new Map<string, number>();
+    let counter = 0;
+    for (const yg of yearGroups) {
+      for (const pkg of yg.packages) {
+        const pkgPolicies = [pkg.mainPolicy, ...pkg.addons].filter(Boolean) as PolicyRecord[];
+        const elzami = pkgPolicies.filter(p => p.policy_type_parent === 'ELZAMI');
+        const nonElzami = pkgPolicies.filter(p => p.policy_type_parent !== 'ELZAMI');
+        const companyToNum = new Map<string, number>();
+        for (const p of nonElzami) {
+          const companyKey = p.company?.name_ar || p.company?.name || `no-company:${p.id}`;
+          if (!companyToNum.has(companyKey)) {
+            counter += 1;
+            companyToNum.set(companyKey, counter);
+          }
+          map.set(p.id, companyToNum.get(companyKey)!);
+        }
+        for (const p of elzami) {
+          counter += 1;
+          map.set(p.id, counter);
+        }
+      }
+    }
+    return map;
+  }, [yearGroups]);
+
   // Track expanded years - current year is expanded by default
   const [expandedYears, setExpandedYears] = useState<Set<string>>(() => {
     const expanded = new Set<string>();
@@ -703,6 +736,7 @@ export function PolicyYearTimeline({
                         paymentStatus={getPackagePaymentStatus(pkg)}
                         accidentCount={accidentCount}
                         childrenCount={childrenCount}
+                        getDocNumber={(id) => policyDocNumbers.get(id)}
                         onPolicyClick={onPolicyClick}
                         onPaymentClick={(e) => handlePackagePayment(e, pkg.allPolicyIds, pkg.mainPolicy?.branch_id || pkg.addons[0]?.branch_id || null)}
                         onOpenInvoiceDialog={(e) => handleOpenInvoiceDialog(e, pkg.allPolicyIds)}
@@ -762,6 +796,7 @@ function PolicyPackageCard({
   paymentStatus,
   accidentCount = 0,
   childrenCount = 0,
+  getDocNumber,
   onPolicyClick,
   onPaymentClick,
   onOpenInvoiceDialog,
@@ -787,6 +822,7 @@ function PolicyPackageCard({
   paymentStatus: { totalPaid: number; remaining: number; isPaid: boolean };
   accidentCount?: number;
   childrenCount?: number;
+  getDocNumber?: (policyId: string) => number | undefined;
   onPolicyClick: (id: string) => void;
   onPaymentClick: (e: React.MouseEvent) => void;
   onOpenInvoiceDialog: (e: React.MouseEvent) => void;
@@ -1160,15 +1196,15 @@ function PolicyPackageCard({
               <PackageComponentRow
                 policy={pkg.mainPolicy}
                 isActive={isActive}
-                index={1}
+                index={getDocNumber?.(pkg.mainPolicy.id)}
               />
               {/* Addons */}
-              {pkg.addons.map((addon, i) => (
+              {pkg.addons.map((addon) => (
                 <PackageComponentRow
                   key={addon.id}
                   policy={addon}
                   isActive={isActive}
-                  index={i + 2}
+                  index={getDocNumber?.(addon.id)}
                 />
               ))}
             </div>
