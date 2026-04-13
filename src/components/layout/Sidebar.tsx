@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -186,6 +186,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
   const [signingOut, setSigningOut] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const activeItemRef = useRef<HTMLAnchorElement | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut, isAdmin, branchName, isSuperAdmin } = useAuth();
@@ -234,6 +235,15 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
         setOpenGroups(prev => ({ ...prev, [group.name]: true }));
       }
     });
+  }, [location.pathname]);
+
+  // Scroll the active nav item into view whenever the route changes.
+  // Deferred so that any group-expansion re-render mounts the item first.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      activeItemRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 60);
+    return () => window.clearTimeout(id);
   }, [location.pathname]);
 
   const handleSignOut = async () => {
@@ -316,6 +326,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                     <NavLink
                       key={item.name}
                       to={item.href}
+                      ref={isActiveRoute ? activeItemRef : undefined}
                       onClick={handleNavClick}
                       title={item.name}
                       className={cn(
@@ -368,6 +379,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                     <NavLink
                       key={item.name}
                       to={item.href}
+                      ref={isActiveRoute ? activeItemRef : undefined}
                       onClick={handleNavClick}
                       className={cn(
                         "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium transition-all duration-200 relative group",
