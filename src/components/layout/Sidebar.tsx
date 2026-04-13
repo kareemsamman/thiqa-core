@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -186,9 +186,25 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
   const [signingOut, setSigningOut] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const activeItemRef = useRef<HTMLAnchorElement | null>(null);
+  const lastScrolledPathRef = useRef<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Callback ref attached to the active NavLink. Fires the moment the
+  // element mounts in the DOM — so it works for both "navigate to a new
+  // page" and "land directly on a page after the auth profile loads and
+  // the group expands".
+  const activeNavLinkRef = useCallback(
+    (node: HTMLAnchorElement | null) => {
+      if (!node) return;
+      if (lastScrolledPathRef.current === location.pathname) return;
+      lastScrolledPathRef.current = location.pathname;
+      requestAnimationFrame(() => {
+        node.scrollIntoView({ block: 'center', behavior: 'auto' });
+      });
+    },
+    [location.pathname],
+  );
   const { profile, signOut, isAdmin, branchName, isSuperAdmin } = useAuth();
   const { data: siteSettings } = useSiteSettings();
   const { hasFeature, isThiqaSuperAdmin, agent } = useAgentContext();
@@ -228,23 +244,16 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
     setOpenGroups(initialState);
   }, []);
 
-  // Update open state when route changes
+  // Update open state when route changes — also re-runs once the filtered
+  // groups list grows (auth profile finishing loading) so the group
+  // containing the active item gets opened on the very first paint.
   useEffect(() => {
     filteredGroups.forEach(group => {
       if (isGroupActive(group)) {
         setOpenGroups(prev => ({ ...prev, [group.name]: true }));
       }
     });
-  }, [location.pathname]);
-
-  // Scroll the active nav item into view whenever the route changes.
-  // Deferred so that any group-expansion re-render mounts the item first.
-  useEffect(() => {
-    const id = window.setTimeout(() => {
-      activeItemRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }, 60);
-    return () => window.clearTimeout(id);
-  }, [location.pathname]);
+  }, [location.pathname, filteredGroups.length]);
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -326,7 +335,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                     <NavLink
                       key={item.name}
                       to={item.href}
-                      ref={isActiveRoute ? activeItemRef : undefined}
+                      ref={isActiveRoute ? activeNavLinkRef : undefined}
                       onClick={handleNavClick}
                       title={item.name}
                       className={cn(
@@ -379,7 +388,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                     <NavLink
                       key={item.name}
                       to={item.href}
-                      ref={isActiveRoute ? activeItemRef : undefined}
+                      ref={isActiveRoute ? activeNavLinkRef : undefined}
                       onClick={handleNavClick}
                       className={cn(
                         "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium transition-all duration-200 relative group",
