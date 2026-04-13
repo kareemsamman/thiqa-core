@@ -63,13 +63,18 @@ export function ThaqibPanel({ open, onClose }: ThaqibPanelProps) {
                 <History className="h-3.5 w-3.5" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuContent align="start" sideOffset={6} className="w-64 z-[60] max-h-[320px] overflow-y-auto">
               <DropdownMenuItem onClick={startNewSession} className="gap-2">
                 <Plus className="h-3.5 w-3.5" />
                 محادثة جديدة
               </DropdownMenuItem>
               {loadingSessions && (
                 <div className="p-2 text-center"><Loader2 className="h-4 w-4 animate-spin mx-auto" /></div>
+              )}
+              {!loadingSessions && sessions.length === 0 && (
+                <div className="p-3 text-center text-xs text-muted-foreground">
+                  لا توجد محادثات سابقة
+                </div>
               )}
               {sessions.map(s => (
                 <DropdownMenuItem key={s.id} onClick={() => loadSession(s.id)} className="text-xs truncate">

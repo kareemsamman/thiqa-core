@@ -526,9 +526,12 @@ export function ClientReportModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+      <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto p-0">
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-gradient-to-l from-primary to-primary/80 text-primary-foreground p-4 rounded-t-lg">
+        <div
+          className="sticky top-0 z-10 text-white p-4 rounded-t-lg"
+          style={{ background: 'linear-gradient(135deg, #122143 0%, #1a3260 100%)' }}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
@@ -536,16 +539,15 @@ export function ClientReportModal({
               </div>
               <div>
                 <h2 className="font-bold text-lg">تقرير العميل الشامل</h2>
-                <p className="text-xs opacity-80">{formatDate(new Date().toISOString())}</p>
+                <p className="text-xs text-white/70">{formatDate(new Date().toISOString())}</p>
               </div>
             </div>
             <div className="flex gap-2">
-              <Button 
-                variant="secondary" 
-                size="sm" 
-                onClick={handleSendSms} 
+              <Button
+                size="sm"
+                onClick={handleSendSms}
                 disabled={sendingSms || !client.phone_number}
-                className="gap-1.5"
+                className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
               >
                 {sendingSms ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -554,12 +556,11 @@ export function ClientReportModal({
                 )}
                 <span className="hidden sm:inline">SMS</span>
               </Button>
-              <Button 
-                variant="secondary" 
-                size="sm" 
-                onClick={handlePrint} 
+              <Button
+                size="sm"
+                onClick={handlePrint}
                 disabled={isPrinting}
-                className="gap-1.5"
+                className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
               >
                 {isPrinting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

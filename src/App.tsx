@@ -9,6 +9,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { RecentClientProvider } from "@/hooks/useRecentClient";
 import { PolicyWizardControllerProvider } from "@/hooks/usePolicyWizardController";
 import { GlobalPolicyWizardHost } from "@/components/policies/GlobalPolicyWizardHost";
+import { ThaqibWidget } from "@/components/ai-assistant/ThaqibWidget";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
 import { SidebarStateProvider } from "@/hooks/useSidebarState";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -120,6 +121,7 @@ const App = () => (
             <RecentClientProvider>
             <PolicyWizardControllerProvider>
             <GlobalPolicyWizardHost />
+            <ThaqibWidget />
             <Routes>
               <Route path="/landing" element={<Landing />} />
               <Route path="/pricing" element={<Pricing />} />

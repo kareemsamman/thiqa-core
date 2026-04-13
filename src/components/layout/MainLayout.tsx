@@ -5,7 +5,6 @@ import { BottomToolbar } from "./BottomToolbar";
 import { AnnouncementPopup } from "./AnnouncementPopup";
 import { TaskPopupReminder } from "@/components/tasks/TaskPopupReminder";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
-import { ThaqibWidget } from "@/components/ai-assistant/ThaqibWidget";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { Button } from "@/components/ui/button";
@@ -68,9 +67,6 @@ export function MainLayout({ children }: MainLayoutProps) {
 
       {/* Onboarding wizard */}
       {!isThiqaSuperAdmin && <OnboardingWizard />}
-
-      {/* AI Assistant */}
-      <ThaqibWidget />
     </div>
   );
 }
