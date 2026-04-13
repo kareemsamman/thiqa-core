@@ -138,8 +138,16 @@ const getTypeName = (p: PackagePolicy) => {
     return '-';
   };
 
-  const totalPrice = policies.reduce((sum, p) => sum + p.insurance_price, 0);
-  const totalProfit = policies.reduce((sum, p) => sum + (p.profit || 0), 0);
+  const totalPrice = policies.reduce((sum, p) => sum + p.insurance_price + ((p as any).office_commission || 0), 0);
+  // Profit total excludes ELZAMI — compulsory policies have no markup. The
+  // office's earning on ELZAMI lives in office_commission and is shown in
+  // its own column / card, not folded into "ربح".
+  const totalProfit = policies
+    .filter((p) => p.policy_type_parent !== 'ELZAMI')
+    .reduce((sum, p) => sum + (p.profit || 0), 0);
+  const totalCommission = policies
+    .filter((p) => p.policy_type_parent === 'ELZAMI')
+    .reduce((sum, p) => sum + ((p as any).office_commission || 0), 0);
 
   return (
     <TooltipProvider>
@@ -206,7 +214,16 @@ const getTypeName = (p: PackagePolicy) => {
                 {isAdmin && (
                   <TableCell className="text-left">
                     {isElzami ? (
-                      <span className="text-muted-foreground text-sm">-</span>
+                      ((policy as any).office_commission || 0) > 0 ? (
+                        <div className="text-left">
+                          <span className="font-semibold ltr-nums text-emerald-600">
+                            {formatCurrency((policy as any).office_commission)}
+                          </span>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">عمولة مكتب</div>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )
                     ) : (
                       <span className={cn(
                         "font-semibold ltr-nums",
@@ -243,12 +260,19 @@ const getTypeName = (p: PackagePolicy) => {
             </TableCell>
             {isAdmin && (
               <TableCell className="text-left">
-                <span className={cn(
-                  "text-lg font-bold ltr-nums",
-                  totalProfit < 0 ? "text-red-600" : "text-emerald-600"
-                )}>
-                  {formatCurrency(totalProfit)}
-                </span>
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className={cn(
+                    "text-lg font-bold ltr-nums",
+                    totalProfit < 0 ? "text-red-600" : "text-emerald-600"
+                  )}>
+                    {formatCurrency(totalProfit)}
+                  </span>
+                  {totalCommission > 0 && (
+                    <span className="text-[10px] text-muted-foreground ltr-nums">
+                      + عمولة {formatCurrency(totalCommission)}
+                    </span>
+                  )}
+                </div>
               </TableCell>
             )}
             {onEditPolicy && <TableCell />}

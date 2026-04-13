@@ -230,8 +230,12 @@ serve(async (req) => {
       paymentsByPolicy[p.policy_id].push(p);
     });
 
-    // Calculate totals
-    const totalPrice = policies.reduce((sum, p) => sum + (p.insurance_price || 0), 0);
+    // Calculate totals — include office commission (ELZAMI markup) in the
+    // price so the customer sees what they actually owe.
+    const totalPrice = policies.reduce(
+      (sum, p) => sum + (p.insurance_price || 0) + (p.office_commission || 0),
+      0,
+    );
     const totalPaid = (allPayments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
     const totalRemaining = totalPrice - totalPaid;
 
@@ -542,6 +546,11 @@ function buildPackageInvoiceHtml(
     const periodText = (p.start_date && p.end_date)
       ? `${formatDate(p.start_date)} → ${formatDate(p.end_date)}`
       : '-';
+    const commission = p.office_commission || 0;
+    const lineTotal = (p.insurance_price || 0) + commission;
+    const commissionLine = commission > 0
+      ? `<div class="item-commission">عمولة المكتب: ₪${commission.toLocaleString('en-US')}</div>`
+      : '';
 
     return `
       <tr>
@@ -549,10 +558,11 @@ function buildPackageInvoiceHtml(
         <td>
           <div class="item-title">${policyType}</div>
           <div class="item-meta">${companyName}</div>
+          ${commissionLine}
           ${driversLine}
         </td>
         <td class="period">${periodText}</td>
-        <td class="num">₪${(p.insurance_price || 0).toLocaleString()}</td>
+        <td class="num">₪${lineTotal.toLocaleString('en-US')}</td>
       </tr>
     `;
   }).join('');
@@ -569,7 +579,7 @@ function buildPackageInvoiceHtml(
     <div class="notes-line"><strong>سجل الدفعات:</strong></div>
     <ul class="notes-list">
       ${allPaymentsList.map(p => `
-        <li>${formatDate(p.payment_date)} — ${PAYMENT_TYPE_LABELS[p.payment_type] || p.payment_type}: ₪${(p.amount || 0).toLocaleString()}</li>
+        <li>${formatDate(p.payment_date)} — ${PAYMENT_TYPE_LABELS[p.payment_type] || p.payment_type}: ₪${(p.amount || 0).toLocaleString('en-US')}</li>
       `).join('')}
     </ul>
   ` : `<div class="notes-line muted">لا توجد دفعات مسجلة.</div>`;
@@ -827,6 +837,13 @@ function buildPackageInvoiceHtml(
       padding-top: 4px;
       border-top: 1px dashed #1a1a1a;
       font-weight: 500;
+    }
+    .items tbody .item-commission {
+      color: #1a1a1a;
+      font-size: 11.5px;
+      margin-top: 3px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
     }
 
     /* ── Privacy / terms ── */
@@ -1194,15 +1211,15 @@ function buildPackageInvoiceHtml(
       <table class="totals">
         <tr>
           <td class="label">الإجمالي</td>
-          <td class="val">₪${totalPrice.toLocaleString()}</td>
+          <td class="val">₪${totalPrice.toLocaleString('en-US')}</td>
         </tr>
         <tr>
           <td class="label">المدفوع</td>
-          <td class="val">₪${totalPaid.toLocaleString()}</td>
+          <td class="val">₪${totalPaid.toLocaleString('en-US')}</td>
         </tr>
         <tr class="total">
           <td class="label">المتبقي</td>
-          <td class="val">₪${remaining.toLocaleString()}</td>
+          <td class="val">₪${remaining.toLocaleString('en-US')}</td>
         </tr>
       </table>
     </div>

@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/collapsible";
 import { ClickablePhone } from "@/components/shared/ClickablePhone";
 import { format } from "date-fns";
-import { ar } from "date-fns/locale";
+import { arDZ as ar } from "date-fns/locale";
 
 interface Lead {
   id: string;

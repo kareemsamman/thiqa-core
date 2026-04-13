@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
-import { ar } from "date-fns/locale";
+import { arDZ as ar } from "date-fns/locale";
 import {
   Table,
   TableBody,

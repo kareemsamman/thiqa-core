@@ -13,7 +13,7 @@ import {
   Clock, MessageSquare, Eye, MoreVertical, Trash2, Pencil 
 } from "lucide-react";
 import { format } from "date-fns";
-import { ar } from "date-fns/locale";
+import { arDZ as ar } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 import { RepairClaimDrawer } from "@/components/claims/RepairClaimDrawer";
 import {

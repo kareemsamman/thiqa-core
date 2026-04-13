@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { format } from "date-fns";
-import { ar } from "date-fns/locale";
+import { arDZ as ar } from "date-fns/locale";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 

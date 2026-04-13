@@ -17,7 +17,7 @@ import { extractFunctionErrorMessage, toastFunctionError } from '@/lib/functionE
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { arDZ as ar } from 'date-fns/locale';
 
 interface Client {
   id: string;

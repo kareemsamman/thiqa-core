@@ -249,7 +249,7 @@ const { data, error } = await supabase
                     {invoice.template?.name && (
                       <span dir="auto">• {invoice.template.name}</span>
                     )}
-                    <span dir="auto">{new Date(invoice.issued_at).toLocaleDateString('ar-SA')}</span>
+                    <span dir="auto">{new Date(invoice.issued_at).toLocaleDateString('en-GB')}</span>
                     <span dir="auto">• أنشئ بواسطة: {invoice.created_by?.full_name || invoice.created_by?.email || '-'}</span>
                   </div>
                 </div>

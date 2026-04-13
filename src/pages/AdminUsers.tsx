@@ -53,7 +53,7 @@ import { useAgentContext } from "@/hooks/useAgentContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
-import { ar } from "date-fns/locale";
+import { arDZ as ar } from "date-fns/locale";
 import { UserSessionsTab } from "@/components/admin/UserSessionsTab";
 
 interface UserProfile {

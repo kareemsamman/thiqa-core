@@ -555,14 +555,14 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
   }, [open, policyId]);
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("ar-EG");
+    return new Date(dateStr).toLocaleDateString("en-GB");
   };
 
   const formatCurrency = (amount: number | null) => {
     if (amount === null || amount === undefined) return "₪0";
     const isNegative = amount < 0;
     const absAmount = Math.abs(amount);
-    return `${isNegative ? '-' : ''}₪${absAmount.toLocaleString("ar-EG", { maximumFractionDigits: 0 })}`;
+    return `${isNegative ? '-' : ''}₪${absAmount.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
   };
 
   const getStatus = () => {
@@ -591,9 +591,20 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
   const packageTotalPrice = hasPackage 
     ? (policy?.insurance_price || 0) + (policy?.office_commission || 0) + relatedPolicies.reduce((sum, rp) => sum + rp.insurance_price + (rp.office_commission || 0), 0)
     : 0;
-  const packageTotalProfit = hasPackage 
-    ? (policy?.profit || 0) + relatedPolicies.reduce((sum, rp) => sum + (rp.profit || 0), 0)
+  // Profit total excludes ELZAMI — those earn a commission (office_commission)
+  // which is tracked separately below and shown in its own card.
+  const packageTotalProfit = hasPackage
+    ? ((policy?.policy_type_parent !== 'ELZAMI') ? (policy?.profit || 0) : 0)
+      + relatedPolicies
+          .filter((rp) => rp.policy_type_parent !== 'ELZAMI')
+          .reduce((sum, rp) => sum + (rp.profit || 0), 0)
     : 0;
+  const packageTotalCommission = hasPackage
+    ? ((policy?.policy_type_parent === 'ELZAMI') ? ((policy as any)?.office_commission || 0) : 0)
+      + relatedPolicies
+          .filter((rp) => rp.policy_type_parent === 'ELZAMI')
+          .reduce((sum, rp) => sum + ((rp as any).office_commission || 0), 0)
+    : (((policy as any)?.office_commission || 0));
 
   // For packages, show unified totals. For single policies, use direct payments
   const calculatePaymentTotals = () => {
@@ -1015,6 +1026,31 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                         </p>
                       </div>
                     </div>
+
+                    {/* Commission Card — shows office_commission from any
+                        ELZAMI policies in the package (or the current policy
+                        if it's ELZAMI). Kept separate from "الربح" since the
+                        user wants ELZAMI earnings tracked distinctly. */}
+                    {isAdmin && packageTotalCommission > 0 && (
+                      <div className="rounded-xl p-4 border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-amber-100/60">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-amber-500">
+                              <TrendingUp className="h-6 w-6 text-white" />
+                            </div>
+                            <div>
+                              <span className="text-sm font-medium text-amber-900">
+                                {hasPackage ? 'إجمالي عمولة الباقة' : 'عمولة للمكتب'}
+                              </span>
+                              <p className="text-xs text-amber-700/80">من الوثائق الإلزامية</p>
+                            </div>
+                          </div>
+                          <p className="text-3xl font-bold ltr-nums text-amber-900">
+                            {formatCurrency(packageTotalCommission)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Profit Card - Enhanced styling for admin */}
                     {!isElzami && isAdmin && (

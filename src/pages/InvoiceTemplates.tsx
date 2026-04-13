@@ -365,7 +365,7 @@ export default function InvoiceTemplates() {
                         )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {new Date(template.updated_at).toLocaleDateString('ar-SA')}
+                        {new Date(template.updated_at).toLocaleDateString('en-GB')}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">

@@ -20,7 +20,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { formatDistanceToNow, startOfDay, endOfDay, isWithinInterval, parseISO } from "date-fns";
-import { ar } from "date-fns/locale";
+import { arDZ as ar } from "date-fns/locale";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import {
   Select,

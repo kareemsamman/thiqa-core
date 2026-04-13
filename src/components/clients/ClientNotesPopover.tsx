@@ -8,7 +8,7 @@ import { MessageSquare, Plus, Loader2, Calendar, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { arDZ as ar } from 'date-fns/locale';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 

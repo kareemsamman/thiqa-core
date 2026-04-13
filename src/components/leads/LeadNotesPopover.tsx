@@ -45,7 +45,7 @@ export function LeadNotesPopover({ leadId, currentNotes }: LeadNotesPopoverProps
   const handleAddNote = () => {
     if (!newNote.trim()) return;
     
-    const timestamp = new Date().toLocaleDateString("ar-EG", {
+    const timestamp = new Date().toLocaleDateString("en-GB", {
       year: "numeric",
       month: "short",
       day: "numeric",

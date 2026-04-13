@@ -22,7 +22,7 @@ import { useNotifications, Notification } from '@/hooks/useNotifications';
 import { PaymentMethodBadge } from '@/components/notifications/PaymentMethodBadge';
 import { PaymentTypeBadges } from '@/components/notifications/PaymentTypeBadges';
 import { formatDistanceToNow } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { arDZ as ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 const NOTIFICATION_ICONS: Record<string, React.ReactNode> = {

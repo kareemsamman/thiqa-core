@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format, addDays, subDays } from "date-fns";
-import { ar } from "date-fns/locale";
+import { arDZ as ar } from "date-fns/locale";
 import {
   Plus,
   ChevronRight,

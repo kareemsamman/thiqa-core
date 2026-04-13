@@ -14,7 +14,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { arDZ as ar } from 'date-fns/locale';
 import { useAuth } from '@/hooks/useAuth';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 

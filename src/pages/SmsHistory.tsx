@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { ar } from "date-fns/locale";
+import { arDZ as ar } from "date-fns/locale";
 import { MessageSquare, Search, Filter, CheckCircle, XCircle, Clock, RefreshCw } from "lucide-react";
 
 interface SmsLog {

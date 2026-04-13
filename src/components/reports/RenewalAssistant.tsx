@@ -266,7 +266,7 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month }: Renewal
 
   const formatDate = (dateStr: string) => {
     try {
-      return new Date(dateStr).toLocaleDateString('ar-SA', {
+      return new Date(dateStr).toLocaleDateString('en-GB', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -362,7 +362,7 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month }: Renewal
                       <TableCell>{policy.car?.car_number || '—'}</TableCell>
                       <TableCell>{formatDate(policy.end_date)}</TableCell>
                       <TableCell className="font-medium">
-                        {policy.insurance_price.toLocaleString('ar-SA')} &#8362;
+                        {policy.insurance_price.toLocaleString('en-US')} &#8362;
                       </TableCell>
                     </TableRow>
                   ))}
@@ -379,7 +379,7 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month }: Renewal
                 <span className="font-bold">
                   {currentClient.policies
                     .reduce((sum, p) => sum + p.insurance_price, 0)
-                    .toLocaleString('ar-SA')}{' '}
+                    .toLocaleString('en-US')}{' '}
                   &#8362;
                 </span>
               </div>

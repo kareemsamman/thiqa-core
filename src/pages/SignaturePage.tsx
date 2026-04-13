@@ -341,7 +341,7 @@ export default function SignaturePage() {
             {/* Expiry notice */}
             {signatureInfo?.expires_at && (
               <p className="text-xs text-muted-foreground text-center">
-                ينتهي هذا الرابط في: {new Date(signatureInfo.expires_at).toLocaleString("ar-EG")}
+                ينتهي هذا الرابط في: {new Date(signatureInfo.expires_at).toLocaleString("en-GB")}
               </p>
             )}
           </CardContent>

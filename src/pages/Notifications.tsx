@@ -29,7 +29,7 @@ import { PaymentTypeBadges } from '@/components/notifications/PaymentTypeBadges'
 import { PaymentDetailsPanel } from '@/components/notifications/PaymentDetailsPanel';
 import { NewSinceLastVisitBanner } from '@/components/notifications/NewSinceLastVisitBanner';
 import { formatDistanceToNow, format } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { arDZ as ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import {
   AlertDialog,

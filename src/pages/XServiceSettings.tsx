@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Save, TestTube, Trash2, RefreshCw, Loader2, CheckCircle, XCircle, Clock, Upload } from "lucide-react";
 import { format } from "date-fns";
-import { ar } from "date-fns/locale";
+import { arDZ as ar } from "date-fns/locale";
 
 interface XServiceSettingsData {
   id: string;

@@ -43,7 +43,7 @@ import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { RowActionsMenu } from "@/components/shared/RowActionsMenu";
 import { BrokerSmsModal } from "./BrokerSmsModal";
 import { format } from "date-fns";
-import { ar } from "date-fns/locale";
+import { arDZ as ar } from "date-fns/locale";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 
