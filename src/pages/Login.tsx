@@ -358,7 +358,7 @@ export default function Login() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="h-[100dvh] flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -369,7 +369,7 @@ export default function Login() {
   const passwordStrength = checkPasswordStrength(signupPasswordDisplay);
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row relative" dir="rtl">
+    <div className="h-[100dvh] overflow-hidden flex flex-col lg:flex-row relative" dir="rtl">
       {/* Mobile background */}
       <div className="fixed inset-0 lg:hidden -z-10">
         <img src={loginBgMobile} alt="" className="w-full h-full object-cover" />
@@ -387,8 +387,8 @@ export default function Login() {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center py-6 px-5 sm:p-6 lg:bg-gradient-to-br lg:from-muted/40 lg:to-background">
-        <div className="w-full max-w-md animate-scale-in">
+      <div className="flex-1 flex items-start lg:items-center justify-center pt-8 pb-4 px-5 sm:p-6 lg:bg-gradient-to-br lg:from-muted/40 lg:to-background overflow-hidden">
+        <div className="w-full max-w-md animate-scale-in max-h-full overflow-y-auto">
           <div className="rounded-2xl sm:rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 lg:bg-white/70 lg:dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
             {/* Header */}
             <div className="text-center pt-8 sm:pt-8 pb-3 sm:pb-3 px-6 sm:px-8">
