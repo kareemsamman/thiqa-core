@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Plus, FileText, X, Maximize2, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -306,7 +306,7 @@ function MinimizedChip({
 }: {
   instance: WizardInstance;
   isLast?: boolean;
-  chipRef?: React.RefObject<HTMLButtonElement>;
+  chipRef?: RefObject<HTMLButtonElement>;
   variant?: "inline" | "stacked";
   onRestore: (id: string) => void;
   onClose: (id: string) => void;
