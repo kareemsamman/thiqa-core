@@ -62,6 +62,7 @@ interface PolicyRecord {
   company: { name: string; name_ar: string | null } | null;
   car: { id: string; car_number: string } | null;
   creator: { full_name: string | null; email: string } | null;
+  road_service?: { name: string; name_ar: string | null } | null;
   branch_id?: string | null;
   created_at?: string;
 }
@@ -1160,33 +1161,6 @@ function PolicyPackageCard({
           </div>
         </div>
 
-        {/* Payment Summary — plain columns under a divider, matching the info grid */}
-        {isActive && (
-          <div className="mt-3 pt-3 border-t border-border/50 grid grid-cols-3 gap-3">
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">السعر</p>
-              <p className="text-lg font-bold ltr-nums">
-                ₪{pkg.totalPrice.toLocaleString('en-US')}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</p>
-              <p className="text-lg font-bold text-success ltr-nums">
-                ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">الباقي</p>
-              <p className={cn(
-                "text-lg font-bold ltr-nums",
-                paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
-              )}>
-                ₪{paymentStatus.remaining.toLocaleString('en-US')}
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Package Components Section - Shows details for each policy in the package */}
         {isPkg && pkg.mainPolicy && (
           <div className="mt-3 pt-3 border-t border-border/50">
@@ -1212,6 +1186,24 @@ function PolicyPackageCard({
                   payment={getPolicyPayment?.(addon.id)}
                 />
               ))}
+              {/* Package totals footer — aligned left */}
+              <div className="flex items-center text-xs rounded-md px-2.5 py-1.5">
+                <div className="flex items-center gap-4 ltr-nums" dir="ltr">
+                  <span className="text-muted-foreground">
+                    المدفوع <span className="font-bold text-success">₪{paymentStatus.totalPaid.toLocaleString('en-US')}</span>
+                  </span>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span className="text-muted-foreground">
+                    الباقي{' '}
+                    <span className={cn(
+                      "font-bold",
+                      paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
+                    )}>
+                      ₪{paymentStatus.remaining.toLocaleString('en-US')}
+                    </span>
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -1331,6 +1323,11 @@ function PackageComponentRow({
         <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border", typeColor)}>
           {typeLabel}
         </Badge>
+        {policy.policy_type_parent === 'ROAD_SERVICE' && (policy.road_service?.name_ar || policy.road_service?.name) && (
+          <span className="text-[10px] font-semibold text-orange-700 bg-orange-500/10 border border-orange-500/30 rounded px-1.5 py-0 h-5 inline-flex items-center">
+            {policy.road_service?.name_ar || policy.road_service?.name}
+          </span>
+        )}
         <span className={cn(
           "truncate max-w-[120px]",
           isActive ? "text-muted-foreground" : "text-muted-foreground/70"
