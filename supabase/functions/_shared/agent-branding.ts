@@ -15,6 +15,8 @@ export interface AgentBranding {
   ownerName: string;
   taxNumber: string;
   invoicePrivacyText: string;
+  invoicePhones: string[];
+  invoiceAddress: string;
 }
 
 const DEFAULT_BRANDING: AgentBranding = {
@@ -29,6 +31,8 @@ const DEFAULT_BRANDING: AgentBranding = {
   ownerName: '',
   taxNumber: '',
   invoicePrivacyText: '',
+  invoicePhones: [],
+  invoiceAddress: '',
 };
 
 /**
@@ -44,7 +48,7 @@ export async function getAgentBranding(
   try {
     const { data, error } = await supabase
       .from('site_settings')
-      .select('site_title, site_description, logo_url, signature_header_html, signature_body_html, signature_footer_html, signature_primary_color, owner_name, tax_number, invoice_privacy_text')
+      .select('site_title, site_description, logo_url, signature_header_html, signature_body_html, signature_footer_html, signature_primary_color, owner_name, tax_number, invoice_privacy_text, invoice_phones, invoice_address')
       .eq('agent_id', agentId)
       .maybeSingle();
 
@@ -62,6 +66,8 @@ export async function getAgentBranding(
       ownerName: data.owner_name || '',
       taxNumber: data.tax_number || '',
       invoicePrivacyText: data.invoice_privacy_text || '',
+      invoicePhones: Array.isArray(data.invoice_phones) ? data.invoice_phones.filter(Boolean) : [],
+      invoiceAddress: data.invoice_address || '',
     };
   } catch {
     return DEFAULT_BRANDING;

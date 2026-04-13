@@ -121,6 +121,8 @@ export default function BrandingSettings() {
   const [ownerName, setOwnerName] = useState("");
   const [taxNumber, setTaxNumber] = useState("");
   const [invoicePrivacyText, setInvoicePrivacyText] = useState("");
+  const [invoicePhonesInput, setInvoicePhonesInput] = useState("");
+  const [invoiceAddress, setInvoiceAddress] = useState("");
   const [initialized, setInitialized] = useState(false);
 
   // Initialize form from fetched settings
@@ -137,6 +139,8 @@ export default function BrandingSettings() {
     setOwnerName(settings.owner_name || '');
     setTaxNumber(settings.tax_number || '');
     setInvoicePrivacyText(settings.invoice_privacy_text || '');
+    setInvoicePhonesInput((settings.invoice_phones || []).join(', '));
+    setInvoiceAddress(settings.invoice_address || '');
     setInitialized(true);
   }
 
@@ -155,6 +159,11 @@ export default function BrandingSettings() {
         owner_name: ownerName.trim() || null,
         tax_number: taxNumber.trim() || null,
         invoice_privacy_text: invoicePrivacyText.trim() || null,
+        invoice_phones: invoicePhonesInput
+          .split(/[,،\n]/)
+          .map((s) => s.trim())
+          .filter(Boolean),
+        invoice_address: invoiceAddress.trim() || null,
       });
       toast.success("تم حفظ الإعدادات بنجاح");
     } catch {
@@ -270,6 +279,32 @@ export default function BrandingSettings() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label htmlFor="invoice-phones">أرقام هاتف التواصل</Label>
+                  <Input
+                    id="invoice-phones"
+                    value={invoicePhonesInput}
+                    onChange={(e) => setInvoicePhonesInput(e.target.value)}
+                    placeholder="04-6555123, 052-1234567"
+                    dir="ltr"
+                    className="ltr-input font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    افصل بين الأرقام بفاصلة (,). تظهر في تذييل الفاتورة بعد عبارة الشكر.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="invoice-address">عنوان المكتب</Label>
+                  <Input
+                    id="invoice-address"
+                    value={invoiceAddress}
+                    onChange={(e) => setInvoiceAddress(e.target.value)}
+                    placeholder="مثال: الناصرة - شارع المركز"
+                  />
+                  <p className="text-xs text-muted-foreground">يظهر في تذييل الفاتورة بجانب أرقام التواصل</p>
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="invoice-privacy">نص سياسة الخصوصية / الشروط</Label>
                   <Textarea
                     id="invoice-privacy"
@@ -284,10 +319,10 @@ export default function BrandingSettings() {
                 </div>
 
                 <div className="rounded-lg border bg-muted/30 p-4 text-sm">
-                  <div className="font-medium mb-2 text-muted-foreground">معلومات إضافية تظهر في الفاتورة:</div>
+                  <div className="font-medium mb-2 text-muted-foreground">يُسحب من تبويبات أخرى:</div>
                   <ul className="space-y-1 text-xs text-muted-foreground list-disc pr-5">
-                    <li>أرقام هاتف التواصل وعنوان المكتب — تُدار من إعدادات الرسائل النصية</li>
                     <li>اسم الوكالة والشعار — من تبويب «العلامة التجارية» أعلاه</li>
+                    <li>إذا لم يوجد شعار، تظهر العلامة الافتراضية لـ Thiqa</li>
                   </ul>
                 </div>
               </CardContent>

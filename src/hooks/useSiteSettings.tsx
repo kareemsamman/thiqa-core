@@ -16,6 +16,8 @@ export interface SiteSettings {
   owner_name: string | null;
   tax_number: string | null;
   invoice_privacy_text: string | null;
+  invoice_phones: string[] | null;
+  invoice_address: string | null;
   updated_at: string;
   updated_by: string | null;
 }
@@ -86,6 +88,8 @@ export function useUpdateSiteSettings() {
           owner_name: updates.owner_name ?? null,
           tax_number: updates.tax_number ?? null,
           invoice_privacy_text: updates.invoice_privacy_text ?? null,
+          invoice_phones: updates.invoice_phones ?? [],
+          invoice_address: updates.invoice_address ?? null,
           updated_at: new Date().toISOString(),
         })
         .select()
