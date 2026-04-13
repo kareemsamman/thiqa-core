@@ -339,20 +339,30 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
               key={group.name}
               open={isOpen}
               onOpenChange={() => toggleGroup(group.name)}
+              className="mb-1"
             >
-              <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 text-sm font-semibold text-sidebar-foreground/60 hover:text-sidebar-foreground/80 hover:bg-[hsl(var(--sidebar-glass-bg))] rounded-lg transition-all duration-200 uppercase tracking-wide">
-                <div className="flex items-center gap-2">
-                  <GroupIcon className="h-3.5 w-3.5" />
-                  <span>{group.name}</span>
+              <CollapsibleTrigger
+                className={cn(
+                  "flex items-center justify-between w-full px-3 py-2.5 rounded-lg transition-all duration-200",
+                  "text-sm font-semibold text-white",
+                  "bg-white/[0.04] border border-white/[0.06]",
+                  "hover:bg-white/[0.08] hover:border-white/10",
+                  isOpen && "bg-white/[0.07] border-white/10",
+                )}
+              >
+                <div className="flex items-center gap-2.5">
+                  <GroupIcon className="h-4 w-4 text-white/80" />
+                  <span className="tracking-wide">{group.name}</span>
                 </div>
-                <ChevronDown 
+                <ChevronDown
                   className={cn(
-                    "h-3 w-3 transition-transform duration-300 text-sidebar-foreground/30",
-                    isOpen && "rotate-180 text-[hsl(var(--sidebar-active))]/60"
-                  )} 
+                    "h-5 w-5 transition-transform duration-300 text-white/70 shrink-0",
+                    isOpen && "rotate-180 text-white",
+                  )}
+                  strokeWidth={2.25}
                 />
               </CollapsibleTrigger>
-              <CollapsibleContent className="mt-0.5 mr-2 space-y-0.5">
+              <CollapsibleContent className="mt-1 mr-2 space-y-0.5">
                 {group.items.map((item) => {
                   const isActiveRoute = location.pathname === item.href;
                   return (
@@ -390,16 +400,16 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             size="sm"
             onClick={() => onCollapse(!collapsed)}
             className={cn(
-              "w-full justify-center text-muted-foreground hover:text-foreground",
+              "w-full justify-center h-10 text-white/70 hover:text-white hover:bg-white/[0.08]",
               collapsed && "px-2"
             )}
           >
             {collapsed ? (
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
             ) : (
               <>
-                <ChevronRight className="h-4 w-4" />
-                <span className="mr-2">تصغير</span>
+                <ChevronRight className="h-5 w-5" strokeWidth={2.25} />
+                <span className="mr-2 text-sm font-medium">تصغير</span>
               </>
             )}
           </Button>
@@ -742,8 +752,8 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
             const GroupIcon = group.icon;
             return (
               <div key={group.name} className="mb-3">
-                <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  <GroupIcon className="h-3 w-3" />
+                <div className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-foreground tracking-wide">
+                  <GroupIcon className="h-4 w-4 text-muted-foreground" />
                   <span>{group.name}</span>
                 </div>
                 <div className="space-y-0.5">
