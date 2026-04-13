@@ -737,6 +737,7 @@ export function PolicyYearTimeline({
                         accidentCount={accidentCount}
                         childrenCount={childrenCount}
                         getDocNumber={(id) => policyDocNumbers.get(id)}
+                        getPolicyPayment={(id) => paymentInfo[id]}
                         onPolicyClick={onPolicyClick}
                         onPaymentClick={(e) => handlePackagePayment(e, pkg.allPolicyIds, pkg.mainPolicy?.branch_id || pkg.addons[0]?.branch_id || null)}
                         onOpenInvoiceDialog={(e) => handleOpenInvoiceDialog(e, pkg.allPolicyIds)}
@@ -797,6 +798,7 @@ function PolicyPackageCard({
   accidentCount = 0,
   childrenCount = 0,
   getDocNumber,
+  getPolicyPayment,
   onPolicyClick,
   onPaymentClick,
   onOpenInvoiceDialog,
@@ -823,6 +825,7 @@ function PolicyPackageCard({
   accidentCount?: number;
   childrenCount?: number;
   getDocNumber?: (policyId: string) => number | undefined;
+  getPolicyPayment?: (policyId: string) => { paid: number; remaining: number } | undefined;
   onPolicyClick: (id: string) => void;
   onPaymentClick: (e: React.MouseEvent) => void;
   onOpenInvoiceDialog: (e: React.MouseEvent) => void;
@@ -1197,6 +1200,7 @@ function PolicyPackageCard({
                 policy={pkg.mainPolicy}
                 isActive={isActive}
                 index={getDocNumber?.(pkg.mainPolicy.id)}
+                payment={getPolicyPayment?.(pkg.mainPolicy.id)}
               />
               {/* Addons */}
               {pkg.addons.map((addon) => (
@@ -1205,6 +1209,7 @@ function PolicyPackageCard({
                   policy={addon}
                   isActive={isActive}
                   index={getDocNumber?.(addon.id)}
+                  payment={getPolicyPayment?.(addon.id)}
                 />
               ))}
             </div>
@@ -1291,14 +1296,19 @@ function PackageComponentRow({
   policy,
   isActive,
   index,
+  payment,
 }: {
   policy: PolicyRecord;
   isActive: boolean;
   index?: number;
+  payment?: { paid: number; remaining: number };
 }) {
   const typeLabel = getDisplayLabel(policy);
   const typeColor = policyTypeColors[policy.policy_type_parent];
   const commission = policy.office_commission || 0;
+  const rowTotal = policy.insurance_price + commission;
+  const paid = payment?.paid ?? 0;
+  const remaining = Math.max(0, rowTotal - paid);
 
   // Get company/service name based on policy type
   const getProviderName = () => {
@@ -1346,6 +1356,20 @@ function PackageComponentRow({
             <span className="text-[9px] text-amber-700 font-semibold ltr-nums">
               + ₪{commission.toLocaleString('en-US')} عمولة
             </span>
+          )}
+          {payment && (
+            <div className="flex items-center gap-1.5 text-[9px] ltr-nums mt-0.5">
+              <span className="text-success font-semibold">
+                مدفوع ₪{paid.toLocaleString('en-US')}
+              </span>
+              <span className="text-muted-foreground/50">·</span>
+              <span className={cn(
+                "font-semibold",
+                remaining > 0 ? "text-destructive" : "text-success"
+              )}>
+                باقي ₪{remaining.toLocaleString('en-US')}
+              </span>
+            </div>
           )}
         </div>
       </div>
