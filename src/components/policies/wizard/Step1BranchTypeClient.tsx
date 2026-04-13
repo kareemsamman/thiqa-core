@@ -266,7 +266,7 @@ export function Step1BranchTypeClient({
           </div>
 
           {branches.length === 0 ? (
-            <Card className="p-4 border-dashed bg-muted/20">
+            <Card className="p-4 border-dashed border-destructive/50 bg-destructive/5">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
                   <Building2 className="h-5 w-5 text-amber-600" />
@@ -297,6 +297,7 @@ export function Step1BranchTypeClient({
               </SelectContent>
             </Select>
           )}
+          <FieldError error={errors.branch} />
         </div>
       )}
 

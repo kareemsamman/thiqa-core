@@ -398,7 +398,10 @@ export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirec
 
   // Steps configuration with validation
   const steps: WizardStep[] = useMemo(() => {
-    const step1Valid = !!(selectedClient || (createNewClient && newClient.full_name.trim() && digitsOnly(newClient.id_number).length === 9));
+    const branchValid = isAdmin
+      ? !!selectedBranchId && branches.length > 0
+      : !!userBranchId;
+    const step1Valid = branchValid && !!(selectedClient || (createNewClient && newClient.full_name.trim() && digitsOnly(newClient.id_number).length === 9));
     const step2Valid = isLightMode ? true : !!(selectedCar || existingCar || (createNewCar && newCar.car_number && !carConflict));
     
     // Package addons validation - find by type instead of index
@@ -440,6 +443,7 @@ export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirec
       { id: 4, key: "payments", title: "الدفعات", icon: CreditCard, isUnlocked: step1Valid && step2Valid && step3Valid, isValid: step4Valid },
     ];
   }, [
+    isAdmin, selectedBranchId, branches, userBranchId,
     selectedClient, createNewClient, newClient, selectedCategory, isLightMode,
     selectedCar, existingCar, createNewCar, newCar, carConflict,
     policy, paymentsExceedPrice, packageMode, packageAddons,
@@ -459,6 +463,12 @@ export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirec
     const isPaymentStep = currentStep === (isLightMode ? 3 : 4);
 
     if (currentStep === 1) {
+      if (isAdmin) {
+        if (branches.length === 0) missing.push("الفرع (لا توجد فروع)");
+        else if (!selectedBranchId) missing.push("الفرع");
+      } else if (!userBranchId) {
+        missing.push("الفرع");
+      }
       if (!selectedCategory) missing.push("نوع التأمين");
       const hasClient = !!(
         selectedClient ||
@@ -530,6 +540,10 @@ export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirec
     return missing;
   }, [
     currentStep,
+    isAdmin,
+    selectedBranchId,
+    branches,
+    userBranchId,
     isLightMode,
     selectedCategory,
     selectedClient,
@@ -637,6 +651,15 @@ export function usePolicyWizardState({ open, defaultBrokerId, defaultBrokerDirec
 
     switch (step.key) {
       case "branch_type_client":
+        if (isAdmin) {
+          if (branches.length === 0) {
+            newErrors.branch = "يجب إضافة فرع قبل إنشاء وثيقة";
+          } else if (!selectedBranchId) {
+            newErrors.branch = "الرجاء اختيار الفرع";
+          }
+        } else if (!userBranchId) {
+          newErrors.branch = "لا يوجد فرع مرتبط بحسابك. تواصل مع المدير";
+        }
         if (!selectedCategory) newErrors.category = "الرجاء اختيار نوع التأمين";
         if (!selectedClient && !createNewClient) {
           newErrors.client = "الرجاء اختيار عميل أو إنشاء عميل جديد";
