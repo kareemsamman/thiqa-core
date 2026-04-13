@@ -895,40 +895,40 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftKey]);
 
-  // Save snapshot on any relevant state change (debounced). Drops File
-  // uploads from payments since they aren't JSON-serializable.
+  // Save snapshot on any relevant state change. No debounce — localStorage
+  // writes are cheap (~1ms) and debouncing dropped data when the user
+  // refreshed within the debounce window. React's useEffect dep-diffing
+  // already throttles us to the render cadence, so this runs at most
+  // once per commit.
   useEffect(() => {
     if (!draftKey || !hasHydratedRef.current) return;
-    const handle = window.setTimeout(() => {
-      try {
-        const snap = {
-          currentStep,
-          selectedBranchId,
-          selectedCategoryId: selectedCategory?.id ?? null,
-          selectedClientId: selectedClient?.id ?? null,
-          createNewClient,
-          newClient,
-          selectedCarId: (selectedCar as any)?.id ?? null,
-          createNewCar,
-          newCar,
-          policy,
-          policyBrokerId,
-          brokerDirection,
-          packageMode,
-          packageAddons,
-          payments: payments.map((p) => {
-            const { cheque_image, ...rest } = p as any;
-            return rest;
-          }),
-          selectedChildIds,
-          newChildren,
-        };
-        localStorage.setItem(draftKey, JSON.stringify(snap));
-      } catch {
-        // ignore quota / parse errors
-      }
-    }, 400);
-    return () => window.clearTimeout(handle);
+    try {
+      const snap = {
+        currentStep,
+        selectedBranchId,
+        selectedCategoryId: selectedCategory?.id ?? null,
+        selectedClientId: selectedClient?.id ?? null,
+        createNewClient,
+        newClient,
+        selectedCarId: (selectedCar as any)?.id ?? null,
+        createNewCar,
+        newCar,
+        policy,
+        policyBrokerId,
+        brokerDirection,
+        packageMode,
+        packageAddons,
+        payments: payments.map((p) => {
+          const { cheque_image, ...rest } = p as any;
+          return rest;
+        }),
+        selectedChildIds,
+        newChildren,
+      };
+      localStorage.setItem(draftKey, JSON.stringify(snap));
+    } catch {
+      // ignore quota / parse errors
+    }
   }, [
     draftKey,
     currentStep,
