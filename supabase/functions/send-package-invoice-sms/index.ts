@@ -425,11 +425,20 @@ serve(async (req) => {
 function formatDate(dateStr: string): string {
   if (!dateStr) return '';
   const date = new Date(dateStr);
-  return date.toLocaleDateString('en-GB', { 
-    year: 'numeric', 
-    month: '2-digit', 
+  return date.toLocaleDateString('en-GB', {
+    year: 'numeric',
+    month: '2-digit',
     day: '2-digit',
   });
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function buildPackageInvoiceHtml(
@@ -454,16 +463,36 @@ function buildPackageInvoiceHtml(
     ? `<img class="logo" src="${branding.logoUrl}" alt="${branding.companyName}" />`
     : `<div class="logo-fallback">Thiqa</div>`;
 
-  // Additional drivers — flat comma-separated list.
-  const additionalDrivers = policyChildren
-    .map((pc: any) => pc?.child?.full_name)
-    .filter(Boolean)
-    .join('، ');
+  // Group additional drivers per policy so each item row can show its own.
+  const driversByPolicy: Record<string, string[]> = {};
+  policyChildren.forEach((pc: any) => {
+    const name = pc?.child?.full_name;
+    if (!name || !pc.policy_id) return;
+    if (!driversByPolicy[pc.policy_id]) driversByPolicy[pc.policy_id] = [];
+    driversByPolicy[pc.policy_id].push(name);
+  });
 
   // Unique car numbers across all policies in this invoice.
   const carNumbers = Array.from(new Set(
     policies.map((p: any) => p.car?.car_number).filter(Boolean)
   )).join('، ');
+
+  // Smarter invoice title based on the policy types in this package.
+  const policyTypeKinds = new Set<string>();
+  policies.forEach((p: any) => {
+    if (p.policy_type_parent === 'ROAD_SERVICE') policyTypeKinds.add('road');
+    else if (p.policy_type_parent === 'ACCIDENT_FEE_EXEMPTION') policyTypeKinds.add('accident_fee');
+    else policyTypeKinds.add('insurance');
+  });
+  let invoiceTitle = 'فاتورة';
+  let invoiceSubtitle = '';
+  if (policyTypeKinds.size === 1) {
+    if (policyTypeKinds.has('insurance')) invoiceSubtitle = 'تأمين سيارة';
+    else if (policyTypeKinds.has('road')) invoiceSubtitle = 'خدمات الطريق';
+    else if (policyTypeKinds.has('accident_fee')) invoiceSubtitle = 'إعفاء رسوم';
+  } else {
+    invoiceSubtitle = 'وثائق التأمين والخدمات';
+  }
 
   // Normalize attachment CDN urls.
   const normalizedFiles = policyFiles.map(f => ({
@@ -488,6 +517,10 @@ function buildPackageInvoiceHtml(
 
     const carLine = p.car?.car_number ? ` — سيارة ${p.car.car_number}` : '';
     const companyName = p.company?.name_ar || p.company?.name || '-';
+    const policyDrivers = driversByPolicy[p.id] || [];
+    const driversLine = policyDrivers.length > 0
+      ? `<div class="item-drivers">سائقون إضافيون: ${policyDrivers.join('، ')}</div>`
+      : '';
 
     return `
       <tr>
@@ -495,6 +528,7 @@ function buildPackageInvoiceHtml(
         <td>
           <div class="item-title">${policyType}${carLine}</div>
           <div class="item-meta">${companyName}</div>
+          ${driversLine}
         </td>
         <td class="num">₪${(p.insurance_price || 0).toLocaleString()}</td>
       </tr>
@@ -747,6 +781,51 @@ function buildPackageInvoiceHtml(
     }
     .items tbody .item-title { font-weight: 600; font-size: 12.5px; color: #18181b; }
     .items tbody .item-meta { color: #71717a; font-size: 10.5px; margin-top: 3px; font-weight: 400; }
+    .items tbody .item-drivers {
+      color: #52525b;
+      font-size: 10.5px;
+      margin-top: 6px;
+      padding-top: 5px;
+      border-top: 1px dashed #e4e4e7;
+      font-weight: 400;
+    }
+
+    /* ── Privacy / terms ── */
+    .privacy {
+      margin-bottom: 24px;
+      border: 1px solid #e4e4e7;
+    }
+    .privacy .body {
+      padding: 12px 14px;
+      font-size: 11px;
+      color: #52525b;
+      line-height: 1.65;
+      white-space: pre-wrap;
+    }
+
+    /* ── Brand subtitle / owner / tax ── */
+    .invoice-meta .subtitle {
+      font-size: 11px;
+      font-weight: 500;
+      color: #71717a;
+      margin-top: -10px;
+      margin-bottom: 14px;
+      letter-spacing: 0.5px;
+    }
+    .brand .owner {
+      font-size: 11px;
+      color: #52525b;
+      margin-top: 4px;
+      font-weight: 500;
+    }
+    .brand .tax {
+      font-size: 11px;
+      color: #71717a;
+      margin-top: 2px;
+      direction: ltr;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
 
     /* ── Bottom row ── */
     .bottom {
@@ -986,11 +1065,14 @@ function buildPackageInvoiceHtml(
       <div class="brand">
         ${brandBlock}
         <div class="name">${branding.companyName}</div>
+        ${branding.ownerName ? `<div class="owner">${branding.ownerName}</div>` : ''}
+        ${branding.taxNumber ? `<div class="tax">رقم المشغل: ${branding.taxNumber}</div>` : ''}
         ${branding.siteDescription ? `<div class="tagline">${branding.siteDescription}</div>` : ''}
         ${companySettings.company_location ? `<div class="address">${companySettings.company_location}</div>` : ''}
       </div>
       <div class="invoice-meta">
-        <h1>فاتورة</h1>
+        <h1>${invoiceTitle}</h1>
+        ${invoiceSubtitle ? `<div class="subtitle">${invoiceSubtitle}</div>` : ''}
         <div class="meta-rows">
           <div class="row">
             <div class="label">التاريخ</div>
@@ -1024,12 +1106,6 @@ function buildPackageInvoiceHtml(
           <div class="label">${policies.length > 1 ? 'السيارات' : 'السيارة'}</div>
           <div class="value tabular">${carNumbers || '-'}</div>
         </div>
-        ${additionalDrivers ? `
-        <div class="cell full">
-          <div class="label">سائقون إضافيون</div>
-          <div class="value">${additionalDrivers}</div>
-        </div>
-        ` : ''}
       </div>
     </div>
 
@@ -1070,6 +1146,13 @@ function buildPackageInvoiceHtml(
         </tr>
       </table>
     </div>
+
+    ${branding.invoicePrivacyText ? `
+    <div class="privacy">
+      <div class="section-title">سياسة الخصوصية والشروط</div>
+      <div class="body">${escapeHtml(branding.invoicePrivacyText)}</div>
+    </div>
+    ` : ''}
 
     ${filesHtml}
 

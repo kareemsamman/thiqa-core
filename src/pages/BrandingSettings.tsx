@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Upload, Trash2, Image, Save, PenTool, Palette } from "lucide-react";
+import { Loader2, Upload, Trash2, Image, Save, PenTool, Palette, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSiteSettings, useUpdateSiteSettings } from "@/hooks/useSiteSettings";
@@ -117,6 +117,10 @@ export default function BrandingSettings() {
   const [sigBody, setSigBody] = useState("");
   const [sigFooter, setSigFooter] = useState("");
   const [sigColor, setSigColor] = useState("#1e3a5f");
+  // Invoice fields
+  const [ownerName, setOwnerName] = useState("");
+  const [taxNumber, setTaxNumber] = useState("");
+  const [invoicePrivacyText, setInvoicePrivacyText] = useState("");
   const [initialized, setInitialized] = useState(false);
 
   // Initialize form from fetched settings
@@ -130,6 +134,9 @@ export default function BrandingSettings() {
     setSigBody(settings.signature_body_html || '<p>مرحباً.</p><p>أقرّ بأنني قرأت وفهمت سياسة الخصوصية، وأوافق على قيام الشركة بجمع واستخدام ومعالجة بياناتي الشخصية للأغراض المتعلقة بخدمات التأمين والتواصل وإتمام الإجراءات اللازمة.</p><p>بالتوقيع أدناه، أؤكد صحة البيانات وأمنح موافقتي على ما ورد أعلاه.</p>');
     setSigFooter(settings.signature_footer_html || '<p>جميع الحقوق محفوظة</p>');
     setSigColor(settings.signature_primary_color || '#1e3a5f');
+    setOwnerName(settings.owner_name || '');
+    setTaxNumber(settings.tax_number || '');
+    setInvoicePrivacyText(settings.invoice_privacy_text || '');
     setInitialized(true);
   }
 
@@ -145,6 +152,9 @@ export default function BrandingSettings() {
         signature_body_html: sigBody,
         signature_footer_html: sigFooter,
         signature_primary_color: sigColor,
+        owner_name: ownerName.trim() || null,
+        tax_number: taxNumber.trim() || null,
+        invoice_privacy_text: invoicePrivacyText.trim() || null,
       });
       toast.success("تم حفظ الإعدادات بنجاح");
     } catch {
@@ -178,6 +188,10 @@ export default function BrandingSettings() {
             <TabsTrigger value="branding" className="gap-2">
               <Image className="h-4 w-4" />
               العلامة التجارية
+            </TabsTrigger>
+            <TabsTrigger value="invoice" className="gap-2">
+              <Receipt className="h-4 w-4" />
+              إعدادات الفاتورة
             </TabsTrigger>
             <TabsTrigger value="signature" className="gap-2">
               <PenTool className="h-4 w-4" />
@@ -215,6 +229,67 @@ export default function BrandingSettings() {
                   onUpload={setLogoUrl}
                   onRemove={() => setLogoUrl(null)}
                 />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="invoice">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Receipt className="h-5 w-5" />
+                  بيانات الفاتورة
+                </CardTitle>
+                <CardDescription>
+                  هذه الحقول تظهر في الفواتير المُرسَلة للعميل. اتركها فارغة إذا لم ترغب بعرضها.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="owner-name">اسم صاحب الشركة</Label>
+                  <Input
+                    id="owner-name"
+                    value={ownerName}
+                    onChange={(e) => setOwnerName(e.target.value)}
+                    placeholder="الاسم الكامل"
+                  />
+                  <p className="text-xs text-muted-foreground">يظهر بجانب اسم الوكالة في رأس الفاتورة</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="tax-number">رقم المشغل / الضريبة</Label>
+                  <Input
+                    id="tax-number"
+                    value={taxNumber}
+                    onChange={(e) => setTaxNumber(e.target.value)}
+                    placeholder="رقم المشغل المرخّص"
+                    dir="ltr"
+                    className="ltr-input font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">يظهر تحت اسم الوكالة في الفاتورة</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="invoice-privacy">نص سياسة الخصوصية / الشروط</Label>
+                  <Textarea
+                    id="invoice-privacy"
+                    value={invoicePrivacyText}
+                    onChange={(e) => setInvoicePrivacyText(e.target.value)}
+                    placeholder="مثال: جميع المبالغ المدفوعة غير قابلة للاسترداد بعد إصدار الوثيقة..."
+                    rows={6}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    يظهر أسفل جدول البنود وقبل التذييل. استخدمه لعرض شروط الدفع، سياسة الإرجاع، أو أي ملاحظات قانونية.
+                  </p>
+                </div>
+
+                <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                  <div className="font-medium mb-2 text-muted-foreground">معلومات إضافية تظهر في الفاتورة:</div>
+                  <ul className="space-y-1 text-xs text-muted-foreground list-disc pr-5">
+                    <li>أرقام هاتف التواصل وعنوان المكتب — تُدار من إعدادات الرسائل النصية</li>
+                    <li>اسم الوكالة والشعار — من تبويب «العلامة التجارية» أعلاه</li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

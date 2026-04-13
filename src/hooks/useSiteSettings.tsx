@@ -13,6 +13,9 @@ export interface SiteSettings {
   signature_body_html: string | null;
   signature_footer_html: string | null;
   signature_primary_color: string | null;
+  owner_name: string | null;
+  tax_number: string | null;
+  invoice_privacy_text: string | null;
   updated_at: string;
   updated_by: string | null;
 }
@@ -80,6 +83,9 @@ export function useUpdateSiteSettings() {
           signature_body_html: updates.signature_body_html ?? null,
           signature_footer_html: updates.signature_footer_html ?? null,
           signature_primary_color: updates.signature_primary_color ?? '#1e3a5f',
+          owner_name: updates.owner_name ?? null,
+          tax_number: updates.tax_number ?? null,
+          invoice_privacy_text: updates.invoice_privacy_text ?? null,
           updated_at: new Date().toISOString(),
         })
         .select()
