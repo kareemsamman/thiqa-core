@@ -19,6 +19,7 @@ import { PolicyFilters, PolicyFilterValues } from "@/components/policies/PolicyF
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { PolicyTableView } from "@/components/policies/PolicyTableView";
 import { recalculatePolicyProfit } from "@/lib/pricingCalculator";
+import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
 
 interface PolicyRecord {
   id: string;
@@ -93,6 +94,7 @@ interface PolicyRecord {
 export default function Policies() {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
+  const { openWizard } = usePolicyWizardController();
   const [policies, setPolicies] = useState<PolicyRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -391,6 +393,10 @@ export default function Policies() {
       <Header
         title="الوثائق"
         subtitle="إدارة وثائق التأمين"
+        action={{
+          label: "وثيقة جديدة",
+          onClick: () => openWizard(),
+        }}
       />
 
       <div className="p-6 space-y-4">

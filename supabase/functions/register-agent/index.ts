@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import nodemailer from "npm:nodemailer@6.9.16";
 import { buildEmailHtml, welcomeAgentEmailBody, newAgentAdminNotifyBody } from "../_shared/email-template.ts";
+import { performSeed } from "../_shared/seed-agent-data.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -208,6 +209,16 @@ Deno.serve(async (req) => {
     }, { onConflict: "agent_id" }).then(({ error: authErr }) => {
       if (authErr) console.error("Auth settings init error:", authErr);
     });
+
+    // Auto-seed starter data (insurance categories, road services, accident fee
+    // services, sample companies + pricing). Non-blocking: if seeding fails we
+    // still want signup to succeed.
+    try {
+      const seeded = await performSeed(adminClient, agentData.id);
+      console.log(`Auto-seeded agent ${agentData.id}:`, seeded);
+    } catch (seedErr) {
+      console.error("Auto-seed error:", seedErr);
+    }
 
     const { error: otpError } = await adminClient.auth.admin.generateLink({
       type: "signup",

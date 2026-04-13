@@ -73,6 +73,16 @@ export default function ThiqaCreateAgent() {
       await supabase.from('agent_feature_flags').insert(flags);
     }
 
+    // 4. Auto-seed starter data (insurance categories, road services,
+    // accident fee services, sample companies + pricing). Non-blocking.
+    try {
+      await supabase.functions.invoke('seed-agent-data', {
+        body: { agent_id: agentId },
+      });
+    } catch (seedErr) {
+      console.error('Auto-seed error:', seedErr);
+    }
+
     setSaving(false);
     toast.success('تم إنشاء الوكيل وتهيئة إعداداته');
     navigate(`/thiqa/agents/${agentId}`);
@@ -150,7 +160,7 @@ export default function ThiqaCreateAgent() {
             <div className="border rounded-lg p-4 bg-muted/30 space-y-2">
               <p className="font-medium text-sm">عند الإنشاء سيتم تهيئة:</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 text-xs text-muted-foreground">
-                {['حساب الوكيل', 'إعدادات SMS (019)', 'إعدادات Tranzila', 'العلامة التجارية', 'إعدادات المصادقة', 'أعلام الميزات'].map(item => (
+                {['حساب الوكيل', 'إعدادات SMS (019)', 'إعدادات Tranzila', 'العلامة التجارية', 'إعدادات المصادقة', 'أعلام الميزات', 'أنواع التأمين', 'خدمات الطريق', 'خدمات إعفاء الرسوم'].map(item => (
                   <div key={item} className="flex items-center gap-1">
                     <CheckCircle2 className="h-3 w-3 text-green-500" />
                     {item}
