@@ -65,7 +65,14 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Track which step the function was on when something threw, so the top
+  // catch can tell the client exactly where it failed. Without this, any
+  // null-deref or query error just bubbles up as "An error occurred..." and
+  // we have no idea which table/call blew up.
+  let currentStep = "init";
+
   try {
+    currentStep = "read env";
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const bunnyApiKey = Deno.env.get("BUNNY_API_KEY");
@@ -91,8 +98,10 @@ serve(async (req) => {
       );
     }
 
+    currentStep = "create supabase client";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    currentStep = "auth header";
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No authorization header" }), {
@@ -101,6 +110,7 @@ serve(async (req) => {
       });
     }
 
+    currentStep = "verify user";
     const { data: { user }, error: authError } = await supabase.auth.getUser(
       authHeader.replace("Bearer ", "")
     );
@@ -112,6 +122,7 @@ serve(async (req) => {
       });
     }
 
+    currentStep = "parse body";
     const { client_id }: ClientReportRequest = await req.json();
 
     if (!client_id) {
@@ -124,10 +135,12 @@ serve(async (req) => {
     // Resolve branding the same way the package invoice does — logo,
     // owner name, tax number, invoice phones/address all come from
     // site_settings for this agent.
+    currentStep = "resolve agent branding";
     const agentId = await resolveAgentId(supabase, user.id);
     const branding = await getAgentBranding(supabase, agentId);
 
     // Fetch client
+    currentStep = "fetch client";
     const { data: client, error: clientError } = await supabase
       .from("clients")
       .select("*")
@@ -135,22 +148,25 @@ serve(async (req) => {
       .single();
 
     if (clientError || !client) {
-      return new Response(JSON.stringify({ error: "Client not found" }), {
+      return new Response(JSON.stringify({ error: "Client not found", detail: clientError?.message }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // Fetch cars
-    const { data: cars } = await supabase
+    currentStep = "fetch cars";
+    const { data: cars, error: carsError } = await supabase
       .from("cars")
       .select("id, car_number, manufacturer_name, model, year, color, car_type, car_value, license_expiry")
       .eq("client_id", client_id)
       .is("deleted_at", null);
+    if (carsError) throw new Error(`cars query: ${carsError.message}`);
 
     // Fetch policies (including office_commission + notes + broker link so
     // we can surface "من الوسيط / إلى الوسيط" on the items table)
-    const { data: policies } = await supabase
+    currentStep = "fetch policies";
+    const { data: policies, error: policiesError } = await supabase
       .from("policies")
       .select(`
         id, policy_number, policy_type_parent, policy_type_child, start_date, end_date,
@@ -163,10 +179,12 @@ serve(async (req) => {
       .eq("client_id", client_id)
       .is("deleted_at", null)
       .order("start_date", { ascending: false });
+    if (policiesError) throw new Error(`policies query: ${policiesError.message}`);
 
     const policyIds = (policies || []).map((p: any) => p.id);
 
     // Fetch related records in parallel
+    currentStep = "fetch related records (files/drivers/payments/accidents/refunds/branch/sms)";
     const [
       filesRes,
       childrenRes,
@@ -229,6 +247,15 @@ serve(async (req) => {
         .maybeSingle(),
     ]);
 
+    // Bubble up specific query errors so the top catch can name the step.
+    const relatedErrors: string[] = [];
+    if ((filesRes as any).error) relatedErrors.push(`media_files: ${(filesRes as any).error.message}`);
+    if ((childrenRes as any).error) relatedErrors.push(`policy_children: ${(childrenRes as any).error.message}`);
+    if ((paymentsRes as any).error) relatedErrors.push(`policy_payments: ${(paymentsRes as any).error.message}`);
+    if ((accidentsRes as any).error) relatedErrors.push(`accident_reports: ${(accidentsRes as any).error.message}`);
+    if ((refundsRes as any).error) relatedErrors.push(`customer_wallet_transactions: ${(refundsRes as any).error.message}`);
+    if (relatedErrors.length > 0) throw new Error(relatedErrors.join(' | '));
+
     const policyFiles = (filesRes.data || []) as any[];
     const policyChildrenRows = (childrenRes.data || []) as any[];
     const allPayments = (paymentsRes.data || []) as any[];
@@ -275,6 +302,7 @@ serve(async (req) => {
     const netRemaining = Math.max(0, grossRemaining - walletBalance);
 
     // Generate HTML
+    currentStep = "build html";
     const html = generateReportHtml({
       client,
       cars: cars || [],
@@ -295,6 +323,7 @@ serve(async (req) => {
     });
 
     // Upload to Bunny CDN
+    currentStep = "upload to bunny";
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -336,10 +365,11 @@ serve(async (req) => {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error && error.stack ? error.stack : undefined;
-    console.error("Error generating report:", message, stack);
+    console.error(`[generate-client-report] failed at step "${currentStep}":`, message, stack);
     return new Response(
       JSON.stringify({
-        error: `فشل في توليد التقرير: ${message}`,
+        error: `فشل في توليد التقرير (${currentStep}): ${message}`,
+        step: currentStep,
         detail: message,
       }),
       {
