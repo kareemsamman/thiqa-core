@@ -246,16 +246,56 @@ serve(async (req) => {
     });
 
     // Calculate totals — include office commission (ELZAMI markup) in the
-    // price so the customer sees what they actually owe.
-    const totalPrice = policies.reduce(
+    // price so the customer sees what they actually owe. Cancelled
+    // siblings are excluded from the totals so the "الإجمالي / المدفوع /
+    // المتبقي" trio matches what the office is still on the hook for.
+    const activePolicies = policies.filter((p: any) => !p.cancelled);
+    const totalPrice = activePolicies.reduce(
       (sum, p) => sum + (p.insurance_price || 0) + (p.office_commission || 0),
       0,
     );
     const totalPaid = (allPayments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
     const totalRemaining = totalPrice - totalPaid;
 
+    // Cancellation snapshot — if any sibling in this package is cancelled,
+    // the invoice gets a big red footer banner with the refund owed. The
+    // refund lives on customer_wallet_transactions so we pull every "refund"
+    // row attached to any of the policies in this package and sum them.
+    const cancelledPolicies = policies.filter((p: any) => p.cancelled);
+    let cancellationInfo: {
+      isCancelled: boolean;
+      date: string;
+      note: string;
+      refundAmount: number;
+    } = {
+      isCancelled: cancelledPolicies.length > 0,
+      date: '',
+      note: '',
+      refundAmount: 0,
+    };
+    if (cancelledPolicies.length > 0) {
+      // Pick the earliest cancellation_date / first non-empty note so the
+      // banner has *something* to show even if only one sibling carries
+      // the full metadata.
+      const firstDated = cancelledPolicies.find((p: any) => p.cancellation_date);
+      cancellationInfo.date = firstDated?.cancellation_date || '';
+      const firstNoted = cancelledPolicies.find((p: any) => p.cancellation_note);
+      cancellationInfo.note = firstNoted?.cancellation_note || '';
+
+      const { data: refundRows } = await supabase
+        .from('customer_wallet_transactions')
+        .select('amount')
+        .in('policy_id', policy_ids)
+        .eq('transaction_type', 'refund');
+      cancellationInfo.refundAmount = (refundRows || []).reduce(
+        (sum: number, row: any) => sum + Number(row.amount || 0),
+        0,
+      );
+      console.log(`[send-package-invoice-sms] Package has ${cancelledPolicies.length} cancelled, refund total: ${cancellationInfo.refundAmount}`);
+    }
+
     // Generate Package Invoice HTML with files and policy children
-    const packageInvoiceHtml = buildPackageInvoiceHtml(policies, paymentsByPolicy, totalPrice, totalPaid, totalRemaining, insuranceFiles || [], policyChildren || [], companySettings, branding);
+    const packageInvoiceHtml = buildPackageInvoiceHtml(policies, paymentsByPolicy, totalPrice, totalPaid, totalRemaining, insuranceFiles || [], policyChildren || [], companySettings, branding, cancellationInfo);
     
     const now = new Date();
     const year = now.getFullYear();
@@ -484,7 +524,8 @@ function buildPackageInvoiceHtml(
   policyFiles: { cdn_url: string; original_name: string; mime_type: string; entity_id: string }[],
   policyChildren: any[] = [],
   companySettings: { company_email?: string; company_phones?: string[]; company_whatsapp?: string; company_location?: string },
-  branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' }
+  branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' },
+  cancellationInfo: { isCancelled: boolean; date: string; note: string; refundAmount: number } = { isCancelled: false, date: '', note: '', refundAmount: 0 }
 ): string {
   const client = policies[0]?.client || {};
   const today = new Date();
@@ -598,6 +639,9 @@ function buildPackageInvoiceHtml(
   }));
 
   // Item rows — one per policy. "Description" = type + car, "Amount" = price.
+  // Cancelled rows are tagged with a .cancelled-row class (strikethrough +
+  // muted color) and a "ملغاة" pill so anyone reading the printed document
+  // can tell which coverages are no longer in force.
   const policyRows = policies.map((p, i) => {
     let policyType = '';
     if (p.policy_type_parent === 'ROAD_SERVICE' && p.road_service) {
@@ -619,12 +663,16 @@ function buildPackageInvoiceHtml(
     const commissionLine = commission > 0
       ? `<div class="item-commission">عمولة المكتب: ₪${commission.toLocaleString('en-US')}</div>`
       : '';
+    const isCancelled = !!p.cancelled;
+    const cancelledTag = isCancelled
+      ? `<span class="cancelled-tag">ملغاة</span>`
+      : '';
 
     return `
-      <tr>
+      <tr class="${isCancelled ? 'cancelled-row' : ''}">
         <td class="num">${i + 1}</td>
         <td>
-          <div class="item-title">${policyType}</div>
+          <div class="item-title">${policyType} ${cancelledTag}</div>
           <div class="item-meta">${companyName}</div>
           ${commissionLine}
         </td>
@@ -633,6 +681,28 @@ function buildPackageInvoiceHtml(
       </tr>
     `;
   }).join('');
+
+  // Cancellation banner — shown near the top when any policy in the
+  // package is cancelled, so the refund obligation jumps off the page
+  // instead of being buried in a line item.
+  const cancellationBannerHtml = cancellationInfo.isCancelled
+    ? `
+    <div class="cancellation-banner">
+      <div class="cancellation-main">
+        <div class="cancellation-title">⊘ هذه الوثيقة ملغاة</div>
+        ${cancellationInfo.date ? `<div class="cancellation-meta"><strong>تاريخ الإلغاء:</strong> ${formatDate(cancellationInfo.date)}</div>` : ''}
+        ${cancellationInfo.note ? `<div class="cancellation-meta"><strong>السبب:</strong> ${escapeHtml(cancellationInfo.note)}</div>` : ''}
+      </div>
+      ${cancellationInfo.refundAmount > 0 ? `
+      <div class="refund-box">
+        <div class="refund-label">مرتجع مستحق للعميل</div>
+        <div class="refund-amount">₪${cancellationInfo.refundAmount.toLocaleString('en-US')}</div>
+        <div class="refund-note">يتوجب على المكتب دفع هذا المبلغ للعميل</div>
+      </div>
+      ` : ''}
+    </div>
+    `
+    : '';
 
   // Payments table rows — one per payment, sorted oldest → newest.
   const allPaymentsList: any[] = [];
@@ -1105,6 +1175,74 @@ function buildPackageInvoiceHtml(
     }
     .totals tr.total td.val { color: #ffffff; }
 
+    /* ── Cancellation banner ── */
+    .cancellation-banner {
+      margin: 18px 0 22px;
+      padding: 16px 18px;
+      border: 2px solid #b91c1c;
+      background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .cancellation-main { flex: 1 1 220px; min-width: 0; }
+    .cancellation-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #991b1b;
+      letter-spacing: 0.3px;
+      margin-bottom: 4px;
+    }
+    .cancellation-meta {
+      font-size: 12px;
+      color: #7f1d1d;
+      line-height: 1.6;
+    }
+    .cancellation-meta strong { font-weight: 700; }
+    .refund-box {
+      background: #ffffff;
+      border: 1px solid #fecaca;
+      padding: 12px 18px;
+      text-align: center;
+      min-width: 180px;
+    }
+    .refund-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #b91c1c;
+      font-weight: 700;
+    }
+    .refund-amount {
+      font-size: 26px;
+      font-weight: 900;
+      color: #b91c1c;
+      margin-top: 4px;
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+    }
+    .refund-note {
+      font-size: 10px;
+      color: #7f1d1d;
+      margin-top: 4px;
+    }
+    .cancelled-row td { color: #9ca3af; text-decoration: line-through; }
+    .cancelled-row td .cancelled-tag { text-decoration: none; }
+    .cancelled-tag {
+      display: inline-block;
+      background: #fee2e2;
+      color: #991b1b;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      margin-right: 6px;
+      border: 1px solid #fca5a5;
+      letter-spacing: 0.3px;
+      vertical-align: middle;
+    }
+
     /* ── Files ── */
     .files-section { margin-bottom: 22px; }
     .section-label {
@@ -1323,6 +1461,8 @@ function buildPackageInvoiceHtml(
         </div>
       </div>
     </div>
+
+    ${cancellationBannerHtml}
 
     ${driversHtml}
 
