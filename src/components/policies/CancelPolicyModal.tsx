@@ -22,7 +22,12 @@ import { useAuth } from "@/hooks/useAuth";
 interface CancelPolicyModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  policyId: string;
+  // Single policyId for a standalone cancel, OR an array for canceling
+  // every policy in a package in one go. Package callers should also
+  // pass the SUM of insurance_price across the included policies so
+  // the refund validation is against the total the client actually paid.
+  policyId?: string;
+  policyIds?: string[];
   policyNumber: string | null;
   clientId: string;
   clientName: string;
@@ -36,6 +41,7 @@ export function CancelPolicyModal({
   open,
   onOpenChange,
   policyId,
+  policyIds,
   policyNumber,
   clientId,
   clientName,
@@ -44,6 +50,15 @@ export function CancelPolicyModal({
   insurancePrice,
   onCancelled,
 }: CancelPolicyModalProps) {
+  // Normalize: always operate on an array so handleCancel can loop
+  // through every affected policy without branching on shape.
+  const effectivePolicyIds: string[] = policyIds && policyIds.length > 0
+    ? policyIds
+    : policyId
+      ? [policyId]
+      : [];
+  const primaryPolicyId: string | null = effectivePolicyIds[0] ?? null;
+  const isPackage = effectivePolicyIds.length > 1;
   const { toast } = useToast();
   const { user } = useAuth();
   
@@ -110,6 +125,11 @@ export function CancelPolicyModal({
   };
 
   const handleCancel = async () => {
+    if (effectivePolicyIds.length === 0) {
+      toast({ title: "خطأ", description: "لا توجد وثائق للإلغاء", variant: "destructive" });
+      return;
+    }
+
     if (!cancellationDate) {
       toast({ title: "خطأ", description: "تاريخ الإلغاء مطلوب", variant: "destructive" });
       return;
@@ -127,7 +147,9 @@ export function CancelPolicyModal({
 
     setSaving(true);
     try {
-      // 1. Update policy with cancellation info
+      // 1. Update every affected policy with cancellation info. Using
+      // .in() covers both the single-policy and package-cancel paths
+      // in one round-trip.
       const { error: policyError } = await supabase
         .from("policies")
         .update({
@@ -136,20 +158,25 @@ export function CancelPolicyModal({
           cancellation_date: cancellationDate,
           cancelled_by_admin_id: user?.id || null,
         })
-        .eq("id", policyId);
+        .in("id", effectivePolicyIds);
 
       if (policyError) throw policyError;
 
-      // 2. Create wallet transaction if refund exists
-      if (hasRefund && refundAmount) {
+      // 2. Create ONE wallet transaction for the refund, attached to
+      // the primary policyId (first in the list). For packages this
+      // is the single refund line — we don't split it across sibling
+      // policies because the client sees one cancellation, not many.
+      if (hasRefund && refundAmount && primaryPolicyId) {
         const { error: walletError } = await supabase
           .from("customer_wallet_transactions")
           .insert({
             client_id: clientId,
-            policy_id: policyId,
+            policy_id: primaryPolicyId,
             transaction_type: "refund",
             amount: parseFloat(refundAmount),
-            description: `مرتجع إلغاء وثيقة ${policyNumber || ""}`,
+            description: isPackage
+              ? `مرتجع إلغاء باقة ${policyNumber || ""}`
+              : `مرتجع إلغاء وثيقة ${policyNumber || ""}`,
             notes: cancellationNote || null,
             created_by_admin_id: user?.id || null,
             branch_id: branchId,
@@ -166,7 +193,7 @@ export function CancelPolicyModal({
               phone: clientPhone,
               message: smsMessage,
               client_id: clientId,
-              policy_id: policyId,
+              policy_id: primaryPolicyId,
               sms_type: "manual",
               branch_id: branchId,
             },
@@ -221,7 +248,7 @@ export function CancelPolicyModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <XCircle className="h-5 w-5" />
-            إلغاء الوثيقة
+            {isPackage ? "إلغاء الباقة" : "إلغاء الوثيقة"}
           </DialogTitle>
         </DialogHeader>
 
@@ -229,7 +256,11 @@ export function CancelPolicyModal({
           {/* Warning */}
           <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg text-sm">
             <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>سيتم تسجيل الوثيقة كملغاة ولن تظهر في التقارير النشطة</span>
+            <span>
+              {isPackage
+                ? `سيتم تسجيل ${effectivePolicyIds.length} وثائق الباقة كملغاة دفعة واحدة`
+                : "سيتم تسجيل الوثيقة كملغاة ولن تظهر في التقارير النشطة"}
+            </span>
           </div>
 
           {/* Cancellation Date */}

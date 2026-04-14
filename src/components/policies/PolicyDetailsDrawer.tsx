@@ -40,7 +40,6 @@ import {
   MapPin,
   Hash,
   Palette,
-  DollarSign,
   Layers,
   Users,
   X,
@@ -54,8 +53,6 @@ import { PackagePolicyEditModal } from "./PackagePolicyEditModal";
 
 import { CancelPolicyModal } from "./CancelPolicyModal";
 import { TransferPolicyModal } from "./TransferPolicyModal";
-import { recalculatePolicyProfit } from "@/lib/pricingCalculator";
-import { RefreshCw } from "lucide-react";
 
 interface PolicyDetailsDrawerProps {
   open: boolean;
@@ -1392,46 +1389,10 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                       </Section>
                     )}
 
-                    {/* Pricing Details - Admin only */}
-                    {isAdmin && !isElzami && (
-                      <Section title="تفاصيل الأسعار" icon={DollarSign}>
-                        <div className="bg-muted/30 rounded-xl p-4 border">
-                          <div className="grid grid-cols-3 gap-4 text-center">
-                            <div className="p-3 rounded-lg bg-background">
-                              <p className="text-xs text-muted-foreground mb-1">سعر التأمين</p>
-                              <p className="font-bold text-lg ltr-nums">{formatCurrency(policy.insurance_price)}</p>
-                            </div>
-                            <div className="p-3 rounded-lg bg-orange-50">
-                              <p className="text-xs text-orange-600 mb-1">مدفوع للشركة</p>
-                              <p className="font-bold text-lg text-orange-700 ltr-nums">{formatCurrency(policy.payed_for_company)}</p>
-                            </div>
-                            <div className="p-3 rounded-lg bg-[#122143]/5">
-                              <p className="text-xs text-primary mb-1">الربح</p>
-                              <p className="font-bold text-lg text-primary ltr-nums">{formatCurrency(policy.profit)}</p>
-                            </div>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-full mt-3 text-xs text-muted-foreground hover:text-primary"
-                            onClick={async () => {
-                              if (!policyId) return;
-                              const result = await recalculatePolicyProfit(policyId);
-                              if (result) {
-                                toast({ title: "تم", description: `الربح: ${result.profit}₪ | للشركة: ${result.companyPayment}₪` });
-                                fetchPolicyDetails();
-                                onUpdated?.();
-                              } else {
-                                toast({ title: "لا تغيير", description: "لا توجد قواعد تسعير لهذه الوثيقة" });
-                              }
-                            }}
-                          >
-                            <RefreshCw className="ml-1 h-3 w-3" />
-                            إعادة حساب الربح
-                          </Button>
-                        </div>
-                      </Section>
-                    )}
+                    {/* Pricing details block intentionally omitted from
+                        the preview — it duplicates info already visible
+                        on the package card (السعر / المدفوع / الربح) and
+                        the drawer is meant to be a lightweight overview. */}
 
                     {/* Office Commission - show for ELZAMI if > 0 */}
                     {isAdmin && policy.policy_type_parent === 'ELZAMI' && (policy.office_commission || 0) > 0 && (
@@ -1542,7 +1503,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
           <CancelPolicyModal
             open={cancelOpen}
             onOpenChange={setCancelOpen}
-            policyId={policy.id}
+            policyIds={[policy.id]}
             policyNumber={policy.policy_number}
             clientId={policy.clients.id}
             clientName={policy.clients.full_name}

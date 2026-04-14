@@ -71,6 +71,7 @@ import { toast } from 'sonner';
 import { CarDrawer } from '@/components/cars/CarDrawer';
 import { PolicyDetailsDrawer } from '@/components/policies/PolicyDetailsDrawer';
 import { TransferPolicyModal } from '@/components/policies/TransferPolicyModal';
+import { CancelPolicyModal } from '@/components/policies/CancelPolicyModal';
 import { PolicyWizard } from '@/components/policies/PolicyWizard';
 import { ClientDrawer } from '@/components/clients/ClientDrawer';
 import { ClientSignatureSection } from '@/components/clients/ClientSignatureSection';
@@ -310,6 +311,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [debtPaymentModalOpen, setDebtPaymentModalOpen] = useState(false);
+  // Cancel policy/package modal — opened directly from the dropdown on
+  // PolicyYearTimeline instead of going through the details drawer.
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelPolicyIds, setCancelPolicyIds] = useState<string[]>([]);
+  const [cancelInsurancePrice, setCancelInsurancePrice] = useState(0);
+  const [cancelPolicyNumber, setCancelPolicyNumber] = useState<string | null>(null);
   
   // Delete policy state (Super Admin only)
   const [deletePolicyIds, setDeletePolicyIds] = useState<string[]>([]);
@@ -1880,8 +1887,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   setPolicyDetailsOpen(true);
                 }}
                 onCancelPolicy={(policyId) => {
-                  setSelectedPolicyId(policyId);
-                  setPolicyDetailsOpen(true);
+                  const p = policies.find((x) => x.id === policyId);
+                  if (!p) return;
+                  setCancelPolicyIds([policyId]);
+                  setCancelInsurancePrice(Number(p.insurance_price) || 0);
+                  setCancelPolicyNumber(p.policy_number);
+                  setCancelModalOpen(true);
                 }}
                 onTransferPackage={(policyIds) => {
                   if (policyIds.length > 0) {
@@ -1890,10 +1901,26 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   }
                 }}
                 onCancelPackage={(policyIds) => {
-                  if (policyIds.length > 0) {
-                    setSelectedPolicyId(policyIds[0]);
-                    setPolicyDetailsOpen(true);
-                  }
+                  if (policyIds.length === 0) return;
+                  const packagePolicies = policies.filter((p) =>
+                    policyIds.includes(p.id),
+                  );
+                  if (packagePolicies.length === 0) return;
+                  // Total package insurance price = sum of every
+                  // sibling's insurance_price. The cancel modal uses
+                  // this as the refund ceiling, so entering a refund
+                  // for the whole باقة no longer trips the "exceeds
+                  // insurance price" guard.
+                  const totalPrice = packagePolicies.reduce(
+                    (sum, p) => sum + (Number(p.insurance_price) || 0),
+                    0,
+                  );
+                  // Use the first policy's number for labels/SMS.
+                  const primary = packagePolicies[0];
+                  setCancelPolicyIds(policyIds);
+                  setCancelInsurancePrice(totalPrice);
+                  setCancelPolicyNumber(primary.policy_number);
+                  setCancelModalOpen(true);
                 }}
                 onDeletePolicy={isAdmin ? (policyIds) => {
                   setDeletePolicyIds(policyIds);
@@ -2468,6 +2495,38 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           />
         );
       })()}
+
+      {/* Cancel policy / package modal — opened directly from the
+          PolicyYearTimeline dropdown so the user doesn't have to walk
+          through the details drawer first. */}
+      <CancelPolicyModal
+        open={cancelModalOpen}
+        onOpenChange={(o) => {
+          setCancelModalOpen(o);
+          if (!o) {
+            setCancelPolicyIds([]);
+            setCancelInsurancePrice(0);
+            setCancelPolicyNumber(null);
+          }
+        }}
+        policyIds={cancelPolicyIds}
+        policyNumber={cancelPolicyNumber}
+        clientId={client.id}
+        clientName={client.full_name}
+        clientPhone={client.phone_number}
+        branchId={client.branch_id}
+        insurancePrice={cancelInsurancePrice}
+        onCancelled={async () => {
+          setCancelModalOpen(false);
+          setCancelPolicyIds([]);
+          setCancelInsurancePrice(0);
+          setCancelPolicyNumber(null);
+          await Promise.all([
+            fetchPolicies(),
+            fetchPaymentSummary(),
+          ]);
+        }}
+      />
 
       {/* Debt Payment Modal */}
       <DebtPaymentModal
