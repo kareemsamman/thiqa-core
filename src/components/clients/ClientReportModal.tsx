@@ -38,7 +38,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { extractFunctionErrorMessage } from '@/lib/functionError';
+import { extractFunctionErrorMessage, parseFunctionError } from '@/lib/functionError';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
@@ -593,6 +593,22 @@ export function ClientReportModal({
 
   // ---------- Actions ----------
 
+  // Log the full parsed response body (step name, detail, status) for any
+  // FunctionsHttpError so the devtools console tells us exactly where the
+  // edge function gave up — otherwise the browser just shows the generic
+  // "Edge Function returned a non-2xx status code" and we're blind.
+  const logFunctionError = async (label: string, error: unknown) => {
+    const parsed = await parseFunctionError(error);
+    console.error(`[${label}]`, {
+      message: parsed.message,
+      step: (parsed.payload as any)?.step,
+      detail: (parsed.payload as any)?.detail,
+      status: parsed.status,
+      raw: error,
+    });
+    return parsed;
+  };
+
   const handlePrint = async () => {
     setIsPrinting(true);
     try {
@@ -609,9 +625,8 @@ export function ClientReportModal({
         });
       }
     } catch (error) {
-      console.error('Error generating print report:', error);
-      const msg = await extractFunctionErrorMessage(error);
-      toast.error(msg || 'فشل في تحضير التقرير للطباعة');
+      const parsed = await logFunctionError('generate-client-report:print', error);
+      toast.error(parsed.message || 'فشل في تحضير التقرير للطباعة');
     } finally {
       setIsPrinting(false);
     }
@@ -654,9 +669,8 @@ export function ClientReportModal({
       ]);
       toast.success('تم إرسال رابط التقرير عبر SMS بنجاح');
     } catch (error) {
-      console.error('Error sending SMS:', error);
-      const msg = await extractFunctionErrorMessage(error);
-      toast.error(msg || 'فشل في إرسال الرسالة');
+      const parsed = await logFunctionError('generate-client-report:sms', error);
+      toast.error(parsed.message || 'فشل في إرسال الرسالة');
     } finally {
       setSendingSms(false);
     }
