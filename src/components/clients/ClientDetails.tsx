@@ -73,6 +73,8 @@ import { PolicyDetailsDrawer } from '@/components/policies/PolicyDetailsDrawer';
 import { TransferPolicyModal } from '@/components/policies/TransferPolicyModal';
 import { CancelPolicyModal } from '@/components/policies/CancelPolicyModal';
 import { PolicyWizard } from '@/components/policies/PolicyWizard';
+import { PolicyEditDrawer } from '@/components/policies/PolicyEditDrawer';
+import { PackagePolicyEditModal } from '@/components/policies/PackagePolicyEditModal';
 import { ClientDrawer } from '@/components/clients/ClientDrawer';
 import { ClientSignatureSection } from '@/components/clients/ClientSignatureSection';
 import { PolicyYearTimeline } from '@/components/clients/PolicyYearTimeline';
@@ -317,6 +319,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [cancelPolicyIds, setCancelPolicyIds] = useState<string[]>([]);
   const [cancelInsurancePrice, setCancelInsurancePrice] = useState(0);
   const [cancelPolicyNumber, setCancelPolicyNumber] = useState<string | null>(null);
+
+  // Edit policy/package modals — opened directly from the dropdown so
+  // the user skips the "open drawer, find edit button" dance. Single
+  // policies go through PolicyEditDrawer (needs a fully hydrated row,
+  // so we fetch on demand) and package edits go through
+  // PackagePolicyEditModal which already fetches by group_id.
+  const [editPolicyOpen, setEditPolicyOpen] = useState(false);
+  const [editPolicyData, setEditPolicyData] = useState<any | null>(null);
+  const [editPackageGroupId, setEditPackageGroupId] = useState<string | null>(null);
   
   // Delete policy state (Super Admin only)
   const [deletePolicyIds, setDeletePolicyIds] = useState<string[]>([]);
@@ -1935,6 +1946,37 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 onPoliciesUpdate={fetchPolicies}
                 onRenewPolicy={handleRenewPolicy}
                 onRenewPackage={handleRenewPackage}
+                onEditPolicy={async (policyId) => {
+                  // PolicyEditDrawer needs a fully hydrated policy row
+                  // (clients.id, clients.less_than_24, cars.car_type/value/year,
+                  // insurance_companies.id, etc.) that the timeline fetch
+                  // doesn't carry. Pull the full row on demand so the
+                  // drawer can render its form without guessing.
+                  try {
+                    const { data, error } = await supabase
+                      .from('policies')
+                      .select(`
+                        id, group_id, policy_type_parent, policy_type_child,
+                        start_date, end_date, insurance_price, cancelled,
+                        transferred, transferred_car_number, is_under_24,
+                        notes, broker_id,
+                        clients!inner(id, full_name, less_than_24, under24_type, under24_driver_name, under24_driver_id),
+                        cars(id, car_number, car_type, car_value, year),
+                        insurance_companies(id, name, name_ar)
+                      `)
+                      .eq('id', policyId)
+                      .single();
+                    if (error) throw error;
+                    setEditPolicyData(data);
+                    setEditPolicyOpen(true);
+                  } catch (e: any) {
+                    console.error('Error loading policy for edit:', e);
+                    toast.error(e.message || 'فشل في تحميل الوثيقة');
+                  }
+                }}
+                onEditPackage={(groupId) => {
+                  setEditPackageGroupId(groupId);
+                }}
               />
             )}
           </TabsContent>
@@ -2501,6 +2543,40 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           />
         );
       })()}
+
+      {/* Policy edit drawer — opened directly from the timeline dropdown
+          for single policies. Needs a fully hydrated policy object, so
+          the dropdown handler fetches the row on demand before opening. */}
+      {editPolicyData && (
+        <PolicyEditDrawer
+          open={editPolicyOpen}
+          onOpenChange={(open) => {
+            setEditPolicyOpen(open);
+            if (!open) setEditPolicyData(null);
+          }}
+          policy={editPolicyData}
+          onSaved={async () => {
+            setEditPolicyOpen(false);
+            setEditPolicyData(null);
+            await fetchPolicies();
+          }}
+        />
+      )}
+
+      {/* Package edit modal — opened directly from the timeline dropdown
+          for package rows. It fetches every sibling in the group itself,
+          so it only needs the groupId. */}
+      <PackagePolicyEditModal
+        open={!!editPackageGroupId}
+        onOpenChange={(open) => {
+          if (!open) setEditPackageGroupId(null);
+        }}
+        groupId={editPackageGroupId}
+        onSaved={async () => {
+          setEditPackageGroupId(null);
+          await fetchPolicies();
+        }}
+      />
 
       {/* Cancel policy / package modal — opened directly from the
           PolicyYearTimeline dropdown so the user doesn't have to walk

@@ -27,6 +27,7 @@ import {
   MessageSquare,
   Save,
   X,
+  Pencil,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -86,6 +87,10 @@ interface PolicyYearTimelineProps {
   // Renewal handlers
   onRenewPolicy?: (policyId: string) => void;
   onRenewPackage?: (policyIds: string[]) => void;
+  // Edit handlers — open the policy/package edit dialogs directly from
+  // the dropdown without having to walk through the details drawer first.
+  onEditPolicy?: (policyId: string) => void;
+  onEditPackage?: (groupId: string) => void;
 }
 
 const policyTypeLabels: Record<string, string> = {
@@ -216,6 +221,8 @@ export function PolicyYearTimeline({
   onTransferPackage,
   onCancelPackage,
   onDeletePolicy,
+  onEditPolicy,
+  onEditPackage,
   onPoliciesUpdate,
   onRenewPolicy,
   onRenewPackage,
@@ -868,6 +875,8 @@ export function PolicyYearTimeline({
                         onDeletePolicy={onDeletePolicy}
                         onRenewPolicy={onRenewPolicy}
                         onRenewPackage={onRenewPackage}
+                        onEditPolicy={onEditPolicy}
+                        onEditPackage={onEditPackage}
                         isSuperAdmin={isSuperAdmin}
                         isAdmin={isAdmin}
                         isEditingNotes={editingNotesId === mainPolicy?.id}
@@ -985,6 +994,8 @@ function PolicyPackageCard({
   onDeletePolicy,
   onRenewPolicy,
   onRenewPackage,
+  onEditPolicy,
+  onEditPackage,
   isSuperAdmin,
   isAdmin,
   isEditingNotes,
@@ -1012,6 +1023,8 @@ function PolicyPackageCard({
   onDeletePolicy?: (ids: string[]) => void;
   onRenewPolicy?: (id: string) => void;
   onRenewPackage?: (ids: string[]) => void;
+  onEditPolicy?: (id: string) => void;
+  onEditPackage?: (groupId: string) => void;
   isSuperAdmin?: boolean;
   isAdmin?: boolean;
   isEditingNotes?: boolean;
@@ -1240,7 +1253,28 @@ function PolicyPackageCard({
                   <Eye className="h-4 w-4 ml-2" />
                   عرض التفاصيل
                 </DropdownMenuItem>
-                
+
+                {/* Edit — open the package/policy edit modal directly from
+                    the dropdown so the user doesn't have to walk through
+                    the details drawer first. Hidden for cancelled and
+                    transferred rows since those are locked anyway. */}
+                {!isCancelled && !isTransferred && (
+                  <>
+                    {isPkg && onEditPackage && policy.group_id && (
+                      <DropdownMenuItem onClick={() => onEditPackage(policy.group_id!)}>
+                        <Pencil className="h-4 w-4 ml-2" />
+                        تعديل الباقة
+                      </DropdownMenuItem>
+                    )}
+                    {!isPkg && onEditPolicy && (
+                      <DropdownMenuItem onClick={() => onEditPolicy(policy.id)}>
+                        <Pencil className="h-4 w-4 ml-2" />
+                        تعديل الوثيقة
+                      </DropdownMenuItem>
+                    )}
+                  </>
+                )}
+
                 {isActive && (
                   <>
                     <DropdownMenuSeparator />
@@ -1256,29 +1290,14 @@ function PolicyPackageCard({
                         تحويل الوثيقة
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuSeparator />
-                    {isPkg && onCancelPackage && (
-                      <DropdownMenuItem 
-                        className="text-destructive focus:text-destructive"
-                        onClick={() => onCancelPackage(pkg.allPolicyIds)}
-                      >
-                        <XCircle className="h-4 w-4 ml-2" />
-                        إلغاء الباقة
-                      </DropdownMenuItem>
-                    )}
-                    {!isPkg && onCancel && (
-                      <DropdownMenuItem 
-                        className="text-destructive focus:text-destructive"
-                        onClick={() => onCancel(policy.id)}
-                      >
-                        <XCircle className="h-4 w-4 ml-2" />
-                        إلغاء الوثيقة
-                      </DropdownMenuItem>
-                    )}
                   </>
                 )}
 
-                {/* Renewal Actions - for active and ended policies (not cancelled/transferred) */}
+                {/* Renewal — placed BEFORE cancel so the happier paths
+                    come first and destructive actions are pushed down
+                    the menu. Shown for active AND ended rows (you can
+                    still renew an expired policy) but not for cancelled
+                    or transferred ones. */}
                 {(isActive || pkg.status === 'ended') && !isTransferred && !isCancelled && (onRenewPolicy || onRenewPackage) && (
                   <>
                     <DropdownMenuSeparator />
@@ -1292,6 +1311,30 @@ function PolicyPackageCard({
                       <DropdownMenuItem onClick={() => onRenewPolicy(policy.id)}>
                         <RefreshCw className="h-4 w-4 ml-2" />
                         تجديد الوثيقة
+                      </DropdownMenuItem>
+                    )}
+                  </>
+                )}
+
+                {isActive && (
+                  <>
+                    <DropdownMenuSeparator />
+                    {isPkg && onCancelPackage && (
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => onCancelPackage(pkg.allPolicyIds)}
+                      >
+                        <XCircle className="h-4 w-4 ml-2" />
+                        إلغاء الباقة
+                      </DropdownMenuItem>
+                    )}
+                    {!isPkg && onCancel && (
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => onCancel(policy.id)}
+                      >
+                        <XCircle className="h-4 w-4 ml-2" />
+                        إلغاء الوثيقة
                       </DropdownMenuItem>
                     )}
                   </>
