@@ -1834,8 +1834,9 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 )}
               </Card>
             ) : (
-              <PolicyYearTimeline 
-                policies={filteredPolicies} 
+              <PolicyYearTimeline
+                policies={filteredPolicies}
+                clientPhone={client.phone_number}
                 paymentInfo={policyPaymentInfo}
                 accidentInfo={policyAccidentCounts}
                 childrenInfo={policyChildrenCounts}

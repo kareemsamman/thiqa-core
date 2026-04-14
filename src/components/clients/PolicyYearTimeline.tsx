@@ -29,6 +29,7 @@ import {
   X,
   Pencil,
   Handshake,
+  Printer,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -41,10 +42,11 @@ import { PackagePaymentModal } from './PackagePaymentModal';
 import { PaymentGroupDetailsDialog, type GroupedPayment } from './PaymentGroupDetailsDialog';
 import { PaymentEditDialog } from './PaymentEditDialog';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
-import { InvoiceSendPrintDialog } from '@/components/policies/InvoiceSendPrintDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { toastFunctionError } from '@/lib/functionError';
+import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { useAuth } from '@/hooks/useAuth';
 
 interface PolicyRecord {
@@ -77,6 +79,9 @@ interface PolicyRecord {
 
 interface PolicyYearTimelineProps {
   policies: PolicyRecord[];
+  /** Used in the SMS hover card on every policy row so staff can see
+      which number the invoice link will go to before they click. */
+  clientPhone?: string | null;
   paymentInfo?: Record<string, { paid: number; remaining: number }>;
   accidentInfo?: Record<string, number>;
   childrenInfo?: Record<string, number>;
@@ -213,12 +218,13 @@ interface YearGroup {
   packages: PolicyPackage[];
 }
 
-export function PolicyYearTimeline({ 
-  policies, 
+export function PolicyYearTimeline({
+  policies,
+  clientPhone,
   paymentInfo: externalPaymentInfo,
   accidentInfo: externalAccidentInfo,
   childrenInfo: externalChildrenInfo,
-  onPolicyClick, 
+  onPolicyClick,
   onPaymentAdded,
   onTransferPolicy,
   onCancelPolicy,
@@ -247,12 +253,6 @@ export function PolicyYearTimeline({
   const [packagePaymentOpen, setPackagePaymentOpen] = useState(false);
   const [selectedPackagePolicyIds, setSelectedPackagePolicyIds] = useState<string[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
-  const [sendingPolicy, setSendingPolicy] = useState<string | null>(null);
-  
-  // Invoice Send/Print Dialog state
-  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
-  const [invoiceDialogPolicyIds, setInvoiceDialogPolicyIds] = useState<string[]>([]);
-  const [invoiceDialogClientPhone, setInvoiceDialogClientPhone] = useState<string | null>(null);
 
   // Payment details dialog state — shows the same PaymentGroupDetailsDialog
   // that ClientDetails opens when clicking a payment row, so the summary
@@ -720,25 +720,58 @@ export function PolicyYearTimeline({
     }
   };
 
-  const handleOpenInvoiceDialog = async (e: React.MouseEvent, policyIds: string[]) => {
-    e.stopPropagation();
-    
-    // Try to get client phone number from policy
+  // Direct invoice actions triggered by the per-card hover buttons (no
+  // popup). Mirrors the logic inside InvoiceSendPrintDialog so staff can
+  // print or SMS an individual policy/package without an extra step.
+  const handleCardPrintInvoice = async (policyIds: string[], isPackage: boolean): Promise<boolean> => {
     try {
-      const { data: policyData } = await supabase
-        .from('policies')
-        .select('clients(phone_number)')
-        .eq('id', policyIds[0])
-        .single();
-      
-      const clientPhone = (policyData?.clients as any)?.phone_number || null;
-      setInvoiceDialogClientPhone(clientPhone);
-    } catch {
-      setInvoiceDialogClientPhone(null);
+      const functionName = isPackage ? 'send-package-invoice-sms' : 'send-invoice-sms';
+      const body = isPackage
+        ? { policy_ids: policyIds, skip_sms: true }
+        : { policy_id: policyIds[0], skip_sms: true };
+      const { data, error } = await supabase.functions.invoke(functionName, { body });
+      if (error) {
+        await toastFunctionError(error, 'فشل في تحميل الوثيقة');
+        return false;
+      }
+      if (data?.error) {
+        toast.error(data.error);
+        return false;
+      }
+      const invoiceUrl = data?.ab_invoice_url || data?.package_invoice_url || data?.invoice_url;
+      if (invoiceUrl) {
+        window.open(invoiceUrl, '_blank');
+        return true;
+      }
+      toast.error('لم يتم إنشاء رابط الوثيقة');
+      return false;
+    } catch (err: any) {
+      toast.error(err?.message || 'فشل في تحميل الوثيقة');
+      return false;
     }
-    
-    setInvoiceDialogPolicyIds(policyIds);
-    setInvoiceDialogOpen(true);
+  };
+
+  const handleCardSendInvoiceSms = async (policyIds: string[], isPackage: boolean): Promise<boolean> => {
+    try {
+      const functionName = isPackage ? 'send-package-invoice-sms' : 'send-invoice-sms';
+      const body = isPackage
+        ? { policy_ids: policyIds }
+        : { policy_id: policyIds[0], force_resend: true };
+      const { data, error } = await supabase.functions.invoke(functionName, { body });
+      if (error) {
+        await toastFunctionError(error, 'فشل في الإرسال');
+        return false;
+      }
+      if (data?.error) {
+        toast.error(data.error);
+        return false;
+      }
+      toast.success(isPackage ? 'تم إرسال الوثائق للعميل' : 'تم إرسال الوثيقة للعميل');
+      return true;
+    } catch (err: any) {
+      toast.error(err?.message || 'فشل في الإرسال');
+      return false;
+    }
   };
 
   const refreshPaymentInfo = async () => {
@@ -866,11 +899,13 @@ export function PolicyYearTimeline({
                         paymentStatus={getPackagePaymentStatus(pkg)}
                         accidentCount={accidentCount}
                         childrenCount={childrenCount}
+                        clientPhone={clientPhone}
                         getDocNumber={(id) => policyDocNumbers.get(id)}
                         onOpenPaymentDetails={handleOpenPaymentDetails}
                         onPolicyClick={onPolicyClick}
                         onPaymentClick={(e) => handlePackagePayment(e, pkg.allPolicyIds, pkg.mainPolicy?.branch_id || pkg.addons[0]?.branch_id || null)}
-                        onOpenInvoiceDialog={(e) => handleOpenInvoiceDialog(e, pkg.allPolicyIds)}
+                        onPrintInvoice={() => handleCardPrintInvoice(pkg.allPolicyIds, pkg.allPolicyIds.length > 1)}
+                        onSendInvoiceSms={() => handleCardSendInvoiceSms(pkg.allPolicyIds, pkg.allPolicyIds.length > 1)}
                         isPackage={pkg.allPolicyIds.length > 1}
                         onTransfer={onTransferPolicy}
                         onCancel={onCancelPolicy}
@@ -910,14 +945,6 @@ export function PolicyYearTimeline({
         onSuccess={async () => {
           if (onPaymentAdded) await onPaymentAdded();
         }}
-      />
-
-      <InvoiceSendPrintDialog
-        open={invoiceDialogOpen}
-        onOpenChange={setInvoiceDialogOpen}
-        policyIds={invoiceDialogPolicyIds}
-        isPackage={invoiceDialogPolicyIds.length > 1}
-        clientPhone={invoiceDialogClientPhone}
       />
 
       <PaymentGroupDetailsDialog
@@ -985,11 +1012,13 @@ function PolicyPackageCard({
   paymentStatus,
   accidentCount = 0,
   childrenCount = 0,
+  clientPhone,
   getDocNumber,
   onOpenPaymentDetails,
   onPolicyClick,
   onPaymentClick,
-  onOpenInvoiceDialog,
+  onPrintInvoice,
+  onSendInvoiceSms,
   isPackage: isPackageProp,
   onTransfer,
   onCancel,
@@ -1014,11 +1043,13 @@ function PolicyPackageCard({
   paymentStatus: { totalPaid: number; remaining: number; isPaid: boolean };
   accidentCount?: number;
   childrenCount?: number;
+  clientPhone?: string | null;
   getDocNumber?: (policyId: string) => number | undefined;
   onOpenPaymentDetails?: (policyIds: string[]) => void;
   onPolicyClick: (id: string) => void;
   onPaymentClick: (e: React.MouseEvent) => void;
-  onOpenInvoiceDialog: (e: React.MouseEvent) => void;
+  onPrintInvoice: () => Promise<boolean>;
+  onSendInvoiceSms: () => Promise<boolean>;
   isPackage: boolean;
   onTransfer?: (id: string) => void;
   onCancel?: (id: string) => void;
@@ -1047,6 +1078,7 @@ function PolicyPackageCard({
   const isCancelled = pkg.status === 'cancelled';
   const isPkg = isPackageProp || (pkg.addons.length > 0 && pkg.mainPolicy !== null);
   const hasUnpaid = !paymentStatus.isPaid;
+  const [invoiceBusy, setInvoiceBusy] = useState<'print' | 'sms' | null>(null);
 
   // Ref on the coverage-period cell so clicking the status badge can flash
   // the date to tell the user "this is what سارية is referring to".
@@ -1263,14 +1295,113 @@ function PolicyPackageCard({
               </Button>
             )}
 
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1 h-8"
-              onClick={onOpenInvoiceDialog}
-            >
-              <Send className="h-3.5 w-3.5" />
-            </Button>
+            {/* Print invoice — hover reveals a card with the action title
+                and a short description. Click triggers the print flow. */}
+            <HoverCard openDelay={120} closeDelay={80}>
+              <HoverCardTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                  disabled={invoiceBusy !== null}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (invoiceBusy) return;
+                    setInvoiceBusy('print');
+                    try {
+                      await onPrintInvoice();
+                    } finally {
+                      setInvoiceBusy(null);
+                    }
+                  }}
+                  aria-label="طباعة الوثيقة"
+                >
+                  {invoiceBusy === 'print' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Printer className="h-4 w-4" />
+                  )}
+                </Button>
+              </HoverCardTrigger>
+              <HoverCardContent
+                side="top"
+                align="end"
+                className="w-auto min-w-[220px] p-3 border-primary/20 shadow-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <Printer className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">طباعة الوثيقة</p>
+                    <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+                      فتح الوثيقة في نافذة جديدة للطباعة
+                    </p>
+                  </div>
+                </div>
+              </HoverCardContent>
+            </HoverCard>
+
+            {/* Send SMS — same pattern, richer hover card showing the exact
+                number the link will go to so staff can double-check before
+                clicking. */}
+            <HoverCard openDelay={120} closeDelay={80}>
+              <HoverCardTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
+                  disabled={invoiceBusy !== null || !clientPhone}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (invoiceBusy) return;
+                    if (!clientPhone) {
+                      toast.error('لا يوجد رقم هاتف للعميل');
+                      return;
+                    }
+                    setInvoiceBusy('sms');
+                    try {
+                      await onSendInvoiceSms();
+                    } finally {
+                      setInvoiceBusy(null);
+                    }
+                  }}
+                  aria-label="إرسال SMS للعميل"
+                >
+                  {invoiceBusy === 'sms' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+              </HoverCardTrigger>
+              <HoverCardContent
+                side="top"
+                align="end"
+                className="w-auto min-w-[260px] p-3 border-emerald-500/20 shadow-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                    <Send className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">إرسال SMS للعميل</p>
+                    {clientPhone ? (
+                      <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+                        سيتم إرسال رابط الوثيقة للرقم{' '}
+                        <span className="font-mono font-semibold text-foreground ltr-nums">
+                          {clientPhone}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-xs text-destructive leading-tight mt-0.5">
+                        لا يوجد رقم هاتف للعميل
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </HoverCardContent>
+            </HoverCard>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
