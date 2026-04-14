@@ -1459,7 +1459,7 @@ function PackageComponentRow({
       </span>
 
       {/* Price column */}
-      <div className="flex flex-col items-start min-w-[70px]">
+      <div className="flex flex-col items-end min-w-[70px]">
         <span className={cn(
           "font-semibold ltr-nums",
           isActive ? "text-foreground" : "text-muted-foreground"
