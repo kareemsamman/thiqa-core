@@ -846,90 +846,96 @@ export function ClientReportModal({
             <div className="absolute bottom-0 right-0 w-48 h-48 bg-white rounded-full translate-x-1/4 translate-y-1/4" />
           </div>
 
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            aria-label="إغلاق"
-            className="absolute left-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-md text-white/80 hover:text-white hover:bg-white/10 transition focus:outline-none focus:ring-2 focus:ring-white/40"
+          {/* Top toolbar: close X always on the visual left (Arabic
+              convention), SMS + print actions on the visual right. dir="ltr"
+              locks the order so the action buttons never wrap under the
+              close button on narrow screens. */}
+          <div
+            dir="ltr"
+            className="relative z-10 flex items-center justify-between px-4 py-3 border-b border-white/10"
           >
-            <X className="h-4 w-4" />
-          </button>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              aria-label="إغلاق"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-white/80 hover:text-white hover:bg-white/10 transition focus:outline-none focus:ring-2 focus:ring-white/40"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={handleSendSms}
+                disabled={sendingSms || !client.phone_number}
+                className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
+                title={!client.phone_number ? 'لا يوجد رقم هاتف' : 'إرسال رابط التقرير للعميل'}
+              >
+                {sendingSms ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MessageSquare className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">SMS</span>
+              </Button>
+              <Button
+                size="sm"
+                onClick={handlePrint}
+                disabled={isPrinting}
+                className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
+              >
+                {isPrinting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Printer className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">طباعة</span>
+              </Button>
+            </div>
+          </div>
 
-          <div className="relative px-4 sm:px-6 py-5 pl-14">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
-                  <User className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <h1 className="text-lg sm:text-xl font-bold text-white break-words">{client.full_name}</h1>
-                    <Badge className="bg-white/20 border-white/30 text-white font-medium">
-                      <IdCard className="h-3 w-3 ml-1" />
-                      <span className="ltr-nums">{client.id_number}</span>
-                    </Badge>
-                    {age !== null && (
-                      <Badge className="bg-white/20 border-white/30 text-white font-medium">
-                        {age} سنة
-                      </Badge>
-                    )}
-                    {walletBalance.total_refunds > 0 && (
-                      <Badge className="bg-amber-100 text-amber-900 border-amber-200 font-bold ltr-nums">
-                        رصيد للعميل: ₪{walletBalance.total_refunds.toLocaleString()}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-x-4 gap-y-1 mt-2 text-white/80 text-sm flex-wrap">
-                    {client.phone_number && (
-                      <div className="flex items-center gap-1">
-                        <Phone className="h-3.5 w-3.5" />
-                        <span className="ltr-nums">{client.phone_number}</span>
-                      </div>
-                    )}
-                    {client.file_number && (
-                      <div className="flex items-center gap-1">
-                        <FileText className="h-3.5 w-3.5" />
-                        <span>ملف #{client.file_number}</span>
-                      </div>
-                    )}
-                    {branchName && (
-                      <div className="flex items-center gap-1">
-                        <Building2 className="h-3.5 w-3.5" />
-                        <span>{branchName}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+          <div className="relative px-4 sm:px-6 py-5">
+            <div className="flex items-start gap-3 sm:gap-4 min-w-0">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
+                <User className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
               </div>
-
-              <div className="flex gap-2 shrink-0">
-                <Button
-                  size="sm"
-                  onClick={handleSendSms}
-                  disabled={sendingSms || !client.phone_number}
-                  className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
-                  title={!client.phone_number ? 'لا يوجد رقم هاتف' : 'إرسال رابط التقرير للعميل'}
-                >
-                  {sendingSms ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <MessageSquare className="h-4 w-4" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <h1 className="text-lg sm:text-xl font-bold text-white break-words">{client.full_name}</h1>
+                  <Badge className="bg-white/20 border-white/30 text-white font-medium">
+                    <IdCard className="h-3 w-3 ml-1" />
+                    <span className="ltr-nums">{client.id_number}</span>
+                  </Badge>
+                  {age !== null && (
+                    <Badge className="bg-white/20 border-white/30 text-white font-medium">
+                      {age} سنة
+                    </Badge>
                   )}
-                  <span className="hidden sm:inline">SMS</span>
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handlePrint}
-                  disabled={isPrinting}
-                  className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
-                >
-                  {isPrinting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Printer className="h-4 w-4" />
+                  {walletBalance.total_refunds > 0 && (
+                    <Badge className="bg-amber-100 text-amber-900 border-amber-200 font-bold ltr-nums">
+                      رصيد للعميل: ₪{walletBalance.total_refunds.toLocaleString()}
+                    </Badge>
                   )}
-                  <span className="hidden sm:inline">طباعة</span>
-                </Button>
+                </div>
+                <div className="flex items-center gap-x-4 gap-y-1 mt-2 text-white/80 text-sm flex-wrap">
+                  {client.phone_number && (
+                    <div className="flex items-center gap-1">
+                      <Phone className="h-3.5 w-3.5" />
+                      <span className="ltr-nums">{client.phone_number}</span>
+                    </div>
+                  )}
+                  {client.file_number && (
+                    <div className="flex items-center gap-1">
+                      <FileText className="h-3.5 w-3.5" />
+                      <span>ملف #{client.file_number}</span>
+                    </div>
+                  )}
+                  {branchName && (
+                    <div className="flex items-center gap-1">
+                      <Building2 className="h-3.5 w-3.5" />
+                      <span>{branchName}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
