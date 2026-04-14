@@ -1216,7 +1216,14 @@ function PolicyPackageCard({
               <FileText className="h-3.5 w-3.5" />
               مكونات الباقة
             </div>
-            <div className="space-y-1">
+            <div className="rounded-lg border border-border/60 overflow-hidden bg-muted/20">
+              {/* Table header */}
+              <div className="grid grid-cols-[2rem_1fr_auto_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
+                <span className="text-center">#</span>
+                <span>الوثيقة</span>
+                <span className="ltr-nums">الفترة</span>
+                <span className="text-left min-w-[70px]">السعر</span>
+              </div>
               {/* Main policy */}
               <PackageComponentRow
                 policy={pkg.mainPolicy}
@@ -1232,44 +1239,48 @@ function PolicyPackageCard({
                   index={getDocNumber?.(addon.id)}
                 />
               ))}
-              {/* Totals footer row — same row shell as the breakdown rows
-                  above, but with its content pushed to the left via
-                  mr-auto so the values sit flush with the card edge. */}
-              <div className="flex items-center justify-between text-xs rounded-md px-2.5 py-1.5">
-                <div className="flex items-center gap-3 shrink-0 mr-auto">
-                  <div className="flex flex-col items-end min-w-[70px]">
-                    <span className="font-semibold ltr-nums text-left text-foreground">
-                      المدفوع : ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
-                    </span>
-                    <span className={cn(
-                      "font-semibold ltr-nums text-left",
-                      paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
-                    )}>
-                      المتبقي للدفع : ₪{paymentStatus.remaining.toLocaleString('en-US')}
-                    </span>
-                  </div>
+              {/* Totals footer row */}
+              <div className="flex items-start justify-start gap-6 px-3 py-2 border-t border-border/60 bg-muted/30">
+                <div className="flex flex-col text-xs">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
+                  <span className="font-bold text-success ltr-nums">
+                    ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
+                  </span>
+                </div>
+                <div className="flex flex-col text-xs">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
+                  <span className={cn(
+                    "font-bold ltr-nums",
+                    paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
+                  )}>
+                    ₪{paymentStatus.remaining.toLocaleString('en-US')}
+                  </span>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Standalone policy totals — same footer row for single-policy cards
+        {/* Standalone policy totals — same framed footer for single-policy cards
             (which don't render مكونات الباقة) so every card surfaces the same
             paid/remaining summary in the same place. */}
         {!isPkg && isActive && (
           <div className="mt-3 pt-3 border-t border-border/50">
-            <div className="flex items-center justify-between text-xs rounded-md px-2.5 py-1.5">
-              <div className="flex items-center gap-3 shrink-0 mr-auto">
-                <div className="flex flex-col items-end min-w-[70px]">
-                  <span className="font-semibold ltr-nums text-left text-foreground">
-                    المدفوع : ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
+            <div className="rounded-lg border border-border/60 bg-muted/20">
+              <div className="flex items-start justify-start gap-6 px-3 py-2">
+                <div className="flex flex-col text-xs">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
+                  <span className="font-bold text-success ltr-nums">
+                    ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
                   </span>
+                </div>
+                <div className="flex flex-col text-xs">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
                   <span className={cn(
-                    "font-semibold ltr-nums text-left",
+                    "font-bold ltr-nums",
                     paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
                   )}>
-                    المتبقي للدفع : ₪{paymentStatus.remaining.toLocaleString('en-US')}
+                    ₪{paymentStatus.remaining.toLocaleString('en-US')}
                   </span>
                 </div>
               </div>
@@ -1377,54 +1388,61 @@ function PackageComponentRow({
     <div
       data-policy-row-id={policy.id}
       className={cn(
-        "flex items-center justify-between text-xs rounded-md px-2.5 py-1.5",
-        isActive ? "bg-muted/40" : "bg-muted/20"
+        "grid grid-cols-[2rem_1fr_auto_auto] items-center gap-3 px-3 py-2 text-xs border-b border-border/60 last:border-b-0 transition-colors hover:bg-muted/30",
+        !isActive && "opacity-70"
       )}
     >
+      {/* # column */}
+      {index !== undefined ? (
+        <span
+          data-doc-number
+          className="text-[10px] font-bold text-muted-foreground ltr-nums text-center"
+        >
+          #{index}
+        </span>
+      ) : (
+        <span />
+      )}
+
+      {/* Policy column: type badge + service subtype + company */}
       <div className="flex items-center gap-2 min-w-0">
-        {index !== undefined && (
-          <span
-            data-doc-number
-            className="text-[10px] font-bold text-muted-foreground ltr-nums w-5 text-center"
-          >
-            #{index}
-          </span>
-        )}
-        <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border", typeColor)}>
+        <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border shrink-0", typeColor)}>
           {typeLabel}
         </Badge>
         {policy.policy_type_parent === 'ROAD_SERVICE' && (policy.road_service?.name_ar || policy.road_service?.name) && (
-          <span className="text-[10px] font-semibold text-orange-700 bg-orange-500/10 border border-orange-500/30 rounded px-1.5 py-0 h-5 inline-flex items-center">
+          <span className="text-[10px] font-semibold text-orange-700 bg-orange-500/10 border border-orange-500/30 rounded px-1.5 py-0 h-5 inline-flex items-center shrink-0">
             {policy.road_service?.name_ar || policy.road_service?.name}
           </span>
         )}
         <span className={cn(
-          "truncate max-w-[120px]",
+          "truncate",
           isActive ? "text-muted-foreground" : "text-muted-foreground/70"
         )}>
           {getProviderName()}
         </span>
       </div>
-      <div className="flex items-center gap-3 shrink-0">
+
+      {/* Period column */}
+      <span className={cn(
+        "ltr-nums text-[11px] shrink-0",
+        isActive ? "text-muted-foreground" : "text-muted-foreground/70"
+      )}>
+        {formatDate(policy.end_date)} ← {formatDate(policy.start_date)}
+      </span>
+
+      {/* Price column */}
+      <div className="flex flex-col items-start min-w-[70px]">
         <span className={cn(
-          "ltr-nums text-[11px]",
-          isActive ? "text-muted-foreground" : "text-muted-foreground/70"
+          "font-semibold ltr-nums",
+          isActive ? "text-foreground" : "text-muted-foreground"
         )}>
-          {formatDate(policy.end_date)} ← {formatDate(policy.start_date)}
+          ₪{policy.insurance_price.toLocaleString('en-US')}
         </span>
-        <div className="flex flex-col items-end min-w-[70px]">
-          <span className={cn(
-            "font-semibold ltr-nums text-left",
-            isActive ? "text-foreground" : "text-muted-foreground"
-          )}>
-            ₪{policy.insurance_price.toLocaleString('en-US')}
+        {commission > 0 && (
+          <span className="text-[9px] text-amber-700 font-semibold ltr-nums">
+            + ₪{commission.toLocaleString('en-US')} عمولة
           </span>
-          {commission > 0 && (
-            <span className="text-[9px] text-amber-700 font-semibold ltr-nums">
-              + ₪{commission.toLocaleString('en-US')} عمولة
-            </span>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
