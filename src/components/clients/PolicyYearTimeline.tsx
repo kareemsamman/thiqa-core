@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PackagePaymentModal } from './PackagePaymentModal';
+import { PackagePaymentsDetailsDialog } from './PackagePaymentsDetailsDialog';
 import { InvoiceSendPrintDialog } from '@/components/policies/InvoiceSendPrintDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -239,6 +240,10 @@ export function PolicyYearTimeline({
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [invoiceDialogPolicyIds, setInvoiceDialogPolicyIds] = useState<string[]>([]);
   const [invoiceDialogClientPhone, setInvoiceDialogClientPhone] = useState<string | null>(null);
+
+  // Payment details dialog state
+  const [paymentDetailsOpen, setPaymentDetailsOpen] = useState(false);
+  const [paymentDetailsPolicyIds, setPaymentDetailsPolicyIds] = useState<string[]>([]);
   // Notes editing state
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [editedNotesValue, setEditedNotesValue] = useState('');
@@ -738,6 +743,10 @@ export function PolicyYearTimeline({
                         accidentCount={accidentCount}
                         childrenCount={childrenCount}
                         getDocNumber={(id) => policyDocNumbers.get(id)}
+                        onOpenPaymentDetails={(ids) => {
+                          setPaymentDetailsPolicyIds(ids);
+                          setPaymentDetailsOpen(true);
+                        }}
                         onPolicyClick={onPolicyClick}
                         onPaymentClick={(e) => handlePackagePayment(e, pkg.allPolicyIds, pkg.mainPolicy?.branch_id || pkg.addons[0]?.branch_id || null)}
                         onOpenInvoiceDialog={(e) => handleOpenInvoiceDialog(e, pkg.allPolicyIds)}
@@ -787,6 +796,13 @@ export function PolicyYearTimeline({
         isPackage={invoiceDialogPolicyIds.length > 1}
         clientPhone={invoiceDialogClientPhone}
       />
+
+      <PackagePaymentsDetailsDialog
+        open={paymentDetailsOpen}
+        onOpenChange={setPaymentDetailsOpen}
+        policyIds={paymentDetailsPolicyIds}
+        onChange={() => { if (onPaymentAdded) onPaymentAdded(); }}
+      />
     </div>
   );
 }
@@ -798,6 +814,7 @@ function PolicyPackageCard({
   accidentCount = 0,
   childrenCount = 0,
   getDocNumber,
+  onOpenPaymentDetails,
   onPolicyClick,
   onPaymentClick,
   onOpenInvoiceDialog,
@@ -824,6 +841,7 @@ function PolicyPackageCard({
   accidentCount?: number;
   childrenCount?: number;
   getDocNumber?: (policyId: string) => number | undefined;
+  onOpenPaymentDetails?: (policyIds: string[]) => void;
   onPolicyClick: (id: string) => void;
   onPaymentClick: (e: React.MouseEvent) => void;
   onOpenInvoiceDialog: (e: React.MouseEvent) => void;
@@ -1240,7 +1258,12 @@ function PolicyPackageCard({
                 />
               ))}
               {/* Totals footer row */}
-              <div className="flex items-start justify-start gap-6 px-3 py-2 border-t border-border/60 bg-muted/30">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onOpenPaymentDetails?.(pkg.allPolicyIds); }}
+                className="w-full flex items-start justify-end gap-6 px-3 py-2 border-t border-border/60 bg-muted/30 hover:bg-muted/50 transition-colors text-right focus:outline-none focus:ring-2 focus:ring-primary/40"
+                title="عرض تفاصيل الدفعات"
+              >
                 <div className="flex flex-col text-xs">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
                   <span className="font-bold text-success ltr-nums">
@@ -1256,7 +1279,7 @@ function PolicyPackageCard({
                     ₪{paymentStatus.remaining.toLocaleString('en-US')}
                   </span>
                 </div>
-              </div>
+              </button>
             </div>
           </div>
         )}
@@ -1266,8 +1289,13 @@ function PolicyPackageCard({
             paid/remaining summary in the same place. */}
         {!isPkg && isActive && (
           <div className="mt-3 pt-3 border-t border-border/50">
-            <div className="rounded-lg border border-border/60 bg-muted/20">
-              <div className="flex items-start justify-start gap-6 px-3 py-2">
+            <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onOpenPaymentDetails?.([policy.id]); }}
+                className="w-full flex items-start justify-end gap-6 px-3 py-2 hover:bg-muted/50 transition-colors text-right focus:outline-none focus:ring-2 focus:ring-primary/40"
+                title="عرض تفاصيل الدفعات"
+              >
                 <div className="flex flex-col text-xs">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
                   <span className="font-bold text-success ltr-nums">
@@ -1283,7 +1311,7 @@ function PolicyPackageCard({
                     ₪{paymentStatus.remaining.toLocaleString('en-US')}
                   </span>
                 </div>
-              </div>
+              </button>
             </div>
           </div>
         )}
