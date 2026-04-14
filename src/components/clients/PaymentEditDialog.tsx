@@ -21,7 +21,7 @@ import {
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, FileImage, ExternalLink, Trash2 } from "lucide-react";
+import { Loader2, Trash2, Upload, X, FileText, ImageIcon } from "lucide-react";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from "@/lib/chequeUtils";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -106,6 +106,33 @@ export function PaymentEditDialog({
     refused: false,
   });
 
+  // Attached files managed inline: existing payment_images rows the user
+  // can delete + brand-new uploads that go straight to the CDN.
+  const [attachedImages, setAttachedImages] = useState<
+    { id: string; image_url: string; image_type: string | null }[]
+  >([]);
+  const [loadingImages, setLoadingImages] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
+
+  const fetchAttachedImages = async (paymentId: string) => {
+    setLoadingImages(true);
+    try {
+      const { data, error } = await supabase
+        .from('payment_images')
+        .select('id, image_url, image_type')
+        .eq('payment_id', paymentId)
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      setAttachedImages((data as any[]) || []);
+    } catch (e) {
+      console.error('[PaymentEditDialog] fetch images error:', e);
+      setAttachedImages([]);
+    } finally {
+      setLoadingImages(false);
+    }
+  };
+
   // Reset form when payment changes
   useEffect(() => {
     if (payment) {
@@ -116,8 +143,87 @@ export function PaymentEditDialog({
         cheque_number: payment.cheque_number || '',
         refused: payment.refused || false,
       });
+      fetchAttachedImages(payment.id);
+    } else {
+      setAttachedImages([]);
     }
-  }, [payment]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payment?.id]);
+
+  const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!payment) return;
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    setUploadingImage(true);
+    try {
+      let nextSortOrder = attachedImages.length;
+      for (const file of files) {
+        const isImage = file.type.startsWith('image/');
+        const isPdf = file.type === 'application/pdf';
+        if (!isImage && !isPdf) {
+          toast.error('يرجى اختيار صور أو ملفات PDF فقط');
+          continue;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          toast.error('حجم الملف يجب أن يكون أقل من 10MB');
+          continue;
+        }
+
+        const formDataBody = new FormData();
+        formDataBody.append('file', file);
+        formDataBody.append('entity_type', 'payment');
+        formDataBody.append('entity_id', payment.id);
+
+        const { data, error } = await supabase.functions.invoke('upload-media', {
+          body: formDataBody,
+        });
+        if (error) throw error;
+        const cdnUrl = (data as any)?.file?.cdn_url || (data as any)?.url;
+        if (!cdnUrl) continue;
+
+        const { data: inserted, error: insertError } = await supabase
+          .from('payment_images')
+          .insert({
+            payment_id: payment.id,
+            image_url: cdnUrl,
+            image_type: 'receipt',
+            sort_order: nextSortOrder++,
+          })
+          .select('id, image_url, image_type')
+          .single();
+        if (insertError) throw insertError;
+        if (inserted) {
+          setAttachedImages((prev) => [...prev, inserted as any]);
+        }
+      }
+      toast.success('تم رفع الملف');
+    } catch (err: any) {
+      console.error('[PaymentEditDialog] upload error:', err);
+      toast.error(err?.message || 'فشل رفع الملف');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleDeleteImage = async (imageId: string) => {
+    setDeletingImageId(imageId);
+    try {
+      const { error } = await supabase
+        .from('payment_images')
+        .delete()
+        .eq('id', imageId);
+      if (error) throw error;
+      setAttachedImages((prev) => prev.filter((img) => img.id !== imageId));
+      toast.success('تم حذف الملف');
+    } catch (err: any) {
+      console.error('[PaymentEditDialog] delete image error:', err);
+      toast.error(err?.message || 'فشل حذف الملف');
+    } finally {
+      setDeletingImageId(null);
+    }
+  };
 
   const handleSave = async () => {
     if (!payment) return;
@@ -233,7 +339,6 @@ export function PaymentEditDialog({
           ) : (
             payment.policy && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>الوثيقة:</span>
                 <Badge variant="outline">
                   {getInsuranceTypeLabel(payment.policy.policy_type_parent as any, (payment.policy.policy_type_child || null) as any)}
                 </Badge>
@@ -324,22 +429,103 @@ export function PaymentEditDialog({
             />
           </div>
 
-          {/* Cheque Image Link */}
-          {payment.cheque_image_url && (
-            <div className="space-y-2">
-              <Label>صورة الإيصال</Label>
-              <a
-                href={payment.cheque_image_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-primary hover:underline text-sm"
-              >
-                <FileImage className="h-4 w-4" />
-                عرض الملف المرفق
-                <ExternalLink className="h-3 w-3" />
-              </a>
+          {/* Attached files — delete / add inline */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1 text-xs">
+              <ImageIcon className="h-3 w-3" />
+              الملفات المرفقة
+            </Label>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Legacy cheque image stored on the payment row itself */}
+              {payment.cheque_image_url && (
+                <a
+                  href={payment.cheque_image_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative h-16 w-16 rounded border overflow-hidden bg-muted flex items-center justify-center"
+                  title="صورة الشيك الأصلية"
+                >
+                  <img
+                    src={payment.cheque_image_url}
+                    alt="cheque"
+                    className="w-full h-full object-cover"
+                  />
+                </a>
+              )}
+              {loadingImages && (
+                <div className="h-16 w-16 rounded border flex items-center justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {attachedImages.map((img) => {
+                const isPdf = img.image_url.toLowerCase().endsWith('.pdf');
+                const isDeleting = deletingImageId === img.id;
+                return (
+                  <div key={img.id} className="relative group">
+                    <a
+                      href={img.image_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block h-16 w-16 rounded border overflow-hidden bg-muted flex items-center justify-center"
+                      title={img.image_type || 'مرفق'}
+                    >
+                      {isPdf ? (
+                        <div className="flex flex-col items-center justify-center gap-0.5">
+                          <FileText className="h-5 w-5 text-red-500" />
+                          <span className="text-[9px] font-bold text-red-500">PDF</span>
+                        </div>
+                      ) : (
+                        <img
+                          src={img.image_url}
+                          alt={img.image_type || ''}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                    </a>
+                    {!isLocked && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteImage(img.id)}
+                        disabled={isDeleting}
+                        className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                      >
+                        {isDeleting ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <X className="h-3 w-3" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {!isLocked && (
+                <label
+                  className="h-16 w-16 border-2 border-dashed rounded flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors"
+                  title="إضافة ملف"
+                >
+                  {uploadingImage ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Upload className="h-5 w-5 text-muted-foreground" />
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    multiple
+                    className="hidden"
+                    onChange={handleUploadImage}
+                    disabled={uploadingImage}
+                  />
+                </label>
+              )}
             </div>
-          )}
+            {!payment.cheque_image_url && !loadingImages && attachedImages.length === 0 && !isLocked && (
+              <p className="text-[11px] text-muted-foreground">
+                لا توجد ملفات مرفقة — اضغط على زر الرفع لإضافة صورة أو PDF.
+              </p>
+            )}
+          </div>
 
           {/* Refused Checkbox */}
           <div className="flex items-center gap-3 pt-2">

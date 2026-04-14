@@ -250,10 +250,13 @@ export function PolicyYearTimeline({
   const [paymentDetailsGroup, setPaymentDetailsGroup] = useState<GroupedPayment | null>(null);
   const [paymentDetailsPolicyIds, setPaymentDetailsPolicyIds] = useState<string[]>([]);
 
-  // Edit / delete a specific payment from inside the details popup
+  // Edit / delete a specific payment from inside the details popup.
+  // reopenDetailsAfterClose is a ref (not state) so toggling it doesn't
+  // cause a re-render and it's always readable from the latest closure.
   const [editPayment, setEditPayment] = useState<any | null>(null);
   const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null);
   const [deletingPayment, setDeletingPayment] = useState(false);
+  const reopenDetailsAfterClose = useRef(false);
   // Notes editing state
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [editedNotesValue, setEditedNotesValue] = useState('');
@@ -694,13 +697,15 @@ export function PolicyYearTimeline({
         .eq('id', deletePaymentId);
       if (error) throw error;
       toast.success('تم حذف الدفعة');
-      setDeletePaymentId(null);
       if (onPaymentAdded) await onPaymentAdded();
+      // onOpenChange will handle reopening the details popup once the
+      // confirm dialog unmounts — we just flush state here.
     } catch (e: any) {
       console.error('[PolicyYearTimeline] delete payment error:', e);
       toast.error(e?.message || 'فشل حذف الدفعة');
     } finally {
       setDeletingPayment(false);
+      setDeletePaymentId(null);
     }
   };
 
@@ -909,27 +914,49 @@ export function PolicyYearTimeline({
           if (!o) setPaymentDetailsGroup(null);
         }}
         group={paymentDetailsGroup}
-        onEdit={(p) => setEditPayment(p)}
-        onDelete={(p) => setDeletePaymentId(p.id)}
+        onEdit={(p) => {
+          reopenDetailsAfterClose.current = true;
+          setEditPayment(p);
+        }}
+        onDelete={(p) => {
+          reopenDetailsAfterClose.current = true;
+          setDeletePaymentId(p.id);
+        }}
       />
 
       <PaymentEditDialog
         open={!!editPayment}
-        onOpenChange={(o) => !o && setEditPayment(null)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditPayment(null);
+            // Re-open the group details popup the user came from so a
+            // save/cancel/delete round-trip lands them back where they
+            // were instead of on the bare page.
+            if (reopenDetailsAfterClose.current && paymentDetailsPolicyIds.length > 0) {
+              reopenDetailsAfterClose.current = false;
+              handleOpenPaymentDetails(paymentDetailsPolicyIds);
+            }
+          }
+        }}
         payment={editPayment}
         onSuccess={async () => {
-          setEditPayment(null);
           if (onPaymentAdded) await onPaymentAdded();
-          // Refresh the details popup so the user can keep drilling in.
-          if (paymentDetailsPolicyIds.length > 0) {
-            await handleOpenPaymentDetails(paymentDetailsPolicyIds);
-          }
         }}
       />
 
       <DeleteConfirmDialog
         open={!!deletePaymentId}
-        onOpenChange={(o) => !o && setDeletePaymentId(null)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDeletePaymentId(null);
+            // Re-open the details popup on both confirm and cancel so
+            // the user doesn't lose their drilled-in context.
+            if (reopenDetailsAfterClose.current && paymentDetailsPolicyIds.length > 0) {
+              reopenDetailsAfterClose.current = false;
+              handleOpenPaymentDetails(paymentDetailsPolicyIds);
+            }
+          }
+        }}
         onConfirm={handleDeletePaymentConfirm}
         title="حذف الدفعة"
         description="هل أنت متأكد من حذف هذه الدفعة؟ لا يمكن التراجع عن هذا الإجراء."

@@ -334,6 +334,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [groupDetailsOpen, setGroupDetailsOpen] = useState(false);
   const [groupDetailsGroup, setGroupDetailsGroup] = useState<GroupedPayment | null>(null);
   const [deletingPayment, setDeletingPayment] = useState(false);
+  // Group key to re-open the PaymentGroupDetailsDialog with after an
+  // edit/delete round-trip. Set to the current group's id when the user
+  // clicks pencil/trash inside the popup, then consumed by the effect
+  // below once the inner dialog has closed.
+  const [pendingReopenGroupKey, setPendingReopenGroupKey] = useState<string | null>(null);
   
   // Payment edit state
   const [editPaymentDialogOpen, setEditPaymentDialogOpen] = useState(false);
@@ -1301,10 +1306,31 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     }
     
     // Sort by date descending
-    return Array.from(groups.values()).sort((a, b) => 
+    return Array.from(groups.values()).sort((a, b) =>
       new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()
     );
   }, [payments, paymentSearch, paymentTypeFilter, policies]);
+
+  // Re-open the PaymentGroupDetailsDialog with the freshest version of
+  // the group the user was drilled into. Runs whenever groupedPayments
+  // changes (e.g. after a refetch following save/delete) AND a reopen
+  // is pending AND no inner dialog is still mounted. The key stays
+  // "sticky" while the popup is open so every subsequent refetch also
+  // re-syncs the displayed group — otherwise the popup would show a
+  // stale cached copy that was captured before the fetches resolved.
+  // If the group has been emptied entirely (every payment deleted) we
+  // just clear the pending key without reopening.
+  useEffect(() => {
+    if (!pendingReopenGroupKey) return;
+    if (editPaymentDialogOpen || deletePaymentDialogOpen) return;
+    const fresh = groupedPayments.find((g) => g.id === pendingReopenGroupKey);
+    if (fresh) {
+      setGroupDetailsGroup(fresh);
+      setGroupDetailsOpen(true);
+    } else {
+      setPendingReopenGroupKey(null);
+    }
+  }, [pendingReopenGroupKey, groupedPayments, editPaymentDialogOpen, deletePaymentDialogOpen]);
 
   // Loading skeleton
   if (initialLoading) {
@@ -2492,11 +2518,20 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         open={groupDetailsOpen}
         onOpenChange={(o) => {
           setGroupDetailsOpen(o);
-          if (!o) setGroupDetailsGroup(null);
+          if (!o) {
+            setGroupDetailsGroup(null);
+            // User explicitly closed the popup — drop any lingering
+            // reopen intent so refetches don't resurrect it.
+            setPendingReopenGroupKey(null);
+          }
         }}
         group={groupDetailsGroup}
-        onEdit={(payment) => handleEditPayment(payment as any, groupDetailsGroup ?? undefined)}
+        onEdit={(payment) => {
+          setPendingReopenGroupKey(groupDetailsGroup?.id ?? null);
+          handleEditPayment(payment as any, groupDetailsGroup ?? undefined);
+        }}
         onDelete={(payment) => {
+          setPendingReopenGroupKey(groupDetailsGroup?.id ?? null);
           setDeletePaymentId(payment.id);
           setDeletePaymentDialogOpen(true);
         }}
