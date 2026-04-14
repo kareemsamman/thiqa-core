@@ -18,6 +18,8 @@ import {
   Loader2,
   ImageIcon,
   FileText,
+  Pencil,
+  Trash2,
   X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -59,6 +61,12 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   group: GroupedPayment | null;
+  // Optional CRUD hooks — when provided, each payment card gets
+  // pencil/trash icon buttons. The dialog closes before calling the
+  // handler so the parent can open its own edit/confirm dialog on top
+  // without z-index fights.
+  onEdit?: (payment: PaymentRecord) => void;
+  onDelete?: (payment: PaymentRecord) => void;
 }
 
 const paymentTypeIcon: Record<string, typeof Banknote> = {
@@ -106,10 +114,26 @@ const buildGalleryFile = (
   };
 };
 
-export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) {
+export function PaymentGroupDetailsDialog({
+  open,
+  onOpenChange,
+  group,
+  onEdit,
+  onDelete,
+}: Props) {
   const [printing, setPrinting] = useState(false);
   const [imagesByPayment, setImagesByPayment] = useState<Record<string, { id: string; image_url: string; image_type: string | null }[]>>({});
   const [galleryFile, setGalleryFile] = useState<GalleryFile | null>(null);
+
+  const handleEditClick = (p: PaymentRecord) => {
+    onOpenChange(false);
+    onEdit?.(p);
+  };
+
+  const handleDeleteClick = (p: PaymentRecord) => {
+    onOpenChange(false);
+    onDelete?.(p);
+  };
 
   // Fetch payment_images for every payment in the group whenever the
   // dialog opens so the user can see receipts / cheque scans / whatever
@@ -277,6 +301,32 @@ export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) 
                       </p>
                     </div>
                   </div>
+                  {(onEdit || onDelete) && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      {onEdit && !p.locked && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={() => handleEditClick(p)}
+                          title="تعديل"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {onDelete && !p.locked && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          onClick={() => handleDeleteClick(p)}
+                          title="حذف"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {(p.cheque_number || p.card_last_four || p.notes || (imagesByPayment[p.id]?.length ?? 0) > 0) && (
                   <div className="px-4 py-3 space-y-2 text-xs">

@@ -2495,6 +2495,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           if (!o) setGroupDetailsGroup(null);
         }}
         group={groupDetailsGroup}
+        onEdit={(payment) => handleEditPayment(payment as any, groupDetailsGroup ?? undefined)}
+        onDelete={(payment) => {
+          setDeletePaymentId(payment.id);
+          setDeletePaymentDialogOpen(true);
+        }}
       />
 
       {/* Super Admin: Delete Policy Confirmation Dialog */}

@@ -37,6 +37,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PackagePaymentModal } from './PackagePaymentModal';
 import { PaymentGroupDetailsDialog, type GroupedPayment } from './PaymentGroupDetailsDialog';
+import { PaymentEditDialog } from './PaymentEditDialog';
+import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 import { InvoiceSendPrintDialog } from '@/components/policies/InvoiceSendPrintDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -246,6 +248,12 @@ export function PolicyYearTimeline({
   // button and the table row route to an identical popup.
   const [paymentDetailsOpen, setPaymentDetailsOpen] = useState(false);
   const [paymentDetailsGroup, setPaymentDetailsGroup] = useState<GroupedPayment | null>(null);
+  const [paymentDetailsPolicyIds, setPaymentDetailsPolicyIds] = useState<string[]>([]);
+
+  // Edit / delete a specific payment from inside the details popup
+  const [editPayment, setEditPayment] = useState<any | null>(null);
+  const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null);
+  const [deletingPayment, setDeletingPayment] = useState(false);
   // Notes editing state
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [editedNotesValue, setEditedNotesValue] = useState('');
@@ -601,16 +609,20 @@ export function PolicyYearTimeline({
   // Fetch all payments across the clicked package's policies and wrap them
   // in a single GroupedPayment so PaymentGroupDetailsDialog (the same popup
   // the ClientDetails payments table uses) can render them as-is.
+  // Extra fields (policy_id, cheque_image_url, policy_type_child) are
+  // selected so we can hand the raw row straight to PaymentEditDialog
+  // when the user clicks the pencil icon inside the popup.
   const handleOpenPaymentDetails = async (policyIds: string[]) => {
     if (policyIds.length === 0) return;
+    setPaymentDetailsPolicyIds(policyIds);
     try {
       const { data, error } = await supabase
         .from('policy_payments')
         .select(`
-          id, amount, payment_date, payment_type, cheque_number,
-          card_last_four, refused, locked, notes,
+          id, policy_id, amount, payment_date, payment_type, cheque_number,
+          cheque_image_url, card_last_four, refused, locked, notes,
           policy:policies!policy_payments_policy_id_fkey(
-            id, policy_type_parent, insurance_price
+            id, policy_type_parent, policy_type_child, insurance_price
           )
         `)
         .in('policy_id', policyIds)
@@ -620,10 +632,12 @@ export function PolicyYearTimeline({
 
       const payments = ((data as any[]) || []).map((p) => ({
         id: p.id,
+        policy_id: p.policy_id,
         amount: Number(p.amount || 0),
         payment_date: p.payment_date,
         payment_type: p.payment_type,
         cheque_number: p.cheque_number,
+        cheque_image_url: p.cheque_image_url,
         card_last_four: p.card_last_four,
         refused: p.refused,
         locked: p.locked,
@@ -667,6 +681,26 @@ export function PolicyYearTimeline({
     } catch (e) {
       console.error('[PolicyYearTimeline] open payment details error:', e);
       toast.error('فشل تحميل تفاصيل الدفعات');
+    }
+  };
+
+  const handleDeletePaymentConfirm = async () => {
+    if (!deletePaymentId) return;
+    setDeletingPayment(true);
+    try {
+      const { error } = await supabase
+        .from('policy_payments')
+        .delete()
+        .eq('id', deletePaymentId);
+      if (error) throw error;
+      toast.success('تم حذف الدفعة');
+      setDeletePaymentId(null);
+      if (onPaymentAdded) await onPaymentAdded();
+    } catch (e: any) {
+      console.error('[PolicyYearTimeline] delete payment error:', e);
+      toast.error(e?.message || 'فشل حذف الدفعة');
+    } finally {
+      setDeletingPayment(false);
     }
   };
 
@@ -875,6 +909,31 @@ export function PolicyYearTimeline({
           if (!o) setPaymentDetailsGroup(null);
         }}
         group={paymentDetailsGroup}
+        onEdit={(p) => setEditPayment(p)}
+        onDelete={(p) => setDeletePaymentId(p.id)}
+      />
+
+      <PaymentEditDialog
+        open={!!editPayment}
+        onOpenChange={(o) => !o && setEditPayment(null)}
+        payment={editPayment}
+        onSuccess={async () => {
+          setEditPayment(null);
+          if (onPaymentAdded) await onPaymentAdded();
+          // Refresh the details popup so the user can keep drilling in.
+          if (paymentDetailsPolicyIds.length > 0) {
+            await handleOpenPaymentDetails(paymentDetailsPolicyIds);
+          }
+        }}
+      />
+
+      <DeleteConfirmDialog
+        open={!!deletePaymentId}
+        onOpenChange={(o) => !o && setDeletePaymentId(null)}
+        onConfirm={handleDeletePaymentConfirm}
+        title="حذف الدفعة"
+        description="هل أنت متأكد من حذف هذه الدفعة؟ لا يمكن التراجع عن هذا الإجراء."
+        loading={deletingPayment}
       />
     </div>
   );
