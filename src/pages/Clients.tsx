@@ -86,11 +86,23 @@ export default function Clients() {
   const [deletingClient, setDeletingClient] = useState<Client | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // Handle URL param to open client directly (supports both /clients/:id and ?open=id)
+  // Handle URL param to open client directly (supports both /clients/:id and
+  // ?open=id). When the URL drops back to /clients with no client id (e.g.
+  // the sidebar "العملاء" link is clicked while a single client is open),
+  // clear viewingClient so the list re-renders.
   useEffect(() => {
     const openClientId = urlClientId || searchParams.get('open');
     const carId = searchParams.get('car');
-    if (openClientId && openClientId !== viewingClient?.id) {
+
+    if (!openClientId) {
+      if (viewingClient) {
+        setViewingClient(null);
+        setInitialCarFilter(null);
+      }
+      return;
+    }
+
+    if (openClientId !== viewingClient?.id) {
       supabase
         .from('clients')
         .select('*, broker:brokers(id, name), branch:branches(id, name, name_ar), created_by:profiles!clients_created_by_admin_id_fkey(full_name, email)')

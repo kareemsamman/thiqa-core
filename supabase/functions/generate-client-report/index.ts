@@ -2,6 +2,11 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
 import { THIQA_LOGO_SVG } from "../_shared/thiqa-logo.ts";
+import {
+  buildBunnyStorageUploadUrl,
+  normalizeBunnyCdnUrl,
+  resolveBunnyStorageZone,
+} from "../_shared/bunny-storage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,9 +68,28 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const bunnyApiKey = Deno.env.get("BUNNY_API_KEY")!;
-    const bunnyStorageZone = Deno.env.get("BUNNY_STORAGE_ZONE")!;
-    const bunnyCdnUrl = Deno.env.get('BUNNY_CDN_URL') || "https://kareem.b-cdn.net";
+    const bunnyApiKey = Deno.env.get("BUNNY_API_KEY");
+    const rawBunnyStorageZone = Deno.env.get("BUNNY_STORAGE_ZONE");
+    const bunnyCdnUrl = normalizeBunnyCdnUrl(Deno.env.get("BUNNY_CDN_URL"));
+    const bunnyStorageZone = resolveBunnyStorageZone(rawBunnyStorageZone, bunnyCdnUrl);
+
+    if (!bunnyApiKey || !bunnyStorageZone) {
+      console.error("Bunny storage env not configured", {
+        hasApiKey: !!bunnyApiKey,
+        hasZone: !!bunnyStorageZone,
+        rawBunnyStorageZone,
+      });
+      return new Response(
+        JSON.stringify({
+          error: "إعدادات Bunny CDN غير مكتملة",
+          detail: "BUNNY_API_KEY / BUNNY_STORAGE_ZONE is missing",
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -278,7 +302,7 @@ serve(async (req) => {
     const fileName = `client_report_${client.id_number}_${timestamp}.html`;
     const storagePath = `uploads/${year}/${month}/${fileName}`;
 
-    const uploadUrl = `https://storage.bunnycdn.com/${bunnyStorageZone}/${storagePath}`;
+    const uploadUrl = buildBunnyStorageUploadUrl(bunnyStorageZone, storagePath);
 
     const uploadResponse = await fetch(uploadUrl, {
       method: "PUT",
@@ -291,8 +315,8 @@ serve(async (req) => {
 
     if (!uploadResponse.ok) {
       const errorText = await uploadResponse.text();
-      console.error("Bunny upload error:", errorText);
-      throw new Error(`Failed to upload to CDN: ${errorText}`);
+      console.error("Bunny upload error:", uploadResponse.status, errorText);
+      throw new Error(`Bunny upload failed (${uploadResponse.status}): ${errorText}`);
     }
 
     const cdnUrl = `${bunnyCdnUrl}/${storagePath}`;
@@ -310,9 +334,14 @@ serve(async (req) => {
       }
     );
   } catch (error: unknown) {
-    console.error("Error generating report:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error && error.stack ? error.stack : undefined;
+    console.error("Error generating report:", message, stack);
     return new Response(
-      JSON.stringify({ error: "An error occurred while generating the report." }),
+      JSON.stringify({
+        error: `فشل في توليد التقرير: ${message}`,
+        detail: message,
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
