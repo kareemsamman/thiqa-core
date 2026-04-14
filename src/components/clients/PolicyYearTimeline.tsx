@@ -1178,29 +1178,6 @@ function PolicyPackageCard({
           </div>
         </div>
 
-        {/* Payment Summary — 2 cols aligned left via margin-right: auto */}
-        {isActive && (
-          <div className="mt-3 pt-3 border-t border-border/50 flex">
-            <div className="grid grid-cols-2 gap-6 mr-auto">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</p>
-                <p className="text-lg font-bold text-success ltr-nums">
-                  ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">الباقي</p>
-                <p className={cn(
-                  "text-lg font-bold ltr-nums",
-                  paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
-                )}>
-                  ₪{paymentStatus.remaining.toLocaleString('en-US')}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Package Components Section - Shows details for each policy in the package */}
         {isPkg && pkg.mainPolicy && (
           <div className="mt-3 pt-3 border-t border-border/50">
@@ -1224,6 +1201,47 @@ function PolicyPackageCard({
                   index={getDocNumber?.(addon.id)}
                 />
               ))}
+              {/* Totals footer row — same row shell as the breakdown rows
+                  above, but with its content pushed to the left via
+                  mr-auto so the values sit flush with the card edge. */}
+              <div className="flex items-center justify-between text-xs rounded-md px-2.5 py-1.5">
+                <div className="flex items-center gap-3 shrink-0 mr-auto">
+                  <div className="flex flex-col items-end min-w-[70px]">
+                    <span className="font-semibold ltr-nums text-left text-foreground">
+                      المدفوع : ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
+                    </span>
+                    <span className={cn(
+                      "font-semibold ltr-nums text-left",
+                      paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
+                    )}>
+                      المتبقي للدفع : ₪{paymentStatus.remaining.toLocaleString('en-US')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Standalone policy totals — same footer row for single-policy cards
+            (which don't render مكونات الباقة) so every card surfaces the same
+            paid/remaining summary in the same place. */}
+        {!isPkg && isActive && (
+          <div className="mt-3 pt-3 border-t border-border/50">
+            <div className="flex items-center justify-between text-xs rounded-md px-2.5 py-1.5">
+              <div className="flex items-center gap-3 shrink-0 mr-auto">
+                <div className="flex flex-col items-end min-w-[70px]">
+                  <span className="font-semibold ltr-nums text-left text-foreground">
+                    المدفوع : ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
+                  </span>
+                  <span className={cn(
+                    "font-semibold ltr-nums text-left",
+                    paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
+                  )}>
+                    المتبقي للدفع : ₪{paymentStatus.remaining.toLocaleString('en-US')}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         )}
