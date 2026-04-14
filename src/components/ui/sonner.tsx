@@ -77,8 +77,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
             "transition-shadow duration-300",
             "hover:shadow-[0_28px_80px_-20px_rgba(15,23,42,0.45)]",
           ),
+          // Physical `mr-4` (margin-right: 1rem). In our RTL layout the
+          // title sits visual-left of the chip, so the title's physical-
+          // right edge is the one facing the chip — adding margin-right
+          // here widens the gap between chip and title on top of the
+          // parent's flex gap.
           title:
-            "flex-1 min-w-0 text-[14px] font-semibold text-foreground leading-snug break-words [unicode-bidi:plaintext]",
+            "flex-1 min-w-0 mr-4 text-[14px] font-semibold text-foreground leading-snug break-words [unicode-bidi:plaintext]",
           description:
             "text-[12.5px] text-muted-foreground mt-1 leading-relaxed break-words [unicode-bidi:plaintext]",
           icon: "shrink-0",
