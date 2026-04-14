@@ -107,6 +107,20 @@ const chequeStatusLabels: Record<string, { label: string; variant: "default" | "
   returned: { label: "مرتجع", variant: "destructive" },
 };
 
+const paymentTypeIcon: Record<string, typeof Banknote> = {
+  cash: Banknote,
+  cheque: CreditCard,
+  visa: CreditCard,
+  transfer: Wallet,
+};
+
+const paymentTypeBg: Record<string, string> = {
+  cash: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30",
+  cheque: "bg-blue-500/10 text-blue-700 border-blue-500/30",
+  visa: "bg-purple-500/10 text-purple-700 border-purple-500/30",
+  transfer: "bg-amber-500/10 text-amber-700 border-amber-500/30",
+};
+
 export function PolicyPaymentsSection({ 
   policyId, 
   payments, 
@@ -824,77 +838,112 @@ export function PolicyPaymentsSection({
           <p className="text-center text-muted-foreground py-4">لا توجد دفعات مسجلة</p>
         ) : (
           <div className="space-y-2">
-            {payments.map((payment) => (
-              <div
-                key={payment.id}
-                className={cn(
-                  "flex items-center justify-between p-3 rounded-lg border",
-                  payment.refused || payment.cheque_status === 'returned' 
-                    ? "bg-destructive/5 border-destructive/20" 
-                    : "bg-muted/30"
-                )}
-              >
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div>
-                    <p className="font-bold">{formatCurrency(payment.amount)}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(payment.payment_date)}</p>
+            {payments.map((payment) => {
+              const Icon = paymentTypeIcon[payment.payment_type] || Banknote;
+              const typeBg = paymentTypeBg[payment.payment_type] || "bg-muted text-muted-foreground border-border";
+              const imageCount = getImageCount(payment);
+              return (
+                <div
+                  key={payment.id}
+                  className={cn(
+                    "rounded-lg border bg-card overflow-hidden",
+                    payment.refused || payment.cheque_status === 'returned'
+                      ? "border-destructive/40 bg-destructive/5"
+                      : "border-border/60"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-muted/30">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div
+                        className={cn(
+                          "w-7 h-7 rounded-md border flex items-center justify-center shrink-0",
+                          typeBg
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="min-w-0 leading-tight">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-sm ltr-nums text-foreground">
+                            {formatCurrency(payment.amount)}
+                          </span>
+                          <Badge variant="outline" className={cn("text-[10px] h-4 px-1.5", typeBg)}>
+                            {paymentTypeLabels[payment.payment_type]}
+                          </Badge>
+                          {payment.payment_type === 'cheque' && payment.cheque_status && (
+                            <Badge
+                              variant={chequeStatusLabels[payment.cheque_status]?.variant || 'secondary'}
+                              className="text-[10px] h-4 px-1.5"
+                            >
+                              {chequeStatusLabels[payment.cheque_status]?.label || payment.cheque_status}
+                            </Badge>
+                          )}
+                          {payment.refused && (
+                            <Badge variant="destructive" className="text-[10px] h-4 px-1.5">راجع</Badge>
+                          )}
+                          {payment.cheque_number && (
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              #{payment.cheque_number}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-muted-foreground ltr-nums">
+                            · {formatDate(payment.payment_date)}
+                          </span>
+                          {imageCount > 0 && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-5 px-1.5 gap-1 border-primary/50 text-primary hover:bg-primary/10"
+                              onClick={() => openGallery(payment)}
+                            >
+                              <ImageIcon className="h-2.5 w-2.5" />
+                              <span className="text-[10px]">{imageCount} صور</span>
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-primary hover:text-primary hover:bg-primary/10"
+                        onClick={() => handleGenerateReceipt(payment.id)}
+                        disabled={generatingReceipt === payment.id}
+                        title="إيصال دفع"
+                      >
+                        {generatingReceipt === payment.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Receipt className="h-3 w-3" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => openEditDialog(payment)}
+                        title="تعديل"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => {
+                          setSelectedPayment(payment);
+                          setDeleteDialogOpen(true);
+                        }}
+                        title="حذف"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
-                  <Badge variant="secondary">{paymentTypeLabels[payment.payment_type]}</Badge>
-                  {payment.cheque_number && (
-                    <span className="text-xs text-muted-foreground font-mono">#{payment.cheque_number}</span>
-                  )}
-                  {payment.payment_type === 'cheque' && payment.cheque_status && (
-                    <Badge variant={chequeStatusLabels[payment.cheque_status]?.variant || 'secondary'}>
-                      {chequeStatusLabels[payment.cheque_status]?.label || payment.cheque_status}
-                    </Badge>
-                  )}
-                  {payment.refused && (
-                    <Badge variant="destructive">راجع</Badge>
-                  )}
-                  {getImageCount(payment) > 0 && (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="h-7 px-2 gap-1 border-primary/50 text-primary hover:bg-primary/10" 
-                      onClick={() => openGallery(payment)}
-                    >
-                      <ImageIcon className="h-3 w-3" />
-                      <span className="text-xs">{getImageCount(payment)} صور</span>
-                    </Button>
-                  )}
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10" 
-                    onClick={() => handleGenerateReceipt(payment.id)}
-                    disabled={generatingReceipt === payment.id}
-                    title="إيصال دفع"
-                  >
-                    {generatingReceipt === payment.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Receipt className="h-4 w-4" />
-                    )}
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(payment)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
-                    onClick={() => {
-                      setSelectedPayment(payment);
-                      setDeleteDialogOpen(true);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>

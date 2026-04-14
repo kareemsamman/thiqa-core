@@ -32,10 +32,10 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Search,
   Plus,
@@ -1141,14 +1141,14 @@ export default function Receipts() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right">رقم الوثيقة</TableHead>
-                  <TableHead className="text-right">رقم سند القبض</TableHead>
-                  <TableHead className="text-right">المبلغ</TableHead>
-                  <TableHead className="text-right">التاريخ</TableHead>
-                  <TableHead className="text-right">اسم العميل</TableHead>
-                  <TableHead className="text-right">رقم السيارة</TableHead>
-                  <TableHead className="text-right">طريقة الدفع</TableHead>
-                  <TableHead className="text-right w-[60px]">إجراءات</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">رقم الوثيقة</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">رقم سند القبض</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">المبلغ</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">التاريخ</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">اسم العميل</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">رقم السيارة</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">طريقة الدفع</TableHead>
+                  <TableHead className="text-right whitespace-nowrap w-[60px]">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1178,26 +1178,20 @@ export default function Receipts() {
                           ? group.document_numbers.join(" · ")
                           : "-"}
                       </TableCell>
-                      <TableCell
-                        className="font-mono text-xs ltr-nums"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                      <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
                         {group.receipts.length <= 1 ? (
                           <span>{firstReceipt?.receipt_number ?? "-"}</span>
                         ) : (
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <button
-                                type="button"
-                                className="text-primary underline underline-offset-2 hover:text-primary/80 font-normal"
-                                title="عرض جميع أرقام السندات"
-                              >
-                                عرض كل السندات
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent
+                          <Tooltip delayDuration={100}>
+                            <TooltipTrigger asChild>
+                              <span className="text-primary underline underline-offset-2 decoration-dotted cursor-help">
+                                عرض الكل
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="bottom"
                               align="end"
-                              className="w-auto p-2"
+                              className="p-2"
                               dir="rtl"
                             >
                               <p className="text-[10px] text-muted-foreground mb-1.5 px-1">
@@ -1207,7 +1201,7 @@ export default function Receipts() {
                                 {group.receipts.map((r) => (
                                   <li
                                     key={r.id}
-                                    className="px-2 py-1 rounded hover:bg-muted font-mono text-xs ltr-nums flex items-center gap-2 justify-between min-w-[140px]"
+                                    className="px-2 py-1 rounded font-mono text-xs ltr-nums flex items-center gap-3 justify-between min-w-[140px]"
                                   >
                                     <span>{r.receipt_number ?? "-"}</span>
                                     <span className="text-muted-foreground">
@@ -1216,8 +1210,8 @@ export default function Receipts() {
                                   </li>
                                 ))}
                               </ul>
-                            </PopoverContent>
-                          </Popover>
+                            </TooltipContent>
+                          </Tooltip>
                         )}
                       </TableCell>
                       <TableCell className="font-semibold">
