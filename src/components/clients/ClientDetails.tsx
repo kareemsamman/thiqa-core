@@ -84,6 +84,7 @@ import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 import { DebtPaymentModal } from '@/components/debt/DebtPaymentModal';
 import { ClientNotesSection } from '@/components/clients/ClientNotesSection';
 import { PaymentEditDialog } from '@/components/clients/PaymentEditDialog';
+import { PaymentGroupDetailsDialog } from '@/components/clients/PaymentGroupDetailsDialog';
 import { RefundsTab } from '@/components/clients/RefundsTab';
 import { AccidentReportWizard } from '@/components/accident-reports/AccidentReportWizard';
 import { ClientAccidentsTab } from '@/components/clients/ClientAccidentsTab';
@@ -198,7 +199,8 @@ interface GroupedPayment {
   id: string; // batch_id or individual payment id
   totalAmount: number;
   payment_date: string;
-  payment_type: string;
+  payment_type: string; // first type, kept for filter compat
+  paymentTypes: string[]; // unique payment types across the batch
   cheque_number: string | null;
   cheque_image_url: string | null;
   card_last_four: string | null;
@@ -319,6 +321,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   // Payment delete state
   const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null);
   const [deletePaymentDialogOpen, setDeletePaymentDialogOpen] = useState(false);
+  const [groupDetailsOpen, setGroupDetailsOpen] = useState(false);
+  const [groupDetailsGroup, setGroupDetailsGroup] = useState<GroupedPayment | null>(null);
   const [deletingPayment, setDeletingPayment] = useState(false);
   
   // Payment edit state
@@ -1141,6 +1145,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           totalAmount: 0,
           payment_date: payment.payment_date,
           payment_type: payment.payment_type,
+          paymentTypes: [],
           cheque_number: payment.cheque_number,
           cheque_image_url: payment.cheque_image_url,
           card_last_four: payment.card_last_four,
@@ -1151,11 +1156,17 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           policyTypes: [],
         });
       }
-      
+
       const group = groups.get(groupKey)!;
       group.payments.push(payment);
       group.totalAmount += payment.amount;
-      
+
+      // Collect unique payment types across the batch so the row can show
+      // combined labels like "نقدي + فيزا" or "نقدي + فيزا + شيكات".
+      if (payment.payment_type && !group.paymentTypes.includes(payment.payment_type)) {
+        group.paymentTypes.push(payment.payment_type);
+      }
+
       // Collect unique policy types
       if (payment.policy?.policy_type_parent && !group.policyTypes.includes(payment.policy.policy_type_parent)) {
         group.policyTypes.push(payment.policy.policy_type_parent);
@@ -1846,8 +1857,21 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {groupedPayments.map((group) => (
-                      <TableRow key={group.id}>
+                    {groupedPayments.map((group) => {
+                      const paymentTypeLabel = (t: string) =>
+                        t === 'cash' ? 'نقدي' :
+                        t === 'cheque' ? 'شيكات' :
+                        t === 'visa' ? 'فيزا' :
+                        t === 'transfer' ? 'تحويل' : t;
+                      return (
+                      <TableRow
+                        key={group.id}
+                        className="cursor-pointer hover:bg-muted/40"
+                        onClick={() => {
+                          setGroupDetailsGroup(group);
+                          setGroupDetailsOpen(true);
+                        }}
+                      >
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-1">
                             ₪{group.totalAmount.toLocaleString()}
@@ -1860,14 +1884,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                         </TableCell>
                         <TableCell>{formatDate(group.payment_date)}</TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <Badge variant="outline">
-                              {group.payment_type === 'cash' ? 'نقدي' :
-                               group.payment_type === 'cheque' ? 'شيك' :
-                               group.payment_type === 'visa' ? 'بطاقة' :
-                               group.payment_type === 'transfer' ? 'تحويل' : group.payment_type}
+                              {group.paymentTypes.length > 0
+                                ? group.paymentTypes.map(paymentTypeLabel).join(' + ')
+                                : paymentTypeLabel(group.payment_type)}
                             </Badge>
-                            {group.payment_type === 'visa' && group.card_last_four && (
+                            {group.paymentTypes.includes('visa') && group.card_last_four && (
                               <span className="text-xs text-muted-foreground font-mono">
                                 *{group.card_last_four}
                               </span>
@@ -1898,7 +1921,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                             batchPaymentIds={group.payments.map(p => p.id)}
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -1958,7 +1981,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                           </DropdownMenu>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </Card>
@@ -2323,6 +2347,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             fetchPayments(),
           ]);
         }}
+      />
+
+      {/* Grouped payment details — opens when a row in the payments table is clicked */}
+      <PaymentGroupDetailsDialog
+        open={groupDetailsOpen}
+        onOpenChange={(o) => {
+          setGroupDetailsOpen(o);
+          if (!o) setGroupDetailsGroup(null);
+        }}
+        group={groupDetailsGroup}
       />
 
       {/* Super Admin: Delete Policy Confirmation Dialog */}

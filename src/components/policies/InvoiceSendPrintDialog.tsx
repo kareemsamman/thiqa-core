@@ -50,7 +50,7 @@ export function InvoiceSendPrintDialog({
         return;
       }
 
-      toast.success(isPackage ? "تم إرسال الفواتير للعميل" : "تم إرسال الفاتورة للعميل");
+      toast.success(isPackage ? "تم إرسال الوثائق للعميل" : "تم إرسال الوثيقة للعميل");
       onOpenChange(false);
     } catch (err: any) {
       toast.error(err?.message || "فشل في الإرسال");
@@ -62,7 +62,7 @@ export function InvoiceSendPrintDialog({
   const handlePrint = async () => {
     setSendingType("print");
     try {
-      // Generate invoice without sending SMS
+      // Generate document without sending SMS
       const functionName = isPackage ? "send-package-invoice-sms" : "send-invoice-sms";
       const body = isPackage
         ? { policy_ids: policyIds, skip_sms: true }
@@ -71,7 +71,7 @@ export function InvoiceSendPrintDialog({
       const { data, error } = await supabase.functions.invoke(functionName, { body });
 
       if (error) {
-        await toastFunctionError(error, "فشل في تحميل الفاتورة");
+        await toastFunctionError(error, "فشل في تحميل الوثيقة");
         return;
       }
       if (data?.error) {
@@ -79,17 +79,17 @@ export function InvoiceSendPrintDialog({
         return;
       }
 
-      // Open the invoice URL in a new tab for printing
+      // Open the document URL in a new tab for printing
       const invoiceUrl = data?.ab_invoice_url || data?.package_invoice_url || data?.invoice_url;
       if (invoiceUrl) {
         window.open(invoiceUrl, "_blank");
-        toast.success("تم فتح الفاتورة في نافذة جديدة");
+        toast.success("تم فتح الوثيقة في نافذة جديدة");
       } else {
-        toast.error("لم يتم إنشاء رابط الفاتورة");
+        toast.error("لم يتم إنشاء رابط الوثيقة");
       }
       onOpenChange(false);
     } catch (err: any) {
-      toast.error(err.message || "فشل في تحميل الفاتورة");
+      toast.error(err.message || "فشل في تحميل الوثيقة");
     } finally {
       setSendingType(null);
     }
@@ -105,7 +105,7 @@ export function InvoiceSendPrintDialog({
             <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-primary/10">
               <FileText className="h-5 w-5 text-primary" />
             </div>
-            <span>إرسال / طباعة الفاتورة</span>
+            <span>إرسال / طباعة الوثيقة</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -126,7 +126,7 @@ export function InvoiceSendPrintDialog({
             <div className="flex-1">
               <div className="font-semibold text-base">إرسال SMS للعميل</div>
               <div className="text-sm text-muted-foreground">
-                سيتم إرسال رابط الفاتورة للرقم {clientPhone || "المسجل"}
+                سيتم إرسال رابط الوثيقة للرقم {clientPhone || "المسجل"}
               </div>
             </div>
           </button>
@@ -145,9 +145,9 @@ export function InvoiceSendPrintDialog({
               )}
             </div>
             <div className="flex-1">
-              <div className="font-semibold text-base">طباعة الفاتورة</div>
+              <div className="font-semibold text-base">طباعة الوثيقة</div>
               <div className="text-sm text-muted-foreground">
-                فتح الفاتورة في نافذة جديدة للطباعة
+                فتح الوثيقة في نافذة جديدة للطباعة
               </div>
             </div>
           </button>

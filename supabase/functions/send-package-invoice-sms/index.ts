@@ -273,7 +273,7 @@ serve(async (req) => {
     if (!uploadResponse.ok) {
       console.error('[send-package-invoice-sms] Bunny upload failed');
       return new Response(
-        JSON.stringify({ error: 'فشل في رفع الفاتورة' }),
+        JSON.stringify({ error: 'فشل في رفع الوثيقة' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -302,7 +302,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: "تم توليد الفاتورة",
+          message: "تم توليد الوثيقة",
           policy_count: policy_ids.length,
           file_count: policyFileUrls.length,
           package_invoice_url: packageInvoiceUrl,
@@ -335,7 +335,7 @@ serve(async (req) => {
     }
 
     // Always add invoice URL
-    smsMessage += `\n\nفاتورة شركة التأمين: ${packageInvoiceUrl}`;
+    smsMessage += `\n\nوثيقة التأمين: ${packageInvoiceUrl}`;
 
     const escapeXml = (value: string) =>
       value
@@ -712,7 +712,7 @@ function buildPackageInvoiceHtml(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>فاتورة - ${client.full_name || 'عميل'}</title>
+  <title>وثيقة - ${client.full_name || 'عميل'}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
 
@@ -1401,7 +1401,7 @@ function buildPackageInvoiceHtml(
     function shareInvoice() {
       var url = window.location.href;
       if (navigator.share) {
-        navigator.share({ title: 'فاتورة', url: url }).catch(function(){});
+        navigator.share({ title: 'وثيقة', url: url }).catch(function(){});
       } else {
         window.open('https://wa.me/?text=' + encodeURIComponent(url), '_blank');
       }

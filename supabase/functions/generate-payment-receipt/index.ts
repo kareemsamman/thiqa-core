@@ -19,21 +19,6 @@ const PAYMENT_TYPE_LABELS: Record<string, string> = {
   transfer: 'تحويل بنكي',
 };
 
-const POLICY_TYPE_LABELS: Record<string, string> = {
-  ELZAMI: 'إلزامي',
-  THIRD_FULL: 'ثالث/شامل',
-  ROAD_SERVICE: 'خدمات الطريق',
-  ACCIDENT_FEE_EXEMPTION: 'إعفاء رسوم حادث',
-  THIRD: 'ثالث',
-  FULL: 'شامل',
-  HEALTH: 'تأمين صحي',
-  LIFE: 'تأمين حياة',
-  PROPERTY: 'تأمين ممتلكات',
-  TRAVEL: 'تأمين سفر',
-  BUSINESS: 'تأمين أعمال',
-  OTHER: 'أخرى',
-};
-
 function formatDate(dateStr: string): string {
   if (!dateStr) return '';
   const date = new Date(dateStr);
@@ -58,6 +43,15 @@ interface PhoneLink {
   href: string;
 }
 
+function escapeHtml(str: string): string {
+  return (str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function buildPaymentReceiptHtml(
   payment: any,
   policy: any,
@@ -67,59 +61,75 @@ function buildPaymentReceiptHtml(
   branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' }
 ): string {
   const paymentTypeLabel = PAYMENT_TYPE_LABELS[payment.payment_type] || payment.payment_type;
-  const policyTypeLabel = POLICY_TYPE_LABELS[policy.policy_type_parent] || policy.policy_type_parent;
-  
-  // Build payment method details
-  let paymentMethodDetails = '';
-  
+  const policyDocumentNumber = policy?.document_number || policy?.policy_number || '—';
+  const receiptNumber = payment.receipt_number || '—';
+  const today = new Date();
+
+  // Build extra payment-method details rows (cheque number, visa last four,
+  // tranzila approval code, etc). Each one is a key/value row inside the
+  // "تفاصيل الدفع" section when the column is actually populated.
+  const extraDetailRows: string[] = [];
   if (payment.payment_type === 'visa') {
     if (payment.card_last_four) {
-      paymentMethodDetails += `
-        <div class="info-item">
-          <span class="info-label">آخر 4 أرقام البطاقة:</span>
-          <span class="info-value">****${payment.card_last_four}</span>
+      extraDetailRows.push(`
+        <div class="row">
+          <div class="label">آخر 4 أرقام البطاقة</div>
+          <div class="val">•••• ${payment.card_last_four}</div>
         </div>
-      `;
+      `);
     }
     if (payment.installments_count && payment.installments_count > 1) {
-      paymentMethodDetails += `
-        <div class="info-item">
-          <span class="info-label">عدد التقسيطات:</span>
-          <span class="info-value">${payment.installments_count}</span>
+      extraDetailRows.push(`
+        <div class="row">
+          <div class="label">عدد التقسيطات</div>
+          <div class="val">${payment.installments_count}</div>
         </div>
-      `;
+      `);
     }
     if (payment.tranzila_approval_code) {
-      paymentMethodDetails += `
-        <div class="info-item">
-          <span class="info-label">رقم التأكيد:</span>
-          <span class="info-value">${payment.tranzila_approval_code}</span>
+      extraDetailRows.push(`
+        <div class="row">
+          <div class="label">رقم التأكيد</div>
+          <div class="val">${payment.tranzila_approval_code}</div>
         </div>
-      `;
+      `);
     }
   } else if (payment.payment_type === 'cheque') {
     if (payment.cheque_number) {
-      paymentMethodDetails += `
-        <div class="info-item">
-          <span class="info-label">رقم الشيك:</span>
-          <span class="info-value">${payment.cheque_number}</span>
+      extraDetailRows.push(`
+        <div class="row">
+          <div class="label">رقم الشيك</div>
+          <div class="val">${payment.cheque_number}</div>
         </div>
-      `;
+      `);
     }
     if (payment.cheque_date) {
-      paymentMethodDetails += `
-        <div class="info-item">
-          <span class="info-label">تاريخ الشيك:</span>
-          <span class="info-value">${formatDate(payment.cheque_date)}</span>
+      extraDetailRows.push(`
+        <div class="row">
+          <div class="label">تاريخ الشيك</div>
+          <div class="val">${formatDate(payment.cheque_date)}</div>
         </div>
-      `;
+      `);
     }
   }
+  const extraDetailsHtml = extraDetailRows.join('');
 
-  // Build phone links section
+  // Contact footer lines — phones / whatsapp / email / address pulled from
+  // the agent's sms_settings row, same as the package invoice footer.
   const phoneLinksHtml = (companySettings.company_phone_links || []).map(
     (link: PhoneLink) => `<a href="${link.href}">${link.phone}</a>`
-  ).join(' | ');
+  ).join(' / ');
+  const contactLines: string[] = [];
+  if (phoneLinksHtml) contactLines.push(`هاتف: ${phoneLinksHtml}`);
+  if (companySettings.company_email) {
+    contactLines.push(`بريد: <a href="mailto:${companySettings.company_email}">${companySettings.company_email}</a>`);
+  }
+  if (companySettings.company_location) {
+    contactLines.push(`عنوان: ${escapeHtml(companySettings.company_location)}`);
+  }
+  const contactFooterHtml = contactLines.length > 0
+    ? `<div class="contact">${contactLines.join(' · ')}</div>`
+    : '';
 
   return `
 <!DOCTYPE html>
@@ -128,325 +138,357 @@ function buildPaymentReceiptHtml(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-  <title>إيصال دفع - ${client.full_name || 'عميل'}</title>
+  <title>سند قبض - ${escapeHtml(client.full_name || 'عميل')}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    @page { size: A5; margin: 10mm; }
+    @page { size: A4; margin: 10mm; }
     @media print {
-      body { padding: 0; }
+      body { padding: 0; background: #ffffff; }
       .no-print { display: none !important; }
     }
     body {
       font-family: 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif;
-      font-size: 14px;
-      line-height: 1.6;
-      color: #2d3748;
-      background: #122143;
+      font-size: 13px;
+      line-height: 1.55;
+      color: #1a1a1a;
+      background: #f4f4f5;
       min-height: 100vh;
       padding: 24px 16px;
       direction: rtl;
     }
-    .container { 
-      max-width: 500px; 
-      margin: 0 auto; 
-      background: white;
-      border-radius: 20px;
-      box-shadow: 0 8px 40px rgba(0,0,0,0.25);
-      overflow: hidden;
+    .invoice {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #1a1a1a;
+      padding: 32px 34px;
     }
-    .header {
-      text-align: center;
-      padding: 25px 20px;
-      background: linear-gradient(135deg, #122143 0%, #1a3260 100%);
-      color: white;
-    }
-    .header h1 { 
-      font-size: 24px; 
-      font-weight: 800;
-      margin-bottom: 5px;
-    }
-    .header .english-name {
-      font-size: 12px;
-      letter-spacing: 2px;
-      opacity: 0.8;
-      margin-bottom: 10px;
-    }
-    .header .receipt-title {
-      font-size: 18px;
-      font-weight: 700;
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid rgba(255,255,255,0.3);
-    }
-    .receipt-number {
-      background: rgba(255,255,255,0.15);
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 12px;
-      display: inline-block;
-      margin-top: 10px;
-    }
-    .amount-section {
-      text-align: center;
-      padding: 30px 20px;
-      background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-    }
-    .amount-label {
-      font-size: 14px;
-      color: #065f46;
-      font-weight: 500;
-      margin-bottom: 8px;
-    }
-    .amount-value {
-      font-size: 42px;
-      font-weight: 800;
-      color: #047857;
-    }
-    .amount-currency {
-      font-size: 24px;
-    }
-    .section {
-      padding: 20px;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .section:last-child {
-      border-bottom: none;
-    }
-    .section-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: #1e3a5f;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .section-icon {
-      font-size: 16px;
-    }
-    .info-item {
+
+    /* Header */
+    .invoice-top {
       display: flex;
       justify-content: space-between;
-      padding: 8px 0;
-      border-bottom: 1px dashed #e2e8f0;
+      align-items: flex-start;
+      gap: 28px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #1a1a1a;
+      margin-bottom: 24px;
     }
-    .info-item:last-child {
-      border-bottom: none;
-    }
-    .info-label {
-      color: #718096;
+    .brand { max-width: 340px; }
+    .brand .logo { max-height: 70px; max-width: 180px; margin-bottom: 10px; display: block; }
+    .brand .name { font-size: 15px; font-weight: 700; color: #1a1a1a; }
+    .brand .tax {
+      font-size: 12px;
+      color: #1a1a1a;
+      margin-top: 2px;
+      direction: ltr;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
       font-weight: 500;
-      font-size: 13px;
     }
-    .info-value {
-      color: #1e3a5f;
-      font-weight: 700;
-      font-size: 13px;
+    .brand .address { font-size: 12px; color: #1a1a1a; margin-top: 8px; line-height: 1.55; font-weight: 500; }
+    .invoice-meta { text-align: left; min-width: 240px; }
+    .invoice-meta .doc-title {
+      font-size: 42px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #1a1a1a;
+      line-height: 1;
+      margin-bottom: 4px;
     }
-    .payment-badge {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 12px;
+    .invoice-meta .subtitle {
       font-size: 12px;
-      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 14px;
+      opacity: 0.7;
     }
-    .badge-cash { background: #d1fae5; color: #065f46; }
-    .badge-visa { background: #dbeafe; color: #1e40af; }
-    .badge-cheque { background: #fef3c7; color: #92400e; }
-    .badge-transfer { background: #e9d5ff; color: #6b21a8; }
-    .footer {
-      text-align: center;
-      padding: 20px;
-      background: #f8fafc;
-      color: #718096;
+    .meta-rows {
+      width: 100%;
+      border: 1px solid #1a1a1a;
       font-size: 12px;
     }
-    .thank-you {
-      font-size: 16px;
+    .meta-rows .row { display: flex; }
+    .meta-rows .row + .row { border-top: 1px solid #1a1a1a; }
+    .meta-rows .label {
+      flex: 0 0 110px;
+      padding: 7px 12px;
+      background: #f4f4f5;
       font-weight: 700;
-      color: #1e3a5f;
-      margin-bottom: 12px;
+      color: #1a1a1a;
+      font-size: 11.5px;
+      text-align: right;
+      border-left: 1px solid #1a1a1a;
+      letter-spacing: 0.3px;
     }
-    .contact-info {
-      margin: 15px 0;
-      padding: 12px;
-      background: #f1f5f9;
-      border-radius: 8px;
-      display: inline-block;
-      text-align: center;
+    .meta-rows .val {
+      flex: 1;
+      padding: 7px 12px;
+      text-align: left;
+      direction: ltr;
+      font-weight: 700;
+      color: #1a1a1a;
+      font-variant-numeric: tabular-nums;
     }
-    .contact-row {
+
+    /* Customer info */
+    .customer {
+      margin-bottom: 22px;
+      border: 1px solid #1a1a1a;
+    }
+    .section-title {
+      padding: 8px 14px;
+      border-bottom: 1px solid #1a1a1a;
+      background: #f4f4f5;
+      font-size: 11px;
+      font-weight: 700;
+      color: #1a1a1a;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    .customer-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+    .customer-grid .cell { padding: 9px 14px; }
+    .customer-grid .cell:not(:nth-child(3n+1)) { border-right: 1px solid #1a1a1a; }
+    .customer-grid .cell:nth-child(n+4) { border-top: 1px solid #1a1a1a; }
+    .customer-grid .label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #1a1a1a;
+      letter-spacing: 0.3px;
+      margin-bottom: 3px;
+      opacity: 0.75;
+    }
+    .customer-grid .value {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    /* Payment details stacked row layout (same styling as the meta box) */
+    .payment-box {
+      margin-bottom: 22px;
+      border: 1px solid #1a1a1a;
+    }
+    .payment-box .body {
+      display: flex;
+      flex-direction: column;
+    }
+    .payment-box .row { display: flex; }
+    .payment-box .row + .row { border-top: 1px solid #1a1a1a; }
+    .payment-box .row .label {
+      flex: 0 0 140px;
+      padding: 9px 14px;
+      background: #f4f4f5;
+      font-weight: 700;
+      color: #1a1a1a;
+      font-size: 11.5px;
+      border-left: 1px solid #1a1a1a;
+    }
+    .payment-box .row .val {
+      flex: 1;
+      padding: 9px 14px;
+      font-weight: 700;
+      color: #1a1a1a;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Amount hero */
+    .hero {
+      display: flex;
+      align-items: stretch;
+      border: 1px solid #1a1a1a;
+      margin-bottom: 22px;
+    }
+    .hero .label {
+      flex: 0 0 180px;
+      padding: 18px 14px;
+      background: #1a1a1a;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1.3px;
+      text-transform: uppercase;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      padding: 4px 0;
-      color: #1e3a5f;
+    }
+    .hero .val {
+      flex: 1;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      font-size: 36px;
+      font-weight: 800;
+      color: #1a1a1a;
+      font-variant-numeric: tabular-nums;
+      direction: ltr;
+    }
+
+    /* Note linking to the policy */
+    .policy-note {
+      border: 1px solid #1a1a1a;
+      padding: 12px 16px;
+      margin-bottom: 24px;
       font-size: 12px;
+      color: #1a1a1a;
+      background: #f9fafb;
     }
-    .contact-row a {
-      color: #2563eb;
-      text-decoration: none;
+    .policy-note strong {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      direction: ltr;
+      display: inline-block;
     }
-    .action-buttons {
+
+    /* Footer */
+    .footer {
+      padding-top: 16px;
+      border-top: 1px solid #1a1a1a;
+      font-size: 12px;
+      color: #1a1a1a;
+      text-align: center;
+    }
+    .footer .thanks {
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .footer .contact { line-height: 1.8; }
+    .footer .contact a { color: #1a1a1a; text-decoration: none; }
+    .footer .issued { margin-top: 10px; opacity: 0.7; }
+
+    .actions {
+      margin-top: 18px;
       display: flex;
       gap: 10px;
       justify-content: center;
-      flex-wrap: wrap;
-      margin-top: 15px;
     }
-    .print-button {
-      display: inline-block;
-      padding: 12px 25px;
-      background: linear-gradient(135deg, #1e3a5f 0%, #2d5a8a 100%);
-      color: white;
+    .actions button {
+      padding: 10px 22px;
+      background: #1a1a1a;
+      color: #ffffff;
       border: none;
-      border-radius: 8px;
-      font-size: 16px;
+      font-family: inherit;
+      font-size: 13px;
       font-weight: 700;
       cursor: pointer;
-      font-family: 'Tajawal', sans-serif;
+      letter-spacing: 0.5px;
     }
-    .share-button {
-      display: inline-block;
-      padding: 12px 25px;
-      background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      font-family: 'Tajawal', sans-serif;
-    }
-    .print-button:hover {
-      opacity: 0.9;
-    }
-    @media (max-width: 500px) {
-      body { padding: 10px; }
-      .container { border-radius: 12px; }
-      .amount-value { font-size: 36px; }
+    .actions button:hover { opacity: 0.85; }
+
+    @media (max-width: 640px) {
+      body { padding: 14px 8px; font-size: 12px; }
+      .invoice { padding: 24px 20px; }
+      .invoice-top { flex-direction: column; gap: 18px; }
+      .invoice-meta { text-align: right; min-width: 0; }
+      .invoice-meta .doc-title { font-size: 32px; }
+      .customer-grid { grid-template-columns: 1fr; }
+      .customer-grid .cell:not(:nth-child(3n+1)) { border-right: none; }
+      .customer-grid .cell:nth-child(n+2) { border-top: 1px solid #1a1a1a; }
+      .hero .label { flex: 0 0 120px; padding: 14px 10px; font-size: 11px; }
+      .hero .val { font-size: 26px; padding: 14px 14px; }
+      .payment-box .row .label { flex: 0 0 110px; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      ${branding.logoUrl ? `<img src="${branding.logoUrl}" alt="${branding.companyName}" style="max-height:50px;object-fit:contain;margin:0 auto 8px auto;display:block;" />` : ''}
-      <h1>${branding.companyName}</h1>
-      ${branding.companyNameEn ? `<p class="english-name">${branding.companyNameEn}</p>` : ''}
-      <p class="receipt-title">إيصال دفع</p>
-      <div class="receipt-number">رقم: ${payment.id.slice(0, 8).toUpperCase()}</div>
-    </div>
-
-    <div class="amount-section">
-      <p class="amount-label">المبلغ المدفوع</p>
-      <p class="amount-value">
-        <span class="amount-currency">₪</span>${payment.amount.toLocaleString()}
-      </p>
-    </div>
-
-    <div class="section">
-      <div class="section-title">
-        <span class="section-icon">💳</span>
-        تفاصيل الدفع
+  <div class="invoice">
+    <!-- Header: brand on the right, doc metadata on the left -->
+    <div class="invoice-top">
+      <div class="brand">
+        ${branding.logoUrl ? `<img class="logo" src="${branding.logoUrl}" alt="${escapeHtml(branding.companyName)}" />` : ''}
+        <div class="name">${escapeHtml(branding.companyName)}</div>
+        ${branding.taxNumber ? `<div class="tax">رقم المشغل: ${escapeHtml(branding.taxNumber)}</div>` : ''}
+        ${branding.invoiceAddress ? `<div class="address">${escapeHtml(branding.invoiceAddress)}</div>`
+          : (companySettings.company_location ? `<div class="address">${escapeHtml(companySettings.company_location)}</div>` : '')}
       </div>
-      <div class="info-item">
-        <span class="info-label">تاريخ الدفع:</span>
-        <span class="info-value">${formatDate(payment.payment_date)}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">طريقة الدفع:</span>
-        <span class="info-value">
-          <span class="payment-badge badge-${payment.payment_type}">${paymentTypeLabel}</span>
-        </span>
-      </div>
-      ${paymentMethodDetails}
-    </div>
-
-    <div class="section">
-      <div class="section-title">
-        <span class="section-icon">👤</span>
-        بيانات العميل
-      </div>
-      <div class="info-item">
-        <span class="info-label">الاسم:</span>
-        <span class="info-value">${client.full_name || '-'}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">رقم الهوية:</span>
-        <span class="info-value">${client.id_number || '-'}</span>
-      </div>
-      ${car ? `
-      <div class="info-item">
-        <span class="info-label">رقم السيارة:</span>
-        <span class="info-value">${car.car_number || '-'}</span>
-      </div>
-      ` : ''}
-    </div>
-
-    <div class="section">
-      <div class="section-title">
-        <span class="section-icon">📋</span>
-        تفاصيل الوثيقة
-      </div>
-      <div class="info-item">
-        <span class="info-label">نوع التأمين:</span>
-        <span class="info-value">${policyTypeLabel}</span>
-      </div>
-      ${policy.policy_number ? `
-      <div class="info-item">
-        <span class="info-label">رقم الوثيقة:</span>
-        <span class="info-value">${policy.policy_number}</span>
-      </div>
-      ` : ''}
-      <div class="info-item">
-        <span class="info-label">فترة التأمين:</span>
-        <span class="info-value">${formatDate(policy.start_date)} - ${formatDate(policy.end_date)}</span>
+      <div class="invoice-meta">
+        <div class="doc-title">سند قبض</div>
+        <div class="subtitle">إيصال دفع</div>
+        <div class="meta-rows">
+          <div class="row">
+            <div class="label">رقم السند</div>
+            <div class="val">${escapeHtml(receiptNumber)}</div>
+          </div>
+          <div class="row">
+            <div class="label">التاريخ</div>
+            <div class="val">${formatDate(payment.payment_date || today.toISOString())}</div>
+          </div>
+        </div>
       </div>
     </div>
 
+    <!-- Customer info -->
+    <div class="customer">
+      <div class="section-title">معلومات العميل</div>
+      <div class="customer-grid">
+        <div class="cell">
+          <div class="label">الاسم</div>
+          <div class="value">${escapeHtml(client.full_name || '-')}</div>
+        </div>
+        <div class="cell">
+          <div class="label">رقم الهوية</div>
+          <div class="value">${escapeHtml(client.id_number || '-')}</div>
+        </div>
+        <div class="cell">
+          <div class="label">رقم الهاتف</div>
+          <div class="value">${escapeHtml(client.phone_number || '-')}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Amount hero -->
+    <div class="hero">
+      <div class="label">المبلغ المدفوع</div>
+      <div class="val">₪${(payment.amount || 0).toLocaleString('en-US')}</div>
+    </div>
+
+    <!-- Payment details (no وصف) -->
+    <div class="payment-box">
+      <div class="section-title">تفاصيل الدفع</div>
+      <div class="body">
+        <div class="row">
+          <div class="label">طريقة الدفع</div>
+          <div class="val">${escapeHtml(paymentTypeLabel)}</div>
+        </div>
+        <div class="row">
+          <div class="label">تاريخ الدفع</div>
+          <div class="val">${formatDate(payment.payment_date)}</div>
+        </div>
+        ${extraDetailsHtml}
+      </div>
+    </div>
+
+    <!-- Policy link note -->
+    <div class="policy-note">
+      هذا السند يخص الوثيقة رقم <strong>${escapeHtml(policyDocumentNumber)}</strong>.
+    </div>
+
+    <!-- Footer -->
     <div class="footer">
-      <p class="thank-you">شكراً لتعاملكم معنا 🙏</p>
-      <div class="contact-info">
-        ${companySettings.company_email ? `
-        <div class="contact-row">
-          <span>📧</span>
-          <a href="mailto:${companySettings.company_email}">${companySettings.company_email}</a>
-        </div>
-        ` : ''}
-        ${companySettings.company_phone_links && companySettings.company_phone_links.length > 0 ? `
-        <div class="contact-row">
-          <span>📞</span>
-          ${phoneLinksHtml}
-        </div>
-        ` : ''}
-        ${companySettings.company_location ? `
-        <div class="contact-row">
-          <span>📍</span>
-          <span>${companySettings.company_location}</span>
-        </div>
-        ` : ''}
-      </div>
-      <p>تم إصدار هذا الإيصال بتاريخ ${formatDate(new Date().toISOString())}</p>
-      <div class="action-buttons no-print">
-        <button class="print-button" onclick="window.print()">🖨️ طباعة الإيصال</button>
-        <button class="share-button" onclick="shareInvoice()">📲 مشاركة</button>
-      </div>
+      <div class="thanks">شكراً لثقتكم</div>
+      ${contactFooterHtml}
+      <div class="issued">تاريخ الإصدار: ${formatDate(today.toISOString())}</div>
+    </div>
+
+    <div class="actions no-print">
+      <button type="button" onclick="window.print()">طباعة</button>
+      <button type="button" onclick="shareReceipt()">مشاركة</button>
     </div>
   </div>
+
   <script>
-    function shareInvoice() {
-      const currentUrl = window.location.href;
-      const shareText = 'إيصال دفع التأمين: ' + currentUrl;
+    function shareReceipt() {
+      var url = window.location.href;
       if (navigator.share) {
-        navigator.share({ title: 'إيصال دفع', text: 'إيصال دفع التأمين الخاص بك', url: currentUrl }).catch(console.error);
+        navigator.share({ title: 'سند قبض', url: url }).catch(function(){});
       } else {
-        window.open('https://wa.me/?text=' + encodeURIComponent(shareText), '_blank');
+        window.open('https://wa.me/?text=' + encodeURIComponent('سند قبض: ' + url), '_blank');
       }
     }
   </script>
-  </div>
 </body>
 </html>
   `;
@@ -529,9 +571,11 @@ serve(async (req) => {
         installments_count,
         tranzila_approval_code,
         notes,
+        receipt_number,
         policy:policies(
           id,
           policy_number,
+          document_number,
           policy_type_parent,
           policy_type_child,
           start_date,
