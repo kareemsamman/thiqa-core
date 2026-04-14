@@ -26,7 +26,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
-  Layers,
   StickyNote,
   Banknote,
   Receipt,
@@ -36,9 +35,11 @@ import {
   IdCard,
   Palette,
   ShieldAlert,
+  Zap,
+  Handshake,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { extractFunctionErrorMessage, parseFunctionError } from '@/lib/functionError';
+import { parseFunctionError } from '@/lib/functionError';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
@@ -142,6 +143,12 @@ interface ClientReportModalProps {
     transferred: boolean | null;
     group_id: string | null;
     notes?: string | null;
+    created_at?: string | null;
+    broker_id?: string | null;
+    broker_direction?: 'from_broker' | 'to_broker' | null;
+    broker?: { id: string; name: string } | null;
+    transferred_car_number?: string | null;
+    transferred_to_car_number?: string | null;
     company: { name: string; name_ar: string | null } | null;
     car: { id: string; car_number: string } | null;
   }>;
@@ -188,6 +195,55 @@ const refundTypeLabels: Record<string, string> = {
   transfer_refund_owed: 'تحويل تأمين',
   manual_refund: 'مرتجع يدوي',
 };
+
+// Policy-type color map (matches PolicyYearTimeline so the report looks
+// identical to the in-app policy cards — same badges, same colors).
+const policyTypeColors: Record<string, string> = {
+  ELZAMI: 'bg-blue-500/10 text-blue-700 border-blue-500/30',
+  THIRD_FULL: 'bg-purple-500/10 text-purple-700 border-purple-500/30',
+  ROAD_SERVICE: 'bg-orange-500/10 text-orange-700 border-orange-500/30',
+  ACCIDENT_FEE_EXEMPTION: 'bg-green-500/10 text-green-700 border-green-500/30',
+  HEALTH: 'bg-pink-500/10 text-pink-700 border-pink-500/30',
+  LIFE: 'bg-indigo-500/10 text-indigo-700 border-indigo-500/30',
+  PROPERTY: 'bg-amber-500/10 text-amber-700 border-amber-500/30',
+  TRAVEL: 'bg-cyan-500/10 text-cyan-700 border-cyan-500/30',
+  BUSINESS: 'bg-slate-500/10 text-slate-700 border-slate-500/30',
+  OTHER: 'bg-gray-500/10 text-gray-700 border-gray-500/30',
+};
+
+// Child type labels used when a THIRD_FULL is split into ثالث / شامل.
+const policyChildLabels: Record<string, string> = {
+  THIRD: 'ثالث',
+  FULL: 'شامل',
+};
+
+// Prefer the child label when THIRD_FULL has one (ثالث / شامل), otherwise
+// fall back to the parent label.
+const getTypeDisplayLabel = (p: {
+  policy_type_parent: string;
+  policy_type_child: string | null;
+}): string => {
+  if (p.policy_type_parent === 'THIRD_FULL' && p.policy_type_child) {
+    return policyChildLabels[p.policy_type_child] || p.policy_type_child;
+  }
+  return (
+    getInsuranceTypeLabel(p.policy_type_parent as any, p.policy_type_child as any) ||
+    p.policy_type_parent
+  );
+};
+
+// "New" = created within the last 24 hours. Drives the green "جديدة" chip.
+const isNewPolicy = (createdAt: string | null | undefined): boolean => {
+  if (!createdAt) return false;
+  const created = new Date(createdAt);
+  if (isNaN(created.getTime())) return false;
+  const hoursDiff = (Date.now() - created.getTime()) / (1000 * 60 * 60);
+  return hoursDiff < 24;
+};
+
+// Main types that anchor a package (addons are ROAD_SERVICE / ACCIDENT_FEE_*).
+// Used to pick the main policy for package header info (company/car/period).
+const MAIN_POLICY_TYPES_FOR_CARD = ['THIRD_FULL', 'ELZAMI', 'HEALTH', 'LIFE', 'PROPERTY', 'TRAVEL', 'BUSINESS', 'OTHER'];
 
 // ---------- File gallery sub-component ----------
 
@@ -716,135 +772,480 @@ export function ClientReportModal({
     </section>
   );
 
-  const renderPolicyLine = (policy: ClientReportModalProps['policies'][number], showType = true) => {
-    const paid = paidByPolicy[policy.id] || 0;
-    const full = policy.insurance_price + (policy.office_commission || 0);
-    const remaining = Math.max(0, full - paid);
-    const files = policyFiles[policy.id] || [];
-    const drivers = extraDriversByPolicy[policy.id] || [];
+  // Pick the main policy for a package: prefer THIRD_FULL, then ELZAMI,
+  // then any other main type, then the first member. Everything else
+  // becomes an addon (ROAD_SERVICE, ACCIDENT_FEE_EXEMPTION, etc.).
+  const pickMainPolicy = (
+    pkgPolicies: ClientReportModalProps['policies']
+  ): ClientReportModalProps['policies'][number] => {
+    return (
+      pkgPolicies.find((p) => p.policy_type_parent === 'THIRD_FULL') ||
+      pkgPolicies.find((p) => p.policy_type_parent === 'ELZAMI') ||
+      pkgPolicies.find((p) => MAIN_POLICY_TYPES_FOR_CARD.includes(p.policy_type_parent)) ||
+      pkgPolicies[0]
+    );
+  };
 
-    const status = policy.cancelled
-      ? { label: 'ملغاة', color: 'bg-destructive/10 text-destructive border-destructive/20', icon: XCircle }
-      : policy.transferred
-      ? { label: 'محولة', color: 'bg-amber-500/10 text-amber-600 border-amber-500/20', icon: ArrowRightLeft }
-      : new Date(policy.end_date) < new Date()
-      ? { label: 'منتهية', color: 'bg-muted text-muted-foreground border-border', icon: Clock }
-      : { label: 'سارية', color: 'bg-success/10 text-success border-success/20', icon: CheckCircle };
-    const StatusIcon = status.icon;
+  // Status derivation — matches PolicyYearTimeline's getPolicyStatus so the
+  // سارية / ملغاة / محولة / منتهية chip shows the same state as the app.
+  const cardStatusFor = (main: ClientReportModalProps['policies'][number]) => {
+    if (main.cancelled) return 'cancelled' as const;
+    if (main.transferred) return 'transferred' as const;
+    if (new Date(main.end_date) < new Date()) return 'ended' as const;
+    return 'active' as const;
+  };
+
+  // Single row inside a package's "مكونات الباقة" table. Mirrors
+  // PackageComponentRow from PolicyYearTimeline so the report looks
+  // identical to the app.
+  const renderComponentRow = (
+    policy: ClientReportModalProps['policies'][number],
+    index: number,
+    isActive: boolean
+  ) => {
+    const typeLabel = getTypeDisplayLabel(policy);
+    const typeColor = policyTypeColors[policy.policy_type_parent] || policyTypeColors.OTHER;
+    const commission = policy.office_commission || 0;
+    const providerName = policy.company?.name_ar || policy.company?.name || '-';
+    const files = policyFiles[policy.id] || [];
 
     return (
-      <div className="rounded-lg border bg-background p-3 sm:p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            {showType && (
-              <Badge variant="outline" className="text-sm px-2.5 py-0.5">
-                {getInsuranceTypeLabel(policy.policy_type_parent as any, policy.policy_type_child as any)}
-              </Badge>
+      <div
+        key={policy.id}
+        data-policy-row-id={policy.id}
+        className={cn(
+          'grid grid-cols-[2rem_1fr_auto_auto] items-center gap-3 px-3 py-2 text-xs border-b border-border/60 last:border-b-0 transition-colors hover:bg-muted/30',
+          !isActive && 'opacity-70'
+        )}
+      >
+        <span className="text-[10px] font-bold text-muted-foreground ltr-nums text-center">
+          #{index}
+        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <Badge className={cn('text-[10px] px-1.5 py-0 h-5 font-medium border shrink-0', typeColor)}>
+            {typeLabel}
+          </Badge>
+          <span
+            className={cn(
+              'truncate',
+              isActive ? 'text-muted-foreground' : 'text-muted-foreground/70'
             )}
-            <Badge className={cn('gap-1 text-xs border', status.color)}>
-              <StatusIcon className="h-3.5 w-3.5" />
-              {status.label}
-            </Badge>
-            {policy.policy_number && (
-              <span className="text-xs font-mono text-muted-foreground ltr-nums">#{policy.policy_number}</span>
-            )}
-          </div>
-          <p className="font-bold text-primary ltr-nums text-base">₪{full.toLocaleString()}</p>
-        </div>
-
-        {full > 0 && <MoneyChips paid={paid} remaining={remaining} />}
-
-        <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-          <span className="flex items-center gap-1.5">
-            <Building2 className="h-3.5 w-3.5" />
-            {policy.company?.name_ar || policy.company?.name || '-'}
+          >
+            {providerName}
           </span>
-          <span className="flex items-center gap-1.5 ltr-nums">
-            <Calendar className="h-3.5 w-3.5" />
-            {formatDate(policy.start_date)} - {formatDate(policy.end_date)}
-          </span>
+          {policy.broker_id && policy.broker && (
+            <span
+              className="text-[10px] font-semibold text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0 h-5 inline-flex items-center gap-1 shrink-0"
+              title={`${
+                policy.broker_direction === 'from_broker' ? 'من الوسيط' : 'إلى الوسيط'
+              }: ${policy.broker.name}`}
+            >
+              <Handshake className="h-3 w-3" />
+              {policy.broker.name}
+            </span>
+          )}
           {files.length > 0 && (
             <button
               type="button"
-              onClick={() => openFileGallery(files, `${getInsuranceTypeLabel(policy.policy_type_parent as any, policy.policy_type_child as any)} ${policy.policy_number || ''}`.trim())}
-              className="flex items-center gap-1.5 text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-full transition-colors text-xs font-medium"
+              onClick={(e) => {
+                e.stopPropagation();
+                openFileGallery(files, `${typeLabel} ${policy.policy_number || ''}`.trim());
+              }}
+              className="text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded px-1.5 py-0 h-5 inline-flex items-center gap-1 shrink-0 transition-colors"
+              title={`${files.length} ملف`}
             >
-              <Paperclip className="h-3.5 w-3.5" />
-              {files.length} ملف
+              <Paperclip className="h-3 w-3" />
+              {files.length}
             </button>
           )}
         </div>
-
-        {drivers.length > 0 && (
-          <div className="pt-3 border-t flex items-start gap-2">
-            <Users className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-            <div className="flex flex-wrap gap-1.5">
-              {drivers.map(d => (
-                <Badge key={d.child_id} variant="secondary" className="text-xs font-normal px-2 py-1">
-                  {d.full_name}
-                  {d.relation ? ` • ${d.relation}` : ''}
-                  {d.birth_date ? ` • ${formatDate(d.birth_date)}` : ''}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {policy.notes && (
-          <div className="pt-3 border-t flex items-start gap-2 text-sm text-muted-foreground">
-            <StickyNote className="h-4 w-4 mt-0.5 shrink-0" />
-            <p className="whitespace-pre-wrap leading-relaxed">{policy.notes}</p>
-          </div>
-        )}
+        <span
+          className={cn(
+            'ltr-nums text-[11px] shrink-0',
+            isActive ? 'text-muted-foreground' : 'text-muted-foreground/70'
+          )}
+        >
+          {formatDate(policy.end_date)} ← {formatDate(policy.start_date)}
+        </span>
+        <div className="flex flex-col items-end min-w-[70px]">
+          <span
+            className={cn(
+              'font-semibold ltr-nums',
+              isActive ? 'text-foreground' : 'text-muted-foreground'
+            )}
+          >
+            ₪{policy.insurance_price.toLocaleString('en-US')}
+          </span>
+          {commission > 0 && (
+            <span className="text-[9px] text-amber-700 font-semibold ltr-nums">
+              + ₪{commission.toLocaleString('en-US')} عمولة
+            </span>
+          )}
+        </div>
       </div>
     );
   };
 
-  const renderItem = (item: Item) => {
-    if (item.kind === 'single') {
-      return <div key={`single-${item.policy.id}`}>{renderPolicyLine(item.policy)}</div>;
-    }
+  // Unified policy card — renders a standalone policy or a package with the
+  // same visual language as the ClientDetails policy cards. Action buttons
+  // (pay / print / SMS / edit) are intentionally omitted; this is a read-
+  // only report preview.
+  const renderPolicyCard = (item: Item) => {
+    const isPkg = item.kind === 'package';
+    const allPolicies = isPkg ? item.policies : [item.policy];
+    const mainPolicy = isPkg ? pickMainPolicy(item.policies) : item.policy;
+    const addons = isPkg
+      ? item.policies.filter((p) => p.id !== mainPolicy.id)
+      : [];
 
-    const pkg = item;
-    const totalPrice = pkg.policies.reduce(
+    const status = cardStatusFor(mainPolicy);
+    const isActive = status === 'active';
+    const isTransferred = status === 'transferred';
+    const isCancelled = status === 'cancelled';
+
+    const totalPrice = allPolicies.reduce(
       (s, p) => s + p.insurance_price + (p.office_commission || 0),
       0
     );
-    const totalPaid = pkg.policies.reduce((s, p) => s + (paidByPolicy[p.id] || 0), 0);
+    const totalPaid = allPolicies.reduce((s, p) => s + (paidByPolicy[p.id] || 0), 0);
     const totalRemaining = Math.max(0, totalPrice - totalPaid);
-    const activeCount = pkg.policies.filter(isActivePolicy).length;
+    const hasUnpaid = totalRemaining > 0;
+
+    const totalCommission = allPolicies.reduce(
+      (s, p) => s + (p.office_commission || 0),
+      0
+    );
+
+    // Broker chip — if any policy in the card is tied to a broker, surface
+    // a single "من/إلى الوسيط: <name>" chip on the header row.
+    const brokerPolicy = allPolicies.find((p) => p.broker_id && p.broker);
+    const brokerDirectionLabel = brokerPolicy
+      ? brokerPolicy.broker_direction === 'from_broker'
+        ? 'من الوسيط'
+        : brokerPolicy.broker_direction === 'to_broker'
+          ? 'إلى الوسيط'
+          : 'وسيط'
+      : null;
+
+    const wasTransferredFrom = mainPolicy.transferred_car_number;
+    const wasTransferredTo = mainPolicy.transferred_to_car_number;
+    const createdRecently =
+      mainPolicy.created_at && isNewPolicy(mainPolicy.created_at);
+
+    const files = policyFiles[mainPolicy.id] || [];
+    const drivers = extraDriversByPolicy[mainPolicy.id] || [];
 
     return (
       <div
-        key={`pkg-${pkg.groupId}`}
-        className="rounded-xl border-2 border-primary/20 bg-primary/[0.02] overflow-hidden"
+        key={isPkg ? `pkg-${item.groupId}` : `single-${mainPolicy.id}`}
+        className={cn(
+          'rounded-xl overflow-hidden transition-all duration-200 border bg-card',
+          isActive && 'border-2 border-primary/40 shadow-md shadow-primary/5',
+          status === 'ended' && 'bg-muted/20 border-border',
+          (isTransferred || isCancelled) &&
+            'bg-muted/10 border-dashed border-muted-foreground/30 opacity-70',
+          hasUnpaid && isActive && 'border-r-4 border-r-destructive'
+        )}
       >
-        <div className="bg-primary/5 px-3 sm:px-4 py-3 border-b border-primary/10">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="h-8 w-8 rounded-lg bg-primary/15 text-primary flex items-center justify-center">
-                <Layers className="h-4 w-4" />
-              </div>
-              <span className="font-bold text-base">باقة تأمين</span>
-              <Badge variant="secondary" className="text-xs">
-                {pkg.policies.length} وثائق
+        <div className="p-4">
+          {/* Top row: status + type chips + package/new/broker badges */}
+          <div className="flex items-center gap-2 flex-wrap mb-3">
+            {isActive && (
+              <Badge variant="success" className="gap-1 font-bold">
+                <CheckCircle className="h-3.5 w-3.5" />
+                سارية
               </Badge>
-              {activeCount > 0 && (
-                <Badge className="bg-success/10 text-success border-success/20 text-xs">
-                  {activeCount} سارية
+            )}
+            {status === 'ended' && (
+              <Badge variant="secondary" className="gap-1">
+                منتهية
+              </Badge>
+            )}
+            {isTransferred && (
+              <Badge variant="warning" className="gap-1">
+                <ArrowRightLeft className="h-3 w-3" />
+                محولة{' '}
+                {wasTransferredTo && (
+                  <span className="font-mono ltr-nums">← {wasTransferredTo}</span>
+                )}
+              </Badge>
+            )}
+            {isCancelled && (
+              <Badge variant="destructive" className="gap-1">
+                <XCircle className="h-3 w-3" />
+                ملغاة
+              </Badge>
+            )}
+
+            {wasTransferredFrom && !isTransferred && (
+              <Badge
+                variant="outline"
+                className="gap-1 text-xs bg-blue-500/10 border-blue-500/30 text-blue-600"
+              >
+                <ArrowRightLeft className="h-3 w-3" />
+                محول من <span className="font-mono ltr-nums">{wasTransferredFrom}</span>
+              </Badge>
+            )}
+
+            {/* Type chips — for packages show each member separated by + and
+                append the باقة chip; for singles just the single type. */}
+            {isPkg ? (
+              <div className="flex flex-wrap items-center gap-1">
+                <Badge
+                  className={cn(
+                    'border text-xs font-semibold',
+                    policyTypeColors[mainPolicy.policy_type_parent] || policyTypeColors.OTHER
+                  )}
+                >
+                  {getTypeDisplayLabel(mainPolicy)}
                 </Badge>
-              )}
+                {addons.map((addon) => (
+                  <span key={addon.id} className="flex items-center gap-1">
+                    <span className="text-muted-foreground text-xs">+</span>
+                    <Badge
+                      className={cn(
+                        'border text-xs',
+                        policyTypeColors[addon.policy_type_parent] || policyTypeColors.OTHER
+                      )}
+                    >
+                      {getTypeDisplayLabel(addon)}
+                    </Badge>
+                  </span>
+                ))}
+                <Badge
+                  variant="outline"
+                  className="gap-1 text-xs bg-primary/5 border-primary/20 text-primary mr-1"
+                >
+                  <Zap className="h-3 w-3" />
+                  باقة
+                </Badge>
+              </div>
+            ) : (
+              <Badge
+                className={cn(
+                  'border text-xs font-semibold',
+                  policyTypeColors[mainPolicy.policy_type_parent] || policyTypeColors.OTHER
+                )}
+              >
+                {getTypeDisplayLabel(mainPolicy)}
+              </Badge>
+            )}
+
+            {createdRecently && (
+              <Badge
+                variant="outline"
+                className="gap-1 text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-600"
+              >
+                <Zap className="h-3 w-3" />
+                جديدة
+              </Badge>
+            )}
+
+            {brokerPolicy && brokerPolicy.broker && brokerDirectionLabel && (
+              <Badge
+                variant="outline"
+                className="gap-1 text-xs bg-amber-500/10 border-amber-500/30 text-amber-700"
+                title={`${brokerDirectionLabel}: ${brokerPolicy.broker.name}`}
+              >
+                <Handshake className="h-3 w-3" />
+                {brokerDirectionLabel}: {brokerPolicy.broker.name}
+              </Badge>
+            )}
+
+            {/* For singles we surface a Files button so customers can still
+                open attachments; packages push file chips down into the
+                component rows instead. */}
+            {!isPkg && files.length > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  openFileGallery(
+                    files,
+                    `${getTypeDisplayLabel(mainPolicy)} ${mainPolicy.policy_number || ''}`.trim()
+                  )
+                }
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-full px-2.5 py-0.5 transition-colors"
+              >
+                <Paperclip className="h-3 w-3" />
+                {files.length} ملف
+              </button>
+            )}
+          </div>
+
+          {/* Main info grid — الشركة / السيارة / الفترة / المبلغ */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div className="flex items-start gap-2">
+              <Building2 className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">الشركة</p>
+                <p
+                  className={cn(
+                    'font-medium truncate',
+                    !isActive && 'text-muted-foreground'
+                  )}
+                >
+                  {mainPolicy.company?.name_ar || mainPolicy.company?.name || '-'}
+                </p>
+              </div>
             </div>
-            <p className="font-bold text-primary ltr-nums text-base">₪{totalPrice.toLocaleString()}</p>
+
+            <div className="flex items-start gap-2">
+              <Car className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">السيارة</p>
+                <p
+                  className={cn(
+                    'font-mono font-medium ltr-nums',
+                    !isActive && 'text-muted-foreground'
+                  )}
+                >
+                  {mainPolicy.car?.car_number || '-'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">الفترة</p>
+                <p
+                  className={cn(
+                    'font-medium text-xs',
+                    !isActive && 'text-muted-foreground'
+                  )}
+                >
+                  <span className="ltr-nums">{formatDate(mainPolicy.start_date)}</span>
+                  <span className="mx-1 text-muted-foreground">←</span>
+                  <span className="ltr-nums">{formatDate(mainPolicy.end_date)}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2 justify-end">
+              <div className="flex flex-col items-start leading-tight">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المبلغ</span>
+                <span
+                  className={cn(
+                    'text-lg font-bold ltr-nums',
+                    isActive ? 'text-primary' : 'text-muted-foreground'
+                  )}
+                >
+                  ₪{totalPrice.toLocaleString('en-US')}
+                </span>
+                {totalCommission > 0 && (
+                  <span className="text-[9px] text-amber-700 font-semibold ltr-nums mt-0.5">
+                    منها ₪{totalCommission.toLocaleString('en-US')} عمولة مكتب
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="mt-2">
-            <MoneyChips paid={totalPaid} remaining={totalRemaining} />
-          </div>
-        </div>
-        <div className="p-3 space-y-3">
-          {pkg.policies.map(p => (
-            <div key={p.id}>{renderPolicyLine(p)}</div>
-          ))}
+
+          {/* Package components table — only for packages */}
+          {isPkg && (
+            <div className="mt-3 pt-3 border-t border-border/50">
+              <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5" />
+                مكونات الباقة
+              </div>
+              <div className="rounded-lg border border-border/60 overflow-hidden bg-muted/20">
+                <div className="grid grid-cols-[2rem_1fr_auto_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
+                  <span className="text-center">#</span>
+                  <span>الوثيقة</span>
+                  <span className="ltr-nums">الفترة</span>
+                  <span className="text-left min-w-[70px]">السعر</span>
+                </div>
+                {renderComponentRow(mainPolicy, 1, isActive)}
+                {addons.map((addon, i) => renderComponentRow(addon, i + 2, isActive))}
+                <div className="flex items-start justify-end gap-6 px-3 py-2 border-t border-border/60 bg-muted/30 text-right">
+                  <div className="flex flex-col text-xs items-end text-left">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
+                    <span className="font-bold text-success ltr-nums">
+                      ₪{totalPaid.toLocaleString('en-US')}
+                    </span>
+                  </div>
+                  <div className="flex flex-col text-xs items-end text-left">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
+                    <span
+                      className={cn(
+                        'font-bold ltr-nums',
+                        totalRemaining > 0 ? 'text-destructive' : 'text-success'
+                      )}
+                    >
+                      ₪{totalRemaining.toLocaleString('en-US')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Standalone totals footer — same framed summary on single-policy
+              cards so every card surfaces paid/remaining in the same place. */}
+          {!isPkg && isActive && (
+            <div className="mt-3 pt-3 border-t border-border/50">
+              <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
+                <div className="flex items-start justify-end gap-6 px-3 py-2 text-right">
+                  <div className="flex flex-col text-xs items-end text-left">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
+                    <span className="font-bold text-success ltr-nums">
+                      ₪{totalPaid.toLocaleString('en-US')}
+                    </span>
+                  </div>
+                  <div className="flex flex-col text-xs items-end text-left">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
+                    <span
+                      className={cn(
+                        'font-bold ltr-nums',
+                        totalRemaining > 0 ? 'text-destructive' : 'text-success'
+                      )}
+                    >
+                      ₪{totalRemaining.toLocaleString('en-US')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Extra drivers */}
+          {drivers.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-border/50">
+              <div className="flex items-start gap-2">
+                <Users className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex flex-wrap gap-1.5">
+                  {drivers.map((d) => (
+                    <Badge
+                      key={d.child_id}
+                      variant="secondary"
+                      className="text-xs font-normal px-2 py-1"
+                    >
+                      {d.full_name}
+                      {d.relation ? ` • ${d.relation}` : ''}
+                      {d.birth_date ? ` • ${formatDate(d.birth_date)}` : ''}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Notes — from the main policy (packages surface addon notes
+              inline on their component rows elsewhere in the app, but the
+              report uses the package-level note as the summary). */}
+          {mainPolicy.notes && (
+            <div className="mt-3 pt-3 border-t border-border/50">
+              <div className="flex items-start gap-2">
+                <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">ملاحظات</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+                    {mainPolicy.notes}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1097,7 +1498,7 @@ export function ClientReportModal({
                       {items.length === 0 ? (
                         <p className="text-center text-sm text-muted-foreground py-2">لا توجد وثائق</p>
                       ) : (
-                        items.map(renderItem)
+                        items.map(renderPolicyCard)
                       )}
                     </div>
                   </div>
@@ -1109,7 +1510,7 @@ export function ClientReportModal({
                   <div className="bg-muted/40 p-3 sm:p-4">
                     <p className="font-semibold text-base">وثائق أخرى (بدون سيارة)</p>
                   </div>
-                  <div className="p-3 sm:p-4 space-y-3">{itemsByCar.noCar.map(renderItem)}</div>
+                  <div className="p-3 sm:p-4 space-y-3">{itemsByCar.noCar.map(renderPolicyCard)}</div>
                 </div>
               )}
 
@@ -1346,28 +1747,6 @@ function HeaderStat({ label, value }: { label: string; value: string | number })
     <div className="rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-2">
       <p className="text-xs text-white/70">{label}</p>
       <p className="text-lg sm:text-xl font-bold text-white ltr-nums">{value}</p>
-    </div>
-  );
-}
-
-function MoneyChips({ paid, remaining }: { paid: number; remaining: number }) {
-  return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success/10 text-success text-xs font-medium">
-        <span>مدفوع</span>
-        <span className="ltr-nums font-bold">₪{paid.toLocaleString()}</span>
-      </span>
-      <span
-        className={cn(
-          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium',
-          remaining > 0
-            ? 'bg-destructive/10 text-destructive'
-            : 'bg-muted text-muted-foreground'
-        )}
-      >
-        <span>متبقي</span>
-        <span className="ltr-nums font-bold">₪{remaining.toLocaleString()}</span>
-      </span>
     </div>
   );
 }
