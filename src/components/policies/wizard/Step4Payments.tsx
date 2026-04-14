@@ -386,22 +386,32 @@ export function Step4Payments({
                     {/* Payment Type */}
                     <div>
                       <Label className="text-[10px] mb-1 block text-muted-foreground">نوع الدفع</Label>
-                      <Select
-                        value={payment.payment_type}
-                        onValueChange={(v) => updatePayment(payment.id, 'payment_type', v)}
-                        disabled={isDisabled}
-                      >
-                        <SelectTrigger className={cn("h-9", isLocked && "opacity-70 cursor-not-allowed")}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {paymentTypes.map((type) => (
-                            <SelectItem key={type.value} value={type.value}>
-                              {type.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {isLocked ? (
+                        // Locked ELZAMI auto-payment — not editable. Render a
+                        // static "فيزا خارجي" chip so the wizard matches the
+                        // rest of the app (customer pays it directly on the
+                        // insurance company's portal, not through our till).
+                        <div className="h-9 px-3 rounded-md border border-border/60 bg-muted/40 flex items-center text-sm font-medium opacity-80 cursor-not-allowed">
+                          فيزا خارجي
+                        </div>
+                      ) : (
+                        <Select
+                          value={payment.payment_type}
+                          onValueChange={(v) => updatePayment(payment.id, 'payment_type', v)}
+                          disabled={isDisabled}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paymentTypes.map((type) => (
+                              <SelectItem key={type.value} value={type.value}>
+                                {type.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
 
                     {/* Amount */}
