@@ -21,9 +21,11 @@ import {
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, FileImage, ExternalLink } from "lucide-react";
+import { Loader2, FileImage, ExternalLink, Trash2 } from "lucide-react";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from "@/lib/chequeUtils";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
+import { useAgentContext } from "@/hooks/useAgentContext";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 
 interface PaymentRecord {
   id: string;
@@ -91,7 +93,11 @@ export function PaymentEditDialog({
   onSuccess,
   packagePolicies,
 }: PaymentEditDialogProps) {
+  const { hasFeature } = useAgentContext();
+  const visaEnabled = hasFeature('visa_payment');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [formData, setFormData] = useState({
     amount: 0,
     payment_type: 'cash',
@@ -162,6 +168,27 @@ export function PaymentEditDialog({
     }
   };
 
+  const handleDelete = async () => {
+    if (!payment) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('policy_payments')
+        .delete()
+        .eq('id', payment.id);
+      if (error) throw error;
+      toast.success('تم حذف الدفعة');
+      setDeleteConfirmOpen(false);
+      onSuccess();
+      onOpenChange(false);
+    } catch (e: any) {
+      console.error('Delete payment error:', e);
+      toast.error(e.message || 'فشل حذف الدفعة');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (!payment) return null;
 
   const isLocked = payment.locked === true;
@@ -217,10 +244,10 @@ export function PaymentEditDialog({
             )
           )}
 
-          {/* Locked info — soft warning, but fields stay editable for admins */}
+          {/* Locked info — only refused can be toggled on elzami rows */}
           {isLocked && (
             <div className="bg-warning/10 border border-warning/30 text-warning-foreground px-3 py-2 rounded-lg text-xs">
-              ℹ️ هذه دفعة لوثيقة إلزامية — عدّل بحذر.
+              🔒 هذه دفعة لوثيقة إلزامية — المبلغ والطريقة والتاريخ ثابتين، يمكنك فقط وضعها كراجعة.
             </div>
           )}
 
@@ -234,6 +261,7 @@ export function PaymentEditDialog({
               step={0.01}
               value={formData.amount}
               onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
+              disabled={isLocked}
               className="text-lg font-semibold"
             />
           </div>
@@ -244,6 +272,7 @@ export function PaymentEditDialog({
             <Select
               value={formData.payment_type}
               onValueChange={(value) => setFormData({ ...formData, payment_type: value })}
+              disabled={isLocked}
             >
               <SelectTrigger>
                 <SelectValue placeholder="اختر طريقة الدفع" />
@@ -251,7 +280,13 @@ export function PaymentEditDialog({
               <SelectContent>
                 <SelectItem value="cash">نقدي</SelectItem>
                 <SelectItem value="cheque">شيك</SelectItem>
-                <SelectItem value="visa">بطاقة</SelectItem>
+                {/* فيزا is only selectable when the agent has visa_payment
+                    enabled by the Thiqa admin. We still render it when the
+                    current row is already visa (e.g. a locked ELZAMI row)
+                    so the value stays valid. */}
+                {(visaEnabled || formData.payment_type === 'visa') && (
+                  <SelectItem value="visa">{isLocked ? 'فيزا خارجي' : 'فيزا'}</SelectItem>
+                )}
                 <SelectItem value="transfer">تحويل</SelectItem>
               </SelectContent>
             </Select>
@@ -264,14 +299,15 @@ export function PaymentEditDialog({
               <Input
                 id="cheque_number"
                 value={formData.cheque_number}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
-                  cheque_number: sanitizeChequeNumber(e.target.value) 
+                onChange={(e) => setFormData({
+                  ...formData,
+                  cheque_number: sanitizeChequeNumber(e.target.value)
                 })}
                 maxLength={CHEQUE_NUMBER_MAX_LENGTH}
                 className="font-mono"
                 placeholder="أدخل رقم الشيك"
-                />
+                disabled={isLocked}
+              />
             </div>
           )}
 
@@ -280,10 +316,11 @@ export function PaymentEditDialog({
             <Label>تاريخ الدفع</Label>
             <ArabicDatePicker
               value={formData.payment_date}
-              onChange={(date) => setFormData({ 
-                ...formData, 
-                payment_date: date || '' 
+              onChange={(date) => setFormData({
+                ...formData,
+                payment_date: date || ''
               })}
+              disabled={isLocked}
             />
           </div>
 
@@ -320,22 +357,49 @@ export function PaymentEditDialog({
           </div>
         </div>
 
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            إلغاء
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? (
-              <>
-                <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                جاري الحفظ...
-              </>
-            ) : (
-              'حفظ التعديلات'
-            )}
-          </Button>
+        <DialogFooter className="gap-2 sm:justify-between flex-row">
+          {/* Delete button — only for user-entered rows. Locked ELZAMI
+              rows can never be deleted individually (they're auto-generated
+              by the wizard and must stay attached to the policy). */}
+          {!isLocked ? (
+            <Button
+              variant="ghost"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={saving || deleting}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              حذف
+            </Button>
+          ) : (
+            <div />
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving || deleting}>
+              إلغاء
+            </Button>
+            <Button onClick={handleSave} disabled={saving || deleting}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                  جاري الحفظ...
+                </>
+              ) : (
+                'حفظ التعديلات'
+              )}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
+
+      <DeleteConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        onConfirm={handleDelete}
+        title="حذف الدفعة"
+        description="هل أنت متأكد من حذف هذه الدفعة؟ لا يمكن التراجع عن هذا الإجراء."
+        loading={deleting}
+      />
     </Dialog>
   );
 }

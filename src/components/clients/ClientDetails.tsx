@@ -200,6 +200,7 @@ interface PaymentRecord {
 // Grouped payment for display (combines payments with same batch_id)
 interface GroupedPayment {
   id: string; // batch_id or individual payment id
+  groupId: string | null; // policies.group_id when the row collapses a package
   totalAmount: number;
   payment_date: string;
   payment_type: string; // first type, kept for filter compat
@@ -212,6 +213,12 @@ interface GroupedPayment {
   locked: boolean | null;
   payments: PaymentRecord[]; // Individual payments in this group
   policyTypes: string[]; // Unique policy types in this group
+  // Every policy that belongs to this package (resolved via group_id on
+  // policies). Auto-generated ELZAMI and user-entered payments are always
+  // attached to the main policy_id on the DB side, so without this we'd
+  // only ever see one policy type per row. When the row is a standalone
+  // payment (no group_id) this falls back to just the attached policy.
+  packagePolicies: { id: string; policy_type_parent: string; policy_type_child: string | null }[];
 }
 
 interface ClientDetailsProps {
@@ -331,6 +338,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   // Payment edit state
   const [editPaymentDialogOpen, setEditPaymentDialogOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<PaymentRecord | null>(null);
+  // When a payment edit is opened from a grouped row we also pass the
+  // full package context so the dialog can show the right policies at
+  // the top instead of whichever single policy the row was attached to.
+  const [editingGroupPolicies, setEditingGroupPolicies] = useState<
+    { id: string; policy_type_parent: string; policy_type_child: string | null; insurance_price: number; company_name: string | null }[] | undefined
+  >(undefined);
   
   // Notes editing
   const [editingNotes, setEditingNotes] = useState(false);
@@ -749,8 +762,27 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   };
 
   // Open payment edit dialog directly
-  const handleEditPayment = (payment: PaymentRecord) => {
+  const handleEditPayment = (payment: PaymentRecord, group?: GroupedPayment) => {
     setEditingPayment(payment);
+    // If the payment belongs to a package (has group_id + >1 policy),
+    // expand the package policies so the dialog can render every row
+    // of the package at the top instead of just the attached policy.
+    if (group && group.packagePolicies.length > 1) {
+      const enriched = group.packagePolicies
+        .map((pp) => {
+          const full = policies.find((pol) => pol.id === pp.id);
+          return {
+            id: pp.id,
+            policy_type_parent: pp.policy_type_parent,
+            policy_type_child: pp.policy_type_child,
+            insurance_price: Number(full?.insurance_price || 0),
+            company_name: full?.company?.name_ar || full?.company?.name || null,
+          };
+        });
+      setEditingGroupPolicies(enriched);
+    } else {
+      setEditingGroupPolicies(undefined);
+    }
     setEditPaymentDialogOpen(true);
   };
 
@@ -1156,7 +1188,25 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   // Group payments by batch_id for unified display
   const groupedPayments = useMemo((): GroupedPayment[] => {
     const groups = new Map<string, GroupedPayment>();
-    
+
+    // Build a group_id → package policies lookup. Every policy with a
+    // group_id gets bucketed so we can answer "which policy types are in
+    // this package?" without re-joining on the payments side.
+    const packagePoliciesByGroup = new Map<
+      string,
+      { id: string; policy_type_parent: string; policy_type_child: string | null }[]
+    >();
+    for (const p of policies) {
+      if (!p.group_id) continue;
+      const arr = packagePoliciesByGroup.get(p.group_id) || [];
+      arr.push({
+        id: p.id,
+        policy_type_parent: p.policy_type_parent,
+        policy_type_child: (p as any).policy_type_child ?? null,
+      });
+      packagePoliciesByGroup.set(p.group_id, arr);
+    }
+
     // Filter payments first based on search and type filter
     const filteredPayments = payments.filter(payment => {
       if (paymentSearch) {
@@ -1185,8 +1235,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         : payment.batch_id || payment.id;
       
       if (!groups.has(groupKey)) {
+        const thisGroupId = payment.policy?.group_id || null;
+        const fromPackage = thisGroupId ? packagePoliciesByGroup.get(thisGroupId) : null;
         groups.set(groupKey, {
           id: groupKey,
+          groupId: thisGroupId,
           totalAmount: 0,
           payment_date: payment.payment_date,
           payment_type: payment.payment_type,
@@ -1199,6 +1252,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           locked: payment.locked,
           payments: [],
           policyTypes: [],
+          packagePolicies: fromPackage && fromPackage.length > 0
+            ? fromPackage
+            : (payment.policy
+              ? [{
+                  id: payment.policy.id,
+                  policy_type_parent: payment.policy.policy_type_parent,
+                  policy_type_child: payment.policy.policy_type_child ?? null,
+                }]
+              : []),
         });
       }
 
@@ -1237,7 +1299,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     return Array.from(groups.values()).sort((a, b) => 
       new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()
     );
-  }, [payments, paymentSearch, paymentTypeFilter]);
+  }, [payments, paymentSearch, paymentTypeFilter, policies]);
 
   // Loading skeleton
   if (initialLoading) {
@@ -1937,19 +1999,17 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
                             {(() => {
-                              // Collect a unique, child-aware label per policy
-                              // row in the group so a package pays with ثالث +
-                              // إلزامي renders both tags instead of only the
-                              // first type seen.
+                              // Show every policy type in the package (via
+                              // group_id → packagePolicies). Payments are
+                              // attached to a single policy on the DB but a
+                              // package pay really covers the whole group.
                               const seen = new Set<string>();
                               const tags: { label: string; parent: string }[] = [];
-                              for (const p of group.payments) {
-                                const parent = p.policy?.policy_type_parent;
-                                if (!parent) continue;
-                                const label = getInsuranceTypeLabel(parent as any, (p.policy as any)?.policy_type_child ?? null);
+                              for (const p of group.packagePolicies) {
+                                const label = getInsuranceTypeLabel(p.policy_type_parent as any, p.policy_type_child as any);
                                 if (seen.has(label)) continue;
                                 seen.add(label);
-                                tags.push({ label, parent });
+                                tags.push({ label, parent: p.policy_type_parent });
                               }
                               return tags.map((t) => (
                                 <Badge key={t.label} className={cn("border", policyTypeColors[t.parent])}>
@@ -1999,7 +2059,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
                               {group.payments.length === 1 ? (
                                 <>
-                                  <DropdownMenuItem onClick={() => handleEditPayment(group.payments[0])}>
+                                  <DropdownMenuItem onClick={() => handleEditPayment(group.payments[0], group)}>
                                     <Edit className="h-4 w-4 ml-2" />
                                     تعديل
                                   </DropdownMenuItem>
@@ -2024,7 +2084,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                   {group.payments.map((payment) => (
                                     <DropdownMenuItem
                                       key={payment.id}
-                                      onClick={() => handleEditPayment(payment)}
+                                      onClick={() => handleEditPayment(payment, group)}
                                       className="text-sm"
                                     >
                                       <Edit className="h-3 w-3 ml-2" />
@@ -2393,10 +2453,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       {/* Payment Edit Dialog */}
       <PaymentEditDialog
         open={editPaymentDialogOpen}
-        onOpenChange={setEditPaymentDialogOpen}
+        onOpenChange={(o) => {
+          setEditPaymentDialogOpen(o);
+          if (!o) setEditingGroupPolicies(undefined);
+        }}
         payment={editingPayment}
+        packagePolicies={editingGroupPolicies}
         onSuccess={async () => {
           setEditingPayment(null);
+          setEditingGroupPolicies(undefined);
           // Refresh payment-related data
           await Promise.all([
             fetchPaymentSummary(),

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,8 @@ import {
   ReceiptText,
   Printer,
   Loader2,
+  ImageIcon,
+  X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -78,6 +80,38 @@ const formatDate = (dateStr: string | null) => {
 
 export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) {
   const [printing, setPrinting] = useState(false);
+  const [imagesByPayment, setImagesByPayment] = useState<Record<string, { id: string; image_url: string; image_type: string | null }[]>>({});
+
+  // Fetch payment_images for every payment in the group whenever the
+  // dialog opens so the user can see receipts / cheque scans / whatever
+  // they uploaded at payment time.
+  useEffect(() => {
+    if (!open || !group) {
+      setImagesByPayment({});
+      return;
+    }
+    const paymentIds = group.payments.map((p) => p.id);
+    if (paymentIds.length === 0) return;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("payment_images")
+          .select("id, payment_id, image_url, image_type")
+          .in("payment_id", paymentIds);
+        const map: Record<string, { id: string; image_url: string; image_type: string | null }[]> = {};
+        (data || []).forEach((img: any) => {
+          const arr = map[img.payment_id] || [];
+          arr.push({ id: img.id, image_url: img.image_url, image_type: img.image_type });
+          map[img.payment_id] = arr;
+        });
+        setImagesByPayment(map);
+      } catch (e) {
+        console.error("[PaymentGroupDetailsDialog] images fetch error:", e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, group?.id, group?.payments.map((p) => p.id).join(",")]);
+
   if (!group) return null;
 
   const combinedTypeLabel = getCombinedPaymentTypeLabel(
@@ -133,21 +167,31 @@ export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) 
                   </p>
                 </div>
               </div>
-              <Button
-                size="sm"
-                onClick={handlePrint}
-                disabled={printing}
-                className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0 shrink-0"
-              >
-                {printing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Printer className="h-4 w-4" />
-                )}
-                <span className="hidden sm:inline">
-                  {group.payments.length > 1 ? 'طباعة السندات' : 'طباعة السند'}
-                </span>
-              </Button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  size="sm"
+                  onClick={handlePrint}
+                  disabled={printing}
+                  className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
+                >
+                  {printing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Printer className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {group.payments.length > 1 ? 'طباعة السندات' : 'طباعة السند'}
+                  </span>
+                </Button>
+                <Button
+                  size="icon"
+                  onClick={() => onOpenChange(false)}
+                  className="h-8 w-8 bg-white/10 hover:bg-white/20 text-white border-0"
+                  aria-label="إغلاق"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </DialogHeader>
         </div>
@@ -198,8 +242,8 @@ export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) 
                     </div>
                   </div>
                 </div>
-                {(p.cheque_number || p.card_last_four || p.notes) && (
-                  <div className="px-4 py-3 space-y-1 text-xs">
+                {(p.cheque_number || p.card_last_four || p.notes || (imagesByPayment[p.id]?.length ?? 0) > 0) && (
+                  <div className="px-4 py-3 space-y-2 text-xs">
                     {p.cheque_number && (
                       <div className="flex items-center gap-2">
                         <span className="text-muted-foreground">رقم الشيك:</span>
@@ -214,6 +258,35 @@ export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) 
                     )}
                     {p.notes && (
                       <p className="text-muted-foreground">{p.notes}</p>
+                    )}
+                    {(imagesByPayment[p.id]?.length ?? 0) > 0 && (
+                      <div className="pt-1">
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1.5">
+                          <ImageIcon className="h-3 w-3" />
+                          <span>الملفات المرفقة</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {imagesByPayment[p.id].map((img) => {
+                            const isPdf = img.image_url.toLowerCase().endsWith('.pdf');
+                            return (
+                              <a
+                                key={img.id}
+                                href={img.image_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="relative w-16 h-16 rounded-md overflow-hidden border border-border hover:border-primary transition-colors bg-muted flex items-center justify-center shrink-0"
+                                title={img.image_type || 'مرفق'}
+                              >
+                                {isPdf ? (
+                                  <span className="text-[10px] font-bold text-muted-foreground">PDF</span>
+                                ) : (
+                                  <img src={img.image_url} alt={img.image_type || ''} className="w-full h-full object-cover" />
+                                )}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}
