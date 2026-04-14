@@ -1,17 +1,24 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { toast } from "sonner";
-import { Printer, MessageSquare, X, Loader2, Check, AlertCircle, Receipt } from "lucide-react";
+import {
+  Printer,
+  MessageSquare,
+  X,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  FileText,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface PolicySuccessDialogProps {
   open: boolean;
@@ -27,7 +34,6 @@ export function PolicySuccessDialog({
   open,
   onOpenChange,
   policyId,
-  clientId,
   clientPhone,
   isPackage,
   onClose,
@@ -37,119 +43,73 @@ export function PolicySuccessDialog({
   const [smsSent, setSmsSent] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Receipt states
-  const [paymentIds, setPaymentIds] = useState<string[]>([]);
-  const [printingReceipt, setPrintingReceipt] = useState(false);
-  const [sendingReceiptSms, setSendingReceiptSms] = useState(false);
-  const [receiptSmsSent, setReceiptSmsSent] = useState(false);
-
-  // Fetch payment IDs when dialog opens
-  useEffect(() => {
-    if (!open || !policyId) return;
-
-    const fetchPayments = async () => {
-      try {
-        let policyIds = [policyId];
-
-        if (isPackage) {
-          const { data: mainPolicy } = await supabase
-            .from('policies')
-            .select('group_id')
-            .eq('id', policyId)
-            .single();
-
-          if (mainPolicy?.group_id) {
-            const { data: groupPolicies } = await supabase
-              .from('policies')
-              .select('id')
-              .eq('group_id', mainPolicy.group_id);
-            if (groupPolicies) {
-              policyIds = groupPolicies.map(p => p.id);
-            }
-          }
-        }
-
-        const { data: payments } = await supabase
-          .from('policy_payments')
-          .select('id')
-          .in('policy_id', policyIds);
-
-        if (payments && payments.length > 0) {
-          setPaymentIds(payments.map(p => p.id));
-        }
-      } catch (err) {
-        console.error('Error fetching payment IDs:', err);
-      }
-    };
-
-    fetchPayments();
-  }, [open, policyId, isPackage]);
-
   const extractErrorMessage = async (result: { data: any; error: any }): Promise<string> => {
     if (result.error) {
       const parsed = await extractFunctionErrorMessage(result.error);
-      return parsed || 'حدث خطأ غير متوقع';
+      return parsed || "حدث خطأ غير متوقع";
     }
     if (result.data?.error) return result.data.error;
-    return 'حدث خطأ غير متوقع';
+    return "حدث خطأ غير متوقع";
+  };
+
+  // Resolve every policy id in the package (falls back to just [policyId]
+  // for standalone policies). Used for both print and SMS.
+  const resolvePolicyIds = async (): Promise<string[]> => {
+    if (!isPackage) return [policyId];
+    const { data: mainPolicy } = await supabase
+      .from("policies")
+      .select("group_id")
+      .eq("id", policyId)
+      .single();
+    const groupId = mainPolicy?.group_id;
+    if (!groupId) return [policyId];
+    const { data: groupPolicies } = await supabase
+      .from("policies")
+      .select("id")
+      .eq("group_id", groupId);
+    return groupPolicies?.map((p) => p.id) || [policyId];
+  };
+
+  const invokeInvoiceFunction = async (skipSms: boolean) => {
+    const ids = await resolvePolicyIds();
+    if (ids.length > 1) {
+      return supabase.functions.invoke("send-package-invoice-sms", {
+        body: skipSms ? { policy_ids: ids, skip_sms: true } : { policy_ids: ids },
+      });
+    }
+    return supabase.functions.invoke("send-invoice-sms", {
+      body: skipSms
+        ? { policy_id: ids[0], skip_sms: true }
+        : { policy_id: ids[0], force_resend: true },
+    });
   };
 
   const handlePrintInvoice = async () => {
     setPrintingInvoice(true);
     setErrorMessage(null);
-    
-    try {
-      let result;
-      
-      if (isPackage) {
-        const { data: mainPolicy, error: mainPolicyError } = await supabase
-          .from('policies')
-          .select('group_id')
-          .eq('id', policyId)
-          .single();
-        
-        if (mainPolicyError) throw mainPolicyError;
-        const groupId = mainPolicy?.group_id;
-        
-        if (!groupId) {
-          result = await supabase.functions.invoke('send-invoice-sms', {
-            body: { policy_id: policyId, skip_sms: true }
-          });
-        } else {
-          const { data: groupPolicies, error: fetchError } = await supabase
-            .from('policies')
-            .select('id')
-            .eq('group_id', groupId);
-          if (fetchError) throw fetchError;
-          const policyIds = groupPolicies?.map(p => p.id) || [policyId];
-          result = await supabase.functions.invoke('send-package-invoice-sms', {
-            body: { policy_ids: policyIds, skip_sms: true }
-          });
-        }
-      } else {
-        result = await supabase.functions.invoke('send-invoice-sms', {
-          body: { policy_id: policyId, skip_sms: true }
-        });
-      }
 
+    try {
+      const result = await invokeInvoiceFunction(true);
       if (result.error || result.data?.error) {
         const errorMsg = await extractErrorMessage(result);
         setErrorMessage(errorMsg);
         toast.error(errorMsg);
         return;
       }
-
-      const invoiceUrl = result.data?.package_invoice_url || result.data?.ab_invoice_url || result.data?.invoice_url;
+      const invoiceUrl =
+        result.data?.package_invoice_url ||
+        result.data?.ab_invoice_url ||
+        result.data?.invoice_url;
       if (invoiceUrl) {
-        window.open(invoiceUrl, '_blank');
-        toast.success("تم فتح الفاتورة");
+        window.open(invoiceUrl, "_blank");
+        toast.success("تم فتح الوثيقة");
       } else {
-        setErrorMessage("لم يتم العثور على رابط الفاتورة");
-        toast.error("لم يتم العثور على رابط الفاتورة");
+        setErrorMessage("لم يتم العثور على رابط الوثيقة");
+        toast.error("لم يتم العثور على رابط الوثيقة");
       }
     } catch (error) {
-      console.error('Print invoice error:', error);
-      const errorMsg = error instanceof Error ? error.message : "فشل في تحميل الفاتورة";
+      console.error("Print invoice error:", error);
+      const errorMsg = error instanceof Error ? error.message : "فشل في تحميل الوثيقة";
       setErrorMessage(errorMsg);
       toast.error(errorMsg);
     } finally {
@@ -165,51 +125,19 @@ export function PolicySuccessDialog({
 
     setSendingSms(true);
     setErrorMessage(null);
-    
-    try {
-      let result;
-      
-      if (isPackage) {
-        const { data: mainPolicy, error: mainPolicyError } = await supabase
-          .from('policies')
-          .select('group_id')
-          .eq('id', policyId)
-          .single();
-        if (mainPolicyError) throw mainPolicyError;
-        const groupId = mainPolicy?.group_id;
-        
-        if (!groupId) {
-          result = await supabase.functions.invoke('send-invoice-sms', {
-            body: { policy_id: policyId, force_resend: true }
-          });
-        } else {
-          const { data: groupPolicies, error: fetchError } = await supabase
-            .from('policies')
-            .select('id')
-            .eq('group_id', groupId);
-          if (fetchError) throw fetchError;
-          const policyIds = groupPolicies?.map(p => p.id) || [policyId];
-          result = await supabase.functions.invoke('send-package-invoice-sms', {
-            body: { policy_ids: policyIds }
-          });
-        }
-      } else {
-        result = await supabase.functions.invoke('send-invoice-sms', {
-          body: { policy_id: policyId, force_resend: true }
-        });
-      }
 
+    try {
+      const result = await invokeInvoiceFunction(false);
       if (result.error || result.data?.error) {
         const errorMsg = await extractErrorMessage(result);
         setErrorMessage(errorMsg);
         toast.error(errorMsg);
         return;
       }
-
       setSmsSent(true);
-      toast.success("تم إرسال SMS بنجاح");
+      toast.success("تم إرسال الوثيقة عبر SMS");
     } catch (error) {
-      console.error('Send SMS error:', error);
+      console.error("Send SMS error:", error);
       const errorMsg = error instanceof Error ? error.message : "فشل في إرسال SMS";
       setErrorMessage(errorMsg);
       toast.error(errorMsg);
@@ -218,206 +146,119 @@ export function PolicySuccessDialog({
     }
   };
 
-  const handlePrintReceipt = async () => {
-    if (paymentIds.length === 0) return;
-    setPrintingReceipt(true);
-    setErrorMessage(null);
-
-    try {
-      const result = await supabase.functions.invoke('generate-payment-receipt', {
-        body: { payment_id: paymentIds[0] }
-      });
-
-      if (result.error || result.data?.error) {
-        const errorMsg = await extractErrorMessage(result);
-        setErrorMessage(errorMsg);
-        toast.error(errorMsg);
-        return;
-      }
-
-      const receiptUrl = result.data?.receipt_url;
-      if (receiptUrl) {
-        window.open(receiptUrl, '_blank');
-        toast.success("تم فتح إيصال الدفع");
-      } else {
-        setErrorMessage("لم يتم العثور على رابط الإيصال");
-        toast.error("لم يتم العثور على رابط الإيصال");
-      }
-    } catch (error) {
-      console.error('Print receipt error:', error);
-      const errorMsg = error instanceof Error ? error.message : "فشل في تحميل الإيصال";
-      setErrorMessage(errorMsg);
-      toast.error(errorMsg);
-    } finally {
-      setPrintingReceipt(false);
-    }
-  };
-
-  const handleSendReceiptSms = async () => {
-    if (!clientPhone || paymentIds.length === 0) {
-      toast.error("لا يوجد رقم هاتف أو دفعات");
-      return;
-    }
-
-    setSendingReceiptSms(true);
-    setErrorMessage(null);
-
-    try {
-      // First generate the receipt to get URL
-      const receiptResult = await supabase.functions.invoke('generate-payment-receipt', {
-        body: { payment_id: paymentIds[0] }
-      });
-
-      if (receiptResult.error || receiptResult.data?.error) {
-        const errorMsg = await extractErrorMessage(receiptResult);
-        setErrorMessage(errorMsg);
-        toast.error(errorMsg);
-        return;
-      }
-
-      const receiptUrl = receiptResult.data?.receipt_url;
-      if (!receiptUrl) {
-        setErrorMessage("لم يتم العثور على رابط الإيصال");
-        toast.error("لم يتم العثور على رابط الإيصال");
-        return;
-      }
-
-      // Send via SMS
-      const smsResult = await supabase.functions.invoke('send-sms', {
-        body: {
-          phone: clientPhone,
-          message: `إيصال الدفع الخاص بك:\n${receiptUrl}`
-        }
-      });
-
-      if (smsResult.error || smsResult.data?.error) {
-        const errorMsg = await extractErrorMessage(smsResult);
-        setErrorMessage(errorMsg);
-        toast.error(errorMsg);
-        return;
-      }
-
-      setReceiptSmsSent(true);
-      toast.success("تم إرسال إيصال الدفع عبر SMS");
-    } catch (error) {
-      console.error('Send receipt SMS error:', error);
-      const errorMsg = error instanceof Error ? error.message : "فشل في إرسال الإيصال";
-      setErrorMessage(errorMsg);
-      toast.error(errorMsg);
-    } finally {
-      setSendingReceiptSms(false);
-    }
-  };
-
   const handleClose = () => {
     setErrorMessage(null);
+    setSmsSent(false);
     onOpenChange(false);
     onClose();
   };
 
+  const isBusy = printingInvoice || sendingSms;
+
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-success">
-            <Check className="h-6 w-6" />
-            تم إنشاء الوثيقة بنجاح
-          </DialogTitle>
-          <DialogDescription>
-            يمكنك طباعة بوليصة التأمين أو فاتورة الدفع أو إرسالها للعميل عبر SMS
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-md w-[95vw] p-0 overflow-hidden" dir="rtl">
+        {/* Dark navy header — matches the package drawer / client report shell */}
+        <div
+          className="text-white p-5"
+          style={{ background: "linear-gradient(135deg, #122143 0%, #1a3260 100%)" }}
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <DialogTitle className="text-lg font-bold text-white text-right">
+                  تم إنشاء الوثيقة بنجاح
+                </DialogTitle>
+                <p className="text-xs text-white/70 mt-0.5">
+                  يمكنك طباعتها أو إرسالها للعميل عبر SMS
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
+        </div>
 
-        {errorMessage && (
-          <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
-            <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
+        {/* Body */}
+        <div className="p-4 space-y-3">
+          {errorMessage && (
+            <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
 
-        <div className="flex flex-col gap-3 mt-4">
-          {/* Invoice Section */}
-          <p className="text-xs font-semibold text-muted-foreground">بوليصة التأمين</p>
-          <Button
-            variant="outline"
-            className="w-full gap-2 h-12"
+          {/* Print */}
+          <button
+            type="button"
             onClick={handlePrintInvoice}
-            disabled={printingInvoice}
-          >
-            {printingInvoice ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Printer className="h-5 w-5" />
+            disabled={isBusy}
+            className={cn(
+              "w-full p-4 rounded-xl border-2 border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 text-right flex items-center gap-4",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
             )}
-            طباعة بوليصة التأمين
-          </Button>
+          >
+            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+              {printingInvoice ? (
+                <Loader2 className="h-6 w-6 text-emerald-600 animate-spin" />
+              ) : (
+                <Printer className="h-6 w-6 text-emerald-600" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-base">طباعة الوثيقة</div>
+              <div className="text-sm text-muted-foreground">
+                فتح الوثيقة في نافذة جديدة للطباعة
+              </div>
+            </div>
+          </button>
 
+          {/* Send SMS */}
+          <button
+            type="button"
+            onClick={handleSendSms}
+            disabled={isBusy || smsSent || !clientPhone}
+            className={cn(
+              "w-full p-4 rounded-xl border-2 transition-all duration-200 text-right flex items-center gap-4",
+              smsSent
+                ? "border-success/40 bg-success/5"
+                : "border-border hover:border-primary/50 hover:bg-primary/5",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
+            )}
+          >
+            <div
+              className={cn(
+                "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
+                smsSent ? "bg-success/15" : "bg-blue-500/10",
+              )}
+            >
+              {sendingSms ? (
+                <Loader2 className="h-6 w-6 text-blue-600 animate-spin" />
+              ) : smsSent ? (
+                <CheckCircle2 className="h-6 w-6 text-success" />
+              ) : (
+                <MessageSquare className="h-6 w-6 text-blue-600" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-base">
+                {smsSent ? "تم إرسال الوثيقة" : "إرسال الوثيقة عبر SMS"}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {clientPhone
+                  ? `سيتم إرسال رابط الوثيقة للرقم ${clientPhone}`
+                  : "لا يوجد رقم هاتف للعميل"}
+              </div>
+            </div>
+          </button>
+
+          {/* Close */}
           <Button
             variant="outline"
-            className="w-full gap-2 h-12"
-            onClick={handleSendSms}
-            disabled={sendingSms || smsSent || !clientPhone}
-          >
-            {sendingSms ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : smsSent ? (
-              <Check className="h-5 w-5 text-success" />
-            ) : (
-              <MessageSquare className="h-5 w-5" />
-            )}
-            {smsSent ? "تم إرسال بوليصة التأمين SMS" : "إرسال بوليصة التأمين SMS"}
-          </Button>
-
-          {/* Receipt Section - only show if payments exist */}
-          {paymentIds.length > 0 && (
-            <>
-              <Separator className="my-1" />
-              <p className="text-xs font-semibold text-muted-foreground">فاتورة الدفع</p>
-
-              <Button
-                variant="outline"
-                className="w-full gap-2 h-12"
-                onClick={handlePrintReceipt}
-                disabled={printingReceipt}
-              >
-                {printingReceipt ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <Receipt className="h-5 w-5" />
-                )}
-                طباعة فاتورة الدفع
-              </Button>
-
-              <Button
-                variant="outline"
-                className="w-full gap-2 h-12"
-                onClick={handleSendReceiptSms}
-                disabled={sendingReceiptSms || receiptSmsSent || !clientPhone}
-              >
-                {sendingReceiptSms ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : receiptSmsSent ? (
-                  <Check className="h-5 w-5 text-success" />
-                ) : (
-                  <MessageSquare className="h-5 w-5" />
-                )}
-                {receiptSmsSent ? "تم إرسال فاتورة الدفع SMS" : "إرسال فاتورة الدفع SMS"}
-              </Button>
-            </>
-          )}
-
-          {!clientPhone && (
-            <p className="text-xs text-muted-foreground text-center">
-              لا يوجد رقم هاتف للعميل لإرسال SMS
-            </p>
-          )}
-
-          <Separator className="my-1" />
-
-          <Button
-            variant="ghost"
-            className="w-full gap-2"
+            className="w-full gap-2 mt-1"
             onClick={handleClose}
+            disabled={isBusy}
           >
             <X className="h-4 w-4" />
             إغلاق
