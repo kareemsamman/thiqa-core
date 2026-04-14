@@ -256,9 +256,9 @@ serve(async (req) => {
     if ((refundsRes as any).error) relatedErrors.push(`customer_wallet_transactions: ${(refundsRes as any).error.message}`);
     if (relatedErrors.length > 0) throw new Error(relatedErrors.join(' | '));
 
-    const rawPolicyFiles = (filesRes.data || []) as any[];
+    const policyFiles = (filesRes.data || []) as any[];
     const policyChildrenRows = (childrenRes.data || []) as any[];
-    const rawPayments = (paymentsRes.data || []) as any[];
+    const allPayments = (paymentsRes.data || []) as any[];
     const accidents = (accidentsRes.data || []) as any[];
     const refunds = (refundsRes.data || []) as any[];
     const branchName = (branchRes.data as any)?.name_ar || (branchRes.data as any)?.name || null;
@@ -270,33 +270,11 @@ serve(async (req) => {
       company_location: (smsSettingsRes.data as any)?.company_location || '',
     };
 
-    // Strip ELZAMI (compulsory) out of the whole report. The office never
-    // bills the client for إلزامي — it's settled directly by the insurance
-    // company — so including its premiums, payments, or attachments would
-    // inflate the totals on the customer-facing report and confuse the
-    // client. Filter policies, and drop any payments/files that belong to
-    // an ELZAMI policy_id so the items table, payment history, and
-    // attachments section stay consistent.
-    const elzamiPolicyIds = new Set(
-      (policies || [])
-        .filter((p: any) => p.policy_type_parent === 'ELZAMI')
-        .map((p: any) => p.id)
-    );
-    const visiblePolicies = (policies || []).filter(
-      (p: any) => p.policy_type_parent !== 'ELZAMI'
-    );
-    const allPayments = rawPayments.filter(
-      (pay: any) => !elzamiPolicyIds.has(pay.policy_id)
-    );
-    const policyFiles = rawPolicyFiles.filter(
-      (f: any) => !elzamiPolicyIds.has(f.entity_id)
-    );
-
     // Totals: include office commission and exclude cancelled policies from
     // the "total insurance" so the المطلوب line matches what the staff sees
     // on the client page.
     let totalInsurance = 0;
-    for (const p of visiblePolicies) {
+    for (const p of policies || []) {
       if (p.cancelled) continue;
       totalInsurance += (p.insurance_price || 0) + ((p as any).office_commission || 0);
     }
@@ -328,7 +306,7 @@ serve(async (req) => {
     const html = generateReportHtml({
       client,
       cars: cars || [],
-      policies: visiblePolicies,
+      policies: policies || [],
       policyFiles,
       policyChildrenRows,
       allPayments,
@@ -658,9 +636,12 @@ function generateReportHtml(args: GenerateReportArgs): string {
     `;
   };
 
-  // Package rendering: a header row spanning all columns acts as the "باقة
-  // تأمين" separator showing the car and package total, then one indented
-  // component row per policy underneath (same 4 columns, lighter background).
+  // Package rendering: a header row spanning all columns acts as the "باقة"
+  // separator. It mirrors the app's policy-card layout (image 2 in the
+  // product brief): a "باقة" chip, the combined member type labels joined
+  // with "+", the car number, and the package total. Then one indented
+  // component row per policy underneath so the client sees each piece of
+  // the package broken out just like in the app.
   const renderPackageBlock = (pkg: PackageItem, index: number) => {
     const members = pkg.policies;
     const first = members[0];
@@ -668,13 +649,17 @@ function generateReportHtml(args: GenerateReportArgs): string {
     const total = members.reduce((s, p) => s + lineTotalFor(p), 0);
     const allCancelled = members.every(p => p.cancelled);
 
+    const combinedTypeLabel = members
+      .map(m => getPolicyTypeLabel(m.policy_type_parent, m.policy_type_child))
+      .join(' + ');
+
     const headerRow = `
       <tr class="package-header ${allCancelled ? 'cancelled-row' : ''}">
         <td class="num">${index}</td>
         <td colspan="3">
           <div class="package-title">
-            <span class="package-badge">باقة تأمين</span>
-            <span class="package-count">${members.length} وثائق</span>
+            <span class="package-badge">باقة</span>
+            <span class="package-types">${escapeHtml(combinedTypeLabel)}</span>
             ${carNumber && carNumber !== '-' ? `<span class="package-car">السيارة: <span class="tabular">${carNumber}</span></span>` : ''}
           </div>
         </td>
@@ -1114,6 +1099,11 @@ function generateReportHtml(args: GenerateReportArgs): string {
       font-size: 11px;
       font-weight: 700;
       letter-spacing: 0.5px;
+    }
+    .items tbody tr.package-header .package-types {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1a1a1a;
     }
     .items tbody tr.package-header .package-count {
       font-size: 11px;
