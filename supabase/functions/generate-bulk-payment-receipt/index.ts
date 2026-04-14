@@ -539,12 +539,12 @@ serve(async (req) => {
       );
     }
 
-    // Calculate total from payments — refused payments subtract (they
-    // represent money the client didn't actually pay, so they pull the
-    // running total down instead of adding to it).
+    // Calculate total from payments — refused payments are excluded
+    // entirely (neither added nor subtracted), since they represent
+    // money the client never actually paid.
     const calculatedTotal = payments.reduce((sum, p: any) => {
-      const amount = Number(p.amount || 0);
-      return p.refused ? sum - amount : sum + amount;
+      if (p.refused) return sum;
+      return sum + Number(p.amount || 0);
     }, 0);
     const finalTotal = total_amount || calculatedTotal;
 

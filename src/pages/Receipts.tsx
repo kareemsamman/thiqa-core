@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,38 +44,40 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { format } from "date-fns";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import {
+  ReceiptGroupDetailsDialog,
+  type ReceiptGroupView,
+  type ReceiptRow,
+} from "@/components/receipts/ReceiptGroupDetailsDialog";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-interface ReceiptRecord {
-  id: string;
-  receipt_number: string | null;
-  client_name: string;
-  car_number: string | null;
-  amount: number;
-  receipt_date: string;
-  payment_method: string;
-  cheque_number: string | null;
-  notes: string | null;
-  receipt_type: string; // "payment" | "accident_fee"
-  created_at: string;
+// The shared ReceiptRow shape lives in ReceiptGroupDetailsDialog so the
+// page and the popup agree on one type. ReceiptRecord adds agent_id for
+// the page's own insert/update calls.
+interface ReceiptRecord extends ReceiptRow {
   agent_id: string;
 }
 
-interface ReceiptGroup {
-  key: string;
-  client_name: string;
-  car_number: string | null;
+interface ReceiptGroup extends ReceiptGroupView {
   created_minute: string;
-  receipts: ReceiptRecord[];
-  total: number;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────
@@ -394,9 +396,10 @@ export default function Receipts() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
 
-  // Add dialog
+  // Add / edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     client_name: "",
     car_number: "",
@@ -406,6 +409,14 @@ export default function Receipts() {
     cheque_number: "",
     notes: "",
   });
+
+  // Details popup (click row → show receipts inside this group)
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsGroup, setDetailsGroup] = useState<ReceiptGroupView | null>(null);
+
+  // Delete confirmation
+  const [deleteReceipt, setDeleteReceipt] = useState<ReceiptRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // ─── Fetch ───────────────────────────────────────────────────────
 
@@ -505,7 +516,7 @@ export default function Receipts() {
     openReceiptPrint(html);
   };
 
-  // ─── Add Receipt ──────────────────────────────────────────────
+  // ─── Add / Edit Receipt ───────────────────────────────────────
 
   const resetForm = () => {
     setFormData({
@@ -520,7 +531,24 @@ export default function Receipts() {
   };
 
   const handleOpenDialog = () => {
+    setEditingId(null);
     resetForm();
+    setDialogOpen(true);
+  };
+
+  const handleEditReceipt = (r: ReceiptRow) => {
+    setEditingId(r.id);
+    setFormData({
+      client_name: r.client_name || "",
+      car_number: r.car_number || "",
+      amount: String(r.amount ?? ""),
+      receipt_date: r.receipt_date
+        ? format(new Date(r.receipt_date), "yyyy-MM-dd")
+        : format(new Date(), "yyyy-MM-dd"),
+      payment_method: r.payment_method || "cash",
+      cheque_number: r.cheque_number || "",
+      notes: r.notes || "",
+    });
     setDialogOpen(true);
   };
 
@@ -545,8 +573,7 @@ export default function Receipts() {
 
     setSaving(true);
     try {
-      const { error } = await (supabase as any).from("receipts").insert({
-        agent_id: agentId,
+      const payload = {
         client_name: formData.client_name.trim(),
         car_number: formData.car_number.trim() || null,
         amount,
@@ -554,20 +581,99 @@ export default function Receipts() {
         payment_method: formData.payment_method,
         cheque_number: formData.cheque_number.trim() || null,
         notes: formData.notes.trim() || null,
-        receipt_type: activeTab,
-      });
-      if (error) throw error;
+      };
 
-      toast.success("تم إضافة الإيصال بنجاح");
+      if (editingId) {
+        const { error } = await (supabase as any)
+          .from("receipts")
+          .update(payload)
+          .eq("id", editingId);
+        if (error) throw error;
+        toast.success("تم تحديث الإيصال");
+      } else {
+        const { error } = await (supabase as any).from("receipts").insert({
+          agent_id: agentId,
+          ...payload,
+          receipt_type: activeTab,
+        });
+        if (error) throw error;
+        toast.success("تم إضافة الإيصال بنجاح");
+      }
+
       setDialogOpen(false);
+      setEditingId(null);
       resetForm();
-      fetchReceipts();
+      await fetchReceipts();
+      // If the details popup is open and we just edited something inside
+      // it, refresh the in-memory group so the popup shows the new row.
+      if (detailsGroup) {
+        setDetailsGroup((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            receipts: prev.receipts.map((x) =>
+              editingId && x.id === editingId ? { ...x, ...payload } as ReceiptRow : x,
+            ),
+            total: prev.receipts.reduce(
+              (sum, x) =>
+                sum + (editingId && x.id === editingId ? amount : Number(x.amount || 0)),
+              0,
+            ),
+          };
+        });
+      }
     } catch (err: any) {
       console.error("Error saving receipt:", err);
       toast.error(err.message || "خطأ في حفظ الإيصال");
     } finally {
       setSaving(false);
     }
+  };
+
+  // ─── Delete Receipt ──────────────────────────────────────────
+
+  const handleConfirmDelete = async () => {
+    if (!deleteReceipt) return;
+    setDeleting(true);
+    try {
+      const { error } = await (supabase as any)
+        .from("receipts")
+        .delete()
+        .eq("id", deleteReceipt.id);
+      if (error) throw error;
+      toast.success("تم حذف الإيصال");
+
+      // Drop the row from the details popup (if open) and close it when
+      // empty so the user doesn't end up staring at a ghost card.
+      if (detailsGroup) {
+        const remaining = detailsGroup.receipts.filter((r) => r.id !== deleteReceipt.id);
+        if (remaining.length === 0) {
+          setDetailsOpen(false);
+          setDetailsGroup(null);
+        } else {
+          setDetailsGroup({
+            ...detailsGroup,
+            receipts: remaining,
+            total: remaining.reduce((sum, r) => sum + Number(r.amount || 0), 0),
+          });
+        }
+      }
+
+      setDeleteReceipt(null);
+      await fetchReceipts();
+    } catch (err: any) {
+      console.error("Error deleting receipt:", err);
+      toast.error(err.message || "خطأ في حذف الإيصال");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // ─── Row interactions ────────────────────────────────────────
+
+  const handleOpenGroupDetails = (group: ReceiptGroup) => {
+    setDetailsGroup(group);
+    setDetailsOpen(true);
   };
 
   // ─── Summary ───────────────────────────────────────────────────
@@ -711,11 +817,19 @@ export default function Receipts() {
         </div>
       </div>
 
-      {/* Add Receipt Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Add / Edit Receipt Dialog */}
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(o) => {
+          setDialogOpen(o);
+          if (!o) setEditingId(null);
+        }}
+      >
         <DialogContent className="sm:max-w-lg" dir="rtl">
           <DialogHeader>
-            <DialogTitle>إضافة إيصال جديد</DialogTitle>
+            <DialogTitle>
+              {editingId ? "تعديل الإيصال" : "إضافة إيصال جديد"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             {/* Client name */}
@@ -823,11 +937,32 @@ export default function Receipts() {
             </DialogClose>
             <Button onClick={handleSaveReceipt} disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
-              حفظ الإيصال
+              {editingId ? "حفظ التعديلات" : "حفظ الإيصال"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ReceiptGroupDetailsDialog
+        open={detailsOpen}
+        onOpenChange={(o) => {
+          setDetailsOpen(o);
+          if (!o) setDetailsGroup(null);
+        }}
+        group={detailsGroup}
+        onPrint={(g) => handlePrintGroup(g as ReceiptGroup)}
+        onEdit={handleEditReceipt}
+        onDelete={(r) => setDeleteReceipt(r)}
+      />
+
+      <DeleteConfirmDialog
+        open={!!deleteReceipt}
+        onOpenChange={(o) => !o && setDeleteReceipt(null)}
+        onConfirm={handleConfirmDelete}
+        title="حذف الإيصال"
+        description="هل أنت متأكد من حذف هذا الإيصال؟ لا يمكن التراجع عن هذا الإجراء."
+        loading={deleting}
+      />
     </MainLayout>
   );
 
@@ -862,81 +997,140 @@ export default function Receipts() {
 
     return (
       <div className="space-y-4">
-        {groups.map((group) => (
-          <Card key={group.key}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Receipt className="h-4 w-4" />
-                  {group.client_name}
-                  {group.car_number && (
-                    <Badge variant="secondary" className="text-xs">
-                      {group.car_number}
-                    </Badge>
-                  )}
-                  <span className="text-sm text-muted-foreground font-normal">
-                    ({group.receipts.length}{" "}
-                    {group.receipts.length === 1 ? "إيصال" : "إيصالات"})
-                  </span>
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Badge className="text-sm">
-                    ₪
-                    {group.total.toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                    })}
-                  </Badge>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePrintGroup(group)}
-                    className="gap-1"
-                  >
-                    <Printer className="h-3.5 w-3.5" />
-                    طباعة
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-right">رقم الإيصال</TableHead>
-                      <TableHead className="text-right">اسم العميل</TableHead>
-                      <TableHead className="text-right">رقم السيارة</TableHead>
-                      <TableHead className="text-right">المبلغ</TableHead>
-                      <TableHead className="text-right">التاريخ</TableHead>
-                      <TableHead className="text-right">طريقة الدفع</TableHead>
-                      <TableHead className="text-right">رقم الشيك</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {group.receipts.map((r) => (
-                      <TableRow key={r.id}>
-                        <TableCell className="font-mono text-sm">
-                          {r.receipt_number || "-"}
-                        </TableCell>
-                        <TableCell>{r.client_name}</TableCell>
-                        <TableCell>{r.car_number || "-"}</TableCell>
-                        <TableCell className="font-semibold">
+        <Card>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-right">المبلغ</TableHead>
+                  <TableHead className="text-right">التاريخ</TableHead>
+                  <TableHead className="text-right">اسم العميل</TableHead>
+                  <TableHead className="text-right">رقم السيارة</TableHead>
+                  <TableHead className="text-right">طريقة الدفع</TableHead>
+                  <TableHead className="text-right">ملاحظات</TableHead>
+                  <TableHead className="text-right w-[60px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {groups.map((group) => {
+                  const firstReceipt = group.receipts[0];
+                  const combinedMethodLabel = Array.from(
+                    new Set(
+                      group.receipts.map(
+                        (r) =>
+                          ({
+                            cash: "نقدي",
+                            cheque: "شيك",
+                            visa: "فيزا",
+                            transfer: "تحويل",
+                          }[r.payment_method] || r.payment_method),
+                      ),
+                    ),
+                  ).join(" + ");
+                  const combinedNotes = group.receipts
+                    .map((r) => r.notes)
+                    .filter((n) => n && n.trim().length > 0)
+                    .join(" · ");
+                  return (
+                    <TableRow
+                      key={group.key}
+                      className="cursor-pointer hover:bg-muted/40"
+                      onClick={() => handleOpenGroupDetails(group)}
+                    >
+                      <TableCell className="font-semibold">
+                        <div className="flex items-center gap-1">
                           ₪
-                          {r.amount.toLocaleString("en-US", {
+                          {group.total.toLocaleString("en-US", {
                             minimumFractionDigits: 2,
                           })}
-                        </TableCell>
-                        <TableCell>{formatDate(r.receipt_date)}</TableCell>
-                        <TableCell>{getPaymentBadge(r.payment_method)}</TableCell>
-                        <TableCell>{r.cheque_number || "-"}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                          {group.receipts.length > 1 && (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] px-1.5 py-0"
+                            >
+                              {group.receipts.length} سندات
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="ltr-nums">
+                        {formatDate(firstReceipt?.receipt_date || "")}
+                      </TableCell>
+                      <TableCell>{group.client_name}</TableCell>
+                      <TableCell>{group.car_number || "-"}</TableCell>
+                      <TableCell>
+                        {group.receipts.length === 1 ? (
+                          getPaymentBadge(firstReceipt.payment_method)
+                        ) : (
+                          <Badge variant="outline">{combinedMethodLabel}</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="max-w-[220px] truncate text-muted-foreground">
+                        {combinedNotes || "-"}
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => handlePrintGroup(group)}
+                            >
+                              <Printer className="h-4 w-4 ml-2" />
+                              {group.receipts.length > 1
+                                ? "طباعة السندات"
+                                : "طباعة السند"}
+                            </DropdownMenuItem>
+                            {group.receipts.length === 1 ? (
+                              <>
+                                <DropdownMenuItem
+                                  onClick={() => handleEditReceipt(group.receipts[0])}
+                                >
+                                  <Pencil className="h-4 w-4 ml-2" />
+                                  تعديل
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => setDeleteReceipt(group.receipts[0])}
+                                >
+                                  <Trash2 className="h-4 w-4 ml-2" />
+                                  حذف
+                                </DropdownMenuItem>
+                              </>
+                            ) : (
+                              <>
+                                <DropdownMenuItem
+                                  disabled
+                                  className="text-muted-foreground text-xs"
+                                >
+                                  سندات مجمعة ({group.receipts.length} سجلات)
+                                </DropdownMenuItem>
+                                {group.receipts.map((r) => (
+                                  <DropdownMenuItem
+                                    key={r.id}
+                                    onClick={() => handleEditReceipt(r)}
+                                    className="text-sm"
+                                  >
+                                    <Pencil className="h-3 w-3 ml-2" />
+                                    تعديل: ₪
+                                    {Number(r.amount || 0).toLocaleString("en-US")}
+                                  </DropdownMenuItem>
+                                ))}
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
 
         {/* Pagination */}
         <div className="flex items-center justify-center gap-3 py-4">
