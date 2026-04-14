@@ -1139,21 +1139,33 @@ export default function Receipts() {
       <div className="space-y-4">
         <Card>
           <div className="overflow-x-auto">
-            {/* Explicit min-widths per column so the td under each th never
-                collapses narrower than its header — otherwise a short value
-                like "17" in رقم سند القبض made the column shrink and the
-                next columns drifted right, misaligning the whole row. */}
-            <Table>
+            {/* table-fixed + explicit widths on every column so the layout
+                stops flex-sizing on content. Previously "17" in رقم سند
+                القبض collapsed its column narrower than the header and
+                everything to the left drifted. With a fixed layout + a
+                <colgroup> the column boundaries are locked and the header
+                always sits directly above its data. */}
+            <Table className="table-fixed w-full min-w-[1000px]">
+              <colgroup>
+                <col style={{ width: "110px" }} />
+                <col style={{ width: "160px" }} />
+                <col style={{ width: "180px" }} />
+                <col style={{ width: "110px" }} />
+                <col />
+                <col style={{ width: "120px" }} />
+                <col style={{ width: "170px" }} />
+                <col style={{ width: "60px" }} />
+              </colgroup>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right whitespace-nowrap min-w-[110px]">رقم الوثيقة</TableHead>
-                  <TableHead className="text-right whitespace-nowrap min-w-[140px]">رقم سند القبض</TableHead>
-                  <TableHead className="text-right whitespace-nowrap min-w-[150px]">المبلغ</TableHead>
-                  <TableHead className="text-right whitespace-nowrap min-w-[120px]">التاريخ</TableHead>
-                  <TableHead className="text-right whitespace-nowrap min-w-[160px]">اسم العميل</TableHead>
-                  <TableHead className="text-right whitespace-nowrap min-w-[120px]">رقم السيارة</TableHead>
-                  <TableHead className="text-right whitespace-nowrap min-w-[140px]">طريقة الدفع</TableHead>
-                  <TableHead className="text-right whitespace-nowrap w-[60px]">إجراءات</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">رقم الوثيقة</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">رقم سند القبض</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">المبلغ</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">التاريخ</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">اسم العميل</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">رقم السيارة</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">طريقة الدفع</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1242,7 +1254,7 @@ export default function Receipts() {
                       <TableCell className="ltr-nums whitespace-nowrap">
                         {formatDate(firstReceipt?.receipt_date || "")}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">{group.client_name}</TableCell>
+                      <TableCell className="truncate" title={group.client_name}>{group.client_name}</TableCell>
                       <TableCell className="whitespace-nowrap">{group.car_number || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">
                         {group.receipts.length === 1 ? (
