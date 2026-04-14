@@ -45,11 +45,23 @@ interface PaymentRecord {
   } | null;
 }
 
+interface PackagePolicyInfo {
+  id: string;
+  policy_type_parent: string;
+  policy_type_child?: string | null;
+  insurance_price: number;
+  company_name?: string | null;
+}
+
 interface PaymentEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   payment: PaymentRecord | null;
   onSuccess: () => void;
+  // Optional: when the payment belongs to a package, pass every policy in
+  // the package so the dialog can show the full context instead of just
+  // the single policy the payment row is attached to.
+  packagePolicies?: PackagePolicyInfo[];
 }
 
 const policyTypeLabels: Record<string, string> = {
@@ -77,6 +89,7 @@ export function PaymentEditDialog({
   onOpenChange,
   payment,
   onSuccess,
+  packagePolicies,
 }: PaymentEditDialogProps) {
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -152,6 +165,7 @@ export function PaymentEditDialog({
   if (!payment) return null;
 
   const isLocked = payment.locked === true;
+  const hasPackage = (packagePolicies?.length ?? 0) > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -161,23 +175,52 @@ export function PaymentEditDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Policy Info Badge */}
-          {payment.policy && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>الوثيقة:</span>
-              <Badge variant="outline">
-                {getInsuranceTypeLabel(payment.policy.policy_type_parent as any, (payment.policy.policy_type_child || null) as any)}
-              </Badge>
-              <span className="text-xs">
-                (سعر الوثيقة: ₪{payment.policy.insurance_price.toLocaleString()})
-              </span>
+          {/* Package Context — show every policy in the package so the user
+              sees the full picture instead of just the one row the payment
+              is technically attached to. */}
+          {hasPackage ? (
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-1.5">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                وثائق الباقة
+              </p>
+              <div className="space-y-1">
+                {packagePolicies!.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Badge variant="outline" className="text-[10px] shrink-0">
+                        {getInsuranceTypeLabel(p.policy_type_parent as any, (p.policy_type_child || null) as any)}
+                      </Badge>
+                      {p.company_name && (
+                        <span className="text-muted-foreground truncate">
+                          {p.company_name}
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-semibold ltr-nums text-foreground shrink-0">
+                      ₪{p.insurance_price.toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
+          ) : (
+            payment.policy && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>الوثيقة:</span>
+                <Badge variant="outline">
+                  {getInsuranceTypeLabel(payment.policy.policy_type_parent as any, (payment.policy.policy_type_child || null) as any)}
+                </Badge>
+                <span className="text-xs">
+                  (سعر الوثيقة: ₪{payment.policy.insurance_price.toLocaleString()})
+                </span>
+              </div>
+            )
           )}
 
-          {/* Locked Warning */}
+          {/* Locked info — soft warning, but fields stay editable for admins */}
           {isLocked && (
-            <div className="bg-warning/10 border border-warning/30 text-warning-foreground px-3 py-2 rounded-lg text-sm">
-              ⚠️ هذه دفعة مقفولة (إلزامي) - التعديل محدود
+            <div className="bg-warning/10 border border-warning/30 text-warning-foreground px-3 py-2 rounded-lg text-xs">
+              ℹ️ هذه دفعة لوثيقة إلزامية — عدّل بحذر.
             </div>
           )}
 
@@ -191,7 +234,6 @@ export function PaymentEditDialog({
               step={0.01}
               value={formData.amount}
               onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
-              disabled={isLocked}
               className="text-lg font-semibold"
             />
           </div>
@@ -202,7 +244,6 @@ export function PaymentEditDialog({
             <Select
               value={formData.payment_type}
               onValueChange={(value) => setFormData({ ...formData, payment_type: value })}
-              disabled={isLocked}
             >
               <SelectTrigger>
                 <SelectValue placeholder="اختر طريقة الدفع" />
@@ -230,8 +271,7 @@ export function PaymentEditDialog({
                 maxLength={CHEQUE_NUMBER_MAX_LENGTH}
                 className="font-mono"
                 placeholder="أدخل رقم الشيك"
-                disabled={isLocked}
-              />
+                />
             </div>
           )}
 
@@ -244,7 +284,6 @@ export function PaymentEditDialog({
                 ...formData, 
                 payment_date: date || '' 
               })}
-              disabled={isLocked}
             />
           </div>
 
@@ -271,7 +310,6 @@ export function PaymentEditDialog({
               id="refused"
               checked={formData.refused}
               onCheckedChange={(checked) => setFormData({ ...formData, refused: checked === true })}
-              disabled={isLocked}
             />
             <Label htmlFor="refused" className="cursor-pointer">
               راجع (مرفوض)
@@ -286,7 +324,7 @@ export function PaymentEditDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             إلغاء
           </Button>
-          <Button onClick={handleSave} disabled={saving || isLocked}>
+          <Button onClick={handleSave} disabled={saving}>
             {saving ? (
               <>
                 <Loader2 className="h-4 w-4 ml-2 animate-spin" />

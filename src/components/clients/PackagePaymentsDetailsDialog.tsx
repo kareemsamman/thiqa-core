@@ -64,6 +64,14 @@ interface PaymentRow {
   images?: PaymentImage[];
 }
 
+interface PackagePolicy {
+  id: string;
+  policy_type_parent: string;
+  policy_type_child: string | null;
+  insurance_price: number;
+  company_name: string | null;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -129,6 +137,7 @@ export function PackagePaymentsDetailsDialog({
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [packagePolicies, setPackagePolicies] = useState<PackagePolicy[]>([]);
   const [transferNames, setTransferNames] = useState<Record<string, string>>({});
   const [editPayment, setEditPayment] = useState<PaymentRow | null>(null);
   const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null);
@@ -160,6 +169,21 @@ export function PackagePaymentsDetailsDialog({
 
       const rows = (data as unknown as PaymentRow[]) || [];
       setPayments(rows);
+
+      // Load all policies in this package for the edit dialog header
+      const { data: pkgData } = await supabase
+        .from("policies")
+        .select("id, policy_type_parent, policy_type_child, insurance_price, company:insurance_companies(name, name_ar)")
+        .in("id", policyIds);
+      setPackagePolicies(
+        ((pkgData as any[]) || []).map((p) => ({
+          id: p.id,
+          policy_type_parent: p.policy_type_parent,
+          policy_type_child: p.policy_type_child,
+          insurance_price: Number(p.insurance_price) || 0,
+          company_name: p.company?.name_ar || p.company?.name || null,
+        })),
+      );
 
       // Load client phone from the first policy for the invoice dialog
       const clientId = (data as any[])?.[0]?.policy?.client_id;
@@ -241,6 +265,7 @@ export function PackagePaymentsDetailsDialog({
     if (open) fetchPayments();
     else {
       setPayments([]);
+      setPackagePolicies([]);
       setTransferNames({});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -399,7 +424,6 @@ export function PackagePaymentsDetailsDialog({
                           variant="ghost"
                           className="h-8 w-8"
                           onClick={() => setEditPayment(p)}
-                          disabled={p.locked === true}
                           title="تعديل"
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -409,7 +433,6 @@ export function PackagePaymentsDetailsDialog({
                           variant="ghost"
                           className="h-8 w-8 text-destructive hover:bg-destructive/10"
                           onClick={() => setDeletePaymentId(p.id)}
-                          disabled={p.locked === true}
                           title="حذف"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -568,6 +591,17 @@ export function PackagePaymentsDetailsDialog({
           open={!!editPayment}
           onOpenChange={(o) => !o && setEditPayment(null)}
           payment={editPayment as any}
+          packagePolicies={
+            packagePolicies.length > 1
+              ? packagePolicies.map((pp) => ({
+                  id: pp.id,
+                  policy_type_parent: pp.policy_type_parent,
+                  policy_type_child: pp.policy_type_child,
+                  insurance_price: pp.insurance_price,
+                  company_name: pp.company_name,
+                }))
+              : undefined
+          }
           onSuccess={() => {
             setEditPayment(null);
             fetchPayments();
