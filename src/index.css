@@ -304,7 +304,14 @@
    with physical `left` (always visual-left, including RTL). */
 .fancy-toast {
   padding-left: 3rem !important;
-  padding-right: 1.125rem !important;
+  padding-right: 1.25rem !important;
+}
+
+/* Give every icon chip real breathing room from the title text on the
+   start side (visual-left in RTL, visual-right in LTR). The flex `gap`
+   alone wasn't enough once the icon got upscaled. */
+.fancy-toast > [data-icon] {
+  margin-inline-end: 0.5rem;
 }
 
 /* Close button — always visible, pinned to the visual-left edge of the

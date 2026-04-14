@@ -68,7 +68,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           // physical left/right stay consistent with the absolutely
           // positioned close button.
           toast: cn(
-            "fancy-toast relative flex items-start gap-3 w-[min(460px,calc(100vw-2rem))] py-4",
+            "fancy-toast relative flex items-start gap-4 w-[min(460px,calc(100vw-2rem))] py-4",
             // Liquid glass surface
             "rounded-2xl border",
             "bg-white/80 dark:bg-slate-900/80",
