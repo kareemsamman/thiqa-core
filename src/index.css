@@ -287,43 +287,34 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
- * Fancy liquid-glass toast
+ * Glass toast
  *
- * Sonner renders every toast with `.fancy-toast` (our custom class).
- * We layer a shimmering highlight across the top and run an entrance
- * animation that combines slide + scale + blur so they feel alive.
+ * sonner.tsx owns the layout via Tailwind classes on `.glass-toast`
+ * (flex + logical padding). This block is only for things Tailwind
+ * can't reach: the absolutely-positioned close button, the entrance
+ * animation, and the radial highlight on each variant chip.
  * ─────────────────────────────────────────────────────────────*/
-.fancy-toast {
-  animation: fancy-toast-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.glass-toast {
+  overflow: hidden;
+  animation: glass-toast-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
   will-change: transform, opacity, filter;
 }
 
-/* Reserve visual-left space on every fancy toast so the absolutely-
-   positioned close button has somewhere to sit without overlapping the
-   text. We use physical padding-left because the close button is pinned
-   with physical `left` (always visual-left, including RTL). */
-.fancy-toast {
-  padding-left: 3rem !important;
-  padding-right: 1.25rem !important;
+.glass-toast[data-removed="true"],
+.glass-toast[data-swiping="true"] {
+  animation: glass-toast-out 260ms cubic-bezier(0.4, 0, 1, 1) both;
 }
 
-/* Give every icon chip real breathing room from the title text on the
-   start side (visual-left in RTL, visual-right in LTR). The flex `gap`
-   alone wasn't enough once the icon got upscaled. */
-.fancy-toast > [data-icon] {
-  margin-inline-end: 0.5rem;
-}
-
-/* Close button — always visible, pinned to the visual-left edge of the
-   toast. Physical `left` is visual-left in both LTR and RTL (inset-inline-*
-   goes the *wrong* way in RTL for our design). High specificity + !important
-   beats Sonner's default inline styles. */
-.fancy-toast > button.fancy-toast-close,
-.fancy-toast .fancy-toast-close {
+/* Close button — always visible, pinned to the inline-end edge of the
+   toast (visual-left in RTL, visual-right in LTR). Higher specificity +
+   !important beats Sonner's default inline styles for a drag-to-dismiss
+   transform we don't want. */
+[data-sonner-toaster] .glass-toast > button.glass-toast-close {
   position: absolute !important;
-  top: 0.75rem !important;
-  left: 0.75rem !important;
-  right: auto !important;
+  inset-block-start: 50% !important;
+  inset-inline-end: 0.75rem !important;
+  inset-inline-start: auto !important;
+  transform: translateY(-50%) !important;
   height: 1.875rem !important;
   width: 1.875rem !important;
   min-width: 1.875rem !important;
@@ -332,40 +323,33 @@
   border-radius: 9999px !important;
   border: 1px solid hsl(var(--border) / 0.7) !important;
   background: hsl(var(--background) / 0.9) !important;
-  color: hsl(var(--foreground) / 0.65) !important;
+  color: hsl(var(--foreground) / 0.7) !important;
   box-shadow: 0 4px 14px -2px rgba(15, 23, 42, 0.14) !important;
   backdrop-filter: blur(10px);
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  transform: none !important;
   opacity: 1 !important;
-  transition: all 0.15s ease !important;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease !important;
   cursor: pointer;
   z-index: 3;
 }
 
-.fancy-toast .fancy-toast-close:hover {
+[data-sonner-toaster] .glass-toast > button.glass-toast-close:hover {
   background: hsl(var(--foreground)) !important;
   color: hsl(var(--background)) !important;
   border-color: hsl(var(--foreground)) !important;
-  transform: scale(1.08) !important;
 }
 
-.fancy-toast .fancy-toast-close svg {
+[data-sonner-toaster] .glass-toast > button.glass-toast-close svg {
   width: 0.9375rem !important;
   height: 0.9375rem !important;
   stroke-width: 2.5 !important;
 }
 
-.fancy-toast[data-removed="true"],
-.fancy-toast[data-swiping="true"] {
-  animation: fancy-toast-out 260ms cubic-bezier(0.4, 0, 1, 1) both;
-}
-
 /* Liquid highlight that travels across the top edge once on entry.
-   Gives a "light catching the glass" feel without being distracting. */
-.fancy-toast::before {
+   Clipped by the toast's own `overflow: hidden`. */
+.glass-toast::before {
   content: "";
   position: absolute;
   top: 0;
@@ -381,12 +365,11 @@
     transparent 62%,
     transparent 100%
   );
-  transform: translateX(0);
-  animation: fancy-toast-shine 1600ms ease-out 160ms 1 both;
+  animation: glass-toast-shine 1600ms ease-out 160ms 1 both;
   mix-blend-mode: overlay;
 }
 
-.dark .fancy-toast::before {
+.dark .glass-toast::before {
   background: linear-gradient(
     115deg,
     transparent 0%,
@@ -397,11 +380,11 @@
   );
 }
 
-/* Soft floating glow under the icon chip so it reads as liquid. */
-.fancy-toast-icon {
+/* Soft floating highlight under each variant chip so it reads as liquid. */
+.glass-chip {
   position: relative;
 }
-.fancy-toast-icon::after {
+.glass-chip::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -411,7 +394,7 @@
   mix-blend-mode: overlay;
 }
 
-@keyframes fancy-toast-in {
+@keyframes glass-toast-in {
   0% {
     opacity: 0;
     transform: translateY(-14px) scale(0.94);
@@ -428,7 +411,7 @@
   }
 }
 
-@keyframes fancy-toast-out {
+@keyframes glass-toast-out {
   0% {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -441,7 +424,7 @@
   }
 }
 
-@keyframes fancy-toast-shine {
+@keyframes glass-toast-shine {
   0% {
     transform: translateX(-60%);
     opacity: 0;
