@@ -245,17 +245,19 @@ serve(async (req) => {
       paymentsByPolicy[p.policy_id].push(p);
     });
 
-    // Calculate totals — include office commission (ELZAMI markup) in the
-    // price so the customer sees what they actually owe. Cancelled
-    // siblings are excluded from the totals so the "الإجمالي / المدفوع /
-    // المتبقي" trio matches what the office is still on the hook for.
-    const activePolicies = policies.filter((p: any) => !p.cancelled);
-    const totalPrice = activePolicies.reduce(
+    // Calculate totals — include every row (even cancelled ones) so the
+    // الإجمالي line matches the sum of the items table. The refund the
+    // office owes back is surfaced separately in the cancellation
+    // banner, and المتبقي is clamped to zero so a fully-paid cancelled
+    // package doesn't show a misleading negative "remaining" balance —
+    // the customer owes nothing, the refund is a SEPARATE obligation on
+    // the office and lives in its own red banner above the totals.
+    const totalPrice = policies.reduce(
       (sum, p) => sum + (p.insurance_price || 0) + (p.office_commission || 0),
       0,
     );
     const totalPaid = (allPayments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
-    const totalRemaining = totalPrice - totalPaid;
+    const totalRemaining = Math.max(0, totalPrice - totalPaid);
 
     // Cancellation snapshot — if any sibling in this package is cancelled,
     // the invoice gets a big red footer banner with the refund owed. The
