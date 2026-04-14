@@ -210,17 +210,24 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const isSubscriptionPaused = subscriptionStatus === 'paused' || subscriptionStatus === 'suspended';
 
   const hasFeature = (featureKey: string): boolean => {
+    // Admin-gated features (e.g. visa_payment) are never auto-unlocked by
+    // super-admin, impersonation, trial, or plan defaults — the Thiqa
+    // admin has to explicitly flip the bit for the agent in
+    // agent_features. Check this FIRST so every other shortcut below
+    // can't bypass it.
+    if (ADMIN_ONLY_FEATURES.includes(featureKey)) {
+      if (featureKey in agentFeatures) return agentFeatures[featureKey];
+      return false;
+    }
+
     if (isThiqaSuperAdmin || isImpersonating) return true;
     if (!agent) return true;
 
-    // Trial: all features enabled
+    // Trial: all non-admin-gated features enabled
     if (isTrial) return true;
 
     // Explicit agent-level override from Thiqa admin takes priority
     if (featureKey in agentFeatures) return agentFeatures[featureKey];
-
-    // Features that must be explicitly enabled by Thiqa admin
-    if (ADMIN_ONLY_FEATURES.includes(featureKey)) return false;
 
     // Use plan default features if available
     if (featureKey in planDefaults) return planDefaults[featureKey];
