@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { 
+import {
   Search,
   FileText,
   CreditCard,
@@ -13,7 +13,9 @@ import {
   Car,
   Filter,
   ChevronDown,
-  Trash2
+  Trash2,
+  XCircle,
+  ArrowLeftRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -32,7 +34,7 @@ import {
 
 interface ActivityItem {
   id: string;
-  type: "policy" | "payment" | "client" | "car" | "delete";
+  type: "policy" | "payment" | "client" | "car" | "delete" | "cancel" | "transfer";
   action: string;
   created_at: string;
   createdBy?: string;
@@ -48,6 +50,11 @@ interface ActivityItem {
     client_name?: string;
     client_file_number?: string;
     insurance_price?: number;
+    cancellation_note?: string;
+    refund_amount?: number;
+    transfer_to_car?: string;
+    transfer_from_car?: string;
+    transfer_note?: string;
   };
 }
 
@@ -73,6 +80,8 @@ const TYPE_LABELS: Record<string, string> = {
   client: "عميل",
   car: "سيارة",
   delete: "حذف",
+  cancel: "إلغاء",
+  transfer: "تحويل",
 };
 
 const POLICY_TYPE_LABELS: Record<string, string> = {
@@ -94,6 +103,8 @@ const typeIcons: Record<string, any> = {
   client: Users,
   car: Car,
   delete: Trash2,
+  cancel: XCircle,
+  transfer: ArrowLeftRight,
 };
 
 const typeColors: Record<string, string> = {
@@ -102,6 +113,8 @@ const typeColors: Record<string, string> = {
   client: "text-accent bg-accent/10",
   car: "text-warning bg-warning/10",
   delete: "text-destructive bg-destructive/10",
+  cancel: "text-destructive bg-destructive/10",
+  transfer: "text-warning bg-warning/10",
 };
 
 export default function ActivityLog() {
@@ -120,11 +133,15 @@ export default function ActivityLog() {
       const results: ActivityItem[] = [];
       const branchFilter = branchId ? { branch_id: branchId } : {};
 
-      // Fetch policies with more details
+      // Fetch policies with more details. Cancelled and transferred rows
+      // are NOT filtered out — we emit a "new policy" entry for every
+      // policy, and *also* emit a separate "cancelled" / "transferred"
+      // entry at the cancellation/transfer timestamp so the activity
+      // feed captures the full lifecycle.
       const { data: policies } = await supabase
         .from("policies")
         .select(`
-          id, created_at, policy_type_parent, policy_type_child, cancelled, insurance_price,
+          id, created_at, policy_type_parent, policy_type_child, cancelled, cancellation_date, cancellation_note, transferred, transferred_car_number, insurance_price,
           clients(id, full_name, file_number, deleted_at),
           cars(car_number),
           insurance_companies(name, name_ar),
@@ -132,8 +149,27 @@ export default function ActivityLog() {
         `)
         .order("created_at", { ascending: false })
         .match(branchFilter)
-        .eq("cancelled", false)
         .limit(100);
+
+      // Track policy->refund so we can attach the refund amount to the
+      // cancel event in one pass without an N+1 round-trip per policy.
+      const refundByPolicyId = new Map<string, number>();
+      if (policies && policies.length > 0) {
+        const cancelledIds = policies
+          .filter((p) => p.cancelled)
+          .map((p) => p.id);
+        if (cancelledIds.length > 0) {
+          const { data: refundRows } = await supabase
+            .from("customer_wallet_transactions")
+            .select("policy_id, amount")
+            .in("policy_id", cancelledIds)
+            .eq("transaction_type", "refund");
+          for (const row of refundRows || []) {
+            const prev = refundByPolicyId.get((row as any).policy_id) || 0;
+            refundByPolicyId.set((row as any).policy_id, prev + Number((row as any).amount || 0));
+          }
+        }
+      }
 
       if (policies) {
         for (const p of policies) {
@@ -144,6 +180,7 @@ export default function ActivityLog() {
           const companyName = (p.insurance_companies as any)?.name_ar || (p.insurance_companies as any)?.name || "";
           const carNumber = (p.cars as any)?.car_number || "";
 
+          // Original "policy created" event
           results.push({
             id: `policy-${p.id}`,
             type: "policy",
@@ -159,6 +196,74 @@ export default function ActivityLog() {
               client_name: clientName,
               client_file_number: fileNumber,
               insurance_price: p.insurance_price || undefined,
+            },
+          });
+
+          // Separate "cancelled" event, timestamped at cancellation_date
+          // so it sorts correctly into the feed alongside other events.
+          if (p.cancelled) {
+            results.push({
+              id: `cancel-${p.id}`,
+              type: "cancel",
+              action: "وثيقة ملغاة",
+              created_at: (p.cancellation_date as any) || p.created_at,
+              details: {
+                policy_type: policyLabel,
+                company_name: companyName,
+                car_number: carNumber,
+                client_id: (p.clients as any)?.id,
+                client_name: clientName,
+                client_file_number: fileNumber,
+                cancellation_note: p.cancellation_note || undefined,
+                refund_amount: refundByPolicyId.get(p.id) || 0,
+              },
+            });
+          }
+        }
+      }
+
+      // Fetch transfer events from policy_transfers so the feed shows
+      // "تحويل" actions the same way it shows cancellations.
+      const { data: transfers } = await supabase
+        .from("policy_transfers")
+        .select(`
+          id, created_at, transfer_date, note,
+          policy:policies!policy_transfers_policy_id_fkey(
+            policy_type_parent,
+            insurance_companies(name, name_ar),
+            clients(id, full_name, file_number, deleted_at)
+          ),
+          from_car:cars!policy_transfers_from_car_id_fkey(car_number),
+          to_car:cars!policy_transfers_to_car_id_fkey(car_number),
+          created_by_profile:profiles!policy_transfers_created_by_admin_id_fkey(full_name)
+        `)
+        .order("created_at", { ascending: false })
+        .match(branchFilter)
+        .limit(100);
+
+      if (transfers) {
+        for (const t of transfers as any[]) {
+          if (t.policy?.clients?.deleted_at) continue;
+          const clientName = t.policy?.clients?.full_name || "عميل";
+          const fileNumber = t.policy?.clients?.file_number || "";
+          const policyLabel = POLICY_TYPE_LABELS[t.policy?.policy_type_parent] || t.policy?.policy_type_parent || "وثيقة";
+          const companyName = t.policy?.insurance_companies?.name_ar || t.policy?.insurance_companies?.name || "";
+          results.push({
+            id: `transfer-${t.id}`,
+            type: "transfer",
+            action: "تحويل وثيقة",
+            created_at: t.transfer_date || t.created_at,
+            createdBy: t.created_by_profile?.full_name || undefined,
+            details: {
+              policy_type: policyLabel,
+              company_name: companyName,
+              car_number: t.from_car?.car_number || "",
+              transfer_from_car: t.from_car?.car_number || "",
+              transfer_to_car: t.to_car?.car_number || "",
+              transfer_note: t.note || undefined,
+              client_id: t.policy?.clients?.id,
+              client_name: clientName,
+              client_file_number: fileNumber,
             },
           });
         }
@@ -432,6 +537,8 @@ export default function ActivityLog() {
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   <SelectItem value="policy">الوثائق</SelectItem>
+                  <SelectItem value="cancel">الإلغاءات</SelectItem>
+                  <SelectItem value="transfer">التحويلات</SelectItem>
                   <SelectItem value="payment">الدفعات</SelectItem>
                   <SelectItem value="client">العملاء</SelectItem>
                   <SelectItem value="car">السيارات</SelectItem>
@@ -577,12 +684,45 @@ export default function ActivityLog() {
                             </div>
                           )}
 
-                          {/* Car Info */}
-                          {activity.details.car_number && (
+                          {/* Car Info (hidden for transfer — shown in dedicated row below) */}
+                          {activity.details.car_number && activity.type !== "transfer" && (
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <Car className="h-3.5 w-3.5" />
                               <span>{activity.details.car_number}</span>
                             </div>
+                          )}
+
+                          {/* Cancel specific */}
+                          {activity.type === "cancel" && (
+                            <div className="flex items-center gap-3 flex-wrap">
+                              {(activity.details.refund_amount || 0) > 0 && (
+                                <Badge variant="destructive" className="text-xs">
+                                  مرتجع للعميل: ₪{activity.details.refund_amount!.toLocaleString()}
+                                </Badge>
+                              )}
+                              {activity.details.cancellation_note && (
+                                <span className="text-xs text-muted-foreground">
+                                  {activity.details.cancellation_note}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Transfer specific */}
+                          {activity.type === "transfer" && (
+                            <>
+                              <div className="flex items-center gap-2 text-muted-foreground">
+                                <ArrowLeftRight className="h-3.5 w-3.5" />
+                                <span className="font-mono text-xs ltr-nums">
+                                  {activity.details.transfer_from_car || "—"} ← {activity.details.transfer_to_car || "—"}
+                                </span>
+                              </div>
+                              {activity.details.transfer_note && (
+                                <div className="text-xs text-muted-foreground">
+                                  {activity.details.transfer_note}
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>

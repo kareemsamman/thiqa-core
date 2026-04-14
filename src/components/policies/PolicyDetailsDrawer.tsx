@@ -133,11 +133,15 @@ interface PolicyDetails {
 
 interface RelatedPolicy {
   id: string;
+  created_at: string;
   policy_type_parent: string;
   policy_type_child: string | null;
   insurance_price: number;
   office_commission: number | null;
   profit: number | null;
+  cancelled: boolean | null;
+  cancellation_date: string | null;
+  cancellation_note: string | null;
   road_service_id: string | null;
   accident_fee_service_id: string | null;
   insurance_companies: {
@@ -365,16 +369,21 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
       if (policyError) throw policyError;
       setPolicy(policyData as PolicyDetails);
 
-      // Fetch related policies if part of a group
+      // Fetch related policies if part of a group. Ordered by created_at
+      // so the components list stays in the same order no matter which
+      // sibling the user is currently viewing — otherwise Postgres can
+      // hand back rows in whatever order the executor likes, which made
+      // cancelled siblings appear to "jump" to the bottom after a refetch.
       let relatedData: RelatedPolicy[] = [];
       if (policyData.group_id) {
         const { data: fetchedRelated } = await supabase
           .from("policies")
-          .select("id, policy_type_parent, policy_type_child, insurance_price, office_commission, profit, road_service_id, accident_fee_service_id, insurance_companies(id, name, name_ar), road_services(id, name, name_ar), accident_fee_services(id, name, name_ar)")
+          .select("id, created_at, policy_type_parent, policy_type_child, insurance_price, office_commission, profit, cancelled, cancellation_date, cancellation_note, road_service_id, accident_fee_service_id, insurance_companies(id, name, name_ar), road_services(id, name, name_ar), accident_fee_services(id, name, name_ar)")
           .eq("group_id", policyData.group_id)
           .neq("id", policyId)
-          .is("deleted_at", null);
-        
+          .is("deleted_at", null)
+          .order("created_at", { ascending: true });
+
         if (fetchedRelated) {
           relatedData = fetchedRelated as RelatedPolicy[];
           setRelatedPolicies(relatedData);
@@ -483,17 +492,27 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
         setPackagePayments([]);
       }
       
-      // Fetch refund amount for cancelled policies
-      let refund = 0;
-      if (policyData.cancelled) {
-        const { data: refundData } = await supabase
+      // Fetch refund amount for cancelled policies. We check every
+      // sibling's id (not just the current one) because package-level
+      // cancellations stash the refund row on the primary policy_id —
+      // so viewing a non-primary sibling would otherwise show no refund
+      // even though the client is owed money.
+      const anySiblingCancelled = policyData.cancelled
+        || relatedData.some((rp) => rp.cancelled);
+      if (anySiblingCancelled) {
+        const idsForRefund = policyData.group_id
+          ? [policyId, ...relatedData.map((rp) => rp.id)]
+          : [policyId];
+        const { data: refundRows } = await supabase
           .from("customer_wallet_transactions")
           .select("amount")
-          .eq("policy_id", policyId)
-          .eq("transaction_type", "refund")
-          .single();
-        
-        refund = refundData?.amount || 0;
+          .in("policy_id", idsForRefund)
+          .eq("transaction_type", "refund");
+
+        const refund = (refundRows || []).reduce(
+          (sum: number, row: any) => sum + Number(row.amount || 0),
+          0,
+        );
         setRefundAmount(refund);
       } else {
         setRefundAmount(0);
@@ -753,6 +772,11 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                             <StatusIcon className="h-3 w-3 ml-1" />
                             {status.label}
                           </Badge>
+                          {refundAmount > 0 && (
+                            <Badge className="bg-red-100 text-red-700 border-red-200 font-bold ltr-nums">
+                              مرتجع للعميل: {formatCurrency(refundAmount)}
+                            </Badge>
+                          )}
                           {hasPackage && (
                             <Badge className="bg-white/20 border-white/30 text-white font-medium">
                               <Layers className="h-3 w-3 ml-1" />
@@ -1145,26 +1169,37 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                       </div>
                     )}
 
-                    {/* Cancellation Info */}
-                    {policy.cancelled && (
-                      <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
-                            <XCircle className="h-5 w-5 text-red-600" />
+                    {/* Cancellation Info. Shown for standalone cancels and
+                        for package cancels where the primary is cancelled;
+                        when the viewer is sitting on a non-primary sibling
+                        whose own row is cancelled we still want the banner
+                        so they can see the refund owed. */}
+                    {(policy.cancelled || (refundAmount > 0 && relatedPolicies.some((rp) => rp.cancelled))) && (
+                      <div className="bg-gradient-to-l from-red-50 to-red-100 border-2 border-red-200 rounded-xl p-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-red-200 flex items-center justify-center shrink-0">
+                            <XCircle className="h-6 w-6 text-red-700" />
                           </div>
-                          <div className="flex-1">
-                            <p className="font-semibold text-red-800">وثيقة ملغاة</p>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-red-900 text-base">
+                              {policy.cancelled ? "وثيقة ملغاة" : "يوجد وثائق ملغاة في الباقة"}
+                            </p>
                             {policy.cancellation_date && (
-                              <p className="text-xs text-red-600">{formatDate(policy.cancellation_date)}</p>
+                              <p className="text-xs text-red-600 ltr-nums">
+                                تاريخ الإلغاء: {formatDate(policy.cancellation_date)}
+                              </p>
                             )}
                             {policy.cancellation_note && (
                               <p className="text-sm text-red-700 mt-1">{policy.cancellation_note}</p>
                             )}
                           </div>
                           {refundAmount > 0 && (
-                            <div className="text-left">
-                              <p className="text-xs text-red-600">مرتجع للعميل</p>
-                              <p className="text-lg font-bold text-red-700 ltr-nums">{formatCurrency(refundAmount)}</p>
+                            <div className="text-left shrink-0 bg-white/70 rounded-lg px-4 py-2 border border-red-200">
+                              <p className="text-[11px] text-red-600 font-semibold">يتوجب على المكتب دفع</p>
+                              <p className="text-2xl font-extrabold text-red-700 ltr-nums leading-tight">
+                                {formatCurrency(refundAmount)}
+                              </p>
+                              <p className="text-[10px] text-red-600">مرتجع للعميل</p>
                             </div>
                           )}
                         </div>
@@ -1240,53 +1275,73 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                       </Section>
                     </div>
 
-                    {/* Package Components Table - unified view */}
-                    {hasPackage && (
-                      <PackageComponentsTable
-                        policies={[
-                          {
-                            id: policy.id,
-                            policy_type_parent: policy.policy_type_parent,
-                            policy_type_child: policy.policy_type_child,
-                            start_date: policy.start_date,
-                            end_date: policy.end_date,
-                            insurance_price: policy.insurance_price,
-                            profit: policy.profit,
-                            is_under_24: policy.is_under_24,
-                            group_id: policy.group_id,
-                            insurance_companies: policy.insurance_companies,
-                            road_services: policy.road_services,
-                            cars: policy.cars ? {
-                              car_type: policy.cars.car_type,
-                              car_value: policy.cars.car_value,
-                              year: policy.cars.year,
-                            } : undefined,
-                          },
-                          ...relatedPolicies.map(rp => ({
-                            id: rp.id,
-                            policy_type_parent: rp.policy_type_parent,
-                            policy_type_child: rp.policy_type_child,
-                            start_date: policy.start_date, // Use main policy dates
-                            end_date: policy.end_date,
-                            insurance_price: rp.insurance_price,
-                            profit: rp.profit,
-                            is_under_24: policy.is_under_24,
-                            group_id: policy.group_id,
-                            insurance_companies: rp.insurance_companies,
-                            road_services: rp.road_services,
-                            accident_fee_services: rp.accident_fee_services,
-                            cars: policy.cars ? {
-                              car_type: policy.cars.car_type,
-                              car_value: policy.cars.car_value,
-                              year: policy.cars.year,
-                            } : undefined,
-                          }))
-                        ]}
-                        isAdmin={isAdmin}
-                        onEditPolicy={(p) => setPackageEditGroupId(p.group_id || null)}
-                        syncStatuses={syncStatuses}
-                      />
-                    )}
+                    {/* Package Components Table - unified view. The primary
+                        viewed policy and the related siblings get merged,
+                        then sorted by created_at so the table always shows
+                        the components in the same order regardless of which
+                        sibling happens to be the "primary" in this drawer
+                        session. */}
+                    {hasPackage && (() => {
+                      const primaryEntry = {
+                        id: policy.id,
+                        created_at: policy.created_at,
+                        policy_type_parent: policy.policy_type_parent,
+                        policy_type_child: policy.policy_type_child,
+                        start_date: policy.start_date,
+                        end_date: policy.end_date,
+                        insurance_price: policy.insurance_price,
+                        office_commission: policy.office_commission,
+                        profit: policy.profit,
+                        is_under_24: policy.is_under_24,
+                        group_id: policy.group_id,
+                        cancelled: policy.cancelled,
+                        cancellation_date: policy.cancellation_date,
+                        insurance_companies: policy.insurance_companies,
+                        road_services: policy.road_services,
+                        accident_fee_services: policy.accident_fee_services,
+                        cars: policy.cars ? {
+                          car_type: policy.cars.car_type,
+                          car_value: policy.cars.car_value,
+                          year: policy.cars.year,
+                        } : undefined,
+                      };
+                      const relatedEntries = relatedPolicies.map(rp => ({
+                        id: rp.id,
+                        created_at: rp.created_at,
+                        policy_type_parent: rp.policy_type_parent,
+                        policy_type_child: rp.policy_type_child,
+                        start_date: policy.start_date,
+                        end_date: policy.end_date,
+                        insurance_price: rp.insurance_price,
+                        office_commission: rp.office_commission,
+                        profit: rp.profit,
+                        is_under_24: policy.is_under_24,
+                        group_id: policy.group_id,
+                        cancelled: rp.cancelled,
+                        cancellation_date: rp.cancellation_date,
+                        insurance_companies: rp.insurance_companies,
+                        road_services: rp.road_services,
+                        accident_fee_services: rp.accident_fee_services,
+                        cars: policy.cars ? {
+                          car_type: policy.cars.car_type,
+                          car_value: policy.cars.car_value,
+                          year: policy.cars.year,
+                        } : undefined,
+                      }));
+                      const combined = [primaryEntry, ...relatedEntries].sort((a, b) => {
+                        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+                        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+                        return ta - tb;
+                      });
+                      return (
+                        <PackageComponentsTable
+                          policies={combined}
+                          isAdmin={isAdmin}
+                          onEditPolicy={(p) => setPackageEditGroupId(p.group_id || null)}
+                          syncStatuses={syncStatuses}
+                        />
+                      );
+                    })()}
 
                     {/* Client & Car Info */}
                     <div className="grid grid-cols-2 gap-4">
@@ -1500,18 +1555,38 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
       {policy && (
         <>
           <PolicyEditDrawer open={editOpen} onOpenChange={setEditOpen} policy={policy} onSaved={handleEditComplete} />
-          <CancelPolicyModal
-            open={cancelOpen}
-            onOpenChange={setCancelOpen}
-            policyIds={[policy.id]}
-            policyNumber={policy.policy_number}
-            clientId={policy.clients.id}
-            clientName={policy.clients.full_name}
-            clientPhone={policy.clients.phone_number}
-            branchId={policy.branch_id}
-            insurancePrice={policy.insurance_price}
-            onCancelled={handleEditComplete}
-          />
+          {/* When the drawer is sitting on a package, canceling should
+              mark every sibling as cancelled in one shot — not just the
+              primary — otherwise the user has to hunt down each component
+              and cancel them one by one. The refund ceiling excludes any
+              ELZAMI rows because compulsory premiums are non-refundable
+              from the office's side. */}
+          {(() => {
+            const cancelIds = hasPackage
+              ? [policy.id, ...relatedPolicies.map((rp) => rp.id)]
+              : [policy.id];
+            const cancelMax = hasPackage
+              ? [policy, ...relatedPolicies]
+                  .filter((p) => p.policy_type_parent !== 'ELZAMI')
+                  .reduce((sum, p) => sum + (Number(p.insurance_price) || 0), 0)
+              : (policy.policy_type_parent === 'ELZAMI'
+                  ? 0
+                  : Number(policy.insurance_price) || 0);
+            return (
+              <CancelPolicyModal
+                open={cancelOpen}
+                onOpenChange={setCancelOpen}
+                policyIds={cancelIds}
+                policyNumber={policy.policy_number}
+                clientId={policy.clients.id}
+                clientName={policy.clients.full_name}
+                clientPhone={policy.clients.phone_number}
+                branchId={policy.branch_id}
+                insurancePrice={cancelMax}
+                onCancelled={handleEditComplete}
+              />
+            );
+          })()}
           <TransferPolicyModal
             open={transferOpen}
             onOpenChange={setTransferOpen}

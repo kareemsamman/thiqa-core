@@ -127,6 +127,35 @@ serve(async (req: Request) => {
 
     console.log(`[generate-invoices] Found ${policyChildren?.length || 0} children for policy`);
 
+    // Look up any refund the office owes the client for this policy.
+    // Package cancels stash the refund line on the primary policy_id, so
+    // we also check sibling policies sharing the same group_id — otherwise
+    // printing a sibling's invoice after a package cancel would show no
+    // refund at the bottom even though the client is owed money.
+    let refundTotal = 0;
+    if (policy.cancelled) {
+      const refundPolicyIds: string[] = [policy_id];
+      if (policy.group_id) {
+        const { data: siblings } = await supabase
+          .from('policies')
+          .select('id')
+          .eq('group_id', policy.group_id);
+        for (const s of siblings || []) {
+          if (s.id && !refundPolicyIds.includes(s.id)) refundPolicyIds.push(s.id);
+        }
+      }
+      const { data: refundRows } = await supabase
+        .from('customer_wallet_transactions')
+        .select('amount')
+        .in('policy_id', refundPolicyIds)
+        .eq('transaction_type', 'refund');
+      refundTotal = (refundRows || []).reduce(
+        (sum, row: any) => sum + Number(row.amount || 0),
+        0,
+      );
+      console.log(`[generate-invoices] Policy is cancelled, refund total: ${refundTotal}`);
+    }
+
     // Get active templates
     const { data: templates, error: templatesError } = await supabase
       .from('invoice_templates')
@@ -211,6 +240,15 @@ serve(async (req: Request) => {
           // Additional drivers / dependents linked to this policy
           additional_drivers: additionalDrivers,
           has_additional_drivers: additionalDrivers.length > 0,
+          // Cancellation snapshot — shown in a red footer block at the
+          // end of the invoice when the policy has been cancelled so the
+          // printed document reflects the current state and makes the
+          // refund obligation visible to whoever receives it.
+          is_cancelled: !!policy.cancelled,
+          cancellation_date: policy.cancellation_date ? formatDate(policy.cancellation_date, lang) : '',
+          cancellation_note: policy.cancellation_note || '',
+          refund_amount: refundTotal,
+          refund_amount_text: refundTotal > 0 ? refundTotal.toLocaleString() : '',
         };
 
         // Replace placeholders in template
@@ -332,6 +370,11 @@ interface InvoiceMetadata {
   policy_number: string;
   additional_drivers: AdditionalDriver[];
   has_additional_drivers: boolean;
+  is_cancelled: boolean;
+  cancellation_date: string;
+  cancellation_note: string;
+  refund_amount: number;
+  refund_amount_text: string;
 }
 
 // Labels per language so the template can flip between Arabic and Hebrew
@@ -373,6 +416,11 @@ const T = {
     paidBadge: 'مدفوع',
     partialBadge: 'دفع جزئي',
     unpaidBadge: 'غير مدفوع',
+    cancelledTitle: 'هذه الوثيقة ملغاة',
+    cancelledOn: 'تاريخ الإلغاء',
+    cancelledNote: 'سبب الإلغاء',
+    refundOwed: 'مرتجع مستحق للعميل',
+    refundOwedLine: 'يتوجب على المكتب دفع المبلغ التالي للعميل:',
   },
   he: {
     invoice: 'חשבונית ביטוח',
@@ -410,6 +458,11 @@ const T = {
     paidBadge: 'שולם',
     partialBadge: 'שולם חלקית',
     unpaidBadge: 'לא שולם',
+    cancelledTitle: 'פוליסה זו בוטלה',
+    cancelledOn: 'תאריך ביטול',
+    cancelledNote: 'סיבת ביטול',
+    refundOwed: 'החזר המגיע ללקוח',
+    refundOwedLine: 'על המשרד להעביר ללקוח את הסכום הבא:',
   },
 } as const;
 
@@ -520,6 +573,32 @@ function buildInvoiceHtml(
         </thead>
         <tbody>${paymentsRows}</tbody>
       </table>
+    </section>`
+    : '';
+
+  // Big red footer block when the policy is cancelled — shows the
+  // cancellation date/reason and, if the office owes the client money,
+  // a prominent "refund owed" amount so the printed document reflects
+  // the live state of the record.
+  const cancelledBlock = metadata.is_cancelled
+    ? `
+    <section style="margin-top:28px;padding:18px 20px;border:2px solid #fecaca;border-radius:12px;background:linear-gradient(135deg,#fef2f2 0%,#fee2e2 100%);">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <h3 style="margin:0 0 6px;font-size:16px;font-weight:800;color:#991b1b;letter-spacing:0.3px;">
+            ⊘ ${t.cancelledTitle}
+          </h3>
+          ${metadata.cancellation_date ? `<div style="font-size:12px;color:#b91c1c;margin-top:4px;"><strong>${t.cancelledOn}:</strong> ${escapeHtml(metadata.cancellation_date)}</div>` : ''}
+          ${metadata.cancellation_note ? `<div style="font-size:12px;color:#7f1d1d;margin-top:4px;line-height:1.6;"><strong>${t.cancelledNote}:</strong> ${escapeHtml(metadata.cancellation_note)}</div>` : ''}
+        </div>
+        ${metadata.refund_amount > 0 ? `
+        <div style="background:#ffffff;border:1px solid #fecaca;border-radius:10px;padding:12px 18px;min-width:180px;text-align:center;">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#b91c1c;font-weight:700;">${t.refundOwed}</div>
+          <div style="font-size:26px;font-weight:900;color:#b91c1c;margin-top:4px;line-height:1.1;">₪${escapeHtml(metadata.refund_amount_text)}</div>
+          <div style="font-size:10px;color:#7f1d1d;margin-top:4px;">${t.refundOwedLine}</div>
+        </div>
+        ` : ''}
+      </div>
     </section>`
     : '';
 
@@ -804,6 +883,7 @@ function buildInvoiceHtml(
 
     ${paymentsBlock}
     ${driversBlock}
+    ${cancelledBlock}
 
     <div class="pay-terms">
       <div>

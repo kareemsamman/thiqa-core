@@ -1906,15 +1906,21 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                     policyIds.includes(p.id),
                   );
                   if (packagePolicies.length === 0) return;
-                  // Total package insurance price = sum of every
-                  // sibling's insurance_price. The cancel modal uses
-                  // this as the refund ceiling, so entering a refund
-                  // for the whole باقة no longer trips the "exceeds
-                  // insurance price" guard.
-                  const totalPrice = packagePolicies.reduce(
-                    (sum, p) => sum + (Number(p.insurance_price) || 0),
-                    0,
-                  );
+                  // Refund ceiling excludes ELZAMI (compulsory) rows.
+                  // Compulsory premiums are settled directly by the
+                  // insurance company — the office can't refund that
+                  // portion to the client, so letting the user enter
+                  // a refund larger than the sum of the non-ELZAMI
+                  // rows would guarantee a reconciliation mismatch.
+                  // All sibling rows (including ELZAMI) still get
+                  // marked as cancelled — the filter only affects the
+                  // ceiling shown in the refund input.
+                  const totalPrice = packagePolicies
+                    .filter((p) => p.policy_type_parent !== 'ELZAMI')
+                    .reduce(
+                      (sum, p) => sum + (Number(p.insurance_price) || 0),
+                      0,
+                    );
                   // Use the first policy's number for labels/SMS.
                   const primary = packagePolicies[0];
                   setCancelPolicyIds(policyIds);

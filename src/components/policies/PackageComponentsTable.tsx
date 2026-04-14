@@ -1,15 +1,16 @@
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
   TableRow,
-  TableFooter 
+  TableFooter
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Shield, Car, Truck, FileCheck, Pencil } from "lucide-react";
+import { Shield, Car, Truck, FileCheck, Pencil, XCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 interface PackagePolicy {
@@ -20,6 +21,9 @@ interface PackagePolicy {
   end_date: string;
   insurance_price: number;
   profit: number | null;
+  office_commission?: number | null;
+  cancelled?: boolean | null;
+  cancellation_date?: string | null;
   is_under_24?: boolean | null;
   group_id?: string | null;
   insurance_companies?: {
@@ -138,14 +142,18 @@ const getTypeName = (p: PackagePolicy) => {
     return '-';
   };
 
-  const totalPrice = policies.reduce((sum, p) => sum + p.insurance_price + ((p as any).office_commission || 0), 0);
+  // Cancelled siblings are excluded from every total — the office stopped
+  // earning on them, and including their prices in the "المجموع" row makes
+  // the numbers disagree with the payments section.
+  const activePolicies = policies.filter((p) => !p.cancelled);
+  const totalPrice = activePolicies.reduce((sum, p) => sum + p.insurance_price + ((p as any).office_commission || 0), 0);
   // Profit total excludes ELZAMI — compulsory policies have no markup. The
   // office's earning on ELZAMI lives in office_commission and is shown in
   // its own column / card, not folded into "ربح".
-  const totalProfit = policies
+  const totalProfit = activePolicies
     .filter((p) => p.policy_type_parent !== 'ELZAMI')
     .reduce((sum, p) => sum + (p.profit || 0), 0);
-  const totalCommission = policies.reduce(
+  const totalCommission = activePolicies.reduce(
     (sum, p) => sum + ((p as any).office_commission || 0),
     0,
   );
@@ -176,13 +184,20 @@ const getTypeName = (p: PackagePolicy) => {
             const Icon = config.icon;
             const serviceName = getServiceName(policy);
             const isElzami = policy.policy_type_parent === 'ELZAMI';
-            
+            const isCancelled = !!policy.cancelled;
+
             return (
-              <TableRow key={policy.id} className="hover:bg-muted/20">
+              <TableRow
+                key={policy.id}
+                className={cn(
+                  "hover:bg-muted/20",
+                  isCancelled && "bg-red-50/40 hover:bg-red-50/60",
+                )}
+              >
                 <TableCell>
                     <div className="flex items-center gap-2">
                     <div className="relative">
-                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", config.bg)}>
+                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", config.bg, isCancelled && "opacity-50 grayscale")}>
                         <Icon className={cn("h-4 w-4", config.text)} />
                       </div>
                       {syncStatuses && syncableTypes.includes(policy.policy_type_parent) && (
@@ -192,25 +207,37 @@ const getTypeName = (p: PackagePolicy) => {
                       )}
                     </div>
                     <div>
-                      <p className="font-semibold">{getTypeName(policy)}</p>
+                      <div className="flex items-center gap-2">
+                        <p className={cn("font-semibold", isCancelled && "text-muted-foreground line-through")}>
+                          {getTypeName(policy)}
+                        </p>
+                        {isCancelled && (
+                          <Badge variant="destructive" className="gap-1 text-[10px] h-5 px-1.5">
+                            <XCircle className="h-3 w-3" />
+                            ملغاة
+                          </Badge>
+                        )}
+                      </div>
                       {serviceName && (
-                        <p className="text-xs text-muted-foreground">{serviceName}</p>
+                        <p className={cn("text-xs text-muted-foreground", isCancelled && "line-through")}>{serviceName}</p>
                       )}
                     </div>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <span className="text-sm font-medium">{getCompanyName(policy)}</span>
+                  <span className={cn("text-sm font-medium", isCancelled && "text-muted-foreground line-through")}>
+                    {getCompanyName(policy)}
+                  </span>
                 </TableCell>
                 <TableCell>
-                  <div className="text-sm">
+                  <div className={cn("text-sm", isCancelled && "text-muted-foreground line-through")}>
                     <span>{formatDate(policy.start_date)}</span>
                     <span className="mx-2 text-muted-foreground">←</span>
                     <span>{formatDate(policy.end_date)}</span>
                   </div>
                 </TableCell>
                 <TableCell className="text-left">
-                  <div className="flex flex-col items-end">
+                  <div className={cn("flex flex-col items-end", isCancelled && "text-muted-foreground line-through")}>
                     <span className="font-bold text-lg ltr-nums">{formatCurrency(policy.insurance_price)}</span>
                     {((policy as any).office_commission || 0) > 0 && (
                       <span className="text-[11px] text-amber-700 font-semibold ltr-nums mt-0.5">
