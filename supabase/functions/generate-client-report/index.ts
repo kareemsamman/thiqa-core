@@ -124,14 +124,17 @@ serve(async (req) => {
       .eq("client_id", client_id)
       .is("deleted_at", null);
 
-    // Fetch policies (including office_commission + notes)
+    // Fetch policies (including office_commission + notes + broker link so
+    // we can surface "من الوسيط / إلى الوسيط" on the items table)
     const { data: policies } = await supabase
       .from("policies")
       .select(`
         id, policy_number, policy_type_parent, policy_type_child, start_date, end_date,
         insurance_price, office_commission, cancelled, transferred, group_id, notes,
+        broker_id, broker_direction,
         company:insurance_companies(name, name_ar),
-        car:cars(id, car_number)
+        car:cars(id, car_number),
+        broker:brokers(id, name)
       `)
       .eq("client_id", client_id)
       .is("deleted_at", null)
@@ -528,6 +531,20 @@ function generateReportHtml(args: GenerateReportArgs): string {
     ? `${formatDate(p.start_date)} → ${formatDate(p.end_date)}`
     : '-';
 
+  // Build a "<label>: <name>" tag for a policy that's linked to a broker.
+  // Used in both single rows and package component rows so staff can see
+  // exactly which policy came from or went to a broker.
+  const brokerLineFor = (p: any): string => {
+    const broker = Array.isArray(p.broker) ? p.broker[0] : p.broker;
+    if (!broker || !p.broker_id) return '';
+    const direction = p.broker_direction === 'from_broker'
+      ? 'من الوسيط'
+      : p.broker_direction === 'to_broker'
+        ? 'إلى الوسيط'
+        : 'وسيط';
+    return `<div class="item-broker">${direction}: ${escapeHtml(broker.name)}</div>`;
+  };
+
   const renderSingleRow = (p: any, index: string, cancelledOverride = false) => {
     const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
     const companyName = getCompanyName(p);
@@ -550,6 +567,7 @@ function generateReportHtml(args: GenerateReportArgs): string {
           <div class="item-title">${typeLabel} ${cancelledTag}</div>
           <div class="item-meta">${companyName}</div>
           ${commissionLine}
+          ${brokerLineFor(p)}
           ${notesLine}
         </td>
         <td class="tabular">${carNumber}</td>
@@ -603,6 +621,7 @@ function generateReportHtml(args: GenerateReportArgs): string {
             <div class="item-title">${typeLabel} ${cancelledTag}</div>
             <div class="item-meta">${companyName}</div>
             ${commissionLine}
+            ${brokerLineFor(m)}
             ${notesLine}
           </td>
           <td class="tabular">${getCarNumber(m)}</td>
@@ -971,6 +990,17 @@ function generateReportHtml(args: GenerateReportArgs): string {
       font-weight: 600;
       font-variant-numeric: tabular-nums;
     }
+    .items tbody .item-broker {
+      display: inline-block;
+      color: #78350f;
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      font-size: 11px;
+      padding: 2px 8px;
+      margin-top: 4px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
     .items tbody td.empty-cell {
       text-align: center;
       font-weight: 500;
@@ -1320,6 +1350,7 @@ function generateReportHtml(args: GenerateReportArgs): string {
       .items tbody tr.package-header td,
       .items tbody tr.package-header .package-badge,
       .items tbody tr.package-component td,
+      .items tbody .item-broker,
       .meta-rows .label,
       .section-title,
       .totals td.label,

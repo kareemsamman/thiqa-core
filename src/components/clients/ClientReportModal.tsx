@@ -610,7 +610,8 @@ export function ClientReportModal({
       }
     } catch (error) {
       console.error('Error generating print report:', error);
-      toast.error('فشل في تحضير التقرير للطباعة');
+      const msg = await extractFunctionErrorMessage(error);
+      toast.error(msg || 'فشل في تحضير التقرير للطباعة');
     } finally {
       setIsPrinting(false);
     }
@@ -846,13 +847,12 @@ export function ClientReportModal({
             <div className="absolute bottom-0 right-0 w-48 h-48 bg-white rounded-full translate-x-1/4 translate-y-1/4" />
           </div>
 
-          {/* Top toolbar: close X always on the visual left (Arabic
-              convention), SMS + print actions on the visual right. dir="ltr"
-              locks the order so the action buttons never wrap under the
-              close button on narrow screens. */}
+          {/* Top toolbar: close X + SMS + print all clustered on the visual
+              left. dir="ltr" locks the order so they sit left-to-right
+              regardless of the RTL page direction. */}
           <div
             dir="ltr"
-            className="relative z-10 flex items-center justify-between px-4 py-3 border-b border-white/10"
+            className="relative z-10 flex items-center gap-2 px-4 py-3 border-b border-white/10"
           >
             <button
               type="button"
@@ -862,35 +862,33 @@ export function ClientReportModal({
             >
               <X className="h-4 w-4" />
             </button>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={handleSendSms}
-                disabled={sendingSms || !client.phone_number}
-                className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
-                title={!client.phone_number ? 'لا يوجد رقم هاتف' : 'إرسال رابط التقرير للعميل'}
-              >
-                {sendingSms ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <MessageSquare className="h-4 w-4" />
-                )}
-                <span className="hidden sm:inline">SMS</span>
-              </Button>
-              <Button
-                size="sm"
-                onClick={handlePrint}
-                disabled={isPrinting}
-                className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
-              >
-                {isPrinting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Printer className="h-4 w-4" />
-                )}
-                <span className="hidden sm:inline">طباعة</span>
-              </Button>
-            </div>
+            <Button
+              size="sm"
+              onClick={handleSendSms}
+              disabled={sendingSms || !client.phone_number}
+              className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
+              title={!client.phone_number ? 'لا يوجد رقم هاتف' : 'إرسال رابط التقرير للعميل'}
+            >
+              {sendingSms ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <MessageSquare className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">SMS</span>
+            </Button>
+            <Button
+              size="sm"
+              onClick={handlePrint}
+              disabled={isPrinting}
+              className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
+            >
+              {isPrinting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Printer className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">طباعة</span>
+            </Button>
           </div>
 
           <div className="relative px-4 sm:px-6 py-5">
