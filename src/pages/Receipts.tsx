@@ -32,6 +32,11 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Search,
   Plus,
   Printer,
@@ -61,6 +66,7 @@ import { useAgentContext } from "@/hooks/useAgentContext";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { format } from "date-fns";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { PaymentEditDialog } from "@/components/clients/PaymentEditDialog";
 import {
   ReceiptGroupDetailsDialog,
   type ReceiptGroupView,
@@ -113,6 +119,15 @@ function formatDate(dateStr: string): string {
   } catch {
     return dateStr;
   }
+}
+
+function paymentLabelShort(method: string): string {
+  return {
+    cash: "نقدي",
+    cheque: "شيك",
+    visa: "فيزا",
+    transfer: "تحويل",
+  }[method] || method;
 }
 
 function getPaymentBadge(method: string) {
@@ -418,6 +433,9 @@ export default function Receipts() {
   const [deleteReceipt, setDeleteReceipt] = useState<ReceiptRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Payment edit (for auto-source receipts that mirror a policy_payment)
+  const [editPayment, setEditPayment] = useState<any | null>(null);
+
   // ─── Fetch ───────────────────────────────────────────────────────
 
   const fetchReceipts = useCallback(async () => {
@@ -534,8 +552,46 @@ export default function Receipts() {
   }, [receipts]);
 
   // ─── Print ─────────────────────────────────────────────────────
+  //
+  // For auto-source groups (rows mirrored from policy_payments) we call
+  // generate-bulk-payment-receipt / generate-payment-receipt so the
+  // output matches the سندات قبض layout used everywhere else — same
+  // heading, same client info grid, same table. Manual-only groups
+  // still fall back to the local HTML builder for now because the
+  // edge function can't fetch them from policy_payments.
 
-  const handlePrintGroup = (group: ReceiptGroup) => {
+  const handlePrintGroup = async (group: ReceiptGroup) => {
+    const paymentIds = group.receipts
+      .map((r) => (r as any).payment_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+    const allAuto = paymentIds.length === group.receipts.length;
+
+    if (allAuto && paymentIds.length > 0) {
+      try {
+        const fn = paymentIds.length > 1
+          ? "generate-bulk-payment-receipt"
+          : "generate-payment-receipt";
+        const body = paymentIds.length > 1
+          ? { payment_ids: paymentIds }
+          : { payment_id: paymentIds[0] };
+        const { data, error } = await supabase.functions.invoke(fn, { body });
+        if (error) throw error;
+        const url = (data as any)?.receipt_url;
+        if (url) {
+          window.open(url, "_blank");
+          return;
+        }
+        toast.error("لم يتم العثور على رابط السند");
+        return;
+      } catch (err: any) {
+        console.error("[Receipts] edge function print failed:", err);
+        const detail = err?.message || err?.context?.error || "";
+        toast.error(detail ? `فشل في توليد السندات: ${detail}` : "فشل في توليد السندات");
+        return;
+      }
+    }
+
+    // Manual receipts fall through to the local HTML builder.
     const logoUrl = siteSettings?.logo_url || null;
     const businessName = siteSettings?.site_title || "Thiqa";
     const html = buildReceiptPrintHtml(group, logoUrl, businessName);
@@ -562,7 +618,42 @@ export default function Receipts() {
     setDialogOpen(true);
   };
 
-  const handleEditReceipt = (r: ReceiptRow) => {
+  const handleEditReceipt = async (r: ReceiptRow) => {
+    // Auto-source receipts mirror a policy_payment row via the DB
+    // trigger, so edits on them have to go through PaymentEditDialog
+    // (same dialog the customer page uses). Editing the receipts row
+    // directly would be overwritten on the next trigger run.
+    if (r.source === "auto" && r.payment_id) {
+      try {
+        const { data, error } = await (supabase as any)
+          .from("policy_payments")
+          .select(`
+            id, policy_id, amount, payment_date, payment_type, cheque_number,
+            cheque_image_url, card_last_four, refused, locked, notes,
+            policy:policies!policy_payments_policy_id_fkey(
+              id, policy_type_parent, policy_type_child, insurance_price
+            )
+          `)
+          .eq("id", r.payment_id)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          toast.error("الدفعة المرتبطة بهذا السند غير موجودة");
+          return;
+        }
+        const normalized = {
+          ...data,
+          policy: Array.isArray(data.policy) ? data.policy[0] : data.policy,
+        };
+        setEditPayment(normalized);
+      } catch (err: any) {
+        console.error("[Receipts] fetch policy_payment for edit:", err);
+        toast.error(err?.message || "فشل تحميل بيانات الدفعة");
+      }
+      return;
+    }
+
+    // Manual receipt — the existing add/edit form handles it.
     setEditingId(r.id);
     setFormData({
       client_name: r.client_name || "",
@@ -989,6 +1080,18 @@ export default function Receipts() {
         description="هل أنت متأكد من حذف هذا الإيصال؟ لا يمكن التراجع عن هذا الإجراء."
         loading={deleting}
       />
+
+      <PaymentEditDialog
+        open={!!editPayment}
+        onOpenChange={(o) => !o && setEditPayment(null)}
+        payment={editPayment}
+        onSuccess={async () => {
+          setEditPayment(null);
+          // The DB trigger mirrors policy_payments → receipts, so a
+          // refetch here picks up the updated row automatically.
+          await fetchReceipts();
+        }}
+      />
     </MainLayout>
   );
 
@@ -1028,9 +1131,9 @@ export default function Receipts() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right">المبلغ</TableHead>
-                  <TableHead className="text-right">رقم سند القبض</TableHead>
                   <TableHead className="text-right">رقم الوثيقة</TableHead>
+                  <TableHead className="text-right">رقم سند القبض</TableHead>
+                  <TableHead className="text-right">المبلغ</TableHead>
                   <TableHead className="text-right">التاريخ</TableHead>
                   <TableHead className="text-right">اسم العميل</TableHead>
                   <TableHead className="text-right">رقم السيارة</TableHead>
@@ -1065,6 +1168,59 @@ export default function Receipts() {
                       className="cursor-pointer hover:bg-muted/40"
                       onClick={() => handleOpenGroupDetails(group)}
                     >
+                      <TableCell className="font-mono text-xs ltr-nums">
+                        {group.document_numbers.length > 0
+                          ? group.document_numbers.join(" · ")
+                          : "-"}
+                      </TableCell>
+                      <TableCell
+                        className="font-mono text-xs ltr-nums"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {group.receipts.length <= 1 ? (
+                          <span>{firstReceipt?.receipt_number ?? "-"}</span>
+                        ) : (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 hover:underline"
+                                title="عرض جميع أرقام السندات"
+                              >
+                                <span>{firstReceipt?.receipt_number ?? "-"}</span>
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[9px] px-1 py-0"
+                                >
+                                  +{group.receipts.length - 1}
+                                </Badge>
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              align="end"
+                              className="w-auto p-2"
+                              dir="rtl"
+                            >
+                              <p className="text-[10px] text-muted-foreground mb-1.5 px-1">
+                                أرقام السندات
+                              </p>
+                              <ul className="flex flex-col gap-0.5">
+                                {group.receipts.map((r) => (
+                                  <li
+                                    key={r.id}
+                                    className="px-2 py-1 rounded hover:bg-muted font-mono text-xs ltr-nums flex items-center gap-2"
+                                  >
+                                    <span className="text-muted-foreground">
+                                      {paymentLabelShort(r.payment_method)}
+                                    </span>
+                                    <span>{r.receipt_number ?? "-"}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      </TableCell>
                       <TableCell className="font-semibold">
                         <div className="flex items-center gap-1">
                           ₪
@@ -1080,16 +1236,6 @@ export default function Receipts() {
                             </Badge>
                           )}
                         </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs ltr-nums">
-                        {group.receipts.length === 1
-                          ? (firstReceipt?.receipt_number ?? "-")
-                          : `${group.receipts[0]?.receipt_number ?? "-"}…`}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs ltr-nums">
-                        {group.document_numbers.length > 0
-                          ? group.document_numbers.join(" · ")
-                          : "-"}
                       </TableCell>
                       <TableCell className="ltr-nums">
                         {formatDate(firstReceipt?.receipt_date || "")}

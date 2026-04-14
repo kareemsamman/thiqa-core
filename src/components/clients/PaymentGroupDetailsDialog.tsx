@@ -194,9 +194,10 @@ export function PaymentGroupDetailsDialog({
       } else {
         toast.error('لم يتم العثور على رابط السند');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Print receipts error:', e);
-      toast.error('فشل في توليد السندات');
+      const detail = e?.message || e?.context?.error || '';
+      toast.error(detail ? `فشل في توليد السندات: ${detail}` : 'فشل في توليد السندات');
     } finally {
       setPrinting(false);
     }

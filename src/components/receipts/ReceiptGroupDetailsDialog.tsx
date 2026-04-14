@@ -31,6 +31,10 @@ export interface ReceiptRow {
   notes: string | null;
   receipt_type: string;
   created_at: string;
+  // 'auto' when the row is mirrored from policy_payments via the DB
+  // trigger, 'manual' when the agent typed it directly on /receipts.
+  source?: string | null;
+  payment_id?: string | null;
   policy?: {
     id: string;
     document_number: string | null;
