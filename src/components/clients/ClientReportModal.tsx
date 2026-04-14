@@ -484,9 +484,16 @@ export function ClientReportModal({
 
   // ---------- Derived data ----------
 
-  // Total insurance = insurance_price + office_commission across all policies.
+  // Total insurance = insurance_price + office_commission across all
+  // ACTIVE policies — i.e. not cancelled and not transferred. This must
+  // match the subset `fetchPaymentSummary` uses for total_paid/total_remaining
+  // in ClientDetails, otherwise the three money cards don't reconcile
+  // (total − paid − refund ≠ remaining) and the customer sees phantom debt.
   const totalInsurance = useMemo(
-    () => policies.reduce((s, p) => s + p.insurance_price + (p.office_commission || 0), 0),
+    () =>
+      policies
+        .filter((p) => !p.cancelled && !p.transferred)
+        .reduce((s, p) => s + p.insurance_price + (p.office_commission || 0), 0),
     [policies]
   );
 

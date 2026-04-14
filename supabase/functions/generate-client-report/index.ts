@@ -270,15 +270,24 @@ serve(async (req) => {
       company_location: (smsSettingsRes.data as any)?.company_location || '',
     };
 
-    // Totals: include office commission and exclude cancelled policies from
-    // the "total insurance" so the المطلوب line matches what the staff sees
-    // on the client page.
+    // Totals: only ACTIVE policies (not cancelled, not transferred) count
+    // toward the money cards. This mirrors `fetchPaymentSummary` in
+    // ClientDetails so the printed report reconciles with the in-app modal
+    // — total − paid − refund = remaining, with no phantom debt from
+    // historical cancelled/transferred rows. The items table still shows
+    // the cancelled/transferred rows (tagged) for history; only the math
+    // is filtered.
+    const activePolicies = (policies || []).filter(
+      (p: any) => !p.cancelled && !p.transferred
+    );
+    const activePolicyIdSet = new Set(activePolicies.map((p: any) => p.id));
     let totalInsurance = 0;
-    for (const p of policies || []) {
-      if (p.cancelled) continue;
+    for (const p of activePolicies) {
       totalInsurance += (p.insurance_price || 0) + ((p as any).office_commission || 0);
     }
-    const totalPaid = allPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalPaid = allPayments
+      .filter((p: any) => activePolicyIdSet.has(p.policy_id))
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
 
     // Wallet balance (net refund we owe the client)
     const { data: walletData } = await supabase
