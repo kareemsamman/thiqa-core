@@ -29,6 +29,7 @@ import { TranzilaPaymentModal } from "@/components/payments/TranzilaPaymentModal
 import { ChequeScannerDialog } from "@/components/payments/ChequeScannerDialog";
 import type { Enums } from "@/integrations/supabase/types";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from "@/lib/chequeUtils";
+import { getPaymentTypeLabel } from "@/lib/paymentLabels";
 
 interface PaymentImage {
   id: string;
@@ -45,6 +46,7 @@ interface Payment {
   cheque_image_url: string | null;
   cheque_status: string | null;
   refused: boolean | null;
+  locked: boolean | null;
   notes: string | null;
   images?: PaymentImage[];
 }
@@ -86,13 +88,6 @@ const isPdfUrl = (url: string): boolean => {
 
 // Helper to check if file is PDF
 const isPdfFile = (file: File): boolean => file.type === 'application/pdf';
-
-const paymentTypeLabels: Record<string, string> = {
-  "cash": "نقدي",
-  "cheque": "شيك",
-  "visa": "فيزا",
-  "transfer": "تحويل",
-};
 
 const paymentTypesBase = [
   { value: 'cash', label: 'نقدي', icon: Banknote },
@@ -837,107 +832,121 @@ export function PolicyPaymentsSection({
         {payments.length === 0 ? (
           <p className="text-center text-muted-foreground py-4">لا توجد دفعات مسجلة</p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {payments.map((payment) => {
               const Icon = paymentTypeIcon[payment.payment_type] || Banknote;
               const typeBg = paymentTypeBg[payment.payment_type] || "bg-muted text-muted-foreground border-border";
               const imageCount = getImageCount(payment);
+              const isReturned = payment.cheque_status === 'returned';
+              const isRefused = payment.refused;
               return (
                 <div
                   key={payment.id}
                   className={cn(
-                    "rounded-lg border bg-card overflow-hidden",
-                    payment.refused || payment.cheque_status === 'returned'
+                    "rounded-xl border bg-card shadow-sm transition-colors",
+                    isRefused || isReturned
                       ? "border-destructive/40 bg-destructive/5"
-                      : "border-border/60"
+                      : "border-border/60 hover:border-border",
                   )}
                 >
-                  <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-muted/30">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <div
-                        className={cn(
-                          "w-7 h-7 rounded-md border flex items-center justify-center shrink-0",
-                          typeBg
-                        )}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                      </div>
-                      <div className="min-w-0 leading-tight">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-bold text-sm ltr-nums text-foreground">
-                            {formatCurrency(payment.amount)}
-                          </span>
-                          <Badge variant="outline" className={cn("text-[10px] h-4 px-1.5", typeBg)}>
-                            {paymentTypeLabels[payment.payment_type]}
+                  <div className="flex items-center gap-4 px-4 py-3">
+                    {/* Icon */}
+                    <div
+                      className={cn(
+                        "w-11 h-11 rounded-xl border-2 flex items-center justify-center shrink-0",
+                        typeBg,
+                      )}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    {/* Amount + type + status badges */}
+                    <div className="flex flex-col gap-1 shrink-0 min-w-[140px]">
+                      <span className="font-bold text-xl ltr-nums text-foreground leading-none">
+                        {formatCurrency(payment.amount)}
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="outline" className={cn("text-[10px] h-5 px-2 font-semibold", typeBg)}>
+                          {getPaymentTypeLabel(payment)}
+                        </Badge>
+                        {payment.payment_type === 'cheque' && payment.cheque_status && (
+                          <Badge
+                            variant={chequeStatusLabels[payment.cheque_status]?.variant || 'secondary'}
+                            className="text-[10px] h-5 px-2"
+                          >
+                            {chequeStatusLabels[payment.cheque_status]?.label || payment.cheque_status}
                           </Badge>
-                          {payment.payment_type === 'cheque' && payment.cheque_status && (
-                            <Badge
-                              variant={chequeStatusLabels[payment.cheque_status]?.variant || 'secondary'}
-                              className="text-[10px] h-4 px-1.5"
-                            >
-                              {chequeStatusLabels[payment.cheque_status]?.label || payment.cheque_status}
-                            </Badge>
-                          )}
-                          {payment.refused && (
-                            <Badge variant="destructive" className="text-[10px] h-4 px-1.5">راجع</Badge>
-                          )}
-                          {payment.cheque_number && (
-                            <span className="text-[10px] text-muted-foreground font-mono">
-                              #{payment.cheque_number}
-                            </span>
-                          )}
-                          <span className="text-[10px] text-muted-foreground ltr-nums">
-                            · {formatDate(payment.payment_date)}
-                          </span>
-                          {imageCount > 0 && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-5 px-1.5 gap-1 border-primary/50 text-primary hover:bg-primary/10"
-                              onClick={() => openGallery(payment)}
-                            >
-                              <ImageIcon className="h-2.5 w-2.5" />
-                              <span className="text-[10px]">{imageCount} صور</span>
-                            </Button>
-                          )}
-                        </div>
+                        )}
+                        {isRefused && !isReturned && (
+                          <Badge variant="destructive" className="text-[10px] h-5 px-2">راجع</Badge>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-0.5 shrink-0">
+                    {/* Divider */}
+                    <div className="h-10 w-px bg-border/70 shrink-0" />
+                    {/* Meta (date + cheque# inline) */}
+                    <div className="flex-1 min-w-0 flex items-center gap-4 flex-wrap text-xs">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <span className="text-[10px] uppercase tracking-wide">التاريخ</span>
+                        <span className="font-semibold text-foreground ltr-nums">
+                          {formatDate(payment.payment_date)}
+                        </span>
+                      </div>
+                      {payment.cheque_number && (
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <span className="text-[10px] uppercase tracking-wide">رقم الشيك</span>
+                          <span className="font-mono font-semibold text-foreground ltr-nums">
+                            {payment.cheque_number}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {/* Attachments chip */}
+                    {imageCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => openGallery(payment)}
+                        className="flex items-center gap-1.5 text-[11px] text-primary bg-primary/10 hover:bg-primary/15 rounded-full px-2.5 py-1 shrink-0 transition-colors"
+                      >
+                        <ImageIcon className="h-3 w-3" />
+                        <span>{imageCount} ملف</span>
+                      </button>
+                    )}
+                    {/* Actions */}
+                    <div className="flex items-center gap-1 shrink-0 border-r border-border/60 pr-3">
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 text-primary hover:text-primary hover:bg-primary/10"
+                        className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
                         onClick={() => handleGenerateReceipt(payment.id)}
                         disabled={generatingReceipt === payment.id}
                         title="إيصال دفع"
                       >
                         {generatingReceipt === payment.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <Receipt className="h-3 w-3" />
+                          <Receipt className="h-4 w-4" />
                         )}
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6"
+                        className="h-8 w-8"
                         onClick={() => openEditDialog(payment)}
                         title="تعديل"
                       >
-                        <Pencil className="h-3 w-3" />
+                        <Pencil className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                         onClick={() => {
                           setSelectedPayment(payment);
                           setDeleteDialogOpen(true);
                         }}
                         title="حذف"
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -1189,103 +1198,131 @@ export function PolicyPaymentsSection({
         </DialogContent>
       </Dialog>
 
-      {/* Edit Payment Dialog */}
+      {/* Edit Payment Dialog — same design language as the
+          PaymentGroupDetailsDialog / شارد نلpsection: navy gradient header,
+          sectioned body with a compact grid, and a split footer so the
+          destructive "mark returned" action sits opposite save/cancel
+          instead of fighting for space in the same corner. */}
       <Dialog open={editDialogOpen} onOpenChange={(open) => { setEditDialogOpen(open); if (!open) { resetEditForm(); setSelectedPayment(null); } }}>
-        <DialogContent className="sm:max-w-md" dir="rtl">
-          <DialogHeader>
-            <DialogTitle>تعديل الدفعة</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>المبلغ (₪)</Label>
-              <Input
-                type="number"
-                value={editFormData.amount}
-                onChange={(e) => handleEditAmountChange(e.target.value)}
-                className={cn("ltr-input text-left", editValidationError && "border-destructive")}
-              />
-              {editValidationError && (
-                <div className="flex items-center gap-2 text-destructive text-sm">
-                  <AlertCircle className="h-4 w-4" />
-                  <span>{editValidationError}</span>
+        <DialogContent className="max-w-xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
+          {/* Header */}
+          <div
+            className="sticky top-0 z-10 text-white px-5 py-4 rounded-t-lg"
+            style={{ background: "linear-gradient(135deg, #122143 0%, #1a3260 100%)" }}
+          >
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center shrink-0">
+                  <Pencil className="h-5 w-5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-lg font-bold text-white text-right leading-tight">
+                    تعديل الدفعة
+                  </DialogTitle>
+                  {selectedPayment && (
+                    <div className="flex items-center gap-2 mt-1 text-xs text-white/75">
+                      <span className="font-bold ltr-nums">{formatCurrency(selectedPayment.amount)}</span>
+                      <span className="text-white/40">•</span>
+                      <span>{getPaymentTypeLabel(selectedPayment)}</span>
+                      <span className="text-white/40">•</span>
+                      <span className="ltr-nums">{formatDate(selectedPayment.payment_date)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+
+          {/* Body */}
+          <div className="p-5 space-y-5 bg-muted/20">
+            {/* Amount + Method + Date */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2 space-y-1.5">
+                <Label className="text-xs font-semibold">المبلغ (₪)</Label>
+                <Input
+                  type="number"
+                  value={editFormData.amount}
+                  onChange={(e) => handleEditAmountChange(e.target.value)}
+                  className={cn("ltr-input text-left text-xl font-bold h-12", editValidationError && "border-destructive")}
+                />
+                {editValidationError && (
+                  <div className="flex items-center gap-2 text-destructive text-xs">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    <span>{editValidationError}</span>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">طريقة الدفع</Label>
+                <Select value={editFormData.payment_type} onValueChange={(v) => setEditFormData(f => ({ ...f, payment_type: v }))}>
+                  <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {/* Visa excluded — visa edits go through Tranzila. */}
+                    {paymentTypes
+                      .filter(type => type.value !== 'visa')
+                      .map(type => (
+                        <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">تاريخ الدفع</Label>
+                <ArabicDatePicker value={editFormData.payment_date} onChange={(v) => setEditFormData(f => ({ ...f, payment_date: v }))} />
+              </div>
+              {editFormData.payment_type === 'cheque' && (
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label className="text-xs font-semibold">رقم الشيك *</Label>
+                  <Input
+                    value={editFormData.cheque_number}
+                    onChange={(e) => setEditFormData(f => ({ ...f, cheque_number: sanitizeChequeNumber(e.target.value) }))}
+                    maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                    className="font-mono ltr-input h-10"
+                  />
                 </div>
               )}
             </div>
-            <div className="space-y-2">
-              <Label>طريقة الدفع</Label>
-              <Select value={editFormData.payment_type} onValueChange={(v) => setEditFormData(f => ({ ...f, payment_type: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {/* Filter out visa from edit - visa payments must go through Tranzila */}
-                  {paymentTypes
-                    .filter(type => type.value !== 'visa')
-                    .map(type => (
-                      <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>تاريخ الدفع</Label>
-              <ArabicDatePicker value={editFormData.payment_date} onChange={(v) => setEditFormData(f => ({ ...f, payment_date: v }))} />
-            </div>
-            {editFormData.payment_type === 'cheque' && (
-              <div className="space-y-2">
-                <Label>رقم الشيك *</Label>
-                <Input
-                  value={editFormData.cheque_number}
-                  onChange={(e) => setEditFormData(f => ({ ...f, cheque_number: sanitizeChequeNumber(e.target.value) }))}
-                  maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                  className="font-mono ltr-input"
-                />
-              </div>
-            )}
-            {/* Show existing images */}
-            {selectedPayment && getImageCount(selectedPayment) > 0 && !removeExistingFiles && (
-              <div className="space-y-2">
-                <Label>الملفات الحالية</Label>
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-2">
-                  {selectedPayment.cheque_image_url && (
-                    isPdfUrl(selectedPayment.cheque_image_url) ? (
-                      <div className="h-12 w-16 flex items-center justify-center bg-destructive/10 rounded border">
-                        <FileText className="h-5 w-5 text-destructive" />
-                      </div>
-                    ) : (
-                      <img src={selectedPayment.cheque_image_url} alt="" className="h-12 w-16 object-cover rounded border" />
-                    )
-                  )}
-                  {selectedPayment.images?.map((img, i) => (
-                    isPdfUrl(img.image_url) ? (
-                      <div key={i} className="h-12 w-16 flex items-center justify-center bg-destructive/10 rounded border">
-                        <FileText className="h-5 w-5 text-destructive" />
-                      </div>
-                    ) : (
-                      <img key={i} src={img.image_url} alt="" className="h-12 w-16 object-cover rounded border" />
-                    )
-                  ))}
-                  </div>
-                  <Button type="button" variant="destructive" size="sm" onClick={() => setRemoveExistingFiles(true)} className="w-full">
-                    <X className="h-4 w-4 ml-2" />
-                    حذف جميع الملفات الحالية
-                  </Button>
-                </div>
-              </div>
-            )}
+
+            {/* Attached Files (existing + new) */}
             {(editFormData.payment_type === 'cash' || editFormData.payment_type === 'cheque' || editFormData.payment_type === 'transfer') && (
-              <div className="space-y-2">
-                <Label>
-                  {editFormData.payment_type === 'cheque' ? 'إضافة صور الشيك' : editFormData.payment_type === 'transfer' ? 'إضافة صور إيصال التحويل' : 'إضافة صور إيصال الدفع'}
+              <div className="rounded-lg border border-border/60 bg-card p-3 space-y-2">
+                <Label className="text-xs font-semibold flex items-center gap-1.5">
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  الملفات المرفقة
                 </Label>
                 <div className="flex flex-wrap gap-2">
+                  {/* Existing files */}
+                  {selectedPayment && getImageCount(selectedPayment) > 0 && !removeExistingFiles && (
+                    <>
+                      {selectedPayment.cheque_image_url && (
+                        isPdfUrl(selectedPayment.cheque_image_url) ? (
+                          <div className="h-14 w-14 flex items-center justify-center bg-red-50 rounded-lg border border-border">
+                            <FileText className="h-5 w-5 text-red-500" />
+                          </div>
+                        ) : (
+                          <img src={selectedPayment.cheque_image_url} alt="" className="h-14 w-14 object-cover rounded-lg border border-border" />
+                        )
+                      )}
+                      {selectedPayment.images?.map((img, i) => (
+                        isPdfUrl(img.image_url) ? (
+                          <div key={i} className="h-14 w-14 flex items-center justify-center bg-red-50 rounded-lg border border-border">
+                            <FileText className="h-5 w-5 text-red-500" />
+                          </div>
+                        ) : (
+                          <img key={i} src={img.image_url} alt="" className="h-14 w-14 object-cover rounded-lg border border-border" />
+                        )
+                      ))}
+                    </>
+                  )}
+                  {/* New uploads preview */}
                   {editPreviewUrls.map((item, index) => (
                     <div key={index} className="relative group">
                       {item.isPdf ? (
-                        <div className="h-16 w-20 flex items-center justify-center bg-destructive/10 rounded border">
-                          <FileText className="h-6 w-6 text-destructive" />
+                        <div className="h-14 w-14 flex items-center justify-center bg-red-50 rounded-lg border-2 border-primary/50">
+                          <FileText className="h-5 w-5 text-red-500" />
                         </div>
                       ) : (
-                        <img src={item.url} alt="" className="h-16 w-20 object-cover rounded border" />
+                        <img src={item.url} alt="" className="h-14 w-14 object-cover rounded-lg border-2 border-primary/50" />
                       )}
                       <button
                         type="button"
@@ -1296,14 +1333,23 @@ export function PolicyPaymentsSection({
                       </button>
                     </div>
                   ))}
-                  <label className="h-16 w-20 border-2 border-dashed rounded flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors">
+                  {/* Upload button */}
+                  <label className="h-14 w-14 border-2 border-dashed border-border rounded-lg flex items-center justify-center cursor-pointer hover:bg-muted/50 hover:border-primary transition-colors">
                     <input type="file" accept="image/*,application/pdf" multiple onChange={handleEditImageSelect} className="hidden" />
-                    <Upload className="h-5 w-5 text-muted-foreground" />
+                    <Upload className="h-4 w-4 text-muted-foreground" />
                   </label>
                 </div>
+                {selectedPayment && getImageCount(selectedPayment) > 0 && !removeExistingFiles && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setRemoveExistingFiles(true)} className="text-destructive hover:text-destructive hover:bg-destructive/10 h-7 text-xs">
+                    <X className="h-3.5 w-3.5 ml-1" />
+                    حذف جميع الملفات الحالية
+                  </Button>
+                )}
               </div>
             )}
-            <div className="flex items-center gap-2">
+
+            {/* Refused toggle */}
+            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card px-3 py-2.5">
               <input
                 type="checkbox"
                 id="refused-edit"
@@ -1318,14 +1364,18 @@ export function PolicyPaymentsSection({
                 }}
                 className="h-4 w-4"
               />
-              <Label htmlFor="refused-edit" className="cursor-pointer">راجع (مرفوض)</Label>
+              <Label htmlFor="refused-edit" className="cursor-pointer text-sm font-medium">راجع (مرفوض)</Label>
+              {editFormData.refused && (
+                <Badge variant="destructive" className="text-[10px] h-5 px-2 mr-auto">راجع</Badge>
+              )}
             </div>
           </div>
-          <DialogFooter className="gap-2 flex-wrap">
-            {/* Mark as Returned button - only for cheques */}
-            {selectedPayment?.payment_type === 'cheque' && selectedPayment?.cheque_status !== 'returned' && (
-              <Button 
-                variant="destructive" 
+
+          <DialogFooter className="p-4 border-t border-border/60 bg-card sm:justify-between flex-row gap-2">
+            {/* Mark as Returned — only for cheques not yet marked returned */}
+            {selectedPayment?.payment_type === 'cheque' && selectedPayment?.cheque_status !== 'returned' ? (
+              <Button
+                variant="ghost"
                 onClick={async () => {
                   if (!selectedPayment) return;
                   setSaving(true);
@@ -1347,18 +1397,21 @@ export function PolicyPaymentsSection({
                   }
                 }}
                 disabled={saving}
-                className="gap-2"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-2"
               >
                 <RotateCcw className="h-4 w-4" />
                 تحديد كمرتجع
               </Button>
+            ) : (
+              <div />
             )}
-            <div className="flex-1" />
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>إلغاء</Button>
-            <Button onClick={handleEdit} disabled={saving || uploadingImages || !!editValidationError}>
-              {(saving || uploadingImages) && <Loader2 className="h-4 w-4 ml-2 animate-spin" />}
-              حفظ
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>إلغاء</Button>
+              <Button onClick={handleEdit} disabled={saving || uploadingImages || !!editValidationError}>
+                {(saving || uploadingImages) && <Loader2 className="h-4 w-4 ml-2 animate-spin" />}
+                حفظ التعديلات
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

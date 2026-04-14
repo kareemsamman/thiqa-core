@@ -21,11 +21,12 @@ import {
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Trash2, Upload, X, FileText, ImageIcon } from "lucide-react";
+import { Loader2, Trash2, Upload, X, FileText, ImageIcon, Pencil, Lock } from "lucide-react";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from "@/lib/chequeUtils";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { cn } from "@/lib/utils";
 
 interface PaymentRecord {
   id: string;
@@ -300,23 +301,58 @@ export function PaymentEditDialog({
   const isLocked = payment.locked === true;
   const hasPackage = (packagePolicies?.length ?? 0) > 0;
 
+  const paymentTypeLabel = isLocked && formData.payment_type === 'visa' ? 'فيزا خارجي' : (paymentTypeLabels[formData.payment_type] || formData.payment_type);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md" dir="rtl">
-        <DialogHeader>
-          <DialogTitle>تعديل الدفعة</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
+        {/* Header — matches the PaymentGroupDetailsDialog navy gradient
+            so every payment-related dialog shares one design language. */}
+        <div
+          className="sticky top-0 z-10 text-white px-5 py-4 rounded-t-lg"
+          style={{ background: "linear-gradient(135deg, #122143 0%, #1a3260 100%)" }}
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center shrink-0">
+                <Pencil className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-lg font-bold text-white text-right leading-tight">
+                  تعديل الدفعة
+                </DialogTitle>
+                <div className="flex items-center gap-2 mt-1 text-xs text-white/75 flex-wrap">
+                  <span className="font-bold ltr-nums">₪{Number(formData.amount || 0).toLocaleString("en-US")}</span>
+                  <span className="text-white/40">•</span>
+                  <span>{paymentTypeLabel}</span>
+                  {formData.payment_date && (
+                    <>
+                      <span className="text-white/40">•</span>
+                      <span className="ltr-nums">
+                        {new Date(formData.payment_date).toLocaleDateString("en-GB")}
+                      </span>
+                    </>
+                  )}
+                  {isLocked && (
+                    <Badge className="bg-amber-400/20 text-amber-100 border-amber-300/30 gap-1 text-[10px] h-5 px-2">
+                      <Lock className="h-2.5 w-2.5" />
+                      إلزامي
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          </DialogHeader>
+        </div>
 
-        <div className="space-y-4 py-4">
-          {/* Package Context — show every policy in the package so the user
-              sees the full picture instead of just the one row the payment
-              is technically attached to. */}
+        <div className="p-5 space-y-5 bg-muted/20">
+          {/* Package / policy context */}
           {hasPackage ? (
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-1.5">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+            <div className="rounded-lg border border-border/60 bg-card p-3 space-y-2">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">
                 وثائق الباقة
               </p>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {packagePolicies!.map((p) => (
                   <div key={p.id} className="flex items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -338,27 +374,31 @@ export function PaymentEditDialog({
             </div>
           ) : (
             payment.policy && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Badge variant="outline">
+              <div className="rounded-lg border border-border/60 bg-card px-3 py-2 flex items-center justify-between gap-2">
+                <Badge variant="outline" className="text-[10px]">
                   {getInsuranceTypeLabel(payment.policy.policy_type_parent as any, (payment.policy.policy_type_child || null) as any)}
                 </Badge>
-                <span className="text-xs">
-                  (سعر الوثيقة: ₪{payment.policy.insurance_price.toLocaleString()})
+                <span className="text-xs text-muted-foreground">
+                  سعر الوثيقة:{" "}
+                  <span className="font-semibold text-foreground ltr-nums">
+                    ₪{payment.policy.insurance_price.toLocaleString()}
+                  </span>
                 </span>
               </div>
             )
           )}
 
-          {/* Locked info — only refused can be toggled on elzami rows */}
+          {/* Locked info — only refused can be toggled on ELZAMI rows */}
           {isLocked && (
-            <div className="bg-warning/10 border border-warning/30 text-warning-foreground px-3 py-2 rounded-lg text-xs">
-              🔒 هذه دفعة لوثيقة إلزامية — المبلغ والطريقة والتاريخ ثابتين، يمكنك فقط وضعها كراجعة.
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2.5 rounded-lg text-xs flex items-start gap-2">
+              <Lock className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>هذه دفعة لوثيقة إلزامية — المبلغ والطريقة والتاريخ ثابتين، يمكنك فقط وضعها كراجعة.</span>
             </div>
           )}
 
-          {/* Amount */}
-          <div className="space-y-2">
-            <Label htmlFor="amount">المبلغ (₪)</Label>
+          {/* Amount — big input */}
+          <div className="space-y-1.5">
+            <Label htmlFor="amount" className="text-xs font-semibold">المبلغ (₪)</Label>
             <Input
               id="amount"
               type="number"
@@ -367,40 +407,54 @@ export function PaymentEditDialog({
               value={formData.amount}
               onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
               disabled={isLocked}
-              className="text-lg font-semibold"
+              className="text-xl font-bold h-12 ltr-input text-left"
             />
           </div>
 
-          {/* Payment Type */}
-          <div className="space-y-2">
-            <Label>طريقة الدفع</Label>
-            <Select
-              value={formData.payment_type}
-              onValueChange={(value) => setFormData({ ...formData, payment_type: value })}
-              disabled={isLocked}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="اختر طريقة الدفع" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">نقدي</SelectItem>
-                <SelectItem value="cheque">شيك</SelectItem>
-                {/* فيزا is only selectable when the agent has visa_payment
-                    enabled by the Thiqa admin. We still render it when the
-                    current row is already visa (e.g. a locked ELZAMI row)
-                    so the value stays valid. */}
-                {(visaEnabled || formData.payment_type === 'visa') && (
-                  <SelectItem value="visa">{isLocked ? 'فيزا خارجي' : 'فيزا'}</SelectItem>
-                )}
-                <SelectItem value="transfer">تحويل</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Method + Date side-by-side */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">طريقة الدفع</Label>
+              <Select
+                value={formData.payment_type}
+                onValueChange={(value) => setFormData({ ...formData, payment_type: value })}
+                disabled={isLocked}
+              >
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder="اختر طريقة الدفع" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">نقدي</SelectItem>
+                  <SelectItem value="cheque">شيك</SelectItem>
+                  {/* فيزا is only selectable when the agent has visa_payment
+                      enabled by the Thiqa admin. We still render it when the
+                      current row is already visa (e.g. a locked ELZAMI row)
+                      so the value stays valid. */}
+                  {(visaEnabled || formData.payment_type === 'visa') && (
+                    <SelectItem value="visa">{isLocked ? 'فيزا خارجي' : 'فيزا'}</SelectItem>
+                  )}
+                  <SelectItem value="transfer">تحويل</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">تاريخ الدفع</Label>
+              <ArabicDatePicker
+                value={formData.payment_date}
+                onChange={(date) => setFormData({
+                  ...formData,
+                  payment_date: date || ''
+                })}
+                disabled={isLocked}
+              />
+            </div>
           </div>
 
           {/* Cheque Number - only show if payment type is cheque */}
           {formData.payment_type === 'cheque' && (
-            <div className="space-y-2">
-              <Label htmlFor="cheque_number">رقم الشيك</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="cheque_number" className="text-xs font-semibold">رقم الشيك</Label>
               <Input
                 id="cheque_number"
                 value={formData.cheque_number}
@@ -409,30 +463,17 @@ export function PaymentEditDialog({
                   cheque_number: sanitizeChequeNumber(e.target.value)
                 })}
                 maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                className="font-mono"
+                className="font-mono h-10 ltr-input"
                 placeholder="أدخل رقم الشيك"
                 disabled={isLocked}
               />
             </div>
           )}
 
-          {/* Payment Date */}
-          <div className="space-y-2">
-            <Label>تاريخ الدفع</Label>
-            <ArabicDatePicker
-              value={formData.payment_date}
-              onChange={(date) => setFormData({
-                ...formData,
-                payment_date: date || ''
-              })}
-              disabled={isLocked}
-            />
-          </div>
-
           {/* Attached files — delete / add inline */}
-          <div className="space-y-2">
-            <Label className="flex items-center gap-1 text-xs">
-              <ImageIcon className="h-3 w-3" />
+          <div className="rounded-lg border border-border/60 bg-card p-3 space-y-2">
+            <Label className="flex items-center gap-1.5 text-xs font-semibold">
+              <ImageIcon className="h-3.5 w-3.5" />
               الملفات المرفقة
             </Label>
             <div className="flex items-center gap-2 flex-wrap">
@@ -442,7 +483,7 @@ export function PaymentEditDialog({
                   href={payment.cheque_image_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="relative h-16 w-16 rounded border overflow-hidden bg-muted flex items-center justify-center"
+                  className="relative h-14 w-14 rounded-lg border border-border overflow-hidden bg-muted flex items-center justify-center"
                   title="صورة الشيك الأصلية"
                 >
                   <img
@@ -453,7 +494,7 @@ export function PaymentEditDialog({
                 </a>
               )}
               {loadingImages && (
-                <div className="h-16 w-16 rounded border flex items-center justify-center">
+                <div className="h-14 w-14 rounded-lg border border-border flex items-center justify-center">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </div>
               )}
@@ -466,7 +507,7 @@ export function PaymentEditDialog({
                       href={img.image_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block h-16 w-16 rounded border overflow-hidden bg-muted flex items-center justify-center"
+                      className="block h-14 w-14 rounded-lg border border-border overflow-hidden bg-background flex items-center justify-center"
                       title={img.image_type || 'مرفق'}
                     >
                       {isPdf ? (
@@ -501,13 +542,13 @@ export function PaymentEditDialog({
               })}
               {!isLocked && (
                 <label
-                  className="h-16 w-16 border-2 border-dashed rounded flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors"
+                  className="h-14 w-14 border-2 border-dashed border-border rounded-lg flex items-center justify-center cursor-pointer hover:bg-muted/50 hover:border-primary transition-colors"
                   title="إضافة ملف"
                 >
                   {uploadingImage ? (
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   ) : (
-                    <Upload className="h-5 w-5 text-muted-foreground" />
+                    <Upload className="h-4 w-4 text-muted-foreground" />
                   )}
                   <input
                     type="file"
@@ -527,23 +568,23 @@ export function PaymentEditDialog({
             )}
           </div>
 
-          {/* Refused Checkbox */}
-          <div className="flex items-center gap-3 pt-2">
+          {/* Refused toggle */}
+          <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card px-3 py-2.5">
             <Checkbox
               id="refused"
               checked={formData.refused}
               onCheckedChange={(checked) => setFormData({ ...formData, refused: checked === true })}
             />
-            <Label htmlFor="refused" className="cursor-pointer">
+            <Label htmlFor="refused" className="cursor-pointer text-sm font-medium">
               راجع (مرفوض)
             </Label>
             {formData.refused && (
-              <Badge variant="destructive" className="mr-2">راجع</Badge>
+              <Badge variant="destructive" className="text-[10px] h-5 px-2 mr-auto">راجع</Badge>
             )}
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:justify-between flex-row">
+        <DialogFooter className="p-4 border-t border-border/60 bg-card sm:justify-between flex-row gap-2">
           {/* Delete button — only for user-entered rows. Locked ELZAMI
               rows can never be deleted individually (they're auto-generated
               by the wizard and must stay attached to the policy). */}

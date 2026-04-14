@@ -176,6 +176,7 @@ interface Payment {
   cheque_image_url: string | null;
   cheque_status: string | null;
   refused: boolean | null;
+  locked: boolean | null;
   notes: string | null;
   images?: PaymentImage[];
 }
