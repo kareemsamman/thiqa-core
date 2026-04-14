@@ -41,10 +41,12 @@ interface ClientDebt {
 interface PolicyDebt {
   id: string;
   policy_number: string | null;
+  document_number: string | null;
   insurance_price: number;
   office_commission: number;
   paid: number;
   remaining: number;
+  start_date: string;
   end_date: string;
   days_until_expiry: number;
   status: 'active' | 'expiring_soon' | 'expired';
@@ -67,10 +69,15 @@ interface DebtRow {
   price: number;
   paid: number;
   remaining: number;
+  startDate: string;
   endDate: string;
   daysUntilExpiry: number;
   status: 'active' | 'expiring_soon' | 'expired';
   carNumber: string | null;
+  // Document numbers of the policies in this row. Packages can have
+  // more than one (e.g. ELZAMI + ثالث each get their own), but every
+  // row surfaces at least one.
+  documentNumbers: string[];
   primaryPolicyId: string;
 }
 
@@ -143,10 +150,12 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
         price,
         paid: Math.min(effectivePaid, price),
         remaining,
+        startDate: p.start_date,
         endDate: p.end_date,
         daysUntilExpiry: p.days_until_expiry,
         status: p.status,
         carNumber: p.car_number,
+        documentNumbers: p.document_number ? [p.document_number] : [],
         primaryPolicyId: p.id,
       });
       continue;
@@ -183,6 +192,16 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
       (best, p) => (!best || new Date(p.end_date) < new Date(best.end_date) ? p : best),
       items[0],
     );
+    const latestStart = items.reduce(
+      (best, p) => (!best || new Date(p.start_date) > new Date(best.start_date) ? p : best),
+      items[0],
+    );
+    const packageDocumentNumbers: string[] = [];
+    for (const p of items) {
+      if (p.document_number && !packageDocumentNumbers.includes(p.document_number)) {
+        packageDocumentNumbers.push(p.document_number);
+      }
+    }
 
     rows.push({
       key,
@@ -193,16 +212,24 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
       price: packagePrice,
       paid: packagePaid,
       remaining: packageRemaining,
+      startDate: latestStart.start_date,
       endDate: earliest.end_date,
       daysUntilExpiry: earliest.days_until_expiry,
       status: earliest.status,
       carNumber: earliest.car_number,
+      documentNumbers: packageDocumentNumbers,
       primaryPolicyId: (nonElzami[0] || items[0]).id,
     });
   }
 
-  // Keep deterministic ordering: earliest expiry first.
-  rows.sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+  // Sort packages newest-first: latest start_date at the top, ties
+  // broken by latest end_date so the most recently renewed row still
+  // wins.
+  rows.sort((a, b) => {
+    const startDiff = new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+    if (startDiff !== 0) return startDiff;
+    return new Date(b.endDate).getTime() - new Date(a.endDate).getTime();
+  });
   return rows;
 };
 
@@ -319,10 +346,12 @@ export default function DebtTracking() {
         const policy: PolicyDebt = {
           id: row.policy_id,
           policy_number: row.policy_number,
+          document_number: row.document_number ?? null,
           insurance_price: Number(row.insurance_price) || 0,
           office_commission: Number(row.office_commission) || 0,
           paid: Number(row.paid) || 0,
           remaining: Number(row.remaining) || 0,
+          start_date: String(row.start_date ?? row.end_date),
           end_date: String(row.end_date),
           days_until_expiry: Number(row.days_until_expiry) || 0,
           status: row.status,
@@ -756,6 +785,7 @@ ${policyDetails}
                             <TableHeader>
                               <TableRow>
                                 <TableHead className="text-right">نوع الوثيقة</TableHead>
+                                <TableHead className="text-right">رقم الوثيقة</TableHead>
                                 <TableHead className="text-right">رقم السيارة</TableHead>
                                 <TableHead className="text-right">السعر</TableHead>
                                 <TableHead className="text-right">المدفوع</TableHead>
@@ -780,6 +810,11 @@ ${policyDetails}
                                         </Badge>
                                       )}
                                     </div>
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs ltr-nums">
+                                    {row.documentNumbers.length > 0
+                                      ? row.documentNumbers.join(' · ')
+                                      : '-'}
                                   </TableCell>
                                   <TableCell className="font-mono">
                                     {row.carNumber || '-'}
