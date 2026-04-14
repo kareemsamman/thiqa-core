@@ -857,6 +857,7 @@ function PolicyPackageCard({
   // Ref on the coverage-period cell so clicking the status badge can flash
   // the date to tell the user "this is what سارية is referring to".
   const periodRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const handleStatusClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     const el = periodRef.current;
@@ -865,6 +866,21 @@ function PolicyPackageCard({
     void el.offsetWidth;
     el.classList.add('highlight-pulse');
     window.setTimeout(() => el.classList.remove('highlight-pulse'), 3100);
+  };
+
+  // Click a top-level type badge (e.g. شامل, إلزامي in the header row) to
+  // pulse the matching breakdown row inside this card. Scoped to cardRef
+  // so a click can't accidentally highlight a row in a sibling card.
+  const pulsePolicyRow = (policyId: string) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const scope = cardRef.current;
+    if (!scope) return;
+    const row = scope.querySelector<HTMLElement>(`[data-policy-row-id="${policyId}"]`);
+    if (!row) return;
+    row.classList.remove('highlight-pulse');
+    void row.offsetWidth;
+    row.classList.add('highlight-pulse');
+    window.setTimeout(() => row.classList.remove('highlight-pulse'), 3100);
   };
 
   // Check if this policy was created from a transfer (has transferred_car_number = FROM which car)
@@ -883,7 +899,8 @@ function PolicyPackageCard({
   };
 
   return (
-    <Card 
+    <Card
+      ref={cardRef}
       className={cn(
         "overflow-hidden transition-all duration-200",
         // Active: Highlight and strong border
@@ -942,15 +959,29 @@ function PolicyPackageCard({
           {/* Policy Type - show as separate badges for packages */}
           {isPkg && pkg.mainPolicy ? (
             <div className="flex flex-wrap items-center gap-1">
-              <Badge className={cn("border text-xs font-semibold", policyTypeColors[pkg.mainPolicy.policy_type_parent])}>
-                {getDisplayLabel(pkg.mainPolicy)}
-              </Badge>
-              {pkg.addons.map((addon, idx) => (
+              <button
+                type="button"
+                onClick={pulsePolicyRow(pkg.mainPolicy.id)}
+                className="focus:outline-none"
+                title="اضغط لإبراز هذه الوثيقة في القائمة"
+              >
+                <Badge className={cn("border text-xs font-semibold cursor-pointer", policyTypeColors[pkg.mainPolicy.policy_type_parent])}>
+                  {getDisplayLabel(pkg.mainPolicy)}
+                </Badge>
+              </button>
+              {pkg.addons.map((addon) => (
                 <span key={addon.id} className="flex items-center gap-1">
                   <span className="text-muted-foreground text-xs">+</span>
-                  <Badge className={cn("border text-xs", policyTypeColors[addon.policy_type_parent])}>
-                    {getDisplayLabel(addon)}
-                  </Badge>
+                  <button
+                    type="button"
+                    onClick={pulsePolicyRow(addon.id)}
+                    className="focus:outline-none"
+                    title="اضغط لإبراز هذه الوثيقة في القائمة"
+                  >
+                    <Badge className={cn("border text-xs cursor-pointer", policyTypeColors[addon.policy_type_parent])}>
+                      {getDisplayLabel(addon)}
+                    </Badge>
+                  </button>
                 </span>
               ))}
               <Badge variant="outline" className="gap-1 text-xs bg-primary/5 border-primary/20 text-primary mr-1">
@@ -1334,7 +1365,6 @@ function PackageComponentRow({
   const typeLabel = getDisplayLabel(policy);
   const typeColor = policyTypeColors[policy.policy_type_parent];
   const commission = policy.office_commission || 0;
-  const rowRef = useRef<HTMLDivElement>(null);
 
   // Get company/service name based on policy type
   const getProviderName = () => {
@@ -1343,21 +1373,9 @@ function PackageComponentRow({
     return policy.company?.name_ar || policy.company?.name || '-';
   };
 
-  // Pulse the whole row when the user clicks the type badge so they can see
-  // which physical line corresponds to the type they tapped.
-  const handleTypeBadgeClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const el = rowRef.current;
-    if (!el) return;
-    el.classList.remove('highlight-pulse');
-    void el.offsetWidth;
-    el.classList.add('highlight-pulse');
-    window.setTimeout(() => el.classList.remove('highlight-pulse'), 3100);
-  };
-
   return (
     <div
-      ref={rowRef}
+      data-policy-row-id={policy.id}
       className={cn(
         "flex items-center justify-between text-xs rounded-md px-2.5 py-1.5",
         isActive ? "bg-muted/40" : "bg-muted/20"
@@ -1372,16 +1390,9 @@ function PackageComponentRow({
             #{index}
           </span>
         )}
-        <button
-          type="button"
-          onClick={handleTypeBadgeClick}
-          className="focus:outline-none"
-          title="اضغط لإبراز هذه الوثيقة"
-        >
-          <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border cursor-pointer", typeColor)}>
-            {typeLabel}
-          </Badge>
-        </button>
+        <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border", typeColor)}>
+          {typeLabel}
+        </Badge>
         {policy.policy_type_parent === 'ROAD_SERVICE' && (policy.road_service?.name_ar || policy.road_service?.name) && (
           <span className="text-[10px] font-semibold text-orange-700 bg-orange-500/10 border border-orange-500/30 rounded px-1.5 py-0 h-5 inline-flex items-center">
             {policy.road_service?.name_ar || policy.road_service?.name}
