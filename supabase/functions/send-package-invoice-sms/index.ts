@@ -201,7 +201,7 @@ serve(async (req) => {
     // Get payments for all policies (include refused=null for pending Visa payments)
     const { data: allPayments } = await supabase
       .from('policy_payments')
-      .select('policy_id, payment_type, amount, payment_date')
+      .select('id, policy_id, payment_type, amount, payment_date, receipt_number, cheque_number, refused')
       .in('policy_id', policy_ids)
       .or('refused.eq.false,refused.is.null')
       .order('created_at', { ascending: true });
@@ -473,9 +473,14 @@ function buildPackageInvoiceHtml(
 ): string {
   const client = policies[0]?.client || {};
   const today = new Date();
-  // Invoice number: YYYYMMDD-<first 6 of first policy id>
-  const firstPolicyId = policies[0]?.id || '';
-  const invoiceNumber = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-${firstPolicyId.slice(0, 6).toUpperCase()}`;
+  // Primary document number (رقم الوثيقة). Pick the first policy that has a
+  // document_number assigned by the DB trigger; fall back to the legacy
+  // date-based string if none of them do (shouldn't happen after the
+  // backfill migration runs, but keeps old data renderable).
+  const primaryDocumentNumber = policies
+    .map((p: any) => p.document_number)
+    .find((n: string | null) => typeof n === 'string' && n.length > 0)
+    || `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-${(policies[0]?.id || '').slice(0, 6).toUpperCase()}`;
 
   // Brand block: agent logo if present, otherwise the bundled Thiqa SVG
   // (the same dark-on-white wordmark used in the app).
@@ -531,7 +536,6 @@ function buildPackageInvoiceHtml(
     else if (p.policy_type_parent === 'ACCIDENT_FEE_EXEMPTION') policyTypeKinds.add('accident_fee');
     else policyTypeKinds.add('insurance');
   });
-  let invoiceTitle = 'فاتورة';
   let invoiceSubtitle = '';
   if (policyTypeKinds.size === 1) {
     if (policyTypeKinds.has('insurance')) invoiceSubtitle = 'تأمين سيارة';
@@ -615,7 +619,7 @@ function buildPackageInvoiceHtml(
     `;
   }).join('');
 
-  // Payments list for the notes section.
+  // Payments table rows — one per payment, sorted oldest → newest.
   const allPaymentsList: any[] = [];
   policies.forEach(p => {
     const policyPayments = paymentsByPolicy[p.id] || [];
@@ -623,14 +627,28 @@ function buildPackageInvoiceHtml(
   });
   allPaymentsList.sort((a, b) => new Date(a.payment_date).getTime() - new Date(b.payment_date).getTime());
 
-  const paymentsNoteHtml = allPaymentsList.length > 0 ? `
-    <div class="notes-line"><strong>سجل الدفعات:</strong></div>
-    <ul class="notes-list">
-      ${allPaymentsList.map(p => `
-        <li>${formatDate(p.payment_date)} — ${PAYMENT_TYPE_LABELS[p.payment_type] || p.payment_type}: ₪${(p.amount || 0).toLocaleString('en-US')}</li>
-      `).join('')}
-    </ul>
-  ` : `<div class="notes-line muted">لا توجد دفعات مسجلة.</div>`;
+  const paymentsTableHtml = allPaymentsList.length > 0 ? `
+    <table class="payments">
+      <thead>
+        <tr>
+          <th style="width: 120px;">رقم سند القبض</th>
+          <th style="width: 130px;">طريقة الدفع</th>
+          <th style="width: 130px;">تاريخ الدفع</th>
+          <th>المبلغ</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${allPaymentsList.map(p => `
+          <tr>
+            <td class="num">${p.receipt_number || '—'}</td>
+            <td>${PAYMENT_TYPE_LABELS[p.payment_type] || p.payment_type}${p.cheque_number ? ` · ${p.cheque_number}` : ''}</td>
+            <td class="date">${formatDate(p.payment_date)}</td>
+            <td class="amount">₪${(p.amount || 0).toLocaleString('en-US')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  ` : `<div class="payments-empty">لا توجد دفعات مسجلة.</div>`;
 
   // Attached files — simple thumbnail grid at the bottom (still useful but
   // styled flat, no gradients or rounded cards).
@@ -748,13 +766,24 @@ function buildPackageInvoiceHtml(
     .brand .address { font-size: 12px; color: #1a1a1a; margin-top: 8px; max-width: 320px; line-height: 1.55; font-weight: 500; }
 
     .invoice-meta { text-align: left; min-width: 240px; }
-    .invoice-meta h1 {
-      font-size: 30px;
+    .invoice-meta .doc-label {
+      font-size: 11px;
       font-weight: 700;
+      color: #1a1a1a;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      opacity: 0.75;
+    }
+    .invoice-meta .doc-number {
+      font-size: 42px;
+      font-weight: 800;
       letter-spacing: 0.5px;
-      margin-bottom: 14px;
       color: #1a1a1a;
       line-height: 1;
+      margin-bottom: 14px;
+      direction: ltr;
+      font-variant-numeric: tabular-nums;
     }
     .meta-rows {
       width: 100%;
@@ -969,42 +998,64 @@ function buildPackageInvoiceHtml(
       font-weight: 500;
     }
 
-    /* ── Bottom row ── */
+    /* ── Payments table (سجل الدفعات) ── */
+    .payments-section { margin-bottom: 20px; }
+    .payments {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      border: 1px solid #1a1a1a;
+    }
+    .payments thead th {
+      background: #f4f4f5;
+      color: #1a1a1a;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 9px 12px;
+      text-align: right;
+      border-bottom: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+    }
+    .payments thead th:last-child { border-left: none; }
+    .payments tbody td {
+      padding: 9px 12px;
+      border-top: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+      font-size: 12px;
+      color: #1a1a1a;
+      font-weight: 500;
+      vertical-align: middle;
+    }
+    .payments tbody td:last-child { border-left: none; }
+    .payments tbody tr:first-child td { border-top: none; }
+    .payments tbody td.num,
+    .payments tbody td.date,
+    .payments tbody td.amount {
+      direction: ltr;
+      text-align: left;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+    .payments tbody td.amount { color: #1a1a1a; }
+    .payments-empty {
+      padding: 14px;
+      border: 1px solid #1a1a1a;
+      font-size: 12px;
+      color: #1a1a1a;
+      opacity: 0.75;
+      text-align: center;
+    }
+
+    /* ── Bottom row (totals only) ── */
     .bottom {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
       gap: 18px;
       align-items: stretch;
       margin-bottom: 20px;
     }
-    .notes {
-      flex: 1;
-      font-size: 12px;
-      display: flex;
-      flex-direction: column;
-      border: 1px solid #1a1a1a;
-    }
-    .notes .body {
-      padding: 11px 14px;
-      flex: 1;
-      min-height: 120px;
-    }
-    .notes-line { margin-bottom: 5px; color: #1a1a1a; font-weight: 500; }
-    .notes-line.muted { color: #1a1a1a; opacity: 0.7; }
-    .notes-list {
-      list-style: none;
-      padding: 0;
-      margin: 5px 0 0 0;
-    }
-    .notes-list li {
-      padding: 5px 0;
-      border-bottom: 1px dashed #1a1a1a;
-      font-size: 12px;
-      color: #1a1a1a;
-      font-variant-numeric: tabular-nums;
-      font-weight: 500;
-    }
-    .notes-list li:last-child { border-bottom: none; }
 
     .totals {
       width: 290px;
@@ -1199,7 +1250,7 @@ function buildPackageInvoiceHtml(
       .invoice { padding: 24px 20px; }
       .invoice-top { flex-direction: column; gap: 18px; }
       .invoice-meta { text-align: right; min-width: 0; }
-      .invoice-meta h1 { font-size: 24px; }
+      .invoice-meta .doc-number { font-size: 32px; }
       .customer-grid { grid-template-columns: 1fr; }
       .customer-grid .cell:not(:nth-child(3n+1)) { border-right: none; }
       .customer-grid .cell:nth-child(n+2) { border-top: 1px solid #1a1a1a; }
@@ -1223,16 +1274,13 @@ function buildPackageInvoiceHtml(
         ${effectiveAddress ? `<div class="address">${effectiveAddress}</div>` : ''}
       </div>
       <div class="invoice-meta">
-        <h1>${invoiceTitle}</h1>
+        <div class="doc-label">رقم الوثيقة</div>
+        <div class="doc-number">${primaryDocumentNumber}</div>
         ${invoiceSubtitle ? `<div class="subtitle">${invoiceSubtitle}</div>` : ''}
         <div class="meta-rows">
           <div class="row">
             <div class="label">التاريخ</div>
             <div class="val">${formatDate(today.toISOString())}</div>
-          </div>
-          <div class="row">
-            <div class="label">رقم الفاتورة</div>
-            <div class="val">${invoiceNumber}</div>
           </div>
         </div>
       </div>
@@ -1286,14 +1334,14 @@ function buildPackageInvoiceHtml(
       </tbody>
     </table>
 
-    <!-- Notes (left of page-bottom in LTR, right in RTL) + totals -->
+    <!-- Payments log (سجل الدفعات) as a proper table of receipts -->
+    <div class="payments-section">
+      <div class="section-title">سجل الدفعات</div>
+      ${paymentsTableHtml}
+    </div>
+
+    <!-- Totals -->
     <div class="bottom">
-      <div class="notes">
-        <div class="section-title">ملاحظات</div>
-        <div class="body">
-          ${paymentsNoteHtml}
-        </div>
-      </div>
       <table class="totals">
         <tr>
           <td class="label">الإجمالي</td>
