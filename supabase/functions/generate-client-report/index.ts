@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
+import { THIQA_LOGO_SVG } from "../_shared/thiqa-logo.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,49 +12,47 @@ interface ClientReportRequest {
   client_id: string;
 }
 
-interface PolicyData {
-  id: string;
-  policy_number: string | null;
-  policy_type_parent: string;
-  policy_type_child: string | null;
-  start_date: string;
-  end_date: string;
-  insurance_price: number;
-  cancelled: boolean | null;
-  transferred: boolean | null;
-  company: { name: string; name_ar: string | null } | { name: string; name_ar: string | null }[] | null;
-  car: { id: string; car_number: string } | { id: string; car_number: string }[] | null;
-}
-
-interface CarData {
-  id: string;
-  car_number: string;
-  manufacturer_name: string | null;
-  model: string | null;
-  year: number | null;
-  color: string | null;
-  car_type: string | null;
-}
-
-interface MediaFile {
-  id: string;
-  cdn_url: string;
-  original_name: string;
-  mime_type: string;
-  entity_id: string;
-}
-
-const policyTypeLabels: Record<string, string> = {
+const POLICY_TYPE_LABELS: Record<string, string> = {
   ELZAMI: 'إلزامي',
   THIRD_FULL: 'ثالث/شامل',
-  ROAD_SERVICE: 'خدمات طريق',
-  ACCIDENT_FEE_EXEMPTION: 'إعفاء رسوم',
-  HEALTH: 'صحي',
-  LIFE: 'حياة',
-  PROPERTY: 'ممتلكات',
-  TRAVEL: 'سفر',
-  BUSINESS: 'أعمال',
+  ROAD_SERVICE: 'خدمات الطريق',
+  ACCIDENT_FEE_EXEMPTION: 'إعفاء رسوم حادث',
+  HEALTH: 'تأمين صحي',
+  LIFE: 'تأمين حياة',
+  PROPERTY: 'تأمين ممتلكات',
+  TRAVEL: 'تأمين سفر',
+  BUSINESS: 'تأمين أعمال',
   OTHER: 'أخرى',
+  THIRD: 'ثالث',
+  FULL: 'شامل',
+};
+
+const PAYMENT_TYPE_LABELS: Record<string, string> = {
+  cash: 'نقدي',
+  cheque: 'شيك',
+  visa: 'فيزا',
+  transfer: 'تحويل',
+};
+
+const CAR_TYPE_LABELS: Record<string, string> = {
+  car: 'سيارة خاصة',
+  cargo: 'شحن',
+  small: 'اوتوبس زعير',
+  taxi: 'تاكسي',
+  tjeradown4: 'تجارة أقل من 4 طن',
+  tjeraup4: 'تجارة أكثر من 4 طن',
+};
+
+const ACCIDENT_STATUS_LABELS: Record<string, string> = {
+  open: 'مفتوح',
+  under_review: 'قيد المراجعة',
+  closed: 'مغلق',
+};
+
+const REFUND_TYPE_LABELS: Record<string, string> = {
+  refund: 'إلغاء تأمين',
+  transfer_refund_owed: 'تحويل تأمين',
+  manual_refund: 'مرتجع يدوي',
 };
 
 serve(async (req) => {
@@ -97,9 +97,13 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Generating report for client: ${client_id}`);
+    // Resolve branding the same way the package invoice does — logo,
+    // owner name, tax number, invoice phones/address all come from
+    // site_settings for this agent.
+    const agentId = await resolveAgentId(supabase, user.id);
+    const branding = await getAgentBranding(supabase, agentId);
 
-    // Fetch client data
+    // Fetch client
     const { data: client, error: clientError } = await supabase
       .from("clients")
       .select("*")
@@ -107,7 +111,6 @@ serve(async (req) => {
       .single();
 
     if (clientError || !client) {
-      console.error("Client fetch error:", clientError);
       return new Response(JSON.stringify({ error: "Client not found" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -117,16 +120,16 @@ serve(async (req) => {
     // Fetch cars
     const { data: cars } = await supabase
       .from("cars")
-      .select("id, car_number, manufacturer_name, model, year, color, car_type")
+      .select("id, car_number, manufacturer_name, model, year, color, car_type, car_value, license_expiry")
       .eq("client_id", client_id)
       .is("deleted_at", null);
 
-    // Fetch policies
+    // Fetch policies (including office_commission + notes)
     const { data: policies } = await supabase
       .from("policies")
       .select(`
-        id, policy_number, policy_type_parent, policy_type_child, start_date, end_date, 
-        insurance_price, cancelled, transferred,
+        id, policy_number, policy_type_parent, policy_type_child, start_date, end_date,
+        insurance_price, office_commission, cancelled, transferred, group_id, notes,
         company:insurance_companies(name, name_ar),
         car:cars(id, car_number)
       `)
@@ -134,115 +137,135 @@ serve(async (req) => {
       .is("deleted_at", null)
       .order("start_date", { ascending: false });
 
-    // Fetch policy files
     const policyIds = (policies || []).map((p: any) => p.id);
-    let policyFiles: MediaFile[] = [];
-    let policyChildren: Record<string, { full_name: string; id_number: string; relation: string | null }[]> = {};
-    
-    if (policyIds.length > 0) {
-      const { data: files } = await supabase
-        .from("media_files")
-        .select("id, cdn_url, original_name, mime_type, entity_id")
-        .in("entity_type", ["policy", "policy_insurance"])
-        .in("entity_id", policyIds)
-        .is("deleted_at", null);
-      policyFiles = files || [];
 
-      // Fetch policy children (additional drivers) for all policies
-      const { data: childrenData } = await supabase
-        .from("policy_children")
+    // Fetch related records in parallel
+    const [
+      filesRes,
+      childrenRes,
+      paymentsRes,
+      accidentsRes,
+      refundsRes,
+      branchRes,
+      smsSettingsRes,
+    ] = await Promise.all([
+      policyIds.length
+        ? supabase
+            .from("media_files")
+            .select("id, cdn_url, original_name, mime_type, entity_id")
+            .in("entity_type", ["policy", "policy_insurance"])
+            .in("entity_id", policyIds)
+            .is("deleted_at", null)
+        : Promise.resolve({ data: [] }),
+      policyIds.length
+        ? supabase
+            .from("policy_children")
+            .select(`
+              policy_id,
+              child:client_children(full_name, id_number, relation, phone, birth_date)
+            `)
+            .in("policy_id", policyIds)
+        : Promise.resolve({ data: [] }),
+      policyIds.length
+        ? supabase
+            .from("policy_payments")
+            .select("id, policy_id, amount, payment_date, payment_type, cheque_number, receipt_number, refused, locked, batch_id")
+            .in("policy_id", policyIds)
+            .or("refused.eq.false,refused.is.null")
+            .order("payment_date", { ascending: true })
+        : Promise.resolve({ data: [] }),
+      supabase
+        .from("accident_reports")
         .select(`
-          policy_id,
-          child:client_children(full_name, id_number, relation)
+          id, accident_date, status, report_number,
+          car:cars(car_number),
+          company:insurance_companies(name, name_ar)
         `)
-        .in("policy_id", policyIds);
+        .eq("client_id", client_id)
+        .order("accident_date", { ascending: false }),
+      supabase
+        .from("customer_wallet_transactions")
+        .select(`
+          id, amount, transaction_type, description, refund_date, payment_method,
+          car:cars(car_number)
+        `)
+        .eq("client_id", client_id)
+        .in("transaction_type", ["refund", "transfer_refund_owed", "manual_refund"])
+        .order("refund_date", { ascending: false, nullsFirst: false }),
+      client.branch_id
+        ? supabase.from("branches").select("name_ar, name").eq("id", client.branch_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      supabase
+        .from("sms_settings")
+        .select("company_email, company_phones, company_whatsapp, company_location")
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
-      // Group children by policy_id
-      for (const pc of (childrenData || [])) {
-        const child = Array.isArray(pc.child) ? pc.child[0] : pc.child;
-        if (child) {
-          if (!policyChildren[pc.policy_id]) {
-            policyChildren[pc.policy_id] = [];
-          }
-          policyChildren[pc.policy_id].push({
-            full_name: child.full_name,
-            id_number: child.id_number,
-            relation: child.relation
-          });
-        }
-      }
+    const policyFiles = (filesRes.data || []) as any[];
+    const policyChildrenRows = (childrenRes.data || []) as any[];
+    const allPayments = (paymentsRes.data || []) as any[];
+    const accidents = (accidentsRes.data || []) as any[];
+    const refunds = (refundsRes.data || []) as any[];
+    const branchName = (branchRes.data as any)?.name_ar || (branchRes.data as any)?.name || null;
+
+    const companySettings = {
+      company_email: (smsSettingsRes.data as any)?.company_email || '',
+      company_phones: (smsSettingsRes.data as any)?.company_phones || [],
+      company_whatsapp: (smsSettingsRes.data as any)?.company_whatsapp || '',
+      company_location: (smsSettingsRes.data as any)?.company_location || '',
+    };
+
+    // Totals: include office commission and exclude cancelled policies from
+    // the "total insurance" so the المطلوب line matches what the staff sees
+    // on the client page.
+    let totalInsurance = 0;
+    for (const p of policies || []) {
+      if (p.cancelled) continue;
+      totalInsurance += (p.insurance_price || 0) + ((p as any).office_commission || 0);
     }
+    const totalPaid = allPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
-    // Calculate payment summary
-    let totalPaid = 0;
-    let totalInsurance = (policies || []).filter((p: any) => !p.cancelled).reduce((sum: number, p: any) => sum + (p.insurance_price || 0), 0);
-
-    if (policyIds.length > 0) {
-      const { data: payments } = await supabase
-        .from("policy_payments")
-        .select("amount, refused")
-        .in("policy_id", policyIds);
-
-      totalPaid = (payments || [])
-        .filter((p: any) => !p.refused)
-        .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
-    }
-
-    const totalRemaining = Number(totalInsurance) - totalPaid;
-
-    // Fetch wallet balance
+    // Wallet balance (net refund we owe the client)
     const { data: walletData } = await supabase
       .from("customer_wallet_transactions")
       .select("amount, transaction_type")
       .eq("client_id", client_id);
 
-    const weOweCustomer = (walletData || [])
-      .filter((t: any) => t.transaction_type === 'refund' || t.transaction_type === 'transfer_refund_owed')
+    const weOwe = (walletData || [])
+      .filter((t: any) =>
+        t.transaction_type === 'refund' ||
+        t.transaction_type === 'transfer_refund_owed' ||
+        t.transaction_type === 'manual_refund'
+      )
       .reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
-
-    const customerOwesUs = (walletData || [])
+    const customerOwes = (walletData || [])
       .filter((t: any) => t.transaction_type === 'transfer_adjustment_due')
       .reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
+    const walletBalance = Math.max(0, weOwe - customerOwes);
 
-    const walletBalance = weOweCustomer - customerOwesUs;
-
-    // Fetch branch name
-    let branchName = null;
-    if (client.branch_id) {
-      const { data: branch } = await supabase
-        .from("branches")
-        .select("name_ar, name")
-        .eq("id", client.branch_id)
-        .single();
-      branchName = branch?.name_ar || branch?.name || null;
-    }
-
-    // Fetch company settings for contact info
-    const { data: smsSettings } = await supabase
-      .from("sms_settings")
-      .select("company_email, company_phones, company_whatsapp, company_location")
-      .limit(1)
-      .maybeSingle();
-
-    const companySettings = {
-      company_email: smsSettings?.company_email || '',
-      company_phones: smsSettings?.company_phones || [],
-      company_whatsapp: smsSettings?.company_whatsapp || '',
-      company_location: smsSettings?.company_location || '',
-    };
+    const grossRemaining = Math.max(0, totalInsurance - totalPaid);
+    const netRemaining = Math.max(0, grossRemaining - walletBalance);
 
     // Generate HTML
-    const html = generateReportHtml(
+    const html = generateReportHtml({
       client,
-      cars || [],
-      policies || [],
+      cars: cars || [],
+      policies: policies || [],
       policyFiles,
-      policyChildren,
-      { totalPaid, totalRemaining, totalInsurance },
+      policyChildrenRows,
+      allPayments,
+      accidents,
+      refunds,
+      totalInsurance,
+      totalPaid,
+      grossRemaining,
+      netRemaining,
       walletBalance,
       branchName,
-      companySettings
-    );
+      branding,
+      companySettings,
+    });
 
     // Upload to Bunny CDN
     const now = new Date();
@@ -253,8 +276,6 @@ serve(async (req) => {
     const storagePath = `uploads/${year}/${month}/${fileName}`;
 
     const uploadUrl = `https://storage.bunnycdn.com/${bunnyStorageZone}/${storagePath}`;
-
-    console.log(`Uploading report to: ${uploadUrl}`);
 
     const uploadResponse = await fetch(uploadUrl, {
       method: "PUT",
@@ -272,7 +293,6 @@ serve(async (req) => {
     }
 
     const cdnUrl = `${bunnyCdnUrl}/${storagePath}`;
-    console.log(`Report uploaded successfully: ${cdnUrl}`);
 
     return new Response(
       JSON.stringify({
@@ -298,27 +318,22 @@ serve(async (req) => {
   }
 });
 
-function formatDate(dateStr: string | null): string {
+// ---------- Helpers ----------
+
+function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString("en-GB", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("en-GB");
 }
 
-function formatDateShort(dateStr: string | null): string {
-  if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString("en-GB");
-}
-
-function getPolicyStatus(policy: PolicyData): { label: string; class: string; icon: string } {
-  if (policy.cancelled) return { label: "ملغاة", class: "status-cancelled", icon: "❌" };
-  if (policy.transferred) return { label: "محولة", class: "status-transferred", icon: "🔄" };
-  const endDate = new Date(policy.end_date);
-  const today = new Date();
-  if (endDate < today) return { label: "منتهية", class: "status-expired", icon: "⏰" };
-  return { label: "سارية", class: "status-active", icon: "✅" };
+function escapeHtml(text: string): string {
+  return (text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function normalizePhoneForWhatsapp(phone: string): string {
@@ -330,597 +345,1044 @@ function normalizePhoneForWhatsapp(phone: string): string {
   return digits;
 }
 
-function generateReportHtml(
-  client: any,
-  cars: CarData[],
-  policies: PolicyData[],
-  policyFiles: MediaFile[],
-  policyChildren: Record<string, { full_name: string; id_number: string; relation: string | null }[]>,
-  paymentSummary: { totalPaid: number; totalRemaining: number; totalInsurance: number },
-  walletBalance: number,
-  branchName: string | null,
-  companySettings: { company_email?: string; company_phones?: string[]; company_whatsapp?: string; company_location?: string }
-): string {
-  const activePolicies = policies.filter(p => {
-    const endDate = new Date(p.end_date);
-    return !p.cancelled && !p.transferred && endDate >= new Date();
-  });
+function getPolicyTypeLabel(parent: string, child: string | null): string {
+  if (parent === 'THIRD_FULL' && child) {
+    return POLICY_TYPE_LABELS[child] || POLICY_TYPE_LABELS[parent] || parent;
+  }
+  return POLICY_TYPE_LABELS[parent] || parent;
+}
 
-  // Helper to get company name
-  const getCompanyName = (policy: PolicyData) => {
-    const company = Array.isArray(policy.company) ? policy.company[0] : policy.company;
+function paymentTypeLabel(p: { payment_type: string; locked?: boolean | null }): string {
+  if (p.locked && p.payment_type === 'visa') return 'فيزا خارجي';
+  return PAYMENT_TYPE_LABELS[p.payment_type] || p.payment_type;
+}
+
+// ---------- HTML generation ----------
+
+interface GenerateReportArgs {
+  client: any;
+  cars: any[];
+  policies: any[];
+  policyFiles: any[];
+  policyChildrenRows: any[];
+  allPayments: any[];
+  accidents: any[];
+  refunds: any[];
+  totalInsurance: number;
+  totalPaid: number;
+  grossRemaining: number;
+  netRemaining: number;
+  walletBalance: number;
+  branchName: string | null;
+  branding: AgentBranding;
+  companySettings: {
+    company_email: string;
+    company_phones: string[];
+    company_whatsapp: string;
+    company_location: string;
+  };
+}
+
+function generateReportHtml(args: GenerateReportArgs): string {
+  const {
+    client,
+    cars,
+    policies,
+    policyFiles,
+    policyChildrenRows,
+    allPayments,
+    accidents,
+    refunds,
+    totalInsurance,
+    totalPaid,
+    grossRemaining,
+    netRemaining,
+    walletBalance,
+    branchName,
+    branding,
+    companySettings,
+  } = args;
+
+  const today = new Date();
+
+  // Brand block (logo or bundled SVG)
+  const brandBlock = branding.logoUrl
+    ? `<img class="logo" src="${branding.logoUrl}" alt="${branding.companyName}" />`
+    : `<div class="logo logo-svg">${THIQA_LOGO_SVG}</div>`;
+
+  // Unique extra drivers across the whole client — same dedup rule as the
+  // invoice (by id_number, fallback to full_name).
+  const driversMap = new Map<string, { name: string; id_number: string; phone: string; relation: string; birth_date: string }>();
+  for (const row of policyChildrenRows) {
+    const child = Array.isArray(row.child) ? row.child[0] : row.child;
+    if (!child?.full_name) continue;
+    const key = child.id_number || child.full_name;
+    if (!driversMap.has(key)) {
+      driversMap.set(key, {
+        name: child.full_name,
+        id_number: child.id_number || '',
+        phone: child.phone || '',
+        relation: child.relation || '',
+        birth_date: child.birth_date || '',
+      });
+    }
+  }
+  const uniqueDrivers = Array.from(driversMap.values());
+
+  // Car table
+  const carsHtml = cars.length > 0
+    ? `
+    <div class="customer">
+      <div class="section-title">السيارات</div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width: 40px;">#</th>
+            <th>رقم السيارة</th>
+            <th>الشركة والموديل</th>
+            <th>النوع</th>
+            <th>اللون</th>
+            <th>انتهاء الرخصة</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${cars.map((car, i) => `
+            <tr>
+              <td class="num">${i + 1}</td>
+              <td class="tabular">${car.car_number || '-'}</td>
+              <td>${[car.manufacturer_name, car.model, car.year].filter(Boolean).join(' ') || '-'}</td>
+              <td>${car.car_type ? (CAR_TYPE_LABELS[car.car_type] || car.car_type) : '-'}</td>
+              <td>${car.color || '-'}</td>
+              <td class="tabular">${car.license_expiry ? formatDate(car.license_expiry) : '-'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `
+    : '';
+
+  // Extra drivers table (same layout as the invoice)
+  const driversHtml = uniqueDrivers.length > 0
+    ? `
+    <div class="drivers">
+      <div class="section-title">السائقون الإضافيون</div>
+      <table class="drivers-table">
+        <thead>
+          <tr>
+            <th style="width: 40px;">#</th>
+            <th>الاسم</th>
+            <th>رقم الهوية</th>
+            <th>تاريخ الميلاد</th>
+            <th>رقم الهاتف</th>
+            <th>صلة القرابة</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${uniqueDrivers.map((d, i) => `
+            <tr>
+              <td class="num">${i + 1}</td>
+              <td>${escapeHtml(d.name)}</td>
+              <td class="tabular">${d.id_number || '-'}</td>
+              <td class="tabular">${d.birth_date ? formatDate(d.birth_date) : '-'}</td>
+              <td class="tabular">${d.phone || '-'}</td>
+              <td>${d.relation || '-'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `
+    : '';
+
+  // Policy rows. We label cancelled rows with a tag and strike-through via
+  // the same .cancelled-row class the invoice uses.
+  const getCarNumber = (p: any) => {
+    const car = Array.isArray(p.car) ? p.car[0] : p.car;
+    return car?.car_number || '-';
+  };
+  const getCompanyName = (p: any) => {
+    const company = Array.isArray(p.company) ? p.company[0] : p.company;
     return company?.name_ar || company?.name || '-';
   };
-  
-  // Helper to get car id
-  const getCarId = (policy: PolicyData) => {
-    const car = Array.isArray(policy.car) ? policy.car[0] : policy.car;
-    return car?.id;
-  };
 
-  // Group policies by car
-  const policiesByCar = cars.map(car => ({
-    car,
-    policies: policies.filter(p => getCarId(p) === car.id),
-  }));
-  const policiesNoCar = policies.filter(p => !getCarId(p));
+  const policyRowsHtml = policies.length > 0
+    ? policies.map((p, i) => {
+        const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
+        const companyName = getCompanyName(p);
+        const carNumber = getCarNumber(p);
+        const commission = p.office_commission || 0;
+        const lineTotal = (p.insurance_price || 0) + commission;
+        const periodText = (p.start_date && p.end_date)
+          ? `${formatDate(p.start_date)} → ${formatDate(p.end_date)}`
+          : '-';
+        const commissionLine = commission > 0
+          ? `<div class="item-commission">عمولة المكتب: ₪${commission.toLocaleString('en-US')}</div>`
+          : '';
+        const cancelledTag = p.cancelled
+          ? `<span class="cancelled-tag">ملغاة</span>`
+          : '';
+        const notesLine = p.notes
+          ? `<div class="item-meta">${escapeHtml(p.notes)}</div>`
+          : '';
 
-  // Helper to get files for a policy
-  const getFilesForPolicy = (policyId: string) => policyFiles.filter(f => f.entity_id === policyId);
+        return `
+          <tr class="${p.cancelled ? 'cancelled-row' : ''}">
+            <td class="num">${i + 1}</td>
+            <td>
+              <div class="item-title">${typeLabel} ${cancelledTag}</div>
+              <div class="item-meta">${companyName}</div>
+              ${commissionLine}
+              ${notesLine}
+            </td>
+            <td class="tabular">${carNumber}</td>
+            <td class="period">${periodText}</td>
+            <td class="num">₪${lineTotal.toLocaleString('en-US')}</td>
+          </tr>
+        `;
+      }).join('')
+    : `<tr><td colspan="5" class="empty-cell">لا توجد وثائق مسجلة</td></tr>`;
 
-  // Helper to get children for a policy
-  const getChildrenForPolicy = (policyId: string) => policyChildren[policyId] || [];
+  // Payment history table — one row per payment, sorted oldest → newest,
+  // showing receipt number, method, date, and amount.
+  const paymentsTableHtml = allPayments.length > 0
+    ? `
+    <table class="payments">
+      <thead>
+        <tr>
+          <th style="width: 120px;">رقم سند القبض</th>
+          <th style="width: 150px;">طريقة الدفع</th>
+          <th style="width: 130px;">تاريخ الدفع</th>
+          <th>المبلغ</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${allPayments.map(p => `
+          <tr>
+            <td class="num">${p.receipt_number || '—'}</td>
+            <td>${paymentTypeLabel(p)}${p.cheque_number ? ` · ${p.cheque_number}` : ''}</td>
+            <td class="date">${formatDate(p.payment_date)}</td>
+            <td class="amount">₪${(p.amount || 0).toLocaleString('en-US')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `
+    : `<div class="payments-empty">لا توجد دفعات مسجلة.</div>`;
 
-  const getTypeLabel = (policy: PolicyData) => {
-    if (policy.policy_type_parent === 'THIRD_FULL' && policy.policy_type_child) {
-      const childLabels: Record<string, string> = { FULL: 'شامل', THIRD: 'ثالث' };
-      return childLabels[policy.policy_type_child] || policyTypeLabels[policy.policy_type_parent] || policy.policy_type_parent;
-    }
-    return policyTypeLabels[policy.policy_type_parent] || policy.policy_type_parent;
-  };
-
-  const renderPolicyCard = (policy: PolicyData) => {
-    const status = getPolicyStatus(policy);
-    const typeLabel = getTypeLabel(policy);
-
-    // Cancelled policies: show minimal one-line summary only
-    if (policy.cancelled) {
-      return `
-        <div class="policy-card" style="opacity:0.6;padding:8px 10px;">
-          <div class="policy-header" style="margin-bottom:0;">
-            <div class="policy-type">${typeLabel}</div>
-            <span class="status status-cancelled">❌ ملغاة</span>
-          </div>
-        </div>
-      `;
-    }
-
-    const files = getFilesForPolicy(policy.id);
-    const children = getChildrenForPolicy(policy.id);
-    const companyName = getCompanyName(policy);
-    
-    // Files section at the end with proper display
-    const filesHtml = files.length > 0 ? `
-      <div class="policy-files-section">
-        <div class="files-label">📎 ملفات البوليصة (${files.length})</div>
-        <div class="files-list">
-          ${files.map(f => {
-            const isPdf = f.mime_type?.includes('pdf');
-            const icon = isPdf ? '📄' : '🖼️';
-            const shortName = f.original_name?.length > 20 
-              ? f.original_name.substring(0, 20) + '...' 
-              : (f.original_name || 'ملف');
-            return `<a href="${f.cdn_url}" target="_blank" class="file-item">
-              <span class="file-icon">${icon}</span>
-              <span class="file-name">${shortName}</span>
-            </a>`;
+  // Accidents table
+  const accidentsHtml = accidents.length > 0
+    ? `
+    <div class="customer">
+      <div class="section-title">بلاغات الحوادث</div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width: 40px;">#</th>
+            <th>رقم البلاغ</th>
+            <th>تاريخ الحادث</th>
+            <th>السيارة</th>
+            <th>الشركة</th>
+            <th>الحالة</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${accidents.map((a, i) => {
+            const car = Array.isArray(a.car) ? a.car[0] : a.car;
+            const company = Array.isArray(a.company) ? a.company[0] : a.company;
+            return `
+              <tr>
+                <td class="num">${i + 1}</td>
+                <td class="num">${a.report_number || '-'}</td>
+                <td class="tabular">${formatDate(a.accident_date)}</td>
+                <td class="tabular">${car?.car_number || '-'}</td>
+                <td>${company?.name_ar || company?.name || '-'}</td>
+                <td>${ACCIDENT_STATUS_LABELS[a.status] || a.status}</td>
+              </tr>
+            `;
           }).join('')}
-        </div>
-      </div>
-    ` : '';
+        </tbody>
+      </table>
+    </div>
+  `
+    : '';
 
-    // Children section (additional drivers)
-    const childrenHtml = children.length > 0 ? `
-      <div class="policy-children-section">
-        <div class="children-label">👥 السائقين الإضافيين (${children.length})</div>
-        <div class="children-list">
-          ${children.map(c => `
-            <div class="child-item">
-              <span class="child-name">${c.full_name}</span>
-              <span class="child-id">${c.id_number}</span>
-              ${c.relation ? `<span class="child-relation">${c.relation}</span>` : ''}
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    ` : '';
+  // Refunds table
+  const refundsHtml = refunds.length > 0
+    ? `
+    <div class="customer">
+      <div class="section-title">المرتجعات</div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width: 40px;">#</th>
+            <th>النوع</th>
+            <th>السيارة</th>
+            <th>طريقة الدفع</th>
+            <th>التاريخ</th>
+            <th>الوصف</th>
+            <th style="width: 110px;">المبلغ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${refunds.map((r, i) => {
+            const car = Array.isArray(r.car) ? r.car[0] : r.car;
+            return `
+              <tr>
+                <td class="num">${i + 1}</td>
+                <td>${REFUND_TYPE_LABELS[r.transaction_type] || r.transaction_type}</td>
+                <td class="tabular">${car?.car_number || '-'}</td>
+                <td>${r.payment_method ? (PAYMENT_TYPE_LABELS[r.payment_method] || r.payment_method) : '-'}</td>
+                <td class="tabular">${formatDate(r.refund_date)}</td>
+                <td>${escapeHtml(r.description || '-')}</td>
+                <td class="num">₪${(r.amount || 0).toLocaleString('en-US')}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `
+    : '';
 
-    return `
-      <div class="policy-card">
-        <div class="policy-header">
-          <div class="policy-type">${typeLabel}</div>
-          <span class="status ${status.class}">${status.icon} ${status.label}</span>
-        </div>
-        <div class="policy-details">
-          <span class="company">${companyName}</span>
-          <span class="dates">${formatDateShort(policy.start_date)} - ${formatDateShort(policy.end_date)}</span>
-        </div>
-        <div class="policy-footer">
-          <span class="price">₪${policy.insurance_price.toLocaleString()}</span>
-        </div>
-        ${childrenHtml}
-        ${filesHtml}
-      </div>
-    `;
-  };
-
-  const carsHtml = policiesByCar.map(({ car, policies: carPolicies }) => {
-    const nonCancelledPolicies = carPolicies.filter(p => !p.cancelled);
-    const allCancelled = nonCancelledPolicies.length === 0 && carPolicies.length > 0;
-    const totalPrice = nonCancelledPolicies.reduce((s, p) => s + p.insurance_price, 0);
-    const activeCount = nonCancelledPolicies.filter(p => !p.transferred && new Date(p.end_date) >= new Date()).length;
-
-    // If all policies for this car are cancelled, show abbreviated section
-    if (allCancelled) {
-      return `
-        <div class="car-section" style="opacity:0.5;">
-          <div class="car-header">
-            <div class="car-plate">${car.car_number}</div>
-            <div class="car-info">
-              <span class="car-name">${car.manufacturer_name || ''} ${car.model || ''} ${car.year || ''}</span>
-              <span class="car-meta" style="color:#dc2626;">جميع الوثائق ملغاة</span>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    
-    return `
-      <div class="car-section">
-        <div class="car-header">
-          <div class="car-plate">${car.car_number}</div>
-          <div class="car-info">
-            <span class="car-name">${car.manufacturer_name || ''} ${car.model || ''} ${car.year || ''}</span>
-            <span class="car-meta">${nonCancelledPolicies.length} وثائق ${activeCount > 0 ? `• <span class="active-badge">${activeCount} سارية</span>` : ''}</span>
-          </div>
-          <div class="car-total">₪${totalPrice.toLocaleString()}</div>
-        </div>
-        <div class="car-policies">
-          ${carPolicies.map(renderPolicyCard).join('')}
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  const noCarPoliciesHtml = policiesNoCar.length > 0 ? `
-    <div class="car-section">
-      <div class="car-header no-car">
-        <div class="car-info">
-          <span class="car-name">وثائق أخرى</span>
-          <span class="car-meta">${policiesNoCar.length} وثائق</span>
-        </div>
-      </div>
-      <div class="car-policies">
-        ${policiesNoCar.map(renderPolicyCard).join('')}
+  // Attached files grid (reuses the invoice look — image thumbnails + PDF
+  // placeholders).
+  const filesHtml = policyFiles.length > 0
+    ? `
+    <div class="files-section">
+      <div class="section-label">الملفات المرفقة</div>
+      <div class="files-grid">
+        ${policyFiles.map(file => {
+          const isImage = file.mime_type?.startsWith('image/');
+          const safeName = escapeHtml(file.original_name || 'ملف');
+          return `
+            <a href="${file.cdn_url}" target="_blank" class="file-link" ${isImage ? `onclick="event.preventDefault();openLightbox('${file.cdn_url}')"` : ''}>
+              ${isImage
+                ? `<img src="${file.cdn_url}" alt="${safeName}" />`
+                : `<div class="file-placeholder">PDF</div>`}
+              <span>${safeName}</span>
+            </a>
+          `;
+        }).join('')}
       </div>
     </div>
-  ` : '';
+  `
+    : '';
+
+  // Contact footer — same merge strategy the invoice uses (branding first,
+  // fall back to sms_settings).
+  const effectivePhones = branding.invoicePhones.length > 0
+    ? branding.invoicePhones
+    : (companySettings.company_phones || []);
+  const effectiveAddress = branding.invoiceAddress || companySettings.company_location || '';
+  const whatsappNormalized = normalizePhoneForWhatsapp(companySettings.company_whatsapp || '');
+  const contactLines: string[] = [];
+  if (effectivePhones.length > 0) {
+    contactLines.push(
+      `هاتف: ${effectivePhones
+        .map((phone: string) => `<a href="tel:${phone.replace(/[^0-9+]/g, '')}">${phone}</a>`)
+        .join(' / ')}`,
+    );
+  }
+  if (companySettings.company_whatsapp) {
+    contactLines.push(`واتساب: <a href="https://wa.me/${whatsappNormalized}">${companySettings.company_whatsapp}</a>`);
+  }
+  if (companySettings.company_email) {
+    contactLines.push(`بريد: <a href="mailto:${companySettings.company_email}">${companySettings.company_email}</a>`);
+  }
+  if (effectiveAddress) {
+    contactLines.push(effectiveAddress);
+  }
+  const contactFooterHtml = contactLines.length > 0
+    ? `<div class="contact">${contactLines.join(' &nbsp;•&nbsp; ')}</div>`
+    : '';
+
+  const reportNumber = `RPT-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-${(client.id_number || '').slice(-4)}`;
 
   return `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>تقرير التأمينات - ${client.full_name}</title>
+  <title>تقرير العميل - ${escapeHtml(client.full_name || '')}</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #122143;
-      min-height: 100vh;
-      padding: 24px 16px;
-      direction: rtl;
-    }
-    .container {
-      max-width: 600px;
-      margin: 0 auto;
-      background: white;
-      border-radius: 20px;
-      box-shadow: 0 8px 40px rgba(0,0,0,0.25);
-      overflow: hidden;
-    }
-    
-    /* Header */
-    .header {
-      background: linear-gradient(135deg, #122143 0%, #1a3260 100%);
-      color: white;
-      padding: 20px 16px;
-      text-align: center;
-    }
-    .header h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
-    .header p { font-size: 12px; opacity: 0.85; }
-    
-    .content { padding: 16px; }
-    
-    /* Client Card */
-    .client-card {
-      background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
-      border-radius: 16px;
-      padding: 16px;
-      margin-bottom: 16px;
-      border: 1px solid #99f6e4;
-    }
-    .client-name {
-      font-size: 18px;
-      font-weight: 700;
-      color: #0f766e;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .client-name::before { content: '👤'; font-size: 20px; }
-    .client-info {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
-    }
-    .info-item {
-      background: white;
-      padding: 10px;
-      border-radius: 10px;
-      border: 1px solid #e2e8f0;
-    }
-    .info-label { font-size: 10px; color: #64748b; margin-bottom: 2px; }
-    .info-value { font-size: 13px; font-weight: 600; color: #0f172a; }
-    
-    /* Summary */
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    .summary-card {
-      padding: 12px 8px;
-      border-radius: 12px;
-      text-align: center;
-      border: 1px solid;
-    }
-    .summary-card.primary { background: #f0fdfa; border-color: #99f6e4; }
-    .summary-card.success { background: #f0fdf4; border-color: #bbf7d0; }
-    .summary-card.danger { background: #fef2f2; border-color: #fecaca; }
-    .summary-label { font-size: 10px; color: #64748b; margin-bottom: 4px; }
-    .summary-value { font-size: 16px; font-weight: 700; }
-    .summary-card.primary .summary-value { color: #0d9488; }
-    .summary-card.success .summary-value { color: #16a34a; }
-    .summary-card.danger .summary-value { color: #dc2626; }
-    
-    /* Wallet */
-    .wallet-banner {
-      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-      border: 1px solid #fcd34d;
-      border-radius: 12px;
-      padding: 12px;
-      text-align: center;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-    .wallet-banner span { font-size: 13px; color: #92400e; }
-    .wallet-banner strong { font-size: 15px; color: #b45309; font-weight: 700; }
-    
-    /* Active Summary */
-    .active-summary {
-      display: flex;
-      justify-content: center;
-      gap: 24px;
-      padding: 16px;
-      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-      border-radius: 12px;
-      border: 1px solid #86efac;
-      margin-bottom: 16px;
-    }
-    .active-stat { text-align: center; }
-    .active-stat .number { font-size: 28px; font-weight: 700; color: #16a34a; }
-    .active-stat .label { font-size: 11px; color: #15803d; }
-    .active-stat.muted .number { color: #6b7280; }
-    .active-stat.muted .label { color: #9ca3af; }
-    .divider { width: 1px; background: #86efac; }
-    
-    /* Car Section */
-    .section-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: #0d9488;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .car-section {
-      border: 1px solid #e2e8f0;
-      border-radius: 14px;
-      overflow: hidden;
-      margin-bottom: 12px;
-    }
-    .car-header {
-      background: #f8fafc;
-      padding: 12px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .car-header.no-car { background: #fafafa; }
-    .car-plate {
-      background: linear-gradient(135deg, #fef08a 0%, #fde047 100%);
-      border: 2px solid #1e293b;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-family: monospace;
-      font-weight: 700;
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    @page { size: A4; margin: 14mm; }
+    html, body {
+      font-family: 'IBM Plex Sans Arabic', 'Tajawal', system-ui, -apple-system, 'Segoe UI', sans-serif;
       font-size: 13px;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background: #f4f4f5;
+      direction: rtl;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-feature-settings: "kern" 1, "liga" 1;
     }
-    .car-info { flex: 1; }
-    .car-name { font-size: 13px; font-weight: 600; color: #1e293b; display: block; }
-    .car-meta { font-size: 11px; color: #64748b; }
-    .active-badge { color: #16a34a; font-weight: 600; }
-    .car-total { font-size: 14px; font-weight: 700; color: #0d9488; }
-    
-    .car-policies { padding: 8px; }
-    
-    /* Policy Card */
-    .policy-card {
-      background: white;
-      border: 1px solid #e2e8f0;
-      border-radius: 10px;
-      padding: 10px;
-      margin-bottom: 8px;
+    body { padding: 32px 16px; }
+    .invoice {
+      max-width: 820px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 40px 44px;
+      border: 1px solid #1a1a1a;
     }
-    .policy-card:last-child { margin-bottom: 0; }
-    .policy-header {
+    a { color: inherit; text-decoration: none; }
+    a:hover { color: #18181b; }
+
+    /* ── Header ── */
+    .invoice-top {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: 6px;
+      align-items: flex-start;
+      gap: 24px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid #1a1a1a;
+      margin-bottom: 24px;
     }
-    .policy-type {
+    .brand { max-width: 55%; }
+    .brand .logo {
+      max-height: 60px;
+      max-width: 220px;
+      object-fit: contain;
+      display: block;
+      margin-bottom: 10px;
+    }
+    .brand .logo-svg { display: block; margin-bottom: 10px; }
+    .brand .logo-svg svg { height: 44px; width: auto; display: block; }
+    .brand .name { font-size: 15px; font-weight: 700; color: #1a1a1a; }
+    .brand .owner { font-size: 12px; color: #1a1a1a; margin-top: 4px; font-weight: 600; }
+    .brand .tax { font-size: 12px; color: #1a1a1a; margin-top: 2px; direction: ltr; text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+    .brand .tagline { font-size: 12px; color: #1a1a1a; margin-top: 2px; font-weight: 500; }
+    .brand .address { font-size: 12px; color: #1a1a1a; margin-top: 8px; max-width: 320px; line-height: 1.55; font-weight: 500; }
+
+    .invoice-meta { text-align: left; min-width: 240px; }
+    .invoice-meta .doc-title {
+      font-size: 42px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #1a1a1a;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .invoice-meta .subtitle {
       font-size: 12px;
       font-weight: 600;
-      color: #1e293b;
-      background: #f1f5f9;
-      padding: 3px 8px;
-      border-radius: 6px;
+      color: #1a1a1a;
+      margin-top: -8px;
+      margin-bottom: 14px;
+      letter-spacing: 0.5px;
     }
-    .status {
+    .meta-rows { width: 100%; border: 1px solid #1a1a1a; font-size: 12px; }
+    .meta-rows .row { display: flex; }
+    .meta-rows .row + .row { border-top: 1px solid #1a1a1a; }
+    .meta-rows .label {
+      flex: 0 0 110px;
+      padding: 7px 12px;
+      background: #f4f4f5;
+      font-weight: 700;
+      color: #1a1a1a;
+      font-size: 11.5px;
+      text-align: right;
+      border-left: 1px solid #1a1a1a;
+      letter-spacing: 0.3px;
+    }
+    .meta-rows .val {
+      flex: 1;
+      padding: 7px 12px;
+      text-align: left;
+      direction: ltr;
+      font-weight: 700;
+      color: #1a1a1a;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Section container (customer / cars / accidents / refunds) ── */
+    .customer { margin-bottom: 20px; border: 1px solid #1a1a1a; }
+    .section-title {
+      padding: 8px 14px;
+      border-bottom: 1px solid #1a1a1a;
+      background: #f4f4f5;
+      font-size: 11px;
+      font-weight: 700;
+      color: #1a1a1a;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    .customer-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+    .customer-grid .cell { padding: 9px 14px; }
+    .customer-grid .cell:not(:nth-child(3n+1)) { border-right: 1px solid #1a1a1a; }
+    .customer-grid .cell:nth-child(n+4) { border-top: 1px solid #1a1a1a; }
+    .customer-grid .cell.full { grid-column: 1 / -1; }
+    .customer-grid .label {
       font-size: 10px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 3px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    .customer-grid .value { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+    .customer-grid .value.tabular { font-variant-numeric: tabular-nums; direction: ltr; text-align: right; }
+
+    /* ── Items table (policies) ── */
+    .items {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      border: 1px solid #1a1a1a;
+    }
+    .items thead th {
+      background: #f4f4f5;
+      color: #1a1a1a;
+      padding: 8px 12px;
+      text-align: right;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      border-bottom: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+    }
+    .items thead th:last-child { border-left: none; }
+    .items tbody td {
+      padding: 9px 12px;
+      border-top: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+      font-size: 13px;
+      color: #1a1a1a;
+      text-align: right;
+      vertical-align: top;
+    }
+    .items tbody td:last-child { border-left: none; }
+    .items tbody tr:first-child td { border-top: none; }
+    .items tbody td.num {
+      text-align: left;
+      direction: ltr;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+    .items tbody td.tabular {
+      direction: ltr;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
       font-weight: 600;
-      padding: 3px 8px;
-      border-radius: 10px;
     }
-    .status-active { background: #dcfce7; color: #16a34a; }
-    .status-expired { background: #f3f4f6; color: #6b7280; }
-    .status-cancelled { background: #fee2e2; color: #dc2626; }
-    .status-transferred { background: #fef3c7; color: #d97706; }
-    
-    .policy-details {
-      display: flex;
-      gap: 12px;
-      font-size: 11px;
-      color: #64748b;
-      margin-bottom: 6px;
-    }
-    .policy-footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .price { font-size: 14px; font-weight: 700; color: #0d9488; }
-    
-    /* Files Section */
-    .policy-files-section {
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px dashed #e2e8f0;
-    }
-    .files-label {
-      font-size: 11px;
+    .items tbody td.period {
+      direction: ltr;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
       font-weight: 600;
-      color: #0d9488;
-      margin-bottom: 6px;
+      font-size: 12px;
+      color: #1a1a1a;
+      white-space: nowrap;
     }
-    .files-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .file-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 8px;
-      background: #f0fdfa;
-      border: 1px solid #99f6e4;
-      border-radius: 6px;
-      text-decoration: none;
-      font-size: 11px;
-      color: #0f766e;
-      transition: all 0.2s;
-    }
-    .file-item:hover { 
-      background: #ccfbf1; 
-      border-color: #14b8a6;
-    }
-    .file-icon { font-size: 14px; }
-    .file-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    
-    /* Children/Additional Drivers Section */
-    .policy-children-section {
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px dashed #fcd34d;
-      background: #fefce8;
-      margin: 8px -12px -12px -12px;
-      padding: 8px 12px 12px 12px;
-      border-radius: 0 0 10px 10px;
-    }
-    .children-label {
-      font-size: 11px;
+    .items tbody .item-title { font-weight: 700; font-size: 14px; color: #1a1a1a; }
+    .items tbody .item-meta { color: #1a1a1a; font-size: 11.5px; margin-top: 3px; font-weight: 500; }
+    .items tbody .item-commission {
+      color: #1a1a1a;
+      font-size: 11.5px;
+      margin-top: 3px;
       font-weight: 600;
-      color: #92400e;
-      margin-bottom: 6px;
+      font-variant-numeric: tabular-nums;
     }
-    .children-list {
+    .items tbody td.empty-cell {
+      text-align: center;
+      font-weight: 500;
+      opacity: 0.7;
+    }
+
+    /* ── Generic data table (cars, accidents, refunds) — same look as .items ── */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .data-table thead th {
+      background: #f4f4f5;
+      color: #1a1a1a;
+      padding: 8px 12px;
+      text-align: right;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      border-bottom: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+    }
+    .data-table thead th:last-child { border-left: none; }
+    .data-table tbody td {
+      padding: 9px 12px;
+      border-top: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+      font-size: 13px;
+      color: #1a1a1a;
+      text-align: right;
+      font-weight: 500;
+    }
+    .data-table tbody td:last-child { border-left: none; }
+    .data-table tbody tr:first-child td { border-top: none; }
+    .data-table tbody td.num {
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+    .data-table tbody td.tabular {
+      direction: ltr;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Extra drivers table ── */
+    .drivers { margin-bottom: 20px; border: 1px solid #1a1a1a; }
+    .drivers-table { width: 100%; border-collapse: collapse; }
+    .drivers-table thead th {
+      background: #f4f4f5;
+      color: #1a1a1a;
+      padding: 8px 12px;
+      text-align: right;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      border-bottom: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+    }
+    .drivers-table thead th:last-child { border-left: none; }
+    .drivers-table tbody td {
+      padding: 9px 12px;
+      border-top: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+      font-size: 13px;
+      color: #1a1a1a;
+      text-align: right;
+      font-weight: 500;
+    }
+    .drivers-table tbody td:last-child { border-left: none; }
+    .drivers-table tbody tr:first-child td { border-top: none; }
+    .drivers-table tbody td.num {
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+    .drivers-table tbody td.tabular {
+      direction: ltr;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Payments table ── */
+    .payments-section { margin-bottom: 20px; }
+    .payments { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #1a1a1a; }
+    .payments thead th {
+      background: #f4f4f5;
+      color: #1a1a1a;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 9px 12px;
+      text-align: right;
+      border-bottom: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+    }
+    .payments thead th:last-child { border-left: none; }
+    .payments tbody td {
+      padding: 9px 12px;
+      border-top: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+      font-size: 12px;
+      color: #1a1a1a;
+      font-weight: 500;
+      vertical-align: middle;
+    }
+    .payments tbody td:last-child { border-left: none; }
+    .payments tbody tr:first-child td { border-top: none; }
+    .payments tbody td.num,
+    .payments tbody td.date,
+    .payments tbody td.amount {
+      direction: ltr;
+      text-align: left;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+    .payments-empty {
+      padding: 14px;
+      border: 1px solid #1a1a1a;
+      font-size: 12px;
+      color: #1a1a1a;
+      opacity: 0.75;
+      text-align: center;
+    }
+
+    /* ── Totals ── */
+    .bottom {
+      display: flex;
+      justify-content: flex-end;
+      gap: 18px;
+      align-items: stretch;
+      margin-bottom: 20px;
+    }
+    .totals {
+      width: 330px;
+      border-collapse: collapse;
+      font-size: 13px;
+      align-self: flex-start;
+      border: 1px solid #1a1a1a;
+    }
+    .totals td {
+      padding: 9px 14px;
+      border-top: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+    }
+    .totals tr:first-child td { border-top: none; }
+    .totals td:last-child { border-left: none; }
+    .totals td.label {
+      font-weight: 700;
+      background: #f4f4f5;
+      color: #1a1a1a;
+      font-size: 11.5px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .totals td.val {
+      text-align: left;
+      direction: ltr;
+      font-weight: 700;
+      color: #1a1a1a;
+      font-variant-numeric: tabular-nums;
+    }
+    .totals tr.total td {
+      font-weight: 800;
+      background: #1a1a1a;
+      color: #ffffff;
+      font-size: 15px;
+      border-top: 1px solid #1a1a1a;
+      padding: 12px 14px;
+    }
+    .totals tr.total td.label { text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; }
+    .totals tr.total td.val { color: #ffffff; }
+
+    /* ── Cancelled row ── */
+    .cancelled-row td { color: #9ca3af; text-decoration: line-through; }
+    .cancelled-row td .cancelled-tag { text-decoration: none; }
+    .cancelled-tag {
+      display: inline-block;
+      background: #fee2e2;
+      color: #991b1b;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      margin-right: 6px;
+      border: 1px solid #fca5a5;
+      letter-spacing: 0.3px;
+      vertical-align: middle;
+    }
+
+    /* ── Files ── */
+    .files-section { margin-bottom: 22px; }
+    .section-label {
+      font-weight: 700;
+      font-size: 11px;
+      color: #1a1a1a;
+      padding: 7px 0;
+      border-bottom: 1px solid #1a1a1a;
+      margin-bottom: 12px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    .files-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .file-link {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      align-items: center;
+      gap: 6px;
+      padding: 9px;
+      border: 1px solid #1a1a1a;
+      font-size: 10.5px;
+      text-align: center;
+      word-break: break-word;
+      background: #fff;
+      color: #1a1a1a;
+      font-weight: 500;
     }
-    .child-item {
+    .file-link:hover { background: #f4f4f5; }
+    .file-link img { max-width: 100%; max-height: 88px; object-fit: contain; }
+    .file-placeholder {
+      width: 100%;
+      height: 68px;
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 11px;
-      color: #78350f;
+      justify-content: center;
+      border: 1px solid #1a1a1a;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 1px;
+      color: #ffffff;
+      background: #1a1a1a;
     }
-    .child-name { font-weight: 600; }
-    .child-id { font-family: monospace; font-size: 10px; color: #a16207; }
-    .child-relation { 
-      font-size: 10px; 
-      background: #fef3c7; 
-      padding: 2px 6px; 
-      border-radius: 4px; 
-      color: #92400e;
-    }
-    
-    /* Footer */
+
+    /* ── Footer ── */
     .footer {
-      padding: 16px;
-      border-top: 1px solid #e2e8f0;
-      display: flex;
-      justify-content: space-between;
+      margin-top: 28px;
+      padding-top: 18px;
+      border-top: 1px solid #1a1a1a;
+      text-align: center;
+      font-size: 12px;
+    }
+    .footer .thanks { font-weight: 700; font-size: 14px; color: #1a1a1a; margin-bottom: 8px; letter-spacing: 0.3px; }
+    .footer .contact { color: #1a1a1a; margin-top: 8px; font-weight: 600; line-height: 1.7; }
+    .footer .contact a { color: #1a1a1a; }
+    .footer .issued { color: #1a1a1a; margin-top: 10px; font-size: 11px; font-variant-numeric: tabular-nums; opacity: 0.7; }
+
+    /* ── Actions ── */
+    .actions { text-align: center; margin-top: 28px; }
+    .actions button {
+      background: #18181b;
+      color: #fff;
+      border: 1px solid #18181b;
+      padding: 10px 26px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      font-family: inherit;
+      margin: 0 5px;
+      border-radius: 4px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .actions button:hover { background: #fff; color: #18181b; }
+
+    /* ── Lightbox ── */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.94);
+      z-index: 9999;
+      justify-content: center;
       align-items: center;
     }
-    .footer-brand { text-align: center; }
-    .footer-brand-ar { font-size: 14px; font-weight: 700; color: #0d9488; }
-    .footer-brand-en { font-size: 9px; color: #94a3b8; letter-spacing: 1px; }
-    .footer-date { font-size: 10px; color: #94a3b8; }
-    
+    .lightbox.active { display: flex; }
+    .lightbox img { max-width: 94%; max-height: 90vh; object-fit: contain; }
+    .lightbox .close {
+      position: absolute;
+      top: 18px;
+      right: 22px;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 36px;
+      cursor: pointer;
+    }
+
     @media print {
-      body { background: white; padding: 0; }
-      .container { box-shadow: none; border-radius: 0; }
+      @page { size: A4; margin: 0; }
+      html, body { background: #fff; }
+      body { padding: 12mm 10mm; }
+      .no-print { display: none !important; }
+      .invoice { max-width: 100%; padding: 16px 20px; border: 1px solid #1a1a1a; }
+      .items thead th,
+      .meta-rows .label,
+      .section-title,
+      .totals td.label,
+      .totals tr.total td,
+      .file-placeholder,
+      .data-table thead th,
+      .drivers-table thead th,
+      .payments thead th {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 14px 8px; font-size: 12px; }
+      .invoice { padding: 24px 20px; }
+      .invoice-top { flex-direction: column; gap: 18px; }
+      .invoice-meta { text-align: right; min-width: 0; }
+      .invoice-meta .doc-title { font-size: 32px; }
+      .customer-grid { grid-template-columns: 1fr; }
+      .customer-grid .cell:not(:nth-child(3n+1)) { border-right: none; }
+      .customer-grid .cell:nth-child(n+2) { border-top: 1px solid #1a1a1a; }
+      .bottom { flex-direction: column; }
+      .totals { width: 100%; }
+      .files-grid { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>${companyName}</h1>
-      <p>تقرير تأميناتك الشامل</p>
+  <div class="invoice">
+
+    <!-- Header: brand right, report metadata left -->
+    <div class="invoice-top">
+      <div class="brand">
+        ${brandBlock}
+        <div class="name">${escapeHtml(branding.companyName)}</div>
+        ${branding.ownerName && branding.ownerName.trim() !== branding.companyName.trim() ? `<div class="owner">${escapeHtml(branding.ownerName)}</div>` : ''}
+        ${branding.taxNumber ? `<div class="tax">رقم المشغل: ${escapeHtml(branding.taxNumber)}</div>` : ''}
+        ${branding.siteDescription ? `<div class="tagline">${escapeHtml(branding.siteDescription)}</div>` : ''}
+        ${effectiveAddress ? `<div class="address">${escapeHtml(effectiveAddress)}</div>` : ''}
+      </div>
+      <div class="invoice-meta">
+        <div class="doc-title">تقرير</div>
+        <div class="subtitle">تقرير العميل الشامل</div>
+        <div class="meta-rows">
+          <div class="row">
+            <div class="label">رقم التقرير</div>
+            <div class="val">${reportNumber}</div>
+          </div>
+          <div class="row">
+            <div class="label">التاريخ</div>
+            <div class="val">${formatDate(today.toISOString())}</div>
+          </div>
+        </div>
+      </div>
     </div>
-    
-    <div class="content">
-      <div class="client-card">
-        <div class="client-name">${client.full_name}</div>
-        <div class="client-info">
-          <div class="info-item">
-            <div class="info-label">رقم الهوية</div>
-            <div class="info-value" style="direction:ltr;text-align:right">${client.id_number}</div>
-          </div>
-          <div class="info-item">
-            <div class="info-label">الهاتف</div>
-            <div class="info-value" style="direction:ltr;text-align:right">${client.phone_number || '-'}</div>
-          </div>
-          <div class="info-item">
-            <div class="info-label">رقم الملف</div>
-            <div class="info-value">${client.file_number || '-'}</div>
-          </div>
-          <div class="info-item">
-            <div class="info-label">تاريخ الانضمام</div>
-            <div class="info-value">${formatDate(client.date_joined)}</div>
-          </div>
-          ${branchName ? `
-          <div class="info-item">
-            <div class="info-label">الفرع</div>
-            <div class="info-value">${branchName}</div>
-          </div>
-          ` : ''}
-        </div>
-      </div>
 
-      <div class="summary-grid">
-        <div class="summary-card primary">
-          <div class="summary-label">إجمالي التأمينات</div>
-          <div class="summary-value">₪${paymentSummary.totalInsurance.toLocaleString()}</div>
+    <!-- Customer info -->
+    <div class="customer">
+      <div class="section-title">معلومات العميل</div>
+      <div class="customer-grid">
+        <div class="cell">
+          <div class="label">الاسم</div>
+          <div class="value">${escapeHtml(client.full_name || '-')}</div>
         </div>
-        <div class="summary-card success">
-          <div class="summary-label">المدفوع</div>
-          <div class="summary-value">₪${paymentSummary.totalPaid.toLocaleString()}</div>
+        <div class="cell">
+          <div class="label">رقم الهوية</div>
+          <div class="value tabular">${client.id_number || '-'}</div>
         </div>
-        <div class="summary-card ${paymentSummary.totalRemaining > 0 ? 'danger' : 'success'}">
-          <div class="summary-label">المتبقي</div>
-          <div class="summary-value">₪${paymentSummary.totalRemaining.toLocaleString()}</div>
+        <div class="cell">
+          <div class="label">رقم الهاتف</div>
+          <div class="value tabular">${client.phone_number || '-'}</div>
         </div>
-      </div>
-
-      ${walletBalance > 0 ? `
-      <div class="wallet-banner">
-        <span>💰 رصيد لك:</span>
-        <strong>₪${walletBalance.toLocaleString()}</strong>
-      </div>
-      ` : ''}
-
-      <div class="active-summary">
-        <div class="active-stat">
-          <div class="number">${activePolicies.length}</div>
-          <div class="label">وثائق سارية</div>
+        <div class="cell">
+          <div class="label">رقم الملف</div>
+          <div class="value">${client.file_number || '-'}</div>
         </div>
-        <div class="divider"></div>
-        <div class="active-stat muted">
-          <div class="number">${cars.length}</div>
-          <div class="label">سيارات</div>
+        <div class="cell">
+          <div class="label">تاريخ الميلاد</div>
+          <div class="value tabular">${formatDate(client.birth_date)}</div>
         </div>
-      </div>
-
-      <div class="section-title">🚗 السيارات والوثائق</div>
-      ${carsHtml}
-      ${noCarPoliciesHtml}
-
-      <div class="footer">
-        <div class="footer-brand">
-          <div class="footer-brand-ar">${companyName}</div>
+        <div class="cell">
+          <div class="label">تاريخ الانضمام</div>
+          <div class="value tabular">${formatDate(client.date_joined)}</div>
         </div>
-        ${(companySettings.company_email || (companySettings.company_phones && companySettings.company_phones.length > 0) || companySettings.company_whatsapp || companySettings.company_location) ? `
-        <div class="contact-info" style="margin: 12px 0; padding: 10px; background: #f0fdfa; border-radius: 8px; display: inline-block; text-align: center;">
-          ${companySettings.company_email ? `<div style="padding: 4px 0;">📧 <a href="mailto:${companySettings.company_email}" style="color: #0d9488; text-decoration: none;">${companySettings.company_email}</a></div>` : ''}
-          ${companySettings.company_phones && companySettings.company_phones.length > 0 ? `<div style="padding: 4px 0;">📞 ${companySettings.company_phones.map((phone: string) => `<a href="tel:${phone.replace(/[^0-9+]/g, '')}" style="color: #0d9488; text-decoration: none;">${phone}</a>`).join(' | ')}</div>` : ''}
-          ${companySettings.company_whatsapp ? `<div style="padding: 4px 0;">💬 <a href="https://wa.me/${normalizePhoneForWhatsapp(companySettings.company_whatsapp)}" style="color: #0d9488; text-decoration: none;">${companySettings.company_whatsapp}</a></div>` : ''}
-          ${companySettings.company_location ? `<div style="padding: 4px 0;">📍 ${companySettings.company_location}</div>` : ''}
+        ${branchName ? `
+        <div class="cell full">
+          <div class="label">الفرع</div>
+          <div class="value">${escapeHtml(branchName)}</div>
         </div>
         ` : ''}
-        <div class="footer-date">${formatDate(new Date().toISOString())}</div>
-        <div class="action-buttons no-print" style="margin-top: 15px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-          <button onclick="window.print()" style="display: inline-block; padding: 12px 25px; background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; font-family: 'Tajawal', sans-serif;">🖨️ طباعة التقرير</button>
-          <button onclick="shareReport()" style="display: inline-block; padding: 12px 25px; background: linear-gradient(135deg, #25D366 0%, #128C7E 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; font-family: 'Tajawal', sans-serif;">📲 مشاركة</button>
-        </div>
       </div>
     </div>
+
+    ${carsHtml}
+    ${driversHtml}
+
+    <!-- Policies items table -->
+    <table class="items">
+      <thead>
+        <tr>
+          <th style="width: 40px;">#</th>
+          <th>الوصف</th>
+          <th style="width: 100px;">السيارة</th>
+          <th style="width: 170px;">المدة</th>
+          <th style="width: 120px;">المبلغ</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${policyRowsHtml}
+      </tbody>
+    </table>
+
+    <!-- Payments log -->
+    <div class="payments-section">
+      <div class="section-title">سجل الدفعات</div>
+      ${paymentsTableHtml}
+    </div>
+
+    ${accidentsHtml}
+    ${refundsHtml}
+
+    <!-- Totals: include wallet credit if the client has one -->
+    <div class="bottom">
+      <table class="totals">
+        <tr>
+          <td class="label">إجمالي التأمينات</td>
+          <td class="val">₪${totalInsurance.toLocaleString('en-US')}</td>
+        </tr>
+        <tr>
+          <td class="label">المدفوع</td>
+          <td class="val">₪${totalPaid.toLocaleString('en-US')}</td>
+        </tr>
+        ${walletBalance > 0 ? `
+        <tr>
+          <td class="label">مرتجع للعميل</td>
+          <td class="val">−₪${walletBalance.toLocaleString('en-US')}</td>
+        </tr>
+        ` : ''}
+        <tr class="total">
+          <td class="label">المتبقي</td>
+          <td class="val">₪${netRemaining.toLocaleString('en-US')}</td>
+        </tr>
+      </table>
+    </div>
+
+    ${branding.invoicePrivacyText ? `
+    <div class="customer">
+      <div class="section-title">سياسة الخصوصية والشروط</div>
+      <div style="padding: 11px 14px; font-size: 12px; color: #1a1a1a; line-height: 1.7; white-space: pre-wrap; font-weight: 500;">${escapeHtml(branding.invoicePrivacyText)}</div>
+    </div>
+    ` : ''}
+
+    ${filesHtml}
+
+    <!-- Footer: thanks + agent contact details + issued date -->
+    <div class="footer">
+      <div class="thanks">شكراً لثقتكم</div>
+      ${contactFooterHtml}
+      <div class="issued">تاريخ الإصدار: ${formatDate(today.toISOString())}</div>
+    </div>
+
+    <div class="actions no-print">
+      <button type="button" onclick="window.print()">طباعة</button>
+      <button type="button" onclick="shareReport()">مشاركة</button>
+    </div>
   </div>
+
+  <!-- Lightbox for attachment previews -->
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <button class="close" type="button" onclick="closeLightbox()">×</button>
+    <img id="lightbox-img" alt="" onclick="event.stopPropagation()" />
+  </div>
+
   <script>
+    function openLightbox(src) {
+      var box = document.getElementById('lightbox');
+      document.getElementById('lightbox-img').src = src;
+      box.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.remove('active');
+      document.body.style.overflow = '';
+    }
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeLightbox();
+    });
     function shareReport() {
-      const currentUrl = window.location.href;
-      const shareText = 'تقرير التأمينات: ' + currentUrl;
+      var url = window.location.href;
       if (navigator.share) {
-        navigator.share({ title: 'تقرير التأمينات', text: 'تقرير التأمينات الخاص بك', url: currentUrl }).catch(console.error);
+        navigator.share({ title: 'تقرير العميل', url: url }).catch(function(){});
       } else {
-        window.open('https://wa.me/?text=' + encodeURIComponent(shareText), '_blank');
+        window.open('https://wa.me/?text=' + encodeURIComponent(url), '_blank');
       }
     }
   </script>
-    </div>
-  </div>
 </body>
 </html>`;
 }
