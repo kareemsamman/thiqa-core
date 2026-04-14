@@ -63,10 +63,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
         // of icon / title / description / close button via data attributes.
         unstyled: true,
         classNames: {
-          // Room on the visual-left for the close button (ps-10) and on the
-          // visual-right for the icon chip (pe-14 is handled by flex gap).
+          // Padding (incl. the visual-left space reserved for the close
+          // button) is applied in index.css via the .fancy-toast rule so
+          // physical left/right stay consistent with the absolutely
+          // positioned close button.
           toast: cn(
-            "fancy-toast relative flex items-start gap-3 w-[min(440px,calc(100vw-2rem))] p-4 ps-10",
+            "fancy-toast relative flex items-start gap-3 w-[min(460px,calc(100vw-2rem))] py-4",
             // Liquid glass surface
             "rounded-2xl border",
             "bg-white/80 dark:bg-slate-900/80",
