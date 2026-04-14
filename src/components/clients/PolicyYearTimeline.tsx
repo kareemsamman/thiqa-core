@@ -28,6 +28,7 @@ import {
   Save,
   X,
   Pencil,
+  Handshake,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -63,10 +64,13 @@ interface PolicyRecord {
   transferred_from_policy_id: string | null;
   group_id: string | null;
   notes: string | null;
+  broker_id?: string | null;
+  broker_direction?: 'from_broker' | 'to_broker' | null;
   company: { name: string; name_ar: string | null } | null;
   car: { id: string; car_number: string } | null;
   creator: { full_name: string | null; email: string } | null;
   road_service?: { name: string; name_ar: string | null } | null;
+  broker?: { id: string; name: string } | null;
   branch_id?: string | null;
   created_at?: string;
 }
@@ -1209,6 +1213,32 @@ function PolicyPackageCard({
             </Badge>
           )}
 
+          {/* Broker indicator — shows when any policy in this card (main or
+              an addon inside the package) is tied to a broker. Label flips
+              to "من الوسيط" / "إلى الوسيط" based on broker_direction. */}
+          {(() => {
+            const policiesInCard: PolicyRecord[] = isPkg && pkg.mainPolicy
+              ? [pkg.mainPolicy, ...pkg.addons]
+              : [policy];
+            const brokerPolicy = policiesInCard.find(p => p.broker_id && p.broker);
+            if (!brokerPolicy || !brokerPolicy.broker) return null;
+            const directionLabel = brokerPolicy.broker_direction === 'from_broker'
+              ? 'من الوسيط'
+              : brokerPolicy.broker_direction === 'to_broker'
+                ? 'إلى الوسيط'
+                : 'وسيط';
+            return (
+              <Badge
+                variant="outline"
+                className="gap-1 text-xs bg-amber-500/10 border-amber-500/30 text-amber-700"
+                title={`${directionLabel}: ${brokerPolicy.broker.name}`}
+              >
+                <Handshake className="h-3 w-3" />
+                {directionLabel}: {brokerPolicy.broker.name}
+              </Badge>
+            );
+          })()}
+
           {/* Payment Status — amounts moved to the summary strip below the grid */}
           {paymentStatus.isPaid && (
             <Badge variant="outline" className="gap-1 text-success border-success/30 bg-success/5">
@@ -1650,6 +1680,15 @@ function PackageComponentRow({
         )}>
           {getProviderName()}
         </span>
+        {policy.broker_id && policy.broker && (
+          <span
+            className="text-[10px] font-semibold text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0 h-5 inline-flex items-center gap-1 shrink-0"
+            title={`${policy.broker_direction === 'from_broker' ? 'من الوسيط' : 'إلى الوسيط'}: ${policy.broker.name}`}
+          >
+            <Handshake className="h-3 w-3" />
+            {policy.broker.name}
+          </span>
+        )}
       </div>
 
       {/* Period column */}
