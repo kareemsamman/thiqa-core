@@ -849,7 +849,7 @@ export function PolicyPaymentsSection({
                       : "border-border/60 hover:border-border",
                   )}
                 >
-                  <div className="flex items-center gap-4 px-4 py-3">
+                  <div className="flex items-center gap-4 px-4 py-3 min-h-[76px]">
                     {/* Icon */}
                     <div
                       className={cn(
@@ -861,7 +861,7 @@ export function PolicyPaymentsSection({
                     </div>
                     {/* Amount + type + status badges */}
                     <div className="flex flex-col gap-1 shrink-0 min-w-[140px]">
-                      <span className="font-bold text-xl ltr-nums text-foreground leading-none">
+                      <span className="font-bold text-xl ltr-nums text-foreground leading-none text-right">
                         {formatCurrency(payment.amount)}
                       </span>
                       <div className="flex items-center gap-1.5 flex-wrap">

@@ -298,7 +298,7 @@ export function PaymentGroupDetailsDialog({
                 )}
               >
                 {/* Primary row */}
-                <div className="flex items-center gap-4 px-4 py-3">
+                <div className="flex items-center gap-4 px-4 py-3 min-h-[76px]">
                   {/* Icon */}
                   <div
                     className={cn(
@@ -310,7 +310,7 @@ export function PaymentGroupDetailsDialog({
                   </div>
                   {/* Amount + type badge */}
                   <div className="flex flex-col gap-1 shrink-0 min-w-[140px]">
-                    <span className="font-bold text-xl ltr-nums text-foreground leading-none">
+                    <span className="font-bold text-xl ltr-nums text-foreground leading-none text-right">
                       ₪{Number(p.amount || 0).toLocaleString("en-US")}
                     </span>
                     <div className="flex items-center gap-1.5 flex-wrap">
