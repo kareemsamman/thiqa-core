@@ -1263,7 +1263,7 @@ function buildPackageInvoiceHtml(
       <div class="brand">
         ${brandBlock}
         <div class="name">${branding.companyName}</div>
-        ${branding.ownerName ? `<div class="owner">${branding.ownerName}</div>` : ''}
+        ${branding.ownerName && branding.ownerName.trim() !== branding.companyName.trim() ? `<div class="owner">${branding.ownerName}</div>` : ''}
         ${branding.taxNumber ? `<div class="tax">رقم المشغل: ${branding.taxNumber}</div>` : ''}
         ${branding.siteDescription ? `<div class="tagline">${branding.siteDescription}</div>` : ''}
         ${effectiveAddress ? `<div class="address">${effectiveAddress}</div>` : ''}
