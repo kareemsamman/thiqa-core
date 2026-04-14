@@ -585,7 +585,17 @@ export default function Receipts() {
         return;
       } catch (err: any) {
         console.error("[Receipts] edge function print failed:", err);
-        const detail = err?.message || err?.context?.error || "";
+        // Pull the actual error body out of the FunctionsHttpError so
+        // the toast shows the function's message.
+        let detail = "";
+        try {
+          if (err?.context && typeof err.context.clone === "function") {
+            const body = await err.context.clone().json();
+            detail = body?.error || body?.message || "";
+          }
+        } catch {}
+        if (!detail) detail = err?.message || "";
+        console.error("[Receipts] print detail:", detail);
         toast.error(detail ? `فشل في توليد السندات: ${detail}` : "فشل في توليد السندات");
         return;
       }

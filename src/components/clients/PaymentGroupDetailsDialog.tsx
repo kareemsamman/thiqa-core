@@ -196,7 +196,19 @@ export function PaymentGroupDetailsDialog({
       }
     } catch (e: any) {
       console.error('Print receipts error:', e);
-      const detail = e?.message || e?.context?.error || '';
+      // supabase-js wraps non-2xx edge function responses as
+      // FunctionsHttpError with the raw Response on .context. Peel it
+      // open so the toast shows the function's actual error instead of
+      // the generic "non-2xx status code" message.
+      let detail = '';
+      try {
+        if (e?.context && typeof e.context.clone === 'function') {
+          const body = await e.context.clone().json();
+          detail = body?.error || body?.message || '';
+        }
+      } catch {}
+      if (!detail) detail = e?.message || '';
+      console.error('Print receipts detail:', detail);
       toast.error(detail ? `فشل في توليد السندات: ${detail}` : 'فشل في توليد السندات');
     } finally {
       setPrinting(false);
