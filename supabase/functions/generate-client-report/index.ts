@@ -506,40 +506,121 @@ function generateReportHtml(args: GenerateReportArgs): string {
     return company?.name_ar || company?.name || '-';
   };
 
-  const policyRowsHtml = policies.length > 0
-    ? policies.map((p, i) => {
-        const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
-        const companyName = getCompanyName(p);
-        const carNumber = getCarNumber(p);
-        const commission = p.office_commission || 0;
-        const lineTotal = (p.insurance_price || 0) + commission;
-        const periodText = (p.start_date && p.end_date)
-          ? `${formatDate(p.start_date)} → ${formatDate(p.end_date)}`
-          : '-';
-        const commissionLine = commission > 0
-          ? `<div class="item-commission">عمولة المكتب: ₪${commission.toLocaleString('en-US')}</div>`
-          : '';
-        const cancelledTag = p.cancelled
-          ? `<span class="cancelled-tag">ملغاة</span>`
-          : '';
-        const notesLine = p.notes
-          ? `<div class="item-meta">${escapeHtml(p.notes)}</div>`
-          : '';
+  // Group policies into packages (by group_id) vs singles, preserving the
+  // order of the first member in the original list.
+  type PackageItem = { kind: 'package'; groupId: string; policies: any[] };
+  type SingleItem = { kind: 'single'; policy: any };
+  const policyItems: (PackageItem | SingleItem)[] = [];
+  const seenGroups = new Set<string>();
+  for (const p of policies) {
+    if (p.group_id) {
+      if (seenGroups.has(p.group_id)) continue;
+      seenGroups.add(p.group_id);
+      const members = policies.filter(x => x.group_id === p.group_id);
+      policyItems.push({ kind: 'package', groupId: p.group_id, policies: members });
+    } else {
+      policyItems.push({ kind: 'single', policy: p });
+    }
+  }
 
-        return `
-          <tr class="${p.cancelled ? 'cancelled-row' : ''}">
-            <td class="num">${i + 1}</td>
-            <td>
-              <div class="item-title">${typeLabel} ${cancelledTag}</div>
-              <div class="item-meta">${companyName}</div>
-              ${commissionLine}
-              ${notesLine}
-            </td>
-            <td class="tabular">${carNumber}</td>
-            <td class="period">${periodText}</td>
-            <td class="num">₪${lineTotal.toLocaleString('en-US')}</td>
-          </tr>
-        `;
+  const lineTotalFor = (p: any) => (p.insurance_price || 0) + (p.office_commission || 0);
+  const periodFor = (p: any) => (p.start_date && p.end_date)
+    ? `${formatDate(p.start_date)} → ${formatDate(p.end_date)}`
+    : '-';
+
+  const renderSingleRow = (p: any, index: string, cancelledOverride = false) => {
+    const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
+    const companyName = getCompanyName(p);
+    const carNumber = getCarNumber(p);
+    const commission = p.office_commission || 0;
+    const commissionLine = commission > 0
+      ? `<div class="item-commission">عمولة المكتب: ₪${commission.toLocaleString('en-US')}</div>`
+      : '';
+    const cancelledTag = (p.cancelled || cancelledOverride)
+      ? `<span class="cancelled-tag">ملغاة</span>`
+      : '';
+    const notesLine = p.notes
+      ? `<div class="item-meta">${escapeHtml(p.notes)}</div>`
+      : '';
+
+    return `
+      <tr class="${p.cancelled ? 'cancelled-row' : ''}">
+        <td class="num">${index}</td>
+        <td>
+          <div class="item-title">${typeLabel} ${cancelledTag}</div>
+          <div class="item-meta">${companyName}</div>
+          ${commissionLine}
+          ${notesLine}
+        </td>
+        <td class="tabular">${carNumber}</td>
+        <td class="period">${periodFor(p)}</td>
+        <td class="num">₪${lineTotalFor(p).toLocaleString('en-US')}</td>
+      </tr>
+    `;
+  };
+
+  // Package rendering: a header row spanning all columns acts as the "باقة
+  // تأمين" separator showing the car and package total, then one indented
+  // component row per policy underneath (same 4 columns, lighter background).
+  const renderPackageBlock = (pkg: PackageItem, index: number) => {
+    const members = pkg.policies;
+    const first = members[0];
+    const carNumber = getCarNumber(first);
+    const total = members.reduce((s, p) => s + lineTotalFor(p), 0);
+    const allCancelled = members.every(p => p.cancelled);
+
+    const headerRow = `
+      <tr class="package-header ${allCancelled ? 'cancelled-row' : ''}">
+        <td class="num">${index}</td>
+        <td colspan="3">
+          <div class="package-title">
+            <span class="package-badge">باقة تأمين</span>
+            <span class="package-count">${members.length} وثائق</span>
+            ${carNumber && carNumber !== '-' ? `<span class="package-car">السيارة: <span class="tabular">${carNumber}</span></span>` : ''}
+          </div>
+        </td>
+        <td class="num">₪${total.toLocaleString('en-US')}</td>
+      </tr>
+    `;
+
+    const componentRows = members.map((m, j) => {
+      const typeLabel = getPolicyTypeLabel(m.policy_type_parent, m.policy_type_child);
+      const companyName = getCompanyName(m);
+      const commission = m.office_commission || 0;
+      const commissionLine = commission > 0
+        ? `<div class="item-commission">عمولة المكتب: ₪${commission.toLocaleString('en-US')}</div>`
+        : '';
+      const cancelledTag = m.cancelled
+        ? `<span class="cancelled-tag">ملغاة</span>`
+        : '';
+      const notesLine = m.notes
+        ? `<div class="item-meta">${escapeHtml(m.notes)}</div>`
+        : '';
+      return `
+        <tr class="package-component ${m.cancelled ? 'cancelled-row' : ''}">
+          <td class="num">${index}.${j + 1}</td>
+          <td>
+            <div class="item-title">${typeLabel} ${cancelledTag}</div>
+            <div class="item-meta">${companyName}</div>
+            ${commissionLine}
+            ${notesLine}
+          </td>
+          <td class="tabular">${getCarNumber(m)}</td>
+          <td class="period">${periodFor(m)}</td>
+          <td class="num">₪${lineTotalFor(m).toLocaleString('en-US')}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return headerRow + componentRows;
+  };
+
+  const policyRowsHtml = policyItems.length > 0
+    ? policyItems.map((item, i) => {
+        if (item.kind === 'single') {
+          return renderSingleRow(item.policy, String(i + 1));
+        }
+        return renderPackageBlock(item, i + 1);
       }).join('')
     : `<tr><td colspan="5" class="empty-cell">لا توجد وثائق مسجلة</td></tr>`;
 
@@ -896,6 +977,56 @@ function generateReportHtml(args: GenerateReportArgs): string {
       opacity: 0.7;
     }
 
+    /* ── Package grouping inside the items table ── */
+    .items tbody tr.package-header td {
+      background: #f4f4f5;
+      padding: 10px 12px;
+      border-top: 2px solid #1a1a1a;
+    }
+    .items tbody tr.package-header + tr td { border-top: 1px solid #1a1a1a; }
+    .items tbody tr.package-header .package-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 13px;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+    .items tbody tr.package-header .package-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #1a1a1a;
+      color: #ffffff;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .items tbody tr.package-header .package-count {
+      font-size: 11px;
+      font-weight: 600;
+      color: #1a1a1a;
+      opacity: 0.8;
+    }
+    .items tbody tr.package-header .package-car {
+      font-size: 11px;
+      font-weight: 600;
+      color: #1a1a1a;
+      opacity: 0.8;
+    }
+    .items tbody tr.package-component td {
+      background: #fbfbfc;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+    .items tbody tr.package-component td.num {
+      font-size: 11px;
+      color: #1a1a1a;
+      opacity: 0.7;
+    }
+
     /* ── Generic data table (cars, accidents, refunds) — same look as .items ── */
     .data-table {
       width: 100%;
@@ -1186,6 +1317,9 @@ function generateReportHtml(args: GenerateReportArgs): string {
       .no-print { display: none !important; }
       .invoice { max-width: 100%; padding: 16px 20px; border: 1px solid #1a1a1a; }
       .items thead th,
+      .items tbody tr.package-header td,
+      .items tbody tr.package-header .package-badge,
+      .items tbody tr.package-component td,
       .meta-rows .label,
       .section-title,
       .totals td.label,

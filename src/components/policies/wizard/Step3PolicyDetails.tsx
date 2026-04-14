@@ -641,8 +641,12 @@ export function Step3PolicyDetails({
     );
   };
 
-  // Check if broker is required for this policy type
-  const requiresBroker = CAR_POLICY_TYPES.find(t => t.value === policy.policy_type_parent)?.requiresBroker || false;
+  // Broker is required whenever the wizard will create a THIRD_FULL policy —
+  // either the main type itself, or an enabled third_full addon inside a
+  // package (e.g. ELZAMI-main + ثالث addon still needs a broker for the ثالث).
+  const mainRequiresBroker = CAR_POLICY_TYPES.find(t => t.value === policy.policy_type_parent)?.requiresBroker || false;
+  const packageHasThirdFull = packageMode && packageAddons.some(a => a.type === 'third_full' && a.enabled);
+  const requiresBroker = mainRequiresBroker || packageHasThirdFull;
 
   return (
     <div className="space-y-6">

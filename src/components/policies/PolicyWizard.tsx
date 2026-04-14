@@ -972,6 +972,17 @@ export function PolicyWizard({
               accidentFeeServiceId: addon.accident_fee_service_id || null,
             });
 
+            // The broker picked in Step3 applies to the THIRD_FULL policy
+            // within the package. When the main is THIRD_FULL it's already
+            // stored on the main row; when the main is something else (e.g.
+            // ELZAMI) and the ثالث/شامل is an addon, the broker needs to
+            // follow the addon row instead.
+            const addonIsThirdFull = addon.type === 'third_full';
+            const applyBrokerToAddon = addonIsThirdFull && policyTypeParent !== 'THIRD_FULL' && policyBrokerId;
+            const addonBrokerBuyPrice = addonIsThirdFull
+              ? parseFloat((addon as any).broker_buy_price || '') || 0
+              : 0;
+
             const { data: addonData, error: addonError } = await supabase.from('policies').insert({
               client_id: clientId,
               car_id: carId || null,
@@ -986,6 +997,9 @@ export function PolicyWizard({
               profit: addonProfitData.profit,
               payed_for_company: addonProfitData.companyPayment,
               company_cost_snapshot: addonProfitData.companyPayment,
+              broker_id: applyBrokerToAddon ? policyBrokerId : null,
+              broker_direction: applyBrokerToAddon ? (brokerDirection || null) : null,
+              broker_buy_price: applyBrokerToAddon ? addonBrokerBuyPrice : 0,
               road_service_id: addon.road_service_id || null,
               accident_fee_service_id: addon.accident_fee_service_id || null,
               office_commission: addon.type === 'elzami' ? parseFloat(addon.office_commission || '0') || 0 : 0,
@@ -1187,6 +1201,15 @@ export function PolicyWizard({
             const addonStartDate = addon.start_date || tempStartDate;
             const addonEndDate = addon.end_date || tempEndDate;
 
+            // Broker applies to the ثالث/شامل addon when the main policy type
+            // isn't THIRD_FULL — matching the non-Visa path above.
+            const addonIsThirdFull = addon.type === 'third_full';
+            const mainPolicyTypeParent = policy.policy_type_parent as PolicyTypeParent;
+            const applyBrokerToAddon = addonIsThirdFull && mainPolicyTypeParent !== 'THIRD_FULL' && policyBrokerId;
+            const addonBrokerBuyPrice = addonIsThirdFull
+              ? parseFloat((addon as any).broker_buy_price || '') || 0
+              : 0;
+
             const { data: addonData, error: addonError } = await supabase.from('policies').insert({
               client_id: tempClientId,
               car_id: tempCarId || null,
@@ -1201,6 +1224,9 @@ export function PolicyWizard({
               profit: addonProfitData.profit,
               payed_for_company: addonProfitData.companyPayment,
               company_cost_snapshot: addonProfitData.companyPayment,
+              broker_id: applyBrokerToAddon ? policyBrokerId : null,
+              broker_direction: applyBrokerToAddon ? (brokerDirection || null) : null,
+              broker_buy_price: applyBrokerToAddon ? addonBrokerBuyPrice : 0,
               road_service_id: addon.road_service_id || null,
               accident_fee_service_id: addon.accident_fee_service_id || null,
               group_id: groupId,
