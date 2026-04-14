@@ -71,14 +71,28 @@ function buildComprehensiveInvoiceHtml(
   companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string },
   branding: AgentBranding
 ): string {
-  // Build single unified payments table with car number
+  // Build single unified payments table with car number. The ملاحظات
+  // column is only rendered if any payment in the list actually has
+  // notes, so invoices for clean batches stay compact.
+  const escapeHtmlInvoice = (value: string | null | undefined): string => {
+    if (!value) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+  const anyPaymentNotes = payments.some(
+    (p: any) => typeof p.notes === 'string' && p.notes.trim().length > 0,
+  );
   const paymentRows = payments.map(payment => {
     const paymentTypeLabel = PAYMENT_TYPE_LABELS[payment.payment_type] || payment.payment_type;
-    const policyType = payment.policy?.policy_type_parent 
+    const policyType = payment.policy?.policy_type_parent
       ? getDisplayLabel(payment.policy.policy_type_parent, payment.policy.policy_type_child)
       : '-';
     const carNumber = payment.policy?.car?.car_number || '-';
-    
+
     // Build payment details based on type
     let details = '-';
     if (payment.payment_type === 'visa') {
@@ -96,6 +110,10 @@ function buildComprehensiveInvoiceHtml(
       details = parts.join('<br>') || '-';
     }
 
+    const notesCell = anyPaymentNotes
+      ? `<td class="notes-cell">${escapeHtmlInvoice((payment as any).notes || '').replace(/\n/g, '<br>') || '-'}</td>`
+      : '';
+
     return `
       <tr>
         <td>${formatDate(payment.payment_date)}</td>
@@ -105,6 +123,7 @@ function buildComprehensiveInvoiceHtml(
         <td class="car-number">${carNumber}</td>
         <td>${policyType}</td>
         <td>${payment.refused ? '<span class="refused">راجع</span>' : '<span class="approved">مقبول</span>'}</td>
+        ${notesCell}
       </tr>
     `;
   }).join('');
@@ -240,6 +259,14 @@ function buildComprehensiveInvoiceHtml(
       font-weight: 600;
       direction: ltr;
       text-align: center;
+    }
+    td.notes-cell {
+      font-size: 11px;
+      color: #475569;
+      text-align: right;
+      max-width: 180px;
+      white-space: normal;
+      word-break: break-word;
     }
     .badge {
       display: inline-block;
@@ -400,6 +427,7 @@ function buildComprehensiveInvoiceHtml(
             <th>رقم السيارة</th>
             <th>نوع التأمين</th>
             <th>الحالة</th>
+            ${anyPaymentNotes ? '<th>ملاحظات</th>' : ''}
           </tr>
         </thead>
         <tbody>
@@ -585,6 +613,7 @@ serve(async (req) => {
           installments_count,
           tranzila_approval_code,
           refused,
+          notes,
           policy_id
         `)
         .in("policy_id", policyIds)

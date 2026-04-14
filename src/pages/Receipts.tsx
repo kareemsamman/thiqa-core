@@ -1148,8 +1148,7 @@ export default function Receipts() {
                   <TableHead className="text-right">اسم العميل</TableHead>
                   <TableHead className="text-right">رقم السيارة</TableHead>
                   <TableHead className="text-right">طريقة الدفع</TableHead>
-                  <TableHead className="text-right">ملاحظات</TableHead>
-                  <TableHead className="text-right w-[60px]"></TableHead>
+                  <TableHead className="text-right w-[60px]">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1168,10 +1167,6 @@ export default function Receipts() {
                       ),
                     ),
                   ).join(" + ");
-                  const combinedNotes = group.receipts
-                    .map((r) => r.notes)
-                    .filter((n) => n && n.trim().length > 0)
-                    .join(" · ");
                   return (
                     <TableRow
                       key={group.key}
@@ -1194,16 +1189,10 @@ export default function Receipts() {
                             <PopoverTrigger asChild>
                               <button
                                 type="button"
-                                className="inline-flex items-center gap-1 hover:underline"
+                                className="text-primary underline underline-offset-2 hover:text-primary/80 font-normal"
                                 title="عرض جميع أرقام السندات"
                               >
-                                <span>{firstReceipt?.receipt_number ?? "-"}</span>
-                                <Badge
-                                  variant="secondary"
-                                  className="text-[9px] px-1 py-0"
-                                >
-                                  +{group.receipts.length - 1}
-                                </Badge>
+                                عرض كل السندات
                               </button>
                             </PopoverTrigger>
                             <PopoverContent
@@ -1212,18 +1201,18 @@ export default function Receipts() {
                               dir="rtl"
                             >
                               <p className="text-[10px] text-muted-foreground mb-1.5 px-1">
-                                أرقام السندات
+                                أرقام السندات ({group.receipts.length})
                               </p>
                               <ul className="flex flex-col gap-0.5">
                                 {group.receipts.map((r) => (
                                   <li
                                     key={r.id}
-                                    className="px-2 py-1 rounded hover:bg-muted font-mono text-xs ltr-nums flex items-center gap-2"
+                                    className="px-2 py-1 rounded hover:bg-muted font-mono text-xs ltr-nums flex items-center gap-2 justify-between min-w-[140px]"
                                   >
+                                    <span>{r.receipt_number ?? "-"}</span>
                                     <span className="text-muted-foreground">
                                       {paymentLabelShort(r.payment_method)}
                                     </span>
-                                    <span>{r.receipt_number ?? "-"}</span>
                                   </li>
                                 ))}
                               </ul>
@@ -1259,9 +1248,6 @@ export default function Receipts() {
                           <Badge variant="outline">{combinedMethodLabel}</Badge>
                         )}
                       </TableCell>
-                      <TableCell className="max-w-[220px] truncate text-muted-foreground">
-                        {combinedNotes || "-"}
-                      </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -1278,7 +1264,12 @@ export default function Receipts() {
                                 ? "طباعة السندات"
                                 : "طباعة السند"}
                             </DropdownMenuItem>
-                            {group.receipts.length === 1 ? (
+                            {/* For single-receipt rows expose edit/delete
+                                inline; for multi-receipt groups the user
+                                clicks the row itself, opens the details
+                                popup, and edits any individual card from
+                                there — no more per-receipt dropdown spam. */}
+                            {group.receipts.length === 1 && (
                               <>
                                 <DropdownMenuItem
                                   onClick={() => handleEditReceipt(group.receipts[0])}
@@ -1293,26 +1284,6 @@ export default function Receipts() {
                                   <Trash2 className="h-4 w-4 ml-2" />
                                   حذف
                                 </DropdownMenuItem>
-                              </>
-                            ) : (
-                              <>
-                                <DropdownMenuItem
-                                  disabled
-                                  className="text-muted-foreground text-xs"
-                                >
-                                  سندات مجمعة ({group.receipts.length} سجلات)
-                                </DropdownMenuItem>
-                                {group.receipts.map((r) => (
-                                  <DropdownMenuItem
-                                    key={r.id}
-                                    onClick={() => handleEditReceipt(r)}
-                                    className="text-sm"
-                                  >
-                                    <Pencil className="h-3 w-3 ml-2" />
-                                    تعديل: ₪
-                                    {Number(r.amount || 0).toLocaleString("en-US")}
-                                  </DropdownMenuItem>
-                                ))}
                               </>
                             )}
                           </DropdownMenuContent>

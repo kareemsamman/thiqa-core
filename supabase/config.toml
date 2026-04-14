@@ -31,3 +31,6 @@ verify_jwt = false
 
 [functions.generate-payment-receipt]
 verify_jwt = false
+
+[functions.generate-client-payments-invoice]
+verify_jwt = false

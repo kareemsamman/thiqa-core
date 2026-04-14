@@ -96,11 +96,15 @@ function buildBulkReceiptHtml(
     ? `<div class="contact">${contactLines.join(' · ')}</div>`
     : '';
 
-  // Rows for the receipts table. We don't emit any policy type column —
-  // the dialog hides it too and the grouped row is already one unit of
-  // "سندات قبض for the same package". Refused rows are tagged and styled
-  // with a strikethrough; their amounts are subtracted from the total by
-  // the caller so they don't count toward what the client actually paid.
+  // Rows for the receipts table. Refused rows are tagged and styled
+  // with a strikethrough; their amounts are excluded from the total
+  // so they don't count toward what the client actually paid. A
+  // dedicated ملاحظات column surfaces per-payment notes at the end —
+  // only rendered when at least one payment actually has notes, so
+  // the table stays compact otherwise.
+  const anyNotes = payments.some(
+    (p: any) => typeof p.notes === 'string' && p.notes.trim().length > 0,
+  );
   const receiptRows = payments.map((p: any) => {
     const num = p.receipt_number || '—';
     const typeLbl = paymentTypeLabel(p);
@@ -114,12 +118,16 @@ function buildBulkReceiptHtml(
     const amountCell = refused
       ? `<span class="struck">₪${amount}</span>`
       : `₪${amount}`;
+    const notesCell = anyNotes
+      ? `<td class="notes">${escapeHtml(p.notes || '').replace(/\n/g, '<br>') || '—'}</td>`
+      : '';
     return `
       <tr${rowClass}>
         <td class="num">${escapeHtml(num)}</td>
         <td>${escapeHtml(typeLbl)}${extra}${refusedBadge}</td>
         <td class="date">${formatDate(p.payment_date)}</td>
         <td class="amount">${amountCell}</td>
+        ${notesCell}
       </tr>
     `;
   }).join('');
@@ -253,6 +261,10 @@ function buildBulkReceiptHtml(
     .receipts tbody td.amount {
       direction: ltr; text-align: left;
       font-variant-numeric: tabular-nums; font-weight: 700;
+    }
+    .receipts tbody td.notes {
+      text-align: right; font-weight: 500; color: #1a1a1a;
+      max-width: 200px; white-space: normal; word-break: break-word;
     }
     .receipts tbody tr.refused td { background: #fef2f2; color: #7f1d1d; }
     .receipts tbody tr.refused .struck {
@@ -392,10 +404,11 @@ function buildBulkReceiptHtml(
       <table class="receipts">
         <thead>
           <tr>
-            <th style="width: 120px;">رقم سند القبض</th>
-            <th style="width: 160px;">طريقة الدفع</th>
-            <th style="width: 130px;">تاريخ الدفع</th>
-            <th>المبلغ</th>
+            <th style="width: 110px;">رقم سند القبض</th>
+            <th style="width: 150px;">طريقة الدفع</th>
+            <th style="width: 120px;">تاريخ الدفع</th>
+            <th style="width: 110px;">المبلغ</th>
+            ${anyNotes ? '<th>ملاحظات</th>' : ''}
           </tr>
         </thead>
         <tbody>
@@ -518,6 +531,7 @@ serve(async (req) => {
         card_last_four,
         locked,
         refused,
+        notes,
         receipt_number,
         policy:policies(
           id,
