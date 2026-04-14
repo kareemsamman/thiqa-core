@@ -98,17 +98,28 @@ function buildBulkReceiptHtml(
 
   // Rows for the receipts table. We don't emit any policy type column —
   // the dialog hides it too and the grouped row is already one unit of
-  // "سندات قبض for the same package".
+  // "سندات قبض for the same package". Refused rows are tagged and styled
+  // with a strikethrough; their amounts are subtracted from the total by
+  // the caller so they don't count toward what the client actually paid.
   const receiptRows = payments.map((p: any) => {
     const num = p.receipt_number || '—';
     const typeLbl = paymentTypeLabel(p);
     const extra = p.cheque_number ? ` · ${p.cheque_number}` : '';
+    const refused = !!p.refused;
+    const rowClass = refused ? ' class="refused"' : '';
+    const refusedBadge = refused
+      ? ' <span class="refused-tag">مرفوضة</span>'
+      : '';
+    const amount = Number(p.amount || 0).toLocaleString('en-US');
+    const amountCell = refused
+      ? `<span class="struck">₪${amount}</span>`
+      : `₪${amount}`;
     return `
-      <tr>
+      <tr${rowClass}>
         <td class="num">${escapeHtml(num)}</td>
-        <td>${escapeHtml(typeLbl)}${extra}</td>
+        <td>${escapeHtml(typeLbl)}${extra}${refusedBadge}</td>
         <td class="date">${formatDate(p.payment_date)}</td>
-        <td class="amount">₪${Number(p.amount || 0).toLocaleString('en-US')}</td>
+        <td class="amount">${amountCell}</td>
       </tr>
     `;
   }).join('');
@@ -242,6 +253,23 @@ function buildBulkReceiptHtml(
     .receipts tbody td.amount {
       direction: ltr; text-align: left;
       font-variant-numeric: tabular-nums; font-weight: 700;
+    }
+    .receipts tbody tr.refused td { background: #fef2f2; color: #7f1d1d; }
+    .receipts tbody tr.refused .struck {
+      text-decoration: line-through;
+      text-decoration-thickness: 1.5px;
+      color: #7f1d1d;
+    }
+    .refused-tag {
+      display: inline-block;
+      margin-right: 4px;
+      padding: 1px 6px;
+      border: 1px solid #7f1d1d;
+      border-radius: 10px;
+      background: #fee2e2;
+      color: #7f1d1d;
+      font-size: 10px;
+      font-weight: 700;
     }
 
     .total-row {
@@ -489,6 +517,7 @@ serve(async (req) => {
         cheque_number,
         card_last_four,
         locked,
+        refused,
         receipt_number,
         policy:policies(
           id,
@@ -510,8 +539,13 @@ serve(async (req) => {
       );
     }
 
-    // Calculate total from payments
-    const calculatedTotal = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    // Calculate total from payments — refused payments subtract (they
+    // represent money the client didn't actually pay, so they pull the
+    // running total down instead of adding to it).
+    const calculatedTotal = payments.reduce((sum, p: any) => {
+      const amount = Number(p.amount || 0);
+      return p.refused ? sum - amount : sum + amount;
+    }, 0);
     const finalTotal = total_amount || calculatedTotal;
 
     // Get client and car info from first payment

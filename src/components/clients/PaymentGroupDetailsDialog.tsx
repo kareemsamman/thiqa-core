@@ -17,11 +17,13 @@ import {
   Printer,
   Loader2,
   ImageIcon,
+  FileText,
   X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getCombinedPaymentTypeLabel, getPaymentTypeLabel } from "@/lib/paymentLabels";
+import { FilePreviewGallery } from "@/components/policies/FilePreviewGallery";
 
 export interface PaymentRecord {
   id: string;
@@ -78,9 +80,36 @@ const formatDate = (dateStr: string | null) => {
   return new Date(dateStr).toLocaleDateString("en-GB");
 };
 
+interface GalleryFile {
+  id: string;
+  original_name: string;
+  cdn_url: string;
+  mime_type: string;
+  size: number;
+  created_at: string;
+  entity_type: string | null;
+}
+
+const buildGalleryFile = (
+  img: { id: string; image_url: string; image_type: string | null },
+): GalleryFile => {
+  const isPdf = img.image_url.toLowerCase().endsWith('.pdf');
+  const tail = img.image_url.split('/').pop() || (isPdf ? 'ملف.pdf' : 'صورة');
+  return {
+    id: img.id,
+    original_name: tail,
+    cdn_url: img.image_url,
+    mime_type: isPdf ? 'application/pdf' : 'image/jpeg',
+    size: 0,
+    created_at: new Date().toISOString(),
+    entity_type: null,
+  };
+};
+
 export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) {
   const [printing, setPrinting] = useState(false);
   const [imagesByPayment, setImagesByPayment] = useState<Record<string, { id: string; image_url: string; image_type: string | null }[]>>({});
+  const [galleryFile, setGalleryFile] = useState<GalleryFile | null>(null);
 
   // Fetch payment_images for every payment in the group whenever the
   // dialog opens so the user can see receipts / cheque scans / whatever
@@ -120,6 +149,12 @@ export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) 
       : [{ payment_type: group.payment_type, locked: null }],
   );
 
+  // Flatten all attachments across payments so the gallery can navigate
+  // between every file in the whole group, not just within one payment.
+  const allGalleryFiles: GalleryFile[] = group.payments.flatMap((p) =>
+    (imagesByPayment[p.id] || []).map(buildGalleryFile),
+  );
+
   const handlePrint = async () => {
     if (group.payments.length === 0) return;
     setPrinting(true);
@@ -144,6 +179,7 @@ export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) 
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
         {/* Header */}
@@ -269,20 +305,22 @@ export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) 
                           {imagesByPayment[p.id].map((img) => {
                             const isPdf = img.image_url.toLowerCase().endsWith('.pdf');
                             return (
-                              <a
+                              <button
                                 key={img.id}
-                                href={img.image_url}
-                                target="_blank"
-                                rel="noreferrer"
+                                type="button"
+                                onClick={() => setGalleryFile(buildGalleryFile(img))}
                                 className="relative w-16 h-16 rounded-md overflow-hidden border border-border hover:border-primary transition-colors bg-muted flex items-center justify-center shrink-0"
                                 title={img.image_type || 'مرفق'}
                               >
                                 {isPdf ? (
-                                  <span className="text-[10px] font-bold text-muted-foreground">PDF</span>
+                                  <div className="flex flex-col items-center justify-center gap-0.5">
+                                    <FileText className="h-5 w-5 text-red-500" />
+                                    <span className="text-[9px] font-bold text-red-500">PDF</span>
+                                  </div>
                                 ) : (
                                   <img src={img.image_url} alt={img.image_type || ''} className="w-full h-full object-cover" />
                                 )}
-                              </a>
+                              </button>
                             );
                           })}
                         </div>
@@ -296,5 +334,13 @@ export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) 
         </div>
       </DialogContent>
     </Dialog>
+
+    <FilePreviewGallery
+      file={galleryFile}
+      allFiles={allGalleryFiles}
+      onClose={() => setGalleryFile(null)}
+      onNavigate={setGalleryFile}
+    />
+    </>
   );
 }

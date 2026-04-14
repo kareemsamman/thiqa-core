@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card } from '@/components/ui/card';
-import { Loader2, CreditCard, Banknote, Wallet, AlertCircle, CheckCircle, Package, Plus, Trash2, Split, Upload, X, ImageIcon, Scan } from 'lucide-react';
+import { Loader2, CreditCard, Banknote, Wallet, AlertCircle, CheckCircle, Package, Plus, Trash2, Split, Upload, X, ImageIcon, Scan, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -32,8 +32,14 @@ interface PaymentLine {
   pendingImages?: File[];
 }
 
+interface PreviewItem {
+  url: string;
+  kind: 'image' | 'pdf';
+  name?: string;
+}
+
 interface PreviewUrls {
-  [paymentId: string]: string[];
+  [paymentId: string]: PreviewItem[];
 }
 
 interface PolicyPaymentInfo {
@@ -154,10 +160,14 @@ export function PackagePaymentModal({
 
     if (validFiles.length === 0) return;
 
-    const newPreviewUrls = validFiles.map(file => URL.createObjectURL(file));
+    const newPreviewItems: PreviewItem[] = validFiles.map(file => ({
+      url: URL.createObjectURL(file),
+      kind: file.type === 'application/pdf' ? 'pdf' : 'image',
+      name: file.name,
+    }));
     setPreviewUrls(prev => ({
       ...prev,
-      [paymentId]: [...(prev[paymentId] || []), ...newPreviewUrls],
+      [paymentId]: [...(prev[paymentId] || []), ...newPreviewItems],
     }));
     
     const payment = paymentLines.find(p => p.id === paymentId);
@@ -168,18 +178,19 @@ export function PackagePaymentModal({
   };
 
   const removeImage = (paymentId: string, index: number) => {
-    const urls = previewUrls[paymentId] || [];
-    if (urls[index]) {
-      URL.revokeObjectURL(urls[index]);
+    const items = previewUrls[paymentId] || [];
+    const target = items[index];
+    if (target?.url?.startsWith('blob:')) {
+      URL.revokeObjectURL(target.url);
     }
-    
+
     setPreviewUrls(prev => {
-      const newUrls = (prev[paymentId] || []).filter((_, i) => i !== index);
-      if (newUrls.length === 0) {
+      const newItems = (prev[paymentId] || []).filter((_, i) => i !== index);
+      if (newItems.length === 0) {
         const { [paymentId]: _, ...rest } = prev;
         return rest;
       }
-      return { ...prev, [paymentId]: newUrls };
+      return { ...prev, [paymentId]: newItems };
     });
     
     const payment = paymentLines.find(p => p.id === paymentId);
@@ -264,8 +275,10 @@ export function PackagePaymentModal({
   const removePaymentLine = (id: string) => {
     if (paymentLines.length > 1) {
       // Clean up preview URLs
-      const urls = previewUrls[id] || [];
-      urls.forEach(url => URL.revokeObjectURL(url));
+      const items = previewUrls[id] || [];
+      items.forEach(item => {
+        if (item.url?.startsWith('blob:')) URL.revokeObjectURL(item.url);
+      });
       setPreviewUrls(prev => {
         const { [id]: _, ...rest } = prev;
         return rest;
@@ -302,7 +315,11 @@ export function PackagePaymentModal({
     }
     
     // Clean up old preview URLs
-    Object.values(previewUrls).flat().forEach(url => URL.revokeObjectURL(url));
+    Object.values(previewUrls)
+      .flat()
+      .forEach(item => {
+        if (item.url?.startsWith('blob:')) URL.revokeObjectURL(item.url);
+      });
     setPreviewUrls({});
     setPaymentLines(newPayments);
     setSplitPopoverOpen(false);
@@ -342,7 +359,7 @@ export function PackagePaymentModal({
       
       // If we have a CDN image_url from the scanner, use it as preview
       if (cheque.image_url) {
-        newPreviewUrls[paymentId] = [cheque.image_url];
+        newPreviewUrls[paymentId] = [{ url: cheque.image_url, kind: 'image' }];
       }
       // Fallback: Convert cropped image to File and add to pendingImages
       else if (cheque.cropped_base64) {
@@ -350,7 +367,7 @@ export function PackagePaymentModal({
           const blob = base64ToBlob(cheque.cropped_base64);
           const file = new File([blob], `cheque_${cheque.cheque_number || paymentId}.jpg`, { type: 'image/jpeg' });
           payment.pendingImages = [file];
-          newPreviewUrls[paymentId] = [URL.createObjectURL(blob)];
+          newPreviewUrls[paymentId] = [{ url: URL.createObjectURL(blob), kind: 'image', name: file.name }];
         } catch (e) {
           console.error('Failed to convert cheque image:', e);
         }
@@ -716,13 +733,23 @@ export function PackagePaymentModal({
                           {payment.paymentType === 'cheque' ? 'صورة الشيك' : payment.paymentType === 'transfer' ? 'صورة الحوالة' : 'صورة الإيصال'}
                         </Label>
                         <div className="flex items-center gap-2 flex-wrap">
-                          {getPreviewUrls(payment.id).map((url, imgIndex) => (
+                          {getPreviewUrls(payment.id).map((item, imgIndex) => (
                             <div key={imgIndex} className="relative">
-                              <img
-                                src={url}
-                                alt="Preview"
-                                className="h-16 w-16 object-cover rounded border"
-                              />
+                              {item.kind === 'pdf' ? (
+                                <div
+                                  className="h-16 w-16 rounded border bg-red-50 border-red-200 flex flex-col items-center justify-center gap-0.5"
+                                  title={item.name || 'PDF'}
+                                >
+                                  <FileText className="h-5 w-5 text-red-500" />
+                                  <span className="text-[9px] font-bold text-red-500">PDF</span>
+                                </div>
+                              ) : (
+                                <img
+                                  src={item.url}
+                                  alt={item.name || 'Preview'}
+                                  className="h-16 w-16 object-cover rounded border"
+                                />
+                              )}
                               <button
                                 type="button"
                                 onClick={() => removeImage(payment.id, imgIndex)}
