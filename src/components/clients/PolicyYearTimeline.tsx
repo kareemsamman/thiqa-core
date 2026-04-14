@@ -1264,13 +1264,13 @@ function PolicyPackageCard({
                 className="w-full flex items-start justify-end gap-6 px-3 py-2 border-t border-border/60 bg-muted/30 hover:bg-muted/50 transition-colors text-right focus:outline-none focus:ring-2 focus:ring-primary/40"
                 title="عرض تفاصيل الدفعات"
               >
-                <div className="flex flex-col text-xs">
+                <div className="flex flex-col text-xs items-start text-left">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
                   <span className="font-bold text-success ltr-nums">
                     ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
                   </span>
                 </div>
-                <div className="flex flex-col text-xs">
+                <div className="flex flex-col text-xs items-start text-left">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
                   <span className={cn(
                     "font-bold ltr-nums",
@@ -1296,13 +1296,13 @@ function PolicyPackageCard({
                 className="w-full flex items-start justify-end gap-6 px-3 py-2 hover:bg-muted/50 transition-colors text-right focus:outline-none focus:ring-2 focus:ring-primary/40"
                 title="عرض تفاصيل الدفعات"
               >
-                <div className="flex flex-col text-xs">
+                <div className="flex flex-col text-xs items-start text-left">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
                   <span className="font-bold text-success ltr-nums">
                     ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
                   </span>
                 </div>
-                <div className="flex flex-col text-xs">
+                <div className="flex flex-col text-xs items-start text-left">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
                   <span className={cn(
                     "font-bold ltr-nums",
