@@ -739,18 +739,23 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   // Delete payment handler
   const handleDeletePayment = async () => {
     if (!deletePaymentId) return;
-    
+
     setDeletingPayment(true);
     try {
       const { error } = await supabase
         .from('policy_payments')
         .delete()
         .eq('id', deletePaymentId);
-      
+
       if (error) throw error;
       toast.success('تم حذف الدفعة بنجاح');
-      fetchPayments();
-      fetchPaymentSummary();
+      // Refresh every surface that reads from payments so the policy
+      // cards' paid/remaining numbers stay in sync without a full reload.
+      await Promise.all([
+        fetchPayments(),
+        fetchPaymentSummary(),
+        fetchPolicies(),
+      ]);
     } catch (error) {
       console.error('Error deleting payment:', error);
       toast.error('فشل حذف الدفعة');
@@ -2462,10 +2467,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         onSuccess={async () => {
           setEditingPayment(null);
           setEditingGroupPolicies(undefined);
-          // Refresh payment-related data
+          // Refresh every surface that reads from payments: the payments
+          // tab itself, the financial summary, and the policies list that
+          // backs the PolicyYearTimeline paid/remaining numbers. Without
+          // the fetchPolicies call the policy cards stay stuck on the
+          // pre-edit amounts until the user hard-refreshes.
           await Promise.all([
             fetchPaymentSummary(),
             fetchPayments(),
+            fetchPolicies(),
           ]);
         }}
       />
