@@ -744,8 +744,10 @@ export function PolicyWizard({
       return;
     }
 
-    // Check for unpaid visa payments
-    const hasUnpaidVisa = payments.some(p => p.payment_type === 'visa' && !p.tranzila_paid && (p.amount || 0) > 0);
+    // Check for unpaid visa payments. Locked rows (external ELZAMI visa
+    // charged directly on the insurance company's portal) are not real
+    // Tranzila charges — don't block save on them.
+    const hasUnpaidVisa = payments.some(p => !p.locked && p.payment_type === 'visa' && !p.tranzila_paid && (p.amount || 0) > 0);
     if (hasUnpaidVisa) {
       toast({
         title: "دفعات فيزا غير مكتملة",
@@ -1284,25 +1286,35 @@ export function PolicyWizard({
         }
       }
 
-      // Create payments (skip visa payments that were already created by Tranzila)
-      const nonVisaPayments = payments.filter(p => p.payment_type !== 'visa' || !p.tranzila_paid);
-      if (nonVisaPayments.length > 0 && !skipPaymentInsert) {
-        const paymentInserts = nonVisaPayments
-          .filter(p => p.payment_type !== 'visa') // Skip visa - already handled by Tranzila
-          .map(p => ({
-            policy_id: policyIdToUse,
-            payment_type: p.payment_type as PaymentType,
-            amount: p.amount,
-            payment_date: p.payment_date,
-            cheque_number: p.cheque_number || null,
-            cheque_status: p.payment_type === 'cheque' ? 'pending' : null,
-            refused: p.refused || false,
-            branch_id: effectiveBranchId || null,
-            created_by_admin_id: user?.id || null,
-            // Pass locked and source flags for ELZAMI system-generated payments
-            locked: p.locked || false,
-            source: p.source || 'user',
-          }));
+      // Create payments. Skip visa rows that were already created through
+      // Tranzila (they're inserted by the Tranzila flow). Keep locked
+      // external-visa rows (the auto ELZAMI payment) — those aren't real
+      // Tranzila charges, they record that the customer paid directly on
+      // the insurance company's portal, and we still need them in
+      // policy_payments so the totals and سجل الدفعات line up.
+      const shouldInsertPayment = (p: any) => {
+        if (p.payment_type !== 'visa') return true;
+        if (p.locked) return true;          // external-visa ELZAMI row — insert it
+        return !p.tranzila_paid;            // Tranzila visa: already inserted by Tranzila flow, skip
+      };
+      const insertablePayments = payments.filter(shouldInsertPayment);
+      // Still avoid re-inserting a real Tranzila visa row that the flow handled.
+      const paymentsToInsert = insertablePayments.filter(p => p.payment_type !== 'visa' || p.locked);
+      if (paymentsToInsert.length > 0 && !skipPaymentInsert) {
+        const paymentInserts = paymentsToInsert.map(p => ({
+          policy_id: policyIdToUse,
+          payment_type: p.payment_type as PaymentType,
+          amount: p.amount,
+          payment_date: p.payment_date,
+          cheque_number: p.cheque_number || null,
+          cheque_status: p.payment_type === 'cheque' ? 'pending' : null,
+          refused: p.refused || false,
+          branch_id: effectiveBranchId || null,
+          created_by_admin_id: user?.id || null,
+          // Pass locked and source flags for ELZAMI system-generated payments
+          locked: p.locked || false,
+          source: p.source || 'user',
+        }));
 
         if (paymentInserts.length > 0) {
           const { data: insertedPayments, error: paymentsError } = await supabase
@@ -1315,8 +1327,8 @@ export function PolicyWizard({
           // Upload payment images
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.access_token && insertedPayments) {
-            for (let i = 0; i < nonVisaPayments.filter(p => p.payment_type !== 'visa').length; i++) {
-              const payment = nonVisaPayments.filter(p => p.payment_type !== 'visa')[i];
+            for (let i = 0; i < paymentsToInsert.length; i++) {
+              const payment = paymentsToInsert[i];
               const insertedPayment = insertedPayments[i];
               
               if (payment.pendingImages && payment.pendingImages.length > 0 && insertedPayment) {
@@ -1908,7 +1920,7 @@ export function PolicyWizard({
                 ) : (
                   <Button
                     onClick={handleSave}
-                    disabled={saving || paymentsExceedPrice || payments.some(p => p.payment_type === 'visa' && !p.tranzila_paid && (p.amount || 0) > 0)}
+                    disabled={saving || paymentsExceedPrice || payments.some(p => !p.locked && p.payment_type === 'visa' && !p.tranzila_paid && (p.amount || 0) > 0)}
                     className="min-w-24 sm:min-w-32"
                     size="sm"
                   >
