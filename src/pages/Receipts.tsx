@@ -52,6 +52,7 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
+  Eye,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -1138,16 +1139,20 @@ export default function Receipts() {
       <div className="space-y-4">
         <Card>
           <div className="overflow-x-auto">
+            {/* Explicit min-widths per column so the td under each th never
+                collapses narrower than its header — otherwise a short value
+                like "17" in رقم سند القبض made the column shrink and the
+                next columns drifted right, misaligning the whole row. */}
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right whitespace-nowrap">رقم الوثيقة</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">رقم سند القبض</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">المبلغ</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">التاريخ</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">اسم العميل</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">رقم السيارة</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">طريقة الدفع</TableHead>
+                  <TableHead className="text-right whitespace-nowrap min-w-[110px]">رقم الوثيقة</TableHead>
+                  <TableHead className="text-right whitespace-nowrap min-w-[140px]">رقم سند القبض</TableHead>
+                  <TableHead className="text-right whitespace-nowrap min-w-[150px]">المبلغ</TableHead>
+                  <TableHead className="text-right whitespace-nowrap min-w-[120px]">التاريخ</TableHead>
+                  <TableHead className="text-right whitespace-nowrap min-w-[160px]">اسم العميل</TableHead>
+                  <TableHead className="text-right whitespace-nowrap min-w-[120px]">رقم السيارة</TableHead>
+                  <TableHead className="text-right whitespace-nowrap min-w-[140px]">طريقة الدفع</TableHead>
                   <TableHead className="text-right whitespace-nowrap w-[60px]">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1173,7 +1178,7 @@ export default function Receipts() {
                       className="cursor-pointer hover:bg-muted/40"
                       onClick={() => handleOpenGroupDetails(group)}
                     >
-                      <TableCell className="font-mono text-xs ltr-nums">
+                      <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
                         {group.document_numbers.length > 0
                           ? group.document_numbers.join(" · ")
                           : "-"}
@@ -1184,8 +1189,12 @@ export default function Receipts() {
                         ) : (
                           <Tooltip delayDuration={100}>
                             <TooltipTrigger asChild>
-                              <span className="text-primary underline underline-offset-2 decoration-dotted cursor-help">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-semibold cursor-help hover:bg-primary/15 transition-colors">
+                                <Eye className="h-3 w-3" />
                                 عرض الكل
+                                <span className="bg-primary/20 rounded-full px-1.5 py-0 text-[9px]">
+                                  {group.receipts.length}
+                                </span>
                               </span>
                             </TooltipTrigger>
                             <TooltipContent
@@ -1214,7 +1223,7 @@ export default function Receipts() {
                           </Tooltip>
                         )}
                       </TableCell>
-                      <TableCell className="font-semibold">
+                      <TableCell className="font-semibold whitespace-nowrap">
                         <div className="flex items-center gap-1">
                           ₪
                           {group.total.toLocaleString("en-US", {
@@ -1230,19 +1239,19 @@ export default function Receipts() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="ltr-nums">
+                      <TableCell className="ltr-nums whitespace-nowrap">
                         {formatDate(firstReceipt?.receipt_date || "")}
                       </TableCell>
-                      <TableCell>{group.client_name}</TableCell>
-                      <TableCell>{group.car_number || "-"}</TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">{group.client_name}</TableCell>
+                      <TableCell className="whitespace-nowrap">{group.car_number || "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap">
                         {group.receipts.length === 1 ? (
                           getPaymentBadge(firstReceipt.payment_method)
                         ) : (
                           <Badge variant="outline">{combinedMethodLabel}</Badge>
                         )}
                       </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TableCell className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8">
