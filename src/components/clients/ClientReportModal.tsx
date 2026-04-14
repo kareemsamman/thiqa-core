@@ -679,14 +679,14 @@ export function ClientReportModal({
     count?: number | string;
     children: React.ReactNode;
   }) => (
-    <section id={id} className="scroll-mt-20">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-          <Icon className="h-4 w-4" />
+    <section id={id} className="scroll-mt-24">
+      <div className="flex items-center gap-2.5 mb-4">
+        <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+          <Icon className="h-5 w-5" />
         </div>
-        <h3 className="font-bold text-base text-foreground">{title}</h3>
+        <h3 className="font-bold text-lg text-foreground">{title}</h3>
         {count !== undefined && count !== 0 && (
-          <Badge variant="secondary" className="text-[11px]">{count}</Badge>
+          <Badge variant="secondary" className="text-xs px-2 py-0.5">{count}</Badge>
         )}
         <div className="flex-1 h-px bg-border" />
       </div>
@@ -711,63 +711,54 @@ export function ClientReportModal({
     const StatusIcon = status.icon;
 
     return (
-      <div className="rounded-lg border bg-background p-3 space-y-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="rounded-lg border bg-background p-3 sm:p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             {showType && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-sm px-2.5 py-0.5">
                 {getInsuranceTypeLabel(policy.policy_type_parent as any, policy.policy_type_child as any)}
               </Badge>
             )}
-            <Badge className={cn('gap-1 text-[10px] border', status.color)}>
-              <StatusIcon className="h-3 w-3" />
+            <Badge className={cn('gap-1 text-xs border', status.color)}>
+              <StatusIcon className="h-3.5 w-3.5" />
               {status.label}
             </Badge>
             {policy.policy_number && (
-              <span className="text-[11px] font-mono text-muted-foreground ltr-nums">#{policy.policy_number}</span>
+              <span className="text-xs font-mono text-muted-foreground ltr-nums">#{policy.policy_number}</span>
             )}
           </div>
-          <div className="text-left shrink-0">
-            <p className="font-bold text-primary ltr-nums">₪{full.toLocaleString()}</p>
-            {full > 0 && (
-              <div className="flex items-center gap-1 justify-end text-[10px] ltr-nums">
-                <span className="text-success">مدفوع {paid.toLocaleString()}</span>
-                <span className="text-muted-foreground">/</span>
-                <span className={remaining > 0 ? 'text-destructive' : 'text-muted-foreground'}>
-                  متبقي {remaining.toLocaleString()}
-                </span>
-              </div>
-            )}
-          </div>
+          <p className="font-bold text-primary ltr-nums text-base">₪{full.toLocaleString()}</p>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-          <span className="flex items-center gap-1">
-            <Building2 className="h-3 w-3" />
+        {full > 0 && <MoneyChips paid={paid} remaining={remaining} />}
+
+        <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+          <span className="flex items-center gap-1.5">
+            <Building2 className="h-3.5 w-3.5" />
             {policy.company?.name_ar || policy.company?.name || '-'}
           </span>
-          <span className="flex items-center gap-1 ltr-nums">
-            <Calendar className="h-3 w-3" />
+          <span className="flex items-center gap-1.5 ltr-nums">
+            <Calendar className="h-3.5 w-3.5" />
             {formatDate(policy.start_date)} - {formatDate(policy.end_date)}
           </span>
           {files.length > 0 && (
             <button
               type="button"
               onClick={() => openFileGallery(files, `${getInsuranceTypeLabel(policy.policy_type_parent as any, policy.policy_type_child as any)} ${policy.policy_number || ''}`.trim())}
-              className="flex items-center gap-1 text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-full transition-colors"
+              className="flex items-center gap-1.5 text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-full transition-colors text-xs font-medium"
             >
-              <Paperclip className="h-3 w-3" />
+              <Paperclip className="h-3.5 w-3.5" />
               {files.length} ملف
             </button>
           )}
         </div>
 
         {drivers.length > 0 && (
-          <div className="pt-2 border-t flex items-start gap-2">
-            <Users className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-            <div className="flex flex-wrap gap-1">
+          <div className="pt-3 border-t flex items-start gap-2">
+            <Users className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+            <div className="flex flex-wrap gap-1.5">
               {drivers.map(d => (
-                <Badge key={d.child_id} variant="secondary" className="text-[10px] font-normal">
+                <Badge key={d.child_id} variant="secondary" className="text-xs font-normal px-2 py-1">
                   {d.full_name}
                   {d.relation ? ` • ${d.relation}` : ''}
                   {d.birth_date ? ` • ${formatDate(d.birth_date)}` : ''}
@@ -778,9 +769,9 @@ export function ClientReportModal({
         )}
 
         {policy.notes && (
-          <div className="pt-2 border-t flex items-start gap-2 text-xs text-muted-foreground">
-            <StickyNote className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-            <p className="whitespace-pre-wrap">{policy.notes}</p>
+          <div className="pt-3 border-t flex items-start gap-2 text-sm text-muted-foreground">
+            <StickyNote className="h-4 w-4 mt-0.5 shrink-0" />
+            <p className="whitespace-pre-wrap leading-relaxed">{policy.notes}</p>
           </div>
         )}
       </div>
@@ -802,35 +793,33 @@ export function ClientReportModal({
     const activeCount = pkg.policies.filter(isActivePolicy).length;
 
     return (
-      <div key={`pkg-${pkg.groupId}`} className="rounded-xl border-2 border-primary/20 bg-primary/[0.02] overflow-hidden">
-        <div className="bg-primary/5 px-3 py-2 flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center">
-              <Layers className="h-3.5 w-3.5" />
+      <div
+        key={`pkg-${pkg.groupId}`}
+        className="rounded-xl border-2 border-primary/20 bg-primary/[0.02] overflow-hidden"
+      >
+        <div className="bg-primary/5 px-3 sm:px-4 py-3 border-b border-primary/10">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="h-8 w-8 rounded-lg bg-primary/15 text-primary flex items-center justify-center">
+                <Layers className="h-4 w-4" />
+              </div>
+              <span className="font-bold text-base">باقة تأمين</span>
+              <Badge variant="secondary" className="text-xs">
+                {pkg.policies.length} وثائق
+              </Badge>
+              {activeCount > 0 && (
+                <Badge className="bg-success/10 text-success border-success/20 text-xs">
+                  {activeCount} سارية
+                </Badge>
+              )}
             </div>
-            <span className="font-bold text-sm">باقة تأمين</span>
+            <p className="font-bold text-primary ltr-nums text-base">₪{totalPrice.toLocaleString()}</p>
           </div>
-          <Badge variant="secondary" className="text-[10px]">
-            {pkg.policies.length} وثائق
-          </Badge>
-          {activeCount > 0 && (
-            <Badge className="bg-success/10 text-success border-success/20 text-[10px]">
-              {activeCount} سارية
-            </Badge>
-          )}
-          <div className="flex-1" />
-          <div className="text-left">
-            <p className="font-bold text-primary ltr-nums text-sm">₪{totalPrice.toLocaleString()}</p>
-            <div className="flex items-center gap-1 justify-end text-[10px] ltr-nums">
-              <span className="text-success">مدفوع {totalPaid.toLocaleString()}</span>
-              <span className="text-muted-foreground">/</span>
-              <span className={totalRemaining > 0 ? 'text-destructive' : 'text-muted-foreground'}>
-                متبقي {totalRemaining.toLocaleString()}
-              </span>
-            </div>
+          <div className="mt-2">
+            <MoneyChips paid={totalPaid} remaining={totalRemaining} />
           </div>
         </div>
-        <div className="p-2 space-y-2">
+        <div className="p-3 space-y-3">
           {pkg.policies.map(p => (
             <div key={p.id}>{renderPolicyLine(p)}</div>
           ))}
@@ -866,15 +855,15 @@ export function ClientReportModal({
             <X className="h-4 w-4" />
           </button>
 
-          <div className="relative px-6 py-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-4 min-w-0">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
-                  <User className="h-7 w-7 text-white" />
+          <div className="relative px-4 sm:px-6 py-5 pl-14">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
+                  <User className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <h1 className="text-xl font-bold text-white truncate">{client.full_name}</h1>
+                    <h1 className="text-lg sm:text-xl font-bold text-white break-words">{client.full_name}</h1>
                     <Badge className="bg-white/20 border-white/30 text-white font-medium">
                       <IdCard className="h-3 w-3 ml-1" />
                       <span className="ltr-nums">{client.id_number}</span>
@@ -890,7 +879,7 @@ export function ClientReportModal({
                       </Badge>
                     )}
                   </div>
-                  <div className="flex items-center gap-4 mt-2 text-white/80 text-sm flex-wrap">
+                  <div className="flex items-center gap-x-4 gap-y-1 mt-2 text-white/80 text-sm flex-wrap">
                     {client.phone_number && (
                       <div className="flex items-center gap-1">
                         <Phone className="h-3.5 w-3.5" />
@@ -913,7 +902,7 @@ export function ClientReportModal({
                 </div>
               </div>
 
-              <div className="flex gap-2 ml-14 shrink-0">
+              <div className="flex gap-2 shrink-0">
                 <Button
                   size="sm"
                   onClick={handleSendSms}
@@ -946,59 +935,49 @@ export function ClientReportModal({
 
             {/* Stats row */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-5">
-              <div className="rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-2">
-                <p className="text-[10px] text-white/70">وثائق سارية</p>
-                <p className="text-lg font-bold text-white ltr-nums">
-                  {activePoliciesCount}
-                  <span className="text-xs text-white/60 mr-1">/ {policies.length}</span>
-                </p>
-              </div>
-              <div className="rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-2">
-                <p className="text-[10px] text-white/70">السيارات</p>
-                <p className="text-lg font-bold text-white ltr-nums">{cars.length}</p>
-              </div>
-              <div className="rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-2">
-                <p className="text-[10px] text-white/70">الدفعات</p>
-                <p className="text-lg font-bold text-white ltr-nums">{paymentGroups.length}</p>
-              </div>
-              <div className="rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-2">
-                <p className="text-[10px] text-white/70">بلاغات حوادث</p>
-                <p className="text-lg font-bold text-white ltr-nums">{accidents.length}</p>
-              </div>
+              <HeaderStat label="وثائق سارية" value={`${activePoliciesCount}/${policies.length}`} />
+              <HeaderStat label="السيارات" value={cars.length} />
+              <HeaderStat label="الدفعات" value={paymentGroups.length} />
+              <HeaderStat label="بلاغات حوادث" value={accidents.length} />
             </div>
           </div>
         </div>
 
-        {/* Quick nav */}
-        <div className="border-b bg-muted/30 px-4 py-2 overflow-x-auto">
-          <nav className="flex gap-1 text-xs">
-            {[
-              { id: 'sec-info', label: 'معلومات العميل', icon: User },
-              { id: 'sec-money', label: 'الملخص المالي', icon: Wallet },
-              { id: 'sec-policies', label: 'السيارات والوثائق', icon: Car },
-              { id: 'sec-payments', label: 'سجل الدفعات', icon: CreditCard },
-              { id: 'sec-accidents', label: 'بلاغات الحوادث', icon: ShieldAlert },
-              { id: 'sec-refunds', label: 'المرتجعات', icon: Banknote },
-              { id: 'sec-notes', label: 'ملاحظات', icon: StickyNote },
-            ].map(tab => (
-              <a
-                key={tab.id}
-                href={`#${tab.id}`}
-                onClick={e => {
-                  e.preventDefault();
-                  document.getElementById(tab.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
-              >
-                <tab.icon className="h-3.5 w-3.5" />
-                {tab.label}
-              </a>
-            ))}
-          </nav>
+        {/* Quick nav — pill tabs sitting between the hero header and the
+            scrollable body. Rendered as buttons with visible backgrounds so
+            they don't look like a breadcrumb and are obviously tappable. */}
+        <div className="border-b bg-background shrink-0 shadow-sm">
+          <div className="px-3 sm:px-4 py-2.5 overflow-x-auto scrollbar-thin">
+            <nav className="flex gap-2 min-w-max">
+              {[
+                { id: 'sec-info', label: 'معلومات العميل', icon: User },
+                { id: 'sec-money', label: 'الملخص المالي', icon: Wallet },
+                { id: 'sec-policies', label: 'السيارات والوثائق', icon: Car },
+                { id: 'sec-payments', label: 'سجل الدفعات', icon: CreditCard },
+                { id: 'sec-accidents', label: 'بلاغات الحوادث', icon: ShieldAlert },
+                { id: 'sec-refunds', label: 'المرتجعات', icon: Banknote },
+                { id: 'sec-notes', label: 'ملاحظات', icon: StickyNote },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() =>
+                    document
+                      .getElementById(tab.id)
+                      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border bg-muted/40 hover:bg-primary hover:border-primary hover:text-primary-foreground text-foreground/80 transition-colors whitespace-nowrap text-sm font-medium"
+                >
+                  <tab.icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          </div>
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-6 sm:space-y-8 bg-muted/20">
           {loadingDetails && (
             <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -1008,7 +987,7 @@ export function ClientReportModal({
 
           {/* Client info */}
           <Section id="sec-info" icon={User} title="معلومات العميل">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
               <InfoCell label="الهاتف" value={client.phone_number} mono />
               {client.phone_number_2 && <InfoCell label="هاتف إضافي" value={client.phone_number_2} mono />}
               <InfoCell label="رقم الهوية" value={client.id_number} mono />
@@ -1029,21 +1008,27 @@ export function ClientReportModal({
 
           {/* Financial summary */}
           <Section id="sec-money" icon={Wallet} title="الملخص المالي">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <MoneyCard label="إجمالي التأمينات" value={totalInsurance} tone="neutral" />
               <MoneyCard label="المدفوع" value={paymentSummary.total_paid} tone="success" />
               <MoneyCard
                 label="المتبقي"
                 value={netRemaining}
                 tone={netRemaining > 0 ? 'destructive' : 'success'}
-                sub={
-                  walletBalance.total_refunds > 0 && paymentSummary.total_remaining > 0
-                    ? `المطلوب ₪${paymentSummary.total_remaining.toLocaleString()} - مرتجع ₪${walletBalance.total_refunds.toLocaleString()}`
-                    : undefined
-                }
               />
               <MoneyCard label="الأرباح" value={paymentSummary.total_profit} tone="primary" />
             </div>
+            {walletBalance.total_refunds > 0 && paymentSummary.total_remaining > 0 && (
+              <div className="mt-3 flex items-center justify-center gap-2 text-sm bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg p-3 flex-wrap">
+                <span className="text-muted-foreground">المطلوب:</span>
+                <span className="font-bold ltr-nums">₪{paymentSummary.total_remaining.toLocaleString()}</span>
+                <span className="text-muted-foreground">−</span>
+                <span className="text-amber-700 dark:text-amber-300">مرتجع للعميل:</span>
+                <span className="font-bold text-amber-600 ltr-nums">₪{walletBalance.total_refunds.toLocaleString()}</span>
+                <span className="text-muted-foreground">=</span>
+                <span className="font-bold text-destructive ltr-nums">₪{netRemaining.toLocaleString()}</span>
+              </div>
+            )}
           </Section>
 
           {/* Policies by car */}
@@ -1053,35 +1038,39 @@ export function ClientReportModal({
                 const items = itemsByCar.byCar[car.id] || [];
                 return (
                   <div key={car.id} className="rounded-xl border overflow-hidden">
-                    <div className="bg-muted/40 p-3 flex items-center gap-3 flex-wrap">
-                      <div className="bg-yellow-200 border-2 border-foreground rounded px-2 py-0.5">
-                        <span className="font-mono font-bold text-sm ltr-nums">{car.car_number}</span>
+                    <div className="bg-muted/40 p-3 sm:p-4 flex items-start sm:items-center gap-3 flex-wrap">
+                      <div className="bg-yellow-200 border-2 border-foreground rounded-md px-2.5 py-1 shrink-0">
+                        <span className="font-mono font-bold text-base ltr-nums">{car.car_number}</span>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm truncate">
+                        <p className="font-semibold text-base truncate">
                           {[car.manufacturer_name, car.model, car.year].filter(Boolean).join(' ') || 'بدون تفاصيل'}
                         </p>
-                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap mt-0.5">
+                        <div className="flex items-center gap-x-4 gap-y-1 text-xs text-muted-foreground flex-wrap mt-1">
                           {car.car_type && <span>{carTypeLabels[car.car_type] || car.car_type}</span>}
                           {car.color && (
                             <span className="flex items-center gap-1">
-                              <Palette className="h-3 w-3" />
+                              <Palette className="h-3.5 w-3.5" />
                               {car.color}
                             </span>
                           )}
-                          {car.car_value ? <span>القيمة: ₪{car.car_value.toLocaleString()}</span> : null}
+                          {car.car_value ? (
+                            <span className="ltr-nums">القيمة: ₪{car.car_value.toLocaleString()}</span>
+                          ) : null}
                           {car.license_expiry && (
-                            <span>انتهاء الرخصة: {formatDate(car.license_expiry)}</span>
+                            <span className="ltr-nums">
+                              انتهاء الرخصة: {formatDate(car.license_expiry)}
+                            </span>
                           )}
                         </div>
                       </div>
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant="secondary" className="text-xs shrink-0">
                         {items.length} {items.length === 1 ? 'بند' : 'بنود'}
                       </Badge>
                     </div>
-                    <div className="p-3 space-y-3">
+                    <div className="p-3 sm:p-4 space-y-3">
                       {items.length === 0 ? (
-                        <p className="text-center text-xs text-muted-foreground py-2">لا توجد وثائق</p>
+                        <p className="text-center text-sm text-muted-foreground py-2">لا توجد وثائق</p>
                       ) : (
                         items.map(renderItem)
                       )}
@@ -1092,10 +1081,10 @@ export function ClientReportModal({
 
               {itemsByCar.noCar.length > 0 && (
                 <div className="rounded-xl border overflow-hidden">
-                  <div className="bg-muted/40 p-3">
-                    <p className="font-medium text-sm">وثائق أخرى (بدون سيارة)</p>
+                  <div className="bg-muted/40 p-3 sm:p-4">
+                    <p className="font-semibold text-base">وثائق أخرى (بدون سيارة)</p>
                   </div>
-                  <div className="p-3 space-y-3">{itemsByCar.noCar.map(renderItem)}</div>
+                  <div className="p-3 sm:p-4 space-y-3">{itemsByCar.noCar.map(renderItem)}</div>
                 </div>
               )}
 
@@ -1110,47 +1099,55 @@ export function ClientReportModal({
             {paymentGroups.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-4">لا توجد دفعات مسجلة</p>
             ) : (
-              <div className="rounded-xl border overflow-hidden">
-                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 bg-muted/40 text-[11px] font-medium text-muted-foreground">
-                  <span>التاريخ / الطريقة</span>
-                  <span className="text-left">المبلغ</span>
-                  <span className="text-left">الحالة</span>
-                  <span />
-                </div>
-                <div className="divide-y">
-                  {paymentGroups.map(group => {
-                    const anyRefused = group.statuses.includes('refused');
-                    return (
-                      <div
-                        key={group.id}
-                        className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2.5 items-center text-sm"
-                      >
+              <div className="rounded-xl border divide-y overflow-hidden">
+                {paymentGroups.map(group => {
+                  const anyRefused = group.statuses.includes('refused');
+                  return (
+                    <div
+                      key={group.id}
+                      className="flex items-center justify-between gap-3 p-3 sm:p-4 flex-wrap"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div
+                          className={cn(
+                            'h-10 w-10 rounded-lg flex items-center justify-center shrink-0',
+                            anyRefused
+                              ? 'bg-destructive/10 text-destructive'
+                              : 'bg-success/10 text-success'
+                          )}
+                        >
+                          <CreditCard className="h-4 w-4" />
+                        </div>
                         <div className="min-w-0">
-                          <p className="font-medium ltr-nums">{formatDate(group.payment_date)}</p>
-                          <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                          <p className="font-semibold ltr-nums text-sm">
+                            {formatDate(group.payment_date)}
+                          </p>
+                          <div className="flex items-center gap-1.5 flex-wrap mt-1">
                             {group.types.map(t => (
-                              <Badge key={t} variant="outline" className="text-[10px] font-normal">
+                              <Badge key={t} variant="outline" className="text-xs font-normal">
                                 {paymentTypeLabels[t] || t}
                               </Badge>
                             ))}
                             {group.items.length > 1 && (
-                              <Badge variant="secondary" className="text-[10px]">
+                              <Badge variant="secondary" className="text-xs">
                                 {group.items.length} دفعات
                               </Badge>
                             )}
                             {group.chequeNumbers.length > 0 && (
-                              <span className="text-[10px] text-muted-foreground font-mono">
+                              <span className="text-xs text-muted-foreground font-mono">
                                 #{group.chequeNumbers.join(', ')}
                               </span>
                             )}
                           </div>
                         </div>
-                        <p className="font-bold text-primary ltr-nums text-left">
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <p className="font-bold text-primary ltr-nums text-base">
                           ₪{group.totalAmount.toLocaleString()}
                         </p>
                         <Badge
                           className={cn(
-                            'text-[10px]',
+                            'text-xs',
                             anyRefused
                               ? 'bg-destructive/10 text-destructive border-destructive/20'
                               : 'bg-success/10 text-success border-success/20'
@@ -1158,11 +1155,10 @@ export function ClientReportModal({
                         >
                           {anyRefused ? 'راجع' : 'مقبول'}
                         </Badge>
-                        <div />
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </Section>
@@ -1174,24 +1170,27 @@ export function ClientReportModal({
             ) : (
               <div className="space-y-2">
                 {accidents.map(a => {
-                  const statusMeta = accidentStatusLabels[a.status] || { label: a.status, variant: 'secondary' as const };
+                  const statusMeta =
+                    accidentStatusLabels[a.status] || { label: a.status, variant: 'secondary' as const };
                   return (
                     <div
                       key={a.id}
-                      className="rounded-lg border bg-background p-3 flex items-center justify-between gap-3 flex-wrap"
+                      className="rounded-lg border bg-background p-3 sm:p-4 flex items-center justify-between gap-3 flex-wrap"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-9 w-9 rounded-lg bg-destructive/10 text-destructive flex items-center justify-center shrink-0">
-                          <AlertTriangle className="h-4 w-4" />
+                        <div className="h-10 w-10 rounded-lg bg-destructive/10 text-destructive flex items-center justify-center shrink-0">
+                          <AlertTriangle className="h-5 w-5" />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-medium text-sm">
-                            بلاغ #{a.report_number}
+                          <p className="font-semibold text-sm flex items-center gap-2">
+                            <span>بلاغ #{a.report_number}</span>
                             {a.car?.car_number && (
-                              <span className="text-muted-foreground font-mono mr-2 ltr-nums">{a.car.car_number}</span>
+                              <span className="text-muted-foreground font-mono ltr-nums text-xs">
+                                {a.car.car_number}
+                              </span>
                             )}
                           </p>
-                          <p className="text-xs text-muted-foreground ltr-nums">
+                          <p className="text-xs text-muted-foreground ltr-nums mt-0.5">
                             {formatDate(a.accident_date)}
                             {a.company ? ` • ${a.company.name_ar || a.company.name}` : ''}
                           </p>
@@ -1214,15 +1213,15 @@ export function ClientReportModal({
                 {refunds.map(r => (
                   <div
                     key={r.id}
-                    className="rounded-lg border bg-background p-3 flex items-center justify-between gap-3 flex-wrap"
+                    className="rounded-lg border bg-background p-3 sm:p-4 flex items-center justify-between gap-3 flex-wrap"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-9 w-9 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
-                        <Receipt className="h-4 w-4" />
+                      <div className="h-10 w-10 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                        <Receipt className="h-5 w-5" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline" className="text-[10px]">
+                          <Badge variant="outline" className="text-xs">
                             {refundTypeLabels[r.transaction_type] || r.transaction_type}
                           </Badge>
                           {r.car?.car_number && (
@@ -1231,18 +1230,20 @@ export function ClientReportModal({
                             </span>
                           )}
                           {r.payment_method && (
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="text-xs text-muted-foreground">
                               {paymentTypeLabels[r.payment_method] || r.payment_method}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground ltr-nums mt-0.5">
+                        <p className="text-xs text-muted-foreground ltr-nums mt-1">
                           {formatDate(r.refund_date)}
                           {r.description ? ` • ${r.description}` : ''}
                         </p>
                       </div>
                     </div>
-                    <p className="font-bold text-amber-600 ltr-nums">₪{r.amount.toLocaleString()}</p>
+                    <p className="font-bold text-amber-600 ltr-nums text-base">
+                      ₪{r.amount.toLocaleString()}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -1303,14 +1304,45 @@ function InfoCell({
   return (
     <div
       className={cn(
-        'rounded-lg border bg-background px-3 py-2',
+        'rounded-lg border bg-background px-3 py-2.5',
         warn && 'border-amber-500/30 bg-amber-500/5'
       )}
     >
-      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
       <p className={cn('text-sm font-semibold truncate', mono && 'font-mono ltr-nums')}>
         {value || '-'}
       </p>
+    </div>
+  );
+}
+
+function HeaderStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-2">
+      <p className="text-xs text-white/70">{label}</p>
+      <p className="text-lg sm:text-xl font-bold text-white ltr-nums">{value}</p>
+    </div>
+  );
+}
+
+function MoneyChips({ paid, remaining }: { paid: number; remaining: number }) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success/10 text-success text-xs font-medium">
+        <span>مدفوع</span>
+        <span className="ltr-nums font-bold">₪{paid.toLocaleString()}</span>
+      </span>
+      <span
+        className={cn(
+          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium',
+          remaining > 0
+            ? 'bg-destructive/10 text-destructive'
+            : 'bg-muted text-muted-foreground'
+        )}
+      >
+        <span>متبقي</span>
+        <span className="ltr-nums font-bold">₪{remaining.toLocaleString()}</span>
+      </span>
     </div>
   );
 }
@@ -1319,12 +1351,10 @@ function MoneyCard({
   label,
   value,
   tone,
-  sub,
 }: {
   label: string;
   value: number;
   tone: 'neutral' | 'success' | 'destructive' | 'primary';
-  sub?: string;
 }) {
   const toneClasses = {
     neutral: 'bg-muted/50 border-border text-foreground',
@@ -1334,10 +1364,9 @@ function MoneyCard({
   }[tone];
 
   return (
-    <div className={cn('rounded-xl border p-3', toneClasses)}>
-      <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>
-      <p className="text-lg font-bold ltr-nums">₪{value.toLocaleString()}</p>
-      {sub && <p className="text-[9px] text-muted-foreground mt-1 ltr-nums">{sub}</p>}
+    <div className={cn('rounded-xl border p-4', toneClasses)}>
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+      <p className="text-xl sm:text-2xl font-bold ltr-nums">₪{value.toLocaleString()}</p>
     </div>
   );
 }
