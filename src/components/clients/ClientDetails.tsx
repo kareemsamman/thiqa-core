@@ -2093,7 +2093,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                       className="text-sm"
                                     >
                                       <Edit className="h-3 w-3 ml-2" />
-                                      تعديل: ₪{Number(payment.amount || 0).toLocaleString('en-US')}
+                                      <span className="flex items-center gap-1.5">
+                                        تعديل: ₪{Number(payment.amount || 0).toLocaleString('en-US')}
+                                        {payment.refused && (
+                                          <span className="text-[10px] font-bold text-destructive border border-destructive/40 bg-destructive/10 rounded px-1 py-0">
+                                            مرفوضة
+                                          </span>
+                                        )}
+                                      </span>
                                     </DropdownMenuItem>
                                   ))}
                                 </>
