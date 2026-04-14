@@ -226,7 +226,7 @@ serve(async (req) => {
       .from('policy_children')
       .select(`
         policy_id,
-        child:client_children(full_name, id_number, relation, phone)
+        child:client_children(full_name, id_number, relation, phone, birth_date)
       `)
       .in('policy_id', policy_ids);
 
@@ -549,7 +549,7 @@ function buildPackageInvoiceHtml(
   // Unique additional drivers across the package. Each child may appear
   // linked to multiple policies (policy_children is a join table); we
   // deduplicate by id_number so they show once in the drivers table.
-  const uniqueDriversMap = new Map<string, { name: string; id_number: string; phone: string; relation: string }>();
+  const uniqueDriversMap = new Map<string, { name: string; id_number: string; phone: string; relation: string; birth_date: string }>();
   policyChildren.forEach((pc: any) => {
     const child = pc?.child;
     if (!child?.full_name) return;
@@ -560,6 +560,7 @@ function buildPackageInvoiceHtml(
         id_number: child.id_number || '',
         phone: child.phone || '',
         relation: child.relation || '',
+        birth_date: child.birth_date || '',
       });
     }
   });
@@ -613,6 +614,7 @@ function buildPackageInvoiceHtml(
             <th style="width: 40px;">#</th>
             <th>الاسم</th>
             <th>رقم الهوية</th>
+            <th>تاريخ الميلاد</th>
             <th>رقم الهاتف</th>
             <th>صلة القرابة</th>
           </tr>
@@ -623,6 +625,7 @@ function buildPackageInvoiceHtml(
               <td class="num">${i + 1}</td>
               <td>${d.name}</td>
               <td class="tabular">${d.id_number || '-'}</td>
+              <td class="tabular">${d.birth_date ? formatDate(d.birth_date) : '-'}</td>
               <td class="tabular">${d.phone || '-'}</td>
               <td>${d.relation || '-'}</td>
             </tr>

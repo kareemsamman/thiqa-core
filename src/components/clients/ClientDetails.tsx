@@ -63,7 +63,6 @@ import {
   MessageSquare,
   Loader2,
   Receipt,
-  Send,
   AlertTriangle,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -389,8 +388,6 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [paymentTypeFilter, setPaymentTypeFilter] = useState<string>('all');
   
   // Comprehensive invoice state
-  const [generatingComprehensiveInvoice, setGeneratingComprehensiveInvoice] = useState(false);
-  const [sendingComprehensiveInvoiceSms, setSendingComprehensiveInvoiceSms] = useState(false);
   
   // Individual payment receipt state
   const [generatingReceipt, setGeneratingReceipt] = useState<string | null>(null);
@@ -1025,53 +1022,6 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     } catch (error) {
       console.error('Error fetching package for renewal:', error);
       toast.error('فشل في جلب بيانات الباقة');
-    }
-  };
-
-  // Generate comprehensive invoice for all payments
-  const handleGenerateAllPaymentsInvoice = async () => {
-    setGeneratingComprehensiveInvoice(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-client-payments-invoice', {
-        body: { client_id: client.id }
-      });
-
-      if (error) throw error;
-
-      if (data?.invoice_url) {
-        window.open(data.invoice_url, '_blank');
-      } else {
-        toast.error("لم يتم العثور على رابط الفاتورة");
-      }
-    } catch (error) {
-      console.error('Generate invoice error:', error);
-      toast.error("فشل في توليد الفاتورة الشاملة");
-    } finally {
-      setGeneratingComprehensiveInvoice(false);
-    }
-  };
-
-  // Send comprehensive invoice via SMS
-  const handleSendComprehensiveInvoiceSms = async () => {
-    if (!client.phone_number) {
-      toast.error("رقم هاتف العميل مطلوب لإرسال SMS");
-      return;
-    }
-    
-    setSendingComprehensiveInvoiceSms(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-client-payments-invoice', {
-        body: { client_id: client.id, send_sms: true }
-      });
-
-      if (error) throw error;
-
-      toast.success("تم إرسال الفاتورة الشاملة للعميل عبر SMS");
-    } catch (error) {
-      console.error('Send invoice SMS error:', error);
-      toast.error("فشل في إرسال الفاتورة عبر SMS");
-    } finally {
-      setSendingComprehensiveInvoiceSms(false);
     }
   };
 
@@ -1985,35 +1935,6 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           <TabsContent value="payments" className="mt-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-lg">سجل الدفعات</h3>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleGenerateAllPaymentsInvoice}
-                  disabled={payments.length === 0 || generatingComprehensiveInvoice}
-                >
-                  {generatingComprehensiveInvoice ? (
-                    <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                  ) : (
-                    <FileText className="h-4 w-4 ml-2" />
-                  )}
-                  فاتورة شاملة
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleSendComprehensiveInvoiceSms}
-                  disabled={payments.length === 0 || sendingComprehensiveInvoiceSms || !client.phone_number}
-                  title={!client.phone_number ? "يجب إضافة رقم هاتف العميل أولاً" : "إرسال الفاتورة الشاملة للعميل عبر SMS"}
-                >
-                  {sendingComprehensiveInvoiceSms ? (
-                    <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4 ml-2" />
-                  )}
-                  إرسال SMS
-                </Button>
-              </div>
             </div>
             
             {/* Payment Filters */}
@@ -2063,7 +1984,6 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                       <TableHead className="text-right">التاريخ</TableHead>
                       <TableHead className="text-right">طريقة الدفع</TableHead>
                       <TableHead className="text-right">نوع التأمين</TableHead>
-                      <TableHead className="text-right">رقم الشيك</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
                       <TableHead className="text-right">ملفات</TableHead>
                       <TableHead className="text-right w-[60px]">إجراءات</TableHead>
@@ -2125,7 +2045,6 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                             })()}
                           </div>
                         </TableCell>
-                        <TableCell className="font-mono">{group.cheque_number || '-'}</TableCell>
                         <TableCell>
                           {group.refused ? (
                             <Badge variant="destructive">راجع</Badge>
