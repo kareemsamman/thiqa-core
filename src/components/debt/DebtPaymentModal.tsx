@@ -3,6 +3,7 @@ import { useAgentContext } from '@/hooks/useAgentContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -113,6 +114,7 @@ export function DebtPaymentModal({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [debtItems, setDebtItems] = useState<DebtItem[]>([]);
+  const [creditBalance, setCreditBalance] = useState(0);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
   const [tranzilaModalOpen, setTranzilaModalOpen] = useState(false);
   const [activeVisaPaymentIndex, setActiveVisaPaymentIndex] = useState<number | null>(null);
@@ -167,9 +169,14 @@ export function DebtPaymentModal({
     .reduce((sum, p) => sum + (p.amount || 0), 0);
   
   const totalPaymentAmount = paymentLines.reduce((sum, p) => sum + (p.amount || 0), 0);
-  
-  // Remaining to pay should account for already completed visa payments
-  const effectiveRemaining = totalRemaining - paidVisaTotal;
+
+  // Credit the customer already has with us (from refunds / cancellations).
+  // We only apply as much of it as there is debt to cover.
+  const appliedCredit = Math.min(creditBalance, Math.max(0, totalRemaining - paidVisaTotal));
+
+  // Remaining to pay should account for already completed visa payments AND any
+  // credit we already owe the customer — that credit offsets their debt.
+  const effectiveRemaining = Math.max(0, totalRemaining - paidVisaTotal - appliedCredit);
   const isOverpaying = pendingPaymentsTotal > effectiveRemaining;
   
   // Check for unpaid visa payments
@@ -189,6 +196,7 @@ export function DebtPaymentModal({
   useEffect(() => {
     if (open && clientId) {
       fetchDebtItems();
+      fetchCreditBalance();
       // Reset form with one empty payment line
       setPaymentLines([{
         id: crypto.randomUUID(),
@@ -200,6 +208,37 @@ export function DebtPaymentModal({
       setSelectedCars([]);
     }
   }, [open, clientId]);
+
+  // Net amount we currently owe the client (refunds minus adjustments due).
+  // This offsets the debt shown in the modal so "المتبقي للدفع" reflects
+  // reality — same logic as ClientDetails.fetchWalletBalance.
+  const fetchCreditBalance = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('customer_wallet_transactions')
+        .select('amount, transaction_type')
+        .eq('client_id', clientId);
+
+      if (error) throw error;
+
+      const weOwe = (data || [])
+        .filter(t =>
+          t.transaction_type === 'refund' ||
+          t.transaction_type === 'transfer_refund_owed' ||
+          t.transaction_type === 'manual_refund'
+        )
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+      const customerOwes = (data || [])
+        .filter(t => t.transaction_type === 'transfer_adjustment_due')
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+      setCreditBalance(Math.max(0, weOwe - customerOwes));
+    } catch (error) {
+      console.error('Error fetching credit balance:', error);
+      setCreditBalance(0);
+    }
+  };
 
   // Image handling functions
   const handleImageSelect = (paymentId: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -798,8 +837,24 @@ export function DebtPaymentModal({
                 <p className="text-lg font-bold text-destructive ltr-nums">
                   ₪{effectiveRemaining.toLocaleString('en-US')}
                 </p>
+                {appliedCredit > 0 && (
+                  <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                    <p>المطلوب: ₪{(totalRemaining - paidVisaTotal).toLocaleString('en-US')}</p>
+                    <p className="text-amber-600">المرتجع: -₪{appliedCredit.toLocaleString('en-US')}</p>
+                  </div>
+                )}
               </div>
             </div>
+
+            {appliedCredit > 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 text-amber-900 dark:text-amber-200">
+                <Info className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+                <p className="text-xs leading-relaxed">
+                  لدى العميل رصيد مرتجع بقيمة <span className="font-bold ltr-nums">₪{creditBalance.toLocaleString('en-US')}</span> تم خصمه من المطلوب.
+                  المبلغ المستحق فعلياً للدفع هو <span className="font-bold ltr-nums">₪{effectiveRemaining.toLocaleString('en-US')}</span>.
+                </p>
+              </div>
+            )}
 
             {/* Car Selection */}
             {uniqueCars.length > 1 && (
@@ -1043,6 +1098,18 @@ export function DebtPaymentModal({
                           />
                         </div>
                       )}
+                    </div>
+
+                    <div>
+                      <Label className="text-xs">ملاحظات (اختياري)</Label>
+                      <Textarea
+                        value={payment.notes || ''}
+                        onChange={e => updatePaymentLine(payment.id, 'notes', e.target.value)}
+                        placeholder="أضف ملاحظة لهذه الدفعة..."
+                        rows={2}
+                        disabled={payment.tranzilaPaid}
+                        className="resize-none text-sm"
+                      />
                     </div>
 
                     {/* Visa Pay Button */}

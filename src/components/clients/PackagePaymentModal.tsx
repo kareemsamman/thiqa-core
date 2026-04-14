@@ -92,6 +92,7 @@ export function PackagePaymentModal({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [policies, setPolicies] = useState<PolicyPaymentInfo[]>([]);
+  const [creditBalance, setCreditBalance] = useState(0);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
   const [tranzilaModalOpen, setTranzilaModalOpen] = useState(false);
   const [activeVisaPaymentIndex, setActiveVisaPaymentIndex] = useState<number | null>(null);
@@ -114,9 +115,13 @@ export function PackagePaymentModal({
     .reduce((sum, p) => sum + (p.amount || 0), 0);
   
   const totalPaymentAmount = paymentLines.reduce((sum, p) => sum + (p.amount || 0), 0);
-  
+
+  // Credit the customer already has with us (from refunds) offsets their debt.
+  const appliedCredit = Math.min(creditBalance, Math.max(0, totalRemaining - paidVisaTotal));
+
   // Remaining to pay should account for already completed visa payments
-  const effectiveRemaining = totalRemaining - paidVisaTotal;
+  // and any refund credit we already owe the customer.
+  const effectiveRemaining = Math.max(0, totalRemaining - paidVisaTotal - appliedCredit);
   const isOverpaying = pendingPaymentsTotal > effectiveRemaining;
   
   // Check for unpaid visa payments
@@ -138,6 +143,21 @@ export function PackagePaymentModal({
       fetchPolicyPaymentInfo();
     }
   }, [open, policyIds]);
+
+  // Pre-fill the first payment line with the effective remaining once policies
+  // and credit are both loaded — but only while the line is still untouched.
+  useEffect(() => {
+    if (loading || policies.length === 0) return;
+    const netRemaining = Math.max(0, totalRemaining - Math.min(creditBalance, totalRemaining));
+    setPaymentLines(prev => {
+      if (prev.length !== 1) return prev;
+      const only = prev[0];
+      if (only.amount > 0 || only.paymentType !== 'cash' || only.chequeNumber || only.notes) return prev;
+      if (netRemaining <= 0) return prev;
+      return [{ ...only, amount: netRemaining }];
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, creditBalance, totalRemaining]);
 
   // Image handling functions
   const handleImageSelect = (paymentId: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -202,16 +222,53 @@ export function PackagePaymentModal({
 
   const getPreviewUrls = (paymentId: string) => previewUrls[paymentId] || [];
 
+  // Net amount currently owed to the client from refunds — offsets debt in
+  // the payment popup so the staff sees the true amount to collect.
+  const fetchCreditBalance = async (cid: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('customer_wallet_transactions')
+        .select('amount, transaction_type')
+        .eq('client_id', cid);
+
+      if (error) throw error;
+
+      const weOwe = (data || [])
+        .filter(t =>
+          t.transaction_type === 'refund' ||
+          t.transaction_type === 'transfer_refund_owed' ||
+          t.transaction_type === 'manual_refund'
+        )
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+      const customerOwes = (data || [])
+        .filter(t => t.transaction_type === 'transfer_adjustment_due')
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+      setCreditBalance(Math.max(0, weOwe - customerOwes));
+    } catch (error) {
+      console.error('Error fetching credit balance:', error);
+      setCreditBalance(0);
+    }
+  };
+
   const fetchPolicyPaymentInfo = async () => {
     setLoading(true);
     try {
       // Fetch policies
       const { data: policiesData, error: policiesError } = await supabase
         .from('policies')
-        .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission')
+        .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, client_id')
         .in('id', policyIds);
 
       if (policiesError) throw policiesError;
+
+      const pkgClientId = (policiesData || [])[0]?.client_id || null;
+      if (pkgClientId) {
+        await fetchCreditBalance(pkgClientId);
+      } else {
+        setCreditBalance(0);
+      }
 
       // Fetch payments for these policies
       const { data: paymentsData, error: paymentsError } = await supabase
@@ -243,11 +300,12 @@ export function PackagePaymentModal({
 
       setPolicies(policyInfo);
 
-      // Initialize with single payment line for remaining amount
-      const currentRemaining = policyInfo.reduce((sum, p) => sum + p.remaining, 0);
+      // Initialize with one empty payment line. A follow-up effect fills the
+      // amount after the refund credit loads so pre-fill matches the true
+      // effective remaining (avoids a false "overpaying" warning on open).
       setPaymentLines([{
         id: crypto.randomUUID(),
-        amount: currentRemaining > 0 ? currentRemaining : 0,
+        amount: 0,
         paymentType: 'cash',
         paymentDate: new Date().toISOString().split('T')[0],
       }]);
@@ -565,8 +623,24 @@ export function PackagePaymentModal({
               <Card className="p-3 text-center bg-red-50 dark:bg-red-950/20">
                 <p className="text-xs text-muted-foreground mb-1">المتبقي</p>
                 <p className="text-lg font-bold text-destructive">₪{effectiveRemaining.toLocaleString()}</p>
+                {appliedCredit > 0 && (
+                  <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                    <p>المطلوب: ₪{(totalRemaining - paidVisaTotal).toLocaleString()}</p>
+                    <p className="text-amber-600">المرتجع: -₪{appliedCredit.toLocaleString()}</p>
+                  </div>
+                )}
               </Card>
             </div>
+
+            {appliedCredit > 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 text-amber-900 dark:text-amber-200">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+                <p className="text-xs leading-relaxed">
+                  لدى العميل رصيد مرتجع بقيمة <span className="font-bold ltr-nums">₪{creditBalance.toLocaleString()}</span> تم خصمه من المطلوب.
+                  المبلغ المستحق فعلياً للدفع هو <span className="font-bold ltr-nums">₪{effectiveRemaining.toLocaleString()}</span>.
+                </p>
+              </div>
+            )}
 
             {/* Policy List */}
             <div className="border rounded-lg divide-y max-h-32 overflow-auto">

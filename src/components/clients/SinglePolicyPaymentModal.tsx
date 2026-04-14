@@ -3,6 +3,7 @@ import { useAgentContext } from '@/hooks/useAgentContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -83,6 +84,7 @@ export function SinglePolicyPaymentModal({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [totalPaid, setTotalPaid] = useState(0);
+  const [creditBalance, setCreditBalance] = useState(0);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
   const [tranzilaModalOpen, setTranzilaModalOpen] = useState(false);
   const [activeVisaPaymentIndex, setActiveVisaPaymentIndex] = useState<number | null>(null);
@@ -104,9 +106,13 @@ export function SinglePolicyPaymentModal({
     .reduce((sum, p) => sum + (p.amount || 0), 0);
   
   const totalPaymentAmount = paymentLines.reduce((sum, p) => sum + (p.amount || 0), 0);
-  
+
+  // Credit the customer has with us (refunds) offsets their debt.
+  const appliedCredit = Math.min(creditBalance, Math.max(0, remaining - paidVisaTotal));
+
   // Remaining to pay should account for already completed visa payments
-  const effectiveRemaining = remaining - paidVisaTotal;
+  // and any refund credit we already owe the customer.
+  const effectiveRemaining = Math.max(0, remaining - paidVisaTotal - appliedCredit);
   const isOverpaying = pendingPaymentsTotal > effectiveRemaining;
   
   // Check for unpaid visa payments
@@ -128,6 +134,21 @@ export function SinglePolicyPaymentModal({
       fetchExistingPayments();
     }
   }, [open, policyId]);
+
+  // Pre-fill the first payment line with the effective remaining once the
+  // refund credit has loaded — only while the line is still untouched.
+  useEffect(() => {
+    if (loading) return;
+    const netRemaining = Math.max(0, remaining - Math.min(creditBalance, remaining));
+    setPaymentLines(prev => {
+      if (prev.length !== 1) return prev;
+      const only = prev[0];
+      if (only.amount > 0 || only.paymentType !== 'cash' || only.chequeNumber || only.notes) return prev;
+      if (netRemaining <= 0) return prev;
+      return [{ ...only, amount: netRemaining }];
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, creditBalance, remaining]);
 
   // Image handling functions
   const handleImageSelect = (paymentId: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -202,11 +223,25 @@ export function SinglePolicyPaymentModal({
         .reduce((sum, p) => sum + p.amount, 0);
 
       setTotalPaid(paid);
-      
-      const currentRemaining = effectiveTotalPrice - paid;
+
+      // Fetch the policy's client_id so we can look up their refund credit.
+      const { data: policyRow } = await supabase
+        .from('policies')
+        .select('client_id')
+        .eq('id', policyId)
+        .maybeSingle();
+
+      if (policyRow?.client_id) {
+        await fetchCreditBalance(policyRow.client_id);
+      } else {
+        setCreditBalance(0);
+      }
+
+      // Initialize with one empty payment line. A follow-up effect pre-fills
+      // it once the credit balance is loaded.
       setPaymentLines([{
         id: crypto.randomUUID(),
-        amount: currentRemaining > 0 ? currentRemaining : 0,
+        amount: 0,
         paymentType: 'cash',
         paymentDate: new Date().toISOString().split('T')[0],
       }]);
@@ -216,6 +251,36 @@ export function SinglePolicyPaymentModal({
       toast.error('خطأ في جلب بيانات الدفع');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Net amount currently owed to the client from refunds — offsets debt in
+  // the payment popup so the staff sees the true amount to collect.
+  const fetchCreditBalance = async (cid: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('customer_wallet_transactions')
+        .select('amount, transaction_type')
+        .eq('client_id', cid);
+
+      if (error) throw error;
+
+      const weOwe = (data || [])
+        .filter(t =>
+          t.transaction_type === 'refund' ||
+          t.transaction_type === 'transfer_refund_owed' ||
+          t.transaction_type === 'manual_refund'
+        )
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+      const customerOwes = (data || [])
+        .filter(t => t.transaction_type === 'transfer_adjustment_due')
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+      setCreditBalance(Math.max(0, weOwe - customerOwes));
+    } catch (error) {
+      console.error('Error fetching credit balance:', error);
+      setCreditBalance(0);
     }
   };
 
@@ -481,8 +546,24 @@ export function SinglePolicyPaymentModal({
               <Card className="p-3 text-center bg-red-50 dark:bg-red-950/20">
                 <p className="text-xs text-muted-foreground mb-1">المتبقي</p>
                 <p className="text-lg font-bold text-destructive">₪{effectiveRemaining.toLocaleString()}</p>
+                {appliedCredit > 0 && (
+                  <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                    <p>المطلوب: ₪{(remaining - paidVisaTotal).toLocaleString()}</p>
+                    <p className="text-amber-600">المرتجع: -₪{appliedCredit.toLocaleString()}</p>
+                  </div>
+                )}
               </Card>
             </div>
+
+            {appliedCredit > 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 text-amber-900 dark:text-amber-200">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+                <p className="text-xs leading-relaxed">
+                  لدى العميل رصيد مرتجع بقيمة <span className="font-bold ltr-nums">₪{creditBalance.toLocaleString()}</span> تم خصمه من المطلوب.
+                  المبلغ المستحق فعلياً للدفع هو <span className="font-bold ltr-nums">₪{effectiveRemaining.toLocaleString()}</span>.
+                </p>
+              </div>
+            )}
 
             {/* Policy Info */}
             <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/30">
@@ -610,6 +691,18 @@ export function SinglePolicyPaymentModal({
                           />
                         </div>
                       )}
+                    </div>
+
+                    <div>
+                      <Label className="text-xs">ملاحظات (اختياري)</Label>
+                      <Textarea
+                        value={payment.notes || ''}
+                        onChange={e => updatePaymentLine(payment.id, 'notes', e.target.value)}
+                        placeholder="أضف ملاحظة لهذه الدفعة..."
+                        rows={2}
+                        disabled={payment.tranzilaPaid}
+                        className="resize-none text-sm"
+                      />
                     </div>
 
                     {/* Visa Pay Button */}
