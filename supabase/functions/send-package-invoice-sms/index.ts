@@ -198,13 +198,19 @@ serve(async (req) => {
       );
     }
 
-    // Get payments for all policies (include refused=null for pending Visa payments)
-    const { data: allPayments } = await supabase
+    // Get payments for all policies (include refused=null for pending Visa
+    // payments). Use "*" so newly-added columns like receipt_number are
+    // picked up when present and the query doesn't error out on older
+    // deploys where the column still doesn't exist.
+    const { data: allPayments, error: allPaymentsError } = await supabase
       .from('policy_payments')
-      .select('id, policy_id, payment_type, amount, payment_date, receipt_number, cheque_number, refused')
+      .select('*')
       .in('policy_id', policy_ids)
       .or('refused.eq.false,refused.is.null')
       .order('created_at', { ascending: true });
+    if (allPaymentsError) {
+      console.error('[send-package-invoice-sms] payments fetch error:', allPaymentsError);
+    }
 
     // Get policy children (additional drivers) for all policies
     const { data: policyChildren, error: childrenError } = await supabase
@@ -766,24 +772,13 @@ function buildPackageInvoiceHtml(
     .brand .address { font-size: 12px; color: #1a1a1a; margin-top: 8px; max-width: 320px; line-height: 1.55; font-weight: 500; }
 
     .invoice-meta { text-align: left; min-width: 240px; }
-    .invoice-meta .doc-label {
-      font-size: 11px;
-      font-weight: 700;
-      color: #1a1a1a;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      margin-bottom: 6px;
-      opacity: 0.75;
-    }
-    .invoice-meta .doc-number {
+    .invoice-meta .doc-title {
       font-size: 42px;
       font-weight: 800;
       letter-spacing: 0.5px;
       color: #1a1a1a;
       line-height: 1;
-      margin-bottom: 14px;
-      direction: ltr;
-      font-variant-numeric: tabular-nums;
+      margin-bottom: 4px;
     }
     .meta-rows {
       width: 100%;
@@ -1250,7 +1245,7 @@ function buildPackageInvoiceHtml(
       .invoice { padding: 24px 20px; }
       .invoice-top { flex-direction: column; gap: 18px; }
       .invoice-meta { text-align: right; min-width: 0; }
-      .invoice-meta .doc-number { font-size: 32px; }
+      .invoice-meta .doc-title { font-size: 32px; }
       .customer-grid { grid-template-columns: 1fr; }
       .customer-grid .cell:not(:nth-child(3n+1)) { border-right: none; }
       .customer-grid .cell:nth-child(n+2) { border-top: 1px solid #1a1a1a; }
@@ -1274,10 +1269,13 @@ function buildPackageInvoiceHtml(
         ${effectiveAddress ? `<div class="address">${effectiveAddress}</div>` : ''}
       </div>
       <div class="invoice-meta">
-        <div class="doc-label">رقم الوثيقة</div>
-        <div class="doc-number">${primaryDocumentNumber}</div>
+        <div class="doc-title">وثيقة</div>
         ${invoiceSubtitle ? `<div class="subtitle">${invoiceSubtitle}</div>` : ''}
         <div class="meta-rows">
+          <div class="row">
+            <div class="label">رقم الوثيقة</div>
+            <div class="val">${primaryDocumentNumber}</div>
+          </div>
           <div class="row">
             <div class="label">التاريخ</div>
             <div class="val">${formatDate(today.toISOString())}</div>
