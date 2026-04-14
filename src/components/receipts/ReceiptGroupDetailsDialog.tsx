@@ -21,7 +21,7 @@ import {
 
 export interface ReceiptRow {
   id: string;
-  receipt_number: string | null;
+  receipt_number: number | string | null;
   client_name: string;
   car_number: string | null;
   amount: number;
@@ -31,6 +31,11 @@ export interface ReceiptRow {
   notes: string | null;
   receipt_type: string;
   created_at: string;
+  policy?: {
+    id: string;
+    document_number: string | null;
+    group_id: string | null;
+  } | null;
 }
 
 export interface ReceiptGroupView {
@@ -39,6 +44,11 @@ export interface ReceiptGroupView {
   car_number: string | null;
   receipts: ReceiptRow[];
   total: number;
+  // Document numbers of the policies backing the receipts in this
+  // group. Usually one per group, but packages can carry multiple
+  // (e.g. ELZAMI + ثالث have their own document numbers even though
+  // they share a group_id).
+  document_numbers: string[];
 }
 
 interface Props {
@@ -94,6 +104,10 @@ export function ReceiptGroupDetailsDialog({
     new Set(group.receipts.map((r) => paymentLabel[r.payment_method] || r.payment_method)),
   ).join(" + ");
 
+  const documentNumberLabel = group.document_numbers.length > 0
+    ? group.document_numbers.join(" · ")
+    : null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -120,6 +134,7 @@ export function ReceiptGroupDetailsDialog({
                     {combinedMethodLabel} · ₪{group.total.toLocaleString("en-US")} ·{" "}
                     {group.receipts.length}{" "}
                     {group.receipts.length === 1 ? "سند" : "سندات"}
+                    {documentNumberLabel && <> · وثيقة {documentNumberLabel}</>}
                   </p>
                 </div>
               </div>

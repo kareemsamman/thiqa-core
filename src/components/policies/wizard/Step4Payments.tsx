@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
-import { Plus, Trash2, CreditCard, AlertCircle, Loader2, Split, Upload, X, ImageIcon, Lock, Scan, Info } from "lucide-react";
+import { Plus, Trash2, CreditCard, AlertCircle, Loader2, Split, Upload, X, ImageIcon, Lock, Scan, Info, FileText } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { PaymentSummaryBar } from "./PaymentSummaryBar";
@@ -34,8 +34,14 @@ interface Step4Props {
   isElzami?: boolean;
 }
 
+interface PreviewItem {
+  url: string;
+  kind: 'image' | 'pdf';
+  name?: string;
+}
+
 interface PreviewUrls {
-  [paymentId: string]: string[];
+  [paymentId: string]: PreviewItem[];
 }
 
 export function Step4Payments({
@@ -85,11 +91,16 @@ export function Step4Payments({
 
     if (validFiles.length === 0) return;
 
-    // Create preview URLs
-    const newPreviewUrls = validFiles.map(file => URL.createObjectURL(file));
+    // Create preview items so PDFs render as a placeholder tile instead
+    // of a broken <img>.
+    const newPreviewItems: PreviewItem[] = validFiles.map(file => ({
+      url: URL.createObjectURL(file),
+      kind: file.type === 'application/pdf' ? 'pdf' : 'image',
+      name: file.name,
+    }));
     setPreviewUrls(prev => ({
       ...prev,
-      [paymentId]: [...(prev[paymentId] || []), ...newPreviewUrls],
+      [paymentId]: [...(prev[paymentId] || []), ...newPreviewItems],
     }));
     
     // Store files in payment object for later upload
@@ -101,20 +112,20 @@ export function Step4Payments({
   };
 
   const removeImage = (paymentId: string, index: number) => {
-    // Revoke preview URL
-    const urls = previewUrls[paymentId] || [];
-    if (urls[index]) {
-      URL.revokeObjectURL(urls[index]);
+    // Revoke preview URL only when it's a blob we created
+    const items = previewUrls[paymentId] || [];
+    const target = items[index];
+    if (target?.url?.startsWith('blob:')) {
+      URL.revokeObjectURL(target.url);
     }
-    
-    // Update preview URLs
+
     setPreviewUrls(prev => {
-      const newUrls = (prev[paymentId] || []).filter((_, i) => i !== index);
-      if (newUrls.length === 0) {
+      const newItems = (prev[paymentId] || []).filter((_, i) => i !== index);
+      if (newItems.length === 0) {
         const { [paymentId]: _, ...rest } = prev;
         return rest;
       }
-      return { ...prev, [paymentId]: newUrls };
+      return { ...prev, [paymentId]: newItems };
     });
     
     // Update payment files
@@ -519,13 +530,23 @@ export function Step4Payments({
                           className="h-10 w-14 object-cover rounded border"
                         />
                       )}
-                      {getPreviewUrls(payment.id).map((url, imgIndex) => (
+                      {getPreviewUrls(payment.id).map((item, imgIndex) => (
                         <div key={imgIndex} className="relative group">
-                          <img
-                            src={url}
-                            alt=""
-                            className="h-10 w-14 object-cover rounded border"
-                          />
+                          {item.kind === 'pdf' ? (
+                            <div
+                              className="h-10 w-14 rounded border bg-red-50 border-red-200 flex flex-col items-center justify-center gap-0.5"
+                              title={item.name || 'PDF'}
+                            >
+                              <FileText className="h-4 w-4 text-red-500" />
+                              <span className="text-[8px] font-bold text-red-500 leading-none">PDF</span>
+                            </div>
+                          ) : (
+                            <img
+                              src={item.url}
+                              alt={item.name || ''}
+                              className="h-10 w-14 object-cover rounded border"
+                            />
+                          )}
                           <button
                             type="button"
                             onClick={() => removeImage(payment.id, imgIndex)}
@@ -612,8 +633,8 @@ export function Step4Payments({
 
           // Convert detected cheques to payment lines with images
           const newPayments: PaymentLine[] = [];
-          const newPreviewUrls: { [key: string]: string[] } = {};
-          
+          const newPreviewUrls: { [key: string]: PreviewItem[] } = {};
+
           for (const cheque of detectedCheques) {
             const paymentId = crypto.randomUUID();
             const payment: PaymentLine = {
@@ -625,28 +646,32 @@ export function Step4Payments({
               refused: false,
               cheque_image_url: cheque.image_url,
             };
-            
+
             // Convert cropped image to File for pendingImages
             if (cheque.cropped_base64) {
               try {
                 const blob = base64ToBlob(cheque.cropped_base64);
                 const file = new File(
-                  [blob], 
-                  `cheque_${cheque.cheque_number || paymentId}.jpg`, 
+                  [blob],
+                  `cheque_${cheque.cheque_number || paymentId}.jpg`,
                   { type: 'image/jpeg' }
                 );
                 payment.pendingImages = [file];
-                
-                // Create preview URL for display
-                newPreviewUrls[paymentId] = [URL.createObjectURL(blob)];
+
+                // Cheque scans are always JPEGs from the detector, never PDFs.
+                newPreviewUrls[paymentId] = [{
+                  url: URL.createObjectURL(blob),
+                  kind: 'image',
+                  name: file.name,
+                }];
               } catch (e) {
                 console.error('Failed to convert cheque image:', e);
               }
             }
-            
+
             newPayments.push(payment);
           }
-          
+
           // Update preview URLs state
           setPreviewUrls(prev => ({ ...prev, ...newPreviewUrls }));
           

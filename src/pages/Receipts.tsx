@@ -426,7 +426,7 @@ export default function Receipts() {
     try {
       let query = (supabase as any)
         .from("receipts")
-        .select("*")
+        .select("*, policy:policies(id, document_number, group_id)")
         .eq("agent_id", agentId)
         .eq("receipt_type", activeTab)
         .order("receipt_date", { ascending: false })
@@ -484,25 +484,51 @@ export default function Receipts() {
   }, [activeTab, dateFrom, dateTo, paymentMethodFilter, searchQuery]);
 
   // ─── Grouping ──────────────────────────────────────────────────
-
+  //
+  // Preferred grouping for auto-synced receipts (those with a policy
+  // link): collapse every receipt whose policy shares the same package
+  // (policies.group_id) into one row — matches how ClientDetails groups
+  // the payments table. Standalone policies (no group_id) still collapse
+  // all their payments into one row via policy_id. Manual receipts with
+  // no policy link fall back to the old (client_name, car_number,
+  // minute) key so same-batch manual entries still show together.
+  // Receipts are already fetched newest-first, so Map insertion order
+  // preserves that ordering in the output.
   const groups: ReceiptGroup[] = useMemo(() => {
     const map = new Map<string, ReceiptGroup>();
     for (const r of receipts) {
-      const minute = roundToMinute(r.created_at);
-      const key = `${r.client_name}||${r.car_number || ""}||${minute}`;
+      // PostgREST may return a single-FK join as an object OR a
+      // one-element array depending on server version, so normalize.
+      const rawPolicy = (r as any).policy;
+      const policy = Array.isArray(rawPolicy) ? rawPolicy[0] ?? null : rawPolicy ?? null;
+      let key: string;
+      if (policy?.group_id) {
+        key = `grp:${policy.group_id}`;
+      } else if (policy?.id) {
+        key = `pol:${policy.id}`;
+      } else {
+        const minute = roundToMinute(r.created_at);
+        key = `manual:${r.client_name}||${r.car_number || ""}||${minute}`;
+      }
+
       if (!map.has(key)) {
         map.set(key, {
           key,
           client_name: r.client_name,
           car_number: r.car_number,
-          created_minute: minute,
+          created_minute: roundToMinute(r.created_at),
           receipts: [],
           total: 0,
+          document_numbers: [],
         });
       }
       const g = map.get(key)!;
       g.receipts.push(r);
       g.total += r.amount;
+      const doc = policy?.document_number;
+      if (doc && !g.document_numbers.includes(doc)) {
+        g.document_numbers.push(doc);
+      }
     }
     return Array.from(map.values());
   }, [receipts]);
@@ -1003,6 +1029,8 @@ export default function Receipts() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-right">المبلغ</TableHead>
+                  <TableHead className="text-right">رقم سند القبض</TableHead>
+                  <TableHead className="text-right">رقم الوثيقة</TableHead>
                   <TableHead className="text-right">التاريخ</TableHead>
                   <TableHead className="text-right">اسم العميل</TableHead>
                   <TableHead className="text-right">رقم السيارة</TableHead>
@@ -1052,6 +1080,16 @@ export default function Receipts() {
                             </Badge>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs ltr-nums">
+                        {group.receipts.length === 1
+                          ? (firstReceipt?.receipt_number ?? "-")
+                          : `${group.receipts[0]?.receipt_number ?? "-"}…`}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs ltr-nums">
+                        {group.document_numbers.length > 0
+                          ? group.document_numbers.join(" · ")
+                          : "-"}
                       </TableCell>
                       <TableCell className="ltr-nums">
                         {formatDate(firstReceipt?.receipt_date || "")}
