@@ -49,32 +49,69 @@ interface PhoneLink {
   href: string;
 }
 
+function escapeHtml(str: string): string {
+  return (str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function paymentTypeLabel(p: { payment_type: string; locked?: boolean | null }): string {
+  if (p.locked && p.payment_type === 'visa') return 'فيزا خارجي';
+  return PAYMENT_TYPE_LABELS[p.payment_type] || p.payment_type;
+}
+
 function buildBulkReceiptHtml(
   payments: any[],
   totalAmount: number,
   client: any,
   car: any,
-  policyTypes: string[],
-  paymentDate: string,
-  paymentType: string,
-  companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string }
+  _policyTypes: string[],
+  _paymentDate: string,
+  _paymentType: string,
+  companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string },
+  branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' } as AgentBranding,
 ): string {
-  const paymentTypeLabel = PAYMENT_TYPE_LABELS[paymentType] || paymentType;
-  
-  // Get unique policy type labels
-  const uniquePolicyLabels = [...new Set(policyTypes)].map(type => 
-    POLICY_TYPE_LABELS[type] || type
-  );
-  
-  const policyTypesText = uniquePolicyLabels.join(' + ');
-  
-  // Build phone links section
+  const today = new Date();
+  const primaryDocumentNumber = payments
+    .map((p: any) => p.policy?.document_number)
+    .find((n: string | null) => typeof n === 'string' && n.length > 0) || '—';
+
+  // Contact footer lines — phones / whatsapp / email / address pulled from
+  // the agent's sms_settings row, same as the package invoice footer.
   const phoneLinksHtml = (companySettings.company_phone_links || []).map(
     (link: PhoneLink) => `<a href="${link.href}">${link.phone}</a>`
-  ).join(' | ');
+  ).join(' / ');
+  const contactLines: string[] = [];
+  if (phoneLinksHtml) contactLines.push(`هاتف: ${phoneLinksHtml}`);
+  if (companySettings.company_email) {
+    contactLines.push(`بريد: <a href="mailto:${companySettings.company_email}">${companySettings.company_email}</a>`);
+  }
+  if (companySettings.company_location) {
+    contactLines.push(`عنوان: ${escapeHtml(companySettings.company_location)}`);
+  }
+  const contactFooterHtml = contactLines.length > 0
+    ? `<div class="contact">${contactLines.join(' · ')}</div>`
+    : '';
 
-  // Receipt ID from first payment
-  const receiptId = payments[0]?.id?.slice(0, 8).toUpperCase() || crypto.randomUUID().slice(0, 8);
+  // Rows for the receipts table. We don't emit any policy type column —
+  // the dialog hides it too and the grouped row is already one unit of
+  // "سندات قبض for the same package".
+  const receiptRows = payments.map((p: any) => {
+    const num = p.receipt_number || '—';
+    const typeLbl = paymentTypeLabel(p);
+    const extra = p.cheque_number ? ` · ${p.cheque_number}` : '';
+    return `
+      <tr>
+        <td class="num">${escapeHtml(num)}</td>
+        <td>${escapeHtml(typeLbl)}${extra}</td>
+        <td class="date">${formatDate(p.payment_date)}</td>
+        <td class="amount">₪${Number(p.amount || 0).toLocaleString('en-US')}</td>
+      </tr>
+    `;
+  }).join('');
 
   return `
 <!DOCTYPE html>
@@ -83,319 +120,291 @@ function buildBulkReceiptHtml(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-  <title>إيصال دفع - ${client?.full_name || 'عميل'}</title>
+  <title>سندات قبض - ${escapeHtml(client?.full_name || 'عميل')}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    @page { size: A5; margin: 10mm; }
+    @page { size: A4; margin: 10mm; }
     @media print {
-      body { padding: 0; }
+      body { padding: 0; background: #ffffff; }
       .no-print { display: none !important; }
     }
     body {
       font-family: 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif;
-      font-size: 14px;
-      line-height: 1.6;
-      color: #2d3748;
-      background: #122143;
+      font-size: 13px;
+      line-height: 1.55;
+      color: #1a1a1a;
+      background: #f4f4f5;
       min-height: 100vh;
       padding: 24px 16px;
       direction: rtl;
     }
-    .container { 
-      max-width: 500px; 
-      margin: 0 auto; 
-      background: white;
-      border-radius: 20px;
-      box-shadow: 0 8px 40px rgba(0,0,0,0.25);
-      overflow: hidden;
+    .invoice {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #1a1a1a;
+      padding: 32px 34px;
     }
-    .header {
-      text-align: center;
-      padding: 25px 20px;
-      background: linear-gradient(135deg, #122143 0%, #1a3260 100%);
-      color: white;
-    }
-    .header h1 { 
-      font-size: 24px; 
-      font-weight: 800;
-      margin-bottom: 5px;
-    }
-    .header .english-name {
-      font-size: 12px;
-      letter-spacing: 2px;
-      opacity: 0.8;
-      margin-bottom: 10px;
-    }
-    .header .receipt-title {
-      font-size: 18px;
-      font-weight: 700;
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid rgba(255,255,255,0.3);
-    }
-    .receipt-number {
-      background: rgba(255,255,255,0.15);
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 12px;
-      display: inline-block;
-      margin-top: 10px;
-    }
-    .amount-section {
-      text-align: center;
-      padding: 30px 20px;
-      background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-    }
-    .amount-label {
-      font-size: 14px;
-      color: #065f46;
-      font-weight: 500;
-      margin-bottom: 8px;
-    }
-    .amount-value {
-      font-size: 42px;
-      font-weight: 800;
-      color: #047857;
-    }
-    .amount-currency {
-      font-size: 24px;
-    }
-    .section {
-      padding: 20px;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .section:last-child {
-      border-bottom: none;
-    }
-    .section-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: #1e3a5f;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .section-icon {
-      font-size: 16px;
-    }
-    .info-item {
+
+    .invoice-top {
       display: flex;
       justify-content: space-between;
-      padding: 8px 0;
-      border-bottom: 1px dashed #e2e8f0;
+      align-items: flex-start;
+      gap: 28px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #1a1a1a;
+      margin-bottom: 24px;
     }
-    .info-item:last-child {
-      border-bottom: none;
+    .brand { max-width: 340px; }
+    .brand .logo { max-height: 70px; max-width: 180px; margin-bottom: 10px; display: block; }
+    .brand .name { font-size: 15px; font-weight: 700; color: #1a1a1a; }
+    .brand .tax {
+      font-size: 12px; color: #1a1a1a; margin-top: 2px;
+      direction: ltr; text-align: right;
+      font-variant-numeric: tabular-nums; font-weight: 500;
     }
-    .info-label {
-      color: #718096;
-      font-weight: 500;
-      font-size: 13px;
+    .brand .address { font-size: 12px; color: #1a1a1a; margin-top: 8px; line-height: 1.55; font-weight: 500; }
+    .invoice-meta { text-align: left; min-width: 240px; }
+    .invoice-meta .doc-title {
+      font-size: 42px; font-weight: 800; letter-spacing: 0.5px;
+      color: #1a1a1a; line-height: 1; margin-bottom: 4px;
     }
-    .info-value {
-      color: #1e3a5f;
-      font-weight: 700;
-      font-size: 13px;
+    .invoice-meta .subtitle {
+      font-size: 12px; color: #1a1a1a; margin-bottom: 14px; opacity: 0.7;
     }
-    .payment-badge {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 12px;
+    .meta-rows { width: 100%; border: 1px solid #1a1a1a; font-size: 12px; }
+    .meta-rows .row { display: flex; }
+    .meta-rows .row + .row { border-top: 1px solid #1a1a1a; }
+    .meta-rows .label {
+      flex: 0 0 110px; padding: 7px 12px;
+      background: #f4f4f5; font-weight: 700; color: #1a1a1a;
+      font-size: 11.5px; text-align: right;
+      border-left: 1px solid #1a1a1a; letter-spacing: 0.3px;
+    }
+    .meta-rows .val {
+      flex: 1; padding: 7px 12px;
+      text-align: left; direction: ltr;
+      font-weight: 700; color: #1a1a1a;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .customer { margin-bottom: 22px; border: 1px solid #1a1a1a; }
+    .section-title {
+      padding: 8px 14px;
+      border-bottom: 1px solid #1a1a1a;
+      background: #f4f4f5;
+      font-size: 11px; font-weight: 700; color: #1a1a1a;
+      letter-spacing: 1.5px; text-transform: uppercase;
+    }
+    .customer-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+    .customer-grid .cell { padding: 9px 14px; }
+    .customer-grid .cell:not(:nth-child(3n+1)) { border-right: 1px solid #1a1a1a; }
+    .customer-grid .cell:nth-child(n+4) { border-top: 1px solid #1a1a1a; }
+    .customer-grid .label {
+      font-size: 10px; font-weight: 700; color: #1a1a1a;
+      letter-spacing: 0.3px; margin-bottom: 3px; opacity: 0.75;
+    }
+    .customer-grid .value { font-size: 13px; font-weight: 600; color: #1a1a1a; }
+
+    /* Receipts table */
+    .receipts-section { margin-bottom: 22px; }
+    .receipts {
+      width: 100%;
+      border-collapse: collapse;
       font-size: 12px;
-      font-weight: 700;
+      border: 1px solid #1a1a1a;
     }
-    .badge-cash { background: #d1fae5; color: #065f46; }
-    .badge-visa { background: #dbeafe; color: #1e40af; }
-    .badge-cheque { background: #fef3c7; color: #92400e; }
-    .badge-transfer { background: #e9d5ff; color: #6b21a8; }
-    .package-badge {
-      display: inline-block;
-      padding: 8px 16px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border-radius: 20px;
-      font-size: 13px;
-      font-weight: 700;
-      margin-top: 10px;
+    .receipts thead th {
+      background: #f4f4f5;
+      color: #1a1a1a;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 1px; text-transform: uppercase;
+      padding: 9px 12px; text-align: right;
+      border-bottom: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
     }
+    .receipts thead th:last-child { border-left: none; }
+    .receipts tbody td {
+      padding: 10px 12px;
+      border-top: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+      font-size: 12px; color: #1a1a1a; font-weight: 500;
+      vertical-align: middle;
+    }
+    .receipts tbody td:last-child { border-left: none; }
+    .receipts tbody tr:first-child td { border-top: none; }
+    .receipts tbody td.num,
+    .receipts tbody td.date,
+    .receipts tbody td.amount {
+      direction: ltr; text-align: left;
+      font-variant-numeric: tabular-nums; font-weight: 700;
+    }
+
+    .total-row {
+      display: flex; justify-content: flex-end;
+      margin-bottom: 20px;
+    }
+    .total-row .box {
+      border: 1px solid #1a1a1a;
+      display: flex; align-items: stretch;
+    }
+    .total-row .box .label {
+      padding: 14px 20px;
+      background: #1a1a1a; color: #ffffff;
+      font-size: 12px; font-weight: 700;
+      letter-spacing: 1.2px; text-transform: uppercase;
+      display: flex; align-items: center;
+    }
+    .total-row .box .val {
+      padding: 14px 28px;
+      font-size: 28px; font-weight: 800;
+      color: #1a1a1a;
+      direction: ltr;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .policy-note {
+      border: 1px solid #1a1a1a;
+      padding: 12px 16px; margin-bottom: 24px;
+      font-size: 12px; color: #1a1a1a; background: #f9fafb;
+    }
+    .policy-note strong {
+      font-weight: 700; font-variant-numeric: tabular-nums;
+      direction: ltr; display: inline-block;
+    }
+
     .footer {
-      text-align: center;
-      padding: 20px;
-      background: #f8fafc;
-      color: #718096;
-      font-size: 12px;
+      padding-top: 16px; border-top: 1px solid #1a1a1a;
+      font-size: 12px; color: #1a1a1a; text-align: center;
     }
-    .thank-you {
-      font-size: 16px;
-      font-weight: 700;
-      color: #1e3a5f;
-      margin-bottom: 12px;
+    .footer .thanks { font-weight: 700; margin-bottom: 6px; }
+    .footer .contact { line-height: 1.8; }
+    .footer .contact a { color: #1a1a1a; text-decoration: none; }
+    .footer .issued { margin-top: 10px; opacity: 0.7; }
+
+    .actions {
+      margin-top: 18px;
+      display: flex; gap: 10px; justify-content: center;
     }
-    .contact-info {
-      margin: 15px 0;
-      padding: 12px;
-      background: #f1f5f9;
-      border-radius: 8px;
-      display: inline-block;
-      text-align: center;
+    .actions button {
+      padding: 10px 22px;
+      background: #1a1a1a; color: #ffffff;
+      border: none; font-family: inherit;
+      font-size: 13px; font-weight: 700;
+      cursor: pointer; letter-spacing: 0.5px;
     }
-    .contact-row {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 4px 0;
-      color: #1e3a5f;
-      font-size: 12px;
-    }
-    .contact-row a {
-      color: #2563eb;
-      text-decoration: none;
-    }
-    .action-buttons {
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-top: 15px;
-    }
-    .print-button {
-      display: inline-block;
-      padding: 12px 25px;
-      background: linear-gradient(135deg, #1e3a5f 0%, #2d5a8a 100%);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      font-family: 'Tajawal', sans-serif;
-    }
-    .share-button {
-      display: inline-block;
-      padding: 12px 25px;
-      background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      font-family: 'Tajawal', sans-serif;
-    }
-    .print-button:hover, .share-button:hover {
-      opacity: 0.9;
-    }
-    @media (max-width: 500px) {
-      body { padding: 10px; }
-      .container { border-radius: 12px; }
-      .amount-value { font-size: 36px; }
+    .actions button:hover { opacity: 0.85; }
+
+    @media (max-width: 640px) {
+      body { padding: 14px 8px; font-size: 12px; }
+      .invoice { padding: 24px 20px; }
+      .invoice-top { flex-direction: column; gap: 18px; }
+      .invoice-meta { text-align: right; min-width: 0; }
+      .invoice-meta .doc-title { font-size: 32px; }
+      .customer-grid { grid-template-columns: 1fr; }
+      .customer-grid .cell:not(:nth-child(3n+1)) { border-right: none; }
+      .customer-grid .cell:nth-child(n+2) { border-top: 1px solid #1a1a1a; }
+      .total-row .box .val { font-size: 22px; padding: 12px 18px; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      ${branding.logoUrl ? `<img src="${branding.logoUrl}" alt="${branding.companyName}" style="max-height:50px;object-fit:contain;margin:0 auto 8px auto;display:block;" />` : ''}
-      <h1>${branding.companyName}</h1>
-      ${branding.companyNameEn ? `<p class="english-name">${branding.companyNameEn}</p>` : ''}
-      <p class="receipt-title">إيصال دفع</p>
-      <div class="receipt-number">رقم: ${receiptId}</div>
-    </div>
-
-    <div class="amount-section">
-      <p class="amount-label">المبلغ المدفوع</p>
-      <p class="amount-value">
-        <span class="amount-currency">₪</span>${totalAmount.toLocaleString()}
-      </p>
-    </div>
-
-    <div class="section">
-      <div class="section-title">
-        <span class="section-icon">💳</span>
-        تفاصيل الدفع
+  <div class="invoice">
+    <!-- Header -->
+    <div class="invoice-top">
+      <div class="brand">
+        ${branding.logoUrl ? `<img class="logo" src="${branding.logoUrl}" alt="${escapeHtml(branding.companyName)}" />` : ''}
+        <div class="name">${escapeHtml(branding.companyName)}</div>
+        ${(branding as any).taxNumber ? `<div class="tax">رقم المشغل: ${escapeHtml((branding as any).taxNumber)}</div>` : ''}
+        ${(branding as any).invoiceAddress ? `<div class="address">${escapeHtml((branding as any).invoiceAddress)}</div>`
+          : (companySettings.company_location ? `<div class="address">${escapeHtml(companySettings.company_location)}</div>` : '')}
       </div>
-      <div class="info-item">
-        <span class="info-label">تاريخ الدفع:</span>
-        <span class="info-value">${formatDate(paymentDate)}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">طريقة الدفع:</span>
-        <span class="info-value">
-          <span class="payment-badge badge-${paymentType}">${paymentTypeLabel}</span>
-        </span>
+      <div class="invoice-meta">
+        <div class="doc-title">سندات قبض</div>
+        <div class="subtitle">${payments.length} ${payments.length === 1 ? 'سند قبض' : 'سندات قبض'}</div>
+        <div class="meta-rows">
+          <div class="row">
+            <div class="label">رقم الوثيقة</div>
+            <div class="val">${escapeHtml(primaryDocumentNumber)}</div>
+          </div>
+          <div class="row">
+            <div class="label">التاريخ</div>
+            <div class="val">${formatDate(today.toISOString())}</div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="section">
-      <div class="section-title">
-        <span class="section-icon">👤</span>
-        بيانات العميل
-      </div>
-      <div class="info-item">
-        <span class="info-label">الاسم:</span>
-        <span class="info-value">${client?.full_name || '-'}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">رقم الهوية:</span>
-        <span class="info-value">${client?.id_number || '-'}</span>
-      </div>
-      ${car?.car_number ? `
-      <div class="info-item">
-        <span class="info-label">رقم السيارة:</span>
-        <span class="info-value">${car.car_number}</span>
-      </div>
-      ` : ''}
-    </div>
-
-    <div class="section">
-      <div class="section-title">
-        <span class="section-icon">📦</span>
-        باقة التأمين
-      </div>
-      <div style="text-align: center;">
-        <span class="package-badge">📋 ${policyTypesText}</span>
+    <!-- Customer info -->
+    <div class="customer">
+      <div class="section-title">معلومات العميل</div>
+      <div class="customer-grid">
+        <div class="cell">
+          <div class="label">الاسم</div>
+          <div class="value">${escapeHtml(client?.full_name || '-')}</div>
+        </div>
+        <div class="cell">
+          <div class="label">رقم الهوية</div>
+          <div class="value">${escapeHtml(client?.id_number || '-')}</div>
+        </div>
+        <div class="cell">
+          <div class="label">رقم الهاتف</div>
+          <div class="value">${escapeHtml(client?.phone_number || '-')}</div>
+        </div>
       </div>
     </div>
 
+    <!-- Receipts table -->
+    <div class="receipts-section">
+      <div class="section-title">سندات القبض</div>
+      <table class="receipts">
+        <thead>
+          <tr>
+            <th style="width: 120px;">رقم سند القبض</th>
+            <th style="width: 160px;">طريقة الدفع</th>
+            <th style="width: 130px;">تاريخ الدفع</th>
+            <th>المبلغ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${receiptRows}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Total -->
+    <div class="total-row">
+      <div class="box">
+        <div class="label">المجموع</div>
+        <div class="val">₪${totalAmount.toLocaleString('en-US')}</div>
+      </div>
+    </div>
+
+    <!-- Policy-link note -->
+    <div class="policy-note">
+      هذه السندات تخص الوثيقة رقم <strong>${escapeHtml(primaryDocumentNumber)}</strong>.
+    </div>
+
+    <!-- Footer -->
     <div class="footer">
-      <p class="thank-you">شكراً لتعاملكم معنا 🙏</p>
-      <div class="contact-info">
-        ${companySettings.company_email ? `
-        <div class="contact-row">
-          <span>📧</span>
-          <a href="mailto:${companySettings.company_email}">${companySettings.company_email}</a>
-        </div>
-        ` : ''}
-        ${companySettings.company_phone_links && companySettings.company_phone_links.length > 0 ? `
-        <div class="contact-row">
-          <span>📞</span>
-          ${phoneLinksHtml}
-        </div>
-        ` : ''}
-        ${companySettings.company_location ? `
-        <div class="contact-row">
-          <span>📍</span>
-          <span>${companySettings.company_location}</span>
-        </div>
-        ` : ''}
-      </div>
-      <p>تم إصدار هذا الإيصال بتاريخ ${formatDate(new Date().toISOString())}</p>
-      <div class="action-buttons no-print">
-        <button class="print-button" onclick="window.print()">🖨️ طباعة الإيصال</button>
-        <button class="share-button" onclick="shareInvoice()">📲 مشاركة</button>
-      </div>
+      <div class="thanks">شكراً لثقتكم</div>
+      ${contactFooterHtml}
+      <div class="issued">تاريخ الإصدار: ${formatDate(today.toISOString())}</div>
+    </div>
+
+    <div class="actions no-print">
+      <button type="button" onclick="window.print()">طباعة</button>
+      <button type="button" onclick="shareReceipts()">مشاركة</button>
     </div>
   </div>
+
   <script>
-    function shareInvoice() {
-      const currentUrl = window.location.href;
-      const shareText = 'إيصال دفع التأمين: ' + currentUrl;
+    function shareReceipts() {
+      var url = window.location.href;
       if (navigator.share) {
-        navigator.share({ title: 'إيصال دفع', text: 'إيصال دفع التأمين الخاص بك', url: currentUrl }).catch(console.error);
+        navigator.share({ title: 'سندات قبض', url: url }).catch(function(){});
       } else {
-        window.open('https://wa.me/?text=' + encodeURIComponent(shareText), '_blank');
+        window.open('https://wa.me/?text=' + encodeURIComponent('سندات قبض: ' + url), '_blank');
       }
     }
   </script>
@@ -473,15 +482,21 @@ serve(async (req) => {
         amount,
         payment_type,
         payment_date,
+        cheque_number,
+        card_last_four,
+        locked,
+        receipt_number,
         policy:policies(
           id,
           policy_type_parent,
           policy_type_child,
+          document_number,
           client:clients(id, full_name, id_number, phone_number),
           car:cars(car_number, manufacturer_name, model, year)
         )
       `)
-      .in("id", payment_ids);
+      .in("id", payment_ids)
+      .order('payment_date', { ascending: true });
 
     if (paymentsError || !payments || payments.length === 0) {
       console.error("[generate-bulk-payment-receipt] Payments not found:", paymentsError);
@@ -529,7 +544,8 @@ serve(async (req) => {
       policyTypes,
       paymentDate,
       paymentType,
-      companySettings
+      companySettings,
+      branding,
     );
 
     if (!bunnyApiKey || !bunnyStorageZone) {

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -5,6 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   Banknote,
@@ -12,8 +14,11 @@ import {
   Wallet,
   AlertCircle,
   ReceiptText,
+  Printer,
+  Loader2,
 } from "lucide-react";
-import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { getCombinedPaymentTypeLabel, getPaymentTypeLabel } from "@/lib/paymentLabels";
 
 interface PaymentRecord {
@@ -72,6 +77,7 @@ const formatDate = (dateStr: string | null) => {
 };
 
 export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) {
+  const [printing, setPrinting] = useState(false);
   if (!group) return null;
 
   const combinedTypeLabel = getCombinedPaymentTypeLabel(
@@ -79,6 +85,29 @@ export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) 
       ? group.payments
       : [{ payment_type: group.payment_type, locked: null }],
   );
+
+  const handlePrint = async () => {
+    if (group.payments.length === 0) return;
+    setPrinting(true);
+    try {
+      const ids = group.payments.map((p) => p.id);
+      const fn = ids.length > 1 ? 'generate-bulk-payment-receipt' : 'generate-payment-receipt';
+      const body = ids.length > 1 ? { payment_ids: ids } : { payment_id: ids[0] };
+      const { data, error } = await supabase.functions.invoke(fn, { body });
+      if (error) throw error;
+      const url = data?.receipt_url;
+      if (url) {
+        window.open(url, '_blank');
+      } else {
+        toast.error('لم يتم العثور على رابط السند');
+      }
+    } catch (e) {
+      console.error('Print receipts error:', e);
+      toast.error('فشل في توليد السندات');
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -89,19 +118,36 @@ export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) 
           style={{ background: "linear-gradient(135deg, #122143 0%, #1a3260 100%)" }}
         >
           <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                <ReceiptText className="h-5 w-5" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <ReceiptText className="h-5 w-5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-lg font-bold text-white text-right">
+                    تفاصيل الدفعة
+                  </DialogTitle>
+                  <p className="text-xs text-white/70">
+                    {combinedTypeLabel} · ₪{group.totalAmount.toLocaleString("en-US")} ·{" "}
+                    {formatDate(group.payment_date)}
+                  </p>
+                </div>
               </div>
-              <div>
-                <DialogTitle className="text-lg font-bold text-white text-right">
-                  تفاصيل الدفعة
-                </DialogTitle>
-                <p className="text-xs text-white/70">
-                  {combinedTypeLabel} · ₪{group.totalAmount.toLocaleString("en-US")} ·{" "}
-                  {formatDate(group.payment_date)}
-                </p>
-              </div>
+              <Button
+                size="sm"
+                onClick={handlePrint}
+                disabled={printing}
+                className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0 shrink-0"
+              >
+                {printing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Printer className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">
+                  {group.payments.length > 1 ? 'طباعة السندات' : 'طباعة السند'}
+                </span>
+              </Button>
             </div>
           </DialogHeader>
         </div>
@@ -139,11 +185,6 @@ export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) 
                         <Badge variant="outline" className={cn("text-[10px]", typeBg)}>
                           {getPaymentTypeLabel(p)}
                         </Badge>
-                        {p.policy && (
-                          <Badge variant="outline" className="text-[10px]">
-                            {getInsuranceTypeLabel(p.policy.policy_type_parent as any, null)}
-                          </Badge>
-                        )}
                         {p.refused && (
                           <Badge variant="destructive" className="text-[10px] gap-1">
                             <AlertCircle className="h-3 w-3" />

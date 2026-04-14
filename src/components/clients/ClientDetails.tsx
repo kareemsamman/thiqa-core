@@ -191,6 +191,7 @@ interface PaymentRecord {
   policy: {
     id: string;
     policy_type_parent: string;
+    policy_type_child?: string | null;
     insurance_price: number;
     group_id?: string | null;
   } | null;
@@ -585,7 +586,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // package into one row.
       const { data: policiesData } = await supabase
         .from('policies')
-        .select('id, policy_type_parent, insurance_price, group_id')
+        .select('id, policy_type_parent, policy_type_child, insurance_price, group_id')
         .eq('client_id', client.id)
         .is('deleted_at', null);
 
@@ -1031,6 +1032,38 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     } catch (error) {
       console.error('Generate receipt error:', error);
       toast.error("فشل في توليد الإيصال");
+    } finally {
+      setGeneratingReceipt(null);
+    }
+  };
+
+  // Print every سند قبض in a grouped row as a single combined page. Uses
+  // the bulk endpoint when there's more than one payment; for a single
+  // payment it falls back to the per-payment endpoint.
+  const handlePrintGroupReceipts = async (groupKey: string, paymentIds: string[]) => {
+    if (paymentIds.length === 0) return;
+    setGeneratingReceipt(groupKey);
+    try {
+      if (paymentIds.length === 1) {
+        const { data, error } = await supabase.functions.invoke('generate-payment-receipt', {
+          body: { payment_id: paymentIds[0] },
+        });
+        if (error) throw error;
+        const url = data?.receipt_url;
+        if (url) window.open(url, '_blank');
+        else toast.error('لم يتم العثور على رابط السند');
+      } else {
+        const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
+          body: { payment_ids: paymentIds },
+        });
+        if (error) throw error;
+        const url = data?.receipt_url;
+        if (url) window.open(url, '_blank');
+        else toast.error('لم يتم العثور على رابط السندات');
+      }
+    } catch (e) {
+      console.error('Print group receipts error:', e);
+      toast.error('فشل في توليد سندات القبض');
     } finally {
       setGeneratingReceipt(null);
     }
@@ -1903,11 +1936,27 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {group.policyTypes.map(type => (
-                              <Badge key={type} className={cn("border", policyTypeColors[type])}>
-                                {getInsuranceTypeLabel(type as any, null)}
-                              </Badge>
-                            ))}
+                            {(() => {
+                              // Collect a unique, child-aware label per policy
+                              // row in the group so a package pays with ثالث +
+                              // إلزامي renders both tags instead of only the
+                              // first type seen.
+                              const seen = new Set<string>();
+                              const tags: { label: string; parent: string }[] = [];
+                              for (const p of group.payments) {
+                                const parent = p.policy?.policy_type_parent;
+                                if (!parent) continue;
+                                const label = getInsuranceTypeLabel(parent as any, (p.policy as any)?.policy_type_child ?? null);
+                                if (seen.has(label)) continue;
+                                seen.add(label);
+                                tags.push({ label, parent });
+                              }
+                              return tags.map((t) => (
+                                <Badge key={t.label} className={cn("border", policyTypeColors[t.parent])}>
+                                  {t.label}
+                                </Badge>
+                              ));
+                            })()}
                           </div>
                         </TableCell>
                         <TableCell className="font-mono">{group.cheque_number || '-'}</TableCell>
@@ -1933,25 +1982,29 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              {group.payments.length === 1 && (
+                              {/* Print all receipts for this row — one PDF when
+                                  the row groups multiple payments, one per-payment
+                                  PDF otherwise. */}
+                              <DropdownMenuItem
+                                onClick={() => handlePrintGroupReceipts(group.id, group.payments.map((p) => p.id))}
+                                disabled={generatingReceipt === group.id}
+                              >
+                                {generatingReceipt === group.id ? (
+                                  <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                                ) : (
+                                  <Receipt className="h-4 w-4 ml-2" />
+                                )}
+                                {group.payments.length > 1 ? 'طباعة سندات القبض' : 'طباعة سند القبض'}
+                              </DropdownMenuItem>
+
+                              {group.payments.length === 1 ? (
                                 <>
-                                  <DropdownMenuItem 
-                                    onClick={() => handleGeneratePaymentReceipt(group.payments[0].id)}
-                                    disabled={generatingReceipt === group.payments[0].id}
-                                  >
-                                    {generatingReceipt === group.payments[0].id ? (
-                                      <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                                    ) : (
-                                      <Receipt className="h-4 w-4 ml-2" />
-                                    )}
-                                    إيصال
-                                  </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleEditPayment(group.payments[0])}>
                                     <Edit className="h-4 w-4 ml-2" />
                                     تعديل
                                   </DropdownMenuItem>
                                   {!group.locked && (
-                                    <DropdownMenuItem 
+                                    <DropdownMenuItem
                                       className="text-destructive focus:text-destructive"
                                       onClick={() => {
                                         setDeletePaymentId(group.payments[0].id);
@@ -1963,20 +2016,19 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                     </DropdownMenuItem>
                                   )}
                                 </>
-                              )}
-                              {group.payments.length > 1 && (
+                              ) : (
                                 <>
                                   <DropdownMenuItem disabled className="text-muted-foreground text-xs">
                                     دفعة مجمعة ({group.payments.length} سجلات)
                                   </DropdownMenuItem>
-                                  {group.payments.map((payment, idx) => (
-                                    <DropdownMenuItem 
+                                  {group.payments.map((payment) => (
+                                    <DropdownMenuItem
                                       key={payment.id}
                                       onClick={() => handleEditPayment(payment)}
                                       className="text-sm"
                                     >
                                       <Edit className="h-3 w-3 ml-2" />
-                                      تعديل: ₪{payment.amount} - {getInsuranceTypeLabel(payment.policy?.policy_type_parent as any || '', null)}
+                                      تعديل: ₪{Number(payment.amount || 0).toLocaleString('en-US')}
                                     </DropdownMenuItem>
                                   ))}
                                 </>
