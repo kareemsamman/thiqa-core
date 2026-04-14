@@ -150,9 +150,13 @@ function buildPaymentReceiptHtml(
   <title>سند قبض - ${escapeHtml(client.full_name || 'عميل')}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    @page { size: A4; margin: 10mm; }
+    /* margin:0 on @page removes Chrome's default print header/footer
+       (date, title, URL, page number) since they're drawn in the page
+       margin area and have no room to render. */
+    @page { size: A4; margin: 0; }
     @media print {
-      body { padding: 0; background: #ffffff; }
+      html, body { background: #ffffff; }
+      body { padding: 10mm 8mm; }
       .no-print { display: none !important; }
     }
     body {

@@ -23,7 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getCombinedPaymentTypeLabel, getPaymentTypeLabel } from "@/lib/paymentLabels";
 
-interface PaymentRecord {
+export interface PaymentRecord {
   id: string;
   amount: number;
   payment_date: string;
@@ -40,7 +40,7 @@ interface PaymentRecord {
   } | null;
 }
 
-interface GroupedPayment {
+export interface GroupedPayment {
   id: string;
   totalAmount: number;
   payment_date: string;

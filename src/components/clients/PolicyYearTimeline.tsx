@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PackagePaymentModal } from './PackagePaymentModal';
-import { PackagePaymentsDetailsDialog } from './PackagePaymentsDetailsDialog';
+import { PaymentGroupDetailsDialog, type GroupedPayment } from './PaymentGroupDetailsDialog';
 import { InvoiceSendPrintDialog } from '@/components/policies/InvoiceSendPrintDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -241,9 +241,11 @@ export function PolicyYearTimeline({
   const [invoiceDialogPolicyIds, setInvoiceDialogPolicyIds] = useState<string[]>([]);
   const [invoiceDialogClientPhone, setInvoiceDialogClientPhone] = useState<string | null>(null);
 
-  // Payment details dialog state
+  // Payment details dialog state — shows the same PaymentGroupDetailsDialog
+  // that ClientDetails opens when clicking a payment row, so the summary
+  // button and the table row route to an identical popup.
   const [paymentDetailsOpen, setPaymentDetailsOpen] = useState(false);
-  const [paymentDetailsPolicyIds, setPaymentDetailsPolicyIds] = useState<string[]>([]);
+  const [paymentDetailsGroup, setPaymentDetailsGroup] = useState<GroupedPayment | null>(null);
   // Notes editing state
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [editedNotesValue, setEditedNotesValue] = useState('');
@@ -596,6 +598,78 @@ export function PolicyYearTimeline({
     setPackagePaymentOpen(true);
   };
 
+  // Fetch all payments across the clicked package's policies and wrap them
+  // in a single GroupedPayment so PaymentGroupDetailsDialog (the same popup
+  // the ClientDetails payments table uses) can render them as-is.
+  const handleOpenPaymentDetails = async (policyIds: string[]) => {
+    if (policyIds.length === 0) return;
+    try {
+      const { data, error } = await supabase
+        .from('policy_payments')
+        .select(`
+          id, amount, payment_date, payment_type, cheque_number,
+          card_last_four, refused, locked, notes,
+          policy:policies!policy_payments_policy_id_fkey(
+            id, policy_type_parent, insurance_price
+          )
+        `)
+        .in('policy_id', policyIds)
+        .order('payment_date', { ascending: true });
+
+      if (error) throw error;
+
+      const payments = ((data as any[]) || []).map((p) => ({
+        id: p.id,
+        amount: Number(p.amount || 0),
+        payment_date: p.payment_date,
+        payment_type: p.payment_type,
+        cheque_number: p.cheque_number,
+        card_last_four: p.card_last_four,
+        refused: p.refused,
+        locked: p.locked,
+        notes: p.notes,
+        policy: Array.isArray(p.policy) ? p.policy[0] : p.policy,
+      }));
+
+      if (payments.length === 0) {
+        toast.info('لا توجد دفعات مسجلة');
+        return;
+      }
+
+      const accepted = payments.filter((p) => !p.refused);
+      const totalAmount = accepted.reduce((sum, p) => sum + p.amount, 0);
+      const paymentTypes: string[] = [];
+      const policyTypes: string[] = [];
+      for (const p of payments) {
+        if (p.payment_type && !paymentTypes.includes(p.payment_type)) {
+          paymentTypes.push(p.payment_type);
+        }
+        const parent = p.policy?.policy_type_parent;
+        if (parent && !policyTypes.includes(parent)) policyTypes.push(parent);
+      }
+      const first = payments[0];
+
+      const group: GroupedPayment = {
+        id: `pkg:${policyIds.join(',')}`,
+        totalAmount,
+        payment_date: first.payment_date,
+        payment_type: first.payment_type,
+        paymentTypes,
+        cheque_number: first.cheque_number ?? null,
+        refused: first.refused ?? null,
+        notes: first.notes ?? null,
+        payments,
+        policyTypes,
+      };
+
+      setPaymentDetailsGroup(group);
+      setPaymentDetailsOpen(true);
+    } catch (e) {
+      console.error('[PolicyYearTimeline] open payment details error:', e);
+      toast.error('فشل تحميل تفاصيل الدفعات');
+    }
+  };
+
   const handleOpenInvoiceDialog = async (e: React.MouseEvent, policyIds: string[]) => {
     e.stopPropagation();
     
@@ -743,10 +817,7 @@ export function PolicyYearTimeline({
                         accidentCount={accidentCount}
                         childrenCount={childrenCount}
                         getDocNumber={(id) => policyDocNumbers.get(id)}
-                        onOpenPaymentDetails={(ids) => {
-                          setPaymentDetailsPolicyIds(ids);
-                          setPaymentDetailsOpen(true);
-                        }}
+                        onOpenPaymentDetails={handleOpenPaymentDetails}
                         onPolicyClick={onPolicyClick}
                         onPaymentClick={(e) => handlePackagePayment(e, pkg.allPolicyIds, pkg.mainPolicy?.branch_id || pkg.addons[0]?.branch_id || null)}
                         onOpenInvoiceDialog={(e) => handleOpenInvoiceDialog(e, pkg.allPolicyIds)}
@@ -797,11 +868,13 @@ export function PolicyYearTimeline({
         clientPhone={invoiceDialogClientPhone}
       />
 
-      <PackagePaymentsDetailsDialog
+      <PaymentGroupDetailsDialog
         open={paymentDetailsOpen}
-        onOpenChange={setPaymentDetailsOpen}
-        policyIds={paymentDetailsPolicyIds}
-        onChange={() => { if (onPaymentAdded) onPaymentAdded(); }}
+        onOpenChange={(o) => {
+          setPaymentDetailsOpen(o);
+          if (!o) setPaymentDetailsGroup(null);
+        }}
+        group={paymentDetailsGroup}
       />
     </div>
   );
