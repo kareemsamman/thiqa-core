@@ -286,6 +286,116 @@
   }
 }
 
+/* ─────────────────────────────────────────────────────────────
+ * Fancy liquid-glass toast
+ *
+ * Sonner renders every toast with `.fancy-toast` (our custom class).
+ * We layer a shimmering highlight across the top and run an entrance
+ * animation that combines slide + scale + blur so they feel alive.
+ * ─────────────────────────────────────────────────────────────*/
+.fancy-toast {
+  animation: fancy-toast-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity, filter;
+}
+
+.fancy-toast[data-removed="true"],
+.fancy-toast[data-swiping="true"] {
+  animation: fancy-toast-out 260ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+/* Liquid highlight that travels across the top edge once on entry.
+   Gives a "light catching the glass" feel without being distracting. */
+.fancy-toast::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -50%;
+  right: -50%;
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    transparent 38%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 62%,
+    transparent 100%
+  );
+  transform: translateX(0);
+  animation: fancy-toast-shine 1600ms ease-out 160ms 1 both;
+  mix-blend-mode: overlay;
+}
+
+.dark .fancy-toast::before {
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    transparent 38%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 62%,
+    transparent 100%
+  );
+}
+
+/* Soft floating glow under the icon chip so it reads as liquid. */
+.fancy-toast-icon {
+  position: relative;
+}
+.fancy-toast-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.5), transparent 60%);
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
+
+@keyframes fancy-toast-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.94);
+    filter: blur(8px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes fancy-toast-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+    filter: blur(6px);
+  }
+}
+
+@keyframes fancy-toast-shine {
+  0% {
+    transform: translateX(-60%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(60%);
+    opacity: 0;
+  }
+}
+
+
 /* Print styles */
 @media print {
   [data-sidebar],
