@@ -32,6 +32,15 @@ const PAYMENT_TYPE_LABELS: Record<string, string> = {
   transfer: 'تحويل',
 };
 
+// Label a payment method. ELZAMI premiums are paid directly on the
+// insurance company's portal (visa flow) and stored with locked=true —
+// surface them as "فيزا خارجي" so the customer sees they didn't pay it
+// through the agency.
+function paymentTypeLabel(p: { payment_type: string; locked?: boolean | null }): string {
+  if (p.locked && p.payment_type === 'visa') return 'فيزا خارجي';
+  return PAYMENT_TYPE_LABELS[p.payment_type] || p.payment_type;
+}
+
 const CAR_TYPE_LABELS: Record<string, string> = {
   car: 'سيارة خاصة',
   cargo: 'شحن',
@@ -647,7 +656,7 @@ function buildPackageInvoiceHtml(
         ${allPaymentsList.map(p => `
           <tr>
             <td class="num">${p.receipt_number || '—'}</td>
-            <td>${PAYMENT_TYPE_LABELS[p.payment_type] || p.payment_type}${p.cheque_number ? ` · ${p.cheque_number}` : ''}</td>
+            <td>${paymentTypeLabel(p)}${p.cheque_number ? ` · ${p.cheque_number}` : ''}</td>
             <td class="date">${formatDate(p.payment_date)}</td>
             <td class="amount">₪${(p.amount || 0).toLocaleString('en-US')}</td>
           </tr>

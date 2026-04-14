@@ -15,9 +15,18 @@ interface GeneratePaymentReceiptRequest {
 const PAYMENT_TYPE_LABELS: Record<string, string> = {
   cash: 'نقدي',
   cheque: 'شيك',
-  visa: 'بطاقة ائتمان',
+  visa: 'فيزا',
   transfer: 'تحويل بنكي',
 };
+
+// Label a payment method. Locked visa rows are auto-created ELZAMI
+// payments the customer made directly on the insurance company's portal;
+// show them as "فيزا خارجي" so it's clear it didn't pass through the
+// agency's till.
+function paymentTypeLabel(p: { payment_type: string; locked?: boolean | null }): string {
+  if (p.locked && p.payment_type === 'visa') return 'فيزا خارجي';
+  return PAYMENT_TYPE_LABELS[p.payment_type] || p.payment_type;
+}
 
 function formatDate(dateStr: string): string {
   if (!dateStr) return '';
@@ -60,7 +69,7 @@ function buildPaymentReceiptHtml(
   companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string },
   branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' }
 ): string {
-  const paymentTypeLabel = PAYMENT_TYPE_LABELS[payment.payment_type] || payment.payment_type;
+  const paymentMethodLabel = paymentTypeLabel(payment);
   const policyDocumentNumber = policy?.document_number || policy?.policy_number || '—';
   const receiptNumber = payment.receipt_number || '—';
   const today = new Date();
@@ -451,7 +460,7 @@ function buildPaymentReceiptHtml(
       <div class="body">
         <div class="row">
           <div class="label">طريقة الدفع</div>
-          <div class="val">${escapeHtml(paymentTypeLabel)}</div>
+          <div class="val">${escapeHtml(paymentMethodLabel)}</div>
         </div>
         <div class="row">
           <div class="label">تاريخ الدفع</div>

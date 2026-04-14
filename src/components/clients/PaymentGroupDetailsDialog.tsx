@@ -14,6 +14,7 @@ import {
   ReceiptText,
 } from "lucide-react";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
+import { getCombinedPaymentTypeLabel, getPaymentTypeLabel } from "@/lib/paymentLabels";
 
 interface PaymentRecord {
   id: string;
@@ -23,6 +24,7 @@ interface PaymentRecord {
   cheque_number: string | null;
   card_last_four: string | null;
   refused: boolean | null;
+  locked: boolean | null;
   notes: string | null;
   policy: {
     id: string;
@@ -57,13 +59,6 @@ const paymentTypeIcon: Record<string, typeof Banknote> = {
   transfer: Wallet,
 };
 
-const paymentTypeLabel: Record<string, string> = {
-  cash: "نقدي",
-  cheque: "شيك",
-  visa: "فيزا",
-  transfer: "تحويل بنكي",
-};
-
 const paymentTypeBg: Record<string, string> = {
   cash: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30",
   cheque: "bg-blue-500/10 text-blue-700 border-blue-500/30",
@@ -79,11 +74,11 @@ const formatDate = (dateStr: string | null) => {
 export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) {
   if (!group) return null;
 
-  const combinedTypeLabel = (group.paymentTypes.length > 0
-    ? group.paymentTypes
-    : [group.payment_type])
-    .map((t) => paymentTypeLabel[t] || t)
-    .join(" + ");
+  const combinedTypeLabel = getCombinedPaymentTypeLabel(
+    group.payments.length > 0
+      ? group.payments
+      : [{ payment_type: group.payment_type, locked: null }],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -142,7 +137,7 @@ export function PaymentGroupDetailsDialog({ open, onOpenChange, group }: Props) 
                           ₪{Number(p.amount || 0).toLocaleString("en-US")}
                         </span>
                         <Badge variant="outline" className={cn("text-[10px]", typeBg)}>
-                          {paymentTypeLabel[p.payment_type] || p.payment_type}
+                          {getPaymentTypeLabel(p)}
                         </Badge>
                         {p.policy && (
                           <Badge variant="outline" className="text-[10px]">

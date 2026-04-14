@@ -30,6 +30,7 @@ import {
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { PaymentEditDialog } from "./PaymentEditDialog";
 import { InvoiceSendPrintDialog } from "@/components/policies/InvoiceSendPrintDialog";
+import { getPaymentTypeLabel } from "@/lib/paymentLabels";
 
 interface PaymentImage {
   id: string;
@@ -84,13 +85,6 @@ const paymentTypeIcon: Record<string, typeof Banknote> = {
   cheque: CreditCard,
   visa: CreditCard,
   transfer: Wallet,
-};
-
-const paymentTypeLabel: Record<string, string> = {
-  cash: "نقدي",
-  cheque: "شيك",
-  visa: "بطاقة ائتمان",
-  transfer: "تحويل بنكي",
 };
 
 const paymentTypeBg: Record<string, string> = {
@@ -362,7 +356,7 @@ export function PackagePaymentsDetailsDialog({
             {!loading &&
               payments.map((p) => {
                 const Icon = paymentTypeIcon[p.payment_type] || Banknote;
-                const typeLabel = paymentTypeLabel[p.payment_type] || p.payment_type;
+                const typeLabel = getPaymentTypeLabel(p);
                 const typeBg =
                   paymentTypeBg[p.payment_type] || "bg-muted text-muted-foreground border-border";
                 const transferKey = p.transferred_to_id

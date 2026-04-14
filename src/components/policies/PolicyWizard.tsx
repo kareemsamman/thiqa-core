@@ -345,10 +345,13 @@ export function PolicyWizard({
           : policy.start_date || new Date().toISOString().split('T')[0];
         
         if (!hasLockedElzamiPayment) {
-          // Add new locked payment
+          // Add new locked payment. ELZAMI is paid by the customer directly
+          // on the insurance company's portal (using their card); the money
+          // never passes through the agency's till, so we store it as 'visa'
+          // and render it as "فيزا خارجي" in every payments surface.
           setPayments([{
             id: crypto.randomUUID(),
-            payment_type: 'cash',
+            payment_type: 'visa',
             amount: elzamiPrice,
             payment_date: elzamiDate,
             refused: false,

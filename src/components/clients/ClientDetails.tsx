@@ -85,6 +85,7 @@ import { DebtPaymentModal } from '@/components/debt/DebtPaymentModal';
 import { ClientNotesSection } from '@/components/clients/ClientNotesSection';
 import { PaymentEditDialog } from '@/components/clients/PaymentEditDialog';
 import { PaymentGroupDetailsDialog } from '@/components/clients/PaymentGroupDetailsDialog';
+import { getCombinedPaymentTypeLabel, getPaymentTypeLabel } from '@/lib/paymentLabels';
 import { RefundsTab } from '@/components/clients/RefundsTab';
 import { AccidentReportWizard } from '@/components/accident-reports/AccidentReportWizard';
 import { ClientAccidentsTab } from '@/components/clients/ClientAccidentsTab';
@@ -191,6 +192,7 @@ interface PaymentRecord {
     id: string;
     policy_type_parent: string;
     insurance_price: number;
+    group_id?: string | null;
   } | null;
 }
 
@@ -578,10 +580,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const fetchPayments = async () => {
     setLoadingPayments(true);
     try {
-      // Get all policies for this client first
+      // Get all policies for this client first — include group_id so the
+      // payments tab can collapse every payment that belongs to the same
+      // package into one row.
       const { data: policiesData } = await supabase
         .from('policies')
-        .select('id, policy_type_parent, insurance_price')
+        .select('id, policy_type_parent, insurance_price, group_id')
         .eq('client_id', client.id)
         .is('deleted_at', null);
 
@@ -1136,8 +1140,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     });
 
     for (const payment of filteredPayments) {
-      // Use batch_id if exists, otherwise use individual payment id
-      const groupKey = payment.batch_id || payment.id;
+      // Collapse every payment made against the same package (shared
+      // group_id on the underlying policy) into one row, regardless of
+      // when or how it was paid. Auto-generated ELZAMI payments and
+      // user-entered package payments don't share a batch_id but they
+      // do share a policy.group_id. Fall back to batch_id for historical
+      // non-package batches and finally to the payment id for standalone
+      // rows.
+      const groupKey = payment.policy?.group_id
+        ? `group:${payment.policy.group_id}`
+        : payment.batch_id || payment.id;
       
       if (!groups.has(groupKey)) {
         groups.set(groupKey, {
@@ -1858,11 +1870,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   </TableHeader>
                   <TableBody>
                     {groupedPayments.map((group) => {
-                      const paymentTypeLabel = (t: string) =>
-                        t === 'cash' ? 'نقدي' :
-                        t === 'cheque' ? 'شيكات' :
-                        t === 'visa' ? 'فيزا' :
-                        t === 'transfer' ? 'تحويل' : t;
+                      const combinedLabel = getCombinedPaymentTypeLabel(group.payments);
                       return (
                       <TableRow
                         key={group.id}
@@ -1885,11 +1893,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                         <TableCell>{formatDate(group.payment_date)}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <Badge variant="outline">
-                              {group.paymentTypes.length > 0
-                                ? group.paymentTypes.map(paymentTypeLabel).join(' + ')
-                                : paymentTypeLabel(group.payment_type)}
-                            </Badge>
+                            <Badge variant="outline">{combinedLabel}</Badge>
                             {group.paymentTypes.includes('visa') && group.card_last_four && (
                               <span className="text-xs text-muted-foreground font-mono">
                                 *{group.card_last_four}
