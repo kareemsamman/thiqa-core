@@ -102,6 +102,11 @@ interface EditState {
   issueDate: string;
   insurancePrice: string;
   companyId: string;
+  // Editable policy type — only service rows (ROAD_SERVICE ↔
+  // ACCIDENT_FEE_EXEMPTION) are allowed to flip this, the UI locks it
+  // for ELZAMI / THIRD_FULL since switching those would have way more
+  // consequences (tariff tables, car fields, refund math…).
+  policyType: string;
 }
 
 interface LookupOption {
@@ -229,6 +234,7 @@ export function PackagePolicyEditModal({
           issueDate: (p as any).issue_date || p.start_date || "",
           insurancePrice: p.insurance_price?.toString() || "0",
           companyId: currentCompanyId,
+          policyType: p.policy_type_parent,
         };
       });
       setEditStates(states);
@@ -255,12 +261,37 @@ export function PackagePolicyEditModal({
         label: row.name_ar || row.name,
       });
 
+      // `category_parent` on insurance_companies is a text[] array
+      // (["ELZAMI"], ["THIRD_FULL"], or both) — not a single value — so
+      // the earlier `=== 'ELZAMI'` check was comparing an array to a
+      // string and always evaluating false, which is why every company
+      // dropdown came up empty. Use Array.isArray + .includes instead.
       const icRows = (icRes.data || []) as any[];
+      const matchesCategory = (row: any, category: string): boolean => {
+        if (Array.isArray(row.category_parent)) {
+          return row.category_parent.includes(category);
+        }
+        // Legacy rows imported before the column was converted from a
+        // single enum still store a plain string — fall back to equality
+        // so they keep surfacing in the right bucket.
+        return row.category_parent === category;
+      };
       setElzamiCompanies(
-        icRows.filter((r) => r.category_parent === 'ELZAMI').map(toOption),
+        icRows.filter((r) => matchesCategory(r, 'ELZAMI')).map(toOption),
       );
       setThirdFullCompanies(
-        icRows.filter((r) => r.category_parent === 'THIRD_FULL' || r.category_parent === null).map(toOption),
+        icRows
+          .filter((r) => {
+            // THIRD_FULL covers both شامل and طرف ثالث rows. Companies
+            // without any category_parent fall in here too because those
+            // are usually older THIRD_FULL rows that predate the column.
+            if (matchesCategory(r, 'THIRD_FULL')) return true;
+            if (!r.category_parent || (Array.isArray(r.category_parent) && r.category_parent.length === 0)) {
+              return true;
+            }
+            return false;
+          })
+          .map(toOption),
       );
       setRoadServices((rsRes.data || []).map(toOption));
       setAccidentFeeServices((afRes.data || []).map(toOption));
@@ -529,11 +560,16 @@ export function PackagePolicyEditModal({
         let companyPayment = price;
         let profit = 0;
 
-        // Resolve the selected company/provider id for this policy type.
+        // Resolve the selected company/provider id and the (possibly
+        // switched) policy type. Only service rows let the user flip
+        // between ROAD_SERVICE ↔ ACCIDENT_FEE_EXEMPTION; everything else
+        // stays on its original type.
         const selectedId = state.companyId || '';
+        const effectiveType = state.policyType || policy.policy_type_parent;
 
-        // Recalculate profit based on policy type using the edited company.
-        if (policy.policy_type_parent === "ELZAMI") {
+        // Recalculate profit based on the (possibly edited) policy type
+        // using the selected company.
+        if (effectiveType === "ELZAMI") {
           const { data: companyData } = await supabase
             .from("insurance_companies")
             .select("elzami_commission")
@@ -541,7 +577,7 @@ export function PackagePolicyEditModal({
             .single();
           profit = companyData?.elzami_commission || 0;
           companyPayment = price;
-        } else if (policy.policy_type_parent === "ROAD_SERVICE") {
+        } else if (effectiveType === "ROAD_SERVICE") {
           if (selectedId) {
             const { data: priceData } = await supabase
               .from("company_road_service_prices")
@@ -552,7 +588,7 @@ export function PackagePolicyEditModal({
             companyPayment = priceData?.company_cost || price;
           }
           profit = price - companyPayment;
-        } else if (policy.policy_type_parent === "ACCIDENT_FEE_EXEMPTION") {
+        } else if (effectiveType === "ACCIDENT_FEE_EXEMPTION") {
           if (selectedId) {
             const { data: priceData } = await supabase
               .from("company_accident_fee_prices")
@@ -563,10 +599,10 @@ export function PackagePolicyEditModal({
             companyPayment = priceData?.company_cost || price;
           }
           profit = price - companyPayment;
-        } else if (policy.policy_type_parent === "THIRD_FULL" && selectedId) {
+        } else if (effectiveType === "THIRD_FULL" && selectedId) {
           const ageBand: Enums<"age_band"> = policy.is_under_24 ? "UNDER_24" : "UP_24";
           const result = await calculatePolicyProfit({
-            policyTypeParent: policy.policy_type_parent as Enums<"policy_type_parent">,
+            policyTypeParent: effectiveType as Enums<"policy_type_parent">,
             policyTypeChild: (policy.policy_type_child || null) as Enums<"policy_type_child"> | null,
             companyId: selectedId,
             carType: (policy.cars?.car_type || "car") as Enums<"car_type">,
@@ -580,7 +616,9 @@ export function PackagePolicyEditModal({
         }
 
         // Build the update payload — route the selected id to the correct
-        // foreign-key column depending on policy type.
+        // foreign-key column depending on the effective policy type and
+        // null out the other service column if the row just switched
+        // from ROAD_SERVICE to ACCIDENT_FEE_EXEMPTION (or vice versa).
         const updatePayload: Record<string, any> = {
           start_date: state.startDate,
           end_date: state.endDate,
@@ -590,12 +628,21 @@ export function PackagePolicyEditModal({
           profit,
           updated_at: new Date().toISOString(),
         };
-        if (policy.policy_type_parent === 'ROAD_SERVICE') {
+        if (effectiveType !== policy.policy_type_parent) {
+          updatePayload.policy_type_parent = effectiveType as Enums<"policy_type_parent">;
+        }
+        if (effectiveType === 'ROAD_SERVICE') {
           updatePayload.road_service_id = selectedId || null;
-        } else if (policy.policy_type_parent === 'ACCIDENT_FEE_EXEMPTION') {
+          updatePayload.accident_fee_service_id = null;
+          updatePayload.company_id = null;
+        } else if (effectiveType === 'ACCIDENT_FEE_EXEMPTION') {
           updatePayload.accident_fee_service_id = selectedId || null;
+          updatePayload.road_service_id = null;
+          updatePayload.company_id = null;
         } else {
           updatePayload.company_id = selectedId || null;
+          updatePayload.road_service_id = null;
+          updatePayload.accident_fee_service_id = null;
         }
 
         const { error } = await supabase
@@ -660,14 +707,19 @@ export function PackagePolicyEditModal({
             <ScrollArea dir="rtl" className="flex-1 min-h-0 -mx-6 px-6">
               <div className="space-y-2 py-1">
                 {policies.map((policy) => {
-                  const config = policyTypeConfig[policy.policy_type_parent] || policyTypeConfig.ELZAMI;
-                  const Icon = config.icon;
                   const state = editStates[policy.id];
+                  // The effective type drives icon / color / options —
+                  // fall back to the stored type when state hasn't loaded
+                  // yet (first render before fetchPolicies resolves).
+                  const effectiveType = state?.policyType || policy.policy_type_parent;
+                  const config = policyTypeConfig[effectiveType] || policyTypeConfig.ELZAMI;
+                  const Icon = config.icon;
+                  const isServiceRow = effectiveType === 'ROAD_SERVICE' || effectiveType === 'ACCIDENT_FEE_EXEMPTION';
 
-                  const companyOptions = getCompanyOptions(policy.policy_type_parent);
-                  const companyLabel = policy.policy_type_parent === 'ROAD_SERVICE'
+                  const companyOptions = getCompanyOptions(effectiveType);
+                  const companyLabel = effectiveType === 'ROAD_SERVICE'
                     ? 'الخدمة'
-                    : policy.policy_type_parent === 'ACCIDENT_FEE_EXEMPTION'
+                    : effectiveType === 'ACCIDENT_FEE_EXEMPTION'
                       ? 'الخدمة'
                       : 'شركة التأمين';
 
@@ -686,9 +738,38 @@ export function PackagePolicyEditModal({
                           <Icon className={cn("h-4 w-4", config.text)} />
                         </div>
                         <Badge className={cn("text-xs font-bold", config.bg, config.text, "border", config.border)}>
-                          {getTypeName(policy)}
+                          {policyTypeLabels[effectiveType] || effectiveType}
                         </Badge>
                       </div>
+
+                      {/* Type switcher — only for service rows. Switching
+                          between ROAD_SERVICE and ACCIDENT_FEE_EXEMPTION
+                          swaps the service-options list and wipes the
+                          current companyId so the user has to pick a
+                          valid row from the new pool. */}
+                      {isServiceRow && (
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold text-foreground/80">نوع الخدمة</Label>
+                          <Select
+                            value={effectiveType}
+                            onValueChange={(v) => {
+                              updateEditState(policy.id, 'policyType', v);
+                              // Reset the selected service id whenever the
+                              // type flips — the id belongs to a different
+                              // table and would otherwise be invalid.
+                              updateEditState(policy.id, 'companyId', '');
+                            }}
+                          >
+                            <SelectTrigger className="h-9 text-sm bg-background">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ROAD_SERVICE">خدمات الطريق</SelectItem>
+                              <SelectItem value="ACCIDENT_FEE_EXEMPTION">إعفاء رسوم حادث</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
 
                       {/* Company selector */}
                       <div className="space-y-1">

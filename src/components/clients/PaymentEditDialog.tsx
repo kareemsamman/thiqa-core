@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -105,6 +106,7 @@ export function PaymentEditDialog({
     payment_date: '',
     cheque_number: '',
     refused: false,
+    notes: '',
   });
 
   // Attached files managed inline: existing payment_images rows the user
@@ -143,6 +145,7 @@ export function PaymentEditDialog({
         payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
         cheque_number: payment.cheque_number || '',
         refused: payment.refused || false,
+        notes: payment.notes || '',
       });
       fetchAttachedImages(payment.id);
     } else {
@@ -248,6 +251,7 @@ export function PaymentEditDialog({
         payment_type: formData.payment_type,
         payment_date: formData.payment_date,
         refused: formData.refused,
+        notes: formData.notes?.trim() ? formData.notes.trim() : null,
       };
 
       // Only include cheque_number if payment type is cheque
@@ -566,6 +570,23 @@ export function PaymentEditDialog({
                 لا توجد ملفات مرفقة — اضغط على زر الرفع لإضافة صورة أو PDF.
               </p>
             )}
+          </div>
+
+          {/* Notes — free-form text so the user can jot down anything
+              that doesn't fit into cheque#, card, or refused. Saved into
+              policy_payments.notes and surfaced on the payment row and
+              in the group-details popup. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="notes" className="text-xs font-semibold">ملاحظات</Label>
+            <Textarea
+              id="notes"
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              placeholder="اكتب ملاحظة اختيارية…"
+              rows={3}
+              disabled={isLocked}
+              className="resize-none text-sm"
+            />
           </div>
 
           {/* Refused toggle */}

@@ -14,6 +14,7 @@ interface MediaFile {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -957,24 +958,47 @@ export function PolicyPaymentsSection({
         )}
       </Card>
 
-      {/* Add Multi-Payment Dialog */}
+      {/* Add Multi-Payment Dialog — navy header matches the rest of the
+          payment dialogs (edit, group details) so the flows feel like
+          one product. */}
       <Dialog open={addDialogOpen} onOpenChange={(open) => { setAddDialogOpen(open); if (!open) resetAddForm(); }}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" dir="rtl">
-          <DialogHeader>
-            <DialogTitle>إضافة دفعات</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
+        <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
+          <div
+            className="sticky top-0 z-10 text-white px-5 py-4 rounded-t-lg"
+            style={{ background: "linear-gradient(135deg, #122143 0%, #1a3260 100%)" }}
+          >
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center shrink-0">
+                  <Plus className="h-5 w-5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-lg font-bold text-white text-right leading-tight">
+                    إضافة دفعات
+                  </DialogTitle>
+                  <div className="flex items-center gap-2 mt-1 text-xs text-white/75">
+                    <span className="font-bold ltr-nums">{formatCurrency(insurancePrice)}</span>
+                    <span className="text-white/40">•</span>
+                    <span>مدفوع: <span className="font-bold ltr-nums">{formatCurrency(totalPaid + paidVisaTotal)}</span></span>
+                    <span className="text-white/40">•</span>
+                    <span>متبقي: <span className="font-bold ltr-nums">{formatCurrency(effectiveRemaining)}</span></span>
+                  </div>
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+          <div className="space-y-4 p-5 bg-muted/20">
             {/* Summary */}
             <div className="grid grid-cols-3 gap-2 text-center text-sm">
-              <div className="bg-muted/50 rounded-lg p-2">
+              <div className="bg-card rounded-lg p-2 border border-border/60">
                 <p className="text-muted-foreground text-xs">سعر التأمين</p>
                 <p className="font-bold">{formatCurrency(insurancePrice)}</p>
               </div>
-              <div className="bg-success/10 rounded-lg p-2">
+              <div className="bg-success/10 rounded-lg p-2 border border-success/20">
                 <p className="text-muted-foreground text-xs">المدفوع</p>
                 <p className="font-bold text-success">{formatCurrency(totalPaid + paidVisaTotal)}</p>
               </div>
-              <div className={cn("rounded-lg p-2", effectiveRemaining > 0 ? "bg-destructive/10" : "bg-success/10")}>
+              <div className={cn("rounded-lg p-2 border", effectiveRemaining > 0 ? "bg-destructive/10 border-destructive/20" : "bg-success/10 border-success/20")}>
                 <p className="text-muted-foreground text-xs">المتبقي</p>
                 <p className={cn("font-bold", effectiveRemaining > 0 ? "text-destructive" : "text-success")}>
                   {formatCurrency(effectiveRemaining)}
@@ -1149,12 +1173,12 @@ export function PolicyPaymentsSection({
                           </div>
                         ))}
                       <label className="h-14 w-18 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors">
-                        <input 
-                          type="file" 
-                          accept="image/*,application/pdf" 
-                          multiple 
-                          onChange={(e) => handleImageSelect(payment.id, e)} 
-                          className="hidden" 
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          multiple
+                          onChange={(e) => handleImageSelect(payment.id, e)}
+                          className="hidden"
                         />
                           <Upload className="h-4 w-4 text-muted-foreground" />
                           <span className="text-[10px] text-muted-foreground mt-0.5">إضافة</span>
@@ -1162,6 +1186,22 @@ export function PolicyPaymentsSection({
                       </div>
                     </div>
                   )}
+
+                  {/* Notes — free-form per payment line. PaymentLine
+                      already carries an optional `notes` field and the
+                      save path forwards it, we just weren't giving the
+                      user a way to type it. */}
+                  <div className="pt-3 border-t border-border/50">
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">ملاحظات</Label>
+                    <Textarea
+                      value={payment.notes || ''}
+                      onChange={(e) => updatePaymentLine(payment.id, 'notes', e.target.value)}
+                      placeholder="اكتب ملاحظة اختيارية…"
+                      rows={2}
+                      className="resize-none text-sm"
+                      disabled={payment.tranzilaPaid}
+                    />
+                  </div>
                 </div>
               </Card>
             ))}
@@ -1188,7 +1228,7 @@ export function PolicyPaymentsSection({
               </div>
             )}
           </div>
-          <DialogFooter className="gap-2">
+          <DialogFooter className="p-4 border-t border-border/60 bg-card gap-2">
             <Button variant="outline" onClick={() => setAddDialogOpen(false)}>إلغاء</Button>
             <Button onClick={handleAddMultiPayments} disabled={!isValid || saving}>
               {saving && <Loader2 className="h-4 w-4 ml-2 animate-spin" />}
@@ -1347,6 +1387,21 @@ export function PolicyPaymentsSection({
                 )}
               </div>
             )}
+
+            {/* Notes — editFormData.notes is already hydrated from the
+                payment row and sent back on save; we were just missing
+                the actual textarea so the field looked unreachable. */}
+            <div className="space-y-1.5">
+              <Label htmlFor="notes-edit" className="text-xs font-semibold">ملاحظات</Label>
+              <Textarea
+                id="notes-edit"
+                value={editFormData.notes}
+                onChange={(e) => setEditFormData(f => ({ ...f, notes: e.target.value }))}
+                placeholder="اكتب ملاحظة اختيارية…"
+                rows={3}
+                className="resize-none text-sm"
+              />
+            </div>
 
             {/* Refused toggle */}
             <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card px-3 py-2.5">
