@@ -17,9 +17,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import thiqaLogo from "@/assets/thiqa-logo-full.svg";
 import thiqaLogoDark from "@/assets/thiqa-logo-dark.svg";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
+import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { Separator } from "@/components/ui/separator";
 import { digitsOnly } from "@/lib/validation";
 import {
@@ -459,8 +459,8 @@ export default function Login() {
           aria-hidden="true"
         />
         <div className="absolute inset-0 bg-gradient-to-br from-black/40 via-black/20 to-transparent" />
-        <div className="relative z-10 text-center space-y-4">
-          <img src={thiqaLogo} alt="ثقة" className="mx-auto w-40 h-auto drop-shadow-2xl" />
+        <div className="relative z-10 flex flex-col items-center gap-4">
+          <ThiqaLogoAnimation iconSize={104} />
           <p className="text-white/80 text-lg font-light tracking-wide">نظام إدارة التأمين</p>
         </div>
       </div>
