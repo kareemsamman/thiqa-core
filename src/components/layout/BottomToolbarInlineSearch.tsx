@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Search, X, User, Car, Phone } from "lucide-react";
+import { Search, X, User, Car, Phone, FileText, Receipt } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,6 +9,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { normalizeArabic } from "@/lib/arabicNormalize";
+import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 
 interface ClientResult {
   id: string;
@@ -17,6 +18,15 @@ interface ClientResult {
   phone_number: string | null;
   cars: string[];
   matchedCarId?: string;
+}
+
+interface PolicyResult {
+  kind: "policy" | "receipt";
+  policyId: string;
+  label: string;            // e.g. "35/2026" (document_number) or "R-2026-00017"
+  subLabel: string | null;  // client + car hint
+  clientName: string | null;
+  carNumber: string | null;
 }
 
 interface BottomToolbarInlineSearchProps {
@@ -31,8 +41,15 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ClientResult[]>([]);
+  const [policyResults, setPolicyResults] = useState<PolicyResult[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Inline policy preview — opened when the user clicks a policy or
+  // receipt result, so search-by-document-number lands on the drawer
+  // without leaving the current page.
+  const [previewPolicyId, setPreviewPolicyId] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const mobileInputRef = useRef<HTMLInputElement | null>(null);
@@ -48,6 +65,7 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
   const clearSearch = useCallback(() => {
     setQuery("");
     setResults([]);
+    setPolicyResults([]);
     setShowDropdown(false);
   }, []);
 
@@ -59,7 +77,7 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
     try {
       const searchTerm = term.trim();
 
-      const [clientsRes, carsRes] = await Promise.all([
+      const [clientsRes, carsRes, policiesRes, receiptsRes] = await Promise.all([
         supabase
           .from("clients")
           .select("id, full_name, id_number, phone_number")
@@ -74,12 +92,36 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
           .is("deleted_at", null)
           .ilike("car_number", `%${searchTerm}%`)
           .limit(10),
+        // Policies matched by document_number or policy_number. The
+        // document_number is the human-readable "35/2026" form shown
+        // on invoices; policy_number is the external insurer ref.
+        supabase
+          .from("policies")
+          .select(
+            "id, document_number, policy_number, client_id, clients(full_name), car:cars(car_number)",
+          )
+          .is("deleted_at", null)
+          .or(`document_number.ilike.%${searchTerm}%,policy_number.ilike.%${searchTerm}%`)
+          .limit(8),
+        // Payment receipts matched by receipt_number — typing a
+        // receipt number takes the user straight to that policy's
+        // drawer.
+        supabase
+          .from("policy_payments")
+          .select(
+            "id, receipt_number, policy_id, policy:policies(id, document_number, client_id, clients(full_name), car:cars(car_number))",
+          )
+          .not("receipt_number", "is", null)
+          .ilike("receipt_number", `%${searchTerm}%`)
+          .limit(8),
       ]);
 
       if (latestRequestRef.current !== requestId) return;
 
       if (clientsRes.error) throw clientsRes.error;
       if (carsRes.error) throw carsRes.error;
+      if (policiesRes.error) throw policiesRes.error;
+      if (receiptsRes.error) throw receiptsRes.error;
 
       const map = new Map<string, ClientResult>();
 
@@ -143,10 +185,52 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
       }
 
       setResults(Array.from(map.values()).slice(0, 10));
+
+      // Policy + receipt results — deduped by policy id, with the
+      // document-number matches listed first and receipt-number
+      // matches appended.
+      const policyMap = new Map<string, PolicyResult>();
+      for (const p of policiesRes.data || []) {
+        const id = (p as any).id as string;
+        if (!id || policyMap.has(id)) continue;
+        const clientName = ((p as any).clients?.full_name as string) || null;
+        const carNumber = ((p as any).car?.car_number as string) || null;
+        const docNum = ((p as any).document_number as string) || null;
+        const polNum = ((p as any).policy_number as string) || null;
+        policyMap.set(id, {
+          kind: "policy",
+          policyId: id,
+          label: docNum || polNum || "وثيقة",
+          subLabel: [clientName, carNumber].filter(Boolean).join(" · ") || null,
+          clientName,
+          carNumber,
+        });
+      }
+      for (const r of receiptsRes.data || []) {
+        const policyRef = (r as any).policy;
+        const policyId = (policyRef?.id as string) || ((r as any).policy_id as string) || null;
+        const receiptNumber = (r as any).receipt_number as string | null;
+        if (!policyId || !receiptNumber) continue;
+        if (policyMap.has(`receipt:${receiptNumber}`)) continue;
+        const clientName = (policyRef?.clients?.full_name as string) || null;
+        const carNumber = (policyRef?.car?.car_number as string) || null;
+        const docNum = (policyRef?.document_number as string) || null;
+        policyMap.set(`receipt:${receiptNumber}`, {
+          kind: "receipt",
+          policyId,
+          label: receiptNumber,
+          subLabel: [docNum, clientName, carNumber].filter(Boolean).join(" · ") || null,
+          clientName,
+          carNumber,
+        });
+      }
+      setPolicyResults(Array.from(policyMap.values()).slice(0, 8));
+
       setShowDropdown(true);
     } catch (e) {
       console.error("Inline search error:", e);
       setResults([]);
+      setPolicyResults([]);
     } finally {
       if (latestRequestRef.current === requestId) setLoading(false);
     }
@@ -157,6 +241,7 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
     const term = query.trim();
     if (term.length < 2) {
       setResults([]);
+      setPolicyResults([]);
       setShowDropdown(false);
       setLoading(false);
       return;
@@ -166,6 +251,13 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
     const t = setTimeout(() => runSearch(term), 250);
     return () => clearTimeout(t);
   }, [query, runSearch]);
+
+  const handleSelectPolicy = useCallback((policyId: string) => {
+    setPreviewPolicyId(policyId);
+    setPreviewOpen(true);
+    clearSearch();
+    setMobileOpen(false);
+  }, [clearSearch]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -196,7 +288,7 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
   }, [mobileOpen]);
 
   const handleFocus = () => {
-    if (query.trim().length >= 2 && results.length > 0) {
+    if (query.trim().length >= 2 && (results.length > 0 || policyResults.length > 0)) {
       setShowDropdown(true);
     }
   };
@@ -205,8 +297,9 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
 
   // Shared renderer for the result list — used by both the desktop
   // inline dropdown and the mobile dialog body.
-  const renderResults = () => (
-    loading ? (
+  const renderResults = () => {
+    const hasAny = results.length > 0 || policyResults.length > 0;
+    return loading ? (
       <div className="space-y-2">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="rounded-md border border-border/60 p-2">
@@ -215,9 +308,65 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
           </div>
         ))}
       </div>
-    ) : results.length > 0 ? (
-      <div className="space-y-1">
-        {results.map((r) => (
+    ) : hasAny ? (
+      <div className="space-y-3">
+        {/* Policy / receipt results — surfaced on top so searching
+            "35/2026" or a receipt number lands on the drawer straight
+            away. */}
+        {policyResults.length > 0 && (
+          <div className="space-y-1">
+            <div className="px-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              الوثائق والسندات
+            </div>
+            {policyResults.map((p) => {
+              const Icon = p.kind === "receipt" ? Receipt : FileText;
+              return (
+                <button
+                  key={`${p.kind}:${p.policyId}:${p.label}`}
+                  type="button"
+                  className={cn(
+                    "w-full text-right rounded-md border border-border/60 p-2 transition-colors",
+                    "hover:bg-accent/40 focus:bg-accent/40 focus:outline-none",
+                  )}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSelectPolicy(p.policyId);
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-primary" />
+                        <span className="font-mono ltr-nums font-semibold truncate">
+                          {p.label}
+                        </span>
+                        {p.kind === "receipt" && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                            سند
+                          </span>
+                        )}
+                      </div>
+                      {p.subLabel && (
+                        <div className="mt-1 text-xs text-muted-foreground truncate">
+                          {p.subLabel}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {results.length > 0 && (
+          <div className="space-y-1">
+            {policyResults.length > 0 && (
+              <div className="px-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                العملاء
+              </div>
+            )}
+            {results.map((r) => (
           <button
             key={r.id}
             type="button"
@@ -256,6 +405,8 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
             </div>
           </button>
         ))}
+          </div>
+        )}
       </div>
     ) : query.trim().length >= 2 ? (
       <div className="py-6 text-center text-sm text-muted-foreground">لا توجد نتائج</div>
@@ -263,8 +414,8 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
       <div className="py-6 text-center text-sm text-muted-foreground">
         اكتب حرفين أو أكثر للبحث
       </div>
-    )
-  );
+    );
+  };
 
   // ─── Mobile: icon-only trigger + full-screen search dialog ──────────
   if (isMobile) {
@@ -324,12 +475,23 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
             </div>
           </DialogContent>
         </Dialog>
+
+        <PolicyDetailsDrawer
+          policyId={previewPolicyId}
+          open={previewOpen}
+          onOpenChange={(o) => {
+            setPreviewOpen(o);
+            if (!o) setPreviewPolicyId(null);
+          }}
+          onViewRelatedPolicy={(id) => setPreviewPolicyId(id)}
+        />
       </>
     );
   }
 
   // ─── Desktop: inline input + upward dropdown ────────────────────────
   return (
+    <>
     <div ref={containerRef} className={cn("relative flex items-center", className)}>
       {/* Always visible search input */}
       <div className="relative">
@@ -372,5 +534,16 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
         </div>
       )}
     </div>
+
+    <PolicyDetailsDrawer
+      policyId={previewPolicyId}
+      open={previewOpen}
+      onOpenChange={(o) => {
+        setPreviewOpen(o);
+        if (!o) setPreviewPolicyId(null);
+      }}
+      onViewRelatedPolicy={(id) => setPreviewPolicyId(id)}
+    />
+    </>
   );
 }
