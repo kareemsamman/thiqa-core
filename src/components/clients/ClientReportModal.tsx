@@ -43,6 +43,7 @@ import { parseFunctionError } from '@/lib/functionError';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
+import { getBankName } from '@/lib/banks';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 
 // ---------- Types ----------
@@ -72,6 +73,8 @@ interface PaymentRow {
   cheque_number: string | null;
   cheque_status: string | null;
   card_last_four: string | null;
+  bank_code: string | null;
+  branch_code: string | null;
   refused: boolean | null;
   notes: string | null;
   batch_id: string | null;
@@ -468,7 +471,7 @@ export function ClientReportModal({
         policyIds.length
           ? supabase
               .from('policy_payments')
-              .select('id, policy_id, amount, payment_date, payment_type, cheque_number, cheque_status, card_last_four, refused, notes, batch_id')
+              .select('id, policy_id, amount, payment_date, payment_type, cheque_number, cheque_status, card_last_four, bank_code, branch_code, refused, notes, batch_id')
               .in('policy_id', policyIds)
               .order('payment_date', { ascending: false })
           : Promise.resolve({ data: [], error: null }),
@@ -622,6 +625,7 @@ export function ClientReportModal({
     statuses: ('refused' | 'ok')[];
     items: PaymentRow[];
     chequeNumbers: string[];
+    bankLines: string[];
   };
 
   const paymentGroups = useMemo<PaymentGroup[]>(() => {
@@ -638,6 +642,7 @@ export function ClientReportModal({
           statuses: [],
           items: [],
           chequeNumbers: [],
+          bankLines: [],
         };
         groups.set(key, g);
       }
@@ -647,6 +652,12 @@ export function ClientReportModal({
       g.statuses.push(p.refused ? 'refused' : 'ok');
       if (p.cheque_number && !g.chequeNumbers.includes(p.cheque_number)) {
         g.chequeNumbers.push(p.cheque_number);
+      }
+      const bankName = getBankName(p.bank_code);
+      const branchLabel = p.branch_code ? `فرع ${p.branch_code}` : '';
+      const bankLine = [bankName, branchLabel].filter(Boolean).join(' · ');
+      if (bankLine && !g.bankLines.includes(bankLine)) {
+        g.bankLines.push(bankLine);
       }
     }
     return Array.from(groups.values()).sort(
@@ -1565,6 +1576,11 @@ export function ClientReportModal({
                               </span>
                             )}
                           </div>
+                          {group.bankLines.length > 0 && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                              {group.bankLines.join(' · ')}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
