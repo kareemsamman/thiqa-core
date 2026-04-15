@@ -212,33 +212,19 @@ export function DebtPaymentModal({
     }
   }, [open, clientId]);
 
-  // Net amount we currently owe the client. Two sources:
-  //   1. customer_wallet_transactions — refunds minus adjustments due.
-  //   2. Broker policies that are overpaid — the excess sits as a credit
-  //      with us and must offset the client's non-broker debt so the
-  //      modal agrees with the global "إجمالي المتبقي" shown on the
-  //      client card (which uses a single Math.max over all policies).
+  // Net amount we currently owe the client (refunds minus adjustments due).
+  // This offsets the debt shown in the modal so "المتبقي للدفع" reflects
+  // reality — same logic as ClientDetails.fetchWalletBalance.
   const fetchCreditBalance = async () => {
     try {
-      const [walletResult, brokerPoliciesResult] = await Promise.all([
-        supabase
-          .from('customer_wallet_transactions')
-          .select('amount, transaction_type')
-          .eq('client_id', clientId),
-        supabase
-          .from('policies')
-          .select('id, insurance_price, office_commission')
-          .eq('client_id', clientId)
-          .eq('cancelled', false)
-          .eq('transferred', false)
-          .is('deleted_at', null)
-          .not('broker_id', 'is', null),
-      ]);
+      const { data, error } = await supabase
+        .from('customer_wallet_transactions')
+        .select('amount, transaction_type')
+        .eq('client_id', clientId);
 
-      if (walletResult.error) throw walletResult.error;
-      if (brokerPoliciesResult.error) throw brokerPoliciesResult.error;
+      if (error) throw error;
 
-      const weOwe = (walletResult.data || [])
+      const weOwe = (data || [])
         .filter(t =>
           t.transaction_type === 'refund' ||
           t.transaction_type === 'transfer_refund_owed' ||
@@ -246,38 +232,11 @@ export function DebtPaymentModal({
         )
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-      const customerOwes = (walletResult.data || [])
+      const customerOwes = (data || [])
         .filter(t => t.transaction_type === 'transfer_adjustment_due')
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-      const walletCredit = Math.max(0, weOwe - customerOwes);
-
-      let brokerOverpayment = 0;
-      const brokerPolicies = brokerPoliciesResult.data || [];
-      if (brokerPolicies.length > 0) {
-        const brokerIds = brokerPolicies.map(p => p.id);
-        const { data: brokerPayments, error: brokerPaymentsError } = await supabase
-          .from('policy_payments')
-          .select('policy_id, amount, refused')
-          .in('policy_id', brokerIds);
-
-        if (brokerPaymentsError) throw brokerPaymentsError;
-
-        const paidByPolicy: Record<string, number> = {};
-        (brokerPayments || []).forEach(p => {
-          if (!p.refused) {
-            paidByPolicy[p.policy_id] = (paidByPolicy[p.policy_id] || 0) + (p.amount || 0);
-          }
-        });
-
-        brokerPolicies.forEach(p => {
-          const price = (p.insurance_price || 0) + ((p as any).office_commission || 0);
-          const paid = paidByPolicy[p.id] || 0;
-          brokerOverpayment += Math.max(0, paid - price);
-        });
-      }
-
-      setCreditBalance(walletCredit + brokerOverpayment);
+      setCreditBalance(Math.max(0, weOwe - customerOwes));
     } catch (error) {
       console.error('Error fetching credit balance:', error);
       setCreditBalance(0);
@@ -349,27 +308,36 @@ export function DebtPaymentModal({
 
   /**
    * Fetch all policies and payments for the client, then build DebtItems
-   * grouped by group_id (packages) or individual policies (singles)
+   * grouped by group_id (packages) or individual policies (singles).
+   *
+   * Package grouping rule (mirrors get_client_balance RPC in migration
+   * 20260413240000): a package with a broker sibling (e.g. THIRD_FULL on
+   * a broker deal + ROAD_SERVICE as client-owed) pools every payment
+   * recorded in the group — including payments on the broker row — and
+   * caps the counted paid at the non-broker owed amount. That way the
+   * modal sees the package as paid off when the broker row already
+   * swallowed the client-owed portion, and broker overpayment in one
+   * group never erases legitimate debt in another group.
    */
   const fetchDebtItems = async () => {
     setLoading(true);
     try {
-      // Fetch ALL policies for this client (including ELZAMI)
-      // Exclude: cancelled, deleted, transferred, and broker deals
+      // Fetch ALL active policies for this client, including broker ones.
+      // Broker policies are used only to pool their payments into the
+      // surrounding group — they never appear as standalone debt items.
       const { data: policiesData, error: policiesError } = await supabase
         .from('policies')
         .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, branch_id, group_id, broker_id, car:cars(car_number)')
         .eq('client_id', clientId)
         .eq('cancelled', false)
         .eq('transferred', false)
-        .is('deleted_at', null)
-        .is('broker_id', null);
+        .is('deleted_at', null);
 
       if (policiesError) throw policiesError;
 
       const allPolicyIds = (policiesData || []).map(p => p.id);
 
-      // Fetch ALL payments for these policies
+      // Fetch ALL payments for these policies (broker + non-broker)
       let paymentsMap: Record<string, number> = {};
       if (allPolicyIds.length > 0) {
         const { data: paymentsData, error: paymentsError } = await supabase
@@ -386,9 +354,10 @@ export function DebtPaymentModal({
         });
       }
 
-      // Group policies by group_id or individual
+      // Group policies by group_id or individual. Broker policies ride
+      // inside their group so their payments feed the pooled total.
       const groupMap = new Map<string, typeof policiesData>();
-      
+
       (policiesData || []).forEach(policy => {
         const key = policy.group_id || `single_${policy.id}`;
         if (!groupMap.has(key)) {
@@ -399,12 +368,18 @@ export function DebtPaymentModal({
 
       // Build DebtItems
       const items: DebtItem[] = [];
-      
-      groupMap.forEach((policies, itemKey) => {
-        const isPackage = policies.length > 1 || (policies[0]?.group_id !== null);
-        
-        // Build policy components
-        const policyComponents: PolicyComponent[] = policies.map(p => {
+
+      groupMap.forEach((groupPolicies, itemKey) => {
+        const nonBrokerPolicies = groupPolicies.filter(p => !(p as any).broker_id);
+
+        // All-broker group: nothing for the client to pay here.
+        if (nonBrokerPolicies.length === 0) return;
+
+        const isPackage = nonBrokerPolicies.length > 1 || (nonBrokerPolicies[0]?.group_id !== null);
+
+        // Build policy components from the non-broker rows only — those
+        // are the ones the client is liable for and can receive payments.
+        const policyComponents: PolicyComponent[] = nonBrokerPolicies.map(p => {
           const commission = (p as any).office_commission || 0;
           const effectivePrice = p.insurance_price + commission;
           return {
@@ -419,9 +394,15 @@ export function DebtPaymentModal({
           };
         });
 
-        // Calculate item-level totals
+        // Pool every payment in the group (broker + non-broker), then
+        // cap at what the client is actually owed for this group so
+        // broker overpayment never erases debt elsewhere.
         const fullPrice = policyComponents.reduce((sum, p) => sum + p.price, 0);
-        const paidTotal = policyComponents.reduce((sum, p) => sum + p.paid, 0);
+        const groupPoolPaid = groupPolicies.reduce(
+          (sum, p) => sum + (paymentsMap[p.id] || 0),
+          0,
+        );
+        const paidTotal = Math.min(groupPoolPaid, fullPrice);
         const fullPackageRemaining = Math.max(0, fullPrice - paidTotal);
 
         // For debt display: only show non-ELZAMI portion that's actually payable
@@ -477,8 +458,8 @@ export function DebtPaymentModal({
             fullPrice,
             paidTotal,
             remainingTotal,
-            carNumber: (policies[0]?.car as any)?.car_number || null,
-            includesElzami: policies.some(p => p.policy_type_parent === 'ELZAMI'),
+            carNumber: (nonBrokerPolicies[0]?.car as any)?.car_number || null,
+            includesElzami: nonBrokerPolicies.some(p => p.policy_type_parent === 'ELZAMI'),
             payablePolicies,
           });
         }
