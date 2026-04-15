@@ -512,7 +512,15 @@ export default function AccidentReportForm() {
                 </SelectTrigger>
                 <SelectContent>
                   {selectableStatuses.map((value) => (
-                    <SelectItem key={value} value={value}>
+                    <SelectItem
+                      key={value}
+                      value={value}
+                      // Kill the default dark focus/hover paint — the
+                      // status pills already carry their own color, a
+                      // navy highlight on top looks like a missing
+                      // state.
+                      className="focus:!bg-muted/60 focus:!text-foreground data-[state=checked]:!bg-muted/40"
+                    >
                       <Badge variant="outline" className={cn("text-xs", statusColors[value])}>
                         {statusLabels[value]}
                       </Badge>

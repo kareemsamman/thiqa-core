@@ -174,9 +174,70 @@ export function FileUploader({
     ));
   };
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  // Recursively walk a dropped directory tree via webkitGetAsEntry and
+  // collect every leaf File. Runs only when the user drops a folder —
+  // plain file drops still go straight through e.dataTransfer.files.
+  const readDirectory = async (entry: any): Promise<File[]> => {
+    const reader = entry.createReader();
+    const files: File[] = [];
+    const readBatch = (): Promise<any[]> =>
+      new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+    while (true) {
+      const batch = await readBatch();
+      if (!batch.length) break;
+      for (const child of batch) {
+        if (child.isFile) {
+          const file = await new Promise<File>((resolve, reject) =>
+            child.file(resolve, reject),
+          );
+          files.push(file);
+        } else if (child.isDirectory) {
+          const nested = await readDirectory(child);
+          files.push(...nested);
+        }
+      }
+    }
+    return files;
+  };
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
+
+    // When anything dropped is a directory, walk the tree. Otherwise
+    // fall back to e.dataTransfer.files for the plain case.
+    const items = e.dataTransfer.items;
+    if (items && items.length > 0) {
+      const entries: any[] = [];
+      let hasDirectory = false;
+      for (let i = 0; i < items.length; i++) {
+        const entry = (items[i] as any).webkitGetAsEntry?.();
+        if (entry) {
+          entries.push(entry);
+          if (entry.isDirectory) hasDirectory = true;
+        }
+      }
+
+      if (hasDirectory) {
+        const collected: File[] = [];
+        for (const entry of entries) {
+          if (entry.isFile) {
+            const file = await new Promise<File>((resolve, reject) =>
+              entry.file(resolve, reject),
+            );
+            collected.push(file);
+          } else if (entry.isDirectory) {
+            const nested = await readDirectory(entry);
+            collected.push(...nested);
+          }
+        }
+        if (collected.length > 0) {
+          addFiles(collected, true); // silent-skip junk files inside folders
+        }
+        return;
+      }
+    }
+
     if (e.dataTransfer.files.length > 0) {
       addFiles(e.dataTransfer.files);
     }
