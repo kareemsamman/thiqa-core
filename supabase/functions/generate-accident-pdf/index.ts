@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
+import { getAgentBranding, type AgentBranding } from "../_shared/agent-branding.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -160,8 +161,13 @@ serve(async (req) => {
       .select("file_url, file_name, file_type")
       .eq("accident_report_id", accident_report_id)
       .order("created_at");
-    
+
     console.log("Attached files found:", attachedFiles?.length || 0);
+
+    // Load the agent's own branding (logo + company name) so the
+    // printed report wears the agent's identity instead of falling
+    // back to the insurance company or a generic default.
+    const branding = await getAgentBranding(supabase, (report as any).agent_id || null);
 
     // Build field values
     const fieldValues = buildFieldValues(report as AccidentReport, thirdParties || []);
@@ -201,13 +207,13 @@ serve(async (req) => {
           console.log("Successfully generated HTML overlay report", editedFields ? "(with saved edits)" : "(fresh)");
         } catch (templateError) {
           console.error("Error using template, falling back to standard HTML:", templateError);
-          htmlContent = generateHtmlReport(report as AccidentReport, thirdParties || []);
+          htmlContent = generateHtmlReport(report as AccidentReport, thirdParties || [], branding);
         }
       } else {
-        htmlContent = generateHtmlReport(report as AccidentReport, thirdParties || []);
+        htmlContent = generateHtmlReport(report as AccidentReport, thirdParties || [], branding);
       }
     } else {
-      htmlContent = generateHtmlReport(report as AccidentReport, thirdParties || []);
+      htmlContent = generateHtmlReport(report as AccidentReport, thirdParties || [], branding);
     }
 
     // Generate filename - FIXED NAME for stable URL (no timestamp)
@@ -1354,14 +1360,27 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#039;");
 }
 
-function generateHtmlReport(report: AccidentReport, thirdParties: ThirdParty[]): string {
+function generateHtmlReport(
+  report: AccidentReport,
+  thirdParties: ThirdParty[],
+  branding: AgentBranding,
+): string {
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "-";
     return new Date(dateStr).toLocaleDateString("en-GB");
   };
 
   const policyTypeLabel = report.policies.policy_type_child === "THIRD" ? "طرف ثالث" : "شامل";
-  const companyName = report.insurance_companies?.name_ar || report.insurance_companies?.name || "-";
+  // Insurance company on the policy (Ahli, Shamal, etc.) — still
+  // shown further down in the policy section, NOT as the printed
+  // report's brand.
+  const insurerName = report.insurance_companies?.name_ar || report.insurance_companies?.name || "-";
+  // Brand block — agent's own logo + name. If the agent has no
+  // site_settings row yet, branding falls back to the generic
+  // "وكالة التأمين" default from agent-branding.ts.
+  const brandLogoHtml = branding.logoUrl
+    ? `<img src="${escapeHtml(branding.logoUrl)}" alt="${escapeHtml(branding.companyName)}" style="max-height:60px;max-width:220px;object-fit:contain;display:block;margin:0 auto 8px auto;" />`
+    : "";
 
   let thirdPartiesHtml = "";
   if (thirdParties.length > 0) {
@@ -1398,6 +1417,8 @@ function generateHtmlReport(report: AccidentReport, thirdParties: ThirdParty[]):
     .header { text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #2563eb; }
     .header h1 { font-size: 22px; color: #2563eb; margin-bottom: 8px; }
     .header .company-name { font-size: 16px; font-weight: 600; color: #333; }
+    .header .owner-name { font-size: 13px; color: #555; margin-top: 2px; }
+    .header .tax-number { font-size: 12px; color: #555; margin-top: 2px; direction: ltr; unicode-bidi: isolate; }
     .header p { color: #666; font-size: 12px; }
     .section { margin-bottom: 20px; }
     .section-title { font-size: 15px; font-weight: 700; color: #2563eb; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; }
@@ -1425,8 +1446,11 @@ function generateHtmlReport(report: AccidentReport, thirdParties: ThirdParty[]):
   <button class="print-button" onclick="window.print()">طباعة</button>
   
   <div class="header">
+    ${brandLogoHtml}
     <h1>بلاغ حادث طرق</h1>
-    <div class="company-name">${escapeHtml(companyName)}</div>
+    <div class="company-name">${escapeHtml(branding.companyName)}</div>
+    ${branding.ownerName && branding.ownerName.trim() !== branding.companyName.trim() ? `<div class="owner-name">${escapeHtml(branding.ownerName)}</div>` : ''}
+    ${branding.taxNumber ? `<div class="tax-number">رقم المشغل: ${escapeHtml(branding.taxNumber)}</div>` : ''}
     <p>تاريخ التقرير: ${formatDate(new Date().toISOString())}</p>
   </div>
 
@@ -1434,6 +1458,7 @@ function generateHtmlReport(report: AccidentReport, thirdParties: ThirdParty[]):
     <h2 class="section-title">بيانات الوثيقة</h2>
     <div class="info-grid">
       <div class="info-item"><label>رقم الوثيقة</label><span>${escapeHtml(report.policies.policy_number || "-")}</span></div>
+      <div class="info-item"><label>شركة التأمين</label><span>${escapeHtml(insurerName)}</span></div>
       <div class="info-item"><label>نوع التأمين</label><span>${policyTypeLabel}</span></div>
       <div class="info-item"><label>تاريخ البداية</label><span>${formatDate(report.policies.start_date)}</span></div>
       <div class="info-item"><label>تاريخ النهاية</label><span>${formatDate(report.policies.end_date)}</span></div>
