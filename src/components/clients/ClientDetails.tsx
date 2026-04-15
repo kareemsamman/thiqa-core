@@ -638,7 +638,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // Get all payments for these policies (include batch_id for grouping)
       const { data: paymentsData, error } = await supabase
         .from('policy_payments')
-        .select('id, amount, payment_date, payment_type, cheque_number, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id')
+        .select('id, amount, payment_date, payment_type, cheque_number, cheque_date, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id')
         .in('policy_id', policyIds)
         .order('payment_date', { ascending: false });
 

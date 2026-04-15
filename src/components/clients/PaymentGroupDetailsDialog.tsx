@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,6 @@ import {
   Printer,
   Loader2,
   ImageIcon,
-  FileText,
   Pencil,
   Trash2,
   X,
@@ -33,6 +32,7 @@ export interface PaymentRecord {
   payment_date: string;
   payment_type: string;
   cheque_number: string | null;
+  cheque_date?: string | null;
   card_last_four: string | null;
   refused: boolean | null;
   locked: boolean | null;
@@ -276,155 +276,187 @@ export function PaymentGroupDetailsDialog({
           </DialogHeader>
         </div>
 
-        {/* Body — every payment row renders as a wide single-line card
-            with columns for icon / amount / badges / meta / files / actions.
-            Details like cheque# and notes live in a secondary row under
-            the main line so the layout stays readable instead of cramming
-            everything into one horizontal strip. */}
-        <div className="p-4 space-y-2.5 bg-muted/20">
-          {group.payments.map((p) => {
-            const Icon = paymentTypeIcon[p.payment_type] || Banknote;
-            const typeBg = paymentTypeBg[p.payment_type] || "bg-muted text-muted-foreground border-border";
-            const attachments = imagesByPayment[p.id] || [];
-            const hasDetails = p.cheque_number || p.card_last_four || p.notes || attachments.length > 0;
-            return (
-              <div
-                key={p.id}
-                className={cn(
-                  "rounded-xl border bg-card shadow-sm transition-colors",
-                  p.refused
-                    ? "border-destructive/40 bg-destructive/5"
-                    : "border-border/60 hover:border-border",
-                )}
-              >
-                {/* Primary row */}
-                <div className="flex items-center gap-4 px-4 py-3 min-h-[76px]">
-                  {/* Icon */}
-                  <div
-                    className={cn(
-                      "w-11 h-11 rounded-xl border-2 flex items-center justify-center shrink-0",
-                      typeBg,
-                    )}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  {/* Amount + type badge */}
-                  <div className="flex flex-col gap-1 shrink-0 min-w-[140px]">
-                    <span className="font-bold text-xl ltr-nums text-foreground leading-none text-right">
-                      ₪{Number(p.amount || 0).toLocaleString("en-US")}
-                    </span>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <Badge variant="outline" className={cn("text-[10px] h-5 px-2 font-semibold", typeBg)}>
-                        {getPaymentTypeLabel(p)}
-                      </Badge>
-                      {p.refused && (
-                        <Badge variant="destructive" className="text-[10px] h-5 px-2 gap-0.5">
-                          <AlertCircle className="h-3 w-3" />
-                          مرفوضة
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  {/* Divider */}
-                  <div className="h-10 w-px bg-border/70 shrink-0" />
-                  {/* Meta (date + cheque# or card inline) */}
-                  <div className="flex-1 min-w-0 flex items-center gap-4 flex-wrap text-xs">
-                    <div className="flex items-center gap-1.5 text-muted-foreground">
-                      <span className="text-[10px] uppercase tracking-wide">التاريخ</span>
-                      <span className="font-semibold text-foreground ltr-nums">
-                        {formatDate(p.payment_date)}
-                      </span>
-                    </div>
-                    {p.cheque_number && (
-                      <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <span className="text-[10px] uppercase tracking-wide">رقم الشيك</span>
-                        <span className="font-mono font-semibold text-foreground ltr-nums">
-                          {p.cheque_number}
-                        </span>
-                      </div>
-                    )}
-                    {p.card_last_four && (
-                      <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <span className="text-[10px] uppercase tracking-wide">البطاقة</span>
-                        <span className="font-mono font-semibold text-foreground ltr-nums">
-                          •••• {p.card_last_four}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  {/* Attachments count chip */}
-                  {attachments.length > 0 && (
-                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/60 rounded-full px-2.5 py-1 shrink-0">
-                      <ImageIcon className="h-3 w-3" />
-                      <span>{attachments.length} ملف</span>
-                    </div>
-                  )}
-                  {/* Actions */}
+        {/* Body — one row per payment in a real HTML table. Every row has
+            the same height so the dialog reads like a ledger, not a stack
+            of variable-size cards. Notes and attachments hang off the row
+            as a thin sub-row (only when present) to avoid height churn. */}
+        <div className="p-4 bg-muted/20">
+          <div className="overflow-x-auto rounded-lg border border-border/60 bg-card">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 border-b border-border/60">
+                <tr>
+                  <th className="text-center w-10 px-2 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">#</th>
+                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">طريقة الدفع</th>
+                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">التفاصيل</th>
+                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">التواريخ</th>
+                  <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide min-w-[110px]">المبلغ</th>
+                  <th className="text-center px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-20">المرفقات</th>
                   {(onEdit || onDelete) && (
-                    <div className="flex items-center gap-1 shrink-0 border-r border-border/60 pr-3">
-                      {onEdit && !p.locked && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          onClick={() => handleEditClick(p)}
-                          title="تعديل"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {onDelete && !p.locked && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                          onClick={() => handleDeleteClick(p)}
-                          title="حذف"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
+                    <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-20">إجراءات</th>
                   )}
-                </div>
-                {/* Secondary row — notes + thumbnails when present */}
-                {hasDetails && (p.notes || attachments.length > 0) && (
-                  <div className="px-4 pb-3 pt-0 border-t border-border/40 mt-0 flex items-start gap-4 flex-wrap bg-muted/10">
-                    {p.notes && (
-                      <p className="text-xs text-muted-foreground leading-relaxed pt-2.5 flex-1 min-w-[160px]">
-                        {p.notes}
-                      </p>
-                    )}
-                    {attachments.length > 0 && (
-                      <div className="pt-2.5 flex flex-wrap gap-1.5">
-                        {attachments.map((img) => {
-                          const isPdf = img.image_url.toLowerCase().endsWith('.pdf');
-                          return (
-                            <button
-                              key={img.id}
-                              type="button"
-                              onClick={() => setGalleryFile(buildGalleryFile(img))}
-                              className="relative w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors bg-background flex items-center justify-center shrink-0"
-                              title={img.image_type || 'مرفق'}
-                            >
-                              {isPdf ? (
-                                <div className="flex flex-col items-center justify-center gap-0.5">
-                                  <FileText className="h-5 w-5 text-red-500" />
-                                  <span className="text-[9px] font-bold text-red-500">PDF</span>
-                                </div>
-                              ) : (
-                                <img src={img.image_url} alt={img.image_type || ''} className="w-full h-full object-cover" />
+                </tr>
+              </thead>
+              <tbody>
+                {group.payments.map((p, idx) => {
+                  const Icon = paymentTypeIcon[p.payment_type] || Banknote;
+                  const typeBg = paymentTypeBg[p.payment_type] || "bg-muted text-muted-foreground border-border";
+                  const attachments = imagesByPayment[p.id] || [];
+                  const colSpan = onEdit || onDelete ? 7 : 6;
+                  return (
+                    <Fragment key={p.id}>
+                      <tr
+                        className={cn(
+                          "border-b border-border/40 last:border-b-0 transition-colors",
+                          p.refused
+                            ? "bg-destructive/5 hover:bg-destructive/10"
+                            : "hover:bg-muted/30",
+                        )}
+                      >
+                        {/* # */}
+                        <td className="px-2 py-3 text-center text-[11px] font-bold text-muted-foreground ltr-nums align-middle">
+                          {idx + 1}
+                        </td>
+
+                        {/* Payment method + refused tag */}
+                        <td className="px-3 py-3 align-middle">
+                          <div className="flex items-center gap-2">
+                            <div className={cn("w-8 h-8 rounded-lg border flex items-center justify-center shrink-0", typeBg)}>
+                              <Icon className="h-4 w-4" />
+                            </div>
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className="text-xs font-semibold truncate">
+                                {getPaymentTypeLabel(p)}
+                              </span>
+                              {p.refused && (
+                                <Badge variant="destructive" className="text-[9px] h-4 px-1.5 gap-0.5 w-fit">
+                                  <AlertCircle className="h-2.5 w-2.5" />
+                                  مرفوضة
+                                </Badge>
                               )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Details (cheque# or card last 4, else dash) */}
+                        <td className="px-3 py-3 align-middle">
+                          {p.cheque_number ? (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[9px] text-muted-foreground uppercase tracking-wide">رقم الشيك</span>
+                              <span className="font-mono text-xs font-semibold ltr-nums">{p.cheque_number}</span>
+                            </div>
+                          ) : p.card_last_four ? (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[9px] text-muted-foreground uppercase tracking-wide">البطاقة</span>
+                              <span className="font-mono text-xs font-semibold ltr-nums">•••• {p.card_last_four}</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+
+                        {/* Dates — payment date always, cheque issue date on top when cheque */}
+                        <td className="px-3 py-3 align-middle">
+                          <div className="flex flex-col gap-0.5">
+                            {p.payment_type === 'cheque' && p.cheque_date && (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[9px] text-muted-foreground uppercase tracking-wide">الإصدار</span>
+                                <span className="text-xs font-semibold ltr-nums">{formatDate(p.cheque_date)}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] text-muted-foreground uppercase tracking-wide">الاستلام</span>
+                              <span className="text-xs font-semibold ltr-nums">{formatDate(p.payment_date)}</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Amount */}
+                        <td className="px-3 py-3 align-middle text-left">
+                          <span className="font-bold text-sm ltr-nums text-foreground">
+                            ₪{Number(p.amount || 0).toLocaleString("en-US")}
+                          </span>
+                        </td>
+
+                        {/* Attachments — clickable count chip that opens the first file */}
+                        <td className="px-3 py-3 align-middle text-center">
+                          {attachments.length > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => setGalleryFile(buildGalleryFile(attachments[0]))}
+                              className="inline-flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 rounded-full px-2 py-0.5 transition-colors"
+                              title={`${attachments.length} مرفق`}
+                            >
+                              <ImageIcon className="h-3 w-3" />
+                              <span className="ltr-nums">{attachments.length}</span>
                             </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        {(onEdit || onDelete) && (
+                          <td className="px-2 py-3 align-middle">
+                            <div className="flex items-center justify-center gap-0.5">
+                              {onEdit && !p.locked && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7"
+                                  onClick={() => handleEditClick(p)}
+                                  title="تعديل"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              {onDelete && !p.locked && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                  onClick={() => handleDeleteClick(p)}
+                                  title="حذف"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+
+                      {/* Notes sub-row — only rendered when the payment has
+                          a note. Same background as the parent row, indented
+                          under the details column, with a "ملاحظة" label so
+                          the customer/agent can tell it's attached to this
+                          payment and not a section header. */}
+                      {p.notes && (
+                        <tr
+                          className={cn(
+                            "border-b border-border/40",
+                            p.refused ? "bg-destructive/5" : "bg-muted/15",
+                          )}
+                        >
+                          <td className="px-2 py-0" />
+                          <td
+                            colSpan={colSpan - 1}
+                            className="px-3 pb-2.5 pt-0 text-xs text-foreground"
+                          >
+                            <div className="flex items-start gap-1.5 text-muted-foreground">
+                              <span className="text-[9px] uppercase tracking-wide shrink-0 mt-0.5">ملاحظة</span>
+                              <span className="text-xs text-foreground leading-relaxed whitespace-pre-wrap break-words">
+                                {p.notes}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

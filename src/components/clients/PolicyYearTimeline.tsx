@@ -633,7 +633,7 @@ export function PolicyYearTimeline({
       const { data, error } = await supabase
         .from('policy_payments')
         .select(`
-          id, policy_id, amount, payment_date, payment_type, cheque_number,
+          id, policy_id, amount, payment_date, payment_type, cheque_number, cheque_date,
           cheque_image_url, card_last_four, refused, locked, notes,
           policy:policies!policy_payments_policy_id_fkey(
             id, policy_type_parent, policy_type_child, insurance_price
