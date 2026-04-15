@@ -989,7 +989,7 @@ function generateReportHtml(args: GenerateReportArgs): string {
     .customer-grid .value { font-size: 14px; font-weight: 700; color: #1a1a1a; }
     .customer-grid .value.tabular { font-variant-numeric: tabular-nums; direction: ltr; text-align: right; }
 
-    /* ── Items table (policies) — rides on top of `.data-table` so the
+    /* ── Items table (policies) — rides on top of .data-table so the
        cars / drivers / policies sections all share the same frame. This
        block only adds what's policy-specific: vertical-align, the
        multi-line description cell, the broker tag, and the package
@@ -1480,7 +1480,7 @@ function generateReportHtml(args: GenerateReportArgs): string {
     ${carsHtml}
     ${driversHtml}
 
-    <!-- Policies items table — same 4-column `.data-table` look as the
+    <!-- Policies items table — same 4-column .data-table look as the
          cars / drivers / payments sections above so the whole report
          reads consistently on paper. Packages render as an indented
          block (header row + one component row per member). -->
