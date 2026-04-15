@@ -1191,9 +1191,22 @@ export default function Receipts() {
                       onClick={() => handleOpenGroupDetails(group)}
                     >
                       <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
-                        {group.document_numbers.length > 0
-                          ? group.document_numbers.join(" · ")
-                          : "-"}
+                        {group.document_numbers.length > 0 ? (
+                          <div className="flex items-center gap-1.5">
+                            <span>{group.document_numbers.join(" · ")}</span>
+                            {group.document_numbers.length > 1 && (
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1.5 py-0 h-4 font-sans bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-300"
+                                title="هذه الوثائق ضمن باقة واحدة"
+                              >
+                                📦 باقة
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
                       </TableCell>
                       <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
                         {group.receipts.length <= 1 ? (
