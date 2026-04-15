@@ -509,7 +509,7 @@ export function Step4Payments({
                               onChange={(e) => updatePayment(payment.id, 'cheque_number', sanitizeChequeNumber(e.target.value))}
                               placeholder="رقم الشيك"
                               maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                              className="h-9 font-mono ltr-input"
+                              className="h-10 font-mono ltr-input"
                               disabled={isDisabled}
                             />
                           </>

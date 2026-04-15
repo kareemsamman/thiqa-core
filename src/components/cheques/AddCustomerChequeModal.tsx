@@ -523,7 +523,7 @@ export function AddCustomerChequeModal({
                                   })}
                                   placeholder="رقم الشيك"
                                   maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                                  className="h-9 font-mono"
+                                  className="h-10 font-mono"
                                 />
                               </>
                             }

@@ -1117,7 +1117,7 @@ export function DebtPaymentModal({
                                 onChange={e => updatePaymentLine(payment.id, 'chequeNumber', sanitizeChequeNumber(e.target.value))}
                                 placeholder="رقم الشيك"
                                 maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                                className="h-9 font-mono"
+                                className="h-10 font-mono"
                                 disabled={payment.tranzilaPaid}
                               />
                             </>

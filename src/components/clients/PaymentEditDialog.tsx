@@ -492,7 +492,7 @@ export function PaymentEditDialog({
                       cheque_number: sanitizeChequeNumber(e.target.value)
                     })}
                     maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                    className="font-mono h-9 ltr-input"
+                    className="font-mono h-10 ltr-input"
                     placeholder="أدخل رقم الشيك"
                     disabled={isLocked}
                   />

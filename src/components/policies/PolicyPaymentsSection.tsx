@@ -1150,7 +1150,7 @@ export function PolicyPaymentsSection({
                               onChange={e => updatePaymentLine(payment.id, 'chequeNumber', sanitizeChequeNumber(e.target.value))}
                               placeholder="رقم الشيك"
                               maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                              className="h-9 font-mono"
+                              className="h-10 font-mono"
                               disabled={payment.tranzilaPaid}
                             />
                           </>
@@ -1369,7 +1369,7 @@ export function PolicyPaymentsSection({
                           value={editFormData.cheque_number}
                           onChange={(e) => setEditFormData(f => ({ ...f, cheque_number: sanitizeChequeNumber(e.target.value) }))}
                           maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                          className="font-mono ltr-input h-9"
+                          className="font-mono ltr-input h-10"
                         />
                       </>
                     }
