@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { getAgentBranding } from "../_shared/agent-branding.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,6 +50,7 @@ serve(async (req) => {
 
     // Get SMS credentials (with Thiqa platform fallback)
     const smsSettings = await resolveSmsSettings(supabase, agentSmsRow?.agent_id);
+    const branding = await getAgentBranding(supabase, agentSmsRow?.agent_id || null);
 
     if (!smsSettings) {
       console.log("[cron-renewal-reminders] SMS service disabled or not configured");
@@ -179,7 +182,7 @@ serve(async (req) => {
         }
       }
 
-      const message = template
+      const baseMessage = template
         .replace(/{client_name}/g, client.full_name || 'عميل')
         .replace(/{car_number}/g, car?.car_number || '-')
         .replace(/{end_date}/g, endDate)
@@ -187,6 +190,7 @@ serve(async (req) => {
         .replace(/{price}/g, policyPrice > 0 ? `₪${policyPrice.toLocaleString('en-US')}` : '')
         .replace(/{commission}/g, policyCommission > 0 ? `₪${policyCommission.toLocaleString('en-US')}` : '')
         .replace(/{price_line}/g, priceLine);
+      const message = appendSmsFooter(baseMessage, branding);
 
       // Normalize phone
       let cleanPhone = client.phone_number.replace(/[^0-9]/g, "");

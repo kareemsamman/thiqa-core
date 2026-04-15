@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { buildBunnyStorageUploadUrl, normalizeBunnyCdnUrl, resolveBunnyStorageZone } from "../_shared/bunny-storage.ts";
 import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { THIQA_LOGO_SVG } from "../_shared/thiqa-logo.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
@@ -465,6 +466,8 @@ serve(async (req) => {
 
     // Always add invoice URL
     smsMessage += `\n\nوثيقة التأمين: ${packageInvoiceUrl}`;
+
+    smsMessage = appendSmsFooter(smsMessage, branding);
 
     const escapeXml = (value: string) =>
       value

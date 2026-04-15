@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { getAgentBranding, resolveAgentId, buildLogoHtml, type AgentBranding } from "../_shared/agent-branding.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
@@ -693,7 +694,8 @@ serve(async (req) => {
           cleanPhone = "0" + cleanPhone.substring(3);
         }
 
-        const smsMessage = `مرحباً ${client.full_name}، تم إصدار فاتورة شاملة بجميع الدفعات الخاصة بك:\n${invoiceUrl}`;
+        const baseSmsMessage = `مرحباً ${client.full_name}، تم إصدار فاتورة شاملة بجميع الدفعات الخاصة بك:\n${invoiceUrl}`;
+        const smsMessage = appendSmsFooter(baseSmsMessage, branding);
 
         const escapeXml = (value: string) =>
           value

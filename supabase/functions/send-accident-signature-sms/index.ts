@@ -1,7 +1,8 @@
  import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
  import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
  import { resolveSmsSettings } from "../_shared/sms-settings.ts";
- import { resolveAgentId } from "../_shared/agent-branding.ts";
+ import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
+ import { appendSmsFooter } from "../_shared/sms-footer.ts";
  import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
  
  const corsHeaders = {
@@ -221,7 +222,10 @@
      smsMessage = smsMessage
        .replace(/\{\{client_name\}\}/g, report.clients.full_name || "عميل")
        .replace(/\{\{signature_url\}\}/g, signaturePageUrl);
- 
+
+     const branding = await getAgentBranding(supabase, agentId);
+     smsMessage = appendSmsFooter(smsMessage, branding);
+
      const escapeXml = (value: string) =>
        value
          .replace(/&/g, "&amp;")

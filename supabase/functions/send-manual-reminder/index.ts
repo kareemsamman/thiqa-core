@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.88.0';
 import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
@@ -303,23 +304,16 @@ Deno.serve(async (req) => {
         ? `\n\nالوثائق:\n${policyLines}` 
         : '';
 
-      // Build final message with policy details and footer
+      // Build the debt-reminder body. The shared footer (applied below)
+      // covers owner name + phones, so we no longer hand-stitch branding here.
       finalMessage = `مرحباً ${client.full_name}،
 
-عليك تسديد المبلغ: ₪${totalRemaining.toLocaleString('en-US')}${policySection}
-
-${branding.companyName}`;
-
-      // Add location if available
-      if (companyLocation) {
-        finalMessage += `\n📍 ${companyLocation}`;
-      }
-
-      // Add phones if available
-      if (phones) {
-        finalMessage += `\n📞 ${phones}`;
-      }
+عليك تسديد المبلغ: ₪${totalRemaining.toLocaleString('en-US')}${policySection}`;
     }
+
+    // Append the shared agent footer to every reminder — custom message
+    // or auto-built debt body, both get the same signature.
+    finalMessage = appendSmsFooter(finalMessage, branding);
 
     // Send SMS
     const smsResult = await sendSms(smsSettings, clientPhone, finalMessage);

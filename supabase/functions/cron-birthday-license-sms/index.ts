@@ -1,5 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { getAgentBranding } from "../_shared/agent-branding.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,6 +29,7 @@ Deno.serve(async (req) => {
 
     // Get SMS credentials (with Thiqa platform fallback)
     const smsSettings = await resolveSmsSettings(supabase, agentSmsRow?.agent_id);
+    const branding = await getAgentBranding(supabase, agentSmsRow?.agent_id || null);
 
     if (!smsSettings) {
       console.error('SMS settings not configured');
@@ -144,9 +147,10 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // Prepare message
-          const message = (agentSmsRow?.birthday_sms_template || 'عيد ميلاد سعيد {client_name}!')
+          // Prepare message + shared footer
+          const baseMessage = (agentSmsRow?.birthday_sms_template || 'عيد ميلاد سعيد {client_name}!')
             .replace(/{client_name}/g, client.full_name);
+          const message = appendSmsFooter(baseMessage, branding);
 
           // Send SMS
           const success = await sendSms(client.phone_number!, message);
@@ -240,10 +244,11 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // Prepare message
-          const message = (agentSmsRow?.license_expiry_sms_template || 'تنبيه: رخصة سيارتك {car_number} ستنتهي قريباً')
+          // Prepare message + shared footer
+          const baseMessage = (agentSmsRow?.license_expiry_sms_template || 'تنبيه: رخصة سيارتك {car_number} ستنتهي قريباً')
             .replace(/{client_name}/g, client.full_name)
             .replace(/{car_number}/g, car.car_number);
+          const message = appendSmsFooter(baseMessage, branding);
 
           // Send SMS
           const success = await sendSms(client.phone_number, message);

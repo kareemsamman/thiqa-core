@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
@@ -103,7 +104,6 @@ Deno.serve(async (req) => {
     // Resolve agent branding
     const agentId = await resolveAgentId(supabase, user.id);
     const brandingData = await getAgentBranding(supabase, agentId);
-    const siteTitle = brandingData.companyName;
 
     const { filter_days, search } = await req.json();
 
@@ -121,13 +121,6 @@ Deno.serve(async (req) => {
         }
       );
     }
-
-    // Get agent-level company settings
-    const { data: agentSmsRow } = await supabase
-      .from("sms_settings")
-      .select("company_location, company_phone_links")
-      .eq("agent_id", agentId)
-      .maybeSingle();
 
     // Get all clients matching the filter (no pagination limit). Raw
     // fetch so auth.uid() inside the tenant-scoped RPC resolves to
@@ -212,11 +205,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Get company footer info
-    const companyLocation = agentSmsRow?.company_location || '';
-    const phoneLinks = (agentSmsRow?.company_phone_links as any[]) || [];
-    const phones = phoneLinks.map((p: any) => p.phone).filter(Boolean).join(' | ');
-
     const smsUser = smsSettings.sms_user;
     const smsToken = smsSettings.sms_token;
     const smsSource = smsSettings.sms_source;
@@ -269,25 +257,16 @@ Deno.serve(async (req) => {
           .slice(0, 5)
           .join('\n');
 
-        // Build final message with policy details and footer
+        // Build the debt-reminder body; the shared footer (owner + phones)
+        // is appended below so the signature is identical across every SMS
+        // path in the app.
         let message = `مرحباً ${clientName}،
 
 عليك تسديد المبلغ: ₪${totalRemaining.toLocaleString()}
 
 الوثائق:
-${policyLines}
-
-${siteTitle}`;
-
-        // Add location if available
-        if (companyLocation) {
-          message += `\n📍 ${companyLocation}`;
-        }
-
-        // Add phones if available
-        if (phones) {
-          message += `\n📞 ${phones}`;
-        }
+${policyLines}`;
+        message = appendSmsFooter(message, brandingData);
 
         // Build 019sms XML request (official API format)
         const dlr = crypto.randomUUID();

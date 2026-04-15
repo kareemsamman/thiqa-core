@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
+import { getAgentBranding } from "../_shared/agent-branding.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -145,6 +147,10 @@ serve(async (req) => {
       cleanPhone = "0" + cleanPhone.substring(3);
     }
 
+    // Append the agent-branded footer (owner name + phones) before escaping.
+    const branding = await getAgentBranding(supabase, agentId);
+    const finalMessage = appendSmsFooter(message, branding);
+
     // Build 019sms XML request (official API)
     // Docs: https://docs.019sms.co.il/sms/send-sms.html
     const dlr = crypto.randomUUID();
@@ -154,7 +160,7 @@ serve(async (req) => {
       `<user><username>${escapeXml(sms_user)}</username></user>` +
       `<source>${escapeXml(sms_source)}</source>` +
       `<destinations><phone id="${dlr}">${escapeXml(cleanPhone)}</phone></destinations>` +
-      `<message>${escapeXml(message)}</message>` +
+      `<message>${escapeXml(finalMessage)}</message>` +
       `</sms>`;
 
     console.log(`Sending SMS to ${cleanPhone} from ${sms_source}`);
@@ -191,10 +197,10 @@ serve(async (req) => {
       );
     }
 
-    // Log SMS to sms_logs table
+    // Log SMS to sms_logs table (store the actual delivered text including footer)
     const { error: logError } = await supabase.from('sms_logs').insert({
       phone_number: cleanPhone,
-      message: message,
+      message: finalMessage,
       sms_type: 'manual',
       status: 'sent',
       sent_at: new Date().toISOString(),

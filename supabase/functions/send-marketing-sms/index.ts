@@ -1,5 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { getAgentBranding } from "../_shared/agent-branding.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
@@ -175,6 +177,11 @@ Deno.serve(async (req) => {
       if (existingCampaign) campaignMessage = existingCampaign.message;
     }
 
+    // Resolve the agent footer once per invocation (per batch) so every
+    // recipient in this batch gets the same signature.
+    const branding = await getAgentBranding(supabase, agentId);
+    const campaignMessageWithFooter = appendSmsFooter(campaignMessage, branding);
+
     // ── Fetch the next batch of pending recipients ──
     const { data: pendingRecipients, error: fetchError } = await supabase
       .from('marketing_sms_recipients')
@@ -208,7 +215,7 @@ Deno.serve(async (req) => {
         if (!phone.startsWith('0')) phone = '0' + phone;
 
         const dlr = crypto.randomUUID();
-        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><sms><user><username>${escapeXml(smsSettings.sms_user)}</username></user><source>${escapeXml(smsSettings.sms_source)}</source><destinations><phone id="${dlr}">${escapeXml(phone)}</phone></destinations><message>${escapeXml(campaignMessage)}</message></sms>`;
+        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><sms><user><username>${escapeXml(smsSettings.sms_user)}</username></user><source>${escapeXml(smsSettings.sms_source)}</source><destinations><phone id="${dlr}">${escapeXml(phone)}</phone></destinations><message>${escapeXml(campaignMessageWithFooter)}</message></sms>`;
 
         const smsResponse = await fetch('https://019sms.co.il/api', {
           method: 'POST',

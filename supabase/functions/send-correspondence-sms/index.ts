@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
-import { resolveAgentId } from "../_shared/agent-branding.ts";
+import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
@@ -215,14 +216,16 @@ Deno.serve(async (req) => {
       phone = '0' + phone;
     }
 
-    const companyName = siteSettings?.site_title || 'وكالة التأمين';
+    const branding = await getAgentBranding(supabase, agentId);
+    const companyName = branding.companyName;
 
     // Build SMS message
-    const message = `رسالة من ${companyName}:
+    const baseMessage = `رسالة من ${companyName}:
 ${letter.recipient_name}
 
 للاطلاع على الرسالة:
 ${letterUrl}`;
+    const message = appendSmsFooter(baseMessage, branding);
 
     // Escape XML
     const escapeXml = (str: string) =>

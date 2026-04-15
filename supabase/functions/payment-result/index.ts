@@ -1,5 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { resolveSmsSettings } from "../_shared/sms-settings.ts"
+import { getAgentBranding } from "../_shared/agent-branding.ts"
+import { appendSmsFooter } from "../_shared/sms-footer.ts"
 
 // This edge function handles payment result pages for Tranzila
 // It returns simple HTML that posts a message to the parent window
@@ -366,6 +368,7 @@ async function sendPaymentReceiptSms(supabase: any, payment: any) {
     // Get SMS credentials (with Thiqa platform fallback)
     const agentId = policy?.agent_id || null
     const smsSettings = await resolveSmsSettings(supabase, agentId)
+    const branding = await getAgentBranding(supabase, agentId)
 
     if (!smsSettings) {
       console.log('SMS is disabled or not configured, skipping receipt SMS')
@@ -409,8 +412,11 @@ async function sendPaymentReceiptSms(supabase: any, payment: any) {
     if (confirmationCode) {
       message += `\nرقم التأكيد: ${confirmationCode}`
     }
-    
-    message += '\n\nشكراً لك - ثقة للتأمين'
+
+    // Replace the old hardcoded "ثقة للتأمين" sign-off with the shared
+    // agent-branded footer (owner name + phones) so every outgoing SMS
+    // carries the same signature.
+    message = appendSmsFooter(message, branding)
 
     // Send SMS via 019sms
     const smsUrl = 'https://019sms.co.il/api'

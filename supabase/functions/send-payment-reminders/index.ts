@@ -1,5 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { getAgentBranding, type AgentBranding } from "../_shared/agent-branding.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { checkUsageLimit, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
@@ -111,6 +113,18 @@ Deno.serve(async (req) => {
       return cached;
     };
 
+    // Per-agent branding cache — each policy's owner/phones footer is
+    // fetched once and reused across all reminders sent to their clients.
+    const agentBrandingCache = new Map<string | null, AgentBranding>();
+    const getBranding = async (agentId: string | null) => {
+      let cached = agentBrandingCache.get(agentId);
+      if (!cached) {
+        cached = await getAgentBranding(supabase, agentId);
+        agentBrandingCache.set(agentId, cached);
+      }
+      return cached;
+    };
+
     for (const policy of policies || []) {
       const client = policy.clients as any;
       const clientPhone = client?.phone_number;
@@ -154,12 +168,14 @@ Deno.serve(async (req) => {
 
       if (!reminderType || !template) continue;
 
-      // Format message
-      const message = template
+      // Format message + append the owning agent's footer (owner + phones).
+      const baseMessage = template
         .replace(/\{\{client_name\}\}/g, client.full_name || 'عميل')
         .replace(/\{\{policy_number\}\}/g, policy.policy_number || policy.id.substring(0, 8))
         .replace(/\{\{remaining_amount\}\}/g, remaining.toFixed(0))
         .replace(/\{\{days_until_expiry\}\}/g, daysUntilExpiry.toString());
+      const branding = await getBranding(policyAgentId);
+      const message = appendSmsFooter(baseMessage, branding);
 
       // Send SMS
       try {

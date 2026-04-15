@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
-import { resolveAgentId } from "../_shared/agent-branding.ts";
+import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { checkUsageLimit, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
@@ -80,6 +81,7 @@ serve(async (req) => {
     // Get SMS credentials (with Thiqa platform fallback)
     const agentId = await resolveAgentId(supabase, user.id);
     const smsSettings = await resolveSmsSettings(supabase, agentId);
+    const branding = await getAgentBranding(supabase, agentId);
 
     if (!smsSettings) {
       return new Response(
@@ -258,7 +260,7 @@ serve(async (req) => {
             priceLine += ` عمولة المكتب: ₪${policyCommission.toLocaleString('en-US')}.`;
           }
         }
-        const message = template
+        const baseMessage = template
           .replace('{client_name}', client.full_name || 'العميل')
           .replace('{car_number}', car?.car_number || '')
           .replace('{policy_end_date}', endDate)
@@ -267,6 +269,7 @@ serve(async (req) => {
           .replace('{price}', policyPrice > 0 ? `₪${policyPrice.toLocaleString('en-US')}` : '')
           .replace('{commission}', policyCommission > 0 ? `₪${policyCommission.toLocaleString('en-US')}` : '')
           .replace('{price_line}', priceLine);
+        const message = appendSmsFooter(baseMessage, branding);
 
         let phone = client.phone_number.replace(/[\s\-\(\)]/g, '');
         if (phone.startsWith('0')) {
