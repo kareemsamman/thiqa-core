@@ -734,7 +734,11 @@ export function PackagePaymentModal({
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* One 3-col row for amount / method / date so the
+                        payment essentials fit on a single line instead
+                        of two separate grids. Mobile collapses to a
+                        single column via grid-cols-1. */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <Label className="text-xs">المبلغ</Label>
                         <Input
@@ -742,6 +746,7 @@ export function PackagePaymentModal({
                           value={payment.amount || ''}
                           onChange={e => updatePaymentLine(payment.id, 'amount', parseFloat(e.target.value) || 0)}
                           placeholder={`أقصى: ₪${effectiveRemaining.toLocaleString()}`}
+                          className="h-10"
                           disabled={payment.tranzilaPaid}
                         />
                       </div>
@@ -752,7 +757,7 @@ export function PackagePaymentModal({
                           onValueChange={(val) => updatePaymentLine(payment.id, 'paymentType', val)}
                           disabled={payment.tranzilaPaid}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="h-10">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -767,11 +772,10 @@ export function PackagePaymentModal({
                           </SelectContent>
                         </Select>
                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <Label className="text-xs">تاريخ الدفع</Label>
+                        <Label className="text-xs">
+                          {payment.paymentType === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
+                        </Label>
                         <ArabicDatePicker
                           value={payment.paymentDate}
                           onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}

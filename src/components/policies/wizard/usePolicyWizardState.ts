@@ -404,6 +404,20 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
   const remainingToPay = displayTotal - totalPaidPayments;
   const paymentsExceedPrice = totalPaidPayments > displayTotal && displayTotal > 0;
 
+  // Per-row payment health. Locked system rows (ELZAMI auto) are
+  // skipped — the user can't edit their amount, so validating them
+  // would lock the step on invalid system state the user can't fix.
+  const hasZeroPayment = payments.some(
+    (p) => !p.refused && !p.locked && (p.amount || 0) <= 0,
+  );
+  const hasIncompleteCheque = payments.some(
+    (p) =>
+      !p.refused &&
+      !p.locked &&
+      p.payment_type === 'cheque' &&
+      !(p.cheque_number && p.cheque_number.trim().length > 0),
+  );
+
   // Steps configuration with validation
   const steps: WizardStep[] = useMemo(() => {
     const branchValid = isAdmin
@@ -439,7 +453,13 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
       !!(policy.full_car_value && parseFloat(policy.full_car_value) > 0);
     
     const step3Valid = !!(policy.company_id && policy.start_date && policy.end_date && policy.insurance_price && fullInsuranceCarValueValid && elzamiAddonValid && thirdFullAddonValid && roadServiceAddonValid && accidentFeeAddonValid);
-    const step4Valid = !paymentsExceedPrice;
+
+    // Step 4: payments. Block when overpaid, any row has a zero
+    // amount, or any cheque row is missing its cheque number.
+    // hasZeroPayment / hasIncompleteCheque are computed at the top
+    // of the hook so the missingFields derivation can reuse them.
+    const step4Valid =
+      !paymentsExceedPrice && !hasZeroPayment && !hasIncompleteCheque;
 
     if (isLightMode) {
       return [
@@ -459,7 +479,8 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     isAdmin, selectedBranchId, branches, userBranchId,
     selectedClient, createNewClient, newClient, selectedCategory, isLightMode,
     selectedCar, existingCar, createNewCar, newCar, carConflict,
-    policy, paymentsExceedPrice, packageMode, packageAddons,
+    policy, paymentsExceedPrice, hasZeroPayment, hasIncompleteCheque,
+    packageMode, packageAddons,
   ]);
 
   // Get current step index for the steps array
@@ -550,6 +571,8 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
       }
     } else if (isPaymentStep) {
       if (paymentsExceedPrice) missing.push("مجموع الدفعات يتجاوز السعر");
+      if (hasZeroPayment) missing.push("مبلغ الدفعة يجب أن يكون أكبر من صفر");
+      if (hasIncompleteCheque) missing.push("رقم الشيك مطلوب");
     }
 
     return missing;
@@ -573,6 +596,8 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     packageMode,
     packageAddons,
     paymentsExceedPrice,
+    hasZeroPayment,
+    hasIncompleteCheque,
   ]);
 
   // Reset functions
