@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { ChequeScannerDialog } from '@/components/payments/ChequeScannerDialog';
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from '@/lib/chequeUtils';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
+import { BankBranchPicker } from '@/components/shared/BankBranchPicker';
 
 interface Client {
   id: string;
@@ -42,6 +43,8 @@ interface ChequeLine {
   amount: number;
   cheque_number: string;
   payment_date: string;
+  bank_code: string | null;
+  branch_code: string | null;
   cheque_image_url?: string;
   notes?: string;
 }
@@ -117,6 +120,8 @@ export function AddCustomerChequeModal({
       amount: 0,
       cheque_number: '',
       payment_date: new Date().toISOString().split('T')[0],
+      bank_code: null,
+      branch_code: null,
     }]);
   };
 
@@ -129,11 +134,17 @@ export function AddCustomerChequeModal({
   };
 
   const handleScannerConfirm = (scannedCheques: any[]) => {
+    // The scanner's OCR emits free-text `bank_name` / `branch_number`
+    // — keep whatever it gave us as `branch_code` (it's typically a
+    // numeric branch id), and leave `bank_code` null unless the scanner
+    // later starts returning a 2-digit MICR code.
     const newLines: ChequeLine[] = scannedCheques.map(cheque => ({
       id: crypto.randomUUID(),
       amount: cheque.amount || 0,
       cheque_number: cheque.cheque_number || '',
       payment_date: cheque.payment_date || new Date().toISOString().split('T')[0],
+      bank_code: cheque.bank_code || null,
+      branch_code: cheque.branch_code || cheque.branch_number || null,
       cheque_image_url: cheque.image_url,
     }));
     // Collect all unique scan images from this batch
@@ -293,6 +304,8 @@ export function AddCustomerChequeModal({
             cheque_number: cheque.cheque_number,
             cheque_image_url: cheque.cheque_image_url || null,
             cheque_status: 'pending',
+            bank_code: cheque.bank_code || null,
+            branch_code: cheque.branch_code || null,
             notes: cheque.notes || 'شيك من صفحة الشيكات',
             branch_id: policy.branchId || branchId,
             batch_id: batchId,
@@ -313,6 +326,8 @@ export function AddCustomerChequeModal({
             cheque_number: cheque.cheque_number,
             cheque_image_url: cheque.cheque_image_url || null,
             cheque_status: 'pending',
+            bank_code: cheque.bank_code || null,
+            branch_code: cheque.branch_code || null,
             notes: cheque.notes || 'شيك من صفحة الشيكات',
             branch_id: lastPolicy.branchId || branchId,
             batch_id: batchId,
@@ -373,7 +388,7 @@ export function AddCustomerChequeModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plus className="h-5 w-5 text-primary" />
@@ -491,37 +506,45 @@ export function AddCustomerChequeModal({
                   {chequeLines.map((cheque) => (
                     <Card key={cheque.id} className="p-4">
                       <div className="flex items-start gap-4">
-                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="space-y-1">
-                            <Label className="text-xs">المبلغ *</Label>
-                            <Input
-                              type="number"
-                              value={cheque.amount || ''}
-                              onChange={(e) => updateChequeLine(cheque.id, { amount: parseFloat(e.target.value) || 0 })}
-                              placeholder="0"
-                              className="h-9"
-                            />
+                        <div className="flex-1 space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs">المبلغ *</Label>
+                              <Input
+                                type="number"
+                                value={cheque.amount || ''}
+                                onChange={(e) => updateChequeLine(cheque.id, { amount: parseFloat(e.target.value) || 0 })}
+                                placeholder="0"
+                                className="h-9"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">رقم الشيك *</Label>
+                              <Input
+                                value={cheque.cheque_number}
+                                onChange={(e) => updateChequeLine(cheque.id, {
+                                  cheque_number: sanitizeChequeNumber(e.target.value)
+                                })}
+                                placeholder="رقم الشيك"
+                                maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                                className="h-9 font-mono"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">تاريخ الاستحقاق *</Label>
+                              <ArabicDatePicker
+                                value={cheque.payment_date}
+                                onChange={(date) => updateChequeLine(cheque.id, { payment_date: date })}
+                                compact
+                              />
+                            </div>
                           </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">رقم الشيك *</Label>
-                            <Input
-                              value={cheque.cheque_number}
-                              onChange={(e) => updateChequeLine(cheque.id, {
-                                cheque_number: sanitizeChequeNumber(e.target.value)
-                              })}
-                              placeholder="رقم الشيك"
-                              maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                              className="h-9 font-mono"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">تاريخ الشيك *</Label>
-                            <ArabicDatePicker
-                              value={cheque.payment_date}
-                              onChange={(date) => updateChequeLine(cheque.id, { payment_date: date })}
-                              compact
-                            />
-                          </div>
+                          <BankBranchPicker
+                            bankCode={cheque.bank_code}
+                            branchCode={cheque.branch_code}
+                            onBankChange={(code) => updateChequeLine(cheque.id, { bank_code: code })}
+                            onBranchChange={(code) => updateChequeLine(cheque.id, { branch_code: code })}
+                          />
                         </div>
                         {cheque.cheque_image_url && (
                           <div className="w-16 h-12 rounded border overflow-hidden shrink-0">

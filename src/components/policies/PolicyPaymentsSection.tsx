@@ -30,6 +30,7 @@ import { TranzilaPaymentModal } from "@/components/payments/TranzilaPaymentModal
 import { ChequeScannerDialog } from "@/components/payments/ChequeScannerDialog";
 import type { Enums } from "@/integrations/supabase/types";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from "@/lib/chequeUtils";
+import { BankBranchPicker } from "@/components/shared/BankBranchPicker";
 import { getPaymentTypeLabel } from "@/lib/paymentLabels";
 
 interface PaymentImage {
@@ -44,6 +45,9 @@ interface Payment {
   payment_type: string;
   payment_date: string;
   cheque_number: string | null;
+  cheque_date?: string | null;
+  bank_code?: string | null;
+  branch_code?: string | null;
   cheque_image_url: string | null;
   cheque_status: string | null;
   refused: boolean | null;
@@ -71,6 +75,8 @@ interface PaymentLine {
   paymentType: 'cash' | 'cheque' | 'transfer' | 'visa';
   paymentDate: string;
   chequeNumber?: string;
+  bankCode?: string | null;
+  branchCode?: string | null;
   notes?: string;
   tranzilaPaid?: boolean;
   pendingImages?: File[];
@@ -154,6 +160,8 @@ export function PolicyPaymentsSection({
     payment_type: "cash",
     payment_date: new Date().toISOString().split('T')[0],
     cheque_number: "",
+    bank_code: null as string | null,
+    branch_code: null as string | null,
     refused: false,
     notes: "",
   });
@@ -327,6 +335,8 @@ export function PolicyPaymentsSection({
         paymentType: 'cheque' as const,
         paymentDate: cheque.payment_date || new Date().toISOString().split('T')[0],
         chequeNumber: cheque.cheque_number || '',
+        bankCode: cheque.bank_code || null,
+        branchCode: cheque.branch_code || cheque.branch_number || null,
         cheque_image_url: cheque.image_url,
       };
       
@@ -503,6 +513,8 @@ export function PolicyPaymentsSection({
             cheque_number: paymentLine.paymentType === 'cheque' ? paymentLine.chequeNumber : null,
             cheque_image_url: paymentLine.paymentType === 'cheque' ? paymentLine.cheque_image_url : null,
             cheque_status: paymentLine.paymentType === 'cheque' ? 'pending' : null,
+            bank_code: paymentLine.paymentType === 'cheque' ? (paymentLine.bankCode || null) : null,
+            branch_code: paymentLine.paymentType === 'cheque' ? (paymentLine.branchCode || null) : null,
             refused: false,
             notes: paymentLine.notes || null,
             branch_id: branchId || null,
@@ -541,6 +553,8 @@ export function PolicyPaymentsSection({
       payment_type: "cash",
       payment_date: new Date().toISOString().split('T')[0],
       cheque_number: "",
+      bank_code: null,
+      branch_code: null,
       refused: false,
       notes: "",
     });
@@ -646,6 +660,8 @@ export function PolicyPaymentsSection({
           payment_type: editFormData.payment_type as Enums<'payment_type'>,
           payment_date: editFormData.payment_date,
           cheque_number: editFormData.payment_type === 'cheque' ? editFormData.cheque_number : null,
+          bank_code: editFormData.payment_type === 'cheque' ? (editFormData.bank_code || null) : null,
+          branch_code: editFormData.payment_type === 'cheque' ? (editFormData.branch_code || null) : null,
           refused: editFormData.refused,
           notes: editFormData.notes || null,
         })
@@ -708,6 +724,8 @@ export function PolicyPaymentsSection({
       payment_type: payment.payment_type,
       payment_date: payment.payment_date,
       cheque_number: payment.cheque_number || "",
+      bank_code: payment.bank_code || null,
+      branch_code: payment.branch_code || null,
       refused: payment.refused || false,
       notes: payment.notes || "",
     });
@@ -962,7 +980,7 @@ export function PolicyPaymentsSection({
           payment dialogs (edit, group details) so the flows feel like
           one product. */}
       <Dialog open={addDialogOpen} onOpenChange={(open) => { setAddDialogOpen(open); if (!open) resetAddForm(); }}>
-        <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
           <div
             className="sticky top-0 z-10 text-white px-5 py-4 rounded-t-lg"
             style={{ background: "linear-gradient(135deg, #122143 0%, #1a3260 100%)" }}
@@ -1104,7 +1122,9 @@ export function PolicyPaymentsSection({
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-xs">تاريخ الدفع</Label>
+                      <Label className="text-xs">
+                        {payment.paymentType === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
+                      </Label>
                       <ArabicDatePicker
                         value={payment.paymentDate}
                         onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
@@ -1124,6 +1144,16 @@ export function PolicyPaymentsSection({
                       </div>
                     )}
                   </div>
+
+                  {payment.paymentType === 'cheque' && (
+                    <BankBranchPicker
+                      bankCode={payment.bankCode}
+                      branchCode={payment.branchCode}
+                      onBankChange={(code) => updatePaymentLine(payment.id, 'bankCode', code)}
+                      onBranchChange={(code) => updatePaymentLine(payment.id, 'branchCode', code)}
+                      disabled={payment.tranzilaPaid}
+                    />
+                  )}
 
                   {/* Visa Pay Button */}
                   {payment.paymentType === 'visa' && (
@@ -1244,7 +1274,7 @@ export function PolicyPaymentsSection({
           destructive "mark returned" action sits opposite save/cancel
           instead of fighting for space in the same corner. */}
       <Dialog open={editDialogOpen} onOpenChange={(open) => { setEditDialogOpen(open); if (!open) { resetEditForm(); setSelectedPayment(null); } }}>
-        <DialogContent className="max-w-xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
           {/* Header */}
           <div
             className="sticky top-0 z-10 text-white px-5 py-4 rounded-t-lg"
@@ -1307,7 +1337,9 @@ export function PolicyPaymentsSection({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">تاريخ الدفع</Label>
+                <Label className="text-xs font-semibold">
+                  {editFormData.payment_type === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
+                </Label>
                 <ArabicDatePicker value={editFormData.payment_date} onChange={(v) => setEditFormData(f => ({ ...f, payment_date: v }))} />
               </div>
               {editFormData.payment_type === 'cheque' && (
@@ -1318,6 +1350,16 @@ export function PolicyPaymentsSection({
                     onChange={(e) => setEditFormData(f => ({ ...f, cheque_number: sanitizeChequeNumber(e.target.value) }))}
                     maxLength={CHEQUE_NUMBER_MAX_LENGTH}
                     className="font-mono ltr-input h-10"
+                  />
+                </div>
+              )}
+              {editFormData.payment_type === 'cheque' && (
+                <div className="sm:col-span-2">
+                  <BankBranchPicker
+                    bankCode={editFormData.bank_code}
+                    branchCode={editFormData.branch_code}
+                    onBankChange={(code) => setEditFormData(f => ({ ...f, bank_code: code }))}
+                    onBranchChange={(code) => setEditFormData(f => ({ ...f, branch_code: code }))}
                   />
                 </div>
               )}

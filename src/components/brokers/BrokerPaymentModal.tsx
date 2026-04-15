@@ -240,7 +240,7 @@ export function BrokerPaymentModal({
   return (
     <Dialog open={open} onOpenChange={(val) => !val && handleCancel()}>
       <DialogContent 
-        className="sm:max-w-2xl max-h-[90vh]" 
+        className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto"
         dir="rtl"
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}

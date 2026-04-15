@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -11,6 +12,31 @@ export type Database = {
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -2353,7 +2379,9 @@ export type Database = {
       company_settlements: {
         Row: {
           agent_id: string | null
+          bank_code: string | null
           bank_reference: string | null
+          branch_code: string | null
           branch_id: string | null
           card_expiry: string | null
           card_last_four: string | null
@@ -2375,7 +2403,9 @@ export type Database = {
         }
         Insert: {
           agent_id?: string | null
+          bank_code?: string | null
           bank_reference?: string | null
+          branch_code?: string | null
           branch_id?: string | null
           card_expiry?: string | null
           card_last_four?: string | null
@@ -2397,7 +2427,9 @@ export type Database = {
         }
         Update: {
           agent_id?: string | null
+          bank_code?: string | null
           bank_reference?: string | null
+          branch_code?: string | null
           branch_id?: string | null
           card_expiry?: string | null
           card_last_four?: string | null
@@ -2679,16 +2711,51 @@ export type Database = {
           },
         ]
       }
+      document_sequences: {
+        Row: {
+          agent_id: string
+          kind: string
+          next_value: number
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          agent_id: string
+          kind: string
+          next_value?: number
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          agent_id?: string
+          kind?: string
+          next_value?: number
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_sequences_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           agent_id: string | null
           amount: number
           branch_id: string | null
+          broker_id: string | null
           category: string
+          company_id: string | null
           contact_name: string | null
           created_at: string
           created_by_admin_id: string | null
           description: string | null
+          entity_type: string | null
           expense_date: string
           id: string
           notes: string | null
@@ -2702,11 +2769,14 @@ export type Database = {
           agent_id?: string | null
           amount: number
           branch_id?: string | null
+          broker_id?: string | null
           category: string
+          company_id?: string | null
           contact_name?: string | null
           created_at?: string
           created_by_admin_id?: string | null
           description?: string | null
+          entity_type?: string | null
           expense_date?: string
           id?: string
           notes?: string | null
@@ -2720,11 +2790,14 @@ export type Database = {
           agent_id?: string | null
           amount?: number
           branch_id?: string | null
+          broker_id?: string | null
           category?: string
+          company_id?: string | null
           contact_name?: string | null
           created_at?: string
           created_by_admin_id?: string | null
           description?: string | null
+          entity_type?: string | null
           expense_date?: string
           id?: string
           notes?: string | null
@@ -2747,6 +2820,20 @@ export type Database = {
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_broker_id_fkey"
+            columns: ["broker_id"]
+            isOneToOne: false
+            referencedRelation: "brokers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_companies"
             referencedColumns: ["id"]
           },
           {
@@ -3748,6 +3835,8 @@ export type Database = {
         Row: {
           agent_id: string | null
           amount: number
+          bank_code: string | null
+          branch_code: string | null
           branch_id: string | null
           cheque_date: string | null
           cheque_image_url: string | null
@@ -3766,6 +3855,8 @@ export type Database = {
         Insert: {
           agent_id?: string | null
           amount: number
+          bank_code?: string | null
+          branch_code?: string | null
           branch_id?: string | null
           cheque_date?: string | null
           cheque_image_url?: string | null
@@ -3784,6 +3875,8 @@ export type Database = {
         Update: {
           agent_id?: string | null
           amount?: number
+          bank_code?: string | null
+          branch_code?: string | null
           branch_id?: string | null
           cheque_date?: string | null
           cheque_image_url?: string | null
@@ -3981,6 +4074,7 @@ export type Database = {
           created_at: string
           created_by_admin_id: string | null
           deleted_at: string | null
+          document_number: string | null
           elzami_cost: number | null
           end_date: string
           group_id: string | null
@@ -4029,6 +4123,7 @@ export type Database = {
           created_at?: string
           created_by_admin_id?: string | null
           deleted_at?: string | null
+          document_number?: string | null
           elzami_cost?: number | null
           end_date: string
           group_id?: string | null
@@ -4077,6 +4172,7 @@ export type Database = {
           created_at?: string
           created_by_admin_id?: string | null
           deleted_at?: string | null
+          document_number?: string | null
           elzami_cost?: number | null
           end_date?: string
           group_id?: string | null
@@ -4299,7 +4395,9 @@ export type Database = {
         Row: {
           agent_id: string | null
           amount: number
+          bank_code: string | null
           batch_id: string | null
+          branch_code: string | null
           branch_id: string | null
           card_expiry: string | null
           card_last_four: string | null
@@ -4317,6 +4415,7 @@ export type Database = {
           payment_type: Database["public"]["Enums"]["payment_type"]
           policy_id: string
           provider: string | null
+          receipt_number: string | null
           refused: boolean | null
           source: string | null
           transferred_at: string | null
@@ -4332,7 +4431,9 @@ export type Database = {
         Insert: {
           agent_id?: string | null
           amount: number
+          bank_code?: string | null
           batch_id?: string | null
+          branch_code?: string | null
           branch_id?: string | null
           card_expiry?: string | null
           card_last_four?: string | null
@@ -4350,6 +4451,7 @@ export type Database = {
           payment_type: Database["public"]["Enums"]["payment_type"]
           policy_id: string
           provider?: string | null
+          receipt_number?: string | null
           refused?: boolean | null
           source?: string | null
           transferred_at?: string | null
@@ -4365,7 +4467,9 @@ export type Database = {
         Update: {
           agent_id?: string | null
           amount?: number
+          bank_code?: string | null
           batch_id?: string | null
+          branch_code?: string | null
           branch_id?: string | null
           card_expiry?: string | null
           card_last_four?: string | null
@@ -4383,6 +4487,7 @@ export type Database = {
           payment_type?: Database["public"]["Enums"]["payment_type"]
           policy_id?: string
           provider?: string | null
+          receipt_number?: string | null
           refused?: boolean | null
           source?: string | null
           transferred_at?: string | null
@@ -4779,6 +4884,149 @@ export type Database = {
           },
         ]
       }
+      receipts: {
+        Row: {
+          agent_id: string
+          amount: number
+          branch_id: string | null
+          car_number: string | null
+          card_last_four: string | null
+          cheque_number: string | null
+          client_name: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          notes: string | null
+          payment_id: string | null
+          payment_method: string | null
+          policy_id: string | null
+          receipt_date: string
+          receipt_number: number
+          receipt_type: string
+          source: string
+        }
+        Insert: {
+          agent_id: string
+          amount?: number
+          branch_id?: string | null
+          car_number?: string | null
+          card_last_four?: string | null
+          cheque_number?: string | null
+          client_name?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          payment_id?: string | null
+          payment_method?: string | null
+          policy_id?: string | null
+          receipt_date?: string
+          receipt_number?: number
+          receipt_type?: string
+          source?: string
+        }
+        Update: {
+          agent_id?: string
+          amount?: number
+          branch_id?: string | null
+          car_number?: string | null
+          card_last_four?: string | null
+          cheque_number?: string | null
+          client_name?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          payment_id?: string | null
+          payment_method?: string | null
+          policy_id?: string | null
+          receipt_date?: string
+          receipt_number?: number
+          receipt_type?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipts_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "policy_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "policies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      renewal_followups: {
+        Row: {
+          agent_id: string
+          client_id: string
+          created_at: string | null
+          decline_reason: string | null
+          follow_up_month: string
+          id: string
+          status: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          agent_id: string
+          client_id: string
+          created_at?: string | null
+          decline_reason?: string | null
+          follow_up_month: string
+          id?: string
+          status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          agent_id?: string
+          client_id?: string
+          created_at?: string | null
+          decline_reason?: string | null
+          follow_up_month?: string
+          id?: string
+          status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "renewal_followups_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "renewal_followups_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       repair_claim_notes: {
         Row: {
           agent_id: string | null
@@ -5153,14 +5401,19 @@ export type Database = {
           agent_id: string | null
           favicon_url: string | null
           id: string
+          invoice_address: string | null
+          invoice_phones: string[] | null
+          invoice_privacy_text: string | null
           logo_url: string | null
           og_image_url: string | null
+          owner_name: string | null
           signature_body_html: string | null
           signature_footer_html: string | null
           signature_header_html: string | null
           signature_primary_color: string | null
           site_description: string
           site_title: string
+          tax_number: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -5168,14 +5421,19 @@ export type Database = {
           agent_id?: string | null
           favicon_url?: string | null
           id?: string
+          invoice_address?: string | null
+          invoice_phones?: string[] | null
+          invoice_privacy_text?: string | null
           logo_url?: string | null
           og_image_url?: string | null
+          owner_name?: string | null
           signature_body_html?: string | null
           signature_footer_html?: string | null
           signature_header_html?: string | null
           signature_primary_color?: string | null
           site_description?: string
           site_title?: string
+          tax_number?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -5183,14 +5441,19 @@ export type Database = {
           agent_id?: string | null
           favicon_url?: string | null
           id?: string
+          invoice_address?: string | null
+          invoice_phones?: string[] | null
+          invoice_privacy_text?: string | null
           logo_url?: string | null
           og_image_url?: string | null
+          owner_name?: string | null
           signature_body_html?: string | null
           signature_footer_html?: string | null
           signature_header_html?: string | null
           signature_primary_color?: string | null
           site_description?: string
           site_title?: string
+          tax_number?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -5846,6 +6109,10 @@ export type Database = {
         Args: { _row_agent_id: string; _user_id: string }
         Returns: boolean
       }
+      allocate_document_number: {
+        Args: { p_agent_id: string; p_kind: string; p_year: number }
+        Returns: number
+      }
       calculate_policy_company_payment: {
         Args: {
           p_age_band: Database["public"]["Enums"]["age_band"]
@@ -6308,15 +6575,18 @@ export type Database = {
           car_number: string
           client_id: string
           days_until_expiry: number
+          document_number: string
           end_date: string
           group_id: string
           insurance_price: number
+          office_commission: number
           paid: number
           policy_id: string
           policy_number: string
           policy_type_child: string
           policy_type_parent: string
           remaining: number
+          start_date: string
           status: string
         }[]
       }
@@ -6796,6 +7066,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       age_band: ["UNDER_24", "UP_24", "ANY"],

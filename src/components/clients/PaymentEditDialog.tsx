@@ -24,6 +24,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Trash2, Upload, X, FileText, ImageIcon, Pencil, Lock } from "lucide-react";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from "@/lib/chequeUtils";
+import { BankBranchPicker } from "@/components/shared/BankBranchPicker";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -35,6 +36,9 @@ interface PaymentRecord {
   payment_date: string;
   payment_type: string;
   cheque_number: string | null;
+  cheque_date?: string | null;
+  bank_code?: string | null;
+  branch_code?: string | null;
   cheque_image_url: string | null;
   card_last_four: string | null;
   refused: boolean | null;
@@ -105,6 +109,8 @@ export function PaymentEditDialog({
     payment_type: 'cash',
     payment_date: '',
     cheque_number: '',
+    bank_code: '' as string | null,
+    branch_code: '' as string | null,
     refused: false,
     notes: '',
   });
@@ -144,6 +150,8 @@ export function PaymentEditDialog({
         payment_type: payment.payment_type || 'cash',
         payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
         cheque_number: payment.cheque_number || '',
+        bank_code: payment.bank_code || null,
+        branch_code: payment.branch_code || null,
         refused: payment.refused || false,
         notes: payment.notes || '',
       });
@@ -254,11 +262,17 @@ export function PaymentEditDialog({
         notes: formData.notes?.trim() ? formData.notes.trim() : null,
       };
 
-      // Only include cheque_number if payment type is cheque
+      // Only include cheque_number / bank / branch if payment type is
+      // cheque — otherwise clear them so the columns don't carry stale
+      // data from a prior cheque that was later re-classified.
       if (formData.payment_type === 'cheque') {
         updateData.cheque_number = formData.cheque_number.trim();
+        updateData.bank_code = formData.bank_code || null;
+        updateData.branch_code = formData.branch_code || null;
       } else {
         updateData.cheque_number = null;
+        updateData.bank_code = null;
+        updateData.branch_code = null;
       }
 
       const { error } = await supabase
@@ -309,7 +323,7 @@ export function PaymentEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
+      <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
         {/* Header — matches the PaymentGroupDetailsDialog navy gradient
             so every payment-related dialog shares one design language. */}
         <div
@@ -455,20 +469,30 @@ export function PaymentEditDialog({
             </div>
           </div>
 
-          {/* Cheque Number - only show if payment type is cheque */}
+          {/* Cheque-specific fields — number, bank, branch. Only rendered
+              when payment_type === 'cheque'. */}
           {formData.payment_type === 'cheque' && (
-            <div className="space-y-1.5">
-              <Label htmlFor="cheque_number" className="text-xs font-semibold">رقم الشيك</Label>
-              <Input
-                id="cheque_number"
-                value={formData.cheque_number}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  cheque_number: sanitizeChequeNumber(e.target.value)
-                })}
-                maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                className="font-mono h-10 ltr-input"
-                placeholder="أدخل رقم الشيك"
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="cheque_number" className="text-xs font-semibold">رقم الشيك</Label>
+                <Input
+                  id="cheque_number"
+                  value={formData.cheque_number}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    cheque_number: sanitizeChequeNumber(e.target.value)
+                  })}
+                  maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                  className="font-mono h-10 ltr-input"
+                  placeholder="أدخل رقم الشيك"
+                  disabled={isLocked}
+                />
+              </div>
+              <BankBranchPicker
+                bankCode={formData.bank_code}
+                branchCode={formData.branch_code}
+                onBankChange={(code) => setFormData({ ...formData, bank_code: code })}
+                onBranchChange={(code) => setFormData({ ...formData, branch_code: code })}
                 disabled={isLocked}
               />
             </div>

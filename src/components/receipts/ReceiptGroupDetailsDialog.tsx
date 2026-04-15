@@ -115,7 +115,7 @@ export function ReceiptGroupDetailsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto p-0"
+        className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto p-0"
         dir="rtl"
       >
         {/* Header — mirrors PaymentGroupDetailsDialog styling so the two

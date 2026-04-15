@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { TranzilaPaymentModal } from '@/components/payments/TranzilaPaymentModal';
 import { ChequeScannerDialog } from '@/components/payments/ChequeScannerDialog';
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from '@/lib/chequeUtils';
+import { BankBranchPicker } from '@/components/shared/BankBranchPicker';
 import { useToast } from '@/hooks/use-toast';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 
@@ -54,6 +55,8 @@ interface PaymentLine {
   paymentType: 'cash' | 'cheque' | 'transfer' | 'visa';
   paymentDate: string;
   chequeNumber?: string;
+  bankCode?: string | null;
+  branchCode?: string | null;
   notes?: string;
   tranzilaPaid?: boolean;
   pendingImages?: File[];
@@ -530,6 +533,8 @@ export function DebtPaymentModal({
         paymentType: 'cheque' as const,
         paymentDate: cheque.payment_date || new Date().toISOString().split('T')[0],
         chequeNumber: cheque.cheque_number || '',
+        bankCode: cheque.bank_code || null,
+        branchCode: cheque.branch_code || cheque.branch_number || null,
         cheque_image_url: cheque.image_url,
       };
       
@@ -717,6 +722,8 @@ export function DebtPaymentModal({
               payment_date: paymentLine.paymentDate,
               cheque_number: paymentLine.paymentType === 'cheque' ? paymentLine.chequeNumber : null,
               cheque_image_url: paymentLine.paymentType === 'cheque' ? paymentLine.cheque_image_url : null,
+              bank_code: paymentLine.paymentType === 'cheque' ? (paymentLine.bankCode || null) : null,
+              branch_code: paymentLine.paymentType === 'cheque' ? (paymentLine.branchCode || null) : null,
               notes: paymentLine.notes || `تسديد دين`,
               branch_id: split.branchId,
               batch_id: batchId,
@@ -801,7 +808,7 @@ export function DebtPaymentModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5 text-primary" />
@@ -1079,7 +1086,9 @@ export function DebtPaymentModal({
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <Label className="text-xs">تاريخ الدفع</Label>
+                        <Label className="text-xs">
+                          {payment.paymentType === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
+                        </Label>
                         <ArabicDatePicker
                           value={payment.paymentDate}
                           onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
@@ -1099,6 +1108,19 @@ export function DebtPaymentModal({
                         </div>
                       )}
                     </div>
+
+                    {/* Bank + branch picker appears under the cheque row
+                        on a new line so the 2-column grid above stays
+                        compact. Same pattern every other cheque form uses. */}
+                    {payment.paymentType === 'cheque' && (
+                      <BankBranchPicker
+                        bankCode={payment.bankCode}
+                        branchCode={payment.branchCode}
+                        onBankChange={(code) => updatePaymentLine(payment.id, 'bankCode', code)}
+                        onBranchChange={(code) => updatePaymentLine(payment.id, 'branchCode', code)}
+                        disabled={payment.tranzilaPaid}
+                      />
+                    )}
 
                     <div>
                       <Label className="text-xs">ملاحظات (اختياري)</Label>

@@ -299,7 +299,7 @@ export function PackagePaymentsDetailsDialog({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="max-w-3xl w-[95vw] max-h-[90vh] overflow-y-auto p-0"
+          className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto p-0"
           dir="rtl"
         >
           {/* Header */}
