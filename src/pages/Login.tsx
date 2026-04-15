@@ -510,14 +510,13 @@ export default function Login() {
 
               {pageView === "login" ? (
                 <>
-                  {/* Desktop-only page heading. The mobile card already
-                      shows the animated logo in its own header, so a
-                      second big "تسجيل الدخول" would double up on
-                      small screens. `hidden lg:block` confines this
-                      to the desktop card where the header area is
-                      otherwise empty. */}
-                  <div className="hidden lg:block">
-                    <h1 className="text-3xl font-bold text-foreground">تسجيل الدخول</h1>
+                  {/* Page heading — centered on both mobile and desktop.
+                      `lg:pt-4` gives the desktop card extra top room
+                      above the heading since the desktop card doesn't
+                      have the animated logo above it (the big logo
+                      lives in the left panel). */}
+                  <div className="text-center lg:pt-4">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-foreground">تسجيل الدخول</h1>
                     <p className="text-sm text-muted-foreground mt-1">
                       أدخل بياناتك للمتابعة إلى حسابك
                     </p>
