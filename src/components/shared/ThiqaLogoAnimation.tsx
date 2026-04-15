@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import thiqaIcon from "@/assets/thiqa-logo-icon.svg";
-
-// Circular Thiqa icon shown on the left of the animated lockup. We
-// use the existing SVG asset so the logo stays crisp at any size.
-const ICON_SRC = thiqaIcon;
+import thiqaIconDefault from "@/assets/thiqa-logo-icon.svg";
 
 const TEXT = "Thiqa";
 const DURATION_MS = 2800;
@@ -39,12 +35,22 @@ if (typeof document !== "undefined") {
 interface ThiqaLogoAnimationProps {
   /** Pixel size of the circular icon. The wordmark scales off this. */
   iconSize?: number;
+  /** When false, clicks do nothing and the cursor stays default. */
+  interactive?: boolean;
+  /** Override the icon image — e.g. pass the dark SVG on a light card. */
+  iconSrc?: string;
 }
 
 // Animated Thiqa logo lockup for the login page. A circular icon
-// pops in with a drawn outline, then slides aside while the "Thiqa"
-// wordmark staggers in letter-by-letter. Click to replay.
-export function ThiqaLogoAnimation({ iconSize = 92 }: ThiqaLogoAnimationProps = {}) {
+// pops in with a drawn outline, then the "Thiqa" wordmark staggers
+// in letter-by-letter while a gap opens up between the two. Colors
+// (wordmark + outline) use `currentColor` so the parent can set a
+// dark or light palette via `color:` / Tailwind text-* classes.
+export function ThiqaLogoAnimation({
+  iconSize = 92,
+  interactive = true,
+  iconSrc = thiqaIconDefault,
+}: ThiqaLogoAnimationProps = {}) {
   const [t, setT] = useState<number>(-1);
   const [playing, setPlaying] = useState(false);
   const raf = useRef<number | null>(null);
@@ -109,27 +115,28 @@ export function ThiqaLogoAnimation({ iconSize = 92 }: ThiqaLogoAnimationProps = 
   const outlineFade = easeOutQuint(progress(t, 0.4, 0.54));
   const outlineOp = outlineStroke * (1 - outlineFade);
 
-  // Phase 3 (0.46 → 0.64): icon slides left so the wordmark has room
+  // Phase 3 (0.46 → 0.64): gap opens between icon and wordmark
   const slide = easeInOutCubic(progress(t, 0.46, 0.64));
 
   // Phase 4 (0.54 → 0.92): wordmark letters stagger in
   const textBase = progress(t, 0.54, 0.92);
 
-  const gap = Math.round(iconSize * 0.18);
+  const gap = Math.round(iconSize * 0.28);
   const fontSize = Math.round(iconSize * 0.62);
-  const slideAmount = Math.round(iconSize * 0.66);
   const dashLen = 2 * Math.PI * 49;
+
+  const handleClick = interactive ? play : undefined;
 
   return (
     <div
-      onClick={play}
+      onClick={handleClick}
       role="img"
       aria-label="Thiqa"
       style={{
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        cursor: "pointer",
+        cursor: interactive ? "pointer" : "default",
         userSelect: "none",
       }}
     >
@@ -138,9 +145,56 @@ export function ThiqaLogoAnimation({ iconSize = 92 }: ThiqaLogoAnimationProps = 
           display: "flex",
           alignItems: "center",
           gap: `${lerp(0, gap, slide)}px`,
-          transform: `translateX(${lerp(0, -slideAmount, slide)}px)`,
         }}
       >
+        {/* Wordmark — source first, so in the login page's `dir="rtl"`
+            flex row it lands on the main-axis start = physical-right
+            side of the icon. In an LTR context it would land on the
+            physical-left. Either way, swapping the source order
+            (wordmark before icon) flips the text to the opposite side
+            of where the previous revision rendered it. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            fontFamily: "'DM Sans', system-ui, sans-serif",
+            fontSize,
+            fontWeight: 600,
+            color: "currentColor",
+            letterSpacing: "-0.005em",
+            lineHeight: 1,
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+            // Force the wordmark itself to read left-to-right so the
+            // letters stagger in in reading order, regardless of
+            // parent direction.
+            direction: "ltr",
+          }}
+        >
+          {TEXT.split("").map((char, i) => {
+            const ls = (i * 0.14) / TEXT.length;
+            const le = Math.min(ls + 0.45, 1);
+            const raw = progress(textBase, ls, le);
+            const op = easeOutExpo(raw);
+            const y = lerp(22, 0, easeOutQuint(raw));
+            const sc = lerp(0.7, 1, easeOutBack(raw));
+
+            return (
+              <span
+                key={i}
+                style={{
+                  display: "inline-block",
+                  opacity: op,
+                  transform: `translateY(${y}px) scale(${sc})`,
+                  willChange: "transform, opacity",
+                }}
+              >
+                {char}
+              </span>
+            );
+          })}
+        </div>
+
         {/* Icon + animated outline ring */}
         <div
           style={{
@@ -172,7 +226,7 @@ export function ThiqaLogoAnimation({ iconSize = 92 }: ThiqaLogoAnimationProps = 
                 }}
               >
                 <img
-                  src={ICON_SRC}
+                  src={iconSrc}
                   alt=""
                   draggable={false}
                   style={{
@@ -202,7 +256,7 @@ export function ThiqaLogoAnimation({ iconSize = 92 }: ThiqaLogoAnimationProps = 
                 cy="50"
                 r="49"
                 fill="none"
-                stroke="#ffffff"
+                stroke="currentColor"
                 strokeWidth="1.2"
                 strokeDasharray={`${dashLen * outlineStroke} ${dashLen}`}
                 strokeDashoffset={dashLen * 0.25}
@@ -211,48 +265,6 @@ export function ThiqaLogoAnimation({ iconSize = 92 }: ThiqaLogoAnimationProps = 
               />
             </svg>
           )}
-        </div>
-
-        {/* "Thiqa" wordmark — letters stagger in from below */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            fontFamily: "'DM Sans', system-ui, sans-serif",
-            fontSize,
-            fontWeight: 600,
-            color: "#ffffff",
-            letterSpacing: "-0.005em",
-            lineHeight: 1,
-            overflow: "hidden",
-            whiteSpace: "nowrap",
-            // Force LTR so "Thiqa" reads left-to-right even though
-            // the parent login card is dir="rtl".
-            direction: "ltr",
-          }}
-        >
-          {TEXT.split("").map((char, i) => {
-            const ls = (i * 0.14) / TEXT.length;
-            const le = Math.min(ls + 0.45, 1);
-            const raw = progress(textBase, ls, le);
-            const op = easeOutExpo(raw);
-            const y = lerp(22, 0, easeOutQuint(raw));
-            const sc = lerp(0.7, 1, easeOutBack(raw));
-
-            return (
-              <span
-                key={i}
-                style={{
-                  display: "inline-block",
-                  opacity: op,
-                  transform: `translateY(${y}px) scale(${sc})`,
-                  willChange: "transform, opacity",
-                }}
-              >
-                {char}
-              </span>
-            );
-          })}
         </div>
       </div>
     </div>

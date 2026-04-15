@@ -415,8 +415,6 @@ export default function Login() {
     );
   }
 
-  const siteTitle = "Thiqa";
-  const siteDesc = "نظام إدارة التأمين";
   const passwordStrength = checkPasswordStrength(signupPasswordDisplay);
 
   return (
@@ -459,7 +457,7 @@ export default function Login() {
           aria-hidden="true"
         />
         <div className="absolute inset-0 bg-gradient-to-br from-black/40 via-black/20 to-transparent" />
-        <div className="relative z-10 flex flex-col items-center gap-4">
+        <div className="relative z-10 flex flex-col items-center gap-4 text-white">
           <ThiqaLogoAnimation iconSize={104} />
           <p className="text-white/80 text-lg font-light tracking-wide">نظام إدارة التأمين</p>
         </div>
@@ -473,10 +471,17 @@ export default function Login() {
       >
         <div className="w-full max-w-md animate-scale-in">
           <div className="rounded-2xl sm:rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 lg:bg-white/70 lg:dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
-            {/* Header */}
-            <div className="text-center pt-8 sm:pt-8 pb-3 sm:pb-3 px-6 sm:px-8">
-              <img src={thiqaLogoDark} alt={siteTitle} className="mx-auto h-9 sm:h-10 w-auto object-contain" />
-              <p className="text-muted-foreground mt-1 text-xs sm:text-sm">{siteDesc}</p>
+            {/* Header — animated Thiqa lockup. Non-interactive (no
+                click-to-replay) and uses the dark SVG so it's visible
+                on the white/light card background. currentColor is
+                inherited from `text-foreground` so the palette
+                switches correctly in dark mode. */}
+            <div className="flex justify-center pt-8 sm:pt-8 pb-3 sm:pb-3 px-6 sm:px-8 text-foreground">
+              <ThiqaLogoAnimation
+                iconSize={44}
+                interactive={false}
+                iconSrc={thiqaLogoDark}
+              />
             </div>
 
             {/* Content */}
