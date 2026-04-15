@@ -268,9 +268,10 @@ export function PaymentGroupDetailsDialog({
                   </span>
                 </Button>
                 <Button
+                  variant="ghost"
                   size="icon"
                   onClick={() => onOpenChange(false)}
-                  className="h-9 w-9 bg-white/10 hover:bg-white/20 text-white border-0"
+                  className="h-9 w-9 bg-white/10 hover:bg-white/20 !text-white border-0 [&_svg]:!text-white"
                   aria-label="إغلاق"
                 >
                   <X className="h-4 w-4" />

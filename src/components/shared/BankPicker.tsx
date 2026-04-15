@@ -96,9 +96,15 @@ export function BankPicker({
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
             {current ? (
-              // Selected state: code pill + bank name
+              // Selected state: code pill + bank name. `dir="ltr"` on
+              // the pill forces the digits to center inside the w-8
+              // box; without it the RTL parent context pushes them to
+              // the edge and they read as offset.
               <div className="flex items-center gap-2 min-w-0 flex-1">
-                <span className="inline-flex items-center justify-center rounded-md bg-primary/10 text-primary font-mono font-bold text-[11px] px-2 py-0.5 shrink-0 ltr-nums">
+                <span
+                  dir="ltr"
+                  className="inline-flex items-center justify-center rounded-md bg-primary/10 text-primary font-mono font-bold text-[11px] w-8 h-5 shrink-0 text-center"
+                >
                   {current.code}
                 </span>
                 <span className="truncate text-sm font-medium text-foreground">
@@ -108,7 +114,10 @@ export function BankPicker({
             ) : value ? (
               // Free-text code the user typed manually — no registry match
               <div className="flex items-center gap-2 min-w-0 flex-1">
-                <span className="inline-flex items-center justify-center rounded-md bg-muted text-muted-foreground font-mono font-bold text-[11px] px-2 py-0.5 shrink-0 ltr-nums">
+                <span
+                  dir="ltr"
+                  className="inline-flex items-center justify-center rounded-md bg-muted text-muted-foreground font-mono font-bold text-[11px] w-8 h-5 shrink-0 text-center"
+                >
                   {value}
                 </span>
                 <span className="truncate text-xs text-muted-foreground italic">

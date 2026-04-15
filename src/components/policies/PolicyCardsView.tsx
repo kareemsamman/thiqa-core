@@ -184,8 +184,8 @@ export function PolicyCardsView({
     e.stopPropagation();
     setSendingPolicy(policyId);
     try {
-      const { data, error } = await supabase.functions.invoke('send-invoice-sms', {
-        body: { policy_id: policyId, force_resend: true }
+      const { data, error } = await supabase.functions.invoke('send-package-invoice-sms', {
+        body: { policy_ids: [policyId] }
       });
 
       if (error) {

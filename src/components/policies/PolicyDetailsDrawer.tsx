@@ -317,12 +317,9 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
 
     setSendingPolicySms(true);
     try {
-      const { data, error } = await supabase.functions.invoke("send-invoice-sms", {
-        body: { 
-          policy_id: policy.id,
-          phone_number: policy.clients.phone_number,
-          client_name: policy.clients.full_name,
-          force_resend: true  // Always allow resend from drawer
+      const { data, error } = await supabase.functions.invoke("send-package-invoice-sms", {
+        body: {
+          policy_ids: [policy.id],
         },
       });
 

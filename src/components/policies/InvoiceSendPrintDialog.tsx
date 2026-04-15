@@ -32,12 +32,12 @@ export function InvoiceSendPrintDialog({
   const handleSendSms = async () => {
     setSendingType("sms");
     try {
-      const functionName = isPackage ? "send-package-invoice-sms" : "send-invoice-sms";
-      const body = isPackage
-        ? { policy_ids: policyIds }
-        : { policy_id: policyIds[0], force_resend: true };
-
-      const { data, error } = await supabase.functions.invoke(functionName, { body });
+      // Always route through send-package-invoice-sms so single and
+      // package invoices share one printed template. It accepts an
+      // array of policy IDs; a single policy is just a 1-item array.
+      const { data, error } = await supabase.functions.invoke("send-package-invoice-sms", {
+        body: { policy_ids: policyIds },
+      });
 
       if (error) {
         // Pass the raw invoke error straight to the helper so it can
@@ -62,13 +62,12 @@ export function InvoiceSendPrintDialog({
   const handlePrint = async () => {
     setSendingType("print");
     try {
-      // Generate document without sending SMS
-      const functionName = isPackage ? "send-package-invoice-sms" : "send-invoice-sms";
-      const body = isPackage
-        ? { policy_ids: policyIds, skip_sms: true }
-        : { policy_id: policyIds[0], skip_sms: true };
-
-      const { data, error } = await supabase.functions.invoke(functionName, { body });
+      // Generate the document without sending SMS. Same unified
+      // route as handleSendSms — single and package both hit
+      // send-package-invoice-sms so they share one template.
+      const { data, error } = await supabase.functions.invoke("send-package-invoice-sms", {
+        body: { policy_ids: policyIds, skip_sms: true },
+      });
 
       if (error) {
         await toastFunctionError(error, "فشل في تحميل الوثيقة");

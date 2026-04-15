@@ -727,16 +727,19 @@ export function PolicyYearTimeline({
     }
   };
 
-  // Direct invoice actions triggered by the per-card hover buttons (no
-  // popup). Mirrors the logic inside InvoiceSendPrintDialog so staff can
-  // print or SMS an individual policy/package without an extra step.
-  const handleCardPrintInvoice = async (policyIds: string[], isPackage: boolean): Promise<boolean> => {
+  // Direct invoice actions triggered by the per-card hover buttons
+  // (no popup). Both single policies and packages now go through
+  // `send-package-invoice-sms` with a policy_ids array so they share
+  // one printed template — a single policy is just a 1-item array.
+  // The old `send-invoice-sms` route rendered the legacy single-
+  // policy invoice layout, which looked different from packages and
+  // surprised users when they printed a plain non-package row.
+  // isPackage is still passed in for the SMS-button copy below.
+  const handleCardPrintInvoice = async (policyIds: string[], _isPackage: boolean): Promise<boolean> => {
     try {
-      const functionName = isPackage ? 'send-package-invoice-sms' : 'send-invoice-sms';
-      const body = isPackage
-        ? { policy_ids: policyIds, skip_sms: true }
-        : { policy_id: policyIds[0], skip_sms: true };
-      const { data, error } = await supabase.functions.invoke(functionName, { body });
+      const { data, error } = await supabase.functions.invoke('send-package-invoice-sms', {
+        body: { policy_ids: policyIds, skip_sms: true },
+      });
       if (error) {
         await toastFunctionError(error, 'فشل في تحميل الوثيقة');
         return false;
@@ -745,7 +748,7 @@ export function PolicyYearTimeline({
         toast.error(data.error);
         return false;
       }
-      const invoiceUrl = data?.ab_invoice_url || data?.package_invoice_url || data?.invoice_url;
+      const invoiceUrl = data?.package_invoice_url || data?.ab_invoice_url || data?.invoice_url;
       if (invoiceUrl) {
         window.open(invoiceUrl, '_blank');
         return true;
@@ -760,11 +763,9 @@ export function PolicyYearTimeline({
 
   const handleCardSendInvoiceSms = async (policyIds: string[], isPackage: boolean): Promise<boolean> => {
     try {
-      const functionName = isPackage ? 'send-package-invoice-sms' : 'send-invoice-sms';
-      const body = isPackage
-        ? { policy_ids: policyIds }
-        : { policy_id: policyIds[0], force_resend: true };
-      const { data, error } = await supabase.functions.invoke(functionName, { body });
+      const { data, error } = await supabase.functions.invoke('send-package-invoice-sms', {
+        body: { policy_ids: policyIds },
+      });
       if (error) {
         await toastFunctionError(error, 'فشل في الإرسال');
         return false;

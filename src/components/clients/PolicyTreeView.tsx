@@ -447,8 +447,11 @@ export function PolicyTreeView({
     e.stopPropagation();
     setSendingPolicy(policyId);
     try {
-      const { data, error } = await supabase.functions.invoke('send-invoice-sms', {
-        body: { policy_id: policyId, force_resend: true }
+      // Unified route — single policies go through the package
+      // function with a 1-item array so they use the same printed
+      // template as real packages.
+      const { data, error } = await supabase.functions.invoke('send-package-invoice-sms', {
+        body: { policy_ids: [policyId] }
       });
 
       if (error) {

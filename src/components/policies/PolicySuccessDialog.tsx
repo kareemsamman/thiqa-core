@@ -72,15 +72,10 @@ export function PolicySuccessDialog({
 
   const invokeInvoiceFunction = async (skipSms: boolean) => {
     const ids = await resolvePolicyIds();
-    if (ids.length > 1) {
-      return supabase.functions.invoke("send-package-invoice-sms", {
-        body: skipSms ? { policy_ids: ids, skip_sms: true } : { policy_ids: ids },
-      });
-    }
-    return supabase.functions.invoke("send-invoice-sms", {
-      body: skipSms
-        ? { policy_id: ids[0], skip_sms: true }
-        : { policy_id: ids[0], force_resend: true },
+    // Always route through send-package-invoice-sms so single and
+    // package invoices share one printed template.
+    return supabase.functions.invoke("send-package-invoice-sms", {
+      body: skipSms ? { policy_ids: ids, skip_sms: true } : { policy_ids: ids },
     });
   };
 

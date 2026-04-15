@@ -195,8 +195,8 @@ export function PolicyFilesSection({
     
     setSendingToClient(true);
     try {
-      const { data, error } = await supabase.functions.invoke('send-invoice-sms', {
-        body: { policy_id: policyId }
+      const { data, error } = await supabase.functions.invoke('send-package-invoice-sms', {
+        body: { policy_ids: [policyId] }
       });
       
       // Parse edge function error response
