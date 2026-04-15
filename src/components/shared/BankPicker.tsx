@@ -157,7 +157,14 @@ export function BankPicker({
             value={search}
             onValueChange={setSearch}
           />
-          <CommandList className="max-h-[340px] overflow-y-auto overscroll-contain">
+          <CommandList
+            className="max-h-[340px] overflow-y-auto overscroll-contain"
+            // The popover can render inside a dialog whose own body is
+            // also scrollable (PaymentEditDialog). Without stopping the
+            // wheel here, the wheel event bubbles out of the portal and
+            // scrolls the dialog instead of the list.
+            onWheel={(e) => e.stopPropagation()}
+          >
             <CommandEmpty className="py-6 text-center text-xs">
               لا توجد نتائج — اكتب رقم البنك للإضافة يدوياً
             </CommandEmpty>
@@ -174,19 +181,23 @@ export function BankPicker({
                   className={cn(
                     "gap-3 py-2.5",
                     // cmdk highlights the active row with bg-accent
-                    // (dark). Force white inside nested <span>s and
-                    // on the code pill so the row stays legible.
-                    "data-[selected=true]:[&_.bank-name]:text-accent-foreground",
-                    "data-[selected=true]:[&_.bank-code-pill]:bg-accent-foreground/10",
-                    "data-[selected=true]:[&_.bank-code-pill]:text-accent-foreground",
-                    "data-[selected=true]:[&_.bank-code-pill]:border-accent-foreground/30",
+                    // (navy). Force white text + re-tint the code pill
+                    // so both stay legible against the dark highlight.
+                    // `!` modifier so our color beats the span's own
+                    // text-foreground class.
+                    "data-[selected=true]:[&_.bank-code-pill]:!bg-accent-foreground/15",
+                    "data-[selected=true]:[&_.bank-code-pill]:!text-accent-foreground",
+                    "data-[selected=true]:[&_.bank-code-pill]:!border-accent-foreground/40",
+                    "data-[selected=true]:[&_.bank-name]:!text-accent-foreground",
                   )}
                 >
-                  <span className="bank-name text-xs text-muted-foreground flex-1 text-right">
-                    استخدام الرقم <span className="font-mono ltr-nums">{manualOption.code}</span> بدون اسم
-                  </span>
+                  {/* Source order: pill first → in RTL flex it lands on
+                      the start edge = physical-right. */}
                   <span className="bank-code-pill inline-flex items-center justify-center rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 font-mono font-bold text-[11px] w-10 h-6 shrink-0 ltr-nums border border-amber-500/30">
                     {manualOption.code}
+                  </span>
+                  <span className="bank-name text-xs text-muted-foreground flex-1 text-right">
+                    استخدام الرقم <span className="font-mono ltr-nums">{manualOption.code}</span> بدون اسم
                   </span>
                 </CommandItem>
               </CommandGroup>
@@ -206,39 +217,20 @@ export function BankPicker({
                     }}
                     className={cn(
                       "gap-3 py-2.5",
-                      // Row order on physical screen (RTL): check on
-                      // left, name in middle (right-aligned), code pill
-                      // on right. This puts the code next to the Arabic
-                      // name's start so the row reads naturally.
-                      //
                       // cmdk highlights the active row with bg-accent
-                      // (navy). We need to keep contrast — force white
-                      // on the name and re-tint the code pill so its
-                      // text stays legible against the dark bg.
-                      "data-[selected=true]:[&_.bank-name]:text-accent-foreground",
-                      "data-[selected=true]:[&_.bank-code-pill]:bg-accent-foreground/15",
-                      "data-[selected=true]:[&_.bank-code-pill]:text-accent-foreground",
-                      "data-[selected=true]:[&_.bank-code-pill]:border-accent-foreground/40",
+                      // (navy). Override the name + pill colors with
+                      // `!` so they beat the direct text-foreground
+                      // class the children carry.
+                      "data-[selected=true]:[&_.bank-code-pill]:!bg-accent-foreground/15",
+                      "data-[selected=true]:[&_.bank-code-pill]:!text-accent-foreground",
+                      "data-[selected=true]:[&_.bank-code-pill]:!border-accent-foreground/40",
+                      "data-[selected=true]:[&_.bank-name]:!text-accent-foreground",
                     )}
                   >
-                    {/* Check — fixed-width slot so selected / unselected
-                        rows stay perfectly aligned */}
-                    <Check
-                      className={cn(
-                        "h-4 w-4 shrink-0 text-primary",
-                        isSelected ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                    {/* Bank name — flows in the middle, truncates gracefully */}
-                    <span
-                      className={cn(
-                        "bank-name text-sm flex-1 truncate text-right",
-                        isSelected ? "font-semibold text-foreground" : "text-foreground",
-                      )}
-                    >
-                      {b.nameAr}
-                    </span>
-                    {/* Code pill — mono, visual-right edge */}
+                    {/* Source order: pill → name → check. In RTL flex
+                        this renders physically as: check | name | pill,
+                        putting the code on the physical-right edge
+                        (same side where the Arabic name starts reading). */}
                     <span
                       className={cn(
                         "bank-code-pill inline-flex items-center justify-center rounded-md font-mono font-bold text-[11px] w-10 h-6 shrink-0 ltr-nums border",
@@ -249,6 +241,20 @@ export function BankPicker({
                     >
                       {b.code}
                     </span>
+                    <span
+                      className={cn(
+                        "bank-name text-sm flex-1 truncate text-right",
+                        isSelected ? "font-semibold text-foreground" : "text-foreground",
+                      )}
+                    >
+                      {b.nameAr}
+                    </span>
+                    <Check
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-primary",
+                        isSelected ? "opacity-100" : "opacity-0",
+                      )}
+                    />
                   </CommandItem>
                 );
               })}
