@@ -47,30 +47,13 @@ export function sanitizeChequeNumber(value: string): string {
 }
 
 /**
- * Determines cheque status based on payment date
- * - If payment_date has passed and status is pending -> should be 'cashed'
- * - Else keep the current status
+ * Returns the cheque status. Cashing is manual only — a past payment
+ * date never flips a pending cheque to cashed on its own.
  */
 export function getEffectiveChequeStatus(
-  paymentDate: string,
+  _paymentDate: string,
   currentStatus: string | null
 ): string {
-  // If already cashed, returned, cancelled, or transferred_out - keep it
-  if (currentStatus === 'cashed' || currentStatus === 'returned' || currentStatus === 'cancelled' || currentStatus === 'transferred_out') {
-    return currentStatus;
-  }
-  
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  const chequeDate = new Date(paymentDate);
-  chequeDate.setHours(0, 0, 0, 0);
-  
-  // If cheque date has passed, it should be considered 'cashed'
-  if (chequeDate <= today) {
-    return 'cashed';
-  }
-  
   return currentStatus || 'pending';
 }
 

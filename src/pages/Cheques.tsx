@@ -715,7 +715,7 @@ export default function Cheques() {
   const formatMonthName = (monthKey: string) => {
     const [year, month] = monthKey.split('-');
     const date = new Date(parseInt(year), parseInt(month) - 1);
-    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    return date.toLocaleDateString('ar-EG-u-nu-latn', { month: 'long', year: 'numeric' });
   };
 
   // Use Bunny CDN for image upload instead of Supabase Storage
@@ -845,7 +845,12 @@ export default function Cheques() {
           isNested && "bg-muted/20"
         )}
       >
-        <TableCell className={cn(isNested && "pr-10")}>
+        <TableCell
+          className={cn(
+            "[&:has([role=checkbox])]:!pr-4 [&:has([role=checkbox])]:!pl-2",
+            isNested && "[&:has([role=checkbox])]:!pr-10",
+          )}
+        >
           <Checkbox
             checked={selectedCheques.has(cheque.id)}
             onCheckedChange={() => toggleSelectCheque(cheque.id)}
@@ -900,8 +905,8 @@ export default function Cheques() {
         </TableCell>
         <TableCell className="text-sm">
           {cheque.bank_code ? (
-            <div className="flex flex-col gap-0.5">
-              <span className="font-medium truncate max-w-[140px]">
+            <div className="flex flex-col gap-0.5 min-w-[200px]">
+              <span className="font-medium">
                 {getBankName(cheque.bank_code) || cheque.bank_code}
               </span>
               <span className="text-[10px] text-muted-foreground font-mono ltr-nums">
@@ -932,14 +937,6 @@ export default function Cheques() {
               <Badge variant={statusLabels[effectiveStatus]?.variant || 'secondary'}>
                 {statusLabels[effectiveStatus]?.label || effectiveStatus}
               </Badge>
-              {/* Show تلقائي badge if status was auto-changed (pending in DB but cashed now) */}
-              {effectiveStatus === 'cashed' && cheque.cheque_status === 'pending' && (
-                <Badge variant="outline" className="text-[10px] px-1 py-0 border-green-500/50 text-green-600">تلقائي</Badge>
-              )}
-              {/* Show يدوي badge if status was manually set to cashed */}
-              {effectiveStatus === 'cashed' && cheque.cheque_status === 'cashed' && (
-                <Badge variant="outline" className="text-[10px] px-1 py-0 border-blue-500/50 text-blue-600">يدوي</Badge>
-              )}
             </div>
             {/* Show transfer info if transferred */}
             {cheque.cheque_status === 'transferred_out' && cheque.transferred_to_name && (
@@ -1131,45 +1128,73 @@ export default function Cheques() {
           </TabsList>
 
           <TabsContent value="report" className="mt-4">
-            <Card className="p-4">
-              <h3 className="text-lg font-semibold mb-4">إحصائيات الشيكات الشهرية</h3>
+            <Card className="overflow-hidden border shadow-sm">
+              <div className="flex items-center justify-between border-b bg-muted/30 px-5 py-3">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                  <h3 className="text-base font-semibold">إحصائيات الشيكات الشهرية</h3>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {monthlyStats.length} {monthlyStats.length === 1 ? "شهر" : "أشهر"}
+                </span>
+              </div>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>الشهر</TableHead>
-                      <TableHead className="text-center">إجمالي الشيكات</TableHead>
-                      <TableHead className="text-center">قيد الانتظار</TableHead>
-                      <TableHead className="text-center">تم صرفها</TableHead>
-                      <TableHead className="text-center">مرتجعة</TableHead>
+                    <TableRow className="bg-muted/20 hover:bg-muted/20 border-border/60">
+                      <TableHead className="font-semibold">الشهر</TableHead>
+                      <TableHead className="text-center font-semibold">إجمالي الشيكات</TableHead>
+                      <TableHead className="text-center font-semibold">قيد الانتظار</TableHead>
+                      <TableHead className="text-center font-semibold">تم صرفها</TableHead>
+                      <TableHead className="text-center font-semibold">مرتجعة</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {monthlyStats.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
                           لا توجد بيانات
                         </TableCell>
                       </TableRow>
                     ) : (
                       monthlyStats.map((month) => (
-                        <TableRow key={month.month}>
-                          <TableCell className="font-medium">{formatMonthName(month.month)}</TableCell>
-                          <TableCell className="text-center">
-                            <div>{month.total} شيك</div>
-                            <div className="text-xs text-muted-foreground ltr-nums">{formatCurrency(month.totalAmount)}</div>
+                        <TableRow key={month.month} className="border-border/40">
+                          <TableCell className="font-semibold">
+                            <div className="flex items-center gap-2">
+                              <div className="h-8 w-1 rounded-full bg-primary/60" />
+                              {formatMonthName(month.month)}
+                            </div>
                           </TableCell>
                           <TableCell className="text-center">
-                            <Badge variant="secondary">{month.pending}</Badge>
-                            <div className="text-xs text-muted-foreground mt-1 ltr-nums">{formatCurrency(month.pendingAmount)}</div>
+                            <div className="font-medium ltr-nums">{month.total} شيك</div>
+                            <div className="text-[11px] text-muted-foreground ltr-nums">{formatCurrency(month.totalAmount)}</div>
                           </TableCell>
                           <TableCell className="text-center">
-                            <Badge variant="default">{month.cashed}</Badge>
-                            <div className="text-xs text-muted-foreground mt-1 ltr-nums">{formatCurrency(month.cashedAmount)}</div>
+                            <Badge
+                              variant="outline"
+                              className="ltr-nums border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                            >
+                              {month.pending}
+                            </Badge>
+                            <div className="text-[11px] text-muted-foreground mt-1 ltr-nums">{formatCurrency(month.pendingAmount)}</div>
                           </TableCell>
                           <TableCell className="text-center">
-                            <Badge variant="destructive">{month.returned}</Badge>
-                            <div className="text-xs text-muted-foreground mt-1 ltr-nums">{formatCurrency(month.returnedAmount)}</div>
+                            <Badge
+                              variant="outline"
+                              className="ltr-nums border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                            >
+                              {month.cashed}
+                            </Badge>
+                            <div className="text-[11px] text-muted-foreground mt-1 ltr-nums">{formatCurrency(month.cashedAmount)}</div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge
+                              variant="outline"
+                              className="ltr-nums border-destructive/40 bg-destructive/10 text-destructive"
+                            >
+                              {month.returned}
+                            </Badge>
+                            <div className="text-[11px] text-muted-foreground mt-1 ltr-nums">{formatCurrency(month.returnedAmount)}</div>
                           </TableCell>
                         </TableRow>
                       ))
@@ -1313,7 +1338,7 @@ export default function Cheques() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-border/50 hover:bg-transparent">
-                      <TableHead className="w-[50px]">
+                      <TableHead className="w-[56px] [&:has([role=checkbox])]:!pr-4 [&:has([role=checkbox])]:!pl-2">
                         <Checkbox
                           checked={selectedCheques.size === cheques.length && cheques.length > 0}
                           onCheckedChange={toggleSelectAll}
@@ -1321,7 +1346,7 @@ export default function Cheques() {
                       </TableHead>
                       <TableHead className="text-muted-foreground font-medium w-[120px]">الصورة</TableHead>
                       <TableHead className="text-muted-foreground font-medium">رقم الشيك</TableHead>
-                      <TableHead className="text-muted-foreground font-medium">البنك</TableHead>
+                      <TableHead className="text-muted-foreground font-medium min-w-[220px]">البنك</TableHead>
                       <TableHead className="text-muted-foreground font-medium">الفرع</TableHead>
                       <TableHead className="text-muted-foreground font-medium">المبلغ</TableHead>
                       <TableHead className="text-muted-foreground font-medium">تاريخ الاستحقاق</TableHead>
