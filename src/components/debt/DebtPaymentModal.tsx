@@ -564,51 +564,44 @@ export function DebtPaymentModal({
 
   /**
    * Sequential "fill one by one" distribution:
-   * - Uses only payable policies from visible debt items
-   * - Fills policies in order until each is complete before moving to next
-   * - For cheques: Keeps as single record on first policy with space
-   * - For cash/transfer: Can span multiple policies
+   *   * Walk payable policies smallest-remaining first.
+   *   * For each, allocate min(amount_left, policy_remaining) until
+   *     either the amount is exhausted or there are no more policies.
+   *
+   * The same logic is used for cash, transfer, AND cheques. For
+   * cheques the caller stamps the returned splits with a shared
+   * batch_id + cheque_number, which is how PaymentGroupDetailsDialog
+   * collapses them back into one visible ledger row — so
+   * physically-one-cheque can still hit N policies on the DB side
+   * without confusing the user-facing view.
+   *
+   * Why we do this for cheques too: the per-policy (and per-package-
+   * group) validate_policy_payment_total trigger caps every policy's
+   * sum(payments) at its own (insurance_price + office_commission).
+   * If a single cheque is larger than any one policy's remaining
+   * room, dumping the full face value onto one row blows the cap
+   * and the insert fails. Splitting across policies keeps every row
+   * under its cap while still representing one physical cheque.
    */
-  const calculateSplitPayments = (amount: number, paymentType: string = 'cash') => {
+  const calculateSplitPayments = (amount: number, _paymentType: string = 'cash') => {
     const splits: { policyId: string; amount: number; branchId: string | null }[] = [];
-    
+
     if (amount <= 0) return splits;
 
-    // Get payable policies from filtered items, sorted by remaining (smallest first)
+    // Smallest-remaining first: fill the tightest policies before
+    // spilling over into ones with more room. That way a 1550 cheque
+    // with (1300, 250) slots becomes [1300, 250] instead of [250, 1300].
     const policiesWithBalance = [...allPayablePolicies]
       .filter(p => p.remaining > 0)
       .sort((a, b) => a.remaining - b.remaining);
 
     if (policiesWithBalance.length === 0) return splits;
 
-    // For cheques: assign FULL amount to a single policy that can fit it
-    if (paymentType === 'cheque') {
-      const policyWithSpace = policiesWithBalance.find(p => p.remaining >= amount);
-      
-      if (policyWithSpace) {
-        splits.push({
-          policyId: policyWithSpace.policyId,
-          amount: amount,
-          branchId: policyWithSpace.branchId,
-        });
-      } else {
-        // Put it on the policy with largest remaining balance
-        const largestPolicy = policiesWithBalance[policiesWithBalance.length - 1];
-        splits.push({
-          policyId: largestPolicy.policyId,
-          amount: amount,
-          branchId: largestPolicy.branchId,
-        });
-      }
-      return splits;
-    }
-
-    // For cash/transfer: fill policies sequentially one by one
     let remainingAmount = amount;
-    
+
     for (const policy of policiesWithBalance) {
       if (remainingAmount <= 0) break;
-      
+
       const paymentForPolicy = Math.min(remainingAmount, policy.remaining);
       if (paymentForPolicy > 0.001) {
         const roundedAmount = Math.round(paymentForPolicy * 100) / 100;
@@ -621,6 +614,21 @@ export function DebtPaymentModal({
           remainingAmount -= paymentForPolicy;
         }
       }
+    }
+
+    // Overflow guard: if the user's amount exceeds the total debt
+    // (e.g. 1600 against a 1550 total), park the leftover on the
+    // policy with the most room so the insert doesn't silently drop
+    // the excess. The overpayment warning in the UI should catch
+    // this upstream, but this keeps the behavior consistent with
+    // the old code path.
+    if (remainingAmount > 0.001 && policiesWithBalance.length > 0) {
+      const largestPolicy = policiesWithBalance[policiesWithBalance.length - 1];
+      splits.push({
+        policyId: largestPolicy.policyId,
+        amount: Math.round(remainingAmount * 100) / 100,
+        branchId: largestPolicy.branchId,
+      });
     }
 
     return splits.filter(s => s.amount > 0);
