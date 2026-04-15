@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { FileUploader } from "@/components/media/FileUploader";
 import { PdfJsViewer } from "@/components/policies/PdfJsViewer";
 import {
@@ -59,6 +60,10 @@ const isVideo = (file: AccidentFile) =>
 
 export function AccidentFilesSection({ accidentReportId, onFilesChange, policyNumber, accidentDate, clientName, carNumber, companyName, reportNumber }: AccidentFilesSectionProps) {
   const { toast } = useToast();
+  // Pull the current agent's branding (site title + logo) so the
+  // "طباعة الكل" cover page wears the agent's identity instead of
+  // the hardcoded "Thiqa Insurance" fallback.
+  const { data: siteSettings } = useSiteSettings();
   const [files, setFiles] = useState<AccidentFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -170,12 +175,27 @@ export function AccidentFilesSection({ accidentReportId, onFilesChange, policyNu
       companyName ? { label: "شركة التأمين", value: companyName } : null,
     ].filter(Boolean) as { label: string; value: string }[];
 
+    // Agent-branded header: logo + name come from site_settings.
+    // Falls back to a generic label when the agent hasn't set one
+    // up yet, but never to "Thiqa Insurance".
+    const brandName = siteSettings?.site_title?.trim() || "وكالة التأمين";
+    const escapeAttr = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const brandLogoHtml = siteSettings?.logo_url
+      ? `<img class="brand-logo" src="${escapeAttr(siteSettings.logo_url)}" alt="${escapeAttr(brandName)}" />`
+      : "";
+    const ownerLine = siteSettings?.owner_name && siteSettings.owner_name.trim() !== brandName
+      ? `<div class="owner">${escapeAttr(siteSettings.owner_name)}</div>`
+      : "";
+
     const headerHtml = `
       <div class="header-page">
         <div class="header-card">
           <div class="header-band">
+            ${brandLogoHtml}
             <h1>بلاغ حادث</h1>
-            <span class="brand">Thiqa Insurance</span>
+            <span class="brand">${escapeAttr(brandName)}</span>
+            ${ownerLine}
           </div>
           <table class="info-table">
             ${infoRows.map((r, i) => `<tr class="${i % 2 === 0 ? 'even' : 'odd'}"><td class="label">${r.label}</td><td class="value">${r.value}</td></tr>`).join("")}
@@ -264,16 +284,27 @@ export function AccidentFilesSection({ accidentReportId, onFilesChange, policyNu
             padding: 28px 32px 20px;
             text-align: center;
           }
+          .header-band .brand-logo {
+            display: block;
+            margin: 0 auto 12px;
+            max-height: 80px;
+            max-width: 220px;
+            object-fit: contain;
+          }
           .header-band h1 {
             font-size: 26px;
             font-weight: 700;
             margin: 0 0 6px;
           }
           .header-band .brand {
-            font-size: 14px;
-            letter-spacing: 2px;
-            opacity: 0.85;
-            text-transform: uppercase;
+            font-size: 15px;
+            opacity: 0.92;
+            font-weight: 600;
+          }
+          .header-band .owner {
+            font-size: 12px;
+            opacity: 0.75;
+            margin-top: 4px;
           }
           .info-table {
             width: 100%;
