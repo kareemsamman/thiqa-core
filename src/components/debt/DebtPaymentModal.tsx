@@ -212,19 +212,33 @@ export function DebtPaymentModal({
     }
   }, [open, clientId]);
 
-  // Net amount we currently owe the client (refunds minus adjustments due).
-  // This offsets the debt shown in the modal so "المتبقي للدفع" reflects
-  // reality — same logic as ClientDetails.fetchWalletBalance.
+  // Net amount we currently owe the client. Two sources:
+  //   1. customer_wallet_transactions — refunds minus adjustments due.
+  //   2. Broker policies that are overpaid — the excess sits as a credit
+  //      with us and must offset the client's non-broker debt so the
+  //      modal agrees with the global "إجمالي المتبقي" shown on the
+  //      client card (which uses a single Math.max over all policies).
   const fetchCreditBalance = async () => {
     try {
-      const { data, error } = await supabase
-        .from('customer_wallet_transactions')
-        .select('amount, transaction_type')
-        .eq('client_id', clientId);
+      const [walletResult, brokerPoliciesResult] = await Promise.all([
+        supabase
+          .from('customer_wallet_transactions')
+          .select('amount, transaction_type')
+          .eq('client_id', clientId),
+        supabase
+          .from('policies')
+          .select('id, insurance_price, office_commission')
+          .eq('client_id', clientId)
+          .eq('cancelled', false)
+          .eq('transferred', false)
+          .is('deleted_at', null)
+          .not('broker_id', 'is', null),
+      ]);
 
-      if (error) throw error;
+      if (walletResult.error) throw walletResult.error;
+      if (brokerPoliciesResult.error) throw brokerPoliciesResult.error;
 
-      const weOwe = (data || [])
+      const weOwe = (walletResult.data || [])
         .filter(t =>
           t.transaction_type === 'refund' ||
           t.transaction_type === 'transfer_refund_owed' ||
@@ -232,11 +246,38 @@ export function DebtPaymentModal({
         )
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-      const customerOwes = (data || [])
+      const customerOwes = (walletResult.data || [])
         .filter(t => t.transaction_type === 'transfer_adjustment_due')
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-      setCreditBalance(Math.max(0, weOwe - customerOwes));
+      const walletCredit = Math.max(0, weOwe - customerOwes);
+
+      let brokerOverpayment = 0;
+      const brokerPolicies = brokerPoliciesResult.data || [];
+      if (brokerPolicies.length > 0) {
+        const brokerIds = brokerPolicies.map(p => p.id);
+        const { data: brokerPayments, error: brokerPaymentsError } = await supabase
+          .from('policy_payments')
+          .select('policy_id, amount, refused')
+          .in('policy_id', brokerIds);
+
+        if (brokerPaymentsError) throw brokerPaymentsError;
+
+        const paidByPolicy: Record<string, number> = {};
+        (brokerPayments || []).forEach(p => {
+          if (!p.refused) {
+            paidByPolicy[p.policy_id] = (paidByPolicy[p.policy_id] || 0) + (p.amount || 0);
+          }
+        });
+
+        brokerPolicies.forEach(p => {
+          const price = (p.insurance_price || 0) + ((p as any).office_commission || 0);
+          const paid = paidByPolicy[p.id] || 0;
+          brokerOverpayment += Math.max(0, paid - price);
+        });
+      }
+
+      setCreditBalance(walletCredit + brokerOverpayment);
     } catch (error) {
       console.error('Error fetching credit balance:', error);
       setCreditBalance(0);
