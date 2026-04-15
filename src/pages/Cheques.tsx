@@ -52,6 +52,9 @@ import {
   Loader2,
   Plus,
   Pencil,
+  Calendar,
+  MoreVertical,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -61,6 +64,14 @@ import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH, getEffectiveChequeStatus, isChequeOverdue } from "@/lib/chequeUtils";
 import { AddCustomerChequeModal } from "@/components/cheques/AddCustomerChequeModal";
 import { PaymentEditDialog } from "@/components/clients/PaymentEditDialog";
+import { getBankName } from "@/lib/banks";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface PaymentImage {
   id: string;
@@ -74,6 +85,9 @@ interface ChequeRecord {
   amount: number;
   payment_date: string;
   cheque_number: string | null;
+  cheque_date: string | null;
+  bank_code: string | null;
+  branch_code: string | null;
   cheque_image_url: string | null;
   cheque_status: string | null;
   refused: boolean | null;
@@ -133,6 +147,7 @@ export default function Cheques() {
   const [customerFilter, setCustomerFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("customer");
   const [overdueOnly, setOverdueOnly] = useState(false);
+  const [dueTodayOnly, setDueTodayOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 100; // Increased for tree view
@@ -157,6 +172,8 @@ export default function Cheques() {
     pendingTotal: 0,
     overdueCount: 0,
     overdueTotal: 0,
+    dueTodayCount: 0,
+    dueTodayTotal: 0,
   });
 
   // Monthly statistics
@@ -312,10 +329,16 @@ export default function Cheques() {
         .eq('payment_type', 'cheque');
 
       if (allCheques) {
+        const todayIso = new Date().toISOString().split('T')[0];
         const returnedCheques = allCheques.filter(c => c.cheque_status === 'returned');
         const pendingCheques = allCheques.filter(c => c.cheque_status === 'pending' || !c.cheque_status);
         const overdueCheques = allCheques.filter(c => isChequeOverdue(c.payment_date, c.cheque_status));
-        
+        // Cheques whose استحقاق is exactly today and aren't already
+        // cashed or returned — that's what staff want to collect today.
+        const dueTodayCheques = allCheques.filter(
+          (c) => c.payment_date === todayIso && c.cheque_status !== 'cashed' && c.cheque_status !== 'returned',
+        );
+
         setSummaryStats({
           returnedCount: returnedCheques.length,
           returnedTotal: returnedCheques.reduce((sum, c) => sum + Number(c.amount), 0),
@@ -323,6 +346,8 @@ export default function Cheques() {
           pendingTotal: pendingCheques.reduce((sum, c) => sum + Number(c.amount), 0),
           overdueCount: overdueCheques.length,
           overdueTotal: overdueCheques.reduce((sum, c) => sum + Number(c.amount), 0),
+          dueTodayCount: dueTodayCheques.length,
+          dueTodayTotal: dueTodayCheques.reduce((sum, c) => sum + Number(c.amount), 0),
         });
 
         // Calculate monthly stats
@@ -371,7 +396,8 @@ export default function Cheques() {
       let query = supabase
         .from('policy_payments')
         .select(`
-          id, policy_id, amount, payment_date, cheque_number, cheque_image_url, 
+          id, policy_id, amount, payment_date, cheque_number, cheque_date,
+          bank_code, branch_code, cheque_image_url,
           cheque_status, refused, notes, transferred_to_type, transferred_to_id, transferred_payment_id,
           policies!policy_payments_policy_id_fkey(
             id, policy_type_parent,
@@ -390,6 +416,14 @@ export default function Cheques() {
       if (overdueOnly) {
         const today = new Date().toISOString().split('T')[0];
         query = query.lt('payment_date', today).neq('cheque_status', 'cashed');
+      }
+
+      if (dueTodayOnly) {
+        // Cheques whose استحقاق falls exactly on today and haven't
+        // been cashed yet — the "who do I need to collect from
+        // today" view staff asked for.
+        const today = new Date().toISOString().split('T')[0];
+        query = query.eq('payment_date', today).neq('cheque_status', 'cashed');
       }
 
       const { data, error, count } = await query;
@@ -455,6 +489,9 @@ export default function Cheques() {
           amount: c.amount,
           payment_date: c.payment_date,
           cheque_number: c.cheque_number,
+          cheque_date: c.cheque_date || null,
+          bank_code: c.bank_code || null,
+          branch_code: c.branch_code || null,
           cheque_image_url: c.cheque_image_url,
           cheque_status: c.cheque_status || 'pending',
           refused: c.refused,
@@ -508,7 +545,7 @@ export default function Cheques() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, statusFilter, overdueOnly, searchQuery, customerFilter, toast]);
+  }, [currentPage, statusFilter, overdueOnly, dueTodayOnly, searchQuery, customerFilter, toast]);
 
   useEffect(() => { fetchSummaryStats(); }, [fetchSummaryStats]);
   useEffect(() => { fetchCheques(); }, [fetchCheques]);
@@ -861,6 +898,23 @@ export default function Cheques() {
         <TableCell className="font-mono text-sm">
           <bdi>{cheque.cheque_number || "-"}</bdi>
         </TableCell>
+        <TableCell className="text-sm">
+          {cheque.bank_code ? (
+            <div className="flex flex-col gap-0.5">
+              <span className="font-medium truncate max-w-[140px]">
+                {getBankName(cheque.bank_code) || cheque.bank_code}
+              </span>
+              <span className="text-[10px] text-muted-foreground font-mono ltr-nums">
+                {cheque.bank_code}
+              </span>
+            </div>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </TableCell>
+        <TableCell className="font-mono text-sm ltr-nums">
+          {cheque.branch_code || <span className="text-muted-foreground">—</span>}
+        </TableCell>
         <TableCell className="font-medium">
           <bdi>{formatCurrency(cheque.amount)}</bdi>
         </TableCell>
@@ -912,82 +966,69 @@ export default function Cheques() {
             )}
           </div>
         </TableCell>
-        <TableCell>
-          <div className="flex items-center gap-1 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 text-[10px] px-2"
-              disabled={loadingPaymentEdit}
-              onClick={() => openPaymentEditFor(cheque)}
-              title="تعديل الدفعة"
-            >
-              {loadingPaymentEdit ? (
-                <Loader2 className="h-3 w-3 ml-1 animate-spin" />
-              ) : (
-                <Pencil className="h-3 w-3 ml-1" />
+        <TableCell className="text-center">
+          {/* Actions collapsed into a 3-dots menu so the row stays
+              tight even with all the cheque-specific verbs. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+                <span className="sr-only">إجراءات</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuItem
+                disabled={loadingPaymentEdit}
+                onClick={() => openPaymentEditFor(cheque)}
+              >
+                <Pencil className="h-4 w-4 ml-2" />
+                تعديل الدفعة
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setSelectedPolicyId(cheque.policy_id);
+                  setPolicyDrawerOpen(true);
+                }}
+              >
+                <ExternalLink className="h-4 w-4 ml-2" />
+                عرض الوثيقة
+              </DropdownMenuItem>
+              {cheque.cheque_status !== 'cashed' &&
+                cheque.cheque_status !== 'returned' &&
+                cheque.cheque_status !== 'transferred_out' && (
+                  <DropdownMenuItem
+                    onClick={() => handleStatusChange(cheque.id, 'cashed')}
+                    className="text-green-600 focus:text-green-700"
+                  >
+                    <CheckCircle2 className="h-4 w-4 ml-2" />
+                    صرف الشيك
+                  </DropdownMenuItem>
+                )}
+              {cheque.cheque_status !== 'returned' &&
+                cheque.cheque_status !== 'transferred_out' && (
+                  <DropdownMenuItem
+                    onClick={() => handleStatusChange(cheque.id, 'returned')}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <RotateCcw className="h-4 w-4 ml-2" />
+                    رجع الشيك
+                  </DropdownMenuItem>
+                )}
+              {cheque.cheque_status === 'returned' && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleEditCheque(cheque)}>
+                    <Edit className="h-4 w-4 ml-2" />
+                    تغيير رقم الشيك
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openSmsDialog(cheque)}>
+                    <MessageSquare className="h-4 w-4 ml-2" />
+                    إرسال SMS للعميل
+                  </DropdownMenuItem>
+                </>
               )}
-              تعديل
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-[10px] px-2"
-              onClick={() => {
-                setSelectedPolicyId(cheque.policy_id);
-                setPolicyDrawerOpen(true);
-              }}
-            >
-              <ExternalLink className="h-3 w-3 ml-1" />
-              الوثيقة
-            </Button>
-            {cheque.cheque_status === 'returned' && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-6 text-[10px] px-2"
-                  onClick={() => handleEditCheque(cheque)}
-                >
-                  <Edit className="h-3 w-3 ml-1" />
-                  تغيير الرقم
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-6 text-[10px] px-2 border-blue-500/50 text-blue-600 hover:bg-blue-500/10"
-                  onClick={() => openSmsDialog(cheque)}
-                >
-                  <MessageSquare className="h-3 w-3 ml-1" />
-                  SMS
-                </Button>
-              </>
-            )}
-            {/* Show صرف button if not cashed and not returned and not transferred */}
-            {cheque.cheque_status !== 'cashed' && cheque.cheque_status !== 'returned' && cheque.cheque_status !== 'transferred_out' && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 text-[10px] px-2 border-green-500/50 text-green-600 hover:bg-green-500/10"
-                onClick={() => handleStatusChange(cheque.id, 'cashed')}
-              >
-                <CheckCircle2 className="h-3 w-3 ml-1" />
-                صرف
-              </Button>
-            )}
-            {/* Show مرتجع button if not already returned and not transferred */}
-            {cheque.cheque_status !== 'returned' && cheque.cheque_status !== 'transferred_out' && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 text-[10px] px-2 border-destructive/50 text-destructive hover:bg-destructive/10"
-                onClick={() => handleStatusChange(cheque.id, 'returned')}
-              >
-                <RotateCcw className="h-3 w-3 ml-1" />
-                مرتجع
-              </Button>
-            )}
-          </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </TableCell>
       </TableRow>
     );
@@ -999,7 +1040,39 @@ export default function Cheques() {
 
       <div className="p-6 space-y-4">
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          {/* Due today — clickable to toggle the filter. Staff asked
+              to land on this page and immediately see which cheques
+              come due today. */}
+          <button
+            type="button"
+            onClick={() => {
+              setDueTodayOnly((v) => !v);
+              if (!dueTodayOnly) setOverdueOnly(false);
+              setCurrentPage(1);
+            }}
+            className={cn(
+              "p-4 rounded-xl border text-right transition-all",
+              dueTodayOnly
+                ? "border-primary bg-primary/10 shadow-sm"
+                : "border-primary/30 bg-primary/5 hover:border-primary/60",
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/15">
+                <Calendar className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">استحقاق اليوم</p>
+                <p className="text-xl font-bold text-primary ltr-nums">
+                  {formatCurrency(summaryStats.dueTodayTotal || 0)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {summaryStats.dueTodayCount || 0} شيك
+                </p>
+              </div>
+            </div>
+          </button>
           <Card className="p-4 border-destructive/30 bg-destructive/5">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-destructive/10">
@@ -1143,10 +1216,27 @@ export default function Cheques() {
                     <SelectItem value="transferred_out">تم استخدامه</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button 
-                  variant={overdueOnly ? "default" : "outline"} 
+                <Button
+                  variant={dueTodayOnly ? "default" : "outline"}
                   size="sm"
-                  onClick={() => { setOverdueOnly(!overdueOnly); setCurrentPage(1); }}
+                  onClick={() => {
+                    setDueTodayOnly((v) => !v);
+                    if (!dueTodayOnly) setOverdueOnly(false);
+                    setCurrentPage(1);
+                  }}
+                  className={dueTodayOnly ? "bg-primary text-primary-foreground" : ""}
+                >
+                  <Calendar className="ml-1 h-4 w-4" />
+                  اليوم فقط
+                </Button>
+                <Button
+                  variant={overdueOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setOverdueOnly((v) => !v);
+                    if (!overdueOnly) setDueTodayOnly(false);
+                    setCurrentPage(1);
+                  }}
                 >
                   <AlertCircle className="ml-1 h-4 w-4" />
                   متأخرة
@@ -1231,10 +1321,12 @@ export default function Cheques() {
                       </TableHead>
                       <TableHead className="text-muted-foreground font-medium w-[120px]">الصورة</TableHead>
                       <TableHead className="text-muted-foreground font-medium">رقم الشيك</TableHead>
+                      <TableHead className="text-muted-foreground font-medium">البنك</TableHead>
+                      <TableHead className="text-muted-foreground font-medium">الفرع</TableHead>
                       <TableHead className="text-muted-foreground font-medium">المبلغ</TableHead>
                       <TableHead className="text-muted-foreground font-medium">تاريخ الاستحقاق</TableHead>
                       <TableHead className="text-muted-foreground font-medium">الحالة</TableHead>
-                      <TableHead className="text-muted-foreground font-medium w-[260px]">الإجراءات</TableHead>
+                      <TableHead className="text-muted-foreground font-medium w-[80px] text-center">إجراءات</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1244,15 +1336,17 @@ export default function Cheques() {
                           <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                           <TableCell><Skeleton className="h-10 w-14" /></TableCell>
                           <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-14" /></TableCell>
                           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                           <TableCell><Skeleton className="h-6 w-20" /></TableCell>
-                          <TableCell><Skeleton className="h-6 w-32" /></TableCell>
+                          <TableCell><Skeleton className="h-6 w-8" /></TableCell>
                         </TableRow>
                       ))
                     ) : customerGroups.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                           لا توجد شيكات
                         </TableCell>
                       </TableRow>
@@ -1272,7 +1366,7 @@ export default function Cheques() {
                               className="bg-muted/50 hover:bg-muted/70 cursor-pointer border-b-2"
                               onClick={() => toggleCustomerExpanded(group.customerId)}
                             >
-                              <TableCell colSpan={7}>
+                              <TableCell colSpan={9}>
                                 <div className="flex items-center justify-between w-full py-1">
                                   <div className="flex items-center gap-3">
                                     <ChevronDown className={cn(
