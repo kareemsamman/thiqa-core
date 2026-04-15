@@ -50,18 +50,27 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Verify user
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
+
     if (authError || !user) {
       return new Response(
         JSON.stringify({ error: 'Invalid authentication' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // User-scoped client for RPCs that need auth.uid() (e.g.
+    // report_debt_policies_for_clients gates on is_active_user and
+    // can_access_branch, both of which require the caller's uid).
+    const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     // Check if user is active
     const { data: profile } = await supabase
@@ -181,8 +190,10 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Fetch policy details for this client
-      const { data: policies } = await supabase.rpc(
+      // Fetch policy details for this client. Must go through the
+      // user-scoped client so auth.uid() is populated inside the RPC
+      // (is_active_user / can_access_branch gate on it).
+      const { data: policies } = await userSupabase.rpc(
         'report_debt_policies_for_clients',
         { p_client_ids: [client_id] }
       );

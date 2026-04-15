@@ -73,6 +73,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    // User-scoped client — used for RPCs that rely on auth.uid() inside
+    // the function (report_client_debts, report_debt_policies_for_clients,
+    // etc.). The service-role client we created above sets auth.uid() to
+    // NULL inside SQL, which would make every tenant-scoped RPC return
+    // an empty set. This second client sends the caller's JWT on each
+    // request so auth.uid() resolves correctly.
+    const userSupabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      }
+    );
+
     // Parse request body
     // Resolve agent branding
     const agentId = await resolveAgentId(supabase, user.id);
@@ -103,8 +118,10 @@ Deno.serve(async (req) => {
       .eq("agent_id", agentId)
       .maybeSingle();
 
-    // Get all clients matching the filter (no pagination limit)
-    const { data: clientRows, error: clientError } = await supabase.rpc(
+    // Get all clients matching the filter (no pagination limit).
+    // Call through the user-scoped client so auth.uid() inside the
+    // tenant-scoped RPC resolves to the caller.
+    const { data: clientRows, error: clientError } = await userSupabase.rpc(
       "report_client_debts",
       {
         p_search: search || null,
@@ -217,8 +234,10 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Fetch policy details for this client
-        const { data: policies } = await supabase.rpc(
+        // Fetch policy details for this client (user-scoped so
+        // is_active_user / can_access_branch inside the RPC see the
+        // caller's uid).
+        const { data: policies } = await userSupabase.rpc(
           "report_debt_policies_for_clients",
           { p_client_ids: [client.client_id] }
         );
