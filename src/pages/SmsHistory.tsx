@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
-import { MessageSquare, Search, Filter, CheckCircle, XCircle, Clock, RefreshCw } from "lucide-react";
+import { MessageSquare, Search, Filter, CheckCircle, XCircle, Clock, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 
 interface SmsLog {
   id: string;
@@ -25,8 +25,12 @@ interface SmsLog {
   created_at: string;
   client_id: string | null;
   policy_id: string | null;
-  clients?: { full_name: string } | null;
-  policies?: { policy_number: string | null } | null;
+  clients?: { full_name: string; phone_number: string | null } | null;
+  policies?: {
+    policy_number: string | null;
+    document_number: string | null;
+    car: { car_number: string | null } | null;
+  } | null;
 }
 
 const SMS_TYPE_LABELS: Record<string, string> = {
@@ -53,7 +57,12 @@ export default function SmsHistory() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const pageSize = 50;
+
+  const toggleExpand = (id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
 
   useEffect(() => {
     fetchLogs();
@@ -66,8 +75,8 @@ export default function SmsHistory() {
         .from("sms_logs")
         .select(`
           *,
-          clients(full_name),
-          policies(policy_number)
+          clients(full_name, phone_number),
+          policies(policy_number, document_number, car:cars(car_number))
         `)
         .order("created_at", { ascending: false })
         .range(page * pageSize, (page + 1) * pageSize - 1);
@@ -193,6 +202,7 @@ export default function SmsHistory() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-8" />
                       <TableHead className="text-right">العميل</TableHead>
                       <TableHead className="text-right">الهاتف</TableHead>
                       <TableHead className="text-right">النوع</TableHead>
@@ -205,7 +215,7 @@ export default function SmsHistory() {
                   <TableBody>
                     {filteredLogs.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                           لا توجد رسائل
                         </TableCell>
                       </TableRow>
@@ -213,43 +223,150 @@ export default function SmsHistory() {
                       filteredLogs.map((log) => {
                         const statusConfig = STATUS_CONFIG[log.status] || STATUS_CONFIG.pending;
                         const StatusIcon = statusConfig.icon;
-                        
+                        const isExpanded = expandedId === log.id;
+                        // Prefer document_number (human-readable "34/2026"),
+                        // fall back to the raw company policy_number, then
+                        // surface the car number as a last-ditch hint for
+                        // client-level SMS that don't carry a policy_id.
+                        const docLabel =
+                          log.policies?.document_number ||
+                          log.policies?.policy_number ||
+                          null;
+                        const carLabel = log.policies?.car?.car_number || null;
+
                         return (
-                          <TableRow key={log.id}>
-                            <TableCell className="font-medium">
-                              {log.clients?.full_name || "-"}
-                            </TableCell>
-                            <TableCell className="text-left">
-                              <bdi>{log.phone_number}</bdi>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">
-                                {SMS_TYPE_LABELS[log.sms_type] || log.sms_type}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              {log.policies?.policy_number || "-"}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={statusConfig.variant} className="gap-1">
-                                <StatusIcon className="h-3 w-3" />
-                                {statusConfig.label}
-                              </Badge>
-                              {log.error_message && (
-                                <p className="text-xs text-destructive mt-1 max-w-[150px] truncate" title={log.error_message}>
-                                  {log.error_message}
+                          <Fragment key={log.id}>
+                            <TableRow
+                              className="cursor-pointer hover:bg-muted/40 transition-colors"
+                              onClick={() => toggleExpand(log.id)}
+                            >
+                              <TableCell className="w-8">
+                                {isExpanded ? (
+                                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {log.clients?.full_name || "-"}
+                              </TableCell>
+                              <TableCell className="text-left">
+                                <bdi>{log.phone_number}</bdi>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline">
+                                  {SMS_TYPE_LABELS[log.sms_type] || log.sms_type}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {docLabel ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="font-mono ltr-nums font-semibold">{docLabel}</span>
+                                    {carLabel && (
+                                      <span className="text-muted-foreground font-mono ltr-nums">🚗 {carLabel}</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={statusConfig.variant} className="gap-1">
+                                  <StatusIcon className="h-3 w-3" />
+                                  {statusConfig.label}
+                                </Badge>
+                                {log.error_message && (
+                                  <p className="text-xs text-destructive mt-1 max-w-[150px] truncate" title={log.error_message}>
+                                    {log.error_message}
+                                  </p>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {formatDate(log.sent_at || log.created_at)}
+                              </TableCell>
+                              <TableCell className="max-w-xs">
+                                <p className="text-sm text-muted-foreground line-clamp-2" title={log.message}>
+                                  {log.message}
                                 </p>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {formatDate(log.sent_at || log.created_at)}
-                            </TableCell>
-                            <TableCell className="max-w-xs">
-                              <p className="text-sm text-muted-foreground line-clamp-2" title={log.message}>
-                                {log.message}
-                              </p>
-                            </TableCell>
-                          </TableRow>
+                              </TableCell>
+                            </TableRow>
+                            {isExpanded && (
+                              <TableRow className="bg-muted/30 hover:bg-muted/30">
+                                <TableCell colSpan={8} className="p-0">
+                                  <div className="p-5 space-y-4 border-t border-border/40">
+                                    {/* Meta strip — all the fields that
+                                        don't fit in the summary row */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                      <div>
+                                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">العميل</p>
+                                        <p className="font-medium">{log.clients?.full_name || "-"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">الهاتف</p>
+                                        <p className="font-mono ltr-nums"><bdi>{log.phone_number}</bdi></p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">النوع</p>
+                                        <p>
+                                          <Badge variant="outline">
+                                            {SMS_TYPE_LABELS[log.sms_type] || log.sms_type}
+                                          </Badge>
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">الحالة</p>
+                                        <p>
+                                          <Badge variant={statusConfig.variant} className="gap-1">
+                                            <StatusIcon className="h-3 w-3" />
+                                            {statusConfig.label}
+                                          </Badge>
+                                        </p>
+                                      </div>
+                                      {docLabel && (
+                                        <div>
+                                          <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">رقم الوثيقة</p>
+                                          <p className="font-mono ltr-nums font-semibold">{docLabel}</p>
+                                        </div>
+                                      )}
+                                      {carLabel && (
+                                        <div>
+                                          <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">رقم السيارة</p>
+                                          <p className="font-mono ltr-nums">{carLabel}</p>
+                                        </div>
+                                      )}
+                                      <div>
+                                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">تاريخ الإرسال</p>
+                                        <p>{formatDate(log.sent_at || log.created_at)}</p>
+                                      </div>
+                                    </div>
+
+                                    {/* Full message body — wrapped in a
+                                        card so it reads clearly from the
+                                        rest of the meta. */}
+                                    <div>
+                                      <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">نص الرسالة</p>
+                                      <div className="rounded-lg border bg-card p-4">
+                                        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                                          {log.message}
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    {log.error_message && (
+                                      <div>
+                                        <p className="text-[11px] text-destructive uppercase tracking-wide mb-1">سبب الفشل</p>
+                                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                                          <p className="whitespace-pre-wrap break-words text-sm text-destructive">
+                                            {log.error_message}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </Fragment>
                         );
                       })
                     )}
