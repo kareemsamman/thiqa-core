@@ -104,16 +104,15 @@ const getPolicyTypeLabel = (parent: string | null, child: string | null): string
 // company via visa, not owed to the agent) — only its office_commission
 // counts toward the debt.
 //
-// Grouping keys: prefer group_id when set; otherwise fall back to
-// car_number so two policies for the same car still collapse into one
-// package row.
+// Grouping is strictly by `group_id`. Standalone policies stay as their
+// own row even when they share a car number — earlier we collapsed by
+// car which made two unrelated singles look like a fake "باقة".
 const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
   const rows: DebtRow[] = [];
   const buckets = new Map<string, PolicyDebt[]>();
 
   const bucketKeyFor = (p: PolicyDebt): string => {
     if (p.group_id) return `g:${p.group_id}`;
-    if (p.car_number) return `c:${p.car_number}`;
     return `p:${p.id}`;
   };
 
