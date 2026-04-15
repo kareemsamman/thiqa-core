@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -400,7 +399,10 @@ export default function Receipts() {
   // Data
   const [receipts, setReceipts] = useState<ReceiptRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<string>("payment");
+  // Receipt tab is locked to "payment" now — the accident_fee tab
+  // was removed from the UI but the `receipt_type` filter on the
+  // query stays so legacy accident_fee rows don't mix in.
+  const activeTab = "payment";
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -827,18 +829,8 @@ export default function Receipts() {
         />
 
         <div className="p-3 md:p-6 space-y-4">
-          {/* Tabs */}
-          <Tabs
-            value={activeTab}
-            onValueChange={(v) => setActiveTab(v)}
-            dir="rtl"
-          >
-            <TabsList className="grid w-full max-w-md grid-cols-2">
-              <TabsTrigger value="payment">دفعات</TabsTrigger>
-              <TabsTrigger value="accident_fee">رسوم حوادث</TabsTrigger>
-            </TabsList>
-
-            {/* Filters */}
+          {/* Filters */}
+          <div>
             <Card className="mt-4">
               <CardContent className="p-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -934,14 +926,11 @@ export default function Receipts() {
               </Card>
             </div>
 
-            {/* Table for both tabs */}
-            <TabsContent value="payment" className="mt-4">
+            {/* Receipts table */}
+            <div className="mt-4">
               {renderTable()}
-            </TabsContent>
-            <TabsContent value="accident_fee" className="mt-4">
-              {renderTable()}
-            </TabsContent>
-          </Tabs>
+            </div>
+          </div>
         </div>
       </div>
 
