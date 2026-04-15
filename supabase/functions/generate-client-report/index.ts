@@ -566,14 +566,12 @@ function generateReportHtml(args: GenerateReportArgs): string {
   `
     : '';
 
-  // Per-policy payment total — keyed off policy_id so each card can show
-  // its own "paid / remaining" row without re-summing allPayments each call.
-  const paidByPolicyId = new Map<string, number>();
-  for (const pay of allPayments) {
-    if (pay.refused) continue;
-    paidByPolicyId.set(pay.policy_id, (paidByPolicyId.get(pay.policy_id) || 0) + (pay.amount || 0));
-  }
-
+  // Cards print poorly (page breaks split them mid-chip, backgrounds drop,
+  // the grid layout collapses on A4). The printed report stays as a plain
+  // 4-column table that matches the cars/drivers/payments `.data-table`
+  // styling elsewhere in the document. The interactive modal still uses
+  // rich cards — only the HTML export switches to a table. Columns:
+  //   # | الوصف (type + company + broker + notes) | المدة | المبلغ
   const getCarNumber = (p: any) => {
     const car = Array.isArray(p.car) ? p.car[0] : p.car;
     return car?.car_number || '-';
@@ -581,37 +579,6 @@ function generateReportHtml(args: GenerateReportArgs): string {
   const getCompanyName = (p: any) => {
     const company = Array.isArray(p.company) ? p.company[0] : p.company;
     return company?.name_ar || company?.name || '-';
-  };
-  const getBrokerFor = (p: any): { id: string; name: string } | null => {
-    const broker = Array.isArray(p.broker) ? p.broker[0] : p.broker;
-    if (!broker || !p.broker_id) return null;
-    return { id: broker.id, name: broker.name };
-  };
-  const brokerDirectionLabel = (direction: string | null | undefined): string =>
-    direction === 'from_broker' ? 'من الوسيط' : direction === 'to_broker' ? 'إلى الوسيط' : 'وسيط';
-
-  // "New" chip — same 24-hour window the app uses on PolicyYearTimeline.
-  const isNewPolicy = (createdAt: string | null | undefined): boolean => {
-    if (!createdAt) return false;
-    const created = new Date(createdAt);
-    if (isNaN(created.getTime())) return false;
-    return (Date.now() - created.getTime()) / (1000 * 60 * 60) < 24;
-  };
-
-  // Main types that anchor a package. Everything else (ROAD_SERVICE,
-  // ACCIDENT_FEE_EXEMPTION, …) becomes an addon.
-  const MAIN_TYPES_CARD = ['THIRD_FULL', 'ELZAMI', 'HEALTH', 'LIFE', 'PROPERTY', 'TRAVEL', 'BUSINESS', 'OTHER'];
-  const pickMainPolicy = (members: any[]): any =>
-    members.find(p => p.policy_type_parent === 'THIRD_FULL') ||
-    members.find(p => p.policy_type_parent === 'ELZAMI') ||
-    members.find(p => MAIN_TYPES_CARD.includes(p.policy_type_parent)) ||
-    members[0];
-
-  const cardStatus = (main: any): 'active' | 'ended' | 'transferred' | 'cancelled' => {
-    if (main.cancelled) return 'cancelled';
-    if (main.transferred) return 'transferred';
-    if (new Date(main.end_date) < new Date()) return 'ended';
-    return 'active';
   };
 
   // Group policies into packages (by group_id) vs singles, preserving the
@@ -633,226 +600,110 @@ function generateReportHtml(args: GenerateReportArgs): string {
 
   const lineTotalFor = (p: any) => (p.insurance_price || 0) + (p.office_commission || 0);
   const periodFor = (p: any) => (p.start_date && p.end_date)
-    ? `${formatDate(p.end_date)} ← ${formatDate(p.start_date)}`
+    ? `${formatDate(p.start_date)} → ${formatDate(p.end_date)}`
     : '-';
 
-  // Render a package component row for the "مكونات الباقة" table inside
-  // a package card. Mirrors PackageComponentRow in PolicyYearTimeline.
-  const renderComponentRow = (m: any, index: number, isActive: boolean): string => {
-    const typeLabel = escapeHtml(getPolicyTypeLabel(m.policy_type_parent, m.policy_type_child));
-    const typeClass = `chip-type-${m.policy_type_parent}`;
-    const companyName = escapeHtml(getCompanyName(m));
-    const broker = getBrokerFor(m);
-    const brokerTag = broker
-      ? `<span class="chip chip-broker-sm" title="${brokerDirectionLabel(m.broker_direction)}: ${escapeHtml(broker.name)}">🤝 ${escapeHtml(broker.name)}</span>`
-      : '';
-    const commission = m.office_commission || 0;
+  // Build a "<label>: <name>" tag for a policy that's linked to a broker.
+  const brokerLineFor = (p: any): string => {
+    const broker = Array.isArray(p.broker) ? p.broker[0] : p.broker;
+    if (!broker || !p.broker_id) return '';
+    const direction = p.broker_direction === 'from_broker'
+      ? 'من الوسيط'
+      : p.broker_direction === 'to_broker'
+        ? 'إلى الوسيط'
+        : 'وسيط';
+    return `<div class="item-broker">${direction}: ${escapeHtml(broker.name)}</div>`;
+  };
+
+  // One row = one policy. Used for standalone policies and for each member
+  // of a package (indented under a package header row).
+  const renderPolicyRow = (
+    p: any,
+    index: string,
+    variant: 'single' | 'component'
+  ): string => {
+    const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
+    const companyName = getCompanyName(p);
+    const carNumber = getCarNumber(p);
+    const commission = p.office_commission || 0;
     const commissionLine = commission > 0
-      ? `<span class="component-commission">+ ₪${commission.toLocaleString('en-US')} عمولة</span>`
+      ? `<div class="item-commission">عمولة المكتب: ₪${commission.toLocaleString('en-US')}</div>`
       : '';
-    const rowClass = isActive ? '' : 'component-inactive';
+    const cancelledTag = p.cancelled ? `<span class="cancelled-tag">ملغاة</span>` : '';
+    const transferredTag = p.transferred && !p.cancelled
+      ? `<span class="cancelled-tag">محولة</span>`
+      : '';
+    const notesLine = p.notes
+      ? `<div class="item-meta">${escapeHtml(p.notes)}</div>`
+      : '';
+    const carLine = carNumber && carNumber !== '-'
+      ? `<div class="item-meta">السيارة: <span class="tabular">${escapeHtml(carNumber)}</span></div>`
+      : '';
+    const rowClass = [
+      variant === 'component' ? 'package-component' : '',
+      p.cancelled || p.transferred ? 'cancelled-row' : '',
+    ].filter(Boolean).join(' ');
+
     return `
       <tr class="${rowClass}">
-        <td class="component-num">#${index}</td>
-        <td class="component-info">
-          <span class="chip chip-sm ${typeClass}">${typeLabel}</span>
-          <span class="component-company">${companyName}</span>
-          ${brokerTag}
-        </td>
-        <td class="component-period">${periodFor(m)}</td>
-        <td class="component-price">
-          <div>₪${(m.insurance_price || 0).toLocaleString('en-US')}</div>
+        <td class="num">${index}</td>
+        <td>
+          <div class="item-title">${typeLabel} ${cancelledTag} ${transferredTag}</div>
+          <div class="item-meta">${companyName}</div>
+          ${carLine}
           ${commissionLine}
+          ${brokerLineFor(p)}
+          ${notesLine}
         </td>
+        <td class="period">${periodFor(p)}</td>
+        <td class="num">₪${lineTotalFor(p).toLocaleString('en-US')}</td>
       </tr>
     `;
   };
 
-  // Unified card renderer — handles both singles and packages. Output
-  // matches the PolicyYearTimeline card in the app: chip row, الشركة/
-  // السيارة/الفترة/المبلغ grid, optional مكونات الباقة table, and notes.
-  const renderPolicyCardHtml = (
-    item: PackageItem | SingleItem,
-  ): string => {
-    const isPkg = item.kind === 'package';
-    const allPolicies = isPkg ? item.policies : [item.policy];
-    const mainPolicy = isPkg ? pickMainPolicy(item.policies) : item.policy;
-    const addons = isPkg ? item.policies.filter(p => p.id !== mainPolicy.id) : [];
+  // Package rendering: a header row that spans the description/period
+  // columns (باقة chip + combined member types + car), then one indented
+  // component row per policy underneath.
+  const renderPackageBlock = (pkg: PackageItem, index: number): string => {
+    const members = pkg.policies;
+    const first = members[0];
+    const carNumber = getCarNumber(first);
+    const total = members.reduce((s, p) => s + lineTotalFor(p), 0);
+    const allCancelled = members.every(p => p.cancelled);
 
-    const status = cardStatus(mainPolicy);
-    const isActive = status === 'active';
+    const combinedTypeLabel = members
+      .map(m => getPolicyTypeLabel(m.policy_type_parent, m.policy_type_child))
+      .join(' + ');
 
-    const totalPrice = allPolicies.reduce((s, p) => s + lineTotalFor(p), 0);
-    const totalPaid = allPolicies.reduce((s, p) => s + (paidByPolicyId.get(p.id) || 0), 0);
-    const totalRemaining = Math.max(0, totalPrice - totalPaid);
-    const hasUnpaid = totalRemaining > 0;
-    const totalCommission = allPolicies.reduce((s, p) => s + (p.office_commission || 0), 0);
-
-    const brokerPolicy = allPolicies.find(p => p.broker_id && (Array.isArray(p.broker) ? p.broker[0] : p.broker));
-    const brokerInfo = brokerPolicy ? getBrokerFor(brokerPolicy) : null;
-
-    const wasTransferredFrom = mainPolicy.transferred_car_number;
-    const wasTransferredTo = mainPolicy.transferred_to_car_number;
-    const createdRecently = isNewPolicy(mainPolicy.created_at);
-
-    // Card-level classes — mirrors the modal's border/background rules.
-    const cardClasses = [
-      'policy-card',
-      `card-${status}`,
-      hasUnpaid && isActive ? 'card-unpaid' : '',
-    ].filter(Boolean).join(' ');
-
-    // ── Top chip row ──
-    const statusChip = (() => {
-      if (isActive) return `<span class="chip chip-status chip-active">✔ سارية</span>`;
-      if (status === 'ended') return `<span class="chip chip-status chip-ended">منتهية</span>`;
-      if (status === 'transferred') {
-        const toPart = wasTransferredTo ? ` ← <span class="tabular">${escapeHtml(wasTransferredTo)}</span>` : '';
-        return `<span class="chip chip-status chip-transferred">⇄ محولة${toPart}</span>`;
-      }
-      return `<span class="chip chip-status chip-cancelled">✕ ملغاة</span>`;
-    })();
-
-    const transferFromChip = wasTransferredFrom && status !== 'transferred'
-      ? `<span class="chip chip-transfer-from">⇄ محول من <span class="tabular">${escapeHtml(wasTransferredFrom)}</span></span>`
-      : '';
-
-    const typeChipsBlock = isPkg
-      ? (() => {
-          const mainLabel = escapeHtml(getPolicyTypeLabel(mainPolicy.policy_type_parent, mainPolicy.policy_type_child));
-          const mainTypeClass = `chip-type-${mainPolicy.policy_type_parent}`;
-          const addonChips = addons.map(a => {
-            const label = escapeHtml(getPolicyTypeLabel(a.policy_type_parent, a.policy_type_child));
-            const typeClass = `chip-type-${a.policy_type_parent}`;
-            return `<span class="chip-plus">+</span><span class="chip ${typeClass}">${label}</span>`;
-          }).join('');
-          return `
-            <span class="chip ${mainTypeClass}">${mainLabel}</span>
-            ${addonChips}
-            <span class="chip chip-package">⚡ باقة</span>
-          `;
-        })()
-      : `<span class="chip chip-type-${mainPolicy.policy_type_parent}">${escapeHtml(getPolicyTypeLabel(mainPolicy.policy_type_parent, mainPolicy.policy_type_child))}</span>`;
-
-    const newChip = createdRecently ? `<span class="chip chip-new">⚡ جديدة</span>` : '';
-    const brokerChip = brokerInfo
-      ? `<span class="chip chip-broker">🤝 ${escapeHtml(brokerDirectionLabel(brokerPolicy.broker_direction))}: ${escapeHtml(brokerInfo.name)}</span>`
-      : '';
-
-    const chipsHtml = `
-      <div class="policy-card__chips">
-        ${statusChip}
-        ${transferFromChip}
-        ${typeChipsBlock}
-        ${newChip}
-        ${brokerChip}
-      </div>
-    `;
-
-    // ── Info grid (الشركة / السيارة / الفترة / المبلغ) ──
-    const gridHtml = `
-      <div class="policy-card__grid">
-        <div class="grid-item">
-          <div class="grid-label">الشركة</div>
-          <div class="grid-value">${escapeHtml(getCompanyName(mainPolicy))}</div>
-        </div>
-        <div class="grid-item">
-          <div class="grid-label">السيارة</div>
-          <div class="grid-value tabular">${escapeHtml(getCarNumber(mainPolicy))}</div>
-        </div>
-        <div class="grid-item">
-          <div class="grid-label">الفترة</div>
-          <div class="grid-value period">${periodFor(mainPolicy)}</div>
-        </div>
-        <div class="grid-item grid-item--amount">
-          <div class="grid-label">المبلغ</div>
-          <div class="grid-value amount">₪${totalPrice.toLocaleString('en-US')}</div>
-          ${totalCommission > 0 ? `<div class="grid-commission">منها ₪${totalCommission.toLocaleString('en-US')} عمولة مكتب</div>` : ''}
-        </div>
-      </div>
-    `;
-
-    // ── Package components table (packages only) ──
-    const componentsHtml = isPkg
-      ? `
-      <div class="policy-card__components">
-        <div class="components-title">📄 مكونات الباقة</div>
-        <table class="package-table">
-          <thead>
-            <tr>
-              <th class="pkg-col-num">#</th>
-              <th>الوثيقة</th>
-              <th class="pkg-col-period">الفترة</th>
-              <th class="pkg-col-price">السعر</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${renderComponentRow(mainPolicy, 1, isActive)}
-            ${addons.map((a, i) => renderComponentRow(a, i + 2, isActive)).join('')}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="4">
-                <div class="totals-row">
-                  <div class="totals-col">
-                    <span class="totals-label">المدفوع</span>
-                    <span class="totals-value paid">₪${totalPaid.toLocaleString('en-US')}</span>
-                  </div>
-                  <div class="totals-col">
-                    <span class="totals-label">المتبقي للدفع</span>
-                    <span class="totals-value ${totalRemaining > 0 ? 'remaining' : 'paid'}">₪${totalRemaining.toLocaleString('en-US')}</span>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    `
-      : '';
-
-    // ── Standalone totals (singles only, same framed summary) ──
-    const standaloneTotalsHtml = !isPkg && isActive
-      ? `
-      <div class="policy-card__standalone-totals">
-        <div class="totals-row">
-          <div class="totals-col">
-            <span class="totals-label">المدفوع</span>
-            <span class="totals-value paid">₪${totalPaid.toLocaleString('en-US')}</span>
+    const headerRow = `
+      <tr class="package-header ${allCancelled ? 'cancelled-row' : ''}">
+        <td class="num">${index}</td>
+        <td colspan="2">
+          <div class="package-title">
+            <span class="package-badge">باقة</span>
+            <span class="package-types">${escapeHtml(combinedTypeLabel)}</span>
+            ${carNumber && carNumber !== '-' ? `<span class="package-car">السيارة: <span class="tabular">${escapeHtml(carNumber)}</span></span>` : ''}
           </div>
-          <div class="totals-col">
-            <span class="totals-label">المتبقي للدفع</span>
-            <span class="totals-value ${totalRemaining > 0 ? 'remaining' : 'paid'}">₪${totalRemaining.toLocaleString('en-US')}</span>
-          </div>
-        </div>
-      </div>
-    `
-      : '';
-
-    // ── Notes ──
-    const notesHtml = mainPolicy.notes
-      ? `
-      <div class="policy-card__notes">
-        <div class="notes-label">💬 ملاحظات</div>
-        <div class="notes-text">${escapeHtml(mainPolicy.notes)}</div>
-      </div>
-    `
-      : '';
-
-    return `
-      <div class="${cardClasses}">
-        ${chipsHtml}
-        ${gridHtml}
-        ${componentsHtml}
-        ${standaloneTotalsHtml}
-        ${notesHtml}
-      </div>
+        </td>
+        <td class="num">₪${total.toLocaleString('en-US')}</td>
+      </tr>
     `;
+
+    const componentRows = members
+      .map((m, j) => renderPolicyRow(m, `${index}.${j + 1}`, 'component'))
+      .join('');
+
+    return headerRow + componentRows;
   };
 
-  const policyCardsHtml = policyItems.length > 0
-    ? policyItems.map(item => renderPolicyCardHtml(item)).join('')
-    : `<div class="policy-card-empty">لا توجد وثائق مسجلة</div>`;
+  const policyRowsHtml = policyItems.length > 0
+    ? policyItems.map((item, i) => {
+        if (item.kind === 'single') {
+          return renderPolicyRow(item.policy, String(i + 1), 'single');
+        }
+        return renderPackageBlock(item, i + 1);
+      }).join('')
+    : `<tr><td colspan="4" class="empty-cell">لا توجد وثائق مسجلة</td></tr>`;
 
   // Payment history table — one row per payment, sorted oldest → newest,
   // showing receipt number, method, date, and amount.
@@ -1138,319 +989,104 @@ function generateReportHtml(args: GenerateReportArgs): string {
     .customer-grid .value { font-size: 14px; font-weight: 700; color: #1a1a1a; }
     .customer-grid .value.tabular { font-variant-numeric: tabular-nums; direction: ltr; text-align: right; }
 
-    /* ── Policy cards ──
-       Mirrors the in-app PolicyYearTimeline card: chip row, 4-column
-       info grid, optional مكونات الباقة table, notes. Colors are
-       hardcoded hex approximations of the Tailwind palette used in the
-       modal so the printed report reads the same as what the agent
-       sees on screen. */
-    .policy-cards-section { margin-bottom: 24px; }
-    .policy-cards { display: flex; flex-direction: column; gap: 14px; }
-
-    .policy-card {
-      border-radius: 12px;
-      border: 1px solid #e5e7eb;
-      background: #ffffff;
-      padding: 16px;
-      page-break-inside: avoid;
+    /* ── Items table (policies) — rides on top of `.data-table` so the
+       cars / drivers / policies sections all share the same frame. This
+       block only adds what's policy-specific: vertical-align, the
+       multi-line description cell, the broker tag, and the package
+       header / component indentation. */
+    .items tbody td { vertical-align: top; }
+    .items tbody td.num {
+      text-align: left;
+      direction: ltr;
+      white-space: nowrap;
+      font-weight: 700;
     }
-    .policy-card.card-active {
-      border: 2px solid rgba(37, 99, 235, 0.4);
-      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+    .items tbody td.period {
+      direction: ltr;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-size: 12px;
+      white-space: nowrap;
     }
-    .policy-card.card-ended {
-      background: #fafafa;
-      border-color: #e5e7eb;
+    .items tbody .item-title { font-weight: 700; font-size: 14px; color: #1a1a1a; }
+    .items tbody .item-meta {
+      color: #1a1a1a;
+      font-size: 11.5px;
+      margin-top: 3px;
+      font-weight: 500;
     }
-    .policy-card.card-transferred,
-    .policy-card.card-cancelled {
-      background: #fafafa;
-      border-style: dashed;
-      border-color: #a1a1aa;
-      opacity: 0.78;
+    .items tbody .item-commission {
+      color: #1a1a1a;
+      font-size: 11.5px;
+      margin-top: 3px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
     }
-    .policy-card.card-unpaid {
-      border-right: 4px solid #dc2626;
+    .items tbody .item-broker {
+      display: inline-block;
+      color: #78350f;
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      font-size: 11px;
+      padding: 2px 8px;
+      margin-top: 4px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
     }
-    .policy-card-empty {
+    .items tbody td.empty-cell {
       text-align: center;
-      padding: 24px;
-      color: #71717a;
-      font-size: 13px;
-      background: #fafafa;
-      border: 1px dashed #e5e7eb;
-      border-radius: 12px;
+      font-weight: 500;
+      opacity: 0.7;
     }
 
-    /* Chip row */
-    .policy-card__chips {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 14px;
+    /* Package rows — header row that spans two columns, indented
+       component rows underneath. */
+    .items tbody tr.package-header td {
+      background: #f4f4f5;
+      padding: 10px 12px;
+      border-top: 2px solid #1a1a1a;
     }
-    .chip {
+    .items tbody tr.package-header + tr td { border-top: 1px solid #1a1a1a; }
+    .items tbody tr.package-header .package-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 13px;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+    .items tbody tr.package-header .package-badge {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      border-radius: 9999px;
+      background: #1a1a1a;
+      color: #ffffff;
       padding: 3px 10px;
       font-size: 11px;
-      font-weight: 600;
-      border: 1px solid transparent;
-      line-height: 1.4;
-    }
-    .chip-plus {
-      color: #71717a;
-      font-size: 11px;
-      font-weight: 500;
-      padding: 0 2px;
-    }
-    .chip.chip-active       { background: rgba(16,185,129,0.14); color: #047857; border-color: rgba(16,185,129,0.35); font-weight: 700; }
-    .chip.chip-ended        { background: #f4f4f5; color: #52525b; border-color: #d4d4d8; }
-    .chip.chip-transferred  { background: rgba(245,158,11,0.14); color: #b45309; border-color: rgba(245,158,11,0.35); }
-    .chip.chip-cancelled    { background: rgba(220,38,38,0.14); color: #b91c1c; border-color: rgba(220,38,38,0.35); }
-    .chip.chip-package      { background: rgba(37,99,235,0.08); color: #1d4ed8; border-color: rgba(37,99,235,0.25); }
-    .chip.chip-new          { background: rgba(16,185,129,0.12); color: #047857; border-color: rgba(16,185,129,0.35); }
-    .chip.chip-broker       { background: rgba(245,158,11,0.12); color: #b45309; border-color: rgba(245,158,11,0.35); }
-    .chip.chip-transfer-from{ background: rgba(59,130,246,0.1); color: #1d4ed8; border-color: rgba(59,130,246,0.35); }
-
-    /* Type chips — per policy_type_parent, using the same palette as
-       policyTypeColors in the app. */
-    .chip.chip-type-ELZAMI                 { background: rgba(59,130,246,0.1); color: #1d4ed8; border-color: rgba(59,130,246,0.35); font-weight: 700; }
-    .chip.chip-type-THIRD_FULL             { background: rgba(168,85,247,0.1); color: #7e22ce; border-color: rgba(168,85,247,0.35); font-weight: 700; }
-    .chip.chip-type-ROAD_SERVICE           { background: rgba(249,115,22,0.1); color: #c2410c; border-color: rgba(249,115,22,0.35); font-weight: 700; }
-    .chip.chip-type-ACCIDENT_FEE_EXEMPTION { background: rgba(34,197,94,0.1);  color: #15803d; border-color: rgba(34,197,94,0.35);  font-weight: 700; }
-    .chip.chip-type-HEALTH                 { background: rgba(236,72,153,0.1); color: #be185d; border-color: rgba(236,72,153,0.35); font-weight: 700; }
-    .chip.chip-type-LIFE                   { background: rgba(99,102,241,0.1); color: #4338ca; border-color: rgba(99,102,241,0.35); font-weight: 700; }
-    .chip.chip-type-PROPERTY               { background: rgba(245,158,11,0.1); color: #b45309; border-color: rgba(245,158,11,0.35); font-weight: 700; }
-    .chip.chip-type-TRAVEL                 { background: rgba(6,182,212,0.1);  color: #0e7490; border-color: rgba(6,182,212,0.35);  font-weight: 700; }
-    .chip.chip-type-BUSINESS               { background: rgba(100,116,139,0.1);color: #334155; border-color: rgba(100,116,139,0.35);font-weight: 700; }
-    .chip.chip-type-OTHER                  { background: rgba(107,114,128,0.1);color: #374151; border-color: rgba(107,114,128,0.35);font-weight: 700; }
-
-    /* Compact chip used inside the package table rows */
-    .chip.chip-sm {
-      padding: 1px 8px;
-      font-size: 10px;
-      line-height: 1.4;
-    }
-    .chip.chip-broker-sm {
-      padding: 1px 8px;
-      font-size: 10px;
-      background: rgba(245,158,11,0.12);
-      color: #b45309;
-      border: 1px solid rgba(245,158,11,0.35);
-      border-radius: 4px;
-    }
-
-    /* Info grid (الشركة / السيارة / الفترة / المبلغ) */
-    .policy-card__grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 14px;
-      font-size: 13px;
-    }
-    .grid-item { display: flex; flex-direction: column; min-width: 0; }
-    .grid-item--amount { align-items: flex-end; }
-    .grid-label {
-      font-size: 9px;
-      letter-spacing: 0.06em;
-      color: #71717a;
-      text-transform: uppercase;
-      font-weight: 600;
-      margin-bottom: 3px;
-    }
-    .grid-value {
-      font-size: 13px;
-      font-weight: 600;
-      color: #18181b;
-      word-break: break-word;
-    }
-    .grid-value.tabular {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      direction: ltr;
-      font-variant-numeric: tabular-nums;
-    }
-    .grid-value.period {
-      font-size: 11px;
-      direction: ltr;
-      font-variant-numeric: tabular-nums;
-    }
-    .grid-value.amount {
-      font-size: 18px;
       font-weight: 700;
-      color: #1d4ed8;
-      font-variant-numeric: tabular-nums;
-      direction: ltr;
+      letter-spacing: 0.5px;
     }
-    .grid-commission {
-      font-size: 9px;
-      color: #b45309;
-      font-weight: 600;
-      margin-top: 2px;
-      font-variant-numeric: tabular-nums;
-      direction: ltr;
-    }
-
-    /* مكونات الباقة — inner table */
-    .policy-card__components {
-      margin-top: 14px;
-      padding-top: 12px;
-      border-top: 1px solid rgba(0,0,0,0.06);
-    }
-    .components-title {
-      font-size: 11px;
-      font-weight: 600;
-      color: #71717a;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .package-table {
-      width: 100%;
-      border-collapse: collapse;
-      border: 1px solid rgba(0,0,0,0.08);
-      border-radius: 8px;
-      overflow: hidden;
-      background: #fafafa;
-    }
-    .package-table thead th {
-      background: rgba(0,0,0,0.04);
-      color: #71717a;
-      font-size: 9px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      padding: 6px 12px;
-      text-align: right;
-      border-bottom: 1px solid rgba(0,0,0,0.08);
-    }
-    .package-table th.pkg-col-num { width: 36px; text-align: center; }
-    .package-table th.pkg-col-period { width: 130px; direction: ltr; text-align: right; }
-    .package-table th.pkg-col-price  { width: 90px; text-align: left; }
-
-    .package-table tbody td {
-      padding: 10px 12px;
-      border-bottom: 1px solid rgba(0,0,0,0.06);
-      font-size: 12px;
-      color: #52525b;
-      vertical-align: middle;
-    }
-    .package-table tbody tr:last-child td { border-bottom: none; }
-    .package-table tbody tr.component-inactive td { opacity: 0.7; }
-
-    .component-num {
-      text-align: center;
-      font-size: 10px;
-      font-weight: 700;
-      color: #71717a;
-      direction: ltr;
-      font-variant-numeric: tabular-nums;
-    }
-    .component-info {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .component-info .chip { margin: 0; }
-    .component-company {
-      color: #71717a;
-      font-size: 11.5px;
-      max-width: 220px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .component-period {
-      font-size: 11px;
-      direction: ltr;
-      font-variant-numeric: tabular-nums;
-      color: #71717a;
-      white-space: nowrap;
-    }
-    .component-price {
-      text-align: left;
-      font-weight: 600;
-      color: #18181b;
-      font-variant-numeric: tabular-nums;
-      direction: ltr;
-    }
-    .component-commission {
-      display: block;
-      font-size: 9px;
-      color: #b45309;
-      font-weight: 600;
-      margin-top: 2px;
-    }
-
-    .package-table tfoot td {
-      background: rgba(0,0,0,0.04);
-      border-top: 1px solid rgba(0,0,0,0.08);
-      padding: 10px 12px;
-    }
-
-    /* Totals row (paid / remaining) — shared between package tfoot and
-       standalone policy cards */
-    .totals-row {
-      display: flex;
-      justify-content: flex-end;
-      gap: 28px;
-    }
-    .totals-col {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      text-align: left;
-      direction: ltr;
-    }
-    .totals-label {
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #71717a;
-      font-weight: 600;
-    }
-    .totals-value {
+    .items tbody tr.package-header .package-types {
       font-size: 13px;
       font-weight: 700;
-      font-variant-numeric: tabular-nums;
+      color: #1a1a1a;
     }
-    .totals-value.paid       { color: #047857; }
-    .totals-value.remaining  { color: #b91c1c; }
-
-    .policy-card__standalone-totals {
-      margin-top: 14px;
-      padding-top: 12px;
-      border-top: 1px solid rgba(0,0,0,0.06);
-      padding: 10px 12px;
-      background: #fafafa;
-      border: 1px solid rgba(0,0,0,0.06);
-      border-radius: 8px;
-    }
-
-    /* Notes */
-    .policy-card__notes {
-      margin-top: 14px;
-      padding-top: 12px;
-      border-top: 1px solid rgba(0,0,0,0.06);
-    }
-    .policy-card__notes .notes-label {
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #71717a;
+    .items tbody tr.package-header .package-car {
+      font-size: 11px;
       font-weight: 600;
-      margin-bottom: 4px;
+      color: #1a1a1a;
+      opacity: 0.8;
     }
-    .policy-card__notes .notes-text {
-      font-size: 13px;
-      color: #18181b;
-      white-space: pre-wrap;
-      word-break: break-word;
-      line-height: 1.6;
+    .items tbody tr.package-component td {
+      background: #fbfbfc;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+    .items tbody tr.package-component td.num {
+      font-size: 11px;
+      color: #1a1a1a;
+      opacity: 0.7;
     }
 
     /* ── Generic data table (cars, accidents, refunds) — same look as .items ── */
@@ -1742,10 +1378,11 @@ function generateReportHtml(args: GenerateReportArgs): string {
       body { padding: 12mm 10mm; }
       .no-print { display: none !important; }
       .invoice { max-width: 100%; padding: 16px 20px; border: 1px solid #1a1a1a; }
-      .policy-card,
-      .policy-card .chip,
-      .package-table thead th,
-      .package-table tfoot td,
+      .items thead th,
+      .items tbody tr.package-header td,
+      .items tbody tr.package-header .package-badge,
+      .items tbody tr.package-component td,
+      .items tbody .item-broker,
       .meta-rows .label,
       .section-title,
       .totals td.label,
@@ -1843,14 +1480,25 @@ function generateReportHtml(args: GenerateReportArgs): string {
     ${carsHtml}
     ${driversHtml}
 
-    <!-- Policies section: one card per single-policy or package, matching
-         the layout used in the in-app modal so the customer sees the same
-         design they'd see on screen when an agent walks them through it. -->
-    <div class="policy-cards-section">
+    <!-- Policies items table — same 4-column `.data-table` look as the
+         cars / drivers / payments sections above so the whole report
+         reads consistently on paper. Packages render as an indented
+         block (header row + one component row per member). -->
+    <div class="customer">
       <div class="section-title">الوثائق</div>
-      <div class="policy-cards">
-        ${policyCardsHtml}
-      </div>
+      <table class="data-table items">
+        <thead>
+          <tr>
+            <th style="width: 40px;">#</th>
+            <th>الوصف</th>
+            <th style="width: 170px;">المدة</th>
+            <th style="width: 120px;">المبلغ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${policyRowsHtml}
+        </tbody>
+      </table>
     </div>
 
     <!-- Payments log -->
