@@ -75,17 +75,23 @@ interface AccidentReport {
   } | null;
 }
 
+// New status vocabulary: only investigating/closed are selectable.
+// draft/submitted stay as legacy labels so old rows still render.
 const statusLabels: Record<string, string> = {
+  investigating: "قيد التحقيق",
+  closed: "مغلق",
   draft: "مسودة",
   submitted: "مُقدَّم",
-  closed: "مُغلق",
 };
 
 const statusColors: Record<string, string> = {
+  investigating: "bg-amber-500/10 text-amber-700 border-amber-500/20",
+  closed: "bg-green-500/10 text-green-700 border-green-500/20",
   draft: "bg-yellow-500/10 text-yellow-700 border-yellow-500/20",
   submitted: "bg-blue-500/10 text-blue-700 border-blue-500/20",
-  closed: "bg-green-500/10 text-green-700 border-green-500/20",
 };
+
+const selectableStatuses: string[] = ["investigating", "closed"];
 
 const PAGE_SIZE = 25;
 
@@ -255,9 +261,11 @@ export default function AccidentReports() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">جميع الحالات</SelectItem>
-              <SelectItem value="draft">مسودة</SelectItem>
-              <SelectItem value="submitted">مُقدَّم</SelectItem>
-              <SelectItem value="closed">مُغلق</SelectItem>
+              {selectableStatuses.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {statusLabels[value]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
