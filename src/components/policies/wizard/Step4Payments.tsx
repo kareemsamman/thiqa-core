@@ -496,23 +496,21 @@ export function Step4Payments({
                   {payment.payment_type === 'cheque' && !isLocked && (
                     <div className="mt-2 pl-8">
                       <BankBranchPicker
+                        hideLabels
                         bankCode={payment.bank_code}
                         branchCode={payment.branch_code}
                         onBankChange={(code) => updatePayment(payment.id, 'bank_code', code)}
                         onBranchChange={(code) => updatePayment(payment.id, 'branch_code', code)}
                         disabled={isDisabled}
                         chequeNumberSlot={
-                          <>
-                            <Label className="text-[10px] mb-1 block text-muted-foreground">رقم الشيك</Label>
-                            <Input
-                              value={payment.cheque_number || ''}
-                              onChange={(e) => updatePayment(payment.id, 'cheque_number', sanitizeChequeNumber(e.target.value))}
-                              placeholder="رقم الشيك"
-                              maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                              className="h-10 font-mono ltr-input"
-                              disabled={isDisabled}
-                            />
-                          </>
+                          <Input
+                            value={payment.cheque_number || ''}
+                            onChange={(e) => updatePayment(payment.id, 'cheque_number', sanitizeChequeNumber(e.target.value))}
+                            placeholder="رقم الشيك"
+                            maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                            className="h-10 font-mono ltr-input"
+                            disabled={isDisabled}
+                          />
                         }
                       />
                     </div>

@@ -38,12 +38,13 @@ export function BankBranchPicker({
   return (
     <div
       className={cn(
-        "grid gap-3",
-        // 3 columns when the cheque slot is provided (bank → branch →
-        // cheque#), 2 otherwise. Collapses to 1 col on narrow screens.
+        "grid gap-2",
+        // Always horizontal — bank/branch/cheque# stay on a single row
+        // at every viewport. The bank column takes the lion's share,
+        // branch is a narrow 3-digit numeric, cheque# gets a fair slice.
         chequeNumberSlot
-          ? "grid-cols-1 sm:grid-cols-[1.6fr_0.7fr_1fr]"
-          : "grid-cols-1 sm:grid-cols-[1.8fr_0.7fr]",
+          ? "grid-cols-[minmax(0,1.6fr)_minmax(90px,0.7fr)_minmax(0,1fr)]"
+          : "grid-cols-[minmax(0,1.8fr)_minmax(90px,0.7fr)]",
         className,
       )}
     >
