@@ -464,11 +464,13 @@ export function PaymentGroupDetailsDialog({
                 })}
               </tbody>
               {/* Footer: running totals. Commission is computed once per
-                  unique policy in the group (each policy's office_commission
-                  is added once even if multiple payments reference it) and
-                  only rendered when at least one policy carries a non-zero
-                  commission. Total is the sum of non-refused payment amounts
-                  so the user sees what actually landed in the till. */}
+                  unique policy in the group and only shown when at least
+                  one policy carries a non-zero commission. Total is the
+                  sum of non-refused payment amounts. Each row lands in
+                  the existing table columns: label sits in the التواريخ
+                  cell (left-aligned, hugging the amount column edge) and
+                  the amount sits in its native المبلغ cell so the footer
+                  reads as a natural extension of the body rows. */}
               {(() => {
                 const totalPaid = group.payments
                   .filter((p) => !p.refused)
@@ -485,30 +487,31 @@ export function PaymentGroupDetailsDialog({
                   (s, c) => s + c,
                   0,
                 );
-                const colSpan = onEdit || onDelete ? 7 : 6;
+                const trailingEmpty = onEdit || onDelete ? 3 : 2;
                 return (
-                  <tfoot className="border-t-2 border-border/60 bg-muted/30">
+                  <tfoot className="bg-muted/40">
                     {totalCommission > 0 && (
-                      <tr>
-                        <td
-                          colSpan={colSpan - 3}
-                          className="px-3 py-2.5 text-right text-xs font-semibold text-muted-foreground"
-                        >
+                      <tr className="border-t border-border/60">
+                        {/* # + طريقة + التفاصيل: empty */}
+                        <td colSpan={3} />
+                        {/* التواريخ: label, pinned to the cell's visual-
+                            left edge (which is right next to المبلغ) */}
+                        <td className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">
                           عمولة المكتب
                         </td>
+                        {/* المبلغ */}
                         <td className="px-3 py-2.5 text-left">
                           <span className="text-sm font-bold ltr-nums text-amber-700 dark:text-amber-400">
                             ₪{totalCommission.toLocaleString("en-US")}
                           </span>
                         </td>
-                        <td colSpan={onEdit || onDelete ? 3 : 2} />
+                        {/* ملاحظات + المرفقات + إجراءات: empty */}
+                        <td colSpan={trailingEmpty} />
                       </tr>
                     )}
-                    <tr>
-                      <td
-                        colSpan={colSpan - 3}
-                        className="px-3 py-3 text-right text-sm font-bold"
-                      >
+                    <tr className="border-t-2 border-border">
+                      <td colSpan={3} />
+                      <td className="px-3 py-3 text-left text-sm font-bold text-foreground">
                         المجموع
                       </td>
                       <td className="px-3 py-3 text-left">
@@ -516,7 +519,7 @@ export function PaymentGroupDetailsDialog({
                           ₪{totalPaid.toLocaleString("en-US")}
                         </span>
                       </td>
-                      <td colSpan={onEdit || onDelete ? 3 : 2} />
+                      <td colSpan={trailingEmpty} />
                     </tr>
                   </tfoot>
                 );
