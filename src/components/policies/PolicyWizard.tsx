@@ -1334,6 +1334,8 @@ export function PolicyWizard({
           payment_date: p.payment_date,
           cheque_number: p.cheque_number || null,
           cheque_status: p.payment_type === 'cheque' ? 'pending' : null,
+          bank_code: p.payment_type === 'cheque' ? (p.bank_code || null) : null,
+          branch_code: p.payment_type === 'cheque' ? (p.branch_code || null) : null,
           refused: p.refused || false,
           branch_id: effectiveBranchId || null,
           created_by_admin_id: user?.id || null,

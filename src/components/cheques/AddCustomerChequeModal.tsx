@@ -507,7 +507,29 @@ export function AddCustomerChequeModal({
                     <Card key={cheque.id} className="p-4">
                       <div className="flex items-start gap-4">
                         <div className="flex-1 space-y-3">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {/* Bank → branch → رقم الشيك on one row */}
+                          <BankBranchPicker
+                            bankCode={cheque.bank_code}
+                            branchCode={cheque.branch_code}
+                            onBankChange={(code) => updateChequeLine(cheque.id, { bank_code: code })}
+                            onBranchChange={(code) => updateChequeLine(cheque.id, { branch_code: code })}
+                            chequeNumberSlot={
+                              <>
+                                <Label className="text-xs font-semibold">رقم الشيك *</Label>
+                                <Input
+                                  value={cheque.cheque_number}
+                                  onChange={(e) => updateChequeLine(cheque.id, {
+                                    cheque_number: sanitizeChequeNumber(e.target.value)
+                                  })}
+                                  placeholder="رقم الشيك"
+                                  maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                                  className="h-9 font-mono"
+                                />
+                              </>
+                            }
+                          />
+                          {/* Amount + due date on a second row */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
                               <Label className="text-xs">المبلغ *</Label>
                               <Input
@@ -519,18 +541,6 @@ export function AddCustomerChequeModal({
                               />
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-xs">رقم الشيك *</Label>
-                              <Input
-                                value={cheque.cheque_number}
-                                onChange={(e) => updateChequeLine(cheque.id, {
-                                  cheque_number: sanitizeChequeNumber(e.target.value)
-                                })}
-                                placeholder="رقم الشيك"
-                                maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                                className="h-9 font-mono"
-                              />
-                            </div>
-                            <div className="space-y-1">
                               <Label className="text-xs">تاريخ الاستحقاق *</Label>
                               <ArabicDatePicker
                                 value={cheque.payment_date}
@@ -539,12 +549,6 @@ export function AddCustomerChequeModal({
                               />
                             </div>
                           </div>
-                          <BankBranchPicker
-                            bankCode={cheque.bank_code}
-                            branchCode={cheque.branch_code}
-                            onBankChange={(code) => updateChequeLine(cheque.id, { bank_code: code })}
-                            onBranchChange={(code) => updateChequeLine(cheque.id, { branch_code: code })}
-                          />
                         </div>
                         {cheque.cheque_image_url && (
                           <div className="w-16 h-12 rounded border overflow-hidden shrink-0">

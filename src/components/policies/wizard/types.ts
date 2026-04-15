@@ -96,6 +96,10 @@ export interface PaymentLine {
   amount: number;
   payment_date: string;
   cheque_number?: string;
+  /** MICR bank code (e.g. "12" = Hapoalim). Only set when payment_type === 'cheque'. */
+  bank_code?: string | null;
+  /** Branch code assigned by the bank (typically 3 digits). */
+  branch_code?: string | null;
   notes?: string;
   refused: boolean;
   tranzila_paid?: boolean;

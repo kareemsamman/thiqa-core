@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -293,6 +293,7 @@ export function PaymentGroupDetailsDialog({
                   <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">التفاصيل</th>
                   <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">التواريخ</th>
                   <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide min-w-[110px]">المبلغ</th>
+                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide min-w-[140px]">ملاحظات</th>
                   <th className="text-center px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-20">المرفقات</th>
                   {(onEdit || onDelete) && (
                     <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-20">إجراءات</th>
@@ -304,17 +305,16 @@ export function PaymentGroupDetailsDialog({
                   const Icon = paymentTypeIcon[p.payment_type] || Banknote;
                   const typeBg = paymentTypeBg[p.payment_type] || "bg-muted text-muted-foreground border-border";
                   const attachments = imagesByPayment[p.id] || [];
-                  const colSpan = onEdit || onDelete ? 7 : 6;
                   return (
-                    <Fragment key={p.id}>
-                      <tr
-                        className={cn(
-                          "border-b border-border/40 last:border-b-0 transition-colors",
-                          p.refused
-                            ? "bg-destructive/5 hover:bg-destructive/10"
-                            : "hover:bg-muted/30",
-                        )}
-                      >
+                    <tr
+                      key={p.id}
+                      className={cn(
+                        "border-b border-border/40 last:border-b-0 transition-colors",
+                        p.refused
+                          ? "bg-destructive/5 hover:bg-destructive/10"
+                          : "hover:bg-muted/30",
+                      )}
+                    >
                         {/* # */}
                         <td className="px-2 py-3 text-center text-[11px] font-bold text-muted-foreground ltr-nums align-middle">
                           {idx + 1}
@@ -399,6 +399,19 @@ export function PaymentGroupDetailsDialog({
                           </span>
                         </td>
 
+                        {/* Notes — own column so the table stays fixed-
+                            height; long notes wrap, empty notes render
+                            an em dash. */}
+                        <td className="px-3 py-3 align-middle">
+                          {p.notes ? (
+                            <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap break-words max-w-[220px]">
+                              {p.notes}
+                            </p>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+
                         {/* Attachments — clickable count chip that opens the first file */}
                         <td className="px-3 py-3 align-middle text-center">
                           {attachments.length > 0 ? (
@@ -446,34 +459,6 @@ export function PaymentGroupDetailsDialog({
                           </td>
                         )}
                       </tr>
-
-                      {/* Notes sub-row — only rendered when the payment has
-                          a note. Same background as the parent row, indented
-                          under the details column, with a "ملاحظة" label so
-                          the customer/agent can tell it's attached to this
-                          payment and not a section header. */}
-                      {p.notes && (
-                        <tr
-                          className={cn(
-                            "border-b border-border/40",
-                            p.refused ? "bg-destructive/5" : "bg-muted/15",
-                          )}
-                        >
-                          <td className="px-2 py-0" />
-                          <td
-                            colSpan={colSpan - 1}
-                            className="px-3 pb-2.5 pt-0 text-xs text-foreground"
-                          >
-                            <div className="flex items-start gap-1.5 text-muted-foreground">
-                              <span className="text-[9px] uppercase tracking-wide shrink-0 mt-0.5">ملاحظة</span>
-                              <span className="text-xs text-foreground leading-relaxed whitespace-pre-wrap break-words">
-                                {p.notes}
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
                   );
                 })}
               </tbody>

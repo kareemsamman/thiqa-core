@@ -1084,11 +1084,14 @@ export function DebtPaymentModal({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* For non-cheque types the date sits on its own row.
+                        For cheque rows the BankBranchPicker absorbs the
+                        cheque number into its third slot so bank → branch →
+                        رقم الشيك all line up on one row, with the due date
+                        on the next row. */}
+                    {payment.paymentType !== 'cheque' && (
                       <div>
-                        <Label className="text-xs">
-                          {payment.paymentType === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
-                        </Label>
+                        <Label className="text-xs">تاريخ الدفع</Label>
                         <ArabicDatePicker
                           value={payment.paymentDate}
                           onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
@@ -1096,30 +1099,40 @@ export function DebtPaymentModal({
                           compact
                         />
                       </div>
-                      {payment.paymentType === 'cheque' && (
+                    )}
+
+                    {payment.paymentType === 'cheque' && (
+                      <>
+                        <BankBranchPicker
+                          bankCode={payment.bankCode}
+                          branchCode={payment.branchCode}
+                          onBankChange={(code) => updatePaymentLine(payment.id, 'bankCode', code)}
+                          onBranchChange={(code) => updatePaymentLine(payment.id, 'branchCode', code)}
+                          disabled={payment.tranzilaPaid}
+                          chequeNumberSlot={
+                            <>
+                              <Label className="text-xs font-semibold">رقم الشيك</Label>
+                              <Input
+                                value={payment.chequeNumber || ''}
+                                onChange={e => updatePaymentLine(payment.id, 'chequeNumber', sanitizeChequeNumber(e.target.value))}
+                                placeholder="رقم الشيك"
+                                maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                                className="h-9 font-mono"
+                                disabled={payment.tranzilaPaid}
+                              />
+                            </>
+                          }
+                        />
                         <div>
-                          <Label className="text-xs">رقم الشيك</Label>
-                          <Input
-                            value={payment.chequeNumber || ''}
-                            onChange={e => updatePaymentLine(payment.id, 'chequeNumber', sanitizeChequeNumber(e.target.value))}
-                            placeholder="رقم الشيك"
-                            maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                          <Label className="text-xs">تاريخ الاستحقاق</Label>
+                          <ArabicDatePicker
+                            value={payment.paymentDate}
+                            onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
+                            disabled={payment.tranzilaPaid}
+                            compact
                           />
                         </div>
-                      )}
-                    </div>
-
-                    {/* Bank + branch picker appears under the cheque row
-                        on a new line so the 2-column grid above stays
-                        compact. Same pattern every other cheque form uses. */}
-                    {payment.paymentType === 'cheque' && (
-                      <BankBranchPicker
-                        bankCode={payment.bankCode}
-                        branchCode={payment.branchCode}
-                        onBankChange={(code) => updatePaymentLine(payment.id, 'bankCode', code)}
-                        onBranchChange={(code) => updatePaymentLine(payment.id, 'branchCode', code)}
-                        disabled={payment.tranzilaPaid}
-                      />
+                      </>
                     )}
 
                     <div>

@@ -1120,11 +1120,11 @@ export function PolicyPaymentsSection({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Non-cheque types: just date. Cheque types: bank → branch
+                      → رقم الشيك on one row, then the due date underneath. */}
+                  {payment.paymentType !== 'cheque' && (
                     <div>
-                      <Label className="text-xs">
-                        {payment.paymentType === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
-                      </Label>
+                      <Label className="text-xs">تاريخ الدفع</Label>
                       <ArabicDatePicker
                         value={payment.paymentDate}
                         onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
@@ -1132,27 +1132,40 @@ export function PolicyPaymentsSection({
                         compact
                       />
                     </div>
-                    {payment.paymentType === 'cheque' && (
-                      <div>
-                        <Label className="text-xs">رقم الشيك</Label>
-                        <Input
-                          value={payment.chequeNumber || ''}
-                          onChange={e => updatePaymentLine(payment.id, 'chequeNumber', sanitizeChequeNumber(e.target.value))}
-                          placeholder="رقم الشيك"
-                          maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                        />
-                      </div>
-                    )}
-                  </div>
+                  )}
 
                   {payment.paymentType === 'cheque' && (
-                    <BankBranchPicker
-                      bankCode={payment.bankCode}
-                      branchCode={payment.branchCode}
-                      onBankChange={(code) => updatePaymentLine(payment.id, 'bankCode', code)}
-                      onBranchChange={(code) => updatePaymentLine(payment.id, 'branchCode', code)}
-                      disabled={payment.tranzilaPaid}
-                    />
+                    <>
+                      <BankBranchPicker
+                        bankCode={payment.bankCode}
+                        branchCode={payment.branchCode}
+                        onBankChange={(code) => updatePaymentLine(payment.id, 'bankCode', code)}
+                        onBranchChange={(code) => updatePaymentLine(payment.id, 'branchCode', code)}
+                        disabled={payment.tranzilaPaid}
+                        chequeNumberSlot={
+                          <>
+                            <Label className="text-xs font-semibold">رقم الشيك</Label>
+                            <Input
+                              value={payment.chequeNumber || ''}
+                              onChange={e => updatePaymentLine(payment.id, 'chequeNumber', sanitizeChequeNumber(e.target.value))}
+                              placeholder="رقم الشيك"
+                              maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                              className="h-9 font-mono"
+                              disabled={payment.tranzilaPaid}
+                            />
+                          </>
+                        }
+                      />
+                      <div>
+                        <Label className="text-xs">تاريخ الاستحقاق</Label>
+                        <ArabicDatePicker
+                          value={payment.paymentDate}
+                          onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
+                          disabled={payment.tranzilaPaid}
+                          compact
+                        />
+                      </div>
+                    </>
                   )}
 
                   {/* Visa Pay Button */}
@@ -1343,23 +1356,23 @@ export function PolicyPaymentsSection({
                 <ArabicDatePicker value={editFormData.payment_date} onChange={(v) => setEditFormData(f => ({ ...f, payment_date: v }))} />
               </div>
               {editFormData.payment_type === 'cheque' && (
-                <div className="sm:col-span-2 space-y-1.5">
-                  <Label className="text-xs font-semibold">رقم الشيك *</Label>
-                  <Input
-                    value={editFormData.cheque_number}
-                    onChange={(e) => setEditFormData(f => ({ ...f, cheque_number: sanitizeChequeNumber(e.target.value) }))}
-                    maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                    className="font-mono ltr-input h-10"
-                  />
-                </div>
-              )}
-              {editFormData.payment_type === 'cheque' && (
                 <div className="sm:col-span-2">
                   <BankBranchPicker
                     bankCode={editFormData.bank_code}
                     branchCode={editFormData.branch_code}
                     onBankChange={(code) => setEditFormData(f => ({ ...f, bank_code: code }))}
                     onBranchChange={(code) => setEditFormData(f => ({ ...f, branch_code: code }))}
+                    chequeNumberSlot={
+                      <>
+                        <Label className="text-xs font-semibold">رقم الشيك *</Label>
+                        <Input
+                          value={editFormData.cheque_number}
+                          onChange={(e) => setEditFormData(f => ({ ...f, cheque_number: sanitizeChequeNumber(e.target.value) }))}
+                          maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                          className="font-mono ltr-input h-9"
+                        />
+                      </>
+                    }
                   />
                 </div>
               )}

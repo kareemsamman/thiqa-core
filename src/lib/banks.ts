@@ -1,95 +1,116 @@
 /**
- * Registry of Israeli and Palestinian banks used on cheque inputs / displays.
+ * Registry of banks and payment institutions used on cheque inputs /
+ * displays. Sourced from Bank of Israel's MICR bank-code list (so the
+ * codes match what's printed at the bottom of real IL/PS cheques).
  *
- * Cheque numbers don't encode the issuing bank — that information lives on
- * the MICR line alongside the branch code. We store `bank_code` (IL: 2
- * digits) and `branch_code` (typically 3 digits) as separate columns on
- * every cheque-bearing table, then resolve the display name via this map.
- *
- * Source: Bank of Israel registry of banks operating in Israel/PA. Codes
- * are the ones printed on the MICR line at the bottom of the cheque.
- * `country: 'IL' | 'PS'` lets the cheque picker group IL banks above PA
- * banks so the dropdown doesn't feel random.
+ * The UI still stores `bank_code` and `branch_code` as free-text columns,
+ * so the picker can accept any 2+ digit value — this list just powers the
+ * searchable dropdown and the display-name lookup.
  */
 
-export type BankCountry = "IL" | "PS";
-
 export interface BankRecord {
-  /** MICR bank code (IL: 2 digits, PA: issued by PMA). */
+  /** MICR bank code (typically 2 digits, zero-padded). */
   code: string;
   /** Arabic display name — preferred in the app. */
   nameAr: string;
-  /** English/Hebrew name for tooltips and internal logs. */
-  nameEn: string;
-  country: BankCountry;
 }
 
-// Order within each country doesn't matter — the picker sorts alphabetically
-// by `nameAr`. New banks can be appended without touching call sites.
+// Full list as-provided. Codes are zero-padded 2-digit strings so they
+// sort and compare predictably. Order matches the Bank of Israel list.
 export const BANKS: BankRecord[] = [
-  // ── Israeli banks ──
-  { code: "04", nameAr: "بنك يهاف",                      nameEn: "Bank Yahav",                country: "IL" },
-  { code: "09", nameAr: "بنك البريد",                    nameEn: "Israel Postal Bank",        country: "IL" },
-  { code: "10", nameAr: "بنك لئومي",                     nameEn: "Bank Leumi",                country: "IL" },
-  { code: "11", nameAr: "بنك دسكونت",                    nameEn: "Discount Bank",             country: "IL" },
-  { code: "12", nameAr: "بنك هبوعليم",                   nameEn: "Bank Hapoalim",             country: "IL" },
-  { code: "13", nameAr: "بنك إيغود",                     nameEn: "Union Bank of Israel",      country: "IL" },
-  { code: "14", nameAr: "بنك أوتسار هحيال",              nameEn: "Otzar Ha-Hayal",            country: "IL" },
-  { code: "17", nameAr: "بنك مركنتيل دسكونت",            nameEn: "Mercantile Discount Bank",  country: "IL" },
-  { code: "20", nameAr: "بنك مزراحي طفاحوت",             nameEn: "Mizrahi-Tefahot Bank",      country: "IL" },
-  { code: "22", nameAr: "سيتي بنك",                      nameEn: "Citibank",                  country: "IL" },
-  { code: "23", nameAr: "إتش إس بي سي",                  nameEn: "HSBC",                      country: "IL" },
-  { code: "26", nameAr: "يو بنك",                        nameEn: "U-Bank",                    country: "IL" },
-  { code: "31", nameAr: "بنك هبوعليم (سابقاً بنك البنك)", nameEn: "Bank of Jerusalem",         country: "IL" },
-  { code: "34", nameAr: "بنك أرابيسكا إسرائيل",          nameEn: "Bank Arabisca",             country: "IL" },
-  { code: "39", nameAr: "إس بي آي بنك",                  nameEn: "SBI State Bank of India",   country: "IL" },
-  { code: "46", nameAr: "بنك ماسّاد",                    nameEn: "Bank Massad",               country: "IL" },
-  { code: "52", nameAr: "بنك بوعلي أغوداث إسرائيل",      nameEn: "Bank Poalei Agudat Israel", country: "IL" },
-  { code: "54", nameAr: "بنك القدس",                     nameEn: "Bank of Jerusalem",         country: "IL" },
-  { code: "59", nameAr: "بنك أ د ك",                     nameEn: "ADK Bank",                  country: "IL" },
-  { code: "68", nameAr: "بنك هتعسيا",                    nameEn: "Bank Hateasia",             country: "IL" },
-
-  // ── Palestinian banks (PMA) ──
-  { code: "72", nameAr: "بنك فلسطين",                    nameEn: "Bank of Palestine",         country: "PS" },
-  { code: "73", nameAr: "البنك الوطني",                  nameEn: "National Bank",             country: "PS" },
-  { code: "74", nameAr: "البنك الإسلامي الفلسطيني",      nameEn: "Palestine Islamic Bank",    country: "PS" },
-  { code: "75", nameAr: "البنك الإسلامي العربي",         nameEn: "Arab Islamic Bank",         country: "PS" },
-  { code: "76", nameAr: "بنك الاستثمار الفلسطيني",       nameEn: "Palestine Investment Bank", country: "PS" },
-  { code: "77", nameAr: "البنك التجاري الفلسطيني",       nameEn: "Palestine Commercial Bank", country: "PS" },
-  { code: "78", nameAr: "بنك القاهرة عمان",              nameEn: "Cairo Amman Bank",          country: "PS" },
-  { code: "79", nameAr: "البنك العربي",                  nameEn: "Arab Bank",                 country: "PS" },
-  { code: "80", nameAr: "بنك الأردن",                    nameEn: "Bank of Jordan",            country: "PS" },
-  { code: "81", nameAr: "البنك الأهلي الأردني",          nameEn: "Jordan Ahli Bank",          country: "PS" },
-  { code: "82", nameAr: "بنك الإسكان للتجارة والتمويل",  nameEn: "Housing Bank",              country: "PS" },
-  { code: "83", nameAr: "بنك القدس",                     nameEn: "Al-Quds Bank",              country: "PS" },
-  { code: "84", nameAr: "البنك الإسلامي الأردني",        nameEn: "Jordan Islamic Bank",       country: "PS" },
-  { code: "85", nameAr: "بنك الصفا",                     nameEn: "Safa Bank",                 country: "PS" },
-  { code: "86", nameAr: "بنك سانتدر",                    nameEn: "Santander",                 country: "PS" },
-  { code: "87", nameAr: "بنك البركة",                    nameEn: "Al Baraka Bank",            country: "PS" },
-  { code: "88", nameAr: "البنك الوطني الإسلامي",         nameEn: "National Islamic Bank",     country: "PS" },
+  { code: "01", nameAr: "ماكس إت فايننشلز" },
+  { code: "02", nameAr: "بنك بوعلي أغودات يسرائيل (فاغي)" },
+  { code: "04", nameAr: "بنك يهاف" },
+  { code: "05", nameAr: "يسراكارت" },
+  { code: "06", nameAr: "بنك أدانيم" },
+  { code: "07", nameAr: "كال - بطاقات ائتمان لإسرائيل" },
+  { code: "08", nameAr: "بنك هسفنوت" },
+  { code: "09", nameAr: "بنك البريد" },
+  { code: "10", nameAr: "بنك لئومي" },
+  { code: "11", nameAr: "بنك ديسكونت" },
+  { code: "12", nameAr: "بنك هبوعليم" },
+  { code: "13", nameAr: "بنك إيغود" },
+  { code: "14", nameAr: "بنك أوتسار هحيال" },
+  { code: "17", nameAr: "بنك مركنتيل ديسكونت" },
+  { code: "18", nameAr: "وان زيرو - البنك الرقمي الأول" },
+  { code: "20", nameAr: "بنك مزراحي طفحوت" },
+  { code: "22", nameAr: "سيتي بنك" },
+  { code: "23", nameAr: "HSBC" },
+  { code: "24", nameAr: "بنك هبوعليم (الأمريكي الإسرائيلي سابقاً)" },
+  { code: "25", nameAr: "BNP Paribas إسرائيل" },
+  { code: "26", nameAr: "يو بنك" },
+  { code: "27", nameAr: "باركليز بنك" },
+  { code: "28", nameAr: "هبوعليم (كونتيننتال سابقاً)" },
+  { code: "30", nameAr: "البنك للتجارة" },
+  { code: "31", nameAr: "البنك الدولي الأول لإسرائيل" },
+  { code: "32", nameAr: "بنك للتمويل والتجارة" },
+  { code: "33", nameAr: "بنك ديسكونت (مركنتيل سابقاً)" },
+  { code: "34", nameAr: "البنك العربي الإسرائيلي" },
+  { code: "37", nameAr: "بنك الأردن" },
+  { code: "38", nameAr: "البنك التجاري الفلسطيني" },
+  { code: "39", nameAr: "بنك الدولة الهندي (SBI)" },
+  { code: "43", nameAr: "البنك الأهلي الأردني" },
+  { code: "46", nameAr: "بنك مسد" },
+  { code: "48", nameAr: "بنك أوتسار هحيال (عوفيد لئومي سابقاً)" },
+  { code: "49", nameAr: "البنك العربي" },
+  { code: "50", nameAr: "مسب - مركز المقاصة البنكي" },
+  { code: "52", nameAr: "بنك بوعلي أغودات يسرائيل (فاغي)" },
+  { code: "54", nameAr: "بنك القدس (يروشلايم)" },
+  { code: "59", nameAr: "شبا - خدمات بنكية آلية" },
+  { code: "60", nameAr: "كاردكوم" },
+  { code: "61", nameAr: "ترانزيلا" },
+  { code: "65", nameAr: "حيسخ - صندوق توفير للتعليم" },
+  { code: "66", nameAr: "بنك القاهرة عمّان" },
+  { code: "67", nameAr: "بنك الأراضي العربية" },
+  { code: "68", nameAr: "بنك دكسيا / البنك البلدي" },
+  { code: "71", nameAr: "البنك التجاري الأردني" },
+  { code: "73", nameAr: "البنك الإسلامي العربي" },
+  { code: "74", nameAr: "البنك البريطاني للشرق الأوسط" },
+  { code: "76", nameAr: "بنك فلسطين للاستثمار" },
+  { code: "77", nameAr: "بنك لئومي للرهن العقاري" },
+  { code: "82", nameAr: "القدس للتنمية والاستثمار" },
+  { code: "83", nameAr: "بنك الاتحاد" },
+  { code: "84", nameAr: "بنك الإسكان" },
+  { code: "89", nameAr: "بنك فلسطين" },
+  { code: "90", nameAr: "بنك ديسكونت للرهن العقاري" },
+  { code: "93", nameAr: "بنك الأردن الكويت" },
+  { code: "99", nameAr: "بنك إسرائيل (البنك المركزي)" },
 ];
 
-// Indexed by code for O(1) lookups at display time.
-const BANKS_BY_CODE = new Map<string, BankRecord>(
-  BANKS.map((b) => [b.code, b]),
-);
+// Keyed map for O(1) display-name lookups at render time.
+const BANKS_BY_CODE = new Map<string, BankRecord>(BANKS.map((b) => [b.code, b]));
 
-/** Resolve a bank code to its Arabic display name. Unknown codes fall
- *  back to `بنك غير معروف` so the UI never renders a blank. */
+/** Normalize any user-entered value to a canonical 2-digit code (trims
+ *  whitespace and left-pads single digits). Unknown codes still pass
+ *  through — the picker accepts manual entry. */
+export const normalizeBankCode = (raw: string | null | undefined): string => {
+  if (!raw) return "";
+  const trimmed = String(raw).trim();
+  if (!trimmed) return "";
+  // If the user typed a single digit, pad to 2 so "4" matches "04".
+  if (/^\d$/.test(trimmed)) return trimmed.padStart(2, "0");
+  return trimmed;
+};
+
+/** Resolve a stored code to its Arabic name. Returns `""` if unknown so
+ *  callers can render the raw code as a fallback. */
 export const getBankName = (code: string | null | undefined): string => {
-  if (!code) return "";
-  return BANKS_BY_CODE.get(code.trim())?.nameAr ?? "";
+  const norm = normalizeBankCode(code);
+  if (!norm) return "";
+  return BANKS_BY_CODE.get(norm)?.nameAr ?? "";
 };
 
-/** Full record lookup — returns `undefined` for unknown codes so callers
- *  can show their own placeholder. */
+/** Full record lookup; returns `undefined` for unknown codes. */
 export const getBank = (code: string | null | undefined): BankRecord | undefined => {
-  if (!code) return undefined;
-  return BANKS_BY_CODE.get(code.trim());
+  const norm = normalizeBankCode(code);
+  if (!norm) return undefined;
+  return BANKS_BY_CODE.get(norm);
 };
 
-/** Sorted list for dropdowns: IL first (alphabetical), then PS. */
+/** Sorted list for dropdowns — numeric sort by code so the picker order
+ *  matches the Bank of Israel reference list. */
 export const BANK_OPTIONS: BankRecord[] = [...BANKS].sort((a, b) => {
-  if (a.country !== b.country) return a.country === "IL" ? -1 : 1;
-  return a.nameAr.localeCompare(b.nameAr, "ar");
+  const an = parseInt(a.code, 10);
+  const bn = parseInt(b.code, 10);
+  return an - bn;
 });

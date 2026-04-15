@@ -469,33 +469,36 @@ export function PaymentEditDialog({
             </div>
           </div>
 
-          {/* Cheque-specific fields — number, bank, branch. Only rendered
-              when payment_type === 'cheque'. */}
+          {/* Cheque-specific fields on one row: bank → branch → رقم الشيك.
+              The picker takes the cheque-number input as a slot so the
+              three identifiers share one row. */}
           {formData.payment_type === 'cheque' && (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="cheque_number" className="text-xs font-semibold">رقم الشيك</Label>
-                <Input
-                  id="cheque_number"
-                  value={formData.cheque_number}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    cheque_number: sanitizeChequeNumber(e.target.value)
-                  })}
-                  maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                  className="font-mono h-10 ltr-input"
-                  placeholder="أدخل رقم الشيك"
-                  disabled={isLocked}
-                />
-              </div>
-              <BankBranchPicker
-                bankCode={formData.bank_code}
-                branchCode={formData.branch_code}
-                onBankChange={(code) => setFormData({ ...formData, bank_code: code })}
-                onBranchChange={(code) => setFormData({ ...formData, branch_code: code })}
-                disabled={isLocked}
-              />
-            </div>
+            <BankBranchPicker
+              bankCode={formData.bank_code}
+              branchCode={formData.branch_code}
+              onBankChange={(code) => setFormData({ ...formData, bank_code: code })}
+              onBranchChange={(code) => setFormData({ ...formData, branch_code: code })}
+              disabled={isLocked}
+              chequeNumberSlot={
+                <>
+                  <Label htmlFor="cheque_number" className="text-xs font-semibold">
+                    رقم الشيك
+                  </Label>
+                  <Input
+                    id="cheque_number"
+                    value={formData.cheque_number}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      cheque_number: sanitizeChequeNumber(e.target.value)
+                    })}
+                    maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                    className="font-mono h-9 ltr-input"
+                    placeholder="أدخل رقم الشيك"
+                    disabled={isLocked}
+                  />
+                </>
+              }
+            />
           )}
 
           {/* Attached files — delete / add inline */}

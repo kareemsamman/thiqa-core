@@ -14,6 +14,7 @@ import { ChequeScannerDialog } from "@/components/payments/ChequeScannerDialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from "@/lib/chequeUtils";
+import { BankBranchPicker } from "@/components/shared/BankBranchPicker";
 import type { PaymentLine, PricingBreakdown, ValidationErrors } from "./types";
 import { getPaymentTypes } from "./types";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -453,21 +454,12 @@ export function Step4Payments({
                       />
                     </div>
 
-                    {/* Actions — cheque# input, visa pay, paid/locked badge. Delete lives
-                        as an absolute button on the card, not here. */}
+                    {/* Actions — visa pay / paid / locked badge. The cheque
+                        # / bank / branch trio now lives on its own row
+                        under the grid so the three identifiers share one
+                        visual line like the rest of the app. */}
                     {hasActionsColumn && (
                       <div className="col-span-2 lg:col-span-1 flex items-center gap-2">
-                        {payment.payment_type === 'cheque' && !isLocked && (
-                          <Input
-                            value={payment.cheque_number || ''}
-                            onChange={(e) => updatePayment(payment.id, 'cheque_number', sanitizeChequeNumber(e.target.value))}
-                            placeholder="رقم الشيك"
-                            maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                            className="h-9 flex-1 font-mono ltr-input"
-                            disabled={isDisabled}
-                          />
-                        )}
-
                         {isVisa && !visaPaid && !isLocked && (
                           <Button
                             type="button"
@@ -497,6 +489,34 @@ export function Step4Payments({
                       </div>
                     )}
                   </div>
+
+                  {/* Cheque identifiers — bank → branch → رقم الشيك on one
+                      row. Only rendered for cheque payments that aren't
+                      locked/auto-generated. */}
+                  {payment.payment_type === 'cheque' && !isLocked && (
+                    <div className="mt-2 pl-8">
+                      <BankBranchPicker
+                        bankCode={payment.bank_code}
+                        branchCode={payment.branch_code}
+                        onBankChange={(code) => updatePayment(payment.id, 'bank_code', code)}
+                        onBranchChange={(code) => updatePayment(payment.id, 'branch_code', code)}
+                        disabled={isDisabled}
+                        chequeNumberSlot={
+                          <>
+                            <Label className="text-[10px] mb-1 block text-muted-foreground">رقم الشيك</Label>
+                            <Input
+                              value={payment.cheque_number || ''}
+                              onChange={(e) => updatePayment(payment.id, 'cheque_number', sanitizeChequeNumber(e.target.value))}
+                              placeholder="رقم الشيك"
+                              maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                              className="h-9 font-mono ltr-input"
+                              disabled={isDisabled}
+                            />
+                          </>
+                        }
+                      />
+                    </div>
+                  )}
 
                   {/* Inline receipt strip — thin, no divider, same card. */}
                   {(payment.payment_type === 'cash' || payment.payment_type === 'cheque' || payment.payment_type === 'transfer') && !visaPaid && (
@@ -643,6 +663,8 @@ export function Step4Payments({
               amount: cheque.amount || 0,
               payment_date: cheque.payment_date || new Date().toISOString().split('T')[0],
               cheque_number: cheque.cheque_number || '',
+              bank_code: (cheque as any).bank_code || null,
+              branch_code: (cheque as any).branch_code || (cheque as any).branch_number || null,
               refused: false,
               cheque_image_url: cheque.image_url,
             };
