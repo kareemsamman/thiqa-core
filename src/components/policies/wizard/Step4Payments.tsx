@@ -14,7 +14,7 @@ import { ChequeScannerDialog } from "@/components/payments/ChequeScannerDialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from "@/lib/chequeUtils";
-import { BankBranchPicker } from "@/components/shared/BankBranchPicker";
+import { BankPicker } from "@/components/shared/BankPicker";
 import type { PaymentLine, PricingBreakdown, ValidationErrors } from "./types";
 import { getPaymentTypes } from "./types";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -403,7 +403,7 @@ export function Step4Payments({
                         // static "فيزا خارجي" chip so the wizard matches the
                         // rest of the app (customer pays it directly on the
                         // insurance company's portal, not through our till).
-                        <div className="h-9 px-3 rounded-md border border-border/60 bg-muted/40 flex items-center text-sm font-medium opacity-80 cursor-not-allowed">
+                        <div className="h-10 px-3 rounded-md border border-border/60 bg-muted/40 flex items-center text-sm font-medium opacity-80 cursor-not-allowed">
                           فيزا خارجي
                         </div>
                       ) : (
@@ -412,7 +412,7 @@ export function Step4Payments({
                           onValueChange={(v) => updatePayment(payment.id, 'payment_type', v)}
                           disabled={isDisabled}
                         >
-                          <SelectTrigger className="h-9">
+                          <SelectTrigger className="h-10">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -436,7 +436,7 @@ export function Step4Payments({
                         placeholder="0"
                         disabled={isDisabled}
                         className={cn(
-                          "h-9",
+                          "h-10",
                           paymentsExceedPrice && "border-destructive",
                           isLocked && "opacity-70 cursor-not-allowed"
                         )}
@@ -449,7 +449,7 @@ export function Step4Payments({
                       <ArabicDatePicker
                         value={payment.payment_date}
                         onChange={(date) => updatePayment(payment.id, 'payment_date', date)}
-                        className={cn("h-9", isLocked && "opacity-70 cursor-not-allowed")}
+                        className={cn("h-10", isLocked && "opacity-70 cursor-not-allowed")}
                         disabled={isDisabled}
                       />
                     </div>
@@ -490,29 +490,49 @@ export function Step4Payments({
                     )}
                   </div>
 
-                  {/* Cheque identifiers — bank → branch → رقم الشيك on one
-                      row. Only rendered for cheque payments that aren't
-                      locked/auto-generated. */}
+                  {/* Cheque identifiers — bank / branch / رقم الشيك
+                      placed in the same 4-column grid as the main row
+                      above so each cheque field lines up with a main
+                      field (bank↔type, branch↔amount, cheque#↔date).
+                      The 4th slot stays empty where actions would be. */}
                   {payment.payment_type === 'cheque' && !isLocked && (
-                    <div className="mt-2 pl-8">
-                      <BankBranchPicker
-                        hideLabels
-                        bankCode={payment.bank_code}
-                        branchCode={payment.branch_code}
-                        onBankChange={(code) => updatePayment(payment.id, 'bank_code', code)}
-                        onBranchChange={(code) => updatePayment(payment.id, 'branch_code', code)}
-                        disabled={isDisabled}
-                        chequeNumberSlot={
-                          <Input
-                            value={payment.cheque_number || ''}
-                            onChange={(e) => updatePayment(payment.id, 'cheque_number', sanitizeChequeNumber(e.target.value))}
-                            placeholder="رقم الشيك"
-                            maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                            className="h-10 font-mono ltr-input"
-                            disabled={isDisabled}
-                          />
-                        }
-                      />
+                    <div className="mt-2 grid grid-cols-2 lg:grid-cols-4 gap-2 items-end pl-8">
+                      <div>
+                        <Label className="text-[10px] mb-1 block text-muted-foreground">البنك</Label>
+                        <BankPicker
+                          value={payment.bank_code}
+                          onChange={(code) => updatePayment(payment.id, 'bank_code', code)}
+                          disabled={isDisabled}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] mb-1 block text-muted-foreground">الفرع</Label>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={4}
+                          value={payment.branch_code || ''}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/\D/g, '');
+                            updatePayment(payment.id, 'branch_code', v || null);
+                          }}
+                          placeholder="مثال: 305"
+                          className="h-10 font-mono ltr-nums"
+                          disabled={isDisabled}
+                        />
+                      </div>
+                      <div className={cn("col-span-2 lg:col-span-1", !hasActionsColumn && "lg:col-span-2")}>
+                        <Label className="text-[10px] mb-1 block text-muted-foreground">رقم الشيك</Label>
+                        <Input
+                          value={payment.cheque_number || ''}
+                          onChange={(e) => updatePayment(payment.id, 'cheque_number', sanitizeChequeNumber(e.target.value))}
+                          placeholder="رقم الشيك"
+                          maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                          className="h-10 font-mono ltr-input"
+                          disabled={isDisabled}
+                        />
+                      </div>
                     </div>
                   )}
 

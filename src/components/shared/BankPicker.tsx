@@ -157,7 +157,7 @@ export function BankPicker({
             value={search}
             onValueChange={setSearch}
           />
-          <CommandList className="max-h-[320px]">
+          <CommandList className="max-h-[340px] overflow-y-auto overscroll-contain">
             <CommandEmpty className="py-6 text-center text-xs">
               لا توجد نتائج — اكتب رقم البنك للإضافة يدوياً
             </CommandEmpty>
@@ -171,13 +171,22 @@ export function BankPicker({
                     setOpen(false);
                     setSearch("");
                   }}
-                  className="gap-3 py-2.5"
+                  className={cn(
+                    "gap-3 py-2.5",
+                    // cmdk highlights the active row with bg-accent
+                    // (dark). Force white inside nested <span>s and
+                    // on the code pill so the row stays legible.
+                    "data-[selected=true]:[&_.bank-name]:text-accent-foreground",
+                    "data-[selected=true]:[&_.bank-code-pill]:bg-accent-foreground/10",
+                    "data-[selected=true]:[&_.bank-code-pill]:text-accent-foreground",
+                    "data-[selected=true]:[&_.bank-code-pill]:border-accent-foreground/30",
+                  )}
                 >
-                  <span className="inline-flex items-center justify-center rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 font-mono font-bold text-[11px] w-10 h-6 shrink-0 ltr-nums border border-amber-500/30">
-                    {manualOption.code}
-                  </span>
-                  <span className="text-xs text-muted-foreground flex-1">
+                  <span className="bank-name text-xs text-muted-foreground flex-1 text-right">
                     استخدام الرقم <span className="font-mono ltr-nums">{manualOption.code}</span> بدون اسم
+                  </span>
+                  <span className="bank-code-pill inline-flex items-center justify-center rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 font-mono font-bold text-[11px] w-10 h-6 shrink-0 ltr-nums border border-amber-500/30">
+                    {manualOption.code}
                   </span>
                 </CommandItem>
               </CommandGroup>
@@ -195,28 +204,23 @@ export function BankPicker({
                       setOpen(false);
                       setSearch("");
                     }}
-                    className="gap-3 py-2.5"
+                    className={cn(
+                      "gap-3 py-2.5",
+                      // Row order on physical screen (RTL): check on
+                      // left, name in middle (right-aligned), code pill
+                      // on right. This puts the code next to the Arabic
+                      // name's start so the row reads naturally.
+                      //
+                      // cmdk highlights the active row with bg-accent
+                      // (navy). We need to keep contrast — force white
+                      // on the name and re-tint the code pill so its
+                      // text stays legible against the dark bg.
+                      "data-[selected=true]:[&_.bank-name]:text-accent-foreground",
+                      "data-[selected=true]:[&_.bank-code-pill]:bg-accent-foreground/15",
+                      "data-[selected=true]:[&_.bank-code-pill]:text-accent-foreground",
+                      "data-[selected=true]:[&_.bank-code-pill]:border-accent-foreground/40",
+                    )}
                   >
-                    {/* Code pill — mono, left edge, so every row aligns */}
-                    <span
-                      className={cn(
-                        "inline-flex items-center justify-center rounded-md font-mono font-bold text-[11px] w-10 h-6 shrink-0 ltr-nums border",
-                        isSelected
-                          ? "bg-primary/15 text-primary border-primary/30"
-                          : "bg-muted text-muted-foreground border-border",
-                      )}
-                    >
-                      {b.code}
-                    </span>
-                    {/* Bank name — flows in the middle, truncates gracefully */}
-                    <span
-                      className={cn(
-                        "text-sm flex-1 truncate",
-                        isSelected ? "font-semibold text-foreground" : "text-foreground",
-                      )}
-                    >
-                      {b.nameAr}
-                    </span>
                     {/* Check — fixed-width slot so selected / unselected
                         rows stay perfectly aligned */}
                     <Check
@@ -225,6 +229,26 @@ export function BankPicker({
                         isSelected ? "opacity-100" : "opacity-0",
                       )}
                     />
+                    {/* Bank name — flows in the middle, truncates gracefully */}
+                    <span
+                      className={cn(
+                        "bank-name text-sm flex-1 truncate text-right",
+                        isSelected ? "font-semibold text-foreground" : "text-foreground",
+                      )}
+                    >
+                      {b.nameAr}
+                    </span>
+                    {/* Code pill — mono, visual-right edge */}
+                    <span
+                      className={cn(
+                        "bank-code-pill inline-flex items-center justify-center rounded-md font-mono font-bold text-[11px] w-10 h-6 shrink-0 ltr-nums border",
+                        isSelected
+                          ? "bg-primary/15 text-primary border-primary/30"
+                          : "bg-muted text-muted-foreground border-border",
+                      )}
+                    >
+                      {b.code}
+                    </span>
                   </CommandItem>
                 );
               })}
