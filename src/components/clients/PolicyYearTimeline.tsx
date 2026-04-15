@@ -30,6 +30,8 @@ import {
   Pencil,
   Handshake,
   Printer,
+  Copy,
+  Hash,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -1150,6 +1152,32 @@ function PolicyPackageCard({
       <div className="p-4">
         {/* Top Row: Status + Type + Actions */}
         <div className="flex items-center gap-2 flex-wrap mb-3">
+          {/* Policy Number — click to copy. Staff asked for this at
+              the head of every policy card so they can grab the number
+              without opening the details drawer. */}
+          {policy.policy_number && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigator.clipboard
+                  .writeText(policy.policy_number!)
+                  .then(() => toast.success(`تم نسخ رقم الوثيقة: ${policy.policy_number}`))
+                  .catch(() => toast.error('فشل نسخ رقم الوثيقة'));
+              }}
+              className="focus:outline-none"
+              title="اضغط لنسخ رقم الوثيقة"
+            >
+              <Badge
+                variant="outline"
+                className="gap-1 font-mono ltr-nums cursor-pointer bg-muted/40 hover:bg-muted border-border/60 group"
+              >
+                <Hash className="h-3 w-3 text-muted-foreground" />
+                {policy.policy_number}
+                <Copy className="h-3 w-3 text-muted-foreground opacity-60 group-hover:opacity-100 transition-opacity" />
+              </Badge>
+            </button>
+          )}
           {/* Status Badge */}
           {isActive && (
             <button

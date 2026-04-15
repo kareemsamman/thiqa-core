@@ -6,6 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -21,10 +30,13 @@ import {
   ChevronRight,
   Car as CarIcon,
   Building2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useBranches } from "@/hooks/useBranches";
+import { useAuth } from "@/hooks/useAuth";
 import { CarDrawer } from "@/components/cars/CarDrawer";
 import { RowActionsMenu } from "@/components/shared/RowActionsMenu";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -77,11 +89,28 @@ const carTypeLabels: Record<string, string> = {
   "tjeraup4": "تجاري > 4",
 };
 
+interface CarFilterValues {
+  carType: string;
+  branchId: string;
+  licenseStatus: "all" | "valid" | "expiring" | "expired" | "missing";
+}
+
+const DEFAULT_CAR_FILTERS: CarFilterValues = {
+  carType: "all",
+  branchId: "all",
+  licenseStatus: "all",
+};
+
 export default function Cars() {
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
+  const { branches } = useBranches();
   const [cars, setCars] = useState<CarRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState<CarFilterValues>(DEFAULT_CAR_FILTERS);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [localFilters, setLocalFilters] = useState<CarFilterValues>(DEFAULT_CAR_FILTERS);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 25;
@@ -91,6 +120,11 @@ export default function Cars() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingCar, setDeletingCar] = useState<CarRecord | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const activeFilterCount =
+    (filters.carType !== "all" ? 1 : 0) +
+    (filters.branchId !== "all" ? 1 : 0) +
+    (filters.licenseStatus !== "all" ? 1 : 0);
 
   const fetchCars = useCallback(async () => {
     setLoading(true);
@@ -108,6 +142,34 @@ export default function Cars() {
         );
       }
 
+      if (filters.carType !== "all") {
+        query = query.eq("car_type", filters.carType);
+      }
+
+      if (filters.branchId !== "all") {
+        query = query.eq("branch_id", filters.branchId);
+      }
+
+      if (filters.licenseStatus !== "all") {
+        const todayIso = new Date().toISOString().split("T")[0];
+        const in30Days = new Date();
+        in30Days.setDate(in30Days.getDate() + 30);
+        const in30Iso = in30Days.toISOString().split("T")[0];
+
+        if (filters.licenseStatus === "expired") {
+          query = query.not("license_expiry", "is", null).lt("license_expiry", todayIso);
+        } else if (filters.licenseStatus === "expiring") {
+          query = query
+            .not("license_expiry", "is", null)
+            .gte("license_expiry", todayIso)
+            .lte("license_expiry", in30Iso);
+        } else if (filters.licenseStatus === "valid") {
+          query = query.not("license_expiry", "is", null).gt("license_expiry", in30Iso);
+        } else if (filters.licenseStatus === "missing") {
+          query = query.is("license_expiry", null);
+        }
+      }
+
       const { data, error, count } = await query;
 
       if (error) throw error;
@@ -119,7 +181,7 @@ export default function Cars() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchQuery, toast]);
+  }, [currentPage, searchQuery, filters, toast]);
 
   useEffect(() => {
     fetchCars();
@@ -195,10 +257,123 @@ export default function Cars() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
-              <Filter className="ml-2 h-4 w-4" />
-              فلترة
-            </Button>
+            <Popover
+              open={filterOpen}
+              onOpenChange={(next) => {
+                setFilterOpen(next);
+                if (next) setLocalFilters(filters);
+              }}
+            >
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="relative">
+                  <Filter className="ml-2 h-4 w-4" />
+                  فلترة
+                  {activeFilterCount > 0 && (
+                    <Badge className="absolute -top-2 -left-2 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                      {activeFilterCount}
+                    </Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-4" align="end" dir="rtl">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium text-right">فلترة</h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-muted-foreground"
+                      onClick={() => {
+                        setLocalFilters(DEFAULT_CAR_FILTERS);
+                        setFilters(DEFAULT_CAR_FILTERS);
+                        setCurrentPage(1);
+                        setFilterOpen(false);
+                      }}
+                    >
+                      <X className="h-3 w-3 ml-1" />
+                      مسح الكل
+                    </Button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-right block text-sm">نوع الرخصة</Label>
+                    <Select
+                      value={localFilters.carType}
+                      onValueChange={(v) => setLocalFilters((f) => ({ ...f, carType: v }))}
+                    >
+                      <SelectTrigger className="h-9 text-right">
+                        <SelectValue placeholder="الكل" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all" className="text-right">الكل</SelectItem>
+                        {Object.entries(carTypeLabels).map(([value, label]) => (
+                          <SelectItem key={value} value={value} className="text-right">
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-right block text-sm">حالة الرخصة</Label>
+                    <Select
+                      value={localFilters.licenseStatus}
+                      onValueChange={(v) =>
+                        setLocalFilters((f) => ({
+                          ...f,
+                          licenseStatus: v as CarFilterValues["licenseStatus"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-9 text-right">
+                        <SelectValue placeholder="الكل" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all" className="text-right">الكل</SelectItem>
+                        <SelectItem value="valid" className="text-right">سارية</SelectItem>
+                        <SelectItem value="expiring" className="text-right">تنتهي خلال شهر</SelectItem>
+                        <SelectItem value="expired" className="text-right">منتهية</SelectItem>
+                        <SelectItem value="missing" className="text-right">بدون رخصة</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {isAdmin && (
+                    <div className="space-y-1.5">
+                      <Label className="text-right block text-sm">الفرع</Label>
+                      <Select
+                        value={localFilters.branchId}
+                        onValueChange={(v) => setLocalFilters((f) => ({ ...f, branchId: v }))}
+                      >
+                        <SelectTrigger className="h-9 text-right">
+                          <SelectValue placeholder="الكل" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all" className="text-right">الكل</SelectItem>
+                          {branches.map((b) => (
+                            <SelectItem key={b.id} value={b.id} className="text-right">
+                              {b.name_ar || b.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <Button
+                    className="w-full"
+                    onClick={() => {
+                      setFilters(localFilters);
+                      setCurrentPage(1);
+                      setFilterOpen(false);
+                    }}
+                  >
+                    تطبيق الفلترة
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 
