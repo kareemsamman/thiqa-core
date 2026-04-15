@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { TranzilaPaymentModal } from '@/components/payments/TranzilaPaymentModal';
 import { ChequeScannerDialog } from '@/components/payments/ChequeScannerDialog';
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from '@/lib/chequeUtils';
+import { BankPicker } from '@/components/shared/BankPicker';
 import { useToast } from '@/hooks/use-toast';
 import type { Enums } from "@/integrations/supabase/types";
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
@@ -26,6 +27,8 @@ interface PaymentLine {
   paymentType: 'cash' | 'cheque' | 'transfer' | 'visa';
   paymentDate: string;
   chequeNumber?: string;
+  bankCode?: string | null;
+  branchCode?: string | null;
   chequeImageUrl?: string;
   notes?: string;
   tranzilaPaid?: boolean;
@@ -412,6 +415,8 @@ export function PackagePaymentModal({
         paymentType: 'cheque' as const,
         paymentDate: cheque.payment_date || new Date().toISOString().split('T')[0],
         chequeNumber: cheque.cheque_number || '',
+        bankCode: cheque.bank_code || null,
+        branchCode: cheque.branch_code || cheque.branch_number || null,
         chequeImageUrl: cheque.image_url || undefined,
       };
       
@@ -553,6 +558,8 @@ export function PackagePaymentModal({
             cheque_number: paymentLine.paymentType === 'cheque' ? paymentLine.chequeNumber : null,
             cheque_image_url: paymentLine.chequeImageUrl || null,
             cheque_status: paymentLine.paymentType === 'cheque' ? 'pending' : null,
+            bank_code: paymentLine.paymentType === 'cheque' ? (paymentLine.bankCode || null) : null,
+            branch_code: paymentLine.paymentType === 'cheque' ? (paymentLine.branchCode || null) : null,
             refused: false,
             notes: paymentLine.notes || `دفعة من باقة (${policies.length} وثائق)`,
             branch_id: branchId,
@@ -772,7 +779,36 @@ export function PackagePaymentModal({
                           compact
                         />
                       </div>
-                      {payment.paymentType === 'cheque' && (
+                    </div>
+
+                    {/* Cheque-only row: bank → branch → رقم الشيك */}
+                    {payment.paymentType === 'cheque' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div>
+                          <Label className="text-xs">البنك</Label>
+                          <BankPicker
+                            value={payment.bankCode}
+                            onChange={(code) => updatePaymentLine(payment.id, 'bankCode', code)}
+                            disabled={payment.tranzilaPaid}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">الفرع</Label>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            maxLength={4}
+                            value={payment.branchCode || ''}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/\D/g, '');
+                              updatePaymentLine(payment.id, 'branchCode', v || null);
+                            }}
+                            placeholder="مثال: 305"
+                            className="h-10 font-mono ltr-nums"
+                            disabled={payment.tranzilaPaid}
+                          />
+                        </div>
                         <div>
                           <Label className="text-xs">رقم الشيك</Label>
                           <Input
@@ -780,11 +816,12 @@ export function PackagePaymentModal({
                             onChange={e => updatePaymentLine(payment.id, 'chequeNumber', sanitizeChequeNumber(e.target.value))}
                             maxLength={CHEQUE_NUMBER_MAX_LENGTH}
                             placeholder="رقم الشيك"
+                            className="h-10 font-mono ltr-input"
                             disabled={payment.tranzilaPaid}
                           />
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* Visa Pay Button */}
                     {payment.paymentType === 'visa' && !payment.tranzilaPaid && (
