@@ -341,24 +341,30 @@ export function PaymentGroupDetailsDialog({
                           </div>
                         </td>
 
-                        {/* Details (cheque# + bank/branch, or card last 4, else dash) */}
+                        {/* Details: for cheques we lead with the number
+                            and hang the bank/branch info directly under
+                            it as a compact muted line (no extra label),
+                            so the cell reads as one "cheque card" instead
+                            of a labeled section stack. */}
                         <td className="px-3 py-3 align-middle">
                           {p.cheque_number ? (
-                            <div className="flex flex-col gap-1">
-                              <div className="flex flex-col gap-0.5">
-                                <span className="text-[9px] text-muted-foreground uppercase tracking-wide">رقم الشيك</span>
-                                <span className="font-mono text-xs font-semibold ltr-nums">{p.cheque_number}</span>
-                              </div>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[9px] text-muted-foreground uppercase tracking-wide">رقم الشيك</span>
+                              <span className="font-mono text-xs font-semibold ltr-nums">
+                                {p.cheque_number}
+                              </span>
                               {(p.bank_code || p.branch_code) && (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="text-[9px] text-muted-foreground uppercase tracking-wide">البنك والفرع</span>
-                                  <span className="text-xs font-semibold text-foreground">
-                                    {getBankName(p.bank_code) || '—'}
-                                    {p.branch_code && (
-                                      <span className="text-muted-foreground font-mono ltr-nums"> · {p.branch_code}</span>
-                                    )}
-                                  </span>
-                                </div>
+                                <span className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                                  {getBankName(p.bank_code) || (p.bank_code ? (
+                                    <span className="font-mono ltr-nums">{p.bank_code}</span>
+                                  ) : null)}
+                                  {p.branch_code && (
+                                    <>
+                                      {(getBankName(p.bank_code) || p.bank_code) && ' · '}
+                                      <span className="font-mono ltr-nums">فرع {p.branch_code}</span>
+                                    </>
+                                  )}
+                                </span>
                               )}
                             </div>
                           ) : p.card_last_four ? (

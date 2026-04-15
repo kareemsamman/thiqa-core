@@ -406,9 +406,22 @@ export default function Login() {
 
   return (
     <div className="min-h-[100dvh] flex flex-col lg:flex-row relative" dir="rtl">
-      {/* Mobile background */}
+      {/* Mobile background — same looping video as the desktop left
+          panel. `loginBgMobile` acts as the poster so the user sees a
+          frame immediately while the first video chunk decodes, and as
+          a fallback on browsers that block autoplay. */}
       <div className="fixed inset-0 lg:hidden -z-10">
-        <img src={loginBgMobile} alt="" className="w-full h-full object-cover" />
+        <video
+          className="w-full h-full object-cover"
+          src="https://thiqacrm.b-cdn.net/video.mp4"
+          poster={loginBgMobile}
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="auto"
+          aria-hidden="true"
+        />
         <div className="absolute inset-0 bg-black/30 backdrop-blur-md" />
       </div>
 

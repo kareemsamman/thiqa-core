@@ -60,6 +60,84 @@ const REFUND_TYPE_LABELS: Record<string, string> = {
   manual_refund: 'مرتجع يدوي',
 };
 
+// Minimal bank registry — mirrors src/lib/banks.ts so the printed report
+// can resolve a stored bank_code to an Arabic name under each cheque row.
+// Codes are zero-padded 2-digit strings. Unknown codes are rendered as the
+// raw code in the report.
+const BANK_LABELS: Record<string, string> = {
+  "01": "ماكس إت فايننشلز",
+  "02": "بنك بوعلي أغودات يسرائيل (فاغي)",
+  "04": "بنك يهاف",
+  "05": "يسراكارت",
+  "06": "بنك أدانيم",
+  "07": "كال - بطاقات ائتمان لإسرائيل",
+  "08": "بنك هسفنوت",
+  "09": "بنك البريد",
+  "10": "بنك لئومي",
+  "11": "بنك ديسكونت",
+  "12": "بنك هبوعليم",
+  "13": "بنك إيغود",
+  "14": "بنك أوتسار هحيال",
+  "17": "بنك مركنتيل ديسكونت",
+  "18": "وان زيرو - البنك الرقمي الأول",
+  "20": "بنك مزراحي طفحوت",
+  "22": "سيتي بنك",
+  "23": "HSBC",
+  "24": "بنك هبوعليم (الأمريكي الإسرائيلي سابقاً)",
+  "25": "BNP Paribas إسرائيل",
+  "26": "يو بنك",
+  "27": "باركليز بنك",
+  "28": "هبوعليم (كونتيننتال سابقاً)",
+  "30": "البنك للتجارة",
+  "31": "البنك الدولي الأول لإسرائيل",
+  "32": "بنك للتمويل والتجارة",
+  "33": "بنك ديسكونت (مركنتيل سابقاً)",
+  "34": "البنك العربي الإسرائيلي",
+  "37": "بنك الأردن",
+  "38": "البنك التجاري الفلسطيني",
+  "39": "بنك الدولة الهندي (SBI)",
+  "43": "البنك الأهلي الأردني",
+  "46": "بنك مسد",
+  "48": "بنك أوتسار هحيال (عوفيد لئومي سابقاً)",
+  "49": "البنك العربي",
+  "50": "مسب - مركز المقاصة البنكي",
+  "52": "بنك بوعلي أغودات يسرائيل (فاغي)",
+  "54": "بنك القدس (يروشلايم)",
+  "59": "شبا - خدمات بنكية آلية",
+  "60": "كاردكوم",
+  "61": "ترانزيلا",
+  "65": "حيسخ - صندوق توفير للتعليم",
+  "66": "بنك القاهرة عمّان",
+  "67": "بنك الأراضي العربية",
+  "68": "بنك دكسيا / البنك البلدي",
+  "71": "البنك التجاري الأردني",
+  "73": "البنك الإسلامي العربي",
+  "74": "البنك البريطاني للشرق الأوسط",
+  "76": "بنك فلسطين للاستثمار",
+  "77": "بنك لئومي للرهن العقاري",
+  "82": "القدس للتنمية والاستثمار",
+  "83": "بنك الاتحاد",
+  "84": "بنك الإسكان",
+  "89": "بنك فلسطين",
+  "90": "بنك ديسكونت للرهن العقاري",
+  "93": "بنك الأردن الكويت",
+  "99": "بنك إسرائيل (البنك المركزي)",
+};
+
+const normalizeBankCode = (raw: string | null | undefined): string => {
+  if (!raw) return "";
+  const trimmed = String(raw).trim();
+  if (!trimmed) return "";
+  if (/^\d$/.test(trimmed)) return trimmed.padStart(2, "0");
+  return trimmed;
+};
+
+const getBankLabel = (code: string | null | undefined): string => {
+  const norm = normalizeBankCode(code);
+  if (!norm) return "";
+  return BANK_LABELS[norm] || norm;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -214,7 +292,7 @@ serve(async (req) => {
       policyIds.length
         ? supabase
             .from("policy_payments")
-            .select("id, policy_id, amount, payment_date, payment_type, cheque_number, receipt_number, refused, locked, batch_id")
+            .select("id, policy_id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code, receipt_number, refused, locked, batch_id")
             .in("policy_id", policyIds)
             .or("refused.eq.false,refused.is.null")
             .order("payment_date", { ascending: true })
@@ -719,14 +797,27 @@ function generateReportHtml(args: GenerateReportArgs): string {
         </tr>
       </thead>
       <tbody>
-        ${allPayments.map(p => `
+        ${allPayments.map(p => {
+          const bankLabel = getBankLabel(p.bank_code);
+          const branchLabel = p.branch_code ? `فرع ${escapeHtml(String(p.branch_code))}` : '';
+          const bankLine = (bankLabel || branchLabel)
+            ? `<div class="payment-bank-line">${[bankLabel, branchLabel].filter(Boolean).join(' · ')}</div>`
+            : '';
+          const chequeLine = p.cheque_number
+            ? ` · <span class="tabular">${escapeHtml(String(p.cheque_number))}</span>`
+            : '';
+          return `
           <tr>
             <td class="num">${p.receipt_number || '—'}</td>
-            <td>${paymentTypeLabel(p)}${p.cheque_number ? ` · ${p.cheque_number}` : ''}</td>
+            <td>
+              <div>${paymentTypeLabel(p)}${chequeLine}</div>
+              ${bankLine}
+            </td>
             <td class="date">${formatDate(p.payment_date)}</td>
             <td class="amount">₪${(p.amount || 0).toLocaleString('en-US')}</td>
           </tr>
-        `).join('')}
+          `;
+        }).join('')}
       </tbody>
     </table>
   `
@@ -1201,6 +1292,16 @@ function generateReportHtml(args: GenerateReportArgs): string {
       text-align: left;
       font-variant-numeric: tabular-nums;
       font-weight: 700;
+    }
+    /* Small secondary line under the payment-method cell showing the
+       cheque's bank + branch (when available). Muted gray, slightly
+       smaller font, so it reads as a detail of the row above without
+       stealing attention. */
+    .payments tbody .payment-bank-line {
+      font-size: 10.5px;
+      font-weight: 500;
+      color: #6b7280;
+      margin-top: 2px;
     }
     .payments-empty {
       padding: 14px;
