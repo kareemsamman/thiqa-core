@@ -17,7 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import thiqaLogoDark from "@/assets/thiqa-logo-dark.svg";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { Separator } from "@/components/ui/separator";
@@ -471,16 +470,23 @@ export default function Login() {
       >
         <div className="w-full max-w-md animate-scale-in">
           <div className="rounded-2xl sm:rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 lg:bg-white/70 lg:dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
-            {/* Header — animated Thiqa lockup. Non-interactive (no
-                click-to-replay) and uses the dark SVG so it's visible
-                on the white/light card background. currentColor is
-                inherited from `text-foreground` so the palette
-                switches correctly in dark mode. */}
-            <div className="flex justify-center pt-8 sm:pt-8 pb-3 sm:pb-3 px-6 sm:px-8 text-foreground">
+            {/* Mobile-only header — animated Thiqa lockup. Hidden on
+                desktop (`lg:hidden`) because the desktop left panel
+                already shows a larger version of the same animation,
+                and rendering both looks redundant.
+                * `interactive={false}` — no click-to-replay in the
+                  card header.
+                * `iconFilter="invert(1)"` — the bundled
+                  thiqa-logo-icon.svg wraps a light-content raster
+                  designed for dark backgrounds, so we flip it to
+                  dark pixels for the white/light card.
+                * `currentColor` on the wordmark + outline inherits
+                  `text-foreground` for correct light/dark theming. */}
+            <div className="flex justify-center pt-8 sm:pt-8 pb-3 sm:pb-3 px-6 sm:px-8 text-foreground lg:hidden">
               <ThiqaLogoAnimation
                 iconSize={44}
                 interactive={false}
-                iconSrc={thiqaLogoDark}
+                iconFilter="invert(1)"
               />
             </div>
 

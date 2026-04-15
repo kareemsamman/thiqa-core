@@ -39,6 +39,9 @@ interface ThiqaLogoAnimationProps {
   interactive?: boolean;
   /** Override the icon image — e.g. pass the dark SVG on a light card. */
   iconSrc?: string;
+  /** CSS filter applied to the icon <img>, e.g. `invert(1)` to darken a
+   *  light-content raster for display on a light background. */
+  iconFilter?: string;
 }
 
 // Animated Thiqa logo lockup for the login page. A circular icon
@@ -50,6 +53,7 @@ export function ThiqaLogoAnimation({
   iconSize = 92,
   interactive = true,
   iconSrc = thiqaIconDefault,
+  iconFilter,
 }: ThiqaLogoAnimationProps = {}) {
   const [t, setT] = useState<number>(-1);
   const [playing, setPlaying] = useState(false);
@@ -234,6 +238,7 @@ export function ThiqaLogoAnimation({
                     height: "100%",
                     display: "block",
                     objectFit: "cover",
+                    filter: iconFilter,
                   }}
                 />
               </div>
