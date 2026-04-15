@@ -42,6 +42,12 @@ interface ThiqaLogoAnimationProps {
   /** CSS filter applied to the icon <img>, e.g. `invert(1)` to darken a
    *  light-content raster for display on a light background. */
   iconFilter?: string;
+  /** Optional tagline rendered below the logo lockup that staggers in
+   *  word-by-word after the main animation finishes. Use this for
+   *  localized product descriptions (e.g. "نظام إدارة التأمين"). */
+  subtitle?: string;
+  /** Tailwind class applied to the subtitle wrapper (font, color). */
+  subtitleClassName?: string;
 }
 
 // Animated Thiqa logo lockup for the login page. A circular icon
@@ -49,11 +55,17 @@ interface ThiqaLogoAnimationProps {
 // in letter-by-letter while a gap opens up between the two. Colors
 // (wordmark + outline) use `currentColor` so the parent can set a
 // dark or light palette via `color:` / Tailwind text-* classes.
+//
+// When `subtitle` is provided, it renders under the lockup and
+// staggers in by word in the last ~20% of the timeline — so the
+// whole logo + tagline animates as a single cohesive sequence.
 export function ThiqaLogoAnimation({
   iconSize = 92,
   interactive = true,
   iconSrc = thiqaIconDefault,
   iconFilter,
+  subtitle,
+  subtitleClassName,
 }: ThiqaLogoAnimationProps = {}) {
   const [t, setT] = useState<number>(-1);
   const [playing, setPlaying] = useState(false);
@@ -95,14 +107,15 @@ export function ThiqaLogoAnimation({
 
   // Before the first frame we render a transparent placeholder of
   // roughly the final size so the parent layout doesn't shift when
-  // the animation kicks in.
+  // the animation kicks in. When a subtitle is present we add extra
+  // vertical room to reserve its line height too.
   if (t < 0) {
     return (
       <div
         aria-hidden="true"
         style={{
           width: iconSize * 2.4,
-          height: iconSize * 1.3,
+          height: iconSize * 1.3 + (subtitle ? 44 : 0),
         }}
       />
     );
@@ -125,8 +138,17 @@ export function ThiqaLogoAnimation({
   // Phase 4 (0.54 → 0.92): wordmark letters stagger in
   const textBase = progress(t, 0.54, 0.92);
 
+  // Phase 5 (0.78 → 1.0): subtitle words stagger in, starting just
+  // before the wordmark finishes so the two motions overlap
+  // gracefully into one continuous entrance.
+  const subtitleBase = progress(t, 0.78, 1.0);
+  // Split on whitespace so Arabic letters stay connected (per-char
+  // splits break glyph joining).
+  const subtitleWords = subtitle ? subtitle.split(/\s+/).filter(Boolean) : [];
+
   const gap = Math.round(iconSize * 0.28);
   const fontSize = Math.round(iconSize * 0.62);
+  const subtitleGap = Math.round(iconSize * 0.22);
   const dashLen = 2 * Math.PI * 49;
 
   const handleClick = interactive ? play : undefined;
@@ -135,9 +157,11 @@ export function ThiqaLogoAnimation({
     <div
       onClick={handleClick}
       role="img"
-      aria-label="Thiqa"
+      aria-label={subtitle ? `Thiqa — ${subtitle}` : "Thiqa"}
       style={{
         display: "flex",
+        // Column so the optional subtitle lands below the lockup.
+        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         cursor: interactive ? "pointer" : "default",
@@ -272,6 +296,47 @@ export function ThiqaLogoAnimation({
           )}
         </div>
       </div>
+
+      {/* Subtitle tagline — rendered only when provided. Word-level
+          split preserves Arabic letter joining (per-char split would
+          break ligatures). Each word is an inline-block so we can
+          animate translateY + opacity without disrupting the text
+          flow. */}
+      {subtitle && (
+        <div
+          className={subtitleClassName}
+          style={{
+            marginTop: subtitleGap,
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            gap: "0.3em",
+            lineHeight: 1.2,
+          }}
+        >
+          {subtitleWords.map((word, i) => {
+            const n = subtitleWords.length;
+            const ls = (i * 0.24) / Math.max(n, 1);
+            const le = Math.min(ls + 0.55, 1);
+            const raw = progress(subtitleBase, ls, le);
+            const op = easeOutExpo(raw);
+            const y = lerp(14, 0, easeOutQuint(raw));
+            return (
+              <span
+                key={i}
+                style={{
+                  display: "inline-block",
+                  opacity: op,
+                  transform: `translateY(${y}px)`,
+                  willChange: "transform, opacity",
+                }}
+              >
+                {word}
+              </span>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -456,9 +456,16 @@ export default function Login() {
           aria-hidden="true"
         />
         <div className="absolute inset-0 bg-gradient-to-br from-black/40 via-black/20 to-transparent" />
-        <div className="relative z-10 flex flex-col items-center gap-4 text-white">
-          <ThiqaLogoAnimation iconSize={104} />
-          <p className="text-white/80 text-lg font-light tracking-wide">نظام إدارة التأمين</p>
+        <div className="relative z-10 flex flex-col items-center text-white">
+          {/* Desktop left panel — the animation owns the tagline via
+              its `subtitle` prop so both animate as one sequence,
+              and click-to-replay is disabled. */}
+          <ThiqaLogoAnimation
+            iconSize={104}
+            interactive={false}
+            subtitle="نظام إدارة التأمين"
+            subtitleClassName="text-white/80 text-lg font-light tracking-wide"
+          />
         </div>
       </div>
 
@@ -482,9 +489,9 @@ export default function Login() {
                   dark pixels for the white/light card.
                 * `currentColor` on the wordmark + outline inherits
                   `text-foreground` for correct light/dark theming. */}
-            <div className="flex justify-center pt-8 sm:pt-8 pb-3 sm:pb-3 px-6 sm:px-8 text-foreground lg:hidden">
+            <div className="flex justify-center pt-10 pb-8 px-6 sm:px-8 text-foreground lg:hidden">
               <ThiqaLogoAnimation
-                iconSize={44}
+                iconSize={64}
                 interactive={false}
                 iconFilter="invert(1)"
               />
@@ -503,6 +510,19 @@ export default function Login() {
 
               {pageView === "login" ? (
                 <>
+                  {/* Desktop-only page heading. The mobile card already
+                      shows the animated logo in its own header, so a
+                      second big "تسجيل الدخول" would double up on
+                      small screens. `hidden lg:block` confines this
+                      to the desktop card where the header area is
+                      otherwise empty. */}
+                  <div className="hidden lg:block">
+                    <h1 className="text-3xl font-bold text-foreground">تسجيل الدخول</h1>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      أدخل بياناتك للمتابعة إلى حسابك
+                    </p>
+                  </div>
+
                   {/* Lockout warning */}
                   {lockoutMessage && (
                     <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive flex items-center gap-2">
