@@ -885,11 +885,11 @@ export function DebtPaymentModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl w-[95vw] max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-primary" />
-            تسديد ديون {clientName}
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <DollarSign className="h-5 w-5 text-primary shrink-0" />
+            <span className="truncate">تسديد ديون {clientName}</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -903,26 +903,26 @@ export function DebtPaymentModal({
             <p>لا توجد ديون مستحقة</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {/* Summary Cards */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-muted/50 rounded-lg p-3 text-center">
-                <p className="text-xs text-muted-foreground">إجمالي السعر</p>
-                <p className="text-lg font-bold ltr-nums">₪{totalFullPrice.toLocaleString('en-US')}</p>
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="bg-muted/50 rounded-lg p-2 sm:p-3 text-center">
+                <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">إجمالي السعر</p>
+                <p className="text-sm sm:text-lg font-bold tabular-nums leading-tight mt-0.5">₪{totalFullPrice.toLocaleString('en-US')}</p>
               </div>
-              <div className="bg-green-500/10 rounded-lg p-3 text-center">
-                <p className="text-xs text-muted-foreground">المدفوع</p>
-                <p className="text-lg font-bold text-green-600 ltr-nums">
+              <div className="bg-green-500/10 rounded-lg p-2 sm:p-3 text-center">
+                <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">المدفوع</p>
+                <p className="text-sm sm:text-lg font-bold text-green-600 tabular-nums leading-tight mt-0.5">
                   ₪{(totalPaidAmount + paidVisaTotal).toLocaleString('en-US')}
                 </p>
               </div>
-              <div className="bg-destructive/10 rounded-lg p-3 text-center">
-                <p className="text-xs text-muted-foreground">المتبقي للدفع</p>
-                <p className="text-lg font-bold text-destructive ltr-nums">
+              <div className="bg-destructive/10 rounded-lg p-2 sm:p-3 text-center">
+                <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">المتبقي للدفع</p>
+                <p className="text-sm sm:text-lg font-bold text-destructive tabular-nums leading-tight mt-0.5">
                   ₪{effectiveRemaining.toLocaleString('en-US')}
                 </p>
                 {appliedCredit > 0 && (
-                  <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                  <div className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 space-y-0.5 leading-tight">
                     <p>المطلوب: ₪{(totalRemaining - paidVisaTotal).toLocaleString('en-US')}</p>
                     <p className="text-amber-600">المرتجع: -₪{appliedCredit.toLocaleString('en-US')}</p>
                   </div>

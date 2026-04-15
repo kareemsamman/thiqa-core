@@ -1630,24 +1630,24 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         </Card>
 
         {/* Financial Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          <Card className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
-            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
-              <Wallet className="h-5 w-5 sm:h-6 sm:w-6 text-success" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
+          <Card className="p-2.5 sm:p-4 flex items-center gap-2 sm:gap-4">
+            <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
+              <Wallet className="h-4 w-4 sm:h-6 sm:w-6 text-success" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-[10px] sm:text-xs text-muted-foreground">إجمالي المدفوع</p>
-              <p className="text-base sm:text-xl font-bold text-success truncate">₪{paymentSummary.total_paid.toLocaleString()}</p>
+              <p className="text-sm sm:text-xl font-bold text-success tabular-nums break-words leading-tight">₪{paymentSummary.total_paid.toLocaleString()}</p>
             </div>
           </Card>
 
-          <Card className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
-            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
-              <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-destructive" />
+          <Card className="p-2.5 sm:p-4 flex items-start gap-2 sm:gap-4">
+            <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
+              <AlertCircle className="h-4 w-4 sm:h-6 sm:w-6 text-destructive" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[10px] sm:text-xs text-muted-foreground">إجمالي المتبقي</p>
-              <p className={cn("text-base sm:text-xl font-bold truncate",
+              <p className={cn("text-sm sm:text-xl font-bold tabular-nums break-words leading-tight",
                 (paymentSummary.total_remaining - walletBalance.total_refunds) > 0
                   ? "text-destructive"
                   : "text-success"
@@ -1655,9 +1655,9 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 ₪{Math.max(0, paymentSummary.total_remaining - walletBalance.total_refunds).toLocaleString()}
               </p>
               {walletBalance.total_refunds > 0 && paymentSummary.total_remaining > 0 && (
-                <div className="text-[10px] text-muted-foreground space-y-0.5 mt-1">
-                  <p>المطلوب: ₪{paymentSummary.total_remaining.toLocaleString()}</p>
-                  <p className="text-amber-600">المرتجع: -₪{walletBalance.total_refunds.toLocaleString()}</p>
+                <div className="text-[9px] sm:text-[10px] text-muted-foreground space-y-0.5 mt-1">
+                  <p className="truncate">المطلوب: ₪{paymentSummary.total_remaining.toLocaleString()}</p>
+                  <p className="text-amber-600 truncate">المرتجع: -₪{walletBalance.total_refunds.toLocaleString()}</p>
                 </div>
               )}
             </div>
@@ -1665,32 +1665,33 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
               totalOwed={paymentSummary.total_paid + paymentSummary.total_remaining}
               totalPaid={paymentSummary.total_paid + walletBalance.total_refunds}
               showAmount={false}
+              className="hidden sm:inline-flex"
             />
           </Card>
 
           {/* Profit card - Admin only */}
           {isAdmin && (
-            <Card className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
-              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+            <Card className="p-2.5 sm:p-4 flex items-center gap-2 sm:gap-4">
+              <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <TrendingUp className="h-4 w-4 sm:h-6 sm:w-6 text-primary" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-[10px] sm:text-xs text-muted-foreground">إجمالي الأرباح</p>
-                <p className="text-base sm:text-xl font-bold text-primary truncate">₪{paymentSummary.total_profit.toLocaleString()}</p>
+                <p className="text-sm sm:text-xl font-bold text-primary tabular-nums break-words leading-tight">₪{paymentSummary.total_profit.toLocaleString()}</p>
               </div>
             </Card>
           )}
 
           {/* Wallet Balance - Show only if we owe customer MORE than their debt (net credit) */}
           {(walletBalance.total_refunds - paymentSummary.total_remaining) > 0 && (
-            <Card className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4 border-amber-500/30 bg-amber-500/5">
-              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
-                <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-amber-600" />
+            <Card className="p-2.5 sm:p-4 flex items-center gap-2 sm:gap-4 border-amber-500/30 bg-amber-500/5">
+              <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                <Banknote className="h-4 w-4 sm:h-6 sm:w-6 text-amber-600" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-[10px] sm:text-xs text-amber-700">مرتجع للعميل</p>
-                <p className="text-base sm:text-xl font-bold text-amber-600 truncate">₪{(walletBalance.total_refunds - paymentSummary.total_remaining).toLocaleString()}</p>
-                <p className="text-[10px] text-amber-600/70">نحن مدينون للعميل بهذا المبلغ</p>
+                <p className="text-sm sm:text-xl font-bold text-amber-600 tabular-nums break-words leading-tight">₪{(walletBalance.total_refunds - paymentSummary.total_remaining).toLocaleString()}</p>
+                <p className="text-[9px] sm:text-[10px] text-amber-600/70 leading-tight">نحن مدينون للعميل بهذا المبلغ</p>
               </div>
             </Card>
           )}
