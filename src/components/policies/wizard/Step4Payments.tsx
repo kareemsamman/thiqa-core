@@ -490,13 +490,21 @@ export function Step4Payments({
                     )}
                   </div>
 
-                  {/* Cheque identifiers — bank / branch / رقم الشيك
-                      placed in the same 4-column grid as the main row
-                      above so each cheque field lines up with a main
-                      field (bank↔type, branch↔amount, cheque#↔date).
-                      The 4th slot stays empty where actions would be. */}
+                  {/* Cheque identifiers — bank / branch / رقم الشيك.
+                      Uses its own 3-col grid (independent of the main
+                      payment row above) so each field gets ~33% width
+                      instead of the cramped ~25% it had when forced
+                      into the main row's 4-col layout. Bank is weighted
+                      slightly wider since it holds the searchable
+                      combobox with the longest content. */}
                   {payment.payment_type === 'cheque' && !isLocked && (
-                    <div className="mt-2 grid grid-cols-2 lg:grid-cols-4 gap-2 items-end pl-8">
+                    <div
+                      className="mt-2 grid gap-2 items-end pl-8"
+                      style={{
+                        gridTemplateColumns:
+                          "minmax(0,1.4fr) minmax(0,0.8fr) minmax(0,1fr)",
+                      }}
+                    >
                       <div>
                         <Label className="text-[10px] mb-1 block text-muted-foreground">البنك</Label>
                         <BankPicker
@@ -522,7 +530,7 @@ export function Step4Payments({
                           disabled={isDisabled}
                         />
                       </div>
-                      <div className={cn("col-span-2 lg:col-span-1", !hasActionsColumn && "lg:col-span-2")}>
+                      <div>
                         <Label className="text-[10px] mb-1 block text-muted-foreground">رقم الشيك</Label>
                         <Input
                           value={payment.cheque_number || ''}

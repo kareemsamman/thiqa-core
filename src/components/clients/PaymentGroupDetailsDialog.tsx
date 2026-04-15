@@ -302,7 +302,39 @@ export function PaymentGroupDetailsDialog({
                 </tr>
               </thead>
               <tbody>
-                {group.payments.map((p, idx) => {
+                {/* Sort rule for the details table:
+                      1. visa first
+                      2. cash second
+                      3. transfer third
+                      4. cheques last, grouped together and ordered by
+                         due date (payment_date) ascending, falling back
+                         to cheque_number so sibling cheques always sit
+                         adjacent even if dates match.
+                    This puts the "immediate" money (visa + cash) on top
+                    where the user expects to see it, and the cheques
+                    queue up in the order they'll clear. */}
+                {[...group.payments]
+                  .sort((a, b) => {
+                    const rank: Record<string, number> = {
+                      visa: 0,
+                      cash: 1,
+                      transfer: 2,
+                      cheque: 3,
+                    };
+                    const ra = rank[a.payment_type] ?? 99;
+                    const rb = rank[b.payment_type] ?? 99;
+                    if (ra !== rb) return ra - rb;
+                    if (a.payment_type === 'cheque') {
+                      const ad = a.payment_date || '';
+                      const bd = b.payment_date || '';
+                      if (ad !== bd) return ad < bd ? -1 : 1;
+                      const an = a.cheque_number || '';
+                      const bn = b.cheque_number || '';
+                      return an < bn ? -1 : an > bn ? 1 : 0;
+                    }
+                    return 0;
+                  })
+                  .map((p, idx) => {
                   const Icon = paymentTypeIcon[p.payment_type] || Banknote;
                   const typeBg = paymentTypeBg[p.payment_type] || "bg-muted text-muted-foreground border-border";
                   const attachments = imagesByPayment[p.id] || [];
