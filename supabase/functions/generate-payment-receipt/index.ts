@@ -19,6 +19,83 @@ const PAYMENT_TYPE_LABELS: Record<string, string> = {
   transfer: 'تحويل بنكي',
 };
 
+// Minimal bank registry — mirrors src/lib/banks.ts so the printed
+// receipt can resolve a stored bank_code to an Arabic name.
+// Unknown codes fall back to the raw code string.
+const BANK_LABELS: Record<string, string> = {
+  "01": "ماكس إت فايننشلز",
+  "02": "بنك بوعلي أغودات يسرائيل (فاغي)",
+  "04": "بنك يهاف",
+  "05": "يسراكارت",
+  "06": "بنك أدانيم",
+  "07": "كال - بطاقات ائتمان لإسرائيل",
+  "08": "بنك هسفنوت",
+  "09": "بنك البريد",
+  "10": "بنك لئومي",
+  "11": "بنك ديسكونت",
+  "12": "بنك هبوعليم",
+  "13": "بنك إيغود",
+  "14": "بنك أوتسار هحيال",
+  "17": "بنك مركنتيل ديسكونت",
+  "18": "وان زيرو - البنك الرقمي الأول",
+  "20": "بنك مزراحي طفحوت",
+  "22": "سيتي بنك",
+  "23": "HSBC",
+  "24": "بنك هبوعليم (الأمريكي الإسرائيلي سابقاً)",
+  "25": "BNP Paribas إسرائيل",
+  "26": "يو بنك",
+  "27": "باركليز بنك",
+  "28": "هبوعليم (كونتيننتال سابقاً)",
+  "30": "البنك للتجارة",
+  "31": "البنك الدولي الأول لإسرائيل",
+  "32": "بنك للتمويل والتجارة",
+  "33": "بنك ديسكونت (مركنتيل سابقاً)",
+  "34": "البنك العربي الإسرائيلي",
+  "37": "بنك الأردن",
+  "38": "البنك التجاري الفلسطيني",
+  "39": "بنك الدولة الهندي (SBI)",
+  "43": "البنك الأهلي الأردني",
+  "46": "بنك مسد",
+  "48": "بنك أوتسار هحيال (عوفيد لئومي سابقاً)",
+  "49": "البنك العربي",
+  "50": "مسب - مركز المقاصة البنكي",
+  "52": "بنك بوعلي أغودات يسرائيل (فاغي)",
+  "54": "بنك القدس (يروشلايم)",
+  "59": "شبا - خدمات بنكية آلية",
+  "60": "كاردكوم",
+  "61": "ترانزيلا",
+  "65": "حيسخ - صندوق توفير للتعليم",
+  "66": "بنك القاهرة عمّان",
+  "67": "بنك الأراضي العربية",
+  "68": "بنك دكسيا / البنك البلدي",
+  "71": "البنك التجاري الأردني",
+  "73": "البنك الإسلامي العربي",
+  "74": "البنك البريطاني للشرق الأوسط",
+  "76": "بنك فلسطين للاستثمار",
+  "77": "بنك لئومي للرهن العقاري",
+  "82": "القدس للتنمية والاستثمار",
+  "83": "بنك الاتحاد",
+  "84": "بنك الإسكان",
+  "89": "بنك فلسطين",
+  "90": "بنك ديسكونت للرهن العقاري",
+  "93": "بنك الأردن الكويت",
+  "99": "بنك إسرائيل (البنك المركزي)",
+};
+
+const normalizeBankCode = (raw: string | null | undefined): string => {
+  if (!raw) return "";
+  const trimmed = String(raw).trim();
+  if (!trimmed) return "";
+  if (/^\d$/.test(trimmed)) return trimmed.padStart(2, "0");
+  return trimmed;
+};
+
+const getBankLabel = (code: string | null | undefined): string => {
+  const norm = normalizeBankCode(code);
+  if (!norm) return "";
+  return BANK_LABELS[norm] || norm;
+};
+
 // Label a payment method. Locked visa rows are auto-created ELZAMI
 // payments the customer made directly on the insurance company's portal;
 // show them as "فيزا خارجي" so it's clear it didn't pass through the
@@ -108,7 +185,26 @@ function buildPaymentReceiptHtml(
       extraDetailRows.push(`
         <div class="row">
           <div class="label">رقم الشيك</div>
-          <div class="val">${payment.cheque_number}</div>
+          <div class="val">${escapeHtml(String(payment.cheque_number))}</div>
+        </div>
+      `);
+    }
+    // Bank row — resolved to the Arabic name when the stored code
+    // matches the registry, otherwise the raw code passes through.
+    const bankLabel = getBankLabel(payment.bank_code);
+    if (bankLabel) {
+      extraDetailRows.push(`
+        <div class="row">
+          <div class="label">البنك</div>
+          <div class="val">${escapeHtml(bankLabel)}</div>
+        </div>
+      `);
+    }
+    if (payment.branch_code) {
+      extraDetailRows.push(`
+        <div class="row">
+          <div class="label">الفرع</div>
+          <div class="val">${escapeHtml(String(payment.branch_code))}</div>
         </div>
       `);
     }
@@ -625,6 +721,8 @@ serve(async (req) => {
         payment_date,
         cheque_number,
         cheque_date,
+        bank_code,
+        branch_code,
         card_last_four,
         card_expiry,
         installments_count,
