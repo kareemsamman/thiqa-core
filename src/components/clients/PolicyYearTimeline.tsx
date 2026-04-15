@@ -651,6 +651,13 @@ export function PolicyYearTimeline({
         payment_date: p.payment_date,
         payment_type: p.payment_type,
         cheque_number: p.cheque_number,
+        // Bank/branch/cheque_date were being dropped here, so opening
+        // the edit dialog from the timeline always showed an empty
+        // bank field even after the user had saved one. Pass them
+        // through so PaymentEditDialog's formData init sees them.
+        cheque_date: p.cheque_date,
+        bank_code: p.bank_code,
+        branch_code: p.branch_code,
         cheque_image_url: p.cheque_image_url,
         card_last_four: p.card_last_four,
         refused: p.refused,
