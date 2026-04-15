@@ -44,6 +44,7 @@ export interface PaymentRecord {
     id: string;
     policy_type_parent: string;
     insurance_price: number;
+    office_commission?: number | null;
   } | null;
 }
 
@@ -462,6 +463,64 @@ export function PaymentGroupDetailsDialog({
                   );
                 })}
               </tbody>
+              {/* Footer: running totals. Commission is computed once per
+                  unique policy in the group (each policy's office_commission
+                  is added once even if multiple payments reference it) and
+                  only rendered when at least one policy carries a non-zero
+                  commission. Total is the sum of non-refused payment amounts
+                  so the user sees what actually landed in the till. */}
+              {(() => {
+                const totalPaid = group.payments
+                  .filter((p) => !p.refused)
+                  .reduce((s, p) => s + (p.amount || 0), 0);
+                const uniquePolicies = new Map<string, number>();
+                for (const p of group.payments) {
+                  if (!p.policy?.id) continue;
+                  const commission = Number(p.policy.office_commission) || 0;
+                  if (commission > 0 && !uniquePolicies.has(p.policy.id)) {
+                    uniquePolicies.set(p.policy.id, commission);
+                  }
+                }
+                const totalCommission = Array.from(uniquePolicies.values()).reduce(
+                  (s, c) => s + c,
+                  0,
+                );
+                const colSpan = onEdit || onDelete ? 7 : 6;
+                return (
+                  <tfoot className="border-t-2 border-border/60 bg-muted/30">
+                    {totalCommission > 0 && (
+                      <tr>
+                        <td
+                          colSpan={colSpan - 3}
+                          className="px-3 py-2.5 text-right text-xs font-semibold text-muted-foreground"
+                        >
+                          عمولة المكتب
+                        </td>
+                        <td className="px-3 py-2.5 text-left">
+                          <span className="text-sm font-bold ltr-nums text-amber-700 dark:text-amber-400">
+                            ₪{totalCommission.toLocaleString("en-US")}
+                          </span>
+                        </td>
+                        <td colSpan={onEdit || onDelete ? 3 : 2} />
+                      </tr>
+                    )}
+                    <tr>
+                      <td
+                        colSpan={colSpan - 3}
+                        className="px-3 py-3 text-right text-sm font-bold"
+                      >
+                        المجموع
+                      </td>
+                      <td className="px-3 py-3 text-left">
+                        <span className="text-base font-bold ltr-nums text-foreground">
+                          ₪{totalPaid.toLocaleString("en-US")}
+                        </span>
+                      </td>
+                      <td colSpan={onEdit || onDelete ? 3 : 2} />
+                    </tr>
+                  </tfoot>
+                );
+              })()}
             </table>
           </div>
         </div>

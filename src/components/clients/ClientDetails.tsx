@@ -627,7 +627,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // package into one row.
       const { data: policiesData } = await supabase
         .from('policies')
-        .select('id, policy_type_parent, policy_type_child, insurance_price, group_id')
+        .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, group_id')
         .eq('client_id', client.id)
         .is('deleted_at', null);
 

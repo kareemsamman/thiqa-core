@@ -636,7 +636,7 @@ export function PolicyYearTimeline({
           id, policy_id, amount, payment_date, payment_type, cheque_number, cheque_date,
           bank_code, branch_code, cheque_image_url, card_last_four, refused, locked, notes,
           policy:policies!policy_payments_policy_id_fkey(
-            id, policy_type_parent, policy_type_child, insurance_price
+            id, policy_type_parent, policy_type_child, insurance_price, office_commission
           )
         `)
         .in('policy_id', policyIds)
