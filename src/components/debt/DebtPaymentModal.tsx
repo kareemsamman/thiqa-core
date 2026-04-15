@@ -310,21 +310,17 @@ export function DebtPaymentModal({
    * Fetch all policies and payments for the client, then build DebtItems
    * grouped by group_id (packages) or individual policies (singles).
    *
-   * Package grouping rule (mirrors get_client_balance RPC in migration
-   * 20260413240000): a package with a broker sibling (e.g. THIRD_FULL on
-   * a broker deal + ROAD_SERVICE as client-owed) pools every payment
-   * recorded in the group — including payments on the broker row — and
-   * caps the counted paid at the non-broker owed amount. That way the
-   * modal sees the package as paid off when the broker row already
-   * swallowed the client-owed portion, and broker overpayment in one
-   * group never erases legitimate debt in another group.
+   * Broker deals are treated as client debt — the client owes the full
+   * package regardless of who arranged it. Because package payments
+   * are commonly recorded against one row (often the broker sibling),
+   * we group by group_id and pool every payment in the group so a
+   * package that was paid in full via the broker row shows as 0
+   * remaining even when the non-broker sibling has no direct payments.
+   * See migration 20260413240000 for the original أسامة حسام case.
    */
   const fetchDebtItems = async () => {
     setLoading(true);
     try {
-      // Fetch ALL active policies for this client, including broker ones.
-      // Broker policies are used only to pool their payments into the
-      // surrounding group — they never appear as standalone debt items.
       const { data: policiesData, error: policiesError } = await supabase
         .from('policies')
         .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, branch_id, group_id, broker_id, car:cars(car_number)')
@@ -337,7 +333,6 @@ export function DebtPaymentModal({
 
       const allPolicyIds = (policiesData || []).map(p => p.id);
 
-      // Fetch ALL payments for these policies (broker + non-broker)
       let paymentsMap: Record<string, number> = {};
       if (allPolicyIds.length > 0) {
         const { data: paymentsData, error: paymentsError } = await supabase
@@ -354,8 +349,7 @@ export function DebtPaymentModal({
         });
       }
 
-      // Group policies by group_id or individual. Broker policies ride
-      // inside their group so their payments feed the pooled total.
+      // Group policies by group_id or individual.
       const groupMap = new Map<string, typeof policiesData>();
 
       (policiesData || []).forEach(policy => {
@@ -366,20 +360,15 @@ export function DebtPaymentModal({
         groupMap.get(key)!.push(policy);
       });
 
-      // Build DebtItems
       const items: DebtItem[] = [];
 
       groupMap.forEach((groupPolicies, itemKey) => {
-        const nonBrokerPolicies = groupPolicies.filter(p => !(p as any).broker_id);
+        const isPackage = groupPolicies.length > 1 || (groupPolicies[0]?.group_id !== null);
 
-        // All-broker group: nothing for the client to pay here.
-        if (nonBrokerPolicies.length === 0) return;
-
-        const isPackage = nonBrokerPolicies.length > 1 || (nonBrokerPolicies[0]?.group_id !== null);
-
-        // Build policy components from the non-broker rows only — those
-        // are the ones the client is liable for and can receive payments.
-        const policyComponents: PolicyComponent[] = nonBrokerPolicies.map(p => {
+        // Build policy components from every policy in the group
+        // (including broker siblings) — the client's debt view is the
+        // gross package total.
+        const policyComponents: PolicyComponent[] = groupPolicies.map(p => {
           const commission = (p as any).office_commission || 0;
           const effectivePrice = p.insurance_price + commission;
           return {
@@ -394,15 +383,8 @@ export function DebtPaymentModal({
           };
         });
 
-        // Pool every payment in the group (broker + non-broker), then
-        // cap at what the client is actually owed for this group so
-        // broker overpayment never erases debt elsewhere.
         const fullPrice = policyComponents.reduce((sum, p) => sum + p.price, 0);
-        const groupPoolPaid = groupPolicies.reduce(
-          (sum, p) => sum + (paymentsMap[p.id] || 0),
-          0,
-        );
-        const paidTotal = Math.min(groupPoolPaid, fullPrice);
+        const paidTotal = policyComponents.reduce((sum, p) => sum + p.paid, 0);
         const fullPackageRemaining = Math.max(0, fullPrice - paidTotal);
 
         // For debt display: only show non-ELZAMI portion that's actually payable
@@ -458,8 +440,8 @@ export function DebtPaymentModal({
             fullPrice,
             paidTotal,
             remainingTotal,
-            carNumber: (nonBrokerPolicies[0]?.car as any)?.car_number || null,
-            includesElzami: nonBrokerPolicies.some(p => p.policy_type_parent === 'ELZAMI'),
+            carNumber: (groupPolicies[0]?.car as any)?.car_number || null,
+            includesElzami: groupPolicies.some(p => p.policy_type_parent === 'ELZAMI'),
             payablePolicies,
           });
         }
