@@ -311,9 +311,6 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
               <div className="space-y-2">
                 <Label htmlFor="elzami_commission" className="text-right block">
                   تكلفة الإلزامي (₪)
-                  <span className="text-xs text-destructive mr-2">
-                    (مبلغ يُخصم من AB)
-                  </span>
                 </Label>
                 <Input
                   id="elzami_commission"

@@ -264,54 +264,50 @@ export default function Companies() {
                         {company.active ? 'نشط' : 'غير نشط'}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2 flex-wrap">
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1.5 flex-nowrap">
                         <Button
                           variant="default"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/companies/${company.id}/wallet`);
-                          }}
+                          size="icon"
+                          className="h-8 w-8"
+                          title="المحفظة"
+                          onClick={() => navigate(`/companies/${company.id}/wallet`)}
                         >
-                          <Wallet className="h-4 w-4 ml-2" />
-                          المحفظة
+                          <Wallet className="h-4 w-4" />
+                          <span className="sr-only">المحفظة</span>
                         </Button>
                         <Button
                           variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleManagePricing(company);
-                          }}
+                          size="icon"
+                          className="h-8 w-8"
+                          title="التسعير"
+                          onClick={() => handleManagePricing(company)}
                         >
-                          <Settings className="h-4 w-4 ml-2" />
-                          التسعير
+                          <Settings className="h-4 w-4" />
+                          <span className="sr-only">التسعير</span>
                         </Button>
                         {company.category_parent?.includes('ROAD_SERVICE') && (
                           <Button
                             variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleManageRoadServicePricing(company);
-                            }}
+                            size="icon"
+                            className="h-8 w-8"
+                            title="خدمات الطريق"
+                            onClick={() => handleManageRoadServicePricing(company)}
                           >
-                            <Truck className="h-4 w-4 ml-2" />
-                            خدمات الطريق
+                            <Truck className="h-4 w-4" />
+                            <span className="sr-only">خدمات الطريق</span>
                           </Button>
                         )}
                         {company.category_parent?.includes('ROAD_SERVICE') && (
                           <Button
                             variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleManageAccidentFeePricing(company);
-                            }}
+                            size="icon"
+                            className="h-8 w-8"
+                            title="إعفاء الحادث"
+                            onClick={() => handleManageAccidentFeePricing(company)}
                           >
-                            <Shield className="h-4 w-4 ml-2" />
-                            إعفاء الحادث
+                            <Shield className="h-4 w-4" />
+                            <span className="sr-only">إعفاء الحادث</span>
                           </Button>
                         )}
                       </div>
