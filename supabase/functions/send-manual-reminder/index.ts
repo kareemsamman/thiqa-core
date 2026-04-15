@@ -64,13 +64,29 @@ Deno.serve(async (req) => {
       );
     }
 
-    // User-scoped client for RPCs that need auth.uid() (e.g.
-    // report_debt_policies_for_clients gates on is_active_user and
-    // can_access_branch, both of which require the caller's uid).
-    const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    // Raw-fetch RPC helper that forwards the caller's JWT straight to
+    // PostgREST. We avoid creating a second supabase-js client with
+    // `global.headers.Authorization` because that path runs gotrue-js
+    // JWT decoding locally, which blows up on ES256-signed tokens
+    // with "Unsupported JWT algorithm ES256". Postgrest + the auth
+    // server handle ES256 natively, so going through raw fetch is
+    // safe.
+    const rpcAsCaller = async (fn: string, params: Record<string, unknown>) => {
+      const resp = await fetch(`${supabaseUrl}/rest/v1/rpc/${fn}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(params),
+      });
+      if (!resp.ok) {
+        const body = await resp.text();
+        throw new Error(`rpc ${fn} failed (${resp.status}): ${body}`);
+      }
+      return resp.json();
+    };
 
     // Check if user is active
     const { data: profile } = await supabase
@@ -190,13 +206,18 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Fetch policy details for this client. Must go through the
-      // user-scoped client so auth.uid() is populated inside the RPC
+      // Fetch policy details for this client. Raw-fetch with the
+      // caller's JWT so auth.uid() is populated inside the RPC
       // (is_active_user / can_access_branch gate on it).
-      const { data: policies } = await userSupabase.rpc(
-        'report_debt_policies_for_clients',
-        { p_client_ids: [client_id] }
-      );
+      let policies: any[] = [];
+      try {
+        const rpcData = await rpcAsCaller('report_debt_policies_for_clients', {
+          p_client_ids: [client_id],
+        });
+        policies = Array.isArray(rpcData) ? rpcData : [];
+      } catch (err) {
+        console.error('report_debt_policies_for_clients failed:', err);
+      }
 
       // Build policy lines (max 5 to keep SMS short). Group by group_id so
       // packages appear as a single combined entry, ELZAMI is hidden unless

@@ -73,20 +73,31 @@ Deno.serve(async (req) => {
       });
     }
 
-    // User-scoped client — used for RPCs that rely on auth.uid() inside
-    // the function (report_client_debts, report_debt_policies_for_clients,
-    // etc.). The service-role client we created above sets auth.uid() to
-    // NULL inside SQL, which would make every tenant-scoped RPC return
-    // an empty set. This second client sends the caller's JWT on each
-    // request so auth.uid() resolves correctly.
-    const userSupabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-        auth: { persistSession: false, autoRefreshToken: false },
+    // Helper to call a PostgREST RPC with the caller's JWT. We avoid
+    // instantiating a second supabase-js client here because
+    // constructing one with a global Authorization header triggers
+    // local JWT decoding inside gotrue-js, which blows up with
+    // "Unsupported JWT algorithm ES256" on ES256-signed tokens. Raw
+    // fetch sends the bearer straight to PostgREST, which forwards
+    // verification to the auth server (that side handles ES256).
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const rpcAsCaller = async (fn: string, params: Record<string, unknown>) => {
+      const resp = await fetch(`${supabaseUrl}/rest/v1/rpc/${fn}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: anonKey,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(params),
+      });
+      if (!resp.ok) {
+        const body = await resp.text();
+        throw new Error(`rpc ${fn} failed (${resp.status}): ${body}`);
       }
-    );
+      return resp.json();
+    };
 
     // Parse request body
     // Resolve agent branding
@@ -118,32 +129,31 @@ Deno.serve(async (req) => {
       .eq("agent_id", agentId)
       .maybeSingle();
 
-    // Get all clients matching the filter (no pagination limit).
-    // Call through the user-scoped client so auth.uid() inside the
-    // tenant-scoped RPC resolves to the caller.
-    const { data: clientRows, error: clientError } = await userSupabase.rpc(
-      "report_client_debts",
-      {
+    // Get all clients matching the filter (no pagination limit). Raw
+    // fetch so auth.uid() inside the tenant-scoped RPC resolves to
+    // the caller without going through supabase-js' JWT decoder.
+    let clientRows: any[] = [];
+    try {
+      const rpcData = await rpcAsCaller("report_client_debts", {
         p_search: search || null,
         p_filter_days: filter_days,
-        p_limit: 10000, // Large limit to get all
+        p_limit: 10000,
         p_offset: 0,
-      }
-    );
-
-    if (clientError) {
-      console.error("Client fetch error:", clientError);
-      throw clientError;
+      });
+      clientRows = Array.isArray(rpcData) ? rpcData : [];
+    } catch (err) {
+      console.error("report_client_debts failed:", err);
+      throw err;
     }
 
-    console.log(`Found ${clientRows?.length || 0} clients with debt`);
+    console.log(`Found ${clientRows.length} clients with debt`);
 
     // Defensive tenant guard: the RPC *should* already be scoped to the
     // caller's agent, but re-verify every row against `clients.agent_id`
     // before sending an SMS. Without this, any hole in the RPC leaks
     // straight into the SMS blast. Fetch the agent_id for every returned
     // client_id in one query and drop anything that doesn't belong to us.
-    const rawClientIds = (clientRows || [])
+    const rawClientIds = clientRows
       .map((c: any) => c.client_id)
       .filter(Boolean);
     const allowedClientIds = new Set<string>();
@@ -163,7 +173,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const droppedCount = (clientRows?.length || 0) - allowedClientIds.size;
+    const droppedCount = clientRows.length - allowedClientIds.size;
     if (droppedCount > 0) {
       console.warn(
         `[tenant-guard] Dropping ${droppedCount} client row(s) that do not belong to agent ${agentId}`,
@@ -172,7 +182,7 @@ Deno.serve(async (req) => {
 
     // Filter clients with valid phone numbers AND that passed the
     // tenant guard above.
-    const clientsWithPhone = (clientRows || []).filter(
+    const clientsWithPhone = clientRows.filter(
       (c: any) =>
         c.client_phone &&
         c.client_phone.trim() !== "" &&
@@ -237,13 +247,18 @@ Deno.serve(async (req) => {
         // Fetch policy details for this client (user-scoped so
         // is_active_user / can_access_branch inside the RPC see the
         // caller's uid).
-        const { data: policies } = await userSupabase.rpc(
-          "report_debt_policies_for_clients",
-          { p_client_ids: [client.client_id] }
-        );
+        let policies: any[] = [];
+        try {
+          const rpcData = await rpcAsCaller("report_debt_policies_for_clients", {
+            p_client_ids: [client.client_id],
+          });
+          policies = Array.isArray(rpcData) ? rpcData : [];
+        } catch (err) {
+          console.error(`policy lookup failed for client ${client.client_id}:`, err);
+        }
 
         // Build policy lines (max 5 to keep SMS short)
-        const policyLines = (policies || [])
+        const policyLines = policies
           .filter((p: any) => (p.remaining || 0) > 0)
           .map((p: any) => {
             const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
