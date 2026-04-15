@@ -121,10 +121,45 @@ Deno.serve(async (req) => {
 
     console.log(`Found ${clientRows?.length || 0} clients with debt`);
 
-    // Filter clients with valid phone numbers
-    // Note: total_remaining now comes from unified get_client_balance function
+    // Defensive tenant guard: the RPC *should* already be scoped to the
+    // caller's agent, but re-verify every row against `clients.agent_id`
+    // before sending an SMS. Without this, any hole in the RPC leaks
+    // straight into the SMS blast. Fetch the agent_id for every returned
+    // client_id in one query and drop anything that doesn't belong to us.
+    const rawClientIds = (clientRows || [])
+      .map((c: any) => c.client_id)
+      .filter(Boolean);
+    const allowedClientIds = new Set<string>();
+    if (rawClientIds.length > 0) {
+      const { data: ownedRows, error: ownedError } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('agent_id', agentId)
+        .is('deleted_at', null)
+        .in('id', rawClientIds);
+      if (ownedError) {
+        console.error('Tenant guard lookup failed:', ownedError);
+        throw ownedError;
+      }
+      for (const row of ownedRows || []) {
+        allowedClientIds.add(row.id as string);
+      }
+    }
+
+    const droppedCount = (clientRows?.length || 0) - allowedClientIds.size;
+    if (droppedCount > 0) {
+      console.warn(
+        `[tenant-guard] Dropping ${droppedCount} client row(s) that do not belong to agent ${agentId}`,
+      );
+    }
+
+    // Filter clients with valid phone numbers AND that passed the
+    // tenant guard above.
     const clientsWithPhone = (clientRows || []).filter(
-      (c: any) => c.client_phone && c.client_phone.trim() !== ""
+      (c: any) =>
+        c.client_phone &&
+        c.client_phone.trim() !== "" &&
+        allowedClientIds.has(c.client_id),
     );
 
     console.log(`${clientsWithPhone.length} clients have phone numbers`);

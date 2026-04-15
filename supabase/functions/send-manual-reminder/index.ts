@@ -86,12 +86,25 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get client info
+    // Resolve caller's agent so we can enforce tenant isolation on the
+    // client lookup below. Without this check the service-role client
+    // would happily read any client row by id and let one agent SMS
+    // another agent's customer.
+    const callerAgentId = await resolveAgentId(supabase, user.id);
+    if (!callerAgentId) {
+      return new Response(
+        JSON.stringify({ error: 'User is not associated with an agent' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Get client info — scoped to caller's agent
     const { data: client, error: clientError } = await supabase
       .from('clients')
-      .select('id, full_name, phone_number, branch_id')
+      .select('id, full_name, phone_number, branch_id, agent_id')
       .eq('id', client_id)
-      .single();
+      .eq('agent_id', callerAgentId)
+      .maybeSingle();
 
     if (clientError || !client) {
       return new Response(
