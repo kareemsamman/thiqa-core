@@ -32,6 +32,84 @@ const PAYMENT_TYPE_LABELS: Record<string, string> = {
   transfer: 'تحويل',
 };
 
+// Minimal bank registry — mirrors src/lib/banks.ts so the printed
+// invoice can resolve a stored bank_code to an Arabic name under
+// each cheque row in the payments table. Unknown codes pass
+// through as the raw code string.
+const BANK_LABELS: Record<string, string> = {
+  "01": "ماكس إت فايننشلز",
+  "02": "بنك بوعلي أغودات يسرائيل (فاغي)",
+  "04": "بنك يهاف",
+  "05": "يسراكارت",
+  "06": "بنك أدانيم",
+  "07": "كال - بطاقات ائتمان لإسرائيل",
+  "08": "بنك هسفنوت",
+  "09": "بنك البريد",
+  "10": "بنك لئومي",
+  "11": "بنك ديسكونت",
+  "12": "بنك هبوعليم",
+  "13": "بنك إيغود",
+  "14": "بنك أوتسار هحيال",
+  "17": "بنك مركنتيل ديسكونت",
+  "18": "وان زيرو - البنك الرقمي الأول",
+  "20": "بنك مزراحي طفحوت",
+  "22": "سيتي بنك",
+  "23": "HSBC",
+  "24": "بنك هبوعليم (الأمريكي الإسرائيلي سابقاً)",
+  "25": "BNP Paribas إسرائيل",
+  "26": "يو بنك",
+  "27": "باركليز بنك",
+  "28": "هبوعليم (كونتيننتال سابقاً)",
+  "30": "البنك للتجارة",
+  "31": "البنك الدولي الأول لإسرائيل",
+  "32": "بنك للتمويل والتجارة",
+  "33": "بنك ديسكونت (مركنتيل سابقاً)",
+  "34": "البنك العربي الإسرائيلي",
+  "37": "بنك الأردن",
+  "38": "البنك التجاري الفلسطيني",
+  "39": "بنك الدولة الهندي (SBI)",
+  "43": "البنك الأهلي الأردني",
+  "46": "بنك مسد",
+  "48": "بنك أوتسار هحيال (عوفيد لئومي سابقاً)",
+  "49": "البنك العربي",
+  "50": "مسب - مركز المقاصة البنكي",
+  "52": "بنك بوعلي أغودات يسرائيل (فاغي)",
+  "54": "بنك القدس (يروشلايم)",
+  "59": "شبا - خدمات بنكية آلية",
+  "60": "كاردكوم",
+  "61": "ترانزيلا",
+  "65": "حيسخ - صندوق توفير للتعليم",
+  "66": "بنك القاهرة عمّان",
+  "67": "بنك الأراضي العربية",
+  "68": "بنك دكسيا / البنك البلدي",
+  "71": "البنك التجاري الأردني",
+  "73": "البنك الإسلامي العربي",
+  "74": "البنك البريطاني للشرق الأوسط",
+  "76": "بنك فلسطين للاستثمار",
+  "77": "بنك لئومي للرهن العقاري",
+  "82": "القدس للتنمية والاستثمار",
+  "83": "بنك الاتحاد",
+  "84": "بنك الإسكان",
+  "89": "بنك فلسطين",
+  "90": "بنك ديسكونت للرهن العقاري",
+  "93": "بنك الأردن الكويت",
+  "99": "بنك إسرائيل (البنك المركزي)",
+};
+
+const normalizeBankCode = (raw: string | null | undefined): string => {
+  if (!raw) return "";
+  const trimmed = String(raw).trim();
+  if (!trimmed) return "";
+  if (/^\d$/.test(trimmed)) return trimmed.padStart(2, "0");
+  return trimmed;
+};
+
+const getBankLabel = (code: string | null | undefined): string => {
+  const norm = normalizeBankCode(code);
+  if (!norm) return "";
+  return BANK_LABELS[norm] || norm;
+};
+
 // Label a payment method. ELZAMI premiums are paid directly on the
 // insurance company's portal (visa flow) and stored with locked=true —
 // surface them as "فيزا خارجي" so the customer sees they didn't pay it
@@ -728,14 +806,31 @@ function buildPackageInvoiceHtml(
         </tr>
       </thead>
       <tbody>
-        ${allPaymentsList.map(p => `
+        ${allPaymentsList.map(p => {
+          const chequePart = p.cheque_number
+            ? ` · <span class="tabular">${escapeHtml(String(p.cheque_number))}</span>`
+            : '';
+          // Bank/branch detail line for cheque rows. Muted grey so
+          // it reads as supporting info, not a new column.
+          const bankLabel = getBankLabel(p.bank_code);
+          const branchLabel = p.branch_code
+            ? `فرع ${escapeHtml(String(p.branch_code))}`
+            : '';
+          const bankLine = (bankLabel || branchLabel)
+            ? `<div class="payment-bank-line">${[escapeHtml(bankLabel), branchLabel].filter(Boolean).join(' · ')}</div>`
+            : '';
+          return `
           <tr>
             <td class="num">${p.receipt_number || '—'}</td>
-            <td>${paymentTypeLabel(p)}${p.cheque_number ? ` · ${p.cheque_number}` : ''}</td>
+            <td>
+              <div>${paymentTypeLabel(p)}${chequePart}</div>
+              ${bankLine}
+            </td>
             <td class="date">${formatDate(p.payment_date)}</td>
             <td class="amount">₪${(p.amount || 0).toLocaleString('en-US')}</td>
           </tr>
-        `).join('')}
+          `;
+        }).join('')}
       </tbody>
     </table>
   ` : `<div class="payments-empty">لا توجد دفعات مسجلة.</div>`;
@@ -1106,6 +1201,13 @@ function buildPackageInvoiceHtml(
       color: #1a1a1a;
       font-weight: 500;
       vertical-align: middle;
+    }
+    /* Small muted line under cheque rows showing the bank name + branch. */
+    .payments tbody .payment-bank-line {
+      font-size: 10.5px;
+      font-weight: 500;
+      color: #6b7280;
+      margin-top: 2px;
     }
     .payments tbody td:last-child { border-left: none; }
     .payments tbody tr:first-child td { border-top: none; }
