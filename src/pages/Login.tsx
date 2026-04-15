@@ -34,6 +34,21 @@ import {
 type PageView = "login" | "signup";
 type SignupFeedback = { type: "success" | "error" | "info"; message: string };
 
+// Playback rate for the background video shown on desktop + mobile.
+// The source clip is a gentle ambient loop — a small 1.4× speed-up
+// keeps it feeling alive without becoming distracting.
+const BACKGROUND_VIDEO_SPEED = 1.4;
+
+// Callback ref that applies `BACKGROUND_VIDEO_SPEED` to any <video>
+// element as soon as it mounts. `playbackRate` has to be set on the
+// real DOM node (can't be passed as a prop), and setting it in a
+// useEffect would miss the first render — callback refs run
+// synchronously when the element attaches, so the rate is in effect
+// before `autoPlay` kicks off playback.
+const setVideoSpeed = (el: HTMLVideoElement | null) => {
+  if (el) el.playbackRate = BACKGROUND_VIDEO_SPEED;
+};
+
 export default function Login() {
   const [loading, setLoading] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
@@ -412,6 +427,7 @@ export default function Login() {
           a fallback on browsers that block autoplay. */}
       <div className="fixed inset-0 lg:hidden -z-10">
         <video
+          ref={setVideoSpeed}
           className="w-full h-full object-cover"
           src="https://thiqacrm.b-cdn.net/video.mp4"
           poster={loginBgMobile}
@@ -431,6 +447,7 @@ export default function Login() {
             mobile browsers. poster= shows the old still image on slow
             connections until the first frame decodes. */}
         <video
+          ref={setVideoSpeed}
           className="absolute inset-0 w-full h-full object-cover"
           src="https://thiqacrm.b-cdn.net/video.mp4"
           poster="/images/thiqa-bg.png"
