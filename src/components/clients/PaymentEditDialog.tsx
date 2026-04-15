@@ -25,7 +25,6 @@ import { toast } from "sonner";
 import { Loader2, Trash2, Upload, X, FileText, ImageIcon, Pencil, Lock } from "lucide-react";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from "@/lib/chequeUtils";
 import { BankBranchPicker } from "@/components/shared/BankBranchPicker";
-import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { cn } from "@/lib/utils";
@@ -317,95 +316,70 @@ export function PaymentEditDialog({
   if (!payment) return null;
 
   const isLocked = payment.locked === true;
-  const hasPackage = (packagePolicies?.length ?? 0) > 0;
 
   const paymentTypeLabel = isLocked && formData.payment_type === 'visa' ? 'فيزا خارجي' : (paymentTypeLabels[formData.payment_type] || formData.payment_type);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
-        {/* Header — matches the PaymentGroupDetailsDialog navy gradient
-            so every payment-related dialog shares one design language. */}
+      {/* Width reduced from max-w-4xl → max-w-2xl: the form only needs
+          ~600px to render comfortably, the wider size left a huge
+          empty band on the sides. `hideCloseButton` on DialogContent
+          so the default primitive X (which sits under our sticky
+          header and is invisible) is replaced with the explicit one
+          in the header, same pattern as PaymentGroupDetailsDialog. */}
+      <DialogContent
+        className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto p-0"
+        dir="rtl"
+        hideCloseButton
+      >
         <div
           className="sticky top-0 z-10 text-white px-5 py-4 rounded-t-lg"
           style={{ background: "linear-gradient(135deg, #122143 0%, #1a3260 100%)" }}
         >
           <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center shrink-0">
-                <Pencil className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <DialogTitle className="text-lg font-bold text-white text-right leading-tight">
-                  تعديل الدفعة
-                </DialogTitle>
-                <div className="flex items-center gap-2 mt-1 text-xs text-white/75 flex-wrap">
-                  <span className="font-bold ltr-nums">₪{Number(formData.amount || 0).toLocaleString("en-US")}</span>
-                  <span className="text-white/40">•</span>
-                  <span>{paymentTypeLabel}</span>
-                  {formData.payment_date && (
-                    <>
-                      <span className="text-white/40">•</span>
-                      <span className="ltr-nums">
-                        {new Date(formData.payment_date).toLocaleDateString("en-GB")}
-                      </span>
-                    </>
-                  )}
-                  {isLocked && (
-                    <Badge className="bg-amber-400/20 text-amber-100 border-amber-300/30 gap-1 text-[10px] h-5 px-2">
-                      <Lock className="h-2.5 w-2.5" />
-                      إلزامي
-                    </Badge>
-                  )}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center shrink-0">
+                  <Pencil className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <DialogTitle className="text-lg font-bold text-white text-right leading-tight">
+                    تعديل الدفعة
+                  </DialogTitle>
+                  <div className="flex items-center gap-2 mt-1 text-xs text-white/75 flex-wrap">
+                    <span className="font-bold ltr-nums">₪{Number(formData.amount || 0).toLocaleString("en-US")}</span>
+                    <span className="text-white/40">•</span>
+                    <span>{paymentTypeLabel}</span>
+                    {formData.payment_date && (
+                      <>
+                        <span className="text-white/40">•</span>
+                        <span className="ltr-nums">
+                          {new Date(formData.payment_date).toLocaleDateString("en-GB")}
+                        </span>
+                      </>
+                    )}
+                    {isLocked && (
+                      <Badge className="bg-amber-400/20 text-amber-100 border-amber-300/30 gap-1 text-[10px] h-5 px-2">
+                        <Lock className="h-2.5 w-2.5" />
+                        إلزامي
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
+              <Button
+                size="icon"
+                onClick={() => onOpenChange(false)}
+                className="h-9 w-9 bg-white/10 hover:bg-white/20 text-white border-0 shrink-0"
+                aria-label="إغلاق"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           </DialogHeader>
         </div>
 
         <div className="p-5 space-y-5 bg-muted/20">
-          {/* Package / policy context */}
-          {hasPackage ? (
-            <div className="rounded-lg border border-border/60 bg-card p-3 space-y-2">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">
-                وثائق الباقة
-              </p>
-              <div className="space-y-1.5">
-                {packagePolicies!.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between gap-2 text-xs">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Badge variant="outline" className="text-[10px] shrink-0">
-                        {getInsuranceTypeLabel(p.policy_type_parent as any, (p.policy_type_child || null) as any)}
-                      </Badge>
-                      {p.company_name && (
-                        <span className="text-muted-foreground truncate">
-                          {p.company_name}
-                        </span>
-                      )}
-                    </div>
-                    <span className="font-semibold ltr-nums text-foreground shrink-0">
-                      ₪{p.insurance_price.toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            payment.policy && (
-              <div className="rounded-lg border border-border/60 bg-card px-3 py-2 flex items-center justify-between gap-2">
-                <Badge variant="outline" className="text-[10px]">
-                  {getInsuranceTypeLabel(payment.policy.policy_type_parent as any, (payment.policy.policy_type_child || null) as any)}
-                </Badge>
-                <span className="text-xs text-muted-foreground">
-                  سعر الوثيقة:{" "}
-                  <span className="font-semibold text-foreground ltr-nums">
-                    ₪{payment.policy.insurance_price.toLocaleString()}
-                  </span>
-                </span>
-              </div>
-            )
-          )}
-
           {/* Locked info — only refused can be toggled on ELZAMI rows */}
           {isLocked && (
             <div className="bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2.5 rounded-lg text-xs flex items-start gap-2">

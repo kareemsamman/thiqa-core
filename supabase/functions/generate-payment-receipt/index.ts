@@ -340,6 +340,42 @@ function buildPaymentReceiptHtml(
       direction: ltr;
     }
 
+    /* Office commission — muted amber strip shown under the hero
+       when the linked policy carries a non-zero office_commission. */
+    .commission-row {
+      display: flex;
+      align-items: stretch;
+      border: 1px solid #b45309;
+      background: #fffbeb;
+      margin-top: -14px;
+      margin-bottom: 22px;
+    }
+    .commission-row .label {
+      flex: 0 0 180px;
+      padding: 12px 14px;
+      background: #fef3c7;
+      color: #78350f;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .commission-row .val {
+      flex: 1;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      font-size: 22px;
+      font-weight: 700;
+      color: #78350f;
+      font-variant-numeric: tabular-nums;
+      direction: ltr;
+    }
+
     /* Note linking to the policy */
     .policy-note {
       border: 1px solid #1a1a1a;
@@ -457,6 +493,16 @@ function buildPaymentReceiptHtml(
       <div class="label">المبلغ المدفوع</div>
       <div class="val">₪${(payment.amount || 0).toLocaleString('en-US')}</div>
     </div>
+
+    ${(Number(policy?.office_commission) || 0) > 0 ? `
+    <!-- Office commission — shown when the linked policy carries a
+         non-zero office_commission, so the client can see how much of
+         the policy price goes to the broker/office. -->
+    <div class="commission-row">
+      <div class="label">عمولة المكتب</div>
+      <div class="val">₪${Number(policy.office_commission).toLocaleString('en-US')}</div>
+    </div>
+    ` : ''}
 
     <!-- Payment details (no وصف) -->
     <div class="payment-box">
@@ -594,6 +640,7 @@ serve(async (req) => {
           start_date,
           end_date,
           insurance_price,
+          office_commission,
           client:clients(id, full_name, id_number, phone_number),
           car:cars(car_number, manufacturer_name, model, year)
         )

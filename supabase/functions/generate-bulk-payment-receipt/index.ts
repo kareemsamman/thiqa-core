@@ -79,6 +79,24 @@ function buildBulkReceiptHtml(
     .map((p: any) => p.policy?.document_number)
     .find((n: string | null) => typeof n === 'string' && n.length > 0) || '—';
 
+  // Sum office_commission once per unique policy. Multiple payment rows
+  // may reference the same policy — we don't want to count its
+  // commission N times. Policies with a null / zero commission simply
+  // don't contribute; the whole row is suppressed when the total is 0.
+  const uniquePolicyCommissions = new Map<string, number>();
+  for (const p of payments) {
+    const policy = (p as any).policy;
+    const pid = policy?.id;
+    const commission = Number(policy?.office_commission) || 0;
+    if (pid && commission > 0 && !uniquePolicyCommissions.has(pid)) {
+      uniquePolicyCommissions.set(pid, commission);
+    }
+  }
+  const totalCommission = Array.from(uniquePolicyCommissions.values()).reduce(
+    (s, c) => s + c,
+    0,
+  );
+
   // Contact footer lines — phones / whatsapp / email / address pulled from
   // the agent's sms_settings row, same as the package invoice footer.
   const phoneLinksHtml = (companySettings.company_phone_links || []).map(
@@ -286,7 +304,9 @@ function buildBulkReceiptHtml(
 
     .total-row {
       display: flex; justify-content: flex-end;
+      gap: 12px;
       margin-bottom: 20px;
+      flex-wrap: wrap;
     }
     .total-row .box {
       border: 1px solid #1a1a1a;
@@ -305,6 +325,19 @@ function buildBulkReceiptHtml(
       color: #1a1a1a;
       direction: ltr;
       font-variant-numeric: tabular-nums;
+    }
+    /* Commission box — inverted palette (amber label on white) so it
+       reads as supporting info and doesn't compete with the main total. */
+    .total-row .box.commission-box {
+      border-color: #b45309;
+    }
+    .total-row .box.commission-box .label {
+      background: #fef3c7;
+      color: #78350f;
+    }
+    .total-row .box.commission-box .val {
+      font-size: 22px;
+      color: #78350f;
     }
 
     .policy-note {
@@ -417,8 +450,14 @@ function buildBulkReceiptHtml(
       </table>
     </div>
 
-    <!-- Total -->
+    <!-- Totals — optional commission line on top, then the grand total -->
     <div class="total-row">
+      ${totalCommission > 0 ? `
+      <div class="box commission-box">
+        <div class="label">عمولة المكتب</div>
+        <div class="val">₪${totalCommission.toLocaleString('en-US')}</div>
+      </div>
+      ` : ''}
       <div class="box">
         <div class="label">المجموع</div>
         <div class="val">₪${totalAmount.toLocaleString('en-US')}</div>
@@ -538,6 +577,7 @@ serve(async (req) => {
           policy_type_parent,
           policy_type_child,
           document_number,
+          office_commission,
           client:clients(id, full_name, id_number, phone_number),
           car:cars(car_number, manufacturer_name, model, year)
         )
