@@ -169,11 +169,12 @@
 }
 
 @layer utilities {
-  /* LTR numeric content */
+  /* LTR numeric content — `unicode-bidi: isolate` + `direction: ltr`
+     is enough to keep digits in their natural order inside RTL flow.
+     No display override, so tds / ps / spans keep their own box. */
   .ltr-nums {
     unicode-bidi: isolate;
     direction: ltr;
-    display: inline-block;
   }
 
   /* Input fields that expect LTR content */
