@@ -1496,10 +1496,44 @@ function buildPackageInvoiceHtml(
 
     @media (max-width: 640px) {
       body { padding: 14px 8px; font-size: 12px; }
-      .invoice { padding: 24px 20px; }
-      .invoice-top { flex-direction: column; gap: 18px; }
-      .invoice-meta { text-align: right; min-width: 0; }
-      .invoice-meta .doc-title { font-size: 32px; }
+      .invoice { padding: 22px 18px; }
+      /* Stack + center the whole invoice header on mobile. Both the
+         brand block and the meta block live on their own row and
+         align to center, and the logo gets a much bigger cap so it
+         actually reads at phone width. */
+      .invoice-top {
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        text-align: center;
+      }
+      .brand {
+        max-width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+      .brand .logo {
+        max-height: 110px;
+        max-width: 260px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .brand .logo-svg { margin-left: auto; margin-right: auto; }
+      .brand .logo-svg svg { height: 72px; }
+      .brand .address { max-width: 100%; text-align: center; }
+      .invoice-meta {
+        text-align: center;
+        min-width: 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .invoice-meta .doc-title { font-size: 36px; }
+      .invoice-meta .subtitle { text-align: center; }
+      .meta-rows { width: 100%; max-width: 320px; }
       .customer-grid { grid-template-columns: 1fr; }
       .customer-grid .cell:not(:nth-child(3n+1)) { border-right: none; }
       .customer-grid .cell:nth-child(n+2) { border-top: 1px solid #1a1a1a; }
