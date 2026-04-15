@@ -414,7 +414,20 @@ export default function Login() {
 
       {/* Left panel - background (desktop) */}
       <div className="hidden lg:flex lg:w-[45%] xl:w-1/2 relative items-center justify-center overflow-hidden">
-        <img src="/images/thiqa-bg.png" alt="" className="absolute inset-0 w-full h-full object-cover" />
+        {/* Background video — autoplay requires muted + playsInline on
+            mobile browsers. poster= shows the old still image on slow
+            connections until the first frame decodes. */}
+        <video
+          className="absolute inset-0 w-full h-full object-cover"
+          src="https://thiqacrm.b-cdn.net/video.mp4"
+          poster="/images/thiqa-bg.png"
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="auto"
+          aria-hidden="true"
+        />
         <div className="absolute inset-0 bg-gradient-to-br from-black/40 via-black/20 to-transparent" />
         <div className="relative z-10 text-center space-y-4">
           <img src={thiqaLogo} alt="ثقة" className="mx-auto w-40 h-auto drop-shadow-2xl" />
