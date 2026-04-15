@@ -540,42 +540,35 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
   const fetchPaymentSummary = async () => {
     try {
-      // Get ALL active policies for this client (including ELZAMI for complete view)
-      const { data: policiesData } = await supabase
-        .from('policies')
-        .select('id, insurance_price, office_commission, profit, policy_type_parent, cancelled, transferred')
-        .eq('client_id', client.id)
-        .eq('cancelled', false)
-        .eq('transferred', false)
-        .is('deleted_at', null);
+      // Debt math (owed / paid / remaining) comes from get_client_balance
+      // so the card matches the debt modal and the DebtTracking RPCs.
+      // That function knows how to: exclude broker-only debt from the
+      // client's owed amount, pool payments across broker siblings within
+      // a package, and cap broker overpayment so it can't erase debt in
+      // other groups. Profit still needs a raw policies query since the
+      // RPC doesn't return it.
+      const [balanceResult, profitResult] = await Promise.all([
+        supabase.rpc('get_client_balance', { p_client_id: client.id }),
+        supabase
+          .from('policies')
+          .select('profit')
+          .eq('client_id', client.id)
+          .eq('cancelled', false)
+          .eq('transferred', false)
+          .is('deleted_at', null),
+      ]);
 
-      if (!policiesData || policiesData.length === 0) {
-        setPaymentSummary({ total_paid: 0, total_remaining: 0, total_profit: 0 });
-        return;
-      }
+      if (balanceResult.error) throw balanceResult.error;
 
-      // Total insurance = ALL policies INCLUDING ELZAMI (for customer view)
-      const totalInsurance = policiesData.reduce((sum, p) => sum + (p.insurance_price || 0) + (p.office_commission || 0), 0);
-      
-      // Total profit from all policies (ELZAMI profit = 0 by design)
-      const totalProfit = policiesData.reduce((sum, p) => sum + (p.profit || 0), 0);
+      const balance = balanceResult.data?.[0];
+      const totalInsurance = Number(balance?.total_insurance || 0);
+      const totalPaid = Number(balance?.total_paid || 0);
+      const totalProfit = (profitResult.data || [])
+        .reduce((sum, p) => sum + (Number(p.profit) || 0), 0);
 
-      // Get ALL payments for ALL policies (including ELZAMI)
-      const allPolicyIds = policiesData.map(p => p.id);
-      let totalPaid = 0;
-      
-      if (allPolicyIds.length > 0) {
-        const { data: paymentsData } = await supabase
-          .from('policy_payments')
-          .select('amount, refused')
-          .in('policy_id', allPolicyIds);
-
-        totalPaid = (paymentsData || [])
-          .filter(p => !p.refused)
-          .reduce((sum, p) => sum + (p.amount || 0), 0);
-      }
-
-      // Remaining = Total Insurance - Total Paid (simple and clear)
+      // Keep total_remaining as the pre-refund figure so the existing
+      // "المطلوب / المرتجع" breakdown on the card still works — wallet
+      // credit is applied on top via walletBalance.total_refunds.
       setPaymentSummary({
         total_paid: totalPaid,
         total_remaining: Math.max(0, totalInsurance - totalPaid),
