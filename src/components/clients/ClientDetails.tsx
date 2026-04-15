@@ -64,6 +64,7 @@ import {
   Loader2,
   Receipt,
   AlertTriangle,
+  Handshake,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -178,6 +179,12 @@ interface PaymentSummary {
 interface WalletBalance {
   total_refunds: number;
   transaction_count: number;
+}
+
+interface BrokerDebtInfo {
+  brokerId: string;
+  brokerName: string;
+  amount: number;
 }
 
 interface PaymentRecord {
@@ -305,6 +312,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [broker, setBroker] = useState<Broker | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary>({ total_paid: 0, total_remaining: 0, total_profit: 0 });
+  const [brokerDebts, setBrokerDebts] = useState<BrokerDebtInfo[]>([]);
   const [walletBalance, setWalletBalance] = useState<WalletBalance>({ total_refunds: 0, transaction_count: 0 });
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadingCars, setLoadingCars] = useState(true);
@@ -540,11 +548,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
   const fetchPaymentSummary = async () => {
     try {
-      // Get ALL active policies for this client (including ELZAMI and
-      // broker deals — the client's owed view is the gross total).
+      // Fetch every active policy (broker + non-broker) in one shot so
+      // we can split the view into "client debt" and "related to broker"
+      // without a second round-trip. Broker rows live alongside their
+      // non-broker siblings in a package so their payments still get
+      // pooled into the group's paid total.
       const { data: policiesData } = await supabase
         .from('policies')
-        .select('id, insurance_price, office_commission, profit, policy_type_parent, cancelled, transferred')
+        .select('id, insurance_price, office_commission, profit, policy_type_parent, cancelled, transferred, group_id, broker_id, broker:brokers(id, name)')
         .eq('client_id', client.id)
         .eq('cancelled', false)
         .eq('transferred', false)
@@ -552,31 +563,88 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
       if (!policiesData || policiesData.length === 0) {
         setPaymentSummary({ total_paid: 0, total_remaining: 0, total_profit: 0 });
+        setBrokerDebts([]);
         return;
       }
 
-      const totalInsurance = policiesData.reduce((sum, p) => sum + (p.insurance_price || 0) + (p.office_commission || 0), 0);
-      const totalProfit = policiesData.reduce((sum, p) => sum + (p.profit || 0), 0);
-
       const allPolicyIds = policiesData.map(p => p.id);
-      let totalPaid = 0;
-
+      let paymentsMap: Record<string, number> = {};
       if (allPolicyIds.length > 0) {
         const { data: paymentsData } = await supabase
           .from('policy_payments')
-          .select('amount, refused')
+          .select('policy_id, amount, refused')
           .in('policy_id', allPolicyIds);
-
-        totalPaid = (paymentsData || [])
-          .filter(p => !p.refused)
-          .reduce((sum, p) => sum + (p.amount || 0), 0);
+        (paymentsData || []).forEach(p => {
+          if (!p.refused) {
+            paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + (p.amount || 0);
+          }
+        });
       }
 
+      // Profit is a raw per-policy figure — keep summing across every
+      // active policy so the profit card stays the same.
+      const totalProfit = policiesData.reduce((sum, p) => sum + (p.profit || 0), 0);
+
+      // Group by group_id (standalone policies get their own bucket).
+      const groupMap = new Map<string, typeof policiesData>();
+      policiesData.forEach(p => {
+        const key = p.group_id || `single_${p.id}`;
+        if (!groupMap.has(key)) groupMap.set(key, []);
+        groupMap.get(key)!.push(p);
+      });
+
+      let clientOwed = 0;
+      let clientPaid = 0;
+      const brokerTotals = new Map<string, { brokerId: string; brokerName: string; amount: number }>();
+
+      groupMap.forEach(groupPolicies => {
+        const nonBrokerInGroup = groupPolicies.filter(p => !(p as any).broker_id);
+        const brokerInGroup = groupPolicies.filter(p => (p as any).broker_id);
+
+        const nonBrokerClaim = nonBrokerInGroup.reduce(
+          (sum, p) => sum + (p.insurance_price || 0) + ((p as any).office_commission || 0),
+          0,
+        );
+        const groupPool = groupPolicies.reduce(
+          (sum, p) => sum + (paymentsMap[p.id] || 0),
+          0,
+        );
+        const paidTowardClient = Math.min(groupPool, nonBrokerClaim);
+        const paidTowardBroker = Math.max(0, groupPool - paidTowardClient);
+
+        clientOwed += nonBrokerClaim;
+        clientPaid += paidTowardClient;
+
+        if (brokerInGroup.length > 0) {
+          const brokerOwed = brokerInGroup.reduce(
+            (sum, p) => sum + (p.insurance_price || 0) + ((p as any).office_commission || 0),
+            0,
+          );
+          const brokerRemaining = Math.max(0, brokerOwed - paidTowardBroker);
+          if (brokerRemaining > 0) {
+            const broker = (brokerInGroup[0] as any).broker;
+            if (broker?.id) {
+              const existing = brokerTotals.get(broker.id);
+              if (existing) {
+                existing.amount += brokerRemaining;
+              } else {
+                brokerTotals.set(broker.id, {
+                  brokerId: broker.id,
+                  brokerName: broker.name || 'وسيط',
+                  amount: brokerRemaining,
+                });
+              }
+            }
+          }
+        }
+      });
+
       setPaymentSummary({
-        total_paid: totalPaid,
-        total_remaining: Math.max(0, totalInsurance - totalPaid),
+        total_paid: clientPaid,
+        total_remaining: Math.max(0, clientOwed - clientPaid),
         total_profit: totalProfit,
       });
+      setBrokerDebts(Array.from(brokerTotals.values()));
     } catch (error) {
       console.error('Error fetching payment summary:', error);
     }
@@ -1627,6 +1695,22 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             </Card>
           )}
         </div>
+
+        {brokerDebts.length > 0 && (
+          <div className="flex items-start gap-2 p-3 rounded-lg border border-sky-500/30 bg-sky-500/5 text-sky-900 dark:text-sky-200">
+            <Handshake className="h-4 w-4 mt-0.5 shrink-0 text-sky-600" />
+            <div className="text-xs leading-relaxed space-y-0.5">
+              <p>هذه المبالغ مستحقة على الوسيط وليس على العميل — تُتابع في حساب الوسيط:</p>
+              {brokerDebts.map(b => (
+                <p key={b.brokerId}>
+                  <span className="font-bold ltr-nums">₪{b.amount.toLocaleString()}</span>
+                  {' '}على الوسيط{' '}
+                  <span className="font-semibold">{b.brokerName}</span>
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Tabs — horizontal scroll on mobile, wrap on desktop */}
         <Tabs defaultValue="policies" className="w-full" dir="rtl">

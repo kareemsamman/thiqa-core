@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Loader2, CreditCard, Banknote, Wallet, AlertCircle, CheckCircle, DollarSign, Plus, Trash2, Split, Upload, X, ImageIcon, HelpCircle, Car, Package, FileText, Info, Scan } from 'lucide-react';
+import { Loader2, CreditCard, Banknote, Wallet, AlertCircle, CheckCircle, DollarSign, Plus, Trash2, Split, Upload, X, ImageIcon, HelpCircle, Car, Package, FileText, Info, Scan, Handshake } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { toast } from 'sonner';
@@ -67,6 +67,15 @@ interface PreviewUrls {
   [paymentId: string]: string[];
 }
 
+// Broker-related debt the client is NOT on the hook for — the broker
+// owes us for any of their own deals. Surfaced as an info block so
+// staff know the amount exists and where it's tracked.
+interface BrokerDebtInfo {
+  brokerId: string;
+  brokerName: string;
+  amount: number;
+}
+
 interface DebtPaymentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -117,6 +126,7 @@ export function DebtPaymentModal({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [debtItems, setDebtItems] = useState<DebtItem[]>([]);
+  const [brokerDebts, setBrokerDebts] = useState<BrokerDebtInfo[]>([]);
   const [creditBalance, setCreditBalance] = useState(0);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
   const [tranzilaModalOpen, setTranzilaModalOpen] = useState(false);
@@ -310,20 +320,19 @@ export function DebtPaymentModal({
    * Fetch all policies and payments for the client, then build DebtItems
    * grouped by group_id (packages) or individual policies (singles).
    *
-   * Broker deals are treated as client debt — the client owes the full
-   * package regardless of who arranged it. Because package payments
-   * are commonly recorded against one row (often the broker sibling),
-   * we group by group_id and pool every payment in the group so a
-   * package that was paid in full via the broker row shows as 0
-   * remaining even when the non-broker sibling has no direct payments.
-   * See migration 20260413240000 for the original أسامة حسام case.
+   * Broker deals are NOT the client's responsibility — the broker owes
+   * us for those. We pool their payments into the containing group
+   * (أسامة حسام case: a package paid against the broker row also
+   * covers the non-broker sibling) but broker policies themselves are
+   * never shown as client debt. Any broker-owed amount is surfaced in
+   * a separate "related to broker" info block.
    */
   const fetchDebtItems = async () => {
     setLoading(true);
     try {
       const { data: policiesData, error: policiesError } = await supabase
         .from('policies')
-        .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, branch_id, group_id, broker_id, car:cars(car_number)')
+        .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, branch_id, group_id, broker_id, broker:brokers(id, name), car:cars(car_number)')
         .eq('client_id', clientId)
         .eq('cancelled', false)
         .eq('transferred', false)
@@ -349,7 +358,8 @@ export function DebtPaymentModal({
         });
       }
 
-      // Group policies by group_id or individual.
+      // Group policies by group_id or individual. Broker policies ride
+      // inside their group so their payments feed the pooled total.
       const groupMap = new Map<string, typeof policiesData>();
 
       (policiesData || []).forEach(policy => {
@@ -363,12 +373,16 @@ export function DebtPaymentModal({
       const items: DebtItem[] = [];
 
       groupMap.forEach((groupPolicies, itemKey) => {
-        const isPackage = groupPolicies.length > 1 || (groupPolicies[0]?.group_id !== null);
+        const nonBrokerPolicies = groupPolicies.filter(p => !(p as any).broker_id);
 
-        // Build policy components from every policy in the group
-        // (including broker siblings) — the client's debt view is the
-        // gross package total.
-        const policyComponents: PolicyComponent[] = groupPolicies.map(p => {
+        // All-broker group: nothing for the client to pay.
+        if (nonBrokerPolicies.length === 0) return;
+
+        const isPackage = nonBrokerPolicies.length > 1 || (nonBrokerPolicies[0]?.group_id !== null);
+
+        // Client components = non-broker only. Broker siblings only
+        // contribute payments into the pool below.
+        const policyComponents: PolicyComponent[] = nonBrokerPolicies.map(p => {
           const commission = (p as any).office_commission || 0;
           const effectivePrice = p.insurance_price + commission;
           return {
@@ -384,7 +398,11 @@ export function DebtPaymentModal({
         });
 
         const fullPrice = policyComponents.reduce((sum, p) => sum + p.price, 0);
-        const paidTotal = policyComponents.reduce((sum, p) => sum + p.paid, 0);
+        const groupPoolPaid = groupPolicies.reduce(
+          (sum, p) => sum + (paymentsMap[p.id] || 0),
+          0,
+        );
+        const paidTotal = Math.min(groupPoolPaid, fullPrice);
         const fullPackageRemaining = Math.max(0, fullPrice - paidTotal);
 
         // For debt display: only show non-ELZAMI portion that's actually payable
@@ -440,8 +458,8 @@ export function DebtPaymentModal({
             fullPrice,
             paidTotal,
             remainingTotal,
-            carNumber: (groupPolicies[0]?.car as any)?.car_number || null,
-            includesElzami: groupPolicies.some(p => p.policy_type_parent === 'ELZAMI'),
+            carNumber: (nonBrokerPolicies[0]?.car as any)?.car_number || null,
+            includesElzami: nonBrokerPolicies.some(p => p.policy_type_parent === 'ELZAMI'),
             payablePolicies,
           });
         }
@@ -449,8 +467,55 @@ export function DebtPaymentModal({
 
       // Sort by remaining (highest first)
       items.sort((a, b) => b.remainingTotal - a.remainingTotal);
-      
+
       setDebtItems(items);
+
+      // Compute "related to broker" info per broker. A broker policy's
+      // outstanding amount = its effective price minus the payments that
+      // landed on non-broker siblings in the same group (those payments
+      // were already applied against the client debt; the broker still
+      // owes us whatever is left). Collapse by broker so one row per
+      // broker appears in the info block.
+      const brokerTotals = new Map<string, BrokerDebtInfo>();
+      groupMap.forEach((groupPolicies) => {
+        const nonBrokerInGroup = groupPolicies.filter(p => !(p as any).broker_id);
+        const brokerInGroup = groupPolicies.filter(p => (p as any).broker_id);
+        if (brokerInGroup.length === 0) return;
+
+        const nonBrokerClaim = nonBrokerInGroup.reduce((sum, p) => {
+          const price = p.insurance_price + ((p as any).office_commission || 0);
+          return sum + price;
+        }, 0);
+        const groupPool = groupPolicies.reduce(
+          (sum, p) => sum + (paymentsMap[p.id] || 0),
+          0,
+        );
+        const paidTowardClient = Math.min(groupPool, nonBrokerClaim);
+        const paidTowardBroker = Math.max(0, groupPool - paidTowardClient);
+
+        const brokerOwed = brokerInGroup.reduce((sum, p) => {
+          const price = p.insurance_price + ((p as any).office_commission || 0);
+          return sum + price;
+        }, 0);
+        const brokerRemaining = Math.max(0, brokerOwed - paidTowardBroker);
+        if (brokerRemaining <= 0) return;
+
+        // A group can only belong to one broker in practice; fall back
+        // to the first broker row if there are somehow multiple.
+        const broker = (brokerInGroup[0] as any).broker;
+        if (!broker?.id) return;
+        const existing = brokerTotals.get(broker.id);
+        if (existing) {
+          existing.amount += brokerRemaining;
+        } else {
+          brokerTotals.set(broker.id, {
+            brokerId: broker.id,
+            brokerName: broker.name || 'وسيط',
+            amount: brokerRemaining,
+          });
+        }
+      });
+      setBrokerDebts(Array.from(brokerTotals.values()));
     } catch (error) {
       console.error('Error fetching debt items:', error);
       toast.error('خطأ في جلب بيانات الدفع');
@@ -872,6 +937,24 @@ export function DebtPaymentModal({
                   لدى العميل رصيد مرتجع بقيمة <span className="font-bold ltr-nums">₪{creditBalance.toLocaleString('en-US')}</span> تم خصمه من المطلوب.
                   المبلغ المستحق فعلياً للدفع هو <span className="font-bold ltr-nums">₪{effectiveRemaining.toLocaleString('en-US')}</span>.
                 </p>
+              </div>
+            )}
+
+            {brokerDebts.length > 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-lg border border-sky-500/30 bg-sky-500/5 text-sky-900 dark:text-sky-200">
+                <Handshake className="h-4 w-4 mt-0.5 shrink-0 text-sky-600" />
+                <div className="text-xs leading-relaxed space-y-0.5">
+                  <p>
+                    هذه المبالغ مستحقة على الوسيط وليس على العميل — تُتابع في حساب الوسيط:
+                  </p>
+                  {brokerDebts.map(b => (
+                    <p key={b.brokerId}>
+                      <span className="font-bold ltr-nums">₪{b.amount.toLocaleString('en-US')}</span>
+                      {' '}على الوسيط{' '}
+                      <span className="font-semibold">{b.brokerName}</span>
+                    </p>
+                  ))}
+                </div>
               </div>
             )}
 
