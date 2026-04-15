@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
@@ -33,11 +33,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   Search,
   ChevronLeft,
   ChevronRight,
@@ -56,6 +51,7 @@ import {
   User,
   Loader2,
   Plus,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -64,6 +60,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH, getEffectiveChequeStatus, isChequeOverdue } from "@/lib/chequeUtils";
 import { AddCustomerChequeModal } from "@/components/cheques/AddCustomerChequeModal";
+import { PaymentEditDialog } from "@/components/clients/PaymentEditDialog";
 
 interface PaymentImage {
   id: string;
@@ -190,6 +187,81 @@ export default function Cheques() {
 
   // Expanded customers in tree view
   const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
+
+  // Full-payment edit dialog — opens the same PaymentEditDialog
+  // clients see when they edit a payment from the policy timeline,
+  // so staff can change cheque number, dates, bank/branch, etc. in
+  // one place instead of the rename-only dialog.
+  const [paymentEditRecord, setPaymentEditRecord] = useState<any>(null);
+  const [paymentEditOpen, setPaymentEditOpen] = useState(false);
+  const [loadingPaymentEdit, setLoadingPaymentEdit] = useState(false);
+
+  const openPaymentEditFor = async (cheque: ChequeRecord) => {
+    setLoadingPaymentEdit(true);
+    try {
+      // Re-fetch the full payment row so we have every column the
+      // edit dialog wants (cheque_date, bank_code, branch_code,
+      // locked, card_last_four, insurance_price on the policy…).
+      const { data, error } = await supabase
+        .from('policy_payments')
+        .select(`
+          id, amount, payment_date, payment_type, cheque_number,
+          cheque_date, bank_code, branch_code, cheque_image_url,
+          card_last_four, refused, notes, locked, policy_id,
+          policies!policy_payments_policy_id_fkey(
+            id, policy_type_parent, policy_type_child, insurance_price
+          )
+        `)
+        .eq('id', cheque.id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) {
+        toast({
+          title: 'غير موجود',
+          description: 'تعذر تحميل بيانات الدفعة',
+          variant: 'destructive',
+        });
+        return;
+      }
+      const policy = Array.isArray((data as any).policies)
+        ? (data as any).policies[0]
+        : (data as any).policies;
+      setPaymentEditRecord({
+        id: (data as any).id,
+        amount: (data as any).amount,
+        payment_date: (data as any).payment_date,
+        payment_type: (data as any).payment_type,
+        cheque_number: (data as any).cheque_number,
+        cheque_date: (data as any).cheque_date,
+        bank_code: (data as any).bank_code,
+        branch_code: (data as any).branch_code,
+        cheque_image_url: (data as any).cheque_image_url,
+        card_last_four: (data as any).card_last_four,
+        refused: (data as any).refused,
+        notes: (data as any).notes,
+        locked: (data as any).locked,
+        policy_id: (data as any).policy_id,
+        policy: policy
+          ? {
+              id: policy.id,
+              policy_type_parent: policy.policy_type_parent,
+              policy_type_child: policy.policy_type_child,
+              insurance_price: policy.insurance_price,
+            }
+          : null,
+      });
+      setPaymentEditOpen(true);
+    } catch (err) {
+      console.error('Error loading payment for edit:', err);
+      toast({
+        title: 'خطأ',
+        description: 'فشل في تحميل بيانات الدفعة',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingPaymentEdit(false);
+    }
+  };
 
   // Add customer cheque modal
   const [addChequeModalOpen, setAddChequeModalOpen] = useState(false);
@@ -842,10 +914,25 @@ export default function Cheques() {
         </TableCell>
         <TableCell>
           <div className="flex items-center gap-1 flex-wrap">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-6 text-[10px] px-2" 
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 text-[10px] px-2"
+              disabled={loadingPaymentEdit}
+              onClick={() => openPaymentEditFor(cheque)}
+              title="تعديل الدفعة"
+            >
+              {loadingPaymentEdit ? (
+                <Loader2 className="h-3 w-3 ml-1 animate-spin" />
+              ) : (
+                <Pencil className="h-3 w-3 ml-1" />
+              )}
+              تعديل
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-[10px] px-2"
               onClick={() => {
                 setSelectedPolicyId(cheque.policy_id);
                 setPolicyDrawerOpen(true);
@@ -1170,63 +1257,66 @@ export default function Cheques() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      customerGroups.map((group) => (
-                        <Collapsible 
-                          key={group.customerId} 
-                          open={expandedCustomers.has(group.customerId)}
-                          onOpenChange={() => toggleCustomerExpanded(group.customerId)}
-                          asChild
-                        >
-                          <>
-                            {/* Customer Header Row */}
-                            <TableRow className="bg-muted/50 hover:bg-muted/70 cursor-pointer border-b-2">
+                      customerGroups.map((group) => {
+                        const isExpanded = expandedCustomers.has(group.customerId);
+                        return (
+                          <Fragment key={group.customerId}>
+                            {/* Customer Header Row — clickable directly.
+                                The old version wrapped a Radix Collapsible
+                                with a Fragment as asChild, which breaks
+                                ref forwarding and left the accordion
+                                effectively dead. Plain conditional
+                                rendering based on expandedCustomers state
+                                is reliable and table-row-friendly. */}
+                            <TableRow
+                              className="bg-muted/50 hover:bg-muted/70 cursor-pointer border-b-2"
+                              onClick={() => toggleCustomerExpanded(group.customerId)}
+                            >
                               <TableCell colSpan={7}>
-                                <CollapsibleTrigger asChild>
-                                  <div className="flex items-center justify-between w-full py-1">
-                                    <div className="flex items-center gap-3">
-                                      <ChevronDown className={cn(
-                                        "h-4 w-4 transition-transform",
-                                        !expandedCustomers.has(group.customerId) && "-rotate-90"
-                                      )} />
-                                      <User className="h-4 w-4 text-primary" />
-                                      <span className="font-semibold">{group.customerName}</span>
-                                      {group.phone && (
-                                        <span className="text-xs text-muted-foreground ltr-nums">({group.phone})</span>
-                                      )}
-                                      <Badge variant="outline" className="text-xs">
-                                        {group.cheques.length} شيك
+                                <div className="flex items-center justify-between w-full py-1">
+                                  <div className="flex items-center gap-3">
+                                    <ChevronDown className={cn(
+                                      "h-4 w-4 transition-transform",
+                                      !isExpanded && "-rotate-90"
+                                    )} />
+                                    <User className="h-4 w-4 text-primary" />
+                                    <span className="font-semibold">{group.customerName}</span>
+                                    {group.phone && (
+                                      <span className="text-xs text-muted-foreground ltr-nums">({group.phone})</span>
+                                    )}
+                                    <Badge variant="outline" className="text-xs">
+                                      {group.cheques.length} شيك
+                                    </Badge>
+                                    {group.overdueCount > 0 && (
+                                      <Badge variant="destructive" className="text-xs">
+                                        {group.overdueCount} متأخر
                                       </Badge>
-                                      {group.overdueCount > 0 && (
-                                        <Badge variant="destructive" className="text-xs">
-                                          {group.overdueCount} متأخر
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-4 text-sm">
-                                      <div>
-                                        <span className="text-muted-foreground">الإجمالي: </span>
-                                        <span className="font-bold ltr-nums">{formatCurrency(group.totalAmount)}</span>
-                                      </div>
-                                      {group.pendingAmount > 0 && (
-                                        <div>
-                                          <span className="text-muted-foreground">قيد الانتظار: </span>
-                                          <span className="font-bold text-amber-600 ltr-nums">{formatCurrency(group.pendingAmount)}</span>
-                                        </div>
-                                      )}
-                                    </div>
+                                    )}
                                   </div>
-                                </CollapsibleTrigger>
+                                  <div className="flex items-center gap-4 text-sm">
+                                    <div>
+                                      <span className="text-muted-foreground">الإجمالي: </span>
+                                      <span className="font-bold ltr-nums">{formatCurrency(group.totalAmount)}</span>
+                                    </div>
+                                    {group.pendingAmount > 0 && (
+                                      <div>
+                                        <span className="text-muted-foreground">قيد الانتظار: </span>
+                                        <span className="font-bold text-amber-600 ltr-nums">{formatCurrency(group.pendingAmount)}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
                               </TableCell>
                             </TableRow>
-                            {/* Cheques Rows */}
-                            <CollapsibleContent asChild>
-                              <>
-                                {group.cheques.map((cheque, index) => renderChequeRow(cheque, index, true))}
-                              </>
-                            </CollapsibleContent>
-                          </>
-                        </Collapsible>
-                      ))
+                            {/* Cheque rows — only rendered when the
+                                group is expanded. */}
+                            {isExpanded &&
+                              group.cheques.map((cheque, index) =>
+                                renderChequeRow(cheque, index, true),
+                              )}
+                          </Fragment>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -1381,6 +1471,24 @@ export default function Cheques() {
         open={addChequeModalOpen}
         onOpenChange={setAddChequeModalOpen}
         onSuccess={() => {
+          fetchCheques();
+          fetchSummaryStats();
+        }}
+      />
+
+      {/* Full payment edit dialog — same component used from the
+          policy timeline / PaymentGroupDetailsDialog, so editing a
+          cheque from here matches the rest of the app. */}
+      <PaymentEditDialog
+        open={paymentEditOpen}
+        onOpenChange={(o) => {
+          setPaymentEditOpen(o);
+          if (!o) setPaymentEditRecord(null);
+        }}
+        payment={paymentEditRecord}
+        onSuccess={() => {
+          setPaymentEditOpen(false);
+          setPaymentEditRecord(null);
           fetchCheques();
           fetchSummaryStats();
         }}
