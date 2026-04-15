@@ -100,17 +100,28 @@ interface AccidentReminder {
   is_done: boolean;
 }
 
+// Status vocabulary used on accident reports. `draft`/`submitted` are
+// legacy values still sitting on older rows, so the labels map still
+// carries them for display — but we only offer the two new statuses
+// ("قيد التحقيق" / "مغلق") in the dropdown going forward.
 const statusLabels: Record<string, string> = {
+  investigating: "قيد التحقيق",
+  closed: "مغلق",
+  // Legacy rows
   draft: "مسودة",
   submitted: "مُقدَّم",
-  closed: "مُغلق",
 };
 
 const statusColors: Record<string, string> = {
+  investigating: "bg-amber-500/10 text-amber-700 border-amber-500/20",
+  closed: "bg-green-500/10 text-green-700 border-green-500/20",
   draft: "bg-yellow-500/10 text-yellow-700 border-yellow-500/20",
   submitted: "bg-blue-500/10 text-blue-700 border-blue-500/20",
-  closed: "bg-green-500/10 text-green-700 border-green-500/20",
 };
+
+// Options offered in the dropdown — drop the legacy draft/submitted
+// values so staff pick from the new two.
+const selectableStatuses: string[] = ["investigating", "closed"];
 
 // Inline editable field component
 function EditableField({ label, value, onSave, toast }: { label: string; value: string; onSave: (val: string) => Promise<void>; toast: any }) {
@@ -427,7 +438,7 @@ export default function AccidentReportForm() {
                 branch_id: branchId || null,
                 accident_date: format(new Date(), "yyyy-MM-dd"),
                 created_by_admin_id: profile?.id,
-                status: "draft",
+                status: "investigating",
               })
               .select("id, policy_id, client_id, car_id, company_id, branch_id, status, accident_date, report_number")
               .single();
@@ -496,14 +507,14 @@ export default function AccidentReportForm() {
             {/* Status */}
             {report && (
               <Select value={report.status} onValueChange={handleStatusChange}>
-                <SelectTrigger className="w-[130px]">
+                <SelectTrigger className="w-[140px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(statusLabels).map(([value, label]) => (
+                  {selectableStatuses.map((value) => (
                     <SelectItem key={value} value={value}>
                       <Badge variant="outline" className={cn("text-xs", statusColors[value])}>
-                        {label}
+                        {statusLabels[value]}
                       </Badge>
                     </SelectItem>
                   ))}

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useId, useRef } from 'react';
-import { Upload, X, CheckCircle, AlertCircle, Loader2, RefreshCw, FileImage, FileVideo, FileText } from 'lucide-react';
+import { Upload, X, CheckCircle, AlertCircle, Loader2, RefreshCw, FileImage, FileVideo, FileText, FolderUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
@@ -45,6 +45,10 @@ export function FileUploader({
 
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // Separate hidden input for folder upload. `webkitdirectory` makes
+  // the OS picker select a directory instead of individual files, and
+  // the browser walks the tree and hands us every file inside.
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
 
   const validateFile = (file: File): string | null => {
     const ext = file.name.split('.').pop()?.toLowerCase();
@@ -57,9 +61,17 @@ export function FileUploader({
     return null;
   };
 
-  const addFiles = useCallback((newFiles: FileList | File[]) => {
-    const fileArray = Array.from(newFiles).slice(0, maxFiles - files.length);
-    
+  const addFiles = useCallback((newFiles: FileList | File[], silentlySkipInvalid = false) => {
+    // Folder uploads often include hidden OS files (.DS_Store,
+    // Thumbs.db) and unrelated extensions. Silently drop anything
+    // that fails validation when the source is a folder instead of
+    // surfacing each one as a visible error row.
+    const incoming = Array.from(newFiles);
+    const filtered = silentlySkipInvalid
+      ? incoming.filter((f) => !validateFile(f))
+      : incoming;
+    const fileArray = filtered.slice(0, Math.max(0, maxFiles - files.length));
+
     const uploadFiles: UploadFile[] = fileArray.map(file => {
       const error = validateFile(file);
       return {
@@ -219,8 +231,24 @@ export function FileUploader({
           <p className="text-xs text-muted-foreground">
             صور، PDF، Word، فيديو • حد أقصى 50MB لكل ملف
           </p>
+
+          <div className="mt-3 flex items-center justify-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                folderInputRef.current?.click();
+              }}
+              className="gap-1.5"
+            >
+              <FolderUp className="h-4 w-4" />
+              رفع مجلد
+            </Button>
+          </div>
         </div>
-        
+
         <input
           id={inputId}
           ref={inputRef}
@@ -229,6 +257,30 @@ export function FileUploader({
           accept={accept}
           className="hidden"
           onChange={(e) => e.target.files && addFiles(e.target.files)}
+        />
+
+        {/* Folder picker — `webkitdirectory` makes the OS dialog
+            select a directory and deliver every file inside, nested
+            subfolders included. We strip anything that fails
+            validation silently so junk files like .DS_Store don't
+            render as errors. */}
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          // @ts-expect-error non-standard but supported on every
+          // Chromium-based browser, Firefox 50+, and Safari 11.1+
+          webkitdirectory=""
+          directory=""
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files && e.target.files.length > 0) {
+              addFiles(e.target.files, true);
+              // reset so selecting the same folder twice still fires
+              e.target.value = '';
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
         />
       </div>
 
