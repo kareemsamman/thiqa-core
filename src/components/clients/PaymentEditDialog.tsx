@@ -268,6 +268,13 @@ export function PaymentEditDialog({
         updateData.cheque_number = formData.cheque_number.trim();
         updateData.bank_code = formData.bank_code || null;
         updateData.branch_code = formData.branch_code || null;
+
+        // Marking a cheque as رفض implicitly returns it — staff asked
+        // that راجع/مرفوض on the edit dialog drive the cheque status so
+        // they don't have to open the cheques page afterwards.
+        if (formData.refused) {
+          updateData.cheque_status = 'returned';
+        }
       } else {
         updateData.cheque_number = null;
         updateData.bank_code = null;

@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Settings, Building2, Truck, Shield, Wallet, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Settings, Building2, Truck, Shield, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -23,7 +23,6 @@ import { CompanyDrawer } from '@/components/companies/CompanyDrawer';
 import { PricingRulesDrawer } from '@/components/companies/PricingRulesDrawer';
 import { RoadServicePricingDrawer } from '@/components/companies/RoadServicePricingDrawer';
 import { AccidentFeePricingDrawer } from '@/components/companies/AccidentFeePricingDrawer';
-import { AccidentTemplateDrawer } from '@/components/companies/AccidentTemplateDrawer';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Company = Tables<'insurance_companies'>;
@@ -51,8 +50,6 @@ export default function Companies() {
   const [roadServicePricingCompany, setRoadServicePricingCompany] = useState<Company | null>(null);
   const [accidentFeePricingOpen, setAccidentFeePricingOpen] = useState(false);
   const [accidentFeePricingCompany, setAccidentFeePricingCompany] = useState<Company | null>(null);
-  const [accidentTemplateOpen, setAccidentTemplateOpen] = useState(false);
-  const [accidentTemplateCompany, setAccidentTemplateCompany] = useState<Company | null>(null);
 
   const fetchCompanies = async () => {
     setLoading(true);
@@ -117,11 +114,6 @@ export default function Companies() {
   const handleManageAccidentFeePricing = (company: Company) => {
     setAccidentFeePricingCompany(company);
     setAccidentFeePricingOpen(true);
-  };
-
-  const handleManageAccidentTemplate = (company: Company) => {
-    setAccidentTemplateCompany(company);
-    setAccidentTemplateOpen(true);
   };
 
   const handleDrawerClose = () => {
@@ -192,22 +184,31 @@ export default function Companies() {
         </div>
 
         {/* Companies Table */}
-        <div className="rounded-lg border bg-card">
+        <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+          <div className="flex items-center justify-between border-b bg-muted/30 px-5 py-3">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-primary" />
+              <h3 className="text-base font-semibold">شركات التأمين</h3>
+            </div>
+            <span className="text-xs text-muted-foreground ltr-nums">
+              {loading ? '—' : `${companies.length} شركة`}
+            </span>
+          </div>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="text-right">الاسم بالعربية</TableHead>
-                <TableHead className="text-right">الاسم بالإنجليزية</TableHead>
-                <TableHead className="text-right">نوع التأمين</TableHead>
-                <TableHead className="text-right">العمولة</TableHead>
-                <TableHead className="text-right">الحالة</TableHead>
-                <TableHead className="text-right">الإجراءات</TableHead>
+              <TableRow className="bg-muted/20 hover:bg-muted/20 border-border/60">
+                <TableHead className="text-right font-semibold">الاسم بالعربية</TableHead>
+                <TableHead className="text-right font-semibold">الاسم بالإنجليزية</TableHead>
+                <TableHead className="text-right font-semibold">نوع التأمين</TableHead>
+                <TableHead className="text-right font-semibold">العمولة</TableHead>
+                <TableHead className="text-right font-semibold">الحالة</TableHead>
+                <TableHead className="text-right font-semibold">الإجراءات</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>
+                  <TableRow key={i} className="border-border/40">
                     <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-20" /></TableCell>
@@ -218,7 +219,7 @@ export default function Companies() {
                 ))
               ) : companies.length === 0 ? (
               <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
                     لا توجد شركات تأمين
                   </TableCell>
                 </TableRow>
@@ -226,13 +227,16 @@ export default function Companies() {
                 companies.map((company) => (
                   <TableRow
                     key={company.id}
-                    className="cursor-pointer hover:bg-muted/50"
+                    className="cursor-pointer border-border/40 transition-colors hover:bg-muted/40"
                     onClick={() => handleEditCompany(company)}
                   >
-                    <TableCell className="font-medium">
-                      {company.name_ar || '-'}
+                    <TableCell className="font-semibold">
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-1 rounded-full bg-primary/60" />
+                        {company.name_ar || '-'}
+                      </div>
                     </TableCell>
-                    <TableCell>{company.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{company.name}</TableCell>
                     <TableCell>
                       {company.category_parent && company.category_parent.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
@@ -310,21 +314,6 @@ export default function Companies() {
                             إعفاء الحادث
                           </Button>
                         )}
-                        {(company.category_parent?.includes('THIRD_FULL') || 
-                          company.category_parent?.includes('ROAD_SERVICE')) && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-orange-600 hover:text-orange-700"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleManageAccidentTemplate(company);
-                            }}
-                          >
-                            <AlertTriangle className="h-4 w-4 ml-2" />
-                            قالب البلاغ
-                          </Button>
-                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -362,13 +351,6 @@ export default function Companies() {
         open={accidentFeePricingOpen}
         onOpenChange={setAccidentFeePricingOpen}
         company={accidentFeePricingCompany}
-      />
-
-      {/* Accident Template Drawer */}
-      <AccidentTemplateDrawer
-        open={accidentTemplateOpen}
-        onOpenChange={setAccidentTemplateOpen}
-        company={accidentTemplateCompany}
       />
     </MainLayout>
   );
