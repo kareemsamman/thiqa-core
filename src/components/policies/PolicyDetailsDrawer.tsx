@@ -951,23 +951,25 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                       </div>
                     )}
 
-                    {/* Financial Cards Grid */}
-                    <div className="grid grid-cols-4 gap-3">
+                    {/* Financial Cards Grid — 2 columns on mobile so each
+                        card has enough room for its 2xl amount without
+                        overflowing; 4 columns from md up as before. */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
                       {/* Insurance Price */}
-                      <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center">
+                      <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-3 sm:p-4 border border-slate-200 min-w-0">
+                        <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-200 flex items-center justify-center shrink-0">
                             <CircleDollarSign className="h-4 w-4 text-slate-600" />
                           </div>
-                          <span className="text-xs font-medium text-slate-600">
+                          <span className="text-[11px] sm:text-xs font-medium text-slate-600 truncate">
                             {hasPackage ? "سعر الباقة" : "سعر التأمين"}
                           </span>
                         </div>
-                        <p className="text-2xl font-bold text-slate-900 ltr-nums">
+                        <p className="text-lg sm:text-2xl font-bold text-slate-900 tabular-nums break-words leading-tight">
                           {formatCurrency(hasPackage ? packageTotalPrice : (policy.insurance_price + (policy.office_commission || 0)))}
                         </p>
                         {!hasPackage && (policy.office_commission || 0) > 0 && (
-                          <p className="text-[11px] text-muted-foreground mt-1">
+                          <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-1 leading-snug">
                             {formatCurrency(policy.insurance_price)} تأمين + {formatCurrency(policy.office_commission)} عمولة مكتب
                           </p>
                         )}
@@ -975,24 +977,24 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
 
                       {/* Paid Amount */}
                       <div className={cn(
-                        "rounded-xl p-4 border",
-                        paymentStatus === 'paid' 
-                          ? "bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20" 
+                        "rounded-xl p-3 sm:p-4 border min-w-0",
+                        paymentStatus === 'paid'
+                          ? "bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20"
                           : "bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200"
                       )}>
-                        <div className="flex items-center gap-2 mb-3">
+                        <div className="flex items-center gap-2 mb-2 sm:mb-3">
                           <div className={cn(
-                            "w-8 h-8 rounded-lg flex items-center justify-center",
+                            "w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0",
                             paymentStatus === 'paid' ? "bg-primary/20" : "bg-slate-200"
                           )}>
                             <CreditCard className={cn("h-4 w-4", paymentStatus === 'paid' ? "text-primary" : "text-slate-600")} />
                           </div>
-                          <span className={cn("text-xs font-medium", paymentStatus === 'paid' ? "text-primary" : "text-slate-600")}>
+                          <span className={cn("text-[11px] sm:text-xs font-medium truncate", paymentStatus === 'paid' ? "text-primary" : "text-slate-600")}>
                             المدفوع
                           </span>
                         </div>
                         <p className={cn(
-                          "text-2xl font-bold ltr-nums",
+                          "text-lg sm:text-2xl font-bold tabular-nums break-words leading-tight",
                           paymentStatus === 'paid' ? "text-primary" : "text-slate-900"
                         )}>
                           {formatCurrency(totalPaid)}
@@ -1001,43 +1003,43 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
 
                       {/* Remaining */}
                       <div className={cn(
-                        "rounded-xl p-4 border",
+                        "rounded-xl p-3 sm:p-4 border min-w-0",
                         remaining > 0 ? "bg-gradient-to-br from-red-50 to-red-100 border-red-200" :
                         remaining < 0 ? "bg-gradient-to-br from-red-50 to-red-100 border-red-200" :
                         "bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20"
                       )}>
-                        <div className="flex items-center gap-2 mb-3">
+                        <div className="flex items-center gap-2 mb-2 sm:mb-3">
                           <div className={cn(
-                            "w-8 h-8 rounded-lg flex items-center justify-center",
+                            "w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0",
                             remaining !== 0 ? "bg-red-200" : "bg-primary/20"
                           )}>
                             <Banknote className={cn("h-4 w-4", remaining !== 0 ? "text-red-600" : "text-primary")} />
                           </div>
-                          <span className={cn("text-xs font-medium", remaining !== 0 ? "text-red-600" : "text-primary")}>
+                          <span className={cn("text-[11px] sm:text-xs font-medium truncate", remaining !== 0 ? "text-red-600" : "text-primary")}>
                             المتبقي
                           </span>
                         </div>
                         <p className={cn(
-                          "text-2xl font-bold ltr-nums",
+                          "text-lg sm:text-2xl font-bold tabular-nums break-words leading-tight",
                           remaining !== 0 ? "text-red-700" : "text-primary"
                         )}>
                           {formatCurrency(remaining)}
                         </p>
                         {remaining < 0 && (
-                          <span className="text-xs text-red-600">رصيد زائد</span>
+                          <span className="text-[10px] sm:text-xs text-red-600">رصيد زائد</span>
                         )}
                       </div>
 
                       {/* Remaining Days */}
-                      <div className="rounded-xl p-4 border bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200">
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center">
+                      <div className="rounded-xl p-3 sm:p-4 border bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200 min-w-0">
+                        <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-200 flex items-center justify-center shrink-0">
                             <Clock className="h-4 w-4 text-slate-600" />
                           </div>
-                          <span className="text-xs font-medium text-slate-600">المتبقي</span>
+                          <span className="text-[11px] sm:text-xs font-medium text-slate-600 truncate">المتبقي</span>
                         </div>
                         <p className={cn(
-                          "text-2xl font-bold",
+                          "text-lg sm:text-2xl font-bold break-words leading-tight",
                           remainingDays < 0 ? "text-red-600" :
                           remainingDays <= 30 ? "text-amber-600" : "text-slate-900"
                         )}>
