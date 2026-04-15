@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.88.0';
 import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
