@@ -55,8 +55,10 @@ import {
   Calendar,
   MoreVertical,
   Building2,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PdfJsViewer } from "@/components/policies/PdfJsViewer";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { useToast } from "@/hooks/use-toast";
@@ -712,6 +714,10 @@ export default function Cheques() {
     return new Date(dateStr).toLocaleDateString('en-GB');
   };
 
+  // PDFs live in the same payment_images table as images (no mime_type
+  // column), so we infer by extension. Query-string tolerant.
+  const isPdfUrl = (url: string) => /\.pdf(\?|#|$)/i.test(url);
+
   const formatMonthName = (monthKey: string) => {
     const [year, month] = monthKey.split('-');
     const date = new Date(parseInt(year), parseInt(month) - 1);
@@ -867,15 +873,21 @@ export default function Cheques() {
                 }}
                 className="relative group"
               >
-                <img 
-                  src={allImages[0]} 
-                  alt="صورة الشيك" 
-                  className="h-10 w-14 object-cover rounded border"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                    (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="h-10 w-14 bg-muted rounded flex items-center justify-center text-[10px] text-muted-foreground">خطأ</div>';
-                  }}
-                />
+                {isPdfUrl(allImages[0]) ? (
+                  <div className="h-10 w-14 rounded border bg-red-500/10 flex items-center justify-center">
+                    <FileText className="h-5 w-5 text-red-600" />
+                  </div>
+                ) : (
+                  <img
+                    src={allImages[0]}
+                    alt="صورة الشيك"
+                    className="h-10 w-14 object-cover rounded border"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                      (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="h-10 w-14 bg-muted rounded flex items-center justify-center text-[10px] text-muted-foreground">خطأ</div>';
+                    }}
+                  />
+                )}
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center gap-1">
                   <Eye className="h-3 w-3 text-white" />
                   {allImages.length > 1 && <span className="text-white text-[10px] font-bold">+{allImages.length - 1}</span>}
@@ -1461,34 +1473,40 @@ export default function Cheques() {
         </Tabs>
       </div>
 
-      {/* Image Gallery Dialog */}
+      {/* Image / PDF Gallery Dialog */}
       <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
-        <DialogContent className="sm:max-w-3xl p-2">
+        <DialogContent className="sm:max-w-4xl p-2">
           <DialogHeader className="sr-only">
-            <DialogTitle>صور الشيك</DialogTitle>
+            <DialogTitle>مرفقات الشيك</DialogTitle>
           </DialogHeader>
           <div className="relative">
             {galleryImages[galleryIndex] ? (
-              <img 
-                src={galleryImages[galleryIndex]} 
-                alt={`صورة ${galleryIndex + 1}`} 
-                className="w-full h-auto max-h-[70vh] object-contain rounded-lg"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = '';
-                  (e.target as HTMLImageElement).alt = 'فشل في تحميل الصورة';
-                  (e.target as HTMLImageElement).className = 'hidden';
-                  const parent = (e.target as HTMLImageElement).parentElement;
-                  if (parent) {
-                    const fallback = document.createElement('div');
-                    fallback.className = 'w-full h-64 bg-muted rounded-lg flex items-center justify-center text-muted-foreground';
-                    fallback.textContent = 'فشل في تحميل الصورة';
-                    parent.insertBefore(fallback, e.target as HTMLImageElement);
-                  }
-                }}
-              />
+              isPdfUrl(galleryImages[galleryIndex]) ? (
+                <div className="w-full h-[80vh] rounded-lg overflow-hidden bg-muted">
+                  <PdfJsViewer url={galleryImages[galleryIndex]} className="h-full" />
+                </div>
+              ) : (
+                <img
+                  src={galleryImages[galleryIndex]}
+                  alt={`صورة ${galleryIndex + 1}`}
+                  className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '';
+                    (e.target as HTMLImageElement).alt = 'فشل في تحميل الصورة';
+                    (e.target as HTMLImageElement).className = 'hidden';
+                    const parent = (e.target as HTMLImageElement).parentElement;
+                    if (parent) {
+                      const fallback = document.createElement('div');
+                      fallback.className = 'w-full h-64 bg-muted rounded-lg flex items-center justify-center text-muted-foreground';
+                      fallback.textContent = 'فشل في تحميل الصورة';
+                      parent.insertBefore(fallback, e.target as HTMLImageElement);
+                    }
+                  }}
+                />
+              )
             ) : (
               <div className="w-full h-64 bg-muted rounded-lg flex items-center justify-center text-muted-foreground">
-                لا توجد صورة
+                لا يوجد مرفق
               </div>
             )}
             {galleryImages.length > 1 && (
