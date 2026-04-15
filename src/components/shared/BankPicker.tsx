@@ -178,26 +178,25 @@ export function BankPicker({
                     setOpen(false);
                     setSearch("");
                   }}
-                  className={cn(
-                    "gap-3 py-2.5",
-                    // cmdk highlights the active row with bg-accent
-                    // (navy). Force white text + re-tint the code pill
-                    // so both stay legible against the dark highlight.
-                    // `!` modifier so our color beats the span's own
-                    // text-foreground class.
-                    "data-[selected=true]:[&_.bank-code-pill]:!bg-accent-foreground/15",
-                    "data-[selected=true]:[&_.bank-code-pill]:!text-accent-foreground",
-                    "data-[selected=true]:[&_.bank-code-pill]:!border-accent-foreground/40",
-                    "data-[selected=true]:[&_.bank-name]:!text-accent-foreground",
-                  )}
+                  // Kill cmdk's data-[selected=true] bg so the row never
+                  // flashes navy on keyboard focus. We use hover-based
+                  // styling instead, which only triggers on real mouse
+                  // hover.
+                  className="gap-3 py-2.5 !bg-transparent data-[selected=true]:!bg-muted/60 data-[selected=true]:!text-foreground hover:!bg-muted/60"
                 >
                   {/* Source order: pill first → in RTL flex it lands on
-                      the start edge = physical-right. */}
-                  <span className="bank-code-pill inline-flex items-center justify-center rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 font-mono font-bold text-[11px] w-10 h-6 shrink-0 ltr-nums border border-amber-500/30">
+                      the start edge = physical-right. `dir="ltr"` on
+                      the pill forces the digits to center properly
+                      inside the fixed-width box (without it the RTL
+                      context pushes them to the right edge). */}
+                  <span
+                    dir="ltr"
+                    className="bank-code-pill inline-flex items-center justify-center rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 font-mono font-bold text-[11px] w-10 h-6 shrink-0 border border-amber-500/30"
+                  >
                     {manualOption.code}
                   </span>
                   <span className="bank-name text-xs text-muted-foreground flex-1 text-right">
-                    استخدام الرقم <span className="font-mono ltr-nums">{manualOption.code}</span> بدون اسم
+                    استخدام الرقم <span dir="ltr" className="font-mono">{manualOption.code}</span> بدون اسم
                   </span>
                 </CommandItem>
               </CommandGroup>
@@ -215,25 +214,19 @@ export function BankPicker({
                       setOpen(false);
                       setSearch("");
                     }}
-                    className={cn(
-                      "gap-3 py-2.5",
-                      // cmdk highlights the active row with bg-accent
-                      // (navy). Override the name + pill colors with
-                      // `!` so they beat the direct text-foreground
-                      // class the children carry.
-                      "data-[selected=true]:[&_.bank-code-pill]:!bg-accent-foreground/15",
-                      "data-[selected=true]:[&_.bank-code-pill]:!text-accent-foreground",
-                      "data-[selected=true]:[&_.bank-code-pill]:!border-accent-foreground/40",
-                      "data-[selected=true]:[&_.bank-name]:!text-accent-foreground",
-                    )}
+                    // Kill cmdk's navy keyboard-highlight bg. Rows get a
+                    // subtle muted bg on real mouse hover only, and the
+                    // currently selected bank stays muted too so you
+                    // can see which one is active.
+                    className="gap-3 py-2.5 !bg-transparent data-[selected=true]:!bg-muted/60 data-[selected=true]:!text-foreground hover:!bg-muted/60"
                   >
                     {/* Source order: pill → name → check. In RTL flex
                         this renders physically as: check | name | pill,
-                        putting the code on the physical-right edge
-                        (same side where the Arabic name starts reading). */}
+                        putting the code on the physical-right edge. */}
                     <span
+                      dir="ltr"
                       className={cn(
-                        "bank-code-pill inline-flex items-center justify-center rounded-md font-mono font-bold text-[11px] w-10 h-6 shrink-0 ltr-nums border",
+                        "bank-code-pill inline-flex items-center justify-center rounded-md font-mono font-bold text-[11px] w-10 h-6 shrink-0 border",
                         isSelected
                           ? "bg-primary/15 text-primary border-primary/30"
                           : "bg-muted text-muted-foreground border-border",
