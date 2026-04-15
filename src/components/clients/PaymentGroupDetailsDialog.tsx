@@ -283,24 +283,23 @@ export function PaymentGroupDetailsDialog({
 
         {/* Body — one row per payment in a real HTML table. Every row has
             the same height so the dialog reads like a ledger, not a stack
-            of variable-size cards. Notes and attachments hang off the row
-            as a thin sub-row (only when present) to avoid height churn.
-            On mobile we collapse the less-critical columns (#, notes,
-            attachments) so the remaining cells fit the narrow width. */}
+            of variable-size cards. On mobile the wrapper scrolls
+            horizontally so every column stays available; we don't hide
+            cells. */}
         <div className="p-2 sm:p-4 bg-muted/20">
           <div className="overflow-x-auto rounded-lg border border-border/60 bg-card">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-muted/40 border-b border-border/60">
                 <tr>
-                  <th className="hidden sm:table-cell text-center w-10 px-2 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">#</th>
-                  <th className="text-right px-2 sm:px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">طريقة الدفع</th>
-                  <th className="text-right px-2 sm:px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">التفاصيل</th>
-                  <th className="text-right px-2 sm:px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">التواريخ</th>
-                  <th className="text-left px-2 sm:px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide sm:min-w-[110px]">المبلغ</th>
-                  <th className="hidden md:table-cell text-right px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide min-w-[140px]">ملاحظات</th>
-                  <th className="hidden md:table-cell text-center px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-20">المرفقات</th>
+                  <th className="text-center w-10 px-2 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">#</th>
+                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">طريقة الدفع</th>
+                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">التفاصيل</th>
+                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">التواريخ</th>
+                  <th className="text-left px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide min-w-[110px]">المبلغ</th>
+                  <th className="text-right px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide min-w-[140px]">ملاحظات</th>
+                  <th className="text-center px-3 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-20">المرفقات</th>
                   {(onEdit || onDelete) && (
-                    <th className="text-center px-1 sm:px-2 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-14 sm:w-20">إجراءات</th>
+                    <th className="text-center px-2 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide w-20">إجراءات</th>
                   )}
                 </tr>
               </thead>
@@ -352,18 +351,18 @@ export function PaymentGroupDetailsDialog({
                       )}
                     >
                         {/* # */}
-                        <td className="hidden sm:table-cell px-2 py-3 text-center text-[11px] font-bold text-muted-foreground ltr-nums align-middle">
+                        <td className="px-2 py-3 text-center text-[11px] font-bold text-muted-foreground ltr-nums align-middle">
                           {idx + 1}
                         </td>
 
                         {/* Payment method + refused tag */}
-                        <td className="px-2 sm:px-3 py-2.5 sm:py-3 align-middle">
-                          <div className="flex items-center gap-1.5 sm:gap-2">
-                            <div className={cn("w-7 h-7 sm:w-8 sm:h-8 rounded-lg border flex items-center justify-center shrink-0", typeBg)}>
-                              <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        <td className="px-3 py-3 align-middle">
+                          <div className="flex items-center gap-2">
+                            <div className={cn("w-8 h-8 rounded-lg border flex items-center justify-center shrink-0", typeBg)}>
+                              <Icon className="h-4 w-4" />
                             </div>
                             <div className="flex flex-col gap-0.5 min-w-0">
-                              <span className="text-[11px] sm:text-xs font-semibold truncate">
+                              <span className="text-xs font-semibold truncate">
                                 {getPaymentTypeLabel(p)}
                               </span>
                               {p.refused && (
@@ -381,7 +380,7 @@ export function PaymentGroupDetailsDialog({
                             it as a compact muted line (no extra label),
                             so the cell reads as one "cheque card" instead
                             of a labeled section stack. */}
-                        <td className="px-2 sm:px-3 py-2.5 sm:py-3 align-middle">
+                        <td className="px-3 py-3 align-middle">
                           {p.cheque_number ? (
                             <div className="flex flex-col gap-0.5">
                               <span className="text-[9px] text-muted-foreground uppercase tracking-wide">رقم الشيك</span>
@@ -417,54 +416,34 @@ export function PaymentGroupDetailsDialog({
                             backend already stores it), so label it
                             accordingly. For non-cheque rows the same
                             column is the actual receipt date. */}
-                        <td className="px-2 sm:px-3 py-2.5 sm:py-3 align-middle">
+                        <td className="px-3 py-3 align-middle">
                           <div className="flex flex-col gap-0.5">
                             {p.payment_type === 'cheque' && p.cheque_date && (
-                              <div className="flex items-center gap-1 sm:gap-1.5">
+                              <div className="flex items-center gap-1.5">
                                 <span className="text-[9px] text-muted-foreground uppercase tracking-wide">الإصدار</span>
-                                <span className="text-[11px] sm:text-xs font-semibold ltr-nums">{formatDate(p.cheque_date)}</span>
+                                <span className="text-xs font-semibold ltr-nums">{formatDate(p.cheque_date)}</span>
                               </div>
                             )}
-                            <div className="flex items-center gap-1 sm:gap-1.5">
+                            <div className="flex items-center gap-1.5">
                               <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
                                 {p.payment_type === 'cheque' ? 'الاستحقاق' : 'التاريخ'}
                               </span>
-                              <span className="text-[11px] sm:text-xs font-semibold ltr-nums">{formatDate(p.payment_date)}</span>
+                              <span className="text-xs font-semibold ltr-nums">{formatDate(p.payment_date)}</span>
                             </div>
                           </div>
                         </td>
 
                         {/* Amount */}
-                        <td className="px-2 sm:px-3 py-2.5 sm:py-3 align-middle text-left">
-                          <span className="font-bold text-[12px] sm:text-sm ltr-nums text-foreground whitespace-nowrap">
+                        <td className="px-3 py-3 align-middle text-left">
+                          <span className="font-bold text-sm ltr-nums text-foreground whitespace-nowrap">
                             ₪{Number(p.amount || 0).toLocaleString("en-US")}
                           </span>
-                          {/* Notes + attachment chip inline under amount on
-                              mobile so the hidden columns still surface. */}
-                          <div className="md:hidden flex flex-col gap-1 mt-1">
-                            {p.notes && (
-                              <p className="text-[10px] text-muted-foreground leading-snug whitespace-pre-wrap break-words max-w-[140px] text-right">
-                                {p.notes}
-                              </p>
-                            )}
-                            {attachments.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => setGalleryFile(buildGalleryFile(attachments[0]))}
-                                className="inline-flex items-center gap-1 text-[10px] text-primary bg-primary/10 rounded-full px-1.5 py-0.5 w-fit"
-                                title={`${attachments.length} مرفق`}
-                              >
-                                <ImageIcon className="h-2.5 w-2.5" />
-                                <span className="ltr-nums">{attachments.length}</span>
-                              </button>
-                            )}
-                          </div>
                         </td>
 
                         {/* Notes — own column so the table stays fixed-
                             height; long notes wrap, empty notes render
                             an em dash. */}
-                        <td className="hidden md:table-cell px-3 py-3 align-middle">
+                        <td className="px-3 py-3 align-middle">
                           {p.notes ? (
                             <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap break-words max-w-[220px]">
                               {p.notes}
@@ -475,7 +454,7 @@ export function PaymentGroupDetailsDialog({
                         </td>
 
                         {/* Attachments — clickable count chip that opens the first file */}
-                        <td className="hidden md:table-cell px-3 py-3 align-middle text-center">
+                        <td className="px-3 py-3 align-middle text-center">
                           {attachments.length > 0 ? (
                             <button
                               type="button"
@@ -493,7 +472,7 @@ export function PaymentGroupDetailsDialog({
 
                         {/* Actions */}
                         {(onEdit || onDelete) && (
-                          <td className="px-1 sm:px-2 py-2.5 sm:py-3 align-middle">
+                          <td className="px-2 py-3 align-middle">
                             <div className="flex items-center justify-center gap-0.5">
                               {onEdit && !p.locked && (
                                 <Button
@@ -548,45 +527,39 @@ export function PaymentGroupDetailsDialog({
                   (s, c) => s + c,
                   0,
                 );
-                const hasActions = onEdit || onDelete;
+                const trailingEmpty = onEdit || onDelete ? 3 : 2;
                 return (
                   <tfoot className="bg-muted/40">
                     {totalCommission > 0 && (
                       <tr className="border-t border-border/60">
-                        {/* # (sm+) + طريقة + التفاصيل: empty */}
-                        <td className="hidden sm:table-cell" />
-                        <td colSpan={2} />
+                        {/* # + طريقة + التفاصيل: empty */}
+                        <td colSpan={3} />
                         {/* التواريخ: label, pinned to the cell's visual-
                             left edge (which is right next to المبلغ) */}
-                        <td className="px-2 sm:px-3 py-2.5 text-left text-[11px] sm:text-xs font-semibold text-muted-foreground">
+                        <td className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">
                           عمولة المكتب
                         </td>
                         {/* المبلغ */}
-                        <td className="px-2 sm:px-3 py-2.5 text-left">
-                          <span className="text-[12px] sm:text-sm font-bold ltr-nums text-amber-700 dark:text-amber-400 whitespace-nowrap">
+                        <td className="px-3 py-2.5 text-left">
+                          <span className="text-sm font-bold ltr-nums text-amber-700 dark:text-amber-400 whitespace-nowrap">
                             ₪{totalCommission.toLocaleString("en-US")}
                           </span>
                         </td>
-                        {/* ملاحظات + المرفقات (md+) + إجراءات */}
-                        <td className="hidden md:table-cell" />
-                        <td className="hidden md:table-cell" />
-                        {hasActions && <td />}
+                        {/* ملاحظات + المرفقات + إجراءات: empty */}
+                        <td colSpan={trailingEmpty} />
                       </tr>
                     )}
                     <tr className="border-t-2 border-border">
-                      <td className="hidden sm:table-cell" />
-                      <td colSpan={2} />
-                      <td className="px-2 sm:px-3 py-3 text-left text-[12px] sm:text-sm font-bold text-foreground">
+                      <td colSpan={3} />
+                      <td className="px-3 py-3 text-left text-sm font-bold text-foreground">
                         المجموع
                       </td>
-                      <td className="px-2 sm:px-3 py-3 text-left">
-                        <span className="text-sm sm:text-base font-bold ltr-nums text-foreground whitespace-nowrap">
+                      <td className="px-3 py-3 text-left">
+                        <span className="text-base font-bold ltr-nums text-foreground whitespace-nowrap">
                           ₪{totalPaid.toLocaleString("en-US")}
                         </span>
                       </td>
-                      <td className="hidden md:table-cell" />
-                      <td className="hidden md:table-cell" />
-                      {hasActions && <td />}
+                      <td colSpan={trailingEmpty} />
                     </tr>
                   </tfoot>
                 );
