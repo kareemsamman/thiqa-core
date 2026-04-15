@@ -12,7 +12,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
-import { MessageSquare, Search, Filter, CheckCircle, XCircle, Clock, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { MessageSquare, Search, Filter, CheckCircle, XCircle, Clock, RefreshCw, ChevronDown, ChevronUp, FileText } from "lucide-react";
+import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 
 interface SmsLog {
   id: string;
@@ -58,10 +59,18 @@ export default function SmsHistory() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [policyDrawerId, setPolicyDrawerId] = useState<string | null>(null);
+  const [policyDrawerOpen, setPolicyDrawerOpen] = useState(false);
   const pageSize = 50;
 
   const toggleExpand = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
+  };
+
+  const openPolicyPreview = (policyId: string | null | undefined) => {
+    if (!policyId) return;
+    setPolicyDrawerId(policyId);
+    setPolicyDrawerOpen(true);
   };
 
   useEffect(() => {
@@ -106,6 +115,8 @@ export default function SmsHistory() {
     }
   };
 
+  // Accept bare ASCII digits (e.g. "03/2026") anywhere in the search
+  // string — users type document/receipt numbers without ltr isolation.
   const filteredLogs = logs.filter((log) => {
     if (!search) return true;
     const searchLower = search.toLowerCase();
@@ -113,7 +124,9 @@ export default function SmsHistory() {
       log.phone_number.includes(search) ||
       log.message.toLowerCase().includes(searchLower) ||
       log.clients?.full_name?.toLowerCase().includes(searchLower) ||
-      log.policies?.policy_number?.toLowerCase().includes(searchLower)
+      log.policies?.policy_number?.toLowerCase().includes(searchLower) ||
+      log.policies?.document_number?.toLowerCase().includes(searchLower) ||
+      log.policies?.car?.car_number?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -260,12 +273,20 @@ export default function SmsHistory() {
                               </TableCell>
                               <TableCell className="text-xs">
                                 {docLabel ? (
-                                  <div className="flex flex-col gap-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openPolicyPreview(log.policy_id);
+                                    }}
+                                    className="flex flex-col items-start gap-0.5 hover:text-primary transition-colors"
+                                    title="عرض الوثيقة"
+                                  >
                                     <span className="font-mono ltr-nums font-semibold">{docLabel}</span>
                                     {carLabel && (
                                       <span className="text-muted-foreground font-mono ltr-nums">🚗 {carLabel}</span>
                                     )}
-                                  </div>
+                                  </button>
                                 ) : (
                                   <span className="text-muted-foreground">—</span>
                                 )}
@@ -362,6 +383,23 @@ export default function SmsHistory() {
                                         </div>
                                       </div>
                                     )}
+
+                                    {log.policy_id && (
+                                      <div className="pt-2">
+                                        <Button
+                                          variant="default"
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openPolicyPreview(log.policy_id);
+                                          }}
+                                          className="gap-2"
+                                        >
+                                          <FileText className="h-4 w-4" />
+                                          عرض الوثيقة
+                                        </Button>
+                                      </div>
+                                    )}
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -400,6 +438,16 @@ export default function SmsHistory() {
           </CardContent>
         </Card>
       </div>
+
+      <PolicyDetailsDrawer
+        policyId={policyDrawerId}
+        open={policyDrawerOpen}
+        onOpenChange={(open) => {
+          setPolicyDrawerOpen(open);
+          if (!open) setPolicyDrawerId(null);
+        }}
+        onViewRelatedPolicy={(id) => setPolicyDrawerId(id)}
+      />
     </MainLayout>
   );
 }
