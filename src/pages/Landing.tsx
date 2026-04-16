@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   ChevronLeft, CheckCircle, Star, ArrowLeft, Play, X, Check,
   Users, FileText, CreditCard, BarChart3, Bell, MessageSquare,
-  Phone, Shield, RefreshCcw, Wallet,
+  Phone, Shield, RefreshCcw, Wallet, AlertTriangle, Mail, Clock,
 } from "lucide-react";
 import { useLandingContent, ct, ci } from "@/hooks/useLandingContent";
 import { cn } from "@/lib/utils";
@@ -727,13 +727,17 @@ export default function Landing() {
           from { clip-path: inset(0 0 0 100%); }
           to   { clip-path: inset(0 0 0 0); }
         }
-        @keyframes hsCardIn {
-          from { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.94); }
-          to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+        @keyframes hsFromLeft {
+          from { opacity: 0; transform: translate3d(-40px, 10px, 0) scale(0.9); }
+          to   { opacity: 1; transform: translate3d(0, 0, 0)         scale(1); }
         }
-        @keyframes hsDotBlink {
-          0%, 60%, 100% { opacity: 0.25; transform: scale(0.85); }
-          30%           { opacity: 1;    transform: scale(1); }
+        @keyframes hsFromRight {
+          from { opacity: 0; transform: translate3d(40px, 10px, 0)  scale(0.9); }
+          to   { opacity: 1; transform: translate3d(0, 0, 0)         scale(1); }
+        }
+        @keyframes hsImgIn {
+          from { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.96); }
+          to   { opacity: 1; transform: translate3d(0, 0, 0)   scale(1); }
         }
         .hs-type {
           display: inline-block;
@@ -743,26 +747,37 @@ export default function Landing() {
         .hs-visible .hs-type-2 { animation: hsTypeRtl 0.8s steps(18, end) 1.00s forwards; }
         .hs-visible .hs-type-3 { animation: hsTypeRtl 0.4s steps(8, end)  1.70s forwards; }
         .hs-visible .hs-type-4 { animation: hsTypeRtl 0.9s steps(20, end) 1.95s forwards; }
-        .hs-visible .hs-chat-msg { animation: hsTypeRtl 1.4s steps(32, end) 3.10s forwards; }
 
-        .hs-card {
+        /* Central image scales in gently once the section becomes
+           visible — anchors the composition before the cards appear. */
+        .hs-img {
           opacity: 0;
-          transform: translate3d(0, 14px, 0) scale(0.94);
+          transform: translate3d(0, 18px, 0) scale(0.96);
+        }
+        .hs-visible .hs-img {
+          animation: hsImgIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
+        }
+
+        /* Each pill card slides in from its own side, scale-bouncing
+           softly into place. Staggered delays give a "popping in one
+           at a time" cadence — the image lands first, then the cards
+           pile in around it. */
+        .hs-pill {
+          opacity: 0;
           will-change: transform, opacity;
         }
-        .hs-visible .hs-card { animation: hsCardIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-        .hs-visible .hs-card-1 { animation-delay: 0.45s; }
-        .hs-visible .hs-card-2 { animation-delay: 0.75s; }
-        .hs-visible .hs-card-3 { animation-delay: 1.05s; }
-        .hs-visible .hs-card-4 { animation-delay: 1.35s; }
-
-        .hs-dot {
-          animation: hsDotBlink 1.3s ease-in-out infinite;
-          animation-play-state: paused;
-        }
-        .hs-visible .hs-dot { animation-play-state: running; }
-        .hs-dot-2 { animation-delay: 0.2s; }
-        .hs-dot-3 { animation-delay: 0.4s; }
+        .hs-pill-l { transform: translate3d(-40px, 10px, 0) scale(0.9); }
+        .hs-pill-r { transform: translate3d(40px, 10px, 0)  scale(0.9); }
+        .hs-visible .hs-pill-l { animation: hsFromLeft  0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+        .hs-visible .hs-pill-r { animation: hsFromRight 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+        .hs-visible .hs-d-1 { animation-delay: 0.85s; }
+        .hs-visible .hs-d-2 { animation-delay: 1.00s; }
+        .hs-visible .hs-d-3 { animation-delay: 1.15s; }
+        .hs-visible .hs-d-4 { animation-delay: 1.30s; }
+        .hs-visible .hs-d-5 { animation-delay: 1.45s; }
+        .hs-visible .hs-d-6 { animation-delay: 1.60s; }
+        .hs-visible .hs-d-7 { animation-delay: 1.75s; }
+        .hs-visible .hs-d-8 { animation-delay: 1.90s; }
 
         .hs-highlight {
           background: #122042;
@@ -802,110 +817,87 @@ export default function Landing() {
             <span className="hs-type hs-type-4 hs-highlight">أكثر احترافاً</span>
           </h2>
 
-          {/* Composition: central image + four floating cards */}
-          <div className="relative max-w-3xl mx-auto">
-            {/* Central image placeholder — swap inner div for <img> when ready */}
-            <div className="relative aspect-[4/5] max-w-xs md:max-w-sm mx-auto rounded-3xl overflow-hidden shadow-[0_30px_80px_-24px_rgba(18,32,66,0.25)]">
-              <div
-                className="absolute inset-0"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #f5eee6 0%, #ebe0d1 60%, #d9c8b3 100%)",
-                }}
+          {/* Composition — central image with small pill-shaped
+              notification cards arranged on BOTH sides. Each card is
+              a self-contained rounded-full pill with an icon, short
+              Arabic label, and (optionally) a red counter badge. They
+              slide in from their respective sides with staggered
+              delays so the composition assembles itself after the
+              image lands. Hidden on mobile to keep the layout clean;
+              desktop shows the full "orbit" effect. */}
+          <div className="relative max-w-5xl mx-auto min-h-[480px] md:min-h-[560px]">
+            {/* Central hero image */}
+            <div className="hs-img relative mx-auto w-full max-w-md md:max-w-lg">
+              <img
+                src="https://thiqacrm.b-cdn.net/hf_20260416_155619_091100f5-d053-456f-9c9f-e9f80354c345%201.png"
+                alt="وكيل تأمين غارق بالمهام قبل Thiqa"
+                className="w-full h-auto rounded-3xl shadow-[0_30px_80px_-24px_rgba(18,32,66,0.25)]"
+                loading="lazy"
               />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <Users className="h-16 w-16 text-black/20 mx-auto mb-2" strokeWidth={1.2} />
-                  <p className="text-xs text-black/30 font-medium">مكانك للصورة</p>
-                </div>
-              </div>
             </div>
 
-            {/* Chat bubble — top-left (hidden on mobile to keep layout clean) */}
-            <div className="hs-card hs-card-1 hidden md:block absolute top-4 left-0 lg:-left-8 w-[300px]">
-              <div className="rounded-3xl bg-[#f5eee6] p-4 flex items-start gap-3 shadow-[0_12px_30px_-10px_rgba(18,32,66,0.18)]">
-                <div
-                  className="flex-shrink-0 h-9 w-9 rounded-full"
-                  style={{
-                    background: "linear-gradient(135deg, #d9c8b3 0%, #b89870 100%)",
-                  }}
-                />
-                <div className="flex-1 min-w-0 text-right">
-                  <p className="hs-type hs-chat-msg text-[13px] text-black/80 leading-relaxed">
-                    مرحبا أحمد، بدي أجدد وثيقة التأمين اليوم قبل ما تنتهي.
-                  </p>
-                  <span className="block text-[11px] text-black/40 mt-1">20:09</span>
-                </div>
-              </div>
-              <div className="mt-3 mr-12 flex items-center gap-1.5">
-                <div className="hs-dot hs-dot-1 h-2 w-2 rounded-full bg-[#d97766]" />
-                <div className="hs-dot hs-dot-2 h-2 w-2 rounded-full bg-[#d97766]" />
-                <div className="hs-dot hs-dot-3 h-2 w-2 rounded-full bg-[#d97766]" />
-              </div>
+            {/* Left-side pills — slide in from the left */}
+            <div className="hs-pill hs-pill-l hs-d-1 hidden md:flex absolute top-4 left-2 lg:-left-4 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+                <AlertTriangle className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.5} />
+              </span>
+              <span className="text-[13px] font-semibold text-black whitespace-nowrap">عاجل</span>
             </div>
 
-            {/* File PDF card — top-right */}
-            <div className="hs-card hs-card-2 hidden md:block absolute top-2 right-0 lg:-right-8 w-[280px]">
-              <div className="rounded-3xl bg-[#f5eee6] px-4 py-3 flex items-center gap-3 shadow-[0_12px_30px_-10px_rgba(18,32,66,0.18)]">
-                <div className="flex-1 min-w-0 text-right">
-                  <p className="text-[13px] font-semibold text-black truncate">
-                    وثيقة_تأمين_شامل.pdf
-                  </p>
-                  <span className="block text-[11px] text-black/50 mt-0.5">
-                    pdf · 14 MB
-                  </span>
-                </div>
-                <div
-                  className="flex-shrink-0 h-10 w-10 rounded-xl flex items-center justify-center"
-                  style={{ background: "#e9dcc8" }}
-                >
-                  <FileText className="h-5 w-5 text-[#7a5a36]" strokeWidth={1.8} />
-                </div>
-              </div>
+            <div className="hs-pill hs-pill-l hs-d-3 hidden md:flex absolute top-28 -left-2 lg:-left-12 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+                <Phone className="h-3.5 w-3.5 text-[#122042]" strokeWidth={2.4} />
+              </span>
+              <span className="text-[13px] font-semibold text-black whitespace-nowrap">مكالمة فائتة</span>
+              <span className="flex-shrink-0 h-5 min-w-[20px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                7
+              </span>
             </div>
 
-            {/* Apps integrations card — bottom-left */}
-            <div className="hs-card hs-card-3 hidden md:block absolute bottom-10 left-0 lg:-left-12 w-[320px]">
-              <div className="rounded-3xl bg-[#f5eee6] p-4 flex items-center gap-4 shadow-[0_12px_30px_-10px_rgba(18,32,66,0.18)]">
-                <div className="flex-1 min-w-0 text-right">
-                  <p className="text-[13px] text-black/80 leading-relaxed">
-                    تطبيقات وأدوات متكاملة تغير المشهد في ثانية.
-                  </p>
-                </div>
-                <div className="flex-shrink-0 grid grid-cols-2 gap-1.5 p-1.5 rounded-xl bg-white">
-                  <div className="h-7 w-7 rounded-md bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center">
-                    <Wallet className="h-3.5 w-3.5 text-emerald-700" />
-                  </div>
-                  <div className="h-7 w-7 rounded-md bg-gradient-to-br from-sky-100 to-sky-200 flex items-center justify-center">
-                    <MessageSquare className="h-3.5 w-3.5 text-sky-700" />
-                  </div>
-                  <div className="h-7 w-7 rounded-md bg-gradient-to-br from-rose-100 to-rose-200 flex items-center justify-center">
-                    <Bell className="h-3.5 w-3.5 text-rose-700" />
-                  </div>
-                  <div className="h-7 w-7 rounded-md bg-gradient-to-br from-violet-100 to-violet-200 flex items-center justify-center">
-                    <BarChart3 className="h-3.5 w-3.5 text-violet-700" />
-                  </div>
-                </div>
-              </div>
+            <div className="hs-pill hs-pill-l hs-d-5 hidden md:flex absolute top-56 left-6 lg:left-0 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+                <MessageSquare className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.2} />
+              </span>
+              <span className="text-[13px] font-semibold text-black whitespace-nowrap">شكوى عميل</span>
             </div>
 
-            {/* Phone call notification — bottom-right */}
-            <div className="hs-card hs-card-4 hidden md:block absolute bottom-12 right-0 lg:-right-10 w-[280px]">
-              <div className="rounded-full bg-white px-4 py-3 flex items-center gap-3 shadow-[0_12px_30px_-10px_rgba(18,32,66,0.18)] border border-black/[0.04]">
-                <div className="flex-1 min-w-0 text-right">
-                  <p className="text-[13px] font-semibold text-black">محمد يتصل</p>
-                  <span className="flex items-center justify-end gap-1 text-[11px] text-black/50 mt-0.5">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-500" />
-                    9:22
-                  </span>
-                </div>
-                <div
-                  className="flex-shrink-0 h-9 w-9 rounded-full flex items-center justify-center"
-                  style={{ background: "#122042" }}
-                >
-                  <Phone className="h-4 w-4 text-white" strokeWidth={2} />
-                </div>
-              </div>
+            <div className="hs-pill hs-pill-l hs-d-7 hidden md:flex absolute bottom-20 -left-2 lg:-left-10 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+                <BarChart3 className="h-3.5 w-3.5 text-amber-600" strokeWidth={2.2} />
+              </span>
+              <span className="text-[13px] font-semibold text-black whitespace-nowrap">خطأ في الجدول</span>
+            </div>
+
+            {/* Right-side pills — slide in from the right */}
+            <div className="hs-pill hs-pill-r hs-d-2 hidden md:flex absolute top-2 right-2 lg:-right-4 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+                <Mail className="h-3.5 w-3.5 text-[#122042]" strokeWidth={2.2} />
+              </span>
+              <span className="text-[13px] font-semibold text-black whitespace-nowrap">بريد غير مقروء</span>
+              <span className="flex-shrink-0 h-5 min-w-[20px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                23
+              </span>
+            </div>
+
+            <div className="hs-pill hs-pill-r hs-d-4 hidden md:flex absolute top-24 -right-2 lg:-right-14 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+                <Clock className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.4} />
+              </span>
+              <span className="text-[13px] font-semibold text-black whitespace-nowrap">تجديد متأخر</span>
+            </div>
+
+            <div className="hs-pill hs-pill-r hs-d-6 hidden md:flex absolute top-52 right-4 lg:right-0 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+                <Bell className="h-3.5 w-3.5 text-amber-600" strokeWidth={2.2} />
+              </span>
+              <span className="text-[13px] font-semibold text-black whitespace-nowrap">مواعيد متراكمة</span>
+            </div>
+
+            <div className="hs-pill hs-pill-r hs-d-8 hidden md:flex absolute bottom-20 -right-2 lg:-right-12 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+                <FileText className="h-3.5 w-3.5 text-[#7a5a36]" strokeWidth={2.2} />
+              </span>
+              <span className="text-[13px] font-semibold text-black whitespace-nowrap">ملف PDF</span>
             </div>
           </div>
         </div>
