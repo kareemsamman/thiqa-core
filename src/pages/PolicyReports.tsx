@@ -968,7 +968,7 @@ export default function PolicyReports() {
           <TabsContent value="created" className="space-y-4 mt-6">
             {/* Filters */}
             <Card className="p-4">
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Select value={createdDatePreset} onValueChange={(v) => { setCreatedDatePreset(v); setCreatedPage(0); }}>
                   <SelectTrigger className="w-[150px]">
                     <SelectValue />
@@ -1419,13 +1419,19 @@ export default function PolicyReports() {
 
             {/* Filters */}
             <Card className="p-4">
-              <div className="flex flex-wrap gap-3">
-                <Input
-                  type="month"
-                  value={renewalsMonth}
-                  onChange={(e) => { setRenewalsMonth(e.target.value); setRenewalsPage(0); }}
-                  className="w-[160px]"
-                />
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground shrink-0">الشهر:</span>
+                  <ArabicDatePicker
+                    value={renewalsMonth ? `${renewalsMonth}-01` : ''}
+                    onChange={(date) => {
+                      setRenewalsMonth(date ? date.slice(0, 7) : '');
+                      setRenewalsPage(0);
+                    }}
+                    placeholder="اختر الشهر"
+                    compact
+                  />
+                </div>
 
                 <Select value={renewalsDaysFilter} onValueChange={(v) => { setRenewalsDaysFilter(v); setRenewalsPage(0); }}>
                   <SelectTrigger className="w-[160px]">
@@ -1853,11 +1859,11 @@ export default function PolicyReports() {
                       <TableHeader>
                         <TableRow className="bg-muted/50">
                           <TableHead className="text-right">العميل</TableHead>
-                          <TableHead className="text-right">رقم السيارة</TableHead>
                           <TableHead className="text-right">النوع (قديم → جديد)</TableHead>
                           <TableHead className="text-right">السعر (قديم → جديد)</TableHead>
                           <TableHead className="text-right">فرق السعر</TableHead>
                           <TableHead className="text-right">تاريخ التجديد</TableHead>
+                          <TableHead className="text-right">التجديد بواسطة</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1869,7 +1875,6 @@ export default function PolicyReports() {
                           const newTypesLabel = (client.new_policy_types || []).map((t) =>
                             getInsuranceTypeLabel(t as any, null)
                           ).join(' + ') || '—';
-                          const carLabel = '—'; // car_number aggregation isn't in the RPC shape
                           return (
                             <TableRow key={client.client_id} className="hover:bg-muted/30">
                               <TableCell>
@@ -1885,7 +1890,6 @@ export default function PolicyReports() {
                                   <p className="text-xs text-muted-foreground">{client.client_file_number}</p>
                                 )}
                               </TableCell>
-                              <TableCell className="font-mono text-sm">{carLabel}</TableCell>
                               <TableCell className="text-sm">
                                 <span className="text-muted-foreground">{oldTypesLabel}</span>
                                 <ArrowLeftRight className="inline h-3 w-3 mx-1 text-muted-foreground" />
@@ -1909,6 +1913,9 @@ export default function PolicyReports() {
                               <TableCell className="font-mono text-sm">
                                 {client.new_start_date ? formatDate(client.new_start_date) : '—'}
                               </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {client.renewed_by_name || '—'}
+                              </TableCell>
                             </TableRow>
                           );
                         })}
@@ -1924,13 +1931,19 @@ export default function PolicyReports() {
           <TabsContent value="renewed" className="space-y-4 mt-6">
             {/* Filters */}
             <Card className="p-4">
-              <div className="flex flex-wrap gap-3">
-                <Input
-                  type="month"
-                  value={renewedMonth}
-                  onChange={(e) => { setRenewedMonth(e.target.value); setRenewedPage(0); }}
-                  className="w-[160px]"
-                />
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground shrink-0">الشهر:</span>
+                  <ArabicDatePicker
+                    value={renewedMonth ? `${renewedMonth}-01` : ''}
+                    onChange={(date) => {
+                      setRenewedMonth(date ? date.slice(0, 7) : '');
+                      setRenewedPage(0);
+                    }}
+                    placeholder="اختر الشهر"
+                    compact
+                  />
+                </div>
 
                 <Select value={renewedPolicyTypeFilter} onValueChange={(v) => { setRenewedPolicyTypeFilter(v); setRenewedPage(0); }}>
                   <SelectTrigger className="w-[140px]">
