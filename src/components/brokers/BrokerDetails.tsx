@@ -39,7 +39,6 @@ import { PolicyWizard } from "@/components/policies/PolicyWizard";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { RowActionsMenu } from "@/components/shared/RowActionsMenu";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
-import { useSiteSettings } from "@/hooks/useSiteSettings";
 
 interface Broker {
   id: string;
@@ -89,7 +88,6 @@ const policyTypeLabels: Record<string, string> = {
 };
 
 export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetailsProps) {
-  const { data: siteSettings } = useSiteSettings();
   const [clients, setClients] = useState<Client[]>([]);
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -244,49 +242,43 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
   const handleExportPdf = async (sendSms = false) => {
     setExporting(true);
     try {
+      // Generation + optional SMS happen in a single call. The edge
+      // function sends the SMS itself using the service role so we
+      // avoid the gateway's HS256/ES256 JWT mismatch that 401'd the
+      // old client-side send-sms round-trip.
       const { data, error } = await supabase.functions.invoke("generate-broker-report", {
         body: {
           broker_id: broker.id,
           start_date: startDate || undefined,
           end_date: endDate || undefined,
           direction_filter: 'all',
+          send_sms: sendSms,
         },
       });
 
       if (error) throw error;
 
-      if (data?.url) {
-        if (sendSms && broker.phone) {
-          // Send report link via SMS
-          const { error: smsError } = await supabase.functions.invoke("send-sms", {
-            body: {
-              phone: broker.phone,
-              message: `مرحباً ${broker.name}،\n\nيمكنك مشاهدة تقرير التأمينات الخاص بك عبر الرابط:\n${data.url}\n\n${siteSettings?.site_title || 'وكالة التأمين'} 🚗`,
-            },
-          });
+      if (!data?.url) return;
 
-          if (smsError) throw smsError;
-
-          // Log SMS
-          await supabase.from("sms_logs").insert({
-            phone_number: broker.phone,
-            message: `تقرير الوسيط - ${data.url}`,
-            sms_type: "manual",
-            status: "sent",
-            sent_at: new Date().toISOString(),
-          });
-
+      if (sendSms) {
+        if (data.sms_sent) {
           toast({
             title: "تم الإرسال",
             description: "تم إرسال رابط التقرير للوسيط عبر SMS",
           });
         } else {
-          window.open(data.url, "_blank");
           toast({
-            title: "تم التصدير",
-            description: "تم إنشاء التقرير بنجاح",
+            title: "تعذر إرسال SMS",
+            description: data.sms_error || "لم يتم إرسال الرسالة",
+            variant: "destructive",
           });
         }
+      } else {
+        window.open(data.url, "_blank");
+        toast({
+          title: "تم التصدير",
+          description: "تم إنشاء التقرير بنجاح",
+        });
       }
     } catch (error: any) {
       console.error("Error exporting PDF:", error);

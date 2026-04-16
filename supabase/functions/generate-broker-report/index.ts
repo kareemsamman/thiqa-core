@@ -7,6 +7,8 @@ import {
   normalizeBunnyCdnUrl,
   resolveBunnyStorageZone,
 } from "../_shared/bunny-storage.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,6 +20,8 @@ interface BrokerReportRequest {
   start_date?: string;
   end_date?: string;
   direction_filter?: 'from_broker' | 'to_broker' | 'all';
+  /** If true, also SMS the report link to the broker's phone. */
+  send_sms?: boolean;
 }
 
 const POLICY_TYPE_LABELS: Record<string, string> = {
@@ -90,7 +94,7 @@ serve(async (req) => {
     }
 
     currentStep = "parse body";
-    const { broker_id, start_date, end_date, direction_filter }: BrokerReportRequest = await req.json();
+    const { broker_id, start_date, end_date, direction_filter, send_sms }: BrokerReportRequest = await req.json();
     if (!broker_id) {
       return new Response(JSON.stringify({ error: "broker_id is required" }), {
         status: 400,
@@ -238,6 +242,84 @@ serve(async (req) => {
 
     const cdnUrl = `${bunnyCdnUrl}/${storagePath}`;
 
+    // Optional SMS leg — done inside this function so the client only
+    // makes a single authenticated call. Calling send-sms separately
+    // from the browser hit the gateway's HS256 check (project signs
+    // ES256) and 401'd before the function ran. Sending here, with the
+    // service-role supabase client, sidesteps that entirely.
+    let smsSent = false;
+    let smsError: string | null = null;
+    if (send_sms) {
+      currentStep = "send sms";
+      const rawPhone = (broker.phone || "").toString();
+      if (!rawPhone) {
+        smsError = "لا يوجد رقم هاتف مسجل لهذا الوسيط";
+      } else {
+        const smsSettingsData = await resolveSmsSettings(supabase, agentId);
+        if (!smsSettingsData || !smsSettingsData.is_enabled) {
+          smsError = "خدمة الرسائل غير مفعلة";
+        } else {
+          let smsMessage = `مرحباً ${broker.name}،\n\nيمكنك مشاهدة كشف حسابك عبر الرابط:\n${cdnUrl}`;
+          smsMessage = appendSmsFooter(smsMessage, branding);
+
+          const escapeXml = (value: string) =>
+            value
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;")
+              .replace(/"/g, "&quot;")
+              .replace(/'/g, "&apos;");
+
+          let cleanPhone = rawPhone.replace(/[^0-9]/g, "");
+          if (cleanPhone.startsWith("972")) {
+            cleanPhone = "0" + cleanPhone.substring(3);
+          }
+
+          const dlr = crypto.randomUUID();
+          const smsXml =
+            `<?xml version="1.0" encoding="UTF-8"?>` +
+            `<sms>` +
+            `<user><username>${escapeXml(smsSettingsData.sms_user || "")}</username></user>` +
+            `<source>${escapeXml(smsSettingsData.sms_source || "")}</source>` +
+            `<destinations><phone id="${dlr}">${escapeXml(cleanPhone)}</phone></destinations>` +
+            `<message>${escapeXml(smsMessage)}</message>` +
+            `</sms>`;
+
+          try {
+            const smsResponse = await fetch("https://019sms.co.il/api", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${smsSettingsData.sms_token}`,
+                "Content-Type": "application/xml; charset=utf-8",
+              },
+              body: smsXml,
+            });
+            const smsResultText = await smsResponse.text();
+            console.log("[generate-broker-report] 019sms response:", smsResponse.status, smsResultText);
+
+            if (!smsResponse.ok) {
+              smsError = `فشل إرسال SMS (${smsResponse.status})`;
+            } else {
+              smsSent = true;
+              // Log the outbound SMS so it shows up in sms_logs like every
+              // other outgoing message in the system.
+              await supabase.from("sms_logs").insert({
+                phone_number: cleanPhone,
+                message: `تقرير الوسيط - ${cdnUrl}`,
+                sms_type: "manual",
+                status: "sent",
+                sent_at: new Date().toISOString(),
+                agent_id: agentId,
+              });
+            }
+          } catch (err) {
+            console.error("[generate-broker-report] SMS error:", err);
+            smsError = err instanceof Error ? err.message : String(err);
+          }
+        }
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -245,6 +327,8 @@ serve(async (req) => {
         broker_name: broker.name,
         phone: broker.phone,
         policies_count: (policies || []).length,
+        sms_sent: smsSent,
+        sms_error: smsError,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
