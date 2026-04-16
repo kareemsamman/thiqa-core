@@ -726,14 +726,18 @@ export default function Landing() {
             hsFromRight 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
             hsFloat 5s ease-in-out 1.2s infinite;
         }
-        .hs-visible .hs-d-1 { animation-delay: 0.85s; }
-        .hs-visible .hs-d-2 { animation-delay: 1.00s; }
-        .hs-visible .hs-d-3 { animation-delay: 1.15s; }
-        .hs-visible .hs-d-4 { animation-delay: 1.30s; }
-        .hs-visible .hs-d-5 { animation-delay: 1.45s; }
-        .hs-visible .hs-d-6 { animation-delay: 1.60s; }
-        .hs-visible .hs-d-7 { animation-delay: 1.75s; }
-        .hs-visible .hs-d-8 { animation-delay: 1.90s; }
+        .hs-visible .hs-d-1  { animation-delay: 0.85s; }
+        .hs-visible .hs-d-2  { animation-delay: 1.00s; }
+        .hs-visible .hs-d-3  { animation-delay: 1.15s; }
+        .hs-visible .hs-d-4  { animation-delay: 1.30s; }
+        .hs-visible .hs-d-5  { animation-delay: 1.45s; }
+        .hs-visible .hs-d-6  { animation-delay: 1.60s; }
+        .hs-visible .hs-d-7  { animation-delay: 1.75s; }
+        .hs-visible .hs-d-8  { animation-delay: 1.90s; }
+        .hs-visible .hs-d-9  { animation-delay: 2.10s; }
+        .hs-visible .hs-d-10 { animation-delay: 2.25s; }
+        .hs-visible .hs-d-11 { animation-delay: 2.40s; }
+        .hs-visible .hs-d-12 { animation-delay: 2.55s; }
 
         .hs-highlight {
           background: #122042;
@@ -847,6 +851,37 @@ export default function Landing() {
           <div className="hs-pill hs-pill-r hs-d-8 hidden md:flex absolute top-[46%] right-[12%] lg:right-[15%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
             <FileText className="h-4 w-4 text-[#7a5a36] flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">ملف PDF</span>
+          </div>
+
+          {/* ── Bigger glass pills on the outer edges ──
+              Same DOM container but styled as larger frosted-glass
+              cards with padding, text and icon all bumped up. They
+              enter after the cream pills land (delays 2.1-2.55s) and
+              live at scattered, non-aligned positions near the
+              corners so the composition feels dispersed instead of
+              gridded. */}
+          <div className="hs-pill hs-pill-l hs-d-9 hidden md:flex absolute top-[8%] left-[2%] lg:left-[3%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
+            <MessageSquare className="h-5 w-5 text-[#122042] flex-shrink-0" strokeWidth={2} />
+            <span className="text-[14px] font-semibold text-black whitespace-nowrap">استعلام جديد</span>
+            <span className="flex-shrink-0 h-2.5 w-2.5 rounded-full bg-rose-500" />
+          </div>
+
+          <div className="hs-pill hs-pill-r hs-d-10 hidden md:flex absolute top-[13%] right-[2%] lg:right-[2%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
+            <AlertTriangle className="h-5 w-5 text-rose-500 flex-shrink-0" strokeWidth={2.2} />
+            <span className="text-[14px] font-semibold text-black whitespace-nowrap">وثيقة منتهية</span>
+          </div>
+
+          <div className="hs-pill hs-pill-l hs-d-11 hidden md:flex absolute top-[60%] left-[2%] lg:left-[2%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
+            <Wallet className="h-5 w-5 text-amber-600 flex-shrink-0" strokeWidth={2} />
+            <span className="text-[14px] font-semibold text-black whitespace-nowrap">دفعة متأخرة</span>
+            <span className="flex-shrink-0 h-6 min-w-[26px] px-2 rounded-full bg-rose-500 text-white text-[11px] font-bold flex items-center justify-center">
+              3
+            </span>
+          </div>
+
+          <div className="hs-pill hs-pill-r hs-d-12 hidden md:flex absolute top-[65%] right-[2%] lg:right-[3%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
+            <CreditCard className="h-5 w-5 text-[#122042] flex-shrink-0" strokeWidth={2} />
+            <span className="text-[14px] font-semibold text-black whitespace-nowrap">تحصيل مطلوب</span>
           </div>
         </div>
       </section>
