@@ -932,7 +932,7 @@ export default function Landing() {
       <section id="demo" className="py-20 md:py-28 relative bg-white">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-10">
-            <p className="text-sm text-[#4a6cc7] mb-3 tracking-wide font-semibold">{ct(content, "showcase_label", "لماذا Thiqa بالذات؟")}</p>
+            <p className="text-sm text-black mb-3 tracking-wide font-light">{ct(content, "showcase_label", "لماذا ثقة بالذات؟")}</p>
             <h2 className="text-3xl md:text-[2.8rem] font-bold leading-tight mb-4 text-black">
               {ct(content, "showcase_title", "كل الأدوات لإدارة الوكالة تحت سقف واحد")}
             </h2>
