@@ -46,7 +46,7 @@ const reapplyHeroVideoSpeed = (e: React.SyntheticEvent<HTMLVideoElement>) => {
 const marqueeMessages = [
   "احصل على 35 يوم تجربة مجانية — بدون بطاقة ائتمان",
   "أنشئ حسابك بضغطة واحدة — بدون مكالمات ولا تعقيد",
-  "طرق دفع مرنة: شيكات، بطاقات، تقسيط وربط مع Tranzila",
+  "طرق دفع مرنة: شيكات، بطاقات، تقسيط وبوابات دفع متعددة",
   "ألغِ اشتراكك متى شئت — بدون التزامات ولا أسئلة",
   "دعم تقني بالعربية جنبك من اليوم الأول",
 ];
@@ -91,20 +91,20 @@ const featureTiles = [
   {
     icon: CreditCard,
     title: "تحصيل، شيكات وتقسيط",
-    desc: "نقدي، شيكات ببنك وفرع، تقسيط داخلي، وربط بسداد Tranzila.",
+    desc: "نقدي، شيكات ببنك وفرع، تقسيط داخلي، وبوابات دفع إلكتروني متعددة.",
     tint: "bg-emerald-50 text-emerald-600",
     hoverTint: "group-hover:bg-emerald-100",
     gradient: "linear-gradient(135deg, #ecfdf5 0%, #a7f3d0 100%)",
     accent: "#059669",
-    intro: "نظام تحصيل كامل يدعم النقدي، الشيكات، التقسيط الداخلي والدفع ببطاقة الائتمان عبر Tranzila — مع متابعة حالة كل دفعة.",
+    intro: "نظام تحصيل كامل يدعم النقدي، الشيكات، التقسيط الداخلي والدفع ببطاقة الائتمان عبر بوابات إلكترونية مدمجة (Tranzila أو أي بوابة أخرى حسب الطلب) — مع متابعة حالة كل دفعة.",
     bullets: [
       "استلام شيكات مع تسجيل البنك والفرع والتاريخ",
       "تقسيط داخلي مع متابعة المستحقات على العميل",
       "إيصالات نقدية قابلة للطباعة وإرسال SMS",
-      "ربط مباشر مع Tranzila لدفع بطاقات الائتمان",
+      "ربط مع بوابات دفع إلكتروني — Tranzila أو غيرها حسب الطلب",
       "تتبع حالة كل دفعة: مكتمل، مرفوض، معلّق",
     ],
-    decorBadges: ["شيكات", "Tranzila", "تقسيط داخلي"],
+    decorBadges: ["شيكات", "بوابات دفع", "تقسيط داخلي"],
   },
   {
     icon: Wallet,
@@ -186,11 +186,11 @@ const featureTabs = [
     label: "تحصيل ومالية",
     num: "02",
     title: "تحصيل كامل بدون Excel،\nشيكات بلا عناء.",
-    desc: "استلام الشيكات مع تسجيل البنك والفرع والتاريخ، تقسيط داخلي مع متابعة المستحقات على العميل، ربط مباشر مع Tranzila لبطاقات الائتمان، وإيصالات نقدية قابلة للطباعة أو الإرسال عبر SMS — كل ذلك في ملف واحد.",
+    desc: "استلام الشيكات مع تسجيل البنك والفرع والتاريخ، تقسيط داخلي مع متابعة المستحقات على العميل، ربط مع بوابات دفع إلكتروني متعددة (Tranzila أو أي بوابة أخرى حسب الطلب)، وإيصالات نقدية قابلة للطباعة أو الإرسال عبر SMS — كل ذلك في ملف واحد.",
     gradient: "linear-gradient(180deg, #3B6FBB 0%, #85A9D1 100%)",
     glow: "radial-gradient(70% 60% at 72% 45%, rgba(255,255,255,0.38) 0%, transparent 60%)",
     stats: [
-      { value: "Tranzila", unit: "", label: "ربط مباشر لدفع بطاقات الائتمان بضغطة زر من داخل الوثيقة." },
+      { value: "بوابات دفع", unit: "", label: "دفع بالبطاقة عبر Tranzila أو أي بوابة أخرى حسب الطلب — مباشرة من داخل الوثيقة." },
       { value: "65%", unit: "", label: "تقليص في وقت متابعة الديون وتسوية الشيكات بلا Excel يدوي." },
     ],
   },
@@ -970,14 +970,59 @@ export default function Landing() {
           below mirror the reference's "+216% + small cards" row,
           each with its own corner glow so the dark surface doesn't
           read as flat. Tabs stay light on top for contrast. */}
-      <section id="demo" className="py-20 md:py-28 relative bg-white">
+      <style>{`
+        @keyframes dhTypeRtl {
+          from { clip-path: inset(0 0 0 100%); }
+          to   { clip-path: inset(0 0 0 0); }
+        }
+        @keyframes dhFadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .dh-type {
+          display: inline-block;
+          clip-path: inset(0 0 0 100%);
+        }
+        .dh-fade { opacity: 0; }
+        .dh-visible .dh-type-1 { animation: dhTypeRtl 0.8s steps(16, end) 0.15s forwards; }
+        .dh-visible .dh-type-2 { animation: dhTypeRtl 1.4s steps(36, end) 0.95s forwards; }
+        .dh-visible .dh-fade   { animation: dhFadeIn 0.7s cubic-bezier(0.22,1,0.36,1) 2.30s forwards; }
+      `}</style>
+      <section
+        id="demo"
+        ref={(el) => {
+          if (!el) return;
+          if ((el as HTMLElement & { __dhBound?: boolean }).__dhBound) return;
+          (el as HTMLElement & { __dhBound?: boolean }).__dhBound = true;
+          const io = new IntersectionObserver(
+            (entries) => {
+              for (const e of entries) {
+                if (e.isIntersecting) {
+                  e.target.classList.add("dh-visible");
+                  io.disconnect();
+                  break;
+                }
+              }
+            },
+            { threshold: 0.15 },
+          );
+          io.observe(el);
+        }}
+        className="py-20 md:py-28 relative bg-white"
+      >
         <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-10">
-            <p className="text-sm text-black mb-3 tracking-wide font-light">{ct(content, "showcase_label", "لماذا ثقة بالذات؟")}</p>
-            <h2 className="text-3xl md:text-[2.8rem] font-bold leading-tight mb-4 text-black">
-              {ct(content, "showcase_title", "كل الأدوات لإدارة الوكالة تحت سقف واحد")}
+          <div className="text-center mb-12 md:mb-16">
+            <p className="text-base md:text-lg text-black mb-4 tracking-wide font-light">
+              <span className="dh-type dh-type-1">
+                {ct(content, "showcase_label", "لماذا ثقة بالذات؟")}
+              </span>
+            </p>
+            <h2 className="text-[2.25rem] md:text-[3.5rem] font-bold leading-[1.15] md:leading-[1.1] mb-5 text-black">
+              <span className="dh-type dh-type-2">
+                {ct(content, "showcase_title", "كل الأدوات لإدارة الوكالة تحت سقف واحد")}
+              </span>
             </h2>
-            <p className="text-black/55 text-sm max-w-xl mx-auto">
+            <p className="dh-fade text-base md:text-lg text-black/55 max-w-2xl mx-auto leading-relaxed">
               {ct(content, "showcase_subtitle", "بنية تقنية متقدمة توفر لك الوقت، تمنع الأخطاء وتزيد الربحية.")}
             </p>
           </div>
@@ -1536,7 +1581,7 @@ export default function Landing() {
                   "كل شيكل يدخل ويخرج يُحسب ويُصنَّف تلقائياً — بدون Excel، بدون عمولات ضائعة.",
                 bullets: [
                   "أرباح محسوبة حياً على كل وثيقة وكل عميل",
-                  "ربط مباشر مع Tranzila وإدارة كاملة للشيكات",
+                  "بوابات دفع متعددة (Tranzila أو غيرها) وإدارة كاملة للشيكات",
                   "تسويات تلقائية مع الوسطاء وشركات التأمين",
                 ],
                 gradient: "linear-gradient(135deg, #ecfdf5 0%, #a7f3d0 100%)",
@@ -1707,7 +1752,7 @@ export default function Landing() {
                   icon: Wallet,
                   eyebrow: "تحصيل ومالية",
                   title: "تحصيل بلا Excel،\nشيكات بلا عناء.",
-                  desc: "استلم الشيكات مع تسجيل البنك والفرع والتاريخ. التقسيط الداخلي ومتابعة المستحقات آلية بالكامل. ربط مباشر مع Tranzila لدفع بطاقات الائتمان من داخل الوثيقة.",
+                  desc: "استلم الشيكات مع تسجيل البنك والفرع والتاريخ. التقسيط الداخلي ومتابعة المستحقات آلية بالكامل. ربط مع بوابات دفع متعددة (Tranzila أو غيرها حسب الطلب) لدفع بطاقات الائتمان من داخل الوثيقة.",
                   cta: "ابدأ التجربة الآن",
                 },
                 {
