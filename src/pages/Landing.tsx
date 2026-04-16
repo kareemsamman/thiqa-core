@@ -1617,16 +1617,18 @@ export default function Landing() {
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
-      {/* ═══ Section 5: Slider ═══ */}
-      <section className="relative py-24 md:py-36 overflow-hidden bg-white">
-        {/* Subtle light gradient so the slider section has its own
-            rhythm without going dark. */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(135deg, #f5f7ff 0%, #ffffff 50%, #fff3f7 100%)",
-          }}
+      {/* ═══ Section 5: Slider ═══
+          Full-bleed CDN image as the backdrop, at least 100vh tall.
+          The <img> sits absolute-inset-0 with object-cover so it
+          fills any viewport without distortion, and everything else
+          renders on z-10 above it. */}
+      <section className="relative py-24 md:py-36 overflow-hidden bg-white min-h-screen">
+        <img
+          src="https://thiqacrm.b-cdn.net/Rectangle%207%20(1).png"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+          aria-hidden="true"
+          loading="lazy"
         />
 
         <div className="relative z-10">
