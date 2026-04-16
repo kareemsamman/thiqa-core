@@ -202,24 +202,30 @@ export default function Landing() {
       `}</style>
 
       {/* ═══ Top marquee — CRM feature keywords ═══
-          Two-group structure: an outer track wraps two identical
-          <div> groups, each holding the full item list. The track
-          animates translateX 0 → -50%. At -50% the second group sits
-          exactly where the first one was, so the wrap is pixel-perfect
-          seamless. We keep multiple groups so even on ultrawide
-          monitors the track is always wider than 2× viewport. */}
+          Seamless infinite scroll. Six identical groups make the track
+          6× a single group wide. translate3d(-50%, 0, 0) shifts it by
+          3 group-widths, so groups 4/5/6 land exactly where groups
+          1/2/3 were — a pixel-perfect wrap. translate3d + GPU hints
+          remove the sub-pixel rounding jitter that caused the "blank"
+          on some browsers. No hover-pause (it was causing visible
+          resets on mouse-out). */}
       <style>{`
         @keyframes marquee-slide {
-          from { transform: translateX(0); }
-          to { transform: translateX(-50%); }
+          from { transform: translate3d(0, 0, 0); }
+          to { transform: translate3d(-50%, 0, 0); }
         }
         .marquee-track {
-          animation: marquee-slide 75s linear infinite;
+          animation-name: marquee-slide;
+          animation-duration: 120s;
+          animation-timing-function: linear;
+          animation-iteration-count: infinite;
+          animation-fill-mode: none;
           will-change: transform;
+          transform: translateZ(0);
+          backface-visibility: hidden;
         }
-        .marquee-track:hover { animation-play-state: paused; }
         @media (max-width: 640px) {
-          .marquee-track { animation-duration: 50s; }
+          .marquee-track { animation-duration: 80s; }
         }
       `}</style>
       <div
@@ -227,7 +233,7 @@ export default function Landing() {
           "relative border-b border-black/[0.06] bg-white overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
           scrolled
             ? "max-h-0 py-0 border-0 opacity-0 pointer-events-none mb-0"
-            : "max-h-[60px] py-3 opacity-100 mb-0",
+            : "max-h-[60px] py-3 opacity-100 mb-8",
         )}
         aria-label="مزايا النظام"
         aria-hidden={scrolled}
@@ -251,9 +257,10 @@ export default function Landing() {
               { icon: Bell, label: "إشعارات انتهاء الوثائق" },
               { icon: Phone, label: "توقيعات رقمية عن بعد" },
             ];
-            // Render group N. Each group is the full items list,
-            // produces an identical-width block. Two groups = track
-            // of 2× single-group width; translate -50% swaps them.
+            // Render group N. Each group is the full items list and
+            // produces an identical-width block. Six groups makes the
+            // track exactly 6× a single-group width; translate -50%
+            // swaps the first three groups with the last three.
             const renderGroup = (copyIdx: number) => (
               <div
                 key={copyIdx}
@@ -274,10 +281,7 @@ export default function Landing() {
                 ))}
               </div>
             );
-            // Four groups so the track always overflows the viewport,
-            // even on ultrawide monitors. translate(-50%) still swaps
-            // the first half with the second — seamless.
-            return [0, 1, 2, 3].map(renderGroup);
+            return [0, 1, 2, 3, 4, 5].map(renderGroup);
           })()}
         </div>
       </div>
