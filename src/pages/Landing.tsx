@@ -241,25 +241,57 @@ export default function Landing() {
   // marquee's aria-hidden) still want the boolean. Kept cheap — flips
   // at most once when crossing the 8 px threshold.
   const [scrolled, setScrolled] = useState(false);
-  // Scroll-linked chrome — BINARY STATE, not interpolation. The old
-  // rAF loop wrote inline styles every frame to morph the nav on a
-  // 0→y pixel gradient; that left a wide "half-morph" dead zone and
-  // any tiny scroll event parked the user inside it. Now `scrolled`
-  // is the only signal and the two visual states (open / pill) are
-  // driven by CSS transitions on the elements themselves. The
-  // browser handles the animation in ~450 ms whether the user
-  // crossed the threshold via wheel, keyboard, touch, or anchor
-  // jump — no JS snap needed, no dead zone possible.
+  // Scroll-linked chrome — binary state + *instant* scroll snap.
+  //
+  // Two moving parts, working together:
+  //   1. `scrolled` flips once at y > 8 and drives two stable visual
+  //      states (open / pill) via conditional inline styles + a
+  //      short CSS transition on the elements themselves.
+  //   2. The scroll listener additionally TELEPORTS the window past
+  //      the 0→DEAD_ZONE_END range the instant the user crosses
+  //      into it — scrolling up jumps to 0, scrolling down jumps to
+  //      DEAD_ZONE_END + 12. `behavior: "auto"` (not smooth) so the
+  //      user literally never sees an in-between scroll position.
+  //
+  // Together: no per-frame JS, no interpolation, no half-morph
+  // frames, and no way to park inside the dead zone. The nav you
+  // see is always either fully-open or fully-pill.
   useEffect(() => {
-    let lastScrolled = window.scrollY > 8;
+    const DEAD_ZONE_END = 158;
+    let prevY = window.scrollY;
+    let lastScrolled = prevY > 8;
     setScrolled(lastScrolled);
+    let snapping = false;
+
     const onScroll = () => {
-      const next = window.scrollY > 8;
+      if (snapping) return;
+      const y = window.scrollY;
+      const dir: "up" | "down" = y > prevY ? "down" : "up";
+
+      if (y > 0 && y < DEAD_ZONE_END) {
+        snapping = true;
+        const target = dir === "up" ? 0 : DEAD_ZONE_END + 12;
+        window.scrollTo({ top: target, behavior: "auto" });
+        requestAnimationFrame(() => {
+          prevY = window.scrollY;
+          const next = prevY > 8;
+          if (next !== lastScrolled) {
+            lastScrolled = next;
+            setScrolled(next);
+          }
+          snapping = false;
+        });
+        return;
+      }
+
+      prevY = y;
+      const next = y > 8;
       if (next !== lastScrolled) {
         lastScrolled = next;
         setScrolled(next);
       }
     };
+
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -432,7 +464,7 @@ export default function Landing() {
           transform: scrolled ? "translate3d(0, -60px, 0)" : "translate3d(0, 0, 0)",
           pointerEvents: scrolled ? "none" : "auto",
           transitionProperty: "max-height, padding, opacity, transform",
-          transitionDuration: "500ms",
+          transitionDuration: "280ms",
           transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
         }}
         aria-label="مزايا النظام"
@@ -531,7 +563,7 @@ export default function Landing() {
             boxShadow: scrolled ? "0 1px 20px 0 rgba(0, 0, 0, 0.12)" : "none",
             border: "none",
             transitionProperty: "width, max-width, margin-top, border-radius, transform, backdrop-filter, background-color, box-shadow",
-            transitionDuration: "500ms",
+            transitionDuration: "280ms",
             transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
           }}
         >
