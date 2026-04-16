@@ -104,7 +104,11 @@ export default function Landing() {
   // past a small threshold and stays true until they scroll back up.
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
+    // Lower threshold so the nav transition starts responding almost
+    // as soon as the user scrolls — the old 40 px threshold felt like
+    // the nav was "frozen" for the first quarter turn of the wheel
+    // before the animation kicked in.
+    const onScroll = () => setScrolled(window.scrollY > 8);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -267,14 +271,15 @@ export default function Landing() {
       <div
         dir="ltr"
         className={cn(
-          // A longer duration + an iOS-style ease-out curve lets the
-          // bar really "slide up" rather than snap closed. -translate-y
-          // pairs with max-h-0 so the element pushes up while its flow
-          // space collapses underneath — content below glides up into
-          // the gap instead of jumping.
-          "relative border-b border-black/[0.06] bg-white overflow-hidden transition-all duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)] transform-gpu origin-top",
+          // No bottom border on the marquee — the bar sits directly
+          // above the hero so a divider line isn't needed. A longer
+          // duration + iOS-style ease lets the bar slide up rather
+          // than snap closed. -translate-y pairs with max-h-0 so the
+          // element pushes up while its flow space collapses — content
+          // below glides up into the gap instead of jumping.
+          "relative bg-white overflow-hidden transition-all duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)] transform-gpu origin-top",
           scrolled
-            ? "max-h-0 py-0 border-0 opacity-0 pointer-events-none -translate-y-full"
+            ? "max-h-0 py-0 opacity-0 pointer-events-none -translate-y-full"
             : "max-h-[60px] py-3 opacity-100 translate-y-0",
         )}
         aria-label="مزايا النظام"
