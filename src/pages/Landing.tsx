@@ -374,48 +374,32 @@ export default function Landing() {
               : undefined
           }
         >
-          {/* Logo — flips from the white variant over the hero to the
-              black variant on the scrolled white pill. The wrapper's
-              text color controls the wordmark (currentColor). */}
-          <div
-            className={cn(
-              "flex items-center transition-colors duration-500",
-              scrolled
-                ? "text-black drop-shadow-none"
-                : "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]",
-            )}
-          >
+          {/* Logo — always the black variant. currentColor on the
+              wordmark inherits from the wrapper's text-black. */}
+          <div className="flex items-center text-black">
             <ThiqaLogoAnimation
               iconSize={32}
               interactive={false}
-              iconSrc={
-                scrolled
-                  ? "https://thiqacrm.b-cdn.net/small_black.png"
-                  : "https://thiqacrm.b-cdn.net/small_white.png"
-              }
+              iconSrc="https://thiqacrm.b-cdn.net/small_black.png"
             />
           </div>
 
-          <div
-            className={cn(
-              "hidden md:flex items-center gap-10 text-[14px] font-medium transition-colors duration-500",
-              scrolled ? "text-black/70" : "text-white/90",
-            )}
-          >
-            <a href="#features" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>لماذا نحن مختلفون</a>
-            <a href="#demo" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>كيف يعمل</a>
-            <a href="#faq" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>أسئلة وأجوبة</a>
-            <a href="/pricing" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>الأسعار</a>
+          <div className="hidden md:flex items-center gap-10 text-[14px] font-medium text-black/70">
+            <a href="#features" className="transition-colors hover:text-black">لماذا نحن مختلفون</a>
+            <a href="#demo" className="transition-colors hover:text-black">كيف يعمل</a>
+            <a href="#faq" className="transition-colors hover:text-black">أسئلة وأجوبة</a>
+            <a href="/pricing" className="transition-colors hover:text-black">الأسعار</a>
           </div>
 
-          {/* CTA pill — translucent white-ring over the hero; switches
-              to a solid black ring on the white scrolled pill so it
-              stays visible. */}
+          {/* CTA pill — black text always. Over the hero it sits on the
+              translucent white-ring style (so the ring + drop shadow
+              read against whatever's behind); on the scrolled white
+              pill it shifts to a black-ring style for contrast. */}
           <button
             onClick={() => { trackEvent("signup_click", "/landing"); navigate("/login?view=signup"); }}
             className={cn(
-              "px-6 py-2 text-[13px] font-bold transition-all",
-              scrolled ? "text-black hover:bg-black/5" : "text-white hover:bg-white/20",
+              "px-6 py-2 text-[13px] font-bold text-black transition-all",
+              scrolled ? "hover:bg-black/5" : "hover:bg-white/40",
             )}
             style={
               scrolled
