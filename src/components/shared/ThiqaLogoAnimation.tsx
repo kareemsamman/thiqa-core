@@ -10,13 +10,6 @@ const progress = (t: number, s: number, e: number) => clamp((t - s) / (e - s));
 
 const easeOutExpo = (t: number) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t));
 const easeOutQuint = (t: number) => 1 - Math.pow(1 - t, 5);
-const easeInOutCubic = (t: number) =>
-  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-const easeOutBack = (t: number) => {
-  const c1 = 1.70158;
-  const c3 = c1 + 1;
-  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-};
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 // Inject DM Sans once per document. Deduped by href so hot-reloads
@@ -50,15 +43,13 @@ interface ThiqaLogoAnimationProps {
   subtitleClassName?: string;
 }
 
-// Animated Thiqa logo lockup for the login page. A circular icon
-// pops in with a drawn outline, then the "Thiqa" wordmark staggers
-// in letter-by-letter while a gap opens up between the two. Colors
-// (wordmark + outline) use `currentColor` so the parent can set a
-// dark or light palette via `color:` / Tailwind text-* classes.
-//
-// When `subtitle` is provided, it renders under the lockup and
-// staggers in by word in the last ~20% of the timeline — so the
-// whole logo + tagline animates as a single cohesive sequence.
+// Animated Thiqa logo lockup for the login page. The icon + wordmark
+// are painted at their final position on the very first frame (no
+// empty placeholder, no blank flash). A light settle animation then
+// runs over the first ~2.8s: the "Thiqa" letters slide up into place
+// and, when provided, the subtitle words stagger in below. Colors use
+// `currentColor` so the parent can set a dark or light palette via
+// `color:` / Tailwind text-* classes.
 export function ThiqaLogoAnimation({
   iconSize = 92,
   interactive = true,
@@ -67,7 +58,12 @@ export function ThiqaLogoAnimation({
   subtitle,
   subtitleClassName,
 }: ThiqaLogoAnimationProps = {}) {
-  const [t, setT] = useState<number>(-1);
+  // `t` starts at 0 so the very first paint already renders the logo
+  // in a visible state — no transparent placeholder, no 400ms gap
+  // before anything shows up. The entry animation is now a short,
+  // additive settle (letters translating + subtitle fading in) that
+  // layers on top of an already-present lockup.
+  const [t, setT] = useState<number>(0);
   const [playing, setPlaying] = useState(false);
   const raf = useRef<number | null>(null);
   const startTs = useRef<number | null>(null);
@@ -98,50 +94,21 @@ export function ThiqaLogoAnimation({
     };
   }, [playing]);
 
-  // Kick off on mount after a short pause so the parent paints its
-  // final layout before the animation starts.
+  // Kick off immediately on mount — no artificial delay, so the
+  // logo never flashes a blank/empty frame on the login screen.
   useEffect(() => {
-    const id = window.setTimeout(play, 400);
-    return () => window.clearTimeout(id);
+    play();
   }, [play]);
 
-  // Before the first frame we render a transparent placeholder of
-  // roughly the final size so the parent layout doesn't shift when
-  // the animation kicks in. When a subtitle is present we add extra
-  // vertical room to reserve its line height too.
-  if (t < 0) {
-    return (
-      <div
-        aria-hidden="true"
-        style={{
-          width: iconSize * 2.4,
-          height: iconSize * 1.3 + (subtitle ? 44 : 0),
-        }}
-      />
-    );
-  }
-
   // ── Timeline phases ─────────────────────────────────────────────
-  // Phase 1 (0 → 0.28): icon scales up with overshoot
-  const iconScale = easeOutBack(progress(t, 0, 0.28));
-  const iconOpacity = easeOutExpo(progress(t, 0, 0.12));
-  const iconBlur = lerp(12, 0, easeOutExpo(progress(t, 0, 0.22)));
+  // Icon, gap and wordmark position are fixed at the final state
+  // from the very first paint — no empty slot on load. Only two
+  // subtle motions remain:
+  //   • wordmark letters slide up into place (0 → 0.7)
+  //   • subtitle words stagger in underneath    (0.4 → 1.0)
+  const textBase = progress(t, 0, 0.7);
+  const subtitleBase = progress(t, 0.4, 1.0);
 
-  // Phase 2 (0.22 → 0.54): circle outline draws and then fades out
-  const outlineStroke = easeOutQuint(progress(t, 0.22, 0.4));
-  const outlineFade = easeOutQuint(progress(t, 0.4, 0.54));
-  const outlineOp = outlineStroke * (1 - outlineFade);
-
-  // Phase 3 (0.46 → 0.64): gap opens between icon and wordmark
-  const slide = easeInOutCubic(progress(t, 0.46, 0.64));
-
-  // Phase 4 (0.54 → 0.92): wordmark letters stagger in
-  const textBase = progress(t, 0.54, 0.92);
-
-  // Phase 5 (0.78 → 1.0): subtitle words stagger in, starting just
-  // before the wordmark finishes so the two motions overlap
-  // gracefully into one continuous entrance.
-  const subtitleBase = progress(t, 0.78, 1.0);
   // Split on whitespace so Arabic letters stay connected (per-char
   // splits break glyph joining).
   const subtitleWords = subtitle ? subtitle.split(/\s+/).filter(Boolean) : [];
@@ -149,7 +116,6 @@ export function ThiqaLogoAnimation({
   const gap = Math.round(iconSize * 0.28);
   const fontSize = Math.round(iconSize * 0.62);
   const subtitleGap = Math.round(iconSize * 0.22);
-  const dashLen = 2 * Math.PI * 49;
 
   const handleClick = interactive ? play : undefined;
 
@@ -172,7 +138,7 @@ export function ThiqaLogoAnimation({
         style={{
           display: "flex",
           alignItems: "center",
-          gap: `${lerp(0, gap, slide)}px`,
+          gap: `${gap}px`,
         }}
       >
         {/* Wordmark — source first, so in the login page's `dir="rtl"`
@@ -200,21 +166,21 @@ export function ThiqaLogoAnimation({
           }}
         >
           {TEXT.split("").map((char, i) => {
+            // Letters are always visible on first paint; they just
+            // settle into place with a small vertical slide. No more
+            // "icon visible next to an empty slot" on mount.
             const ls = (i * 0.14) / TEXT.length;
             const le = Math.min(ls + 0.45, 1);
             const raw = progress(textBase, ls, le);
-            const op = easeOutExpo(raw);
-            const y = lerp(22, 0, easeOutQuint(raw));
-            const sc = lerp(0.7, 1, easeOutBack(raw));
+            const y = lerp(8, 0, easeOutQuint(raw));
 
             return (
               <span
                 key={i}
                 style={{
                   display: "inline-block",
-                  opacity: op,
-                  transform: `translateY(${y}px) scale(${sc})`,
-                  willChange: "transform, opacity",
+                  transform: `translateY(${y}px)`,
+                  willChange: "transform",
                 }}
               >
                 {char}
@@ -223,77 +189,29 @@ export function ThiqaLogoAnimation({
           })}
         </div>
 
-        {/* Icon + animated outline ring */}
+        {/* Icon — rendered statically at its final size/opacity so the
+            login screen never shows an empty placeholder on mount. */}
         <div
           style={{
             width: iconSize,
             height: iconSize,
-            position: "relative",
+            borderRadius: "50%",
+            overflow: "hidden",
             flexShrink: 0,
           }}
         >
-          {iconOpacity > 0 && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: iconSize * iconScale,
-                  height: iconSize * iconScale,
-                  borderRadius: "50%",
-                  overflow: "hidden",
-                  opacity: iconOpacity,
-                  filter: `blur(${iconBlur}px)`,
-                  willChange: "transform, opacity, filter",
-                }}
-              >
-                <img
-                  src={iconSrc}
-                  alt=""
-                  draggable={false}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    display: "block",
-                    objectFit: "cover",
-                    filter: iconFilter,
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {outlineOp > 0.005 && (
-            <svg
-              viewBox="0 0 100 100"
-              style={{
-                position: "absolute",
-                inset: -6,
-                width: iconSize + 12,
-                height: iconSize + 12,
-                pointerEvents: "none",
-              }}
-            >
-              <circle
-                cx="50"
-                cy="50"
-                r="49"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                strokeDasharray={`${dashLen * outlineStroke} ${dashLen}`}
-                strokeDashoffset={dashLen * 0.25}
-                strokeLinecap="round"
-                opacity={outlineOp}
-              />
-            </svg>
-          )}
+          <img
+            src={iconSrc}
+            alt=""
+            draggable={false}
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "block",
+              objectFit: "cover",
+              filter: iconFilter,
+            }}
+          />
         </div>
       </div>
 
