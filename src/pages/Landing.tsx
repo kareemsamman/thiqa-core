@@ -169,16 +169,18 @@ export default function Landing() {
       `}</style>
 
       {/* ═══ Top marquee — CRM feature keywords ═══
-          Lives at the very top of the page, above the nav, looping
-          infinitely. Seamless loop: the item list is duplicated in a
-          flat flex row (no nested wrappers, no parent flex-gap) and
-          each item carries its own symmetric horizontal margin. That
-          way translateX(0 → -50%) lands exactly on the start of the
-          second set — no visible jump, no "blank" gap. */}
+          Looping infinitely, no blank gap on wrap.
+          The "blank" the user saw before was caused by the track being
+          barely wider than 2× the viewport: translateX(-50%) at that
+          point leaves an empty strip on the leading edge. Fix: duplicate
+          the item list four times (always wider than 2× any realistic
+          viewport) and move by translateX(-25%) — exactly one copy's
+          width — per cycle. Three copies remain covering the viewport
+          at any instant, so there is no visible gap, ever. */}
       <style>{`
         @keyframes marquee-rtl {
           0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
+          100% { transform: translateX(-25%); }
         }
         .marquee-track {
           animation: marquee-rtl 75s linear infinite;
@@ -190,7 +192,7 @@ export default function Landing() {
         }
       `}</style>
       <div
-        className="relative border-b border-black/[0.06] bg-white py-3 overflow-hidden"
+        className="relative border-b border-black/[0.06] bg-white py-3 overflow-hidden mb-6"
         aria-label="مزايا النظام"
       >
         {/* Edge fades so items dissolve into the white bg at both ends
@@ -212,10 +214,11 @@ export default function Landing() {
               { icon: Bell, label: "إشعارات انتهاء الوثائق" },
               { icon: Phone, label: "توقيعات رقمية عن بعد" },
             ];
-            // Flat, doubled list. Each item carries its own mx-5 so
-            // gaps are identical across every neighbour pair —
-            // including the wrap point where the two copies meet.
-            return [...items, ...items].map(({ icon: Icon, label }, i) => (
+            // 4 copies so the track is always wider than 2× the
+            // viewport; identical mx-5 on every item keeps the visual
+            // gap uniform across the wrap point.
+            const copies = [...items, ...items, ...items, ...items];
+            return copies.map(({ icon: Icon, label }, i) => (
               <div
                 key={i}
                 aria-hidden={i >= items.length}
@@ -257,19 +260,28 @@ export default function Landing() {
             <a href="#faq" className="hover:text-black transition-colors">أسئلة وأجوبة</a>
             <a href="/pricing" className="hover:text-black transition-colors">الأسعار</a>
           </div>
-            {/* Pill CTA — matches the Hebrew reference (clean ring, crisp
-                bold text, slight translucent center, subtle glow on hover). */}
+            {/* Pill CTA — white text with the translucent ring style
+                the user specified (rgba whites + soft drop shadow). */}
             <button
               onClick={() => { trackEvent("signup_click", "/landing"); navigate("/login?view=signup"); }}
-              className="px-7 py-2.5 text-[13px] font-bold text-black rounded-full border-2 border-black/40 bg-white/30 backdrop-blur-sm transition-all hover:bg-white/50 hover:border-black/70 hover:shadow-[0_6px_20px_-4px_rgba(0,0,0,0.25)]"
+              className="px-7 py-2.5 text-[13px] font-bold text-white transition-all hover:bg-white/20"
+              style={{
+                borderRadius: '100px',
+                border: '2px solid rgba(255, 255, 255, 0.40)',
+                background: 'rgba(255, 255, 255, 0.10)',
+                boxShadow: '0 4px 16px 0 rgba(0, 0, 0, 0.08)',
+              }}
             >
               {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
             </button>
         </div>
       </nav>
 
-      {/* ═══ HERO with video background ═══ */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
+      {/* ═══ HERO with video background ═══
+          justify-between (not justify-center) so the title block
+          parks near the top with breathing room from the nav, and
+          the mockup frame sticks to the bottom of the hero. */}
+      <section className="relative min-h-screen flex flex-col items-center justify-between overflow-hidden">
         <div className="absolute inset-0 z-0">
           {/* Background video — autoplay, muted, loop, playsInline so
               iPhone Safari allows playback without going full-screen.
@@ -295,7 +307,7 @@ export default function Landing() {
           <div className="absolute inset-0 bg-white/30" />
         </div>
 
-        <div className="relative z-10 w-[90%] max-w-[56rem] mx-auto text-center pt-20">
+        <div className="relative z-10 w-[90%] max-w-[56rem] mx-auto text-center pt-40 md:pt-44">
           <h1
             className="text-[1.6rem] md:text-[2.2rem] lg:text-[2.8rem] font-extrabold leading-[1.2] tracking-tight whitespace-pre-line hero-reveal text-black"
             style={{ animationDelay: '120ms' }}
@@ -309,28 +321,31 @@ export default function Landing() {
             {ct(content, "hero_subtitle", "إدارة الوثائق، الأموال والتسويق في مكان واحد — سريع وآمن.")}
           </p>
           <div className="mt-8 hero-reveal" style={{ animationDelay: '520ms' }}>
-            {/* CTA pill — same visual language as the navbar button for
-                consistency, just scaled up for primary weight. */}
+            {/* Solid white pill, no border — the user's explicit spec. */}
             <button
               onClick={() => navigate("/login?view=signup")}
-              className="text-[15px] font-bold text-black rounded-full border-2 border-black/40 bg-white/30 backdrop-blur-sm px-9 py-3.5 transition-all hover:bg-white/55 hover:border-black/70 hover:scale-[1.03] hover:shadow-[0_10px_28px_-6px_rgba(0,0,0,0.25)]"
+              className="text-[15px] font-bold text-black px-9 py-3.5 transition-all hover:scale-[1.03] hover:shadow-[0_10px_28px_-6px_rgba(0,0,0,0.25)]"
+              style={{
+                borderRadius: '100px',
+                background: '#FFF',
+                border: 'none',
+              }}
             >
               {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
             </button>
           </div>
         </div>
 
-        {/* Hero framed mockup — 60% of the viewport, height follows the
-            image's intrinsic aspect ratio. Transparent frame (no more
-            black fill behind the image) so the rounded corners sit
-            cleanly on the video background. */}
+        {/* Hero framed mockup — 50% of the viewport, stuck to the
+            bottom of the hero section. Transparent frame so the rounded
+            top corners sit cleanly on the video background. */}
         <div
-          className="relative z-10 w-full mx-auto mt-16 px-6 hero-scale-in flex justify-center"
+          className="relative z-10 w-full mx-auto px-6 pb-0 hero-scale-in flex justify-center"
           style={{ animationDelay: '720ms' }}
         >
           <div
             className="relative rounded-t-xl overflow-hidden border border-black/[0.12] border-b-0 shadow-2xl shadow-black/20 max-w-full"
-            style={{ width: '60%' }}
+            style={{ width: '50%' }}
           >
             <img
               src="https://thiqacrm.b-cdn.net/1.png"
