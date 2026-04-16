@@ -146,7 +146,6 @@ const ALL_FEATURES = [
   { key: 'financial_reports', label: 'التقارير المالية', description: 'عرض التقارير المالية' },
   { key: 'broker_wallet', label: 'محفظة الوسطاء', description: 'إدارة محفظة الوسطاء' },
   { key: 'company_settlement', label: 'تسويات الشركات', description: 'تقارير تسويات شركات التأمين' },
-  { key: 'expenses', label: 'السندات والمصروفات', description: 'إدارة سندات القبض والصرف' },
   { key: 'cheques', label: 'الشيكات', description: 'إدارة الشيكات' },
   { key: 'leads', label: 'Whatsapp Leads', description: 'عملاء الواتساب المحتملين' },
   { key: 'accident_reports', label: 'بلاغات الحوادث', description: 'إدارة بلاغات الحوادث' },

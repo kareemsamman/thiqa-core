@@ -117,7 +117,6 @@ export const navigationGroups: NavGroup[] = [
       { name: "متابعة الديون", href: "/debt-tracking", icon: DollarSign, badge: 'debt' },
       { name: "شركات التأمين", href: "/companies", icon: Building2, adminOnly: true },
       { name: "الوسطاء", href: "/brokers", icon: Wallet, adminOnly: true, featureKey: 'broker_wallet' },
-      { name: "سندات القبض والصرف", href: "/expenses", icon: DollarSign, adminOnly: true, featureKey: 'expenses' },
       { name: "الإيصالات", href: "/receipts", icon: FileText, featureKey: 'receipts' },
     ],
   },

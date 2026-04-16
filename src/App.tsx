@@ -58,7 +58,6 @@ import MarketingSms from "./pages/MarketingSms";
 import AccidentReports from "./pages/AccidentReports";
 import AccidentReportForm from "./pages/AccidentReportForm";
 import AccidentTemplateMapper from "./pages/AccidentTemplateMapper";
-import Expenses from "./pages/Expenses";
 import AnnouncementSettings from "./pages/AnnouncementSettings";
 import Tasks from "./pages/Tasks";
 import BusinessContacts from "./pages/BusinessContacts";
@@ -329,11 +328,6 @@ const App = () => (
                 <AdminRoute>
                   <FinancialReports />
                 </AdminRoute>
-              } />
-              <Route path="/expenses" element={
-                <ProtectedRoute>
-                  <Expenses />
-                </ProtectedRoute>
               } />
               <Route path="/reports/elzami-costs" element={
                 <AdminRoute>

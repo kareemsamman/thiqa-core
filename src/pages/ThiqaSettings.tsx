@@ -640,7 +640,6 @@ const SYSTEM_FEATURES = [
   { key: 'financial_reports', label: 'التقارير المالية' },
   { key: 'broker_wallet', label: 'محفظة الوسطاء' },
   { key: 'company_settlement', label: 'تسويات الشركات' },
-  { key: 'expenses', label: 'السندات والمصروفات' },
   { key: 'cheques', label: 'الشيكات' },
   { key: 'leads', label: 'Whatsapp Leads' },
   { key: 'accident_reports', label: 'بلاغات الحوادث' },

@@ -45,7 +45,6 @@ const BASIC_BLOCKED_FEATURES = [
   'financial_reports',
   'broker_wallet',
   'company_settlement',
-  'expenses',
   'cheques',
 ];
 

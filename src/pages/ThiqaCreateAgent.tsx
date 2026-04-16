@@ -11,8 +11,8 @@ import { toast } from "sonner";
 import { ArrowRight, Loader2, Building2, CheckCircle2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
-const DEFAULT_BASIC_FEATURES = ['sms', 'financial_reports', 'broker_wallet', 'company_settlement', 'expenses', 'cheques', 'marketing_sms'];
-const BLOCKED_BASIC = new Set(['sms', 'financial_reports', 'broker_wallet', 'company_settlement', 'expenses', 'cheques', 'marketing_sms']);
+const DEFAULT_BASIC_FEATURES = ['sms', 'financial_reports', 'broker_wallet', 'company_settlement', 'cheques', 'marketing_sms'];
+const BLOCKED_BASIC = new Set(['sms', 'financial_reports', 'broker_wallet', 'company_settlement', 'cheques', 'marketing_sms']);
 
 export default function ThiqaCreateAgent() {
   const navigate = useNavigate();
