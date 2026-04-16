@@ -241,6 +241,39 @@ export default function Landing() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("policies");
   const [slideIdx, setSlideIdx] = useState(0);
+  // Slider section is scroll-pinned: the outer <section> is N ×
+  // viewport-height, an inner `sticky top-0 h-screen` container
+  // holds the slides, and scroll progress through the section
+  // drives `slideIdx`. The user can't leave the section until
+  // they've scrolled through all N slides — natural scroll feel,
+  // no wheel-hijacking needed.
+  const sliderSectionRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const section = sliderSectionRef.current;
+    if (!section) return;
+    const SLIDES = 3;
+    let ticking = false;
+    const apply = () => {
+      const rect = section.getBoundingClientRect();
+      const scrollable = rect.height - window.innerHeight;
+      if (scrollable <= 0) return;
+      const scrolled = Math.max(0, -rect.top);
+      const progress = Math.min(0.9999, scrolled / scrollable);
+      const idx = Math.min(SLIDES - 1, Math.floor(progress * SLIDES));
+      setSlideIdx(idx);
+    };
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        apply();
+        ticking = false;
+      });
+    };
+    apply();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
   const [testimonialAnim, setTestimonialAnim] = useState<"in" | "out">("in");
   const [faqCategory, setFaqCategory] = useState("general");
@@ -1634,94 +1667,140 @@ export default function Landing() {
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
       {/* ═══ Section 5: Slider ═══
-          Full-bleed CDN image as the backdrop, at least 100vh tall.
-          The <img> sits absolute-inset-0 with object-cover so it
-          fills any viewport without distortion, and everything else
-          renders on z-10 above it. */}
-      <section className="relative py-24 md:py-36 overflow-hidden bg-white min-h-screen">
-        <img
-          src="https://thiqacrm.b-cdn.net/Rectangle%207%20(1).png"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-          aria-hidden="true"
-          loading="lazy"
-        />
+          Scroll-pinned slider. The outer <section> is 3× viewport-
+          height; the inner `sticky top-0 h-screen` container holds
+          the slider UI. A scroll listener (see the useEffect above)
+          maps scroll progress through the section to slideIdx —
+          each ~33% of the section's scrollable distance advances
+          one slide. The user literally can't scroll past the
+          section until they've seen all three cards, but it doesn't
+          feel like "scroll hijacking" because the browser is
+          doing its normal native scroll the whole time.
 
-        <div className="relative z-10">
-          <h2 className="text-3xl md:text-[2.8rem] font-bold text-center mb-16 text-black">
-            {ct(content, "slider_title", "لا تنتظر التجديد. اصنعه بنفسك")}
-          </h2>
+          Cards: portrait, taller than wide, glass background
+          (rgba(255,255,255,0.06) + backdrop-blur), three-up layout
+          with the active slide centered + two neighbors peeking at
+          40% opacity. Positioned via translateX offsets so the
+          transition between slides animates smoothly. */}
+      <section
+        ref={sliderSectionRef}
+        className="relative bg-white"
+        style={{ height: "300vh" }}
+      >
+        <div className="sticky top-0 h-screen overflow-hidden">
+          <img
+            src="https://thiqacrm.b-cdn.net/Rectangle%207%20(1).png"
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+            aria-hidden="true"
+            loading="lazy"
+          />
 
-          {(() => {
-            const slides = [
-              {
-                title: "إدارة مستندات آمنة في السحابة",
-                desc: "كل المستندات، الوثائق والإيصالات — منظمة في السحابة مع وصول فوري من الكمبيوتر أو الجوال.",
-                cta: "ابدأ التجربة الآن",
-              },
-              {
-                title: "راحة بال والحفاظ على العملاء",
-                desc: "لا تترك العميل يشعر بأنه وحيد في لحظة الحقيقة. النظام يدير لك جمع المستندات، يحدّث العميل بحالة المطالبة تلقائياً، ويتأكد أن لا مطلب من شركة التأمين يضيع. أنت تقدم خدمة VIP، بينما الأتمتة تقوم بالعمل الشاق.",
-                cta: "ابدأ التجربة الآن",
-              },
-              {
-                title: "تقارير مالية بضغطة زر",
-                desc: "تقارير أرباح، مدفوعات وأرصدة — كل شيء تلقائي ومحدّث بالوقت الفعلي، مع تصدير فوري.",
-                cta: "ابدأ التجربة الآن",
-              },
-            ];
+          <div className="relative z-10 h-full flex flex-col items-center justify-center px-6 py-12">
+            <h2 className="text-3xl md:text-[2.6rem] font-bold text-center mb-10 md:mb-14 text-white">
+              {ct(content, "slider_title", "لا تنتظر التجديد. اصنعه بنفسك")}
+            </h2>
 
-            const goNext = () => setSlideIdx((p) => (p + 1) % slides.length);
-            const goPrev = () => setSlideIdx((p) => (p - 1 + slides.length) % slides.length);
+            {(() => {
+              const slides = [
+                {
+                  icon: Wallet,
+                  eyebrow: "تحصيل ومالية",
+                  title: "تحصيل بلا Excel،\nشيكات بلا عناء.",
+                  desc: "استلم الشيكات مع تسجيل البنك والفرع والتاريخ. التقسيط الداخلي ومتابعة المستحقات آلية بالكامل. ربط مباشر مع Tranzila لدفع بطاقات الائتمان من داخل الوثيقة.",
+                  cta: "ابدأ التجربة الآن",
+                },
+                {
+                  icon: MessageSquare,
+                  eyebrow: "تذكيرات وحملات",
+                  title: "النظام يذكّر العميل\nقبل ما تفكر فيه.",
+                  desc: "تذكيرات قبل شهر وأسبوع من انتهاء الوثيقة، حملات SMS جماعية باختيار ذكي للعملاء، نماذج مخصّصة لكل تنبيه. النتيجة: نسبة تجديد أعلى بـ 40%.",
+                  cta: "ابدأ التجربة الآن",
+                },
+                {
+                  icon: BarChart3,
+                  eyebrow: "تقارير لحظية",
+                  title: "كل شيكل مرصود،\nكل فرع تحت السيطرة.",
+                  desc: "أرباح وعمولات محسوبة بلحظتها، رصيد خزينة حيّ، متابعة أرصدة كل شركة تأمين، وتقارير متعددة الفروع — كل شيء قابل للتصدير إلى Excel في ثانية.",
+                  cta: "ابدأ التجربة الآن",
+                },
+              ];
 
-            return (
-              <>
-                <div className="relative flex items-stretch w-full">
-                  <div className="hidden lg:flex flex-shrink-0 w-[14%] opacity-60 transition-all duration-500">
-                    <div className="rounded-2xl overflow-hidden bg-black/[0.04] border border-black/[0.08] p-6 flex items-center justify-center w-full cursor-pointer hover:bg-black/[0.07] transition-colors" onClick={goPrev}>
-                      <h3 className="text-base font-bold text-center text-black/70">{slides[(slideIdx - 1 + slides.length) % slides.length].title}</h3>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 transition-all duration-500 mx-3 lg:mx-5">
-                    <div className="rounded-2xl overflow-hidden bg-white border border-black/[0.08] shadow-lg flex flex-col h-full">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-0 flex-1">
-                        <div className="flex items-center justify-center p-6 md:p-10 order-2 md:order-1 bg-black/[0.02]">
-                          <img src={featuresMockup} alt="" className="max-h-[300px] object-contain rounded-lg" loading="lazy" />
+              return (
+                <>
+                  {/* Three-up card rail. Each card is absolutely
+                      positioned at the center; translateX offset +
+                      scale + opacity give the left-preview / active
+                      / right-preview effect. */}
+                  <div className="relative w-full max-w-5xl h-[440px] md:h-[500px]">
+                    {slides.map((slide, i) => {
+                      const offset = i - slideIdx;
+                      const abs = Math.abs(offset);
+                      const Icon = slide.icon;
+                      return (
+                        <div
+                          key={i}
+                          className="absolute top-0 left-1/2 rounded-3xl overflow-hidden transition-all duration-500 ease-out w-[320px] md:w-[360px] h-full"
+                          style={{
+                            background: "rgba(255, 255, 255, 0.06)",
+                            backdropFilter: "blur(24px) saturate(1.3)",
+                            WebkitBackdropFilter: "blur(24px) saturate(1.3)",
+                            border: "1px solid rgba(255, 255, 255, 0.14)",
+                            transform: `translateX(calc(-50% + ${offset * 110}%)) scale(${abs === 0 ? 1 : 0.88})`,
+                            opacity: abs <= 1 ? (abs === 0 ? 1 : 0.45) : 0,
+                            pointerEvents: abs === 0 ? "auto" : "none",
+                            zIndex: abs === 0 ? 10 : 5,
+                            boxShadow: abs === 0 ? "0 30px 80px -16px rgba(18,32,66,0.45)" : "none",
+                          }}
+                        >
+                          <div className="h-full p-8 md:p-10 flex flex-col text-white">
+                            <div
+                              className="h-14 w-14 rounded-2xl flex items-center justify-center mb-6"
+                              style={{ background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.22)" }}
+                            >
+                              <Icon className="h-7 w-7 text-white" strokeWidth={1.8} />
+                            </div>
+                            <span className="text-[11px] text-white/70 font-bold tracking-[0.2em] uppercase mb-3">
+                              0{i + 1} · {slide.eyebrow}
+                            </span>
+                            <h3 className="text-xl md:text-[1.55rem] font-bold leading-[1.25] whitespace-pre-line mb-4">
+                              {slide.title}
+                            </h3>
+                            <p className="text-sm text-white/80 leading-relaxed mb-8 flex-1">
+                              {slide.desc}
+                            </p>
+                            <button
+                              onClick={() => navigate("/login?view=signup")}
+                              className="self-start flex items-center gap-2 px-6 py-3 text-sm font-bold text-white rounded-full bg-white/15 border border-white/30 hover:bg-white/25 transition-colors backdrop-blur-sm"
+                            >
+                              {slide.cta}
+                              <ArrowLeft className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="p-8 md:p-12 flex flex-col justify-center order-1 md:order-2">
-                          <h3 className="text-xl md:text-2xl font-bold mb-4 text-black">{slides[slideIdx].title}</h3>
-                          <p className="text-sm text-black/60 leading-relaxed mb-8">{slides[slideIdx].desc}</p>
-                          <button
-                            onClick={() => navigate("/login?view=signup")}
-                            className="flex items-center gap-2 px-6 py-3 text-sm font-bold text-black hover:bg-black/[0.06] transition-colors bg-black/[0.03] border border-black/[0.12] rounded-lg w-fit"
-                          >
-                            <ArrowLeft className="h-4 w-4" />
-                            {slides[slideIdx].cta}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                      );
+                    })}
                   </div>
 
-                  <div className="hidden lg:flex flex-shrink-0 w-[14%] opacity-60 transition-all duration-500">
-                    <div className="rounded-2xl overflow-hidden bg-black/[0.04] border border-black/[0.08] p-6 flex items-center justify-center w-full cursor-pointer hover:bg-black/[0.07] transition-colors" onClick={goNext}>
-                      <h3 className="text-base font-bold text-center text-black/70">{slides[(slideIdx + 1) % slides.length].title}</h3>
-                    </div>
+                  {/* Progress dots — driven by slideIdx, also acts
+                      as a visual "where am I in the scroll lock"
+                      indicator. */}
+                  <div className="flex gap-2 mt-10">
+                    {slides.map((_, i) => (
+                      <div
+                        key={i}
+                        className="h-1 rounded-full transition-all duration-500"
+                        style={{
+                          width: i === slideIdx ? "2rem" : "1rem",
+                          background: i === slideIdx ? "#ffffff" : "rgba(255,255,255,0.35)",
+                        }}
+                      />
+                    ))}
                   </div>
-                </div>
-
-                <div className="flex justify-center gap-3 mt-10">
-                  <button onClick={goPrev} className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
-                    <ChevronLeft className="h-5 w-5 rotate-180" />
-                  </button>
-                  <button onClick={goNext} className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
-                    <ChevronLeft className="h-5 w-5" />
-                  </button>
-                </div>
-              </>
-            );
-          })()}
+                </>
+              );
+            })()}
+          </div>
         </div>
       </section>
 
