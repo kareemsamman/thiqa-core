@@ -102,27 +102,69 @@ export default function Landing() {
   // Track scroll to drive the nav's sticky pill transition + the top
   // marquee's slide-up close. `scrolled` flips true once the user is
   // past a small threshold and stays true until they scroll back up.
+  // `scrolled` is still a React state because the logo / link colors
+  // don't depend on it any more, but some conditional bits (e.g. the
+  // marquee's aria-hidden) still want the boolean. Kept cheap — flips
+  // at most once when crossing the 8 px threshold.
   const [scrolled, setScrolled] = useState(false);
-  // Scroll-linked progress 0 → 1 driving the nav/marquee animation.
-  // Interpolating values against scrollY is always smooth because
-  // the change is tied directly to the user's input — no 700 ms
-  // transition fighting against the scroll gesture, so the nav
-  // never feels "frozen" while the page is scrolling.
-  const [scrollProgress, setScrollProgress] = useState(0);
+  // Scroll-linked chrome — driven DIRECTLY on the DOM via refs in a
+  // requestAnimationFrame loop, NOT through React state. A large page
+  // like Landing re-rendering on every scroll tick was adding its own
+  // lag on top of the animation, especially on the way back to the
+  // top where the user is actively scrolling while the lerp settles.
+  // By writing to `.style` on pinned refs we bypass React entirely on
+  // every frame — the nav tracks the scroll 1:1 with no reconciler
+  // cost per event.
+  const marqueeChromeRef = useRef<HTMLDivElement | null>(null);
+  const navPillRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     let ticking = false;
+    let lastScrolled = false;
+    const apply = () => {
+      const y = window.scrollY;
+      const p = Math.min(1, Math.max(0, y / 90));
+      const inv = 1 - p;
+      const m = marqueeChromeRef.current;
+      if (m) {
+        m.style.maxHeight = `${60 * inv}px`;
+        m.style.paddingTop = `${12 * inv}px`;
+        m.style.paddingBottom = `${12 * inv}px`;
+        m.style.opacity = String(inv);
+        m.style.transform = `translate3d(0, ${-60 * p}px, 0)`;
+        m.style.pointerEvents = p > 0.5 ? "none" : "auto";
+      }
+      const n = navPillRef.current;
+      if (n) {
+        n.style.width = `${90 - 6 * p}%`;
+        n.style.maxWidth = `${96 - 32 * p}rem`;
+        n.style.marginTop = `${12 * p}px`;
+        n.style.borderRadius = `${9999 * p}px`;
+        n.style.transform = `translate3d(0, ${44 * inv}px, 0)`;
+        if (p > 0.02) {
+          n.style.backdropFilter = "blur(8px)";
+          (n.style as CSSStyleDeclaration & { webkitBackdropFilter?: string }).webkitBackdropFilter = "blur(8px)";
+        } else {
+          n.style.backdropFilter = "none";
+          (n.style as CSSStyleDeclaration & { webkitBackdropFilter?: string }).webkitBackdropFilter = "none";
+        }
+        n.style.backgroundColor = `rgba(255, 255, 255, ${0.8 * p})`;
+        n.style.boxShadow = `0 1px 20px 0 rgba(0, 0, 0, ${0.12 * p})`;
+      }
+      const isScrolled = y > 8;
+      if (isScrolled !== lastScrolled) {
+        lastScrolled = isScrolled;
+        setScrolled(isScrolled);
+      }
+    };
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
-        const y = window.scrollY;
-        const p = Math.min(1, Math.max(0, y / 90));
-        setScrollProgress(p);
-        setScrolled(y > 8);
+        apply();
         ticking = false;
       });
     };
-    onScroll();
+    apply();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -282,18 +324,17 @@ export default function Landing() {
           in from off-screen-right. The inner Arabic text still renders
           its own RTL direction via each item's natural bidi. */}
       <div
+        ref={marqueeChromeRef}
         dir="ltr"
         className="relative bg-white overflow-hidden transform-gpu origin-top will-change-[max-height,opacity,transform]"
         style={{
-          // Scroll-linked morph — height, opacity and translateY all
-          // interpolate against scrollY so the retraction follows the
-          // scroll gesture 1:1 instead of a delayed 700 ms tween.
-          maxHeight: `${60 * (1 - scrollProgress)}px`,
-          paddingTop: `${12 * (1 - scrollProgress)}px`,
-          paddingBottom: `${12 * (1 - scrollProgress)}px`,
-          opacity: 1 - scrollProgress,
-          transform: `translate3d(0, ${-60 * scrollProgress}px, 0)`,
-          pointerEvents: scrollProgress > 0.5 ? "none" : "auto",
+          // Initial values — the rAF loop rewrites these on every
+          // scroll event. React never re-runs to update them.
+          maxHeight: "60px",
+          paddingTop: "12px",
+          paddingBottom: "12px",
+          opacity: 1,
+          transform: "translate3d(0, 0, 0)",
         }}
         aria-label="مزايا النظام"
         aria-hidden={scrolled}
@@ -375,21 +416,20 @@ export default function Landing() {
           the layout each frame. */}
       <nav className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-2">
         <div
+          ref={navPillRef}
           className="pointer-events-auto flex items-center justify-between px-6 h-14 md:h-16 mx-auto transform-gpu will-change-[transform,background-color,border-radius,box-shadow]"
           style={{
-            // Every visual property is a linear interpolation on
-            // scrollProgress. No CSS transition, no delayed tween —
-            // the nav follows the scroll gesture frame-for-frame, so
-            // there's nothing to "freeze" on slow scrolls.
-            width: `${90 - 6 * scrollProgress}%`,
-            maxWidth: `${96 - 32 * scrollProgress}rem`,
-            marginTop: `${12 * scrollProgress}px`,
-            borderRadius: `${9999 * scrollProgress}px`,
-            transform: `translate3d(0, ${44 * (1 - scrollProgress)}px, 0)`,
-            backdropFilter: scrollProgress > 0.02 ? "blur(8px)" : "none",
-            WebkitBackdropFilter: scrollProgress > 0.02 ? "blur(8px)" : "none",
-            backgroundColor: `rgba(255, 255, 255, ${0.8 * scrollProgress})`,
-            boxShadow: `0 1px 20px 0 rgba(0, 0, 0, ${0.12 * scrollProgress})`,
+            // Initial (unscrolled) values — rewritten per-frame by
+            // the rAF loop above without going through React.
+            width: "90%",
+            maxWidth: "96rem",
+            marginTop: "0px",
+            borderRadius: "0px",
+            transform: "translate3d(0, 44px, 0)",
+            backdropFilter: "none",
+            WebkitBackdropFilter: "none",
+            backgroundColor: "rgba(255, 255, 255, 0)",
+            boxShadow: "none",
             border: "none",
           }}
         >
