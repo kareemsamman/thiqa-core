@@ -575,34 +575,129 @@ export default function Landing() {
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
       {/* ═══ Section 2: Feature highlights ═══
-          Six real Thiqa capabilities, each in its own tinted tile.
-          IntersectionObserver flips `visible` on the whole section
-          when it first enters the viewport; boxes animate in with a
-          staggered fade-up (+ light scale) via per-box
-          `transition-delay`. Hover lifts the tile and tints the icon
-          pill so the section feels alive instead of static. */}
+          Six real Thiqa capabilities, each in its own tile.
+          IntersectionObserver flips `.fb-visible` on the whole
+          section when it first enters the viewport. Two things then
+          animate:
+            1. Label + title do an RTL typewriter reveal via
+               clip-path + steps() — the clip window slides leftward
+               so the Arabic text appears right-to-left like a real
+               typist.
+            2. Cards fade-up in sequence and grow a primary-color
+               accent bar on their right edge on hover. */}
       <style>{`
+        @keyframes fbTypeRtl {
+          from { clip-path: inset(0 0 0 100%); }
+          to   { clip-path: inset(0 0 0 0); }
+        }
+        @keyframes fbCaretBlink {
+          0%, 49% { opacity: 1; }
+          50%, 100% { opacity: 0; }
+        }
+        .fb-type {
+          display: inline-block;
+          clip-path: inset(0 0 0 100%);
+        }
+        .fb-visible .fb-type-label {
+          animation: fbTypeRtl 0.9s steps(18, end) 0.15s forwards;
+        }
+        .fb-visible .fb-type-title {
+          animation: fbTypeRtl 1.5s steps(34, end) 0.85s forwards;
+        }
+        .fb-caret {
+          display: inline-block;
+          width: 2px;
+          height: 1em;
+          vertical-align: -0.12em;
+          background: currentColor;
+          margin-inline-start: 4px;
+          opacity: 0;
+          animation: fbCaretBlink 0.9s step-end infinite;
+          animation-play-state: paused;
+        }
+        .fb-visible .fb-caret-label {
+          animation-play-state: running;
+          animation-delay: 0.15s;
+          opacity: 1;
+        }
+        .fb-visible .fb-caret-title {
+          animation-play-state: running;
+          animation-delay: 0.85s;
+          opacity: 1;
+        }
+
         .fb-tile {
           opacity: 0;
           transform: translate3d(0, 24px, 0) scale(0.96);
           transition:
             opacity 0.7s cubic-bezier(0.22,1,0.36,1),
             transform 0.7s cubic-bezier(0.22,1,0.36,1),
-            box-shadow 0.25s ease,
-            background-color 0.25s ease;
+            box-shadow 0.35s ease,
+            border-color 0.35s ease;
         }
         .fb-visible .fb-tile {
           opacity: 1;
           transform: translate3d(0, 0, 0) scale(1);
         }
         .fb-tile:hover {
-          transform: translate3d(0, -4px, 0) scale(1);
+          transform: translate3d(0, -5px, 0) scale(1);
+        }
+        /* Right-edge accent bar — grows top-to-bottom on hover and
+           tints in the primary brand color. */
+        .fb-tile::before {
+          content: "";
+          position: absolute;
+          top: 14%;
+          bottom: 14%;
+          right: 0;
+          width: 3px;
+          border-radius: 3px 0 0 3px;
+          background: linear-gradient(180deg, #122143 0%, #4a6cc7 100%);
+          transform: scaleY(0);
+          transform-origin: top;
+          transition: transform 0.5s cubic-bezier(0.22,1,0.36,1);
+        }
+        .fb-tile:hover::before {
+          transform: scaleY(1);
+        }
+        /* Soft corner glow that fades in on hover. */
+        .fb-tile::after {
+          content: "";
+          position: absolute;
+          top: -40px;
+          right: -40px;
+          width: 140px;
+          height: 140px;
+          border-radius: 9999px;
+          background: radial-gradient(circle, rgba(74,108,199,0.18) 0%, rgba(74,108,199,0) 70%);
+          opacity: 0;
+          transition: opacity 0.45s ease;
+          pointer-events: none;
+        }
+        .fb-tile:hover::after {
+          opacity: 1;
         }
         .fb-tile .fb-icon {
-          transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), background-color 0.25s ease;
+          transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), background-color 0.25s ease, box-shadow 0.35s ease;
         }
         .fb-tile:hover .fb-icon {
-          transform: rotate(-6deg) scale(1.06);
+          transform: rotate(-6deg) scale(1.08);
+          box-shadow: 0 8px 24px -8px rgba(18, 33, 67, 0.35);
+        }
+        .fb-tile .fb-cta {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          color: #122143;
+          font-size: 12px;
+          font-weight: 700;
+          opacity: 0;
+          transform: translateX(6px);
+          transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.22,1,0.36,1);
+        }
+        .fb-tile:hover .fb-cta {
+          opacity: 1;
+          transform: translateX(0);
         }
       `}</style>
       <section
@@ -631,9 +726,13 @@ export default function Landing() {
       >
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
-            <p className="text-sm text-[#4a6cc7] mb-3 tracking-wide font-semibold">كل ما تحتاجه وكالتك</p>
-            <h2 className="text-2xl md:text-[2.2rem] font-bold leading-tight text-black">
-              أدوات حقيقية تعمل من اليوم الأول
+            <p className="text-sm mb-3 tracking-wide font-semibold">
+              <span className="fb-type fb-type-label text-[#4a6cc7]">كل ما تحتاجه وكالتك</span>
+              <span className="fb-caret fb-caret-label text-[#4a6cc7]" aria-hidden="true" />
+            </p>
+            <h2 className="text-2xl md:text-[2.2rem] font-bold leading-tight" style={{ color: '#122143' }}>
+              <span className="fb-type fb-type-title">أدوات حقيقية تعمل من اليوم الأول</span>
+              <span className="fb-caret fb-caret-title" aria-hidden="true" />
             </h2>
           </div>
 
@@ -684,14 +783,20 @@ export default function Landing() {
             ].map(({ icon: Icon, title, desc, tint, hoverTint }, i) => (
               <div
                 key={i}
-                className="fb-tile group rounded-2xl border border-black/[0.06] bg-white p-6 text-right hover:shadow-[0_12px_40px_-8px_rgba(0,0,0,0.12)] hover:bg-white"
+                className="fb-tile group relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white p-6 text-right hover:border-[#122143]/20 hover:shadow-[0_20px_50px_-14px_rgba(18,33,67,0.22)]"
                 style={{ transitionDelay: `${i * 90}ms` }}
               >
-                <div className={cn("fb-icon inline-flex h-12 w-12 items-center justify-center rounded-xl mb-4", tint, hoverTint)}>
-                  <Icon className="h-6 w-6" strokeWidth={2} />
+                <div className="relative z-10">
+                  <div className={cn("fb-icon inline-flex h-12 w-12 items-center justify-center rounded-xl mb-4", tint, hoverTint)}>
+                    <Icon className="h-6 w-6" strokeWidth={2} />
+                  </div>
+                  <h3 className="text-[15px] font-bold mb-1.5" style={{ color: '#122143' }}>{title}</h3>
+                  <p className="text-[13px] text-black/55 leading-relaxed">{desc}</p>
+                  <div className="fb-cta mt-3">
+                    اعرف المزيد
+                    <ArrowLeft className="h-3 w-3" />
+                  </div>
                 </div>
-                <h3 className="text-[15px] font-bold text-black mb-1.5">{title}</h3>
-                <p className="text-[13px] text-black/55 leading-relaxed">{desc}</p>
               </div>
             ))}
           </div>
