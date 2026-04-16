@@ -177,12 +177,49 @@ export const navigationGroups: NavGroup[] = [
   },
 ];
 
-// Module-level — survives sidebar remounts triggered by route navigation
-// (MainLayout wraps each page, so Sidebar is a new component instance
-// every time). Without this the nav would snap back to scrollTop=0 on
-// every click. See also the persistence effect below.
-let PRESERVED_NAV_SCROLL = 0;
-let HAS_DONE_INITIAL_ACTIVE_SCROLL = false;
+// Persist the nav scroll across both route navigations (Sidebar
+// remounts because MainLayout wraps every page) AND full-page refreshes.
+// sessionStorage so it lives for the tab's session but doesn't leak
+// across tabs / browser restarts. Fall back to a module-level number
+// when sessionStorage is unavailable (SSR / private mode edge cases).
+const NAV_SCROLL_STORAGE_KEY = 'thiqa:sidebar:navScrollTop';
+const INITIAL_ACTIVE_SCROLL_KEY = 'thiqa:sidebar:initialActiveScrolled';
+let PRESERVED_NAV_SCROLL_FALLBACK = 0;
+
+function readPreservedScroll(): number {
+  try {
+    const raw = sessionStorage.getItem(NAV_SCROLL_STORAGE_KEY);
+    const parsed = raw == null ? NaN : Number(raw);
+    return Number.isFinite(parsed) ? parsed : PRESERVED_NAV_SCROLL_FALLBACK;
+  } catch {
+    return PRESERVED_NAV_SCROLL_FALLBACK;
+  }
+}
+
+function writePreservedScroll(value: number) {
+  PRESERVED_NAV_SCROLL_FALLBACK = value;
+  try {
+    sessionStorage.setItem(NAV_SCROLL_STORAGE_KEY, String(value));
+  } catch {
+    /* ignore — fallback already updated */
+  }
+}
+
+function hasDoneInitialActiveScroll(): boolean {
+  try {
+    return sessionStorage.getItem(INITIAL_ACTIVE_SCROLL_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markInitialActiveScrollDone() {
+  try {
+    sessionStorage.setItem(INITIAL_ACTIVE_SCROLL_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
 
 function SidebarContent({ collapsed, onCollapse, onNavigate }: {
   collapsed: boolean;
@@ -198,45 +235,53 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Preserve the nav's scrollTop across route navigations. On mount we
-  // restore what was saved last time; on every scroll we update the
-  // module-level cache so the next mount can restore it again.
+  // Preserve the nav's scrollTop across route navigations AND full-page
+  // refreshes (sessionStorage-backed). On mount we restore what was
+  // saved last time; on every scroll we update the cache so the next
+  // mount — even after F5 — can restore it.
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
-    // Restore after layout so the restored value sticks. requestAnimationFrame
-    // covers most cases; a tiny timeout catches late layouts where
-    // collapsible groups expand on load.
-    const restore = () => { nav.scrollTop = PRESERVED_NAV_SCROLL; };
+    // Restore immediately, then again after layout settles. The second
+    // restore catches cases where collapsible groups expand on load and
+    // change the content height after the first assignment.
+    const saved = readPreservedScroll();
+    const restore = () => { nav.scrollTop = saved; };
     restore();
     const raf = requestAnimationFrame(restore);
+    const t = window.setTimeout(restore, 120);
     const handleScroll = () => {
-      PRESERVED_NAV_SCROLL = nav.scrollTop;
+      writePreservedScroll(nav.scrollTop);
     };
     nav.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       cancelAnimationFrame(raf);
+      window.clearTimeout(t);
       nav.removeEventListener('scroll', handleScroll);
     };
   }, []);
 
-  // Callback ref for the active NavLink. We only auto-scroll it into
-  // view ONCE per session — on the very first landing (deep-link /
-  // refresh / fresh login). After that, PRESERVED_NAV_SCROLL owns the
-  // scroll position so subsequent navigations keep whatever the user
-  // had scrolled to. This is guarded at the module level so remounts
-  // caused by route changes can't retrigger the snap-to-active.
+  // Callback ref for the active NavLink. Auto-scroll runs at most once
+  // per browser session — the very first landing after opening a tab —
+  // so refresh / deep-link behaviour stays useful without clobbering
+  // the saved scroll on subsequent navigations or reloads. The "done"
+  // flag lives in sessionStorage so it survives remounts and refreshes
+  // together with the scroll offset.
   const activeNavLinkRef = useCallback(
     (node: HTMLAnchorElement | null) => {
       if (!node) return;
-      if (HAS_DONE_INITIAL_ACTIVE_SCROLL) return;
-      HAS_DONE_INITIAL_ACTIVE_SCROLL = true;
+      if (hasDoneInitialActiveScroll()) return;
+      // Don't run when we already have a saved scroll from a prior
+      // session interaction — the saved offset is authoritative.
+      if (readPreservedScroll() > 0) {
+        markInitialActiveScrollDone();
+        return;
+      }
+      markInitialActiveScrollDone();
       lastScrolledPathRef.current = location.pathname;
       const scroll = () => {
         node.scrollIntoView({ block: 'nearest', behavior: 'auto' });
-        // Capture the post-scroll position so the persistence layer
-        // starts from here instead of 0.
-        if (navRef.current) PRESERVED_NAV_SCROLL = navRef.current.scrollTop;
+        if (navRef.current) writePreservedScroll(navRef.current.scrollTop);
       };
       requestAnimationFrame(scroll);
       const t1 = window.setTimeout(scroll, 150);
