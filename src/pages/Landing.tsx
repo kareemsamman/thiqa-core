@@ -23,12 +23,9 @@ import gridLogoBgDefault from "@/assets/landing/grid-logo-bg.png";
 // Hero video plays back faster than real-time so the motion has more
 // "wow" energy without the viewer feeling like they're watching a slow
 // product tour. Same pattern the login background uses. Some browsers
-// reset playbackRate on the first `play` event (Safari), so we also
-// re-apply it in an onPlay handler on the element.
+// reset playbackRate on the first `play` event (Safari) — we also
+// re-apply it in onPlay / onLoadedMetadata handlers.
 const HERO_VIDEO_SPEED = 1.5;
-const setHeroVideoSpeed = (el: HTMLVideoElement | null) => {
-  if (el) el.playbackRate = HERO_VIDEO_SPEED;
-};
 const reapplyHeroVideoSpeed = (e: React.SyntheticEvent<HTMLVideoElement>) => {
   (e.currentTarget as HTMLVideoElement).playbackRate = HERO_VIDEO_SPEED;
 };
@@ -109,6 +106,29 @@ export default function Landing() {
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Hero video — force playback after mount. Autoplay is fragile
+  // (Safari + some privacy modes block it until the element is ready,
+  // not when the attribute appears). Pin the speed and retry .play()
+  // on every readiness event so the motion is actually running.
+  const heroVideoRef = useRef<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    const el = heroVideoRef.current;
+    if (!el) return;
+    el.playbackRate = HERO_VIDEO_SPEED;
+    const tryPlay = () => {
+      el.playbackRate = HERO_VIDEO_SPEED;
+      const p = el.play();
+      if (p && typeof p.catch === "function") p.catch(() => { /* ignore */ });
+    };
+    tryPlay();
+    el.addEventListener("canplay", tryPlay);
+    el.addEventListener("loadeddata", tryPlay);
+    return () => {
+      el.removeEventListener("canplay", tryPlay);
+      el.removeEventListener("loadeddata", tryPlay);
+    };
   }, []);
 
   // CMS-driven images with fallbacks
@@ -352,18 +372,28 @@ export default function Landing() {
           parks near the top with breathing room from the nav, and
           the mockup frame sticks to the bottom of the hero. */}
       <section className="relative min-h-screen flex flex-col items-center justify-between overflow-hidden">
-        <div className="absolute inset-0 z-0">
+        {/* Hero background layer. A soft light gradient sits under the
+            video as a fallback — if autoplay is blocked or the file
+            hasn't loaded yet, the hero is still a bright, branded
+            surface instead of a black hole. */}
+        <div
+          className="absolute inset-0 z-0"
+          style={{
+            background:
+              "linear-gradient(135deg, #eef1ff 0%, #ffffff 45%, #ffe8f0 100%)",
+          }}
+        >
           {/* Background video — autoplay, muted, loop, playsInline so
               iPhone Safari allows playback without going full-screen.
-              playbackRate is set via the callback ref before autoplay
-              so the very first frame is already at 1.5×. */}
+              Speed pinned to 1.5× via the effect above + the inline
+              onPlay / onLoadedMetadata handlers so Safari can't reset
+              it to 1× on the first play. */}
           <video
-            ref={setHeroVideoSpeed}
+            ref={heroVideoRef}
             onPlay={reapplyHeroVideoSpeed}
             onLoadedMetadata={reapplyHeroVideoSpeed}
             className="w-full h-full object-cover block"
             src="https://thiqacrm.b-cdn.net/video.mp4"
-            poster={ci(content, "hero_bg_image", "/images/hero-gradient-bg.png")}
             autoPlay
             loop
             muted
@@ -371,10 +401,9 @@ export default function Landing() {
             preload="auto"
             aria-hidden="true"
           />
-          {/* Light veil so black hero text stays readable without
-              hiding the video underneath. Lower opacity than before
-              so the motion is clearly visible behind the copy. */}
-          <div className="absolute inset-0 bg-white/30" />
+          {/* Very light veil so the black hero text stays readable
+              without washing out the motion behind it. */}
+          <div className="absolute inset-0 bg-white/20" />
         </div>
 
         <div className="relative z-10 w-[90%] max-w-[56rem] mx-auto text-center pt-40 md:pt-44">
