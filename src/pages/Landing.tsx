@@ -162,60 +162,65 @@ const featureTiles = [
   },
 ];
 
+// Demo-section tabs. Each tab maps directly to a real module inside
+// the Thiqa CRM (PolicyWizard / Cheques+Receipts+DebtTracking /
+// MarketingSms / FinancialReports / BrokerWallet+CompanySettlement).
+// Copy is grounded in the actual shipping features — no marketing
+// fluff, no promises the product doesn't keep.
 const featureTabs = [
   {
-    id: "invoicing",
+    id: "policies",
     label: "إصدار وتسعير",
     num: "01",
-    title: "إصدار وثائق التأمين بضغطة واحدة.",
-    desc: "إنشاء وثائق جديدة، تجديدات وحزم تأمين مخصصة — مع حساب سعر تلقائي حسب قواعد التسعير لكل شركة تأمين.",
+    title: "إصدار وثائق التأمين\nبضغطة واحدة.",
+    desc: "معالج ذكي يقودك خطوة بخطوة: اختيار العميل والمركبة، حساب أسعار الإلزامي والثالث والشامل تلقائياً حسب قواعد كل شركة تأمين، وإضافة خدمات الطريق والحوادث في نفس الباقة. الوثيقة جاهزة للتوقيع الرقمي بعد دقائق.",
     stats: [
-      { value: "3", unit: "دقائق", label: "متوسط الوقت لإصدار وثيقة تأمين جديدة كاملة." },
-      { value: "100%", unit: "", label: "دقة في حساب الأسعار والعمولات تلقائياً." },
+      { value: "3", unit: "دقائق", label: "متوسط الوقت لإصدار وثيقة جديدة — من اختيار العميل إلى الإرسال للتوقيع." },
+      { value: "100%", unit: "", label: "دقة في حساب السعر والعمولة حسب قواعد كل شركة تأمين." },
     ],
   },
   {
-    id: "claims",
-    label: "إدارة المطالبات",
+    id: "payments",
+    label: "تحصيل ومالية",
     num: "02",
-    title: "المطالبات تُغلق أسرع،\nبدون مراسلات لا نهائية.",
-    desc: "إدارة مطالبات ذكية مع تحديثات تلقائية للعميل، جمع مستندات رقمي ومزامنة كاملة مع شركات التأمين. العميل يبقى على اطلاع، وأنت متفرّغ للبيع التالي.",
+    title: "تحصيل كامل بدون Excel،\nشيكات بلا عناء.",
+    desc: "استلام الشيكات مع تسجيل البنك والفرع والتاريخ، تقسيط داخلي مع متابعة المستحقات على العميل، ربط مباشر مع Tranzila لبطاقات الائتمان، وإيصالات نقدية قابلة للطباعة أو الإرسال عبر SMS — كل ذلك في ملف واحد.",
     stats: [
-      { value: "12", unit: "دقيقة", label: "متوسط الوقت الموفّر للوكيل على فتح مطالبة وتحديث الحالة مع شركات التأمين، بفضل مزامنة البيانات التلقائية." },
-      { value: "65%", unit: "", label: "تقليص في وقت جمع المستندات من العميل. النظام يرسل طلبات تلقائية ويبدأ الملفات مباشرة في ملف المطالبة بدون تدخل يدوي." },
+      { value: "Tranzila", unit: "", label: "ربط مباشر لدفع بطاقات الائتمان بضغطة زر من داخل الوثيقة." },
+      { value: "65%", unit: "", label: "تقليص في وقت متابعة الديون وتسوية الشيكات بلا Excel يدوي." },
     ],
   },
   {
-    id: "marketing",
+    id: "sms",
     label: "أتمتة التسويق",
     num: "03",
-    title: "تسويق تلقائي يعمل من أجلك.",
-    desc: "إرسال SMS وحملات تلقائية للعملاء، تذكيرات تجديد، تحديثات عروض والحفاظ على العملاء — كل شيء بدون جهد يدوي.",
+    title: "النظام يذكّر العميل\nقبل ما تفكر فيه.",
+    desc: "تذكيرات تجديد تلقائية قبل شهر وأسبوع من انتهاء الوثيقة، حملات SMS جماعية مع اختيار عملاء ذكي حسب الفرع أو الشركة، نماذج رسائل مخصصة لكل نوع تنبيه، وتتبع كامل لحالة الإرسال مع تقارير DLR.",
     stats: [
-      { value: "40%", unit: "", label: "ارتفاع في نسبة تجديد الوثائق بفضل التذكيرات التلقائية." },
-      { value: "5K+", unit: "", label: "رسائل SMS تُرسل شهرياً عبر النظام." },
+      { value: "40%", unit: "", label: "ارتفاع في نسبة تجديد الوثائق بفضل التذكيرات التلقائية قبل الانتهاء." },
+      { value: "5K+", unit: "", label: "رسائل SMS تُرسل شهرياً — تذكيرات، تسويات، وحملات مستهدفة." },
     ],
   },
   {
-    id: "bi",
-    label: "رقابة وتحليلات",
+    id: "reports",
+    label: "تقارير لحظية",
     num: "04",
-    title: "سيطرة كاملة على البيانات.",
-    desc: "تقارير ربحية، متابعة عمولات، تحليل أداء الوكلاء ونظرة شاملة على جميع الفروع — بالوقت الفعلي وبضغطة واحدة.",
+    title: "كل شيكل مرصود،\nكل فرع تحت السيطرة.",
+    desc: "تقارير أرباح مع تفصيل العمولات والمصاريف، رصيد خزينة حيّ مع فصل الدخل عن المصروفات، متابعة الأرصدة المستحقة لكل شركة تأمين، وتقارير متعددة الفروع بالوقت الفعلي — مع تصدير فوري إلى Excel.",
     stats: [
-      { value: "50%", unit: "", label: "توفير في وقت إعداد التقارير المالية." },
-      { value: "∞", unit: "", label: "تقارير مخصصة بلا حدود." },
+      { value: "لحظياً", unit: "", label: "محرك حسابات الأرباح يُحدَّث مع كل عملية — بدون انتظار نهاية الشهر." },
+      { value: "∞", unit: "", label: "تقارير مخصصة حسب الفرع والوسيط والشركة والفترة، قابلة للتصدير." },
     ],
   },
   {
-    id: "cx",
-    label: "تجربة العميل",
+    id: "brokers",
+    label: "محفظة الوسطاء",
     num: "05",
-    title: "تجربة عميل تبيع نفسها.",
-    desc: "توقيعات رقمية، بوابة عميل، تواصل مباشر عبر WhatsApp ومتابعة كل تفاعل — عملاؤك سيشعرون بالفرق.",
+    title: "عمولات محسوبة تلقائياً،\nتسويات دقيقة.",
+    desc: "حساب العمولات تلقائياً على كل وثيقة، تسويات مع الوسطاء مع تتبع الأرصدة والمستحقات، تسويات مع شركات التأمين بأسعارهم ومدفوعاتهم، وتقارير مفصلة لكل علاقة مالية — بدون جداول إكسل يدوية.",
     stats: [
-      { value: "95%", unit: "", label: "رضا العملاء عن الواجهة الرقمية." },
-      { value: "24/7", unit: "", label: "وصول ذاتي للعميل للوثائق والمستندات." },
+      { value: "0", unit: "", label: "عمولات ضائعة — كل شيكل محسوب على صاحبه من لحظة الإصدار." },
+      { value: "∞", unit: "", label: "وسطاء وشركات تأمين، كل واحد بمحفظة مالية منفصلة." },
     ],
   },
 ];
@@ -224,7 +229,7 @@ export default function Landing() {
   usePageView("/landing");
   const { data: content } = useLandingContent();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("claims");
+  const [activeTab, setActiveTab] = useState("policies");
   const [slideIdx, setSlideIdx] = useState(0);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
   const [testimonialAnim, setTestimonialAnim] = useState<"in" | "out">("in");
@@ -738,6 +743,16 @@ export default function Landing() {
         .hs-visible .hs-d-10 { animation-delay: 2.25s; }
         .hs-visible .hs-d-11 { animation-delay: 2.40s; }
         .hs-visible .hs-d-12 { animation-delay: 2.55s; }
+        .hs-visible .hs-d-13 { animation-delay: 2.70s; }
+        .hs-visible .hs-d-14 { animation-delay: 2.85s; }
+
+        /* Depth-of-field pills — out-of-focus sibling cards that
+           sit further in the "distance". Slight opacity drop +
+           physical blur filter sells the layered depth. */
+        .hs-pill-blur {
+          filter: blur(3px);
+          opacity: 0.55;
+        }
 
         .hs-highlight {
           background: #122042;
@@ -882,6 +897,21 @@ export default function Landing() {
           <div className="hs-pill hs-pill-r hs-d-12 hidden md:flex absolute top-[65%] right-[2%] lg:right-[3%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
             <CreditCard className="h-5 w-5 text-[#122042] flex-shrink-0" strokeWidth={2} />
             <span className="text-[14px] font-semibold text-black whitespace-nowrap">تحصيل مطلوب</span>
+          </div>
+
+          {/* Depth-of-field cards — blurred/faded siblings further in
+              the background. Same cream pill design but with the
+              .hs-pill-blur filter class, placed at "between" spots
+              not covered by the sharp pills so they fill negative
+              space and add depth without competing for attention. */}
+          <div className="hs-pill hs-pill-blur hs-pill-l hs-d-13 hidden md:flex absolute top-[6%] left-[22%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.1)]">
+            <Bell className="h-4 w-4 text-[#122042] flex-shrink-0" strokeWidth={2.2} />
+            <span className="text-[13px] font-semibold text-black whitespace-nowrap">رسالة جديدة</span>
+          </div>
+
+          <div className="hs-pill hs-pill-blur hs-pill-r hs-d-14 hidden md:flex absolute top-[74%] right-[20%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.1)]">
+            <Clock className="h-4 w-4 text-amber-600 flex-shrink-0" strokeWidth={2.2} />
+            <span className="text-[13px] font-semibold text-black whitespace-nowrap">طلب معلق</span>
           </div>
         </div>
       </section>
