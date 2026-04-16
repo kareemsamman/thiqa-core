@@ -20,6 +20,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
+import { ClickablePhone } from '@/components/shared/ClickablePhone';
 import {
   ChevronRight,
   ChevronLeft,
@@ -28,7 +29,7 @@ import {
   XCircle,
   SkipForward,
   Loader2,
-  Phone,
+  Users,
   User,
 } from 'lucide-react';
 
@@ -37,6 +38,9 @@ interface RenewalAssistantProps {
   onOpenChange: (open: boolean) => void;
   agentId: string;
   month: string; // 'YYYY-MM' format
+  /** Fires after a successful upsert so the parent can refresh its
+   *  tables and — for 'renewed' — auto-switch to the tam-altajdid tab. */
+  onActionComplete?: (status: 'renewed' | 'pending' | 'declined_renewal') => void;
 }
 
 interface PolicyRow {
@@ -60,7 +64,7 @@ interface ClientGroup {
 
 type RenewalStatus = 'renewed' | 'pending' | 'declined_renewal';
 
-export function RenewalAssistant({ open, onOpenChange, agentId, month }: RenewalAssistantProps) {
+export function RenewalAssistant({ open, onOpenChange, agentId, month, onActionComplete }: RenewalAssistantProps) {
   const [clients, setClients] = useState<ClientGroup[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -230,6 +234,10 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month }: Renewal
 
       toast.success(`${currentClient.clientName}: ${statusLabels[status]}`);
 
+      // Notify the parent so it can refetch tables and, for 'renewed',
+      // auto-switch the sub-tab to "تم التجديد".
+      onActionComplete?.(status);
+
       // Remove client from list if renewed or declined
       if (status === 'renewed' || status === 'declined_renewal') {
         setClients((prev) => {
@@ -280,9 +288,12 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month }: Renewal
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" dir="rtl">
         <DialogHeader>
-          <DialogTitle className="text-xl">مساعد التجديد</DialogTitle>
+          <DialogTitle className="text-xl flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            مساعد التجديد — {month}
+          </DialogTitle>
           <DialogDescription>
-            متابعة تجديد وثائق شهر {month}
+            متابعة عملاء الوثائق المنتهية خلال هذا الشهر
           </DialogDescription>
         </DialogHeader>
 
@@ -323,15 +334,15 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month }: Renewal
 
             {/* Client info */}
             <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <User className="h-5 w-5 text-muted-foreground" />
                 <span className="font-semibold text-lg">{currentClient.clientName}</span>
+                <Badge variant="outline" className="text-xs">
+                  {currentClient.policies.length} {currentClient.policies.length === 1 ? 'وثيقة' : 'وثائق'}
+                </Badge>
               </div>
               {currentClient.clientPhone && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Phone className="h-4 w-4" />
-                  <span dir="ltr">{currentClient.clientPhone}</span>
-                </div>
+                <ClickablePhone phone={currentClient.clientPhone} className="text-muted-foreground" showIcon />
               )}
             </div>
 

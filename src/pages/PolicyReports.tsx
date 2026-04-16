@@ -56,6 +56,8 @@ import {
   CreditCard,
   Banknote,
   Package,
+  Users,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { extractFunctionErrorMessage } from '@/lib/functionError';
@@ -63,8 +65,10 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 import { useAuth } from '@/hooks/useAuth';
+import { useAgentContext } from '@/hooks/useAgentContext';
 import { ClickablePhone } from '@/components/shared/ClickablePhone';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
+import { RenewalAssistant } from '@/components/reports/RenewalAssistant';
 
 const policyTypeLabels: Record<string, string> = {
   ELZAMI: 'إلزامي',
@@ -244,7 +248,22 @@ const PAGE_SIZE = 25;
 export default function PolicyReports() {
   const navigate = useNavigate();
   const { isAdmin, user } = useAuth();
+  const { agentId } = useAgentContext();
   const [activeTab, setActiveTab] = useState('created');
+  // Sub-tab inside the Renewals top-tab. Starts on "pending" — the
+  // legacy list — and flips to "renewed" whenever a follow-up is
+  // marked as renewed (via the assistant or the wizard onSaved).
+  const [renewalSubTab, setRenewalSubTab] = useState<'pending' | 'declined' | 'renewed'>('pending');
+  const [renewalAssistantOpen, setRenewalAssistantOpen] = useState(false);
+  const [declinedFollowups, setDeclinedFollowups] = useState<Array<{
+    client_id: string;
+    client_name: string;
+    client_phone: string | null;
+    follow_up_month: string;
+    decline_reason: string | null;
+    updated_at: string;
+  }>>([]);
+  const [declinedLoading, setDeclinedLoading] = useState(false);
   
   // Created Policies State
   const [createdPolicies, setCreatedPolicies] = useState<CreatedPolicy[]>([]);
@@ -525,6 +544,42 @@ export default function PolicyReports() {
     }
   };
 
+  // "رافضون" sub-tab. Pulls clients from renewal_followups where the
+  // agent flagged them as declined_renewal for the month currently in
+  // view. The decline_reason is shown in the table so staff can see
+  // why the customer bailed without opening the client page.
+  const fetchDeclinedFollowups = async () => {
+    if (!renewalsMonth) return;
+    setDeclinedLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('renewal_followups' as any)
+        .select(`
+          client_id, follow_up_month, decline_reason, updated_at,
+          client:clients(full_name, phone_number)
+        `)
+        .eq('follow_up_month', renewalsMonth)
+        .eq('status', 'declined_renewal')
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+      const rows = ((data as any[]) || []).map((r) => ({
+        client_id: r.client_id,
+        client_name: r.client?.full_name || 'غير معروف',
+        client_phone: r.client?.phone_number || null,
+        follow_up_month: r.follow_up_month,
+        decline_reason: r.decline_reason,
+        updated_at: r.updated_at,
+      }));
+      setDeclinedFollowups(rows);
+    } catch (error) {
+      console.error('Error fetching declined followups:', error);
+      toast.error('فشل في تحميل قائمة الرافضين');
+    } finally {
+      setDeclinedLoading(false);
+    }
+  };
+
   // Fetch client's detailed policies for expansion
   const fetchClientPolicies = async (clientId: string) => {
     if (clientPolicies[clientId]) {
@@ -608,6 +663,27 @@ export default function PolicyReports() {
       fetchRenewals();
     }
   }, [activeTab, renewalsPage, renewalsMonth, renewalsDaysFilter, renewalsPolicyTypeFilter, renewalsCreatedByFilter, renewalsSearch]);
+
+  // Sub-tab data fetchers — declined list comes from renewal_followups,
+  // the tam-altajdid list reuses fetchRenewedClients with the renewals
+  // tab's month filter so the user doesn't have to retype it.
+  useEffect(() => {
+    if (activeTab !== 'renewals') return;
+    if (renewalSubTab === 'declined') {
+      fetchDeclinedFollowups();
+    } else if (renewalSubTab === 'renewed') {
+      // Align the inner "tam altajdid" view with the renewals month so
+      // the two sub-tabs reconcile. We call fetchRenewedClients via the
+      // same month filter used by the pending list.
+      if (renewalsMonth) {
+        // Keep the existing renewedMonth in state too, so the top-level
+        // "tam altajdid" tab stays in sync if the user jumps there.
+        setRenewedMonth(renewalsMonth);
+      }
+      fetchRenewedClients();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, renewalSubTab, renewalsMonth]);
 
   // Fetch renewed clients
   const fetchRenewedClients = async () => {
@@ -1398,6 +1474,16 @@ export default function PolicyReports() {
                 </div>
 
                 <div className="flex gap-2 mr-auto">
+                  {/* مساعد التجديد — guided walkthrough of every client
+                      whose policies expire this month, posting to the
+                      renewal_followups table. */}
+                  <Button
+                    onClick={() => setRenewalAssistantOpen(true)}
+                    disabled={!agentId || renewalClients.length === 0}
+                  >
+                    <Users className="h-4 w-4 ml-2" />
+                    مساعد التجديد
+                  </Button>
                   {/* PDF للمسؤولين فقط */}
                   {isAdmin && (
                     <Button variant="outline" onClick={handleGeneratePdf} disabled={generatingPdf}>
@@ -1406,7 +1492,7 @@ export default function PolicyReports() {
                     </Button>
                   )}
                   {/* SMS للجميع */}
-                  <Button onClick={handleSendReminders} disabled={sendingReminders || renewalClients.length === 0}>
+                  <Button variant="outline" onClick={handleSendReminders} disabled={sendingReminders || renewalClients.length === 0}>
                     {sendingReminders ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Send className="h-4 w-4 ml-2" />}
                     إرسال تذكيرات SMS {renewalClients.length > 0 && `(${renewalsTotalRows})`}
                   </Button>
@@ -1414,6 +1500,27 @@ export default function PolicyReports() {
               </div>
             </Card>
 
+            {/* Sub-tabs: معلقون / رافضون / تم التجديد. The existing
+                pending list stays as "معلقون" — we only wrap it so the
+                user can flip between three views without leaving the
+                Renewals top-tab. */}
+            <Tabs value={renewalSubTab} onValueChange={(v) => setRenewalSubTab(v as 'pending' | 'declined' | 'renewed')}>
+              <TabsList className="grid w-full max-w-lg grid-cols-3">
+                <TabsTrigger value="pending" className="gap-2">
+                  <Clock className="h-4 w-4" />
+                  معلقون
+                </TabsTrigger>
+                <TabsTrigger value="declined" className="gap-2">
+                  <XCircle className="h-4 w-4" />
+                  رافضون
+                </TabsTrigger>
+                <TabsTrigger value="renewed" className="gap-2">
+                  <CheckCircle className="h-4 w-4" />
+                  تم التجديد
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="pending" className="mt-4">
             {/* Table - Grouped by Customer */}
             <Card className="overflow-hidden">
               {renewalsLoading ? (
@@ -1505,7 +1612,7 @@ export default function PolicyReports() {
                               <div className="flex flex-wrap gap-1">
                                 {client.policy_types?.map(type => (
                                   <Badge key={type} variant="secondary" className="text-xs">
-                                    {policyTypeLabels[type] || type}
+                                    {getInsuranceTypeLabel(type as any, null)}
                                   </Badge>
                                 ))}
                               </div>
@@ -1671,6 +1778,146 @@ export default function PolicyReports() {
                 </>
               )}
             </Card>
+              </TabsContent>
+
+              {/* رافضون — clients whose follow-up status was flipped to
+                  'declined_renewal' for the renewals-month in view. */}
+              <TabsContent value="declined" className="mt-4">
+                <Card className="overflow-hidden">
+                  {declinedLoading ? (
+                    <div className="p-4 space-y-2">
+                      {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                    </div>
+                  ) : declinedFollowups.length === 0 ? (
+                    <div className="text-center py-12">
+                      <XCircle className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+                      <p className="text-muted-foreground">لا يوجد عملاء مسجلين كرافضي التجديد لهذا الشهر</p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="text-right">العميل</TableHead>
+                          <TableHead className="text-right">الهاتف</TableHead>
+                          <TableHead className="text-right">سبب الرفض</TableHead>
+                          <TableHead className="text-right">تاريخ التسجيل</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {declinedFollowups.map((row) => (
+                          <TableRow key={`${row.client_id}-${row.follow_up_month}`} className="hover:bg-muted/30">
+                            <TableCell>
+                              <button
+                                onClick={() => navigate(`/clients/${row.client_id}`, {
+                                  state: { from: '/reports/policies', tab: 'renewals' },
+                                })}
+                                className="font-medium hover:text-primary hover:underline transition-colors text-right"
+                              >
+                                {row.client_name}
+                              </button>
+                            </TableCell>
+                            <TableCell>
+                              <ClickablePhone phone={row.client_phone} />
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {row.decline_reason || '—'}
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">
+                              {formatDate(row.updated_at)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </Card>
+              </TabsContent>
+
+              {/* تم التجديد — reuses report_renewed_clients with a
+                  slimmer column set (old → new per car + price delta).
+                  The detail-heavy top-level "renewed" tab stays intact;
+                  this one is a quick snapshot inside the renewals flow. */}
+              <TabsContent value="renewed" className="mt-4">
+                <Card className="overflow-hidden">
+                  {renewedLoading ? (
+                    <div className="p-4 space-y-2">
+                      {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                    </div>
+                  ) : renewedClients.length === 0 ? (
+                    <div className="text-center py-12">
+                      <CheckCircle className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+                      <p className="text-muted-foreground">لا يوجد عملاء قاموا بالتجديد لهذا الشهر</p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="text-right">العميل</TableHead>
+                          <TableHead className="text-right">رقم السيارة</TableHead>
+                          <TableHead className="text-right">النوع (قديم → جديد)</TableHead>
+                          <TableHead className="text-right">السعر (قديم → جديد)</TableHead>
+                          <TableHead className="text-right">فرق السعر</TableHead>
+                          <TableHead className="text-right">تاريخ التجديد</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {renewedClients.map((client) => {
+                          const priceDiff = (client.new_total_price || 0) - (client.total_insurance_price || 0);
+                          const oldTypesLabel = (client.policy_types || []).map((t) =>
+                            getInsuranceTypeLabel(t as any, null)
+                          ).join(' + ') || '—';
+                          const newTypesLabel = (client.new_policy_types || []).map((t) =>
+                            getInsuranceTypeLabel(t as any, null)
+                          ).join(' + ') || '—';
+                          const carLabel = '—'; // car_number aggregation isn't in the RPC shape
+                          return (
+                            <TableRow key={client.client_id} className="hover:bg-muted/30">
+                              <TableCell>
+                                <button
+                                  onClick={() => navigate(`/clients/${client.client_id}`, {
+                                    state: { from: '/reports/policies', tab: 'renewals' },
+                                  })}
+                                  className="font-medium hover:text-primary hover:underline transition-colors text-right"
+                                >
+                                  {client.client_name}
+                                </button>
+                                {client.client_file_number && (
+                                  <p className="text-xs text-muted-foreground">{client.client_file_number}</p>
+                                )}
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">{carLabel}</TableCell>
+                              <TableCell className="text-sm">
+                                <span className="text-muted-foreground">{oldTypesLabel}</span>
+                                <ArrowLeftRight className="inline h-3 w-3 mx-1 text-muted-foreground" />
+                                <span className="font-medium">{newTypesLabel}</span>
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">
+                                <span className="text-muted-foreground">
+                                  ₪{(client.total_insurance_price || 0).toLocaleString('en-US')}
+                                </span>
+                                <ArrowLeftRight className="inline h-3 w-3 mx-1 text-muted-foreground" />
+                                <span className="font-medium">
+                                  ₪{(client.new_total_price || 0).toLocaleString('en-US')}
+                                </span>
+                              </TableCell>
+                              <TableCell className={cn(
+                                "font-bold font-mono",
+                                priceDiff > 0 ? "text-green-600" : priceDiff < 0 ? "text-destructive" : "",
+                              )}>
+                                {priceDiff > 0 ? '+' : ''}₪{priceDiff.toLocaleString('en-US')}
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">
+                                {client.new_start_date ? formatDate(client.new_start_date) : '—'}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </Card>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           {/* Renewed Clients Tab */}
@@ -1986,9 +2233,40 @@ export default function PolicyReports() {
           setClientPolicies({});
           setExpandedClientId(null);
           fetchRenewals();
+          // Auto-switch the sub-tab to "tam altajdid" and refetch so the
+          // user sees the just-renewed client immediately. fetchRenewedClients
+          // is also keyed on the sub-tab effect, but call it explicitly in
+          // case the sub-tab was already on 'renewed' (the effect would
+          // have already been coasting on stale data).
+          setRenewalSubTab('renewed');
+          fetchRenewedClients();
         }}
         renewalData={renewalData ?? undefined}
       />
+
+      {/* Renewal Assistant — guided walkthrough modal. agentId is
+          required so renewal_followups rows get the right tenant. */}
+      {agentId && (
+        <RenewalAssistant
+          open={renewalAssistantOpen}
+          onOpenChange={setRenewalAssistantOpen}
+          agentId={agentId}
+          month={renewalsMonth}
+          onActionComplete={(status) => {
+            // Always refetch the pending list so counts update.
+            fetchRenewals();
+            if (status === 'declined_renewal') {
+              fetchDeclinedFollowups();
+            }
+            if (status === 'renewed') {
+              // Client likely has new policies now — jump them to the
+              // tam-altajdid sub-tab and refetch it.
+              setRenewalSubTab('renewed');
+              fetchRenewedClients();
+            }
+          }}
+        />
+      )}
     </MainLayout>
   );
 }
