@@ -1054,53 +1054,206 @@ export default function Landing() {
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
-      <section id="features" className="py-24 md:py-36 relative bg-white">
+      {/* ═══ Section 3: The big 3 ═══
+          Three headline themes each anchored in real CRM capabilities
+          (profit engine, paperless, marketing automation). The hero
+          block is a gradient+icon placeholder so the section feels
+          finished right now — the design is ready to accept an
+          <img> per card when the user drops in new artwork (just
+          replace the inner contents of the `.bn-hero` div). */}
+      <style>{`
+        .bn-card {
+          opacity: 0;
+          transform: translate3d(0, 28px, 0);
+          transition:
+            opacity 0.8s cubic-bezier(0.22,1,0.36,1),
+            transform 0.8s cubic-bezier(0.22,1,0.36,1),
+            box-shadow 0.35s ease,
+            border-color 0.35s ease;
+        }
+        .bn-visible .bn-card {
+          opacity: 1;
+          transform: translate3d(0, 0, 0);
+        }
+        .bn-card:hover {
+          transform: translate3d(0, -6px, 0);
+        }
+        .bn-card .bn-icon {
+          transition: transform 0.45s cubic-bezier(0.22,1,0.36,1);
+        }
+        .bn-card:hover .bn-icon {
+          transform: scale(1.08) rotate(-4deg);
+        }
+        .bn-card .bn-hero-num {
+          transition: transform 0.6s cubic-bezier(0.22,1,0.36,1), opacity 0.6s ease;
+        }
+        .bn-card:hover .bn-hero-num {
+          transform: scale(1.04) translateX(6px);
+          opacity: 0.18;
+        }
+      `}</style>
+      <section
+        id="features"
+        ref={(el) => {
+          if (!el) return;
+          if ((el as HTMLElement & { __bnBound?: boolean }).__bnBound) return;
+          (el as HTMLElement & { __bnBound?: boolean }).__bnBound = true;
+          const io = new IntersectionObserver(
+            (entries) => {
+              for (const e of entries) {
+                if (e.isIntersecting) {
+                  e.target.classList.add("bn-visible");
+                  io.disconnect();
+                  break;
+                }
+              }
+            },
+            { threshold: 0.15 },
+          );
+          io.observe(el);
+        }}
+        className="pt-10 md:pt-14 pb-24 md:pb-32 relative bg-white"
+      >
         <div className="max-w-6xl mx-auto px-6 text-center">
-          <p className="text-sm text-black/50 mb-4 tracking-wide">{ct(content, "benefits_section_label", "البيت الرقمي لوكالتك")}</p>
+          <p className="text-sm text-[#4a6cc7] mb-3 tracking-wide font-semibold">
+            {ct(content, "benefits_section_label", "لماذا Thiqa هو الفرق")}
+          </p>
           <h2 className="text-3xl md:text-[2.8rem] font-bold leading-tight mb-4 text-black">
-            {ct(content, "benefits_section_title", "كل الأدوات لإدارة الوكالة تحت سقف واحد")}
+            {ct(content, "benefits_section_title", "ثلاثة محاور تقلب طريقة عمل الوكالة")}
           </h2>
-          <p className="text-black/55 text-sm max-w-xl mx-auto mb-16">
-            {ct(content, "benefits_section_subtitle", "بنية تقنية متقدمة توفر لك الوقت، تمنع الأخطاء وتزيد الربحية.")}
+          <p className="text-black/55 text-sm max-w-xl mx-auto mb-12">
+            {ct(content, "benefits_section_subtitle", "محرك مالي يحسب كل شيكل، ملف رقمي صفر ورق، وأتمتة تسويق تعيد العملاء قبل أن تفقدهم.")}
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-14">
             {[
               {
-                img: featureProfitEngine,
-                title: ct(content, "benefit_card_1_title", "محرك حساب أرباح تلقائي."),
-                desc: ct(content, "benefit_card_1_desc", "إدارة تدفقات الشيكات، تحصيل بطاقات ائتمان وتسوية مع الوسطاء وشركات التأمين بدقة 100%. بدون خسارة عمولات وبدون حسابات يدوية."),
+                num: "01",
+                icon: Wallet,
+                title: "محرك حساب أرباح تلقائي",
+                intro:
+                  "كل شيكل يدخل ويخرج يُحسب ويُصنَّف تلقائياً — بدون Excel، بدون عمولات ضائعة.",
+                bullets: [
+                  "أرباح محسوبة حياً على كل وثيقة وكل عميل",
+                  "ربط مباشر مع Tranzila وإدارة كاملة للشيكات",
+                  "تسويات تلقائية مع الوسطاء وشركات التأمين",
+                ],
+                gradient: "linear-gradient(135deg, #ecfdf5 0%, #a7f3d0 100%)",
+                accent: "#059669",
               },
               {
-                img: featurePaperless,
-                title: ct(content, "benefit_card_2_title", "صفر أوراق، أقصى سرعة."),
-                desc: ct(content, "benefit_card_2_desc", "إرسال وثائق للتوقيع الرقمي عبر SMS، إدارة مستندات آمنة في السحابة ومتابعة كاملة لدورة حياة الوثيقة — كل شيء من الكمبيوتر أو الجوال."),
+                num: "02",
+                icon: Shield,
+                title: "صفر أوراق، أقصى سرعة",
+                intro:
+                  "من إصدار الوثيقة حتى تجديدها — كل خطوة رقمية، وكل مستند آمن في السحابة.",
+                bullets: [
+                  "توقيع رقمي عبر SMS يصل الجوال مباشرة",
+                  "إدارة مستندات كاملة مع وصول فوري 24/7",
+                  "متابعة دورة الوثيقة من الإصدار للتجديد",
+                ],
+                gradient: "linear-gradient(135deg, #eef2ff 0%, #c7d2fe 100%)",
+                accent: "#4f46e5",
               },
               {
-                img: featureMarketing,
-                title: ct(content, "benefit_card_3_title", "تحويل البيانات إلى مبيعات."),
-                desc: ct(content, "benefit_card_3_desc", "نظام تسويق مدمج لإرسال حملات عبر SMS وبريد إلكتروني. تذكيرات تلقائية للتجديدات، تحديثات عروض والحفاظ على العملاء بشكل فعّال."),
+                num: "03",
+                icon: MessageSquare,
+                title: "تحويل البيانات إلى مبيعات",
+                intro:
+                  "النظام يعرف متى يذكّر، مع من يتواصل وكيف — فلا تخسر عميلاً ولا تجديد.",
+                bullets: [
+                  "حملات SMS جماعية مع اختيار عملاء ذكي",
+                  "تذكيرات تجديد تلقائية قبل شهر وأسبوع",
+                  "تتبع حالة الإرسال مع تقارير DLR",
+                ],
+                gradient: "linear-gradient(135deg, #fff1f2 0%, #fecdd3 100%)",
+                accent: "#e11d48",
               },
-            ].map((card, i) => (
-              <div key={i} className="rounded-2xl border border-black/[0.08] bg-black/[0.02] overflow-hidden text-center shadow-sm">
-                <div className="aspect-[4/3] overflow-hidden bg-black/[0.03]">
-                  <img src={card.img} alt="" className="w-full h-full object-cover" loading="lazy" />
+            ].map((card, i) => {
+              const Icon = card.icon;
+              return (
+                <div
+                  key={i}
+                  className="bn-card relative rounded-2xl border border-black/[0.06] bg-white overflow-hidden text-right shadow-[0_6px_22px_-14px_rgba(18,32,66,0.14)] hover:shadow-[0_24px_60px_-16px_rgba(18,32,66,0.22)] hover:border-[#122042]/15"
+                  style={{ transitionDelay: `${i * 120}ms` }}
+                >
+                  {/* Hero block — swap this div's contents for <img
+                      src={yourImage} className="w-full h-full object-cover" />
+                      when the artwork lands. The wrapper keeps the
+                      4:3 aspect + rounded top corners. */}
+                  <div
+                    className="bn-hero relative aspect-[4/3] overflow-hidden"
+                    style={{ background: card.gradient }}
+                  >
+                    <div
+                      className="absolute inset-0 opacity-[0.2]"
+                      style={{
+                        backgroundImage:
+                          "radial-gradient(circle at 1px 1px, rgba(18,32,66,0.35) 1px, transparent 0)",
+                        backgroundSize: "20px 20px",
+                      }}
+                    />
+                    <span
+                      className="bn-hero-num absolute top-4 left-6 text-6xl md:text-7xl font-black leading-none opacity-[0.12] pointer-events-none select-none"
+                      style={{ color: card.accent }}
+                    >
+                      {card.num}
+                    </span>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div
+                        className="bn-icon h-20 w-20 md:h-24 md:w-24 rounded-2xl bg-white/90 backdrop-blur-sm flex items-center justify-center"
+                        style={{ boxShadow: `0 18px 40px -14px ${card.accent}66` }}
+                      >
+                        <Icon
+                          className="h-10 w-10 md:h-12 md:w-12"
+                          strokeWidth={1.6}
+                          style={{ color: card.accent }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-7 md:p-8">
+                    <p
+                      className="text-[11px] font-bold tracking-[0.18em] mb-2"
+                      style={{ color: card.accent }}
+                    >
+                      {`ميزة ${card.num}`}
+                    </p>
+                    <h3 className="text-xl font-extrabold mb-3 text-black leading-tight">
+                      {card.title}
+                    </h3>
+                    <p className="text-[13px] text-black/60 leading-relaxed mb-5">
+                      {card.intro}
+                    </p>
+                    <ul className="space-y-2.5">
+                      {card.bullets.map((b, idx) => (
+                        <li
+                          key={idx}
+                          className="flex items-start gap-2 text-[13px] text-black/75 leading-relaxed"
+                        >
+                          <Check
+                            className="h-4 w-4 flex-shrink-0 mt-0.5"
+                            strokeWidth={3}
+                            style={{ color: card.accent }}
+                          />
+                          <span>{b}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
-                <div className="p-6 pt-5">
-                  <h3 className="text-lg font-bold mb-2 text-black">{card.title}</h3>
-                  <p className="text-sm text-black/60 leading-relaxed">{card.desc}</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <button
             onClick={() => navigate("/login?view=signup")}
             className="px-10 py-4 text-[15px] font-bold text-white hover:opacity-90 transition-opacity"
             style={{
-              borderRadius: '100px',
-              background: '#111',
-              boxShadow: '0 4px 16px 0 rgba(0, 0, 0, 0.12)',
+              borderRadius: "100px",
+              background: "#122042",
+              boxShadow: "0 12px 30px -8px rgba(18,32,66,0.4)",
             }}
           >
             احصل على 35 يوم مجاناً
