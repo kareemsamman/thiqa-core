@@ -1,6 +1,15 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import thiqaIconDefault from "@/assets/thiqa-logo-icon.svg";
 
 const TEXT = "Thiqa";
+const DURATION_MS = 2800;
+
+// ── Easing helpers ──────────────────────────────────────────────────
+const clamp = (v: number, min = 0, max = 1) => Math.min(max, Math.max(min, v));
+const progress = (t: number, s: number, e: number) => clamp((t - s) / (e - s));
+const easeOutExpo = (t: number) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t));
+const easeOutQuint = (t: number) => 1 - Math.pow(1 - t, 5);
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 // Inject DM Sans once per document. Deduped by href so hot-reloads
 // don't stack multiple <link> tags.
@@ -31,10 +40,11 @@ interface ThiqaLogoAnimationProps {
   subtitleClassName?: string;
 }
 
-// Static Thiqa logo lockup. Everything renders at its final geometry
-// on the very first paint — no animation, no empty flash. Colors use
-// `currentColor` so the parent can set a dark or light palette via
-// `color:` / Tailwind text-* classes.
+// Thiqa logo lockup for the login page. The circular icon is fully
+// static — it paints at its final size/position on the first frame.
+// Only the "Thiqa" wordmark animates: each letter fades + rises +
+// settles, staggered L→R. Subtitle, when provided, fades+staggers in
+// by word under the lockup. Colors use `currentColor`.
 export function ThiqaLogoAnimation({
   iconSize = 92,
   iconSrc = thiqaIconDefault,
@@ -42,6 +52,37 @@ export function ThiqaLogoAnimation({
   subtitle,
   subtitleClassName,
 }: ThiqaLogoAnimationProps = {}) {
+  const [t, setT] = useState<number>(0);
+  const raf = useRef<number | null>(null);
+  const startTs = useRef<number | null>(null);
+
+  const play = useCallback(() => {
+    startTs.current = null;
+    const tick = (ts: number) => {
+      if (startTs.current == null) startTs.current = ts;
+      const p = Math.min((ts - startTs.current) / DURATION_MS, 1);
+      setT(p);
+      if (p < 1) {
+        raf.current = requestAnimationFrame(tick);
+      }
+    };
+    raf.current = requestAnimationFrame(tick);
+  }, []);
+
+  useEffect(() => {
+    play();
+    return () => {
+      if (raf.current != null) cancelAnimationFrame(raf.current);
+    };
+  }, [play]);
+
+  // Wordmark letters stagger in over 0 → 0.55. Subtitle words stagger
+  // in 0.4 → 1.0 so the two motions overlap into one cohesive settle.
+  const textBase = progress(t, 0, 0.55);
+  const subtitleBase = progress(t, 0.4, 1.0);
+
+  const subtitleWords = subtitle ? subtitle.split(/\s+/).filter(Boolean) : [];
+
   const gap = Math.round(iconSize * 0.28);
   const fontSize = Math.round(iconSize * 0.62);
   const subtitleGap = Math.round(iconSize * 0.22);
@@ -65,8 +106,9 @@ export function ThiqaLogoAnimation({
           gap: `${gap}px`,
         }}
       >
-        {/* Wordmark — source first, so in an RTL flex row it lands on
-            the main-axis start = physical-right side of the icon. */}
+        {/* Wordmark — animated letter-by-letter. Source first so in
+            the login page's RTL flex row it lands on the physical
+            right of the icon. */}
         <div
           style={{
             display: "flex",
@@ -77,16 +119,41 @@ export function ThiqaLogoAnimation({
             color: "currentColor",
             letterSpacing: "-0.005em",
             lineHeight: 1,
+            overflow: "hidden",
             whiteSpace: "nowrap",
-            // Force LTR so the Latin wordmark reads left-to-right
-            // regardless of parent direction.
+            // Force the Latin wordmark to read left-to-right so the
+            // letters stagger in reading order regardless of parent.
             direction: "ltr",
           }}
         >
-          {TEXT}
+          {TEXT.split("").map((char, i) => {
+            const ls = (i * 0.18) / TEXT.length;
+            const le = Math.min(ls + 0.55, 1);
+            const raw = progress(textBase, ls, le);
+            const eased = easeOutQuint(raw);
+            const op = easeOutExpo(raw);
+            const y = lerp(22, 0, eased);
+            const sc = lerp(0.85, 1, eased);
+
+            return (
+              <span
+                key={i}
+                style={{
+                  display: "inline-block",
+                  opacity: op,
+                  transform: `translateY(${y}px) scale(${sc})`,
+                  transformOrigin: "50% 100%",
+                  willChange: "transform, opacity",
+                }}
+              >
+                {char}
+              </span>
+            );
+          })}
         </div>
 
-        {/* Icon */}
+        {/* Icon — fully static. No scale/opacity/blur/outline; paints
+            at final geometry on the first frame. */}
         <div
           style={{
             width: iconSize,
@@ -116,11 +183,34 @@ export function ThiqaLogoAnimation({
           className={subtitleClassName}
           style={{
             marginTop: subtitleGap,
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            gap: "0.3em",
             lineHeight: 1.2,
-            textAlign: "center",
           }}
         >
-          {subtitle}
+          {subtitleWords.map((word, i) => {
+            const n = subtitleWords.length;
+            const ls = (i * 0.24) / Math.max(n, 1);
+            const le = Math.min(ls + 0.55, 1);
+            const raw = progress(subtitleBase, ls, le);
+            const op = easeOutExpo(raw);
+            const y = lerp(14, 0, easeOutQuint(raw));
+            return (
+              <span
+                key={i}
+                style={{
+                  display: "inline-block",
+                  opacity: op,
+                  transform: `translateY(${y}px)`,
+                  willChange: "transform, opacity",
+                }}
+              >
+                {word}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
