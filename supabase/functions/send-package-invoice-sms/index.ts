@@ -768,6 +768,24 @@ function buildPackageInvoiceHtml(
     `;
   }).join('');
 
+  // Broker notice — when any policy in this package was made through or
+  // for a broker, the money is tracked on the broker's account, not the
+  // customer's. Surface that on the invoice so whoever reads the PDF
+  // understands why no payment is expected from the customer.
+  const brokerPolicyForNotice = policies.find((p: any) => p.broker_id && p.broker?.name);
+  const brokerNoticeHtml = brokerPolicyForNotice
+    ? `
+    <div class="broker-banner">
+      <div class="broker-title">ملاحظة: وثيقة مرتبطة بوسيط</div>
+      <div class="broker-body">${
+        brokerPolicyForNotice.broker_direction === 'to_broker'
+          ? `صُدرت هذه الوثيقة للوسيط <strong>${escapeHtml(brokerPolicyForNotice.broker.name)}</strong> — المبلغ المستحق يُتابع في حساب الوسيط، وليس على العميل.`
+          : `تمت هذه الوثيقة عبر الوسيط <strong>${escapeHtml(brokerPolicyForNotice.broker.name)}</strong> — المبلغ المستحق يُتابع في حساب الوسيط، وليس على العميل.`
+      }</div>
+    </div>
+    `
+    : '';
+
   // Cancellation banner — shown near the top when any policy in the
   // package is cancelled, so the refund obligation jumps off the page
   // instead of being buried in a line item.
@@ -1285,6 +1303,29 @@ function buildPackageInvoiceHtml(
     }
     .totals tr.total td.val { color: #ffffff; }
 
+    /* ── Broker banner ── shown when any policy in the package is
+       tied to a broker. Muted amber so it reads as informational,
+       not as an alert like the cancellation banner. */
+    .broker-banner {
+      margin: 18px 0 14px;
+      padding: 12px 16px;
+      border: 1px solid #f59e0b;
+      background: #fffbeb;
+      border-right: 4px solid #d97706;
+    }
+    .broker-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #92400e;
+      margin-bottom: 4px;
+    }
+    .broker-body {
+      font-size: 12px;
+      color: #7c2d12;
+      line-height: 1.7;
+    }
+    .broker-body strong { font-weight: 700; }
+
     /* ── Cancellation banner ── */
     .cancellation-banner {
       margin: 18px 0 22px;
@@ -1605,6 +1646,8 @@ function buildPackageInvoiceHtml(
         </div>
       </div>
     </div>
+
+    ${brokerNoticeHtml}
 
     ${cancellationBannerHtml}
 

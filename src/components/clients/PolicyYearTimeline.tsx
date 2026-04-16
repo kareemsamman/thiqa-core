@@ -1088,6 +1088,21 @@ function PolicyPackageCard({
   const isCancelled = pkg.status === 'cancelled';
   const isPkg = isPackageProp || (pkg.addons.length > 0 && pkg.mainPolicy !== null);
   const hasUnpaid = !paymentStatus.isPaid;
+  // Broker-involved packages: the money is tracked against the broker,
+  // not the customer. Suppress the customer-debt surface (red "remaining"
+  // totals and the "دفع" button) and show a neutral notice instead. The
+  // value itself still lives in the package → broker accounting will be
+  // reconciled elsewhere.
+  const brokerCardPolicy = (isPkg && pkg.mainPolicy
+    ? [pkg.mainPolicy, ...pkg.addons]
+    : [policy]
+  ).find(p => p.broker_id && p.broker);
+  const hasBroker = !!brokerCardPolicy;
+  const brokerNoteText = brokerCardPolicy
+    ? (brokerCardPolicy.broker_direction === 'to_broker'
+        ? `صُدرت هذه الوثيقة للوسيط ${brokerCardPolicy.broker?.name ?? ''} — المبلغ يُتابع في حساب الوسيط`
+        : `تمت هذه الوثيقة عبر الوسيط ${brokerCardPolicy.broker?.name ?? ''} — المبلغ يُتابع في حساب الوسيط`)
+    : '';
   const [invoiceBusy, setInvoiceBusy] = useState<'print' | 'sms' | null>(null);
 
   // Ref on the coverage-period cell so clicking the status badge can flash
@@ -1319,7 +1334,7 @@ function PolicyPackageCard({
 
           {/* Quick Actions */}
           <div className="flex items-center gap-1">
-            {hasUnpaid && isActive && (
+            {hasUnpaid && isActive && !hasBroker && (
               <Button
                 variant="outline"
                 size="sm"
@@ -1660,24 +1675,38 @@ function PolicyPackageCard({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onOpenPaymentDetails?.(pkg.allPolicyIds); }}
-                className="w-full flex items-start justify-end gap-6 px-3 py-2 border-t border-border/60 bg-muted/30 hover:bg-muted/50 transition-colors text-right focus:outline-none focus:ring-2 focus:ring-primary/40"
-                title="عرض تفاصيل الدفعات"
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2 border-t border-border/60 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  hasBroker
+                    ? "justify-start bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-500/5 dark:hover:bg-amber-500/10 text-right"
+                    : "justify-end bg-muted/30 hover:bg-muted/50 text-right",
+                )}
+                title={hasBroker ? brokerNoteText : "عرض تفاصيل الدفعات"}
               >
-                <div className="flex flex-col text-xs items-end text-left">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
-                  <span className="font-bold text-success ltr-nums">
-                    ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
-                  </span>
-                </div>
-                <div className="flex flex-col text-xs items-end text-left">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
-                  <span className={cn(
-                    "font-bold ltr-nums",
-                    paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
-                  )}>
-                    ₪{paymentStatus.remaining.toLocaleString('en-US')}
-                  </span>
-                </div>
+                {hasBroker ? (
+                  <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
+                    <Handshake className="h-3.5 w-3.5 shrink-0" />
+                    <span>{brokerNoteText}</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col text-xs items-end text-left">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
+                      <span className="font-bold text-success ltr-nums">
+                        ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
+                      </span>
+                    </div>
+                    <div className="flex flex-col text-xs items-end text-left">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
+                      <span className={cn(
+                        "font-bold ltr-nums",
+                        paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
+                      )}>
+                        ₪{paymentStatus.remaining.toLocaleString('en-US')}
+                      </span>
+                    </div>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -1692,24 +1721,38 @@ function PolicyPackageCard({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onOpenPaymentDetails?.([policy.id]); }}
-                className="w-full flex items-start justify-end gap-6 px-3 py-2 hover:bg-muted/50 transition-colors text-right focus:outline-none focus:ring-2 focus:ring-primary/40"
-                title="عرض تفاصيل الدفعات"
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  hasBroker
+                    ? "justify-start bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-500/5 dark:hover:bg-amber-500/10 text-right"
+                    : "justify-end hover:bg-muted/50 text-right",
+                )}
+                title={hasBroker ? brokerNoteText : "عرض تفاصيل الدفعات"}
               >
-                <div className="flex flex-col text-xs items-end text-left">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
-                  <span className="font-bold text-success ltr-nums">
-                    ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
-                  </span>
-                </div>
-                <div className="flex flex-col text-xs items-end text-left">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
-                  <span className={cn(
-                    "font-bold ltr-nums",
-                    paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
-                  )}>
-                    ₪{paymentStatus.remaining.toLocaleString('en-US')}
-                  </span>
-                </div>
+                {hasBroker ? (
+                  <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
+                    <Handshake className="h-3.5 w-3.5 shrink-0" />
+                    <span>{brokerNoteText}</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col text-xs items-end text-left">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
+                      <span className="font-bold text-success ltr-nums">
+                        ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
+                      </span>
+                    </div>
+                    <div className="flex flex-col text-xs items-end text-left">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
+                      <span className={cn(
+                        "font-bold ltr-nums",
+                        paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
+                      )}>
+                        ₪{paymentStatus.remaining.toLocaleString('en-US')}
+                      </span>
+                    </div>
+                  </>
+                )}
               </button>
             </div>
           </div>
