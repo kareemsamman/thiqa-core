@@ -354,7 +354,7 @@ export default function Brokers() {
                   <TableHead className="text-muted-foreground font-medium">الوسيط</TableHead>
                   <TableHead className="text-muted-foreground font-medium">الهاتف</TableHead>
                   <TableHead className="text-muted-foreground font-medium text-center">الوثائق</TableHead>
-                  <TableHead className="text-muted-foreground font-medium">إجمالي المبالغ</TableHead>
+                  <TableHead className="text-muted-foreground font-medium">إجمالي المستحق</TableHead>
                   <TableHead className="text-muted-foreground font-medium w-[80px]">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
