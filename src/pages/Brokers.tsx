@@ -6,8 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
+import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import {
   Table,
   TableBody,
@@ -23,11 +22,9 @@ import {
   ChevronRight,
   Phone,
   FileText,
-  CalendarIcon,
   X,
-  Wallet,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -35,7 +32,6 @@ import { BrokerDrawer } from "@/components/brokers/BrokerDrawer";
 import { BrokerDetails } from "@/components/brokers/BrokerDetails";
 import { RowActionsMenu } from "@/components/shared/RowActionsMenu";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
-import { format } from "date-fns";
 
 interface Broker {
   id: string;
@@ -57,6 +53,7 @@ interface BrokerWithStats extends Broker {
 export default function Brokers() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { brokerId: routeBrokerId } = useParams<{ brokerId?: string }>();
   const [brokers, setBrokers] = useState<BrokerWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -66,15 +63,20 @@ export default function Brokers() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState<Broker | null>(null);
+  // Detail view is URL-driven (/brokers/:brokerId). We still cache the
+  // loaded broker in state so the detail page can render without a
+  // blank flash while we re-fetch on navigation.
   const [viewingBroker, setViewingBroker] = useState<Broker | null>(null);
+  const [viewingLoading, setViewingLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingBroker, setDeletingBroker] = useState<Broker | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  
-  // Date filter state
+
+  // Date filter state — YYYY-MM-DD strings matching ArabicDatePicker so
+  // the inputs behave exactly like the rest of the system's date pickers.
   const [showFilters, setShowFilters] = useState(false);
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
 
   const fetchBrokers = useCallback(async () => {
     setLoading(true);
@@ -112,10 +114,10 @@ export default function Brokers() {
             .is('deleted_at', null);
 
           if (startDate) {
-            policyQuery = policyQuery.gte('start_date', format(startDate, 'yyyy-MM-dd'));
+            policyQuery = policyQuery.gte('start_date', startDate);
           }
           if (endDate) {
-            policyQuery = policyQuery.lte('start_date', format(endDate, 'yyyy-MM-dd'));
+            policyQuery = policyQuery.lte('start_date', endDate);
           }
 
           const { data: policies } = await policyQuery;
@@ -197,18 +199,63 @@ export default function Brokers() {
   };
 
   const clearDateFilter = () => {
-    setStartDate(undefined);
-    setEndDate(undefined);
+    setStartDate("");
+    setEndDate("");
   };
+
+  // Load the broker pointed at by /brokers/:brokerId so refresh and
+  // deep-links render the detail page directly. Clears the cached
+  // broker when the user navigates back to /brokers.
+  useEffect(() => {
+    let cancelled = false;
+    if (!routeBrokerId) {
+      setViewingBroker(null);
+      return;
+    }
+    if (viewingBroker?.id === routeBrokerId) return;
+    setViewingLoading(true);
+    supabase
+      .from('brokers')
+      .select('*')
+      .eq('id', routeBrokerId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error || !data) {
+          toast({
+            title: "خطأ",
+            description: "تعذر تحميل بيانات الوسيط",
+            variant: "destructive",
+          });
+          navigate('/brokers', { replace: true });
+          return;
+        }
+        setViewingBroker(data);
+      })
+      .then(() => { if (!cancelled) setViewingLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeBrokerId]);
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
-  if (viewingBroker) {
+  if (routeBrokerId) {
+    if (viewingLoading && !viewingBroker) {
+      return (
+        <MainLayout>
+          <div className="p-6 space-y-4">
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-40 w-full" />
+          </div>
+        </MainLayout>
+      );
+    }
+    if (!viewingBroker) return null;
     return (
       <>
         <BrokerDetails
           broker={viewingBroker}
-          onBack={() => setViewingBroker(null)}
+          onBack={() => navigate('/brokers')}
           onEdit={() => {
             setSelectedBroker(viewingBroker);
             setDrawerOpen(true);
@@ -291,52 +338,32 @@ export default function Brokers() {
           </div>
         </div>
 
-        {/* Date Filter Panel */}
+        {/* Date Filter Panel — uses the system-wide ArabicDatePicker. The
+            spacing between label and input mirrors BrokerDetails' inner
+            filter so both screens read as the same control. */}
         {showFilters && (
           <Card className="p-4">
-            <div className="flex flex-wrap items-end gap-4">
-              <div className="space-y-2">
-                <Label>من تاريخ</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-[180px] justify-start text-right", !startDate && "text-muted-foreground")}>
-                      <CalendarIcon className="ml-2 h-4 w-4" />
-                      {startDate ? format(startDate, "yyyy/MM/dd") : "اختر التاريخ"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={startDate}
-                      onSelect={setStartDate}
-                      initialFocus
-                      className="pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1.5 flex-1 min-w-[180px] max-w-[220px]">
+                <Label className="text-xs text-muted-foreground">من تاريخ</Label>
+                <ArabicDatePicker
+                  value={startDate}
+                  onChange={setStartDate}
+                  placeholder="اختر التاريخ"
+                  compact
+                />
               </div>
-              <div className="space-y-2">
-                <Label>إلى تاريخ</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-[180px] justify-start text-right", !endDate && "text-muted-foreground")}>
-                      <CalendarIcon className="ml-2 h-4 w-4" />
-                      {endDate ? format(endDate, "yyyy/MM/dd") : "اختر التاريخ"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={endDate}
-                      onSelect={setEndDate}
-                      initialFocus
-                      className="pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
+              <div className="space-y-1.5 flex-1 min-w-[180px] max-w-[220px]">
+                <Label className="text-xs text-muted-foreground">إلى تاريخ</Label>
+                <ArabicDatePicker
+                  value={endDate}
+                  onChange={setEndDate}
+                  placeholder="اختر التاريخ"
+                  compact
+                />
               </div>
               {(startDate || endDate) && (
-                <Button variant="ghost" size="sm" onClick={clearDateFilter}>
+                <Button variant="ghost" size="sm" onClick={clearDateFilter} className="mb-0.5">
                   <X className="h-4 w-4 ml-1" />
                   مسح الفلتر
                 </Button>
@@ -384,7 +411,7 @@ export default function Brokers() {
                         "hover:bg-secondary/50 animate-fade-in"
                       )}
                       style={{ animationDelay: `${index * 30}ms` }}
-                      onClick={() => setViewingBroker(broker)}
+                      onClick={() => navigate(`/brokers/${broker.id}`)}
                     >
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -423,17 +450,8 @@ export default function Brokers() {
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => navigate(`/brokers/${broker.id}/wallet`)}
-                            title="محفظة الوسيط"
-                          >
-                            <Wallet className="h-4 w-4" />
-                          </Button>
                           <RowActionsMenu
-                            onView={() => setViewingBroker(broker)}
+                            onView={() => navigate(`/brokers/${broker.id}`)}
                             onEdit={() => {
                               setSelectedBroker(broker);
                               setDrawerOpen(true);

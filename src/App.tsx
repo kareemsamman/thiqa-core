@@ -193,6 +193,11 @@ const App = () => (
                   <Brokers />
                 </AdminRoute>
               } />
+              <Route path="/brokers/:brokerId" element={
+                <AdminRoute>
+                  <Brokers />
+                </AdminRoute>
+              } />
               <Route path="/brokers/:brokerId/wallet" element={
                 <AdminRoute>
                   <BrokerWallet />
