@@ -37,6 +37,20 @@ const reapplyHeroVideoSpeed = (e: React.SyntheticEvent<HTMLVideoElement>) => {
 // (pulled from the actual pages under src/pages/) and the `gradient`
 // / `accent` colors drive the modal hero visual. Change the copy
 // here and the popup updates automatically.
+// Top marquee — short rotating sales messages. Each one is shown
+// full-screen centered in the top bar, swapping every 5 s with a
+// gentle fade+slide via CSS. Keep these punchy (under ~55 chars
+// each in Arabic) so the animation cycle feels rhythmic — if a
+// line is too long the user will never finish reading it before
+// the next one swaps in.
+const marqueeMessages = [
+  "احصل على 35 يوم تجربة مجانية — بدون بطاقة ائتمان",
+  "أنشئ حسابك بضغطة واحدة — بدون مكالمات ولا تعقيد",
+  "طرق دفع مرنة: شيكات، بطاقات، تقسيط وربط مع Tranzila",
+  "ألغِ اشتراكك متى شئت — بدون التزامات ولا أسئلة",
+  "دعم تقني بالعربية جنبك من اليوم الأول",
+];
+
 const featureTiles = [
   {
     icon: Users,
@@ -319,57 +333,18 @@ export default function Landing() {
     };
   }, []);
 
-  // Top marquee — JS-driven scroll, dynamically padded so the track
-  // always covers more than the viewport. rAF loop measures group1's
-  // width every frame; when the running offset reaches -groupWidth we
-  // add groupWidth back, so the snap is by exactly one pixel-identical
-  // group width (no sub-pixel gap possible). On mount we also measure
-  // against innerWidth and, if a single group is narrower than the
-  // viewport, ask React to render extra clones so the track always
-  // covers at least 2× viewport — that's what prevents the blank on
-  // wider monitors.
-  const marqueeTrackRef = useRef<HTMLDivElement | null>(null);
-  const marqueeGroupRef = useRef<HTMLDivElement | null>(null);
-  const [marqueeClones, setMarqueeClones] = useState(3);
+  // Top marquee — auto-cycling centered sales message. The old
+  // horizontally scrolling icon list has been replaced by a single
+  // centered line of copy that swaps every 5 s with a gentle fade +
+  // vertical glide. The animation duration matches the interval,
+  // so by the time the <span> is remounted (via `key`) the previous
+  // one has already faded to opacity 0 and the swap is invisible.
+  const [marqueeIdx, setMarqueeIdx] = useState(0);
   useEffect(() => {
-    const group = marqueeGroupRef.current;
-    if (!group) return;
-    const measure = () => {
-      const groupW = group.offsetWidth;
-      const vw = window.innerWidth || 0;
-      if (groupW <= 0 || vw <= 0) return;
-      // We want total track width ≥ 2 × viewport so the wrap (by 1
-      // groupWidth) always leaves at least one extra groupWidth of
-      // content visible on the leading edge. clones = number of
-      // additional identical groups after the primary one.
-      const needed = Math.max(1, Math.ceil((2 * vw) / groupW));
-      setMarqueeClones((prev) => (prev >= needed ? prev : needed));
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, []);
-  useEffect(() => {
-    const track = marqueeTrackRef.current;
-    const group = marqueeGroupRef.current;
-    if (!track || !group) return;
-    const SPEED_PX_PER_SEC = 35;
-    let offset = 0;
-    let lastTs = performance.now();
-    let raf = 0;
-    const loop = (ts: number) => {
-      const dt = (ts - lastTs) / 1000;
-      lastTs = ts;
-      const groupW = group.offsetWidth;
-      if (groupW > 0) {
-        offset -= SPEED_PX_PER_SEC * dt;
-        if (offset <= -groupW) offset += groupW;
-        track.style.transform = `translate3d(${offset}px, 0, 0)`;
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    const interval = window.setInterval(() => {
+      setMarqueeIdx((i) => (i + 1) % marqueeMessages.length);
+    }, 5000);
+    return () => window.clearInterval(interval);
   }, []);
 
   // CMS-driven images with fallbacks
@@ -440,24 +415,31 @@ export default function Landing() {
         }
       `}</style>
 
-      {/* ═══ Top marquee — CRM feature keywords ═══
-          JS-driven infinite scroll. dir="ltr" is critical: the page is
-          RTL, and in a default-direction flex row RTL places the first
-          child on the RIGHT and clones extend leftward — then shifting
-          the track left empties the right-hand viewport edge (the
-          "blank" the user kept reporting). Forcing LTR on the marquee
-          wrapper puts the primary group on the LEFT and clones on the
-          RIGHT, so translating left reveals those clones as they slide
-          in from off-screen-right. The inner Arabic text still renders
-          its own RTL direction via each item's natural bidi. */}
+      {/* ═══ Top marquee — centered rotating sales messages ═══
+          Single centered line of copy that swaps every 5 s. The
+          fade+glide animation lives in the <style> block right below,
+          and the `key={marqueeIdx}` on the inner <span> is what
+          re-mounts it on every tick so the keyframes re-play.
+          Binary open/closed state preserved from the old marquee —
+          it still collapses when the user scrolls past the 8 px
+          threshold (same `scrolled` boolean). */}
+      <style>{`
+        @keyframes mqcCycle {
+          0%   { opacity: 0; transform: translateY(-10px); filter: blur(2px); }
+          18%  { opacity: 1; transform: translateY(0);     filter: blur(0); }
+          82%  { opacity: 1; transform: translateY(0);     filter: blur(0); }
+          100% { opacity: 0; transform: translateY(10px);  filter: blur(2px); }
+        }
+        .mqc-text {
+          display: inline-block;
+          animation: mqcCycle 5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+      `}</style>
       <div
-        dir="ltr"
+        dir="rtl"
         className="relative bg-white overflow-hidden transform-gpu origin-top"
         style={{
-          // Binary open / closed state. All four properties share a
-          // single ~500 ms ease-out transition so the close reads as
-          // one coordinated motion instead of four racing animations.
-          maxHeight: scrolled ? 0 : 60,
+          maxHeight: scrolled ? 0 : 56,
           paddingTop: scrolled ? 0 : 12,
           paddingBottom: scrolled ? 0 : 12,
           opacity: scrolled ? 0 : 1,
@@ -467,74 +449,20 @@ export default function Landing() {
           transitionDuration: "280ms",
           transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
         }}
-        aria-label="مزايا النظام"
+        aria-label="رسائل ترويجية"
         aria-hidden={scrolled}
       >
-        {/* Edge fades so items dissolve into the white bg at both ends
-            instead of hard-clipping at the viewport edges. */}
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-24 z-10 bg-gradient-to-l from-white to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-24 z-10 bg-gradient-to-r from-white to-transparent" />
-
         <div
-          ref={marqueeTrackRef}
-          className="flex items-center w-max will-change-transform"
-          style={{ transform: "translate3d(0, 0, 0)" }}
+          className="flex items-center justify-center px-6 h-full"
+          aria-live="polite"
+          aria-atomic="true"
         >
-          {(() => {
-            const items = [
-              { icon: Users, label: "إدارة العملاء والمركبات" },
-              { icon: FileText, label: "وثائق، تجديدات وباقات تأمين" },
-              { icon: RefreshCcw, label: "تجديد تلقائي مع تذكيرات SMS" },
-              { icon: CreditCard, label: "تحصيل وشيكات وتقسيط" },
-              { icon: Wallet, label: "محفظة الوسطاء والعمولات" },
-              { icon: BarChart3, label: "تقارير ربحية لحظية" },
-              { icon: MessageSquare, label: "حملات SMS تسويقية" },
-              { icon: Shield, label: "بيانات آمنة بتشفير كامل" },
-              { icon: Bell, label: "إشعارات انتهاء الوثائق" },
-              { icon: Phone, label: "توقيعات رقمية عن بعد" },
-            ];
-            const renderItem = (
-              { icon: Icon, label }: { icon: typeof Users; label: string },
-              key: string,
-            ) => (
-              // dir="rtl" keeps each item's internal layout (icon → text
-              // → dot) reading right-to-left like the rest of the UI,
-              // even though the outer flex track is LTR for the scroll.
-              <div
-                key={key}
-                dir="rtl"
-                className="flex items-center gap-2.5 shrink-0 text-black/70 px-5"
-              >
-                <Icon className="h-4 w-4 text-black/50" />
-                <span className="text-[13px] font-medium whitespace-nowrap">
-                  {label}
-                </span>
-                <span className="mx-2 text-black/25 select-none">•</span>
-              </div>
-            );
-            return (
-              <>
-                {/* Primary group — its measured width drives the wrap. */}
-                <div ref={marqueeGroupRef} className="flex items-center shrink-0">
-                  {items.map((it, i) => renderItem(it, `a-${i}`))}
-                </div>
-                {/* N identical clones. The resize effect picks N so
-                    total track width ≥ 2 × viewport — guarantees at
-                    least one full extra group stays visible after the
-                    wrap, so the leading edge never reveals a blank
-                    even on ultrawide monitors. */}
-                {Array.from({ length: marqueeClones }).map((_, cIdx) => (
-                  <div
-                    key={`c-${cIdx}`}
-                    className="flex items-center shrink-0"
-                    aria-hidden="true"
-                  >
-                    {items.map((it, i) => renderItem(it, `c-${cIdx}-${i}`))}
-                  </div>
-                ))}
-              </>
-            );
-          })()}
+          <span
+            key={marqueeIdx}
+            className="mqc-text text-[13px] md:text-[14px] font-medium text-black/75 tracking-tight"
+          >
+            {marqueeMessages[marqueeIdx]}
+          </span>
         </div>
       </div>
 
