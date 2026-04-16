@@ -21,11 +21,15 @@ import sliderBgDefault from "@/assets/landing/slider-bg.png";
 import gridLogoBgDefault from "@/assets/landing/grid-logo-bg.png";
 // Hero video plays back faster than real-time so the motion has more
 // "wow" energy without the viewer feeling like they're watching a slow
-// product tour. Same pattern the login background uses. Callback ref
-// so playbackRate lands before autoplay kicks off.
+// product tour. Same pattern the login background uses. Some browsers
+// reset playbackRate on the first `play` event (Safari), so we also
+// re-apply it in an onPlay handler on the element.
 const HERO_VIDEO_SPEED = 1.5;
 const setHeroVideoSpeed = (el: HTMLVideoElement | null) => {
   if (el) el.playbackRate = HERO_VIDEO_SPEED;
+};
+const reapplyHeroVideoSpeed = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+  (e.currentTarget as HTMLVideoElement).playbackRate = HERO_VIDEO_SPEED;
 };
 
 const featureTabs = [
@@ -237,7 +241,7 @@ export default function Landing() {
           fixed, so it doesn't follow the scroll onto the dark sections
           below — the black styling is only visible over the hero. */}
       <nav className="absolute top-0 inset-x-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-6 h-16">
+        <div className="w-[90%] max-w-[96rem] mx-auto flex items-center justify-between px-6 h-16">
           <div className="flex items-center text-black">
             <ThiqaLogoAnimation
               iconSize={34}
@@ -251,17 +255,14 @@ export default function Landing() {
             <a href="#faq" className="hover:text-black transition-colors">أسئلة وأجوبة</a>
             <a href="/pricing" className="hover:text-black transition-colors">الأسعار</a>
           </div>
+            {/* Pill CTA — matches the Hebrew reference (clean ring, crisp
+                bold text, slight translucent center, subtle glow on hover). */}
             <button
               onClick={() => { trackEvent("signup_click", "/landing"); navigate("/login?view=signup"); }}
-            className="px-6 py-2 text-[13px] font-bold text-black hover:text-black transition-colors"
-            style={{
-              borderRadius: '100px',
-              border: '2px solid rgba(0, 0, 0, 0.40)',
-              background: 'rgba(255, 255, 255, 0.55)',
-            }}
-          >
-            {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
-          </button>
+              className="px-7 py-2.5 text-[13px] font-bold text-black rounded-full border-2 border-black/40 bg-white/30 backdrop-blur-sm transition-all hover:bg-white/50 hover:border-black/70 hover:shadow-[0_6px_20px_-4px_rgba(0,0,0,0.25)]"
+            >
+              {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
+            </button>
         </div>
       </nav>
 
@@ -274,6 +275,8 @@ export default function Landing() {
               so the very first frame is already at 1.5×. */}
           <video
             ref={setHeroVideoSpeed}
+            onPlay={reapplyHeroVideoSpeed}
+            onLoadedMetadata={reapplyHeroVideoSpeed}
             className="w-full h-full object-cover block"
             src="https://thiqacrm.b-cdn.net/video.mp4"
             poster={ci(content, "hero_bg_image", "/images/hero-gradient-bg.png")}
@@ -284,34 +287,31 @@ export default function Landing() {
             preload="auto"
             aria-hidden="true"
           />
-          {/* Soft white veil so black hero text stays readable regardless
-              of which frame is on screen. */}
-          <div className="absolute inset-0 bg-white/55" />
+          {/* Light veil so black hero text stays readable without
+              hiding the video underneath. Lower opacity than before
+              so the motion is clearly visible behind the copy. */}
+          <div className="absolute inset-0 bg-white/30" />
         </div>
 
-        <div className="relative z-10 max-w-4xl mx-auto text-center px-6 pt-20">
+        <div className="relative z-10 w-[90%] max-w-[56rem] mx-auto text-center pt-20">
           <h1
-            className="text-[2.2rem] md:text-[3.2rem] lg:text-[4rem] font-extrabold leading-[1.15] tracking-tight whitespace-pre-line hero-reveal text-black"
+            className="text-[1.6rem] md:text-[2.2rem] lg:text-[2.8rem] font-extrabold leading-[1.2] tracking-tight whitespace-pre-line hero-reveal text-black"
             style={{ animationDelay: '120ms' }}
           >
-            {ct(content, "hero_title", "نظام CRM الأذكى\nلوكالات التأمين التي تريد أن تربح أكثر")}
+            {ct(content, "hero_title", "CRM لوكالات التأمين.\nأبسط، أسرع، أذكى.")}
           </h1>
           <p
-            className="mt-6 text-[15px] md:text-lg text-black/70 max-w-2xl mx-auto leading-relaxed whitespace-pre-line hero-reveal"
+            className="mt-5 text-[14px] md:text-[15px] text-black/70 max-w-xl mx-auto leading-relaxed whitespace-pre-line hero-reveal"
             style={{ animationDelay: '340ms' }}
           >
-            {ct(content, "hero_subtitle", "حل شامل لإدارة الوثائق، الأموال والتسويق. سريع، آمن\nومصمم للعمل على نطاق واسع.")}
+            {ct(content, "hero_subtitle", "إدارة الوثائق، الأموال والتسويق في مكان واحد — سريع وآمن.")}
           </p>
-          <div className="mt-10 hero-reveal" style={{ animationDelay: '520ms' }}>
+          <div className="mt-8 hero-reveal" style={{ animationDelay: '520ms' }}>
+            {/* CTA pill — same visual language as the navbar button for
+                consistency, just scaled up for primary weight. */}
             <button
               onClick={() => navigate("/login?view=signup")}
-              className="text-[16px] font-bold text-black hover:text-black transition-all px-10 py-4 hover:scale-105 hover:shadow-[0_0_32px_0_rgba(0,0,0,0.18)]"
-              style={{
-                borderRadius: '100px',
-                border: '2px solid rgba(0, 0, 0, 0.40)',
-                background: 'rgba(255, 255, 255, 0.55)',
-                boxShadow: '0 4px 16px 0 rgba(0, 0, 0, 0.10)',
-              }}
+              className="text-[15px] font-bold text-black rounded-full border-2 border-black/40 bg-white/30 backdrop-blur-sm px-9 py-3.5 transition-all hover:bg-white/55 hover:border-black/70 hover:scale-[1.03] hover:shadow-[0_10px_28px_-6px_rgba(0,0,0,0.25)]"
             >
               {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
             </button>
@@ -331,7 +331,7 @@ export default function Landing() {
             style={{ width: '607px', height: '407px' }}
           >
             <img
-              src={dashboardMockup}
+              src="https://thiqacrm.b-cdn.net/1.png"
               alt="Thiqa CRM Dashboard"
               width={607}
               height={407}
