@@ -933,11 +933,7 @@ export default function Landing() {
           );
           io.observe(el);
         }}
-        className="py-20 md:py-28 relative overflow-hidden"
-        style={{
-          background:
-            "linear-gradient(135deg, #eef1ff 0%, #ffffff 45%, #ffe8f0 100%)",
-        }}
+        className="py-20 md:py-28 bg-white"
       >
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
