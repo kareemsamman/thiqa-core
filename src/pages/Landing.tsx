@@ -256,10 +256,6 @@ export default function Landing() {
     let lastScrolled = false;
     const apply = () => {
       const y = window.scrollY;
-      // DEBUG: remove once the nav snap ranges are tuned. Logs the
-      // current scrollY on every rAF frame so we can tell exactly
-      // which positions look broken and adjust LOWER/UPPER below.
-      console.log("[scroll]", y);
       const p = Math.min(1, Math.max(0, y / 90));
       const inv = 1 - p;
       const m = marqueeChromeRef.current;
@@ -308,20 +304,20 @@ export default function Landing() {
   }, []);
 
   // ═══ Nav "dead zone" snap ═══
-  // The chrome animation above interpolates on `y / 90`, so while
-  // the user is scrolled anywhere in 0 < y < 90 the nav pill is
-  // caught mid-morph — looks broken, especially when a user gives
-  // the wheel a small nudge and stops. This effect watches for the
-  // user to actually *settle* inside that zone (debounced ~140 ms
-  // after the last scroll event) and then nudges them the rest of
-  // the way out, respecting whichever direction they were heading:
-  //   • scrolling up  →  snap to 0
-  //   • scrolling down → snap to 102 (just past the 90 px threshold)
+  // Even though the chrome animation itself interpolates on y/90,
+  // the visual "bad zone" where the nav + marquee look half-morphed
+  // extends all the way to ~158 px (measured live). This effect
+  // watches for the user to actually *settle* inside 0 < y < 158
+  // (debounced ~140 ms after the last scroll event) and then nudges
+  // them the rest of the way out, respecting whichever direction
+  // they were heading:
+  //   • scrolling up   → snap to 0
+  //   • scrolling down → snap to 170 (158 + 12 px overshoot)
   // Active scrolling resets the timer so we never fight the user,
   // and a `snapping` guard prevents the smooth-scroll's own events
   // from re-triggering the snap.
   useEffect(() => {
-    const TRANSITION_END = 90;
+    const TRANSITION_END = 158;
     const LOWER = 4;    // treat y ≤ 4 as "already at top"
     const UPPER = TRANSITION_END - 2;
     const OVERSHOOT = 12;
