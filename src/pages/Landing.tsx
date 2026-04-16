@@ -763,26 +763,6 @@ export default function Landing() {
         }}
         className="relative w-full min-h-screen overflow-hidden bg-white"
       >
-        {/* Blurred-background layer — duplicate of the hero photo
-            scaled up and heavily blurred so it acts as an ambient
-            color wash behind the sharp 70%-wide foreground image.
-            `scale-110` hides the hard edges that blur() leaves at
-            the rectangle's border. */}
-        <div
-          className="absolute inset-0 scale-110"
-          style={{
-            backgroundImage:
-              "url('https://thiqacrm.b-cdn.net/hf_20260416_155619_091100f5-d053-456f-9c9f-e9f80354c345%201.png')",
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            filter: "blur(48px) saturate(1.05)",
-          }}
-          aria-hidden="true"
-        />
-        {/* Soft white veil — knocks the blurred backdrop's intensity
-            down so the foreground image and glass pills pop against it. */}
-        <div className="absolute inset-0 bg-white/25" aria-hidden="true" />
-
         {/* Sharp foreground image — 70% viewport width, 76% section
             height, anchored to the bottom so the person's head sits
             in the upper portion of the image (around ~25-45% of the
@@ -794,16 +774,17 @@ export default function Landing() {
           loading="lazy"
         />
 
-        {/* Headline — two lines in the gray-then-black layout the user
-            specified. Line 1 is the soft lead-in (#b2b2b2); line 2 is
-            the black punchline. Both type in right-to-left via
-            clip-path + steps(), the black line starting after the
-            gray one finishes so the reveal reads as a natural sentence. */}
-        <h2 className="relative z-10 text-center text-[1.75rem] md:text-[2.75rem] font-bold leading-[1.3] md:leading-[1.25] pt-16 md:pt-20 px-6">
-          <span className="hs-type hs-type-1 block" style={{ color: "#b2b2b2" }}>
+        {/* Headline — two stacked lines, both black. The lead-in is
+            font-light (300) and the punchline is font-bold (700) so
+            the weight contrast carries the emphasis instead of a
+            color shift. Both type in right-to-left via clip-path +
+            steps(), the bold line starting after the light one
+            finishes so the reveal reads as a natural sentence. */}
+        <h2 className="relative z-10 text-center text-[1.75rem] md:text-[2.75rem] leading-[1.3] md:leading-[1.25] pt-16 md:pt-20 px-6 text-black">
+          <span className="hs-type hs-type-1 block font-light">
             زهقت من الأكسل والأوراق؟
           </span>
-          <span className="hs-type hs-type-2 block text-black mt-2">
+          <span className="hs-type hs-type-2 block font-bold mt-2">
             ثقة هو الحل.
           </span>
         </h2>
