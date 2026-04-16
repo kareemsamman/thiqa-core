@@ -1805,61 +1805,56 @@ export default function Landing() {
                       Cards are horizontal: image on the right side
                       (flex-row first child reads right-first in RTL),
                       description on the left. */}
-                  <div className="relative w-full max-w-6xl h-[380px] md:h-[420px]">
+                  <div className="relative w-full max-w-[1200px] h-[420px] md:h-[460px]">
                     {slides.map((slide, i) => {
                       const offset = i - slideIdx;
                       const abs = Math.abs(offset);
                       return (
                         <div
                           key={i}
-                          className="absolute top-0 left-1/2 rounded-3xl overflow-hidden transition-all duration-500 ease-out w-[440px] md:w-[540px] h-full flex flex-row"
+                          className="absolute top-0 left-1/2 rounded-3xl overflow-hidden transition-all duration-500 ease-out w-[560px] md:w-[720px] h-full flex flex-row"
                           style={{
-                            // Liquid-glass surface per user spec.
-                            background: "rgba(0, 0, 0, 0.40)",
-                            backdropFilter: "blur(30px) saturate(1.5)",
-                            WebkitBackdropFilter: "blur(30px) saturate(1.5)",
-                            border: "1px solid rgba(255, 255, 255, 0.12)",
-                            // Sign flipped (was `offset * 108%`) so
-                            // next slides slide in from the left in
-                            // RTL; previously-seen slides fade to
-                            // the right. Matches Arabic reading flow.
-                            transform: `translateX(calc(-50% + ${-offset * 92}%)) scale(${abs === 0 ? 1 : 0.9})`,
+                            // Light liquid-glass surface per user spec.
+                            background: "rgba(255, 255, 255, 0.06)",
+                            backdropFilter: "blur(30px) saturate(1.4)",
+                            WebkitBackdropFilter: "blur(30px) saturate(1.4)",
+                            border: "1px solid rgba(255, 255, 255, 0.14)",
+                            transform: `translateX(calc(-50% + ${-offset * 78}%)) scale(${abs === 0 ? 1 : 0.9})`,
                             opacity: abs <= 1 ? (abs === 0 ? 1 : 0.45) : 0,
                             pointerEvents: abs === 0 ? "auto" : "none",
                             zIndex: abs === 0 ? 10 : 5,
-                            boxShadow: abs === 0 ? "0 30px 80px -16px rgba(0,0,0,0.55)" : "none",
+                            boxShadow: abs === 0 ? "0 30px 80px -16px rgba(18,32,66,0.35)" : "none",
                           }}
                         >
-                          {/* Right side: image (swap the <img> src
-                              per-slide for real art). First child
-                              in a flex-row under RTL renders on the
-                              visual right. */}
-                          <div
-                            className="relative w-[45%] h-full overflow-hidden border-l flex-shrink-0"
-                            style={{ borderColor: "rgba(255,255,255,0.10)" }}
-                          >
+                          {/* Right side (first child under RTL):
+                              padded container that floats a smaller
+                              mockup image in the middle. The image
+                              no longer fills — it sits with
+                              breathing space all around so the card
+                              background shows through. */}
+                          <div className="w-[48%] h-full flex items-center justify-center p-6 md:p-8 flex-shrink-0">
                             <img
                               src={slide.image}
                               alt=""
-                              className="w-full h-full object-cover"
+                              className="max-w-full max-h-full object-contain rounded-2xl shadow-[0_20px_50px_-12px_rgba(18,32,66,0.4)]"
                               loading="lazy"
                             />
                           </div>
 
                           {/* Left side: text + CTA */}
-                          <div className="flex-1 p-6 md:p-8 flex flex-col text-white text-right">
-                            <span className="text-[11px] text-white/70 font-bold tracking-[0.2em] uppercase mb-3">
+                          <div className="flex-1 p-7 md:p-10 flex flex-col text-white text-right">
+                            <span className="text-[11px] text-white/75 font-bold tracking-[0.2em] uppercase mb-3">
                               0{i + 1} · {slide.eyebrow}
                             </span>
-                            <h3 className="text-xl md:text-[1.4rem] font-bold leading-[1.25] whitespace-pre-line mb-3">
+                            <h3 className="text-2xl md:text-[1.7rem] font-bold leading-[1.2] whitespace-pre-line mb-4">
                               {slide.title}
                             </h3>
-                            <p className="text-[13px] md:text-sm text-white/80 leading-relaxed mb-6 flex-1">
+                            <p className="text-sm md:text-[15px] text-white/85 leading-relaxed mb-6 flex-1">
                               {slide.desc}
                             </p>
                             <button
                               onClick={() => navigate("/login?view=signup")}
-                              className="self-start flex items-center gap-2 px-5 py-2.5 text-[13px] font-bold text-white rounded-full bg-white/15 border border-white/30 hover:bg-white/25 transition-colors backdrop-blur-sm"
+                              className="self-start flex items-center gap-2 px-6 py-3 text-[13px] font-bold text-white rounded-full bg-white/15 border border-white/30 hover:bg-white/25 transition-colors backdrop-blur-sm"
                             >
                               {slide.cta}
                               <ArrowLeft className="h-3.5 w-3.5" />
