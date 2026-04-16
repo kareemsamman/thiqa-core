@@ -477,11 +477,12 @@ export default function Landing() {
         <div
           className="pointer-events-auto flex items-center justify-between px-6 h-14 md:h-16 mx-auto transform-gpu"
           style={{
-            // Two stable visual states, one shared 500 ms transition.
-            // `scrolled` flips once at y > 8 and the browser handles
-            // the rest — no per-frame JS, nothing to freeze.
-            width: scrolled ? "84%" : "90%",
-            maxWidth: scrolled ? "64rem" : "96rem",
+            // Nav width stays pinned at 75% across both states. Only
+            // the pill chrome (margin, radius, blur, bg, shadow) and
+            // content colors swap when `scrolled` flips at y > 8 —
+            // the layout never shifts sideways during scroll.
+            width: "75%",
+            maxWidth: "72rem",
             marginTop: scrolled ? "12px" : "0px",
             borderRadius: scrolled ? "9999px" : "0px",
             transform: scrolled ? "translate3d(0, 0, 0)" : "translate3d(0, 44px, 0)",
@@ -490,52 +491,68 @@ export default function Landing() {
             backgroundColor: scrolled ? "rgba(255, 255, 255, 0.8)" : "rgba(255, 255, 255, 0)",
             boxShadow: scrolled ? "0 1px 20px 0 rgba(0, 0, 0, 0.12)" : "none",
             border: "none",
-            transitionProperty: "width, max-width, margin-top, border-radius, transform, backdrop-filter, background-color, box-shadow",
+            transitionProperty: "margin-top, border-radius, transform, backdrop-filter, background-color, box-shadow",
             transitionDuration: "280ms",
             transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
           }}
         >
-          {/* Logo — always the black variant. currentColor on the
-              wordmark inherits from the wrapper's text-black. */}
-          <div className="flex items-center text-black">
+          {/* Logo — swaps between the white variant (over the hero
+              video before scroll) and the black variant (on the glass
+              pill after scroll). The wordmark inherits its color from
+              the wrapper's text-{white,black} via currentColor. */}
+          <div
+            className={cn(
+              "flex items-center transition-colors duration-300",
+              scrolled ? "text-black" : "text-white",
+            )}
+          >
             <ThiqaLogoAnimation
               iconSize={32}
               interactive={false}
-              iconSrc="https://thiqacrm.b-cdn.net/small_black.png"
+              iconSrc={
+                scrolled
+                  ? "https://thiqacrm.b-cdn.net/small_black.png"
+                  : "https://thiqacrm.b-cdn.net/small_white.png"
+              }
             />
           </div>
 
-          <div className="hidden md:flex items-center gap-10 text-[14px] font-medium text-black/70">
+          <div
+            className={cn(
+              "hidden md:flex items-center gap-10 text-[14px] font-medium transition-colors duration-300",
+              scrolled ? "text-black/70" : "text-white/90",
+            )}
+          >
             {/* Hidden: features section is currently disabled. Restore alongside the `{false && …}` block below. */}
-            {false && <a href="#features" className="transition-colors hover:text-black">لماذا نحن مختلفون</a>}
-            <a href="#demo" className="transition-colors hover:text-black">كيف يعمل</a>
-            <a href="#faq" className="transition-colors hover:text-black">أسئلة وأجوبة</a>
-            <a href="/pricing" className="transition-colors hover:text-black">الأسعار</a>
+            {false && <a href="#features" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>لماذا نحن مختلفون</a>}
+            <a href="#demo" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>كيف يعمل</a>
+            <a href="#faq" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>أسئلة وأجوبة</a>
+            <a href="/pricing" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>الأسعار</a>
           </div>
 
-          {/* CTA pill — black text always. Over the hero it sits on the
-              translucent white-ring style (so the ring + drop shadow
-              read against whatever's behind); on the scrolled white
-              pill it shifts to a black-ring style for contrast. */}
+          {/* CTA pill — white text + white ring over the hero video,
+              black text + black ring once scrolled onto the glass
+              pill. Bigger than the old version (px-8 py-3, text-[14px])
+              so the button anchors the right side of the nav. */}
           <button
             onClick={() => { trackEvent("signup_click", "/landing"); navigate("/login?view=signup"); }}
             className={cn(
-              "px-6 py-2 text-[13px] font-bold text-black transition-all",
-              scrolled ? "hover:bg-black/5" : "hover:bg-white/40",
+              "px-8 py-3 text-[14px] font-bold transition-all",
+              scrolled ? "text-black hover:bg-black/5" : "text-white hover:bg-white/20",
             )}
             style={
               scrolled
                 ? {
                     borderRadius: "100px",
-                    border: "2px solid rgba(0, 0, 0, 0.18)",
+                    border: "2px solid rgba(0, 0, 0, 0.22)",
                     background: "rgba(255, 255, 255, 0.0)",
                     boxShadow: "0 2px 8px 0 rgba(0, 0, 0, 0.06)",
                   }
                 : {
                     borderRadius: "100px",
-                    border: "2px solid rgba(255, 255, 255, 0.40)",
-                    background: "rgba(255, 255, 255, 0.10)",
-                    boxShadow: "0 4px 16px 0 rgba(0, 0, 0, 0.08)",
+                    border: "2px solid rgba(255, 255, 255, 0.55)",
+                    background: "rgba(255, 255, 255, 0.12)",
+                    boxShadow: "0 4px 16px 0 rgba(0, 0, 0, 0.12)",
                   }
             }
           >
@@ -677,10 +694,8 @@ export default function Landing() {
           display: inline-block;
           clip-path: inset(0 0 0 100%);
         }
-        .hs-visible .hs-type-1 { animation: hsTypeRtl 0.9s steps(22, end) 0.15s forwards; }
-        .hs-visible .hs-type-2 { animation: hsTypeRtl 0.8s steps(18, end) 1.00s forwards; }
-        .hs-visible .hs-type-3 { animation: hsTypeRtl 0.4s steps(8, end)  1.70s forwards; }
-        .hs-visible .hs-type-4 { animation: hsTypeRtl 0.9s steps(20, end) 1.95s forwards; }
+        .hs-visible .hs-type-1 { animation: hsTypeRtl 1.0s steps(24, end) 0.15s forwards; }
+        .hs-visible .hs-type-2 { animation: hsTypeRtl 0.7s steps(14, end) 1.30s forwards; }
 
         /* Full-width hero image fades in once the section becomes
            visible. Sits absolutely behind the headline + pill layer. */
@@ -778,13 +793,18 @@ export default function Landing() {
           loading="lazy"
         />
 
-        {/* Headline — overlays the top of the composition */}
-        <h2 className="relative z-10 text-center text-2xl md:text-[2.5rem] font-bold leading-[1.45] md:leading-[1.35] text-black pt-16 md:pt-20 px-6">
-          <span className="hs-type hs-type-1">آلاف وكلاء التأمين</span>{" "}
-          <span className="hs-type hs-type-2">يديرون وكالاتهم</span>
-          <br />
-          <span className="hs-type hs-type-3">بشكل </span>
-          <span className="hs-type hs-type-4 hs-highlight">أكثر احترافاً</span>
+        {/* Headline — two lines in the gray-then-black layout the user
+            specified. Line 1 is the soft lead-in (#b2b2b2); line 2 is
+            the black punchline. Both type in right-to-left via
+            clip-path + steps(), the black line starting after the
+            gray one finishes so the reveal reads as a natural sentence. */}
+        <h2 className="relative z-10 text-center text-[1.75rem] md:text-[2.75rem] font-bold leading-[1.3] md:leading-[1.25] pt-16 md:pt-20 px-6">
+          <span className="hs-type hs-type-1 block" style={{ color: "#b2b2b2" }}>
+            زهقت من الأكسل والأوراق؟
+          </span>
+          <span className="hs-type hs-type-2 block text-black mt-2">
+            ثقة هو الحل.
+          </span>
         </h2>
 
         {/* Pill notifications — glassmorphism cards concentrated in
