@@ -255,14 +255,17 @@ export default function Landing() {
       `}</style>
 
       {/* ═══ Top marquee — CRM feature keywords ═══
-          JS-driven infinite scroll. The previous CSS-percentage version
-          kept leaving a one-frame blank at the wrap point on this
-          user's browser no matter how many copies the track held, so
-          the animation is now measured-pixel-based via
-          requestAnimationFrame (see marqueeTrackRef + groupRef above).
-          Two identical group children; the loop resets offset by the
-          measured group width, which is pixel-perfect seamless. */}
+          JS-driven infinite scroll. dir="ltr" is critical: the page is
+          RTL, and in a default-direction flex row RTL places the first
+          child on the RIGHT and clones extend leftward — then shifting
+          the track left empties the right-hand viewport edge (the
+          "blank" the user kept reporting). Forcing LTR on the marquee
+          wrapper puts the primary group on the LEFT and clones on the
+          RIGHT, so translating left reveals those clones as they slide
+          in from off-screen-right. The inner Arabic text still renders
+          its own RTL direction via each item's natural bidi. */}
       <div
+        dir="ltr"
         className={cn(
           "relative border-b border-black/[0.06] bg-white overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
           scrolled
@@ -299,8 +302,12 @@ export default function Landing() {
               { icon: Icon, label }: { icon: typeof Users; label: string },
               key: string,
             ) => (
+              // dir="rtl" keeps each item's internal layout (icon → text
+              // → dot) reading right-to-left like the rest of the UI,
+              // even though the outer flex track is LTR for the scroll.
               <div
                 key={key}
+                dir="rtl"
                 className="flex items-center gap-2.5 shrink-0 text-black/70 px-5"
               >
                 <Icon className="h-4 w-4 text-black/50" />
