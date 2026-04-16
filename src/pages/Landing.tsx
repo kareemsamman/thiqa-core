@@ -303,6 +303,62 @@ export default function Landing() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // ═══ Nav "dead zone" snap ═══
+  // The chrome animation above interpolates on `y / 90`, so while
+  // the user is scrolled anywhere in 0 < y < 90 the nav pill is
+  // caught mid-morph — looks broken, especially when a user gives
+  // the wheel a small nudge and stops. This effect watches for the
+  // user to actually *settle* inside that zone (debounced ~140 ms
+  // after the last scroll event) and then nudges them the rest of
+  // the way out, respecting whichever direction they were heading:
+  //   • scrolling up  →  snap to 0
+  //   • scrolling down → snap to 102 (just past the 90 px threshold)
+  // Active scrolling resets the timer so we never fight the user,
+  // and a `snapping` guard prevents the smooth-scroll's own events
+  // from re-triggering the snap.
+  useEffect(() => {
+    const TRANSITION_END = 90;
+    const LOWER = 4;    // treat y ≤ 4 as "already at top"
+    const UPPER = TRANSITION_END - 2;
+    const OVERSHOOT = 12;
+    const SETTLE_MS = 140;
+
+    let prevY = window.scrollY;
+    let lastDir: "up" | "down" = "down";
+    let timer: number | null = null;
+    let snapping = false;
+    let releaseTimer: number | null = null;
+
+    const settle = () => {
+      if (snapping) return;
+      const y = window.scrollY;
+      if (y <= LOWER || y >= UPPER) return;
+      snapping = true;
+      const target = lastDir === "up" ? 0 : TRANSITION_END + OVERSHOOT;
+      window.scrollTo({ top: target, behavior: "smooth" });
+      if (releaseTimer) window.clearTimeout(releaseTimer);
+      releaseTimer = window.setTimeout(() => {
+        snapping = false;
+      }, 600);
+    };
+
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y !== prevY) lastDir = y > prevY ? "down" : "up";
+      prevY = y;
+      if (snapping) return;
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(settle, SETTLE_MS);
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (timer) window.clearTimeout(timer);
+      if (releaseTimer) window.clearTimeout(releaseTimer);
+    };
+  }, []);
+
   // Hero video — force playback after mount. Autoplay is fragile
   // (Safari + some privacy modes block it until the element is ready,
   // not when the attribute appears). Pin the speed and retry .play()
