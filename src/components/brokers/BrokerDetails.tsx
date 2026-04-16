@@ -6,8 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
+import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { useToast } from "@/hooks/use-toast";
 import {
   Table,
@@ -23,13 +22,13 @@ import {
   Phone,
   FileText,
   Wallet,
-  TrendingUp,
-  TrendingDown,
   Plus,
   Download,
-  CalendarIcon,
   X,
   Loader2,
+  Handshake,
+  ArrowUpRight,
+  ArrowDownLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,8 +37,6 @@ import { ClientDrawer } from "@/components/clients/ClientDrawer";
 import { PolicyWizard } from "@/components/policies/PolicyWizard";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { RowActionsMenu } from "@/components/shared/RowActionsMenu";
-import { format } from "date-fns";
-import { arDZ as ar } from "date-fns/locale";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 
@@ -98,6 +95,8 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
     totalRemaining: 0,
     fromBrokerTotal: 0,
     toBrokerTotal: 0,
+    fromBrokerCount: 0,
+    toBrokerCount: 0,
     paidToBroker: 0,
     receivedFromBroker: 0,
   });
@@ -106,9 +105,9 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
   const [viewingPolicyId, setViewingPolicyId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   
-  // Date filter state
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  // Date filter state — YYYY-MM-DD strings matching ArabicDatePicker.
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
   
   const { toast } = useToast();
 
@@ -138,10 +137,10 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
         .order("created_at", { ascending: false });
 
       if (startDate) {
-        query = query.gte("start_date", format(startDate, "yyyy-MM-dd"));
+        query = query.gte("start_date", startDate);
       }
       if (endDate) {
-        query = query.lte("start_date", format(endDate, "yyyy-MM-dd"));
+        query = query.lte("start_date", endDate);
       }
 
       const { data: policiesData } = await query;
@@ -214,6 +213,8 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
         totalRemaining: totalPrice - totalCollected,
         fromBrokerTotal, // Policy profits I owe broker
         toBrokerTotal,   // Policy profits broker owes me
+        fromBrokerCount: fromBrokerPolicies.length,
+        toBrokerCount: toBrokerPolicies.length,
         paidToBroker,    // Settlements I paid to broker
         receivedFromBroker, // Settlements broker paid to me
       });
@@ -242,8 +243,8 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
       const { data, error } = await supabase.functions.invoke("generate-broker-report", {
         body: {
           broker_id: broker.id,
-          start_date: startDate ? format(startDate, "yyyy-MM-dd") : undefined,
-          end_date: endDate ? format(endDate, "yyyy-MM-dd") : undefined,
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
           direction_filter: 'all',
         },
       });
@@ -298,8 +299,8 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
   };
 
   const clearDateFilter = () => {
-    setStartDate(undefined);
-    setEndDate(undefined);
+    setStartDate("");
+    setEndDate("");
   };
 
   // Net balance = (what broker owes me from policies + what I received from broker)
@@ -310,7 +311,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
   const netBalance = policyNetBalance + settlementNetBalance;
 
   const dateRangeText = startDate || endDate
-    ? `${startDate ? format(startDate, "yyyy/MM/dd") : "..."} - ${endDate ? format(endDate, "yyyy/MM/dd") : "..."}`
+    ? `${startDate ? formatDate(startDate) : "..."} - ${endDate ? formatDate(endDate) : "..."}`
     : "كل الفترات";
 
   return (
@@ -373,49 +374,27 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
         {/* Date Filter */}
         <Card className="print:hidden">
           <CardContent className="pt-6">
-            <div className="flex flex-wrap items-end gap-4">
-              <div className="space-y-2">
-                <Label>من تاريخ</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-[180px] justify-start text-right", !startDate && "text-muted-foreground")}>
-                      <CalendarIcon className="ml-2 h-4 w-4" />
-                      {startDate ? format(startDate, "yyyy/MM/dd") : "اختر التاريخ"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={startDate}
-                      onSelect={setStartDate}
-                      initialFocus
-                      className="pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1.5 flex-1 min-w-[180px] max-w-[220px]">
+                <Label className="text-xs text-muted-foreground">من تاريخ</Label>
+                <ArabicDatePicker
+                  value={startDate}
+                  onChange={setStartDate}
+                  placeholder="اختر التاريخ"
+                  compact
+                />
               </div>
-              <div className="space-y-2">
-                <Label>إلى تاريخ</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-[180px] justify-start text-right", !endDate && "text-muted-foreground")}>
-                      <CalendarIcon className="ml-2 h-4 w-4" />
-                      {endDate ? format(endDate, "yyyy/MM/dd") : "اختر التاريخ"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={endDate}
-                      onSelect={setEndDate}
-                      initialFocus
-                      className="pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
+              <div className="space-y-1.5 flex-1 min-w-[180px] max-w-[220px]">
+                <Label className="text-xs text-muted-foreground">إلى تاريخ</Label>
+                <ArabicDatePicker
+                  value={endDate}
+                  onChange={setEndDate}
+                  placeholder="اختر التاريخ"
+                  compact
+                />
               </div>
               {(startDate || endDate) && (
-                <Button variant="ghost" size="sm" onClick={clearDateFilter}>
+                <Button variant="ghost" size="sm" onClick={clearDateFilter} className="mb-0.5">
                   <X className="h-4 w-4 ml-1" />
                   مسح الفلتر
                 </Button>
@@ -594,6 +573,84 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Broker-direction breakdown — which side owes whom on policies
+            alone. "to-broker" rows (exported by me to the broker) are
+            what the broker owes me; "from-broker" rows (brought to me
+            by the broker) are what I owe the broker. Net matches the
+            "إجمالي المبالغ" card at the top, ignoring settlements. */}
+        {!loading && policies.length > 0 && (
+          <Card className="print:border print:shadow-none">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Handshake className="h-4 w-4 text-muted-foreground" />
+                ملخص التعامل مع {broker.name}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="rounded-lg border border-green-200 dark:border-green-900/40 bg-green-50/60 dark:bg-green-950/20 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ArrowDownLeft className="h-4 w-4 text-green-700 dark:text-green-400" />
+                    <span className="text-sm font-medium text-green-800 dark:text-green-300">
+                      أنشأتها للوسيط
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mb-1">
+                    {stats.toBrokerCount} {stats.toBrokerCount === 1 ? "وثيقة" : "وثائق"} — يدفع لي الوسيط
+                  </div>
+                  <div className="text-xl font-bold text-green-700 dark:text-green-400 ltr-nums">
+                    {formatCurrency(stats.toBrokerTotal)}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-orange-200 dark:border-orange-900/40 bg-orange-50/60 dark:bg-orange-950/20 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ArrowUpRight className="h-4 w-4 text-orange-700 dark:text-orange-400" />
+                    <span className="text-sm font-medium text-orange-800 dark:text-orange-300">
+                      أنشأها لي الوسيط
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mb-1">
+                    {stats.fromBrokerCount} {stats.fromBrokerCount === 1 ? "وثيقة" : "وثائق"} — أدفع للوسيط
+                  </div>
+                  <div className="text-xl font-bold text-orange-700 dark:text-orange-400 ltr-nums">
+                    {formatCurrency(stats.fromBrokerTotal)}
+                  </div>
+                </div>
+
+                <div className={cn(
+                  "rounded-lg border-2 p-4",
+                  policyNetBalance >= 0
+                    ? "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30"
+                    : "border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30",
+                )}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Wallet className={cn(
+                      "h-4 w-4",
+                      policyNetBalance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400",
+                    )} />
+                    <span className="text-sm font-medium text-foreground">
+                      الصافي (الفرق)
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mb-1 ltr-nums">
+                    {formatCurrency(stats.toBrokerTotal)} − {formatCurrency(stats.fromBrokerTotal)}
+                  </div>
+                  <div className={cn(
+                    "text-xl font-bold ltr-nums",
+                    policyNetBalance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400",
+                  )}>
+                    {policyNetBalance < 0 ? "−" : ""}{formatCurrency(Math.abs(policyNetBalance))}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-1.5">
+                    {policyNetBalance >= 0 ? "الوسيط مدين لي" : "أنا مدين للوسيط"}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
       </div>
 
