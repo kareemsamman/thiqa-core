@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import {
   Phone, Shield, RefreshCcw, Wallet,
 } from "lucide-react";
 import { useLandingContent, ct, ci } from "@/hooks/useLandingContent";
+import { cn } from "@/lib/utils";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import thiqaLogo from "@/assets/thiqa-logo-full.svg";
 import dashboardMockupDefault from "@/assets/landing/dashboard-mockup.png";
@@ -99,6 +100,16 @@ export default function Landing() {
   const [testimonialIdx, setTestimonialIdx] = useState(0);
   const [testimonialAnim, setTestimonialAnim] = useState<"in" | "out">("in");
   const [faqCategory, setFaqCategory] = useState("general");
+  // Track scroll to drive the nav's sticky pill transition + the top
+  // marquee's slide-up close. `scrolled` flips true once the user is
+  // past a small threshold and stays true until they scroll back up.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 40);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   // CMS-driven images with fallbacks
   const dashboardMockup = ci(content, "dashboard_mockup_image", dashboardMockupDefault);
@@ -192,8 +203,14 @@ export default function Landing() {
         }
       `}</style>
       <div
-        className="relative border-b border-black/[0.06] bg-white py-3 overflow-hidden mb-6"
+        className={cn(
+          "relative border-b border-black/[0.06] bg-white overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+          scrolled
+            ? "max-h-0 py-0 border-0 opacity-0 pointer-events-none mb-0"
+            : "max-h-[60px] py-3 opacity-100 mb-6",
+        )}
         aria-label="مزايا النظام"
+        aria-hidden={scrolled}
       >
         {/* Edge fades so items dissolve into the white bg at both ends
             instead of hard-clipping at the viewport edges. */}
@@ -235,45 +252,98 @@ export default function Landing() {
         </div>
       </div>
 
-      {/* Wrapper for nav + hero so the nav's absolute positioning
-          anchors to this block (below the top marquee) instead of the
-          page root. Without it, absolute top-0 would place the nav
-          behind the marquee. */}
-      <div className="relative">
-
-      {/* ═══ Navbar — sits on top of the light-veiled hero, so text and
-          borders are black for readability. The navbar is absolute, not
-          fixed, so it doesn't follow the scroll onto the dark sections
-          below — the black styling is only visible over the hero. */}
-      <nav className="absolute top-0 inset-x-0 z-50">
-        <div className="w-[90%] max-w-[96rem] mx-auto flex items-center justify-between px-6 h-16">
-          <div className="flex items-center text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]">
+      {/* ═══ Navbar — fixed to the viewport so it follows the scroll.
+          When the user is at the top, the nav sits just below the open
+          marquee (top-11 = 44px, matching the marquee's rendered
+          height) as a full-width translucent strip over the hero.
+          Past the scroll threshold the marquee collapses to zero and
+          the nav animates to top-0 while morphing into the centered
+          rounded pill the user specified. */}
+      <nav
+        className={cn(
+          "fixed inset-x-0 z-50 pointer-events-none transition-[top] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+          scrolled ? "top-0" : "top-11",
+        )}
+      >
+        <div
+          className={cn(
+            "pointer-events-auto flex items-center justify-between px-6 h-14 md:h-16 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+            scrolled
+              ? "w-[92%] max-w-[64rem] mx-auto mt-3 border border-[rgb(245,245,245)] rounded-full"
+              : "w-[90%] max-w-[96rem] mx-auto mt-0 rounded-none border-0",
+          )}
+          style={
+            scrolled
+              ? {
+                  backdropFilter: "blur(8px)",
+                  WebkitBackdropFilter: "blur(8px)",
+                  backgroundColor: "rgba(255, 255, 255, 0.8)",
+                  boxShadow: "0 1px 20px 0 rgba(0, 0, 0, 0.12)",
+                }
+              : undefined
+          }
+        >
+          {/* Logo — flips from the white variant over the hero to the
+              black variant on the scrolled white pill. The wrapper's
+              text color controls the wordmark (currentColor). */}
+          <div
+            className={cn(
+              "flex items-center transition-colors duration-500",
+              scrolled
+                ? "text-black drop-shadow-none"
+                : "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]",
+            )}
+          >
             <ThiqaLogoAnimation
-              iconSize={34}
+              iconSize={32}
               interactive={false}
-              iconSrc="https://thiqacrm.b-cdn.net/small_white.png"
+              iconSrc={
+                scrolled
+                  ? "https://thiqacrm.b-cdn.net/small_black.png"
+                  : "https://thiqacrm.b-cdn.net/small_white.png"
+              }
             />
           </div>
-          <div className="hidden md:flex items-center gap-10 text-[14px] text-black/70 font-medium">
-            <a href="#features" className="hover:text-black transition-colors">لماذا نحن مختلفون</a>
-            <a href="#demo" className="hover:text-black transition-colors">كيف يعمل</a>
-            <a href="#faq" className="hover:text-black transition-colors">أسئلة وأجوبة</a>
-            <a href="/pricing" className="hover:text-black transition-colors">الأسعار</a>
+
+          <div
+            className={cn(
+              "hidden md:flex items-center gap-10 text-[14px] font-medium transition-colors duration-500",
+              scrolled ? "text-black/70" : "text-white/90",
+            )}
+          >
+            <a href="#features" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>لماذا نحن مختلفون</a>
+            <a href="#demo" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>كيف يعمل</a>
+            <a href="#faq" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>أسئلة وأجوبة</a>
+            <a href="/pricing" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>الأسعار</a>
           </div>
-            {/* Pill CTA — white text with the translucent ring style
-                the user specified (rgba whites + soft drop shadow). */}
-            <button
-              onClick={() => { trackEvent("signup_click", "/landing"); navigate("/login?view=signup"); }}
-              className="px-7 py-2.5 text-[13px] font-bold text-white transition-all hover:bg-white/20"
-              style={{
-                borderRadius: '100px',
-                border: '2px solid rgba(255, 255, 255, 0.40)',
-                background: 'rgba(255, 255, 255, 0.10)',
-                boxShadow: '0 4px 16px 0 rgba(0, 0, 0, 0.08)',
-              }}
-            >
-              {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
-            </button>
+
+          {/* CTA pill — translucent white-ring over the hero; switches
+              to a solid black ring on the white scrolled pill so it
+              stays visible. */}
+          <button
+            onClick={() => { trackEvent("signup_click", "/landing"); navigate("/login?view=signup"); }}
+            className={cn(
+              "px-6 py-2 text-[13px] font-bold transition-all",
+              scrolled ? "text-black hover:bg-black/5" : "text-white hover:bg-white/20",
+            )}
+            style={
+              scrolled
+                ? {
+                    borderRadius: "100px",
+                    border: "2px solid rgba(0, 0, 0, 0.18)",
+                    background: "rgba(255, 255, 255, 0.0)",
+                    boxShadow: "0 2px 8px 0 rgba(0, 0, 0, 0.06)",
+                  }
+                : {
+                    borderRadius: "100px",
+                    border: "2px solid rgba(255, 255, 255, 0.40)",
+                    background: "rgba(255, 255, 255, 0.10)",
+                    boxShadow: "0 4px 16px 0 rgba(0, 0, 0, 0.08)",
+                  }
+            }
+          >
+            {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
+          </button>
         </div>
       </nav>
 
@@ -359,7 +429,6 @@ export default function Landing() {
         </div>
       </section>
 
-      </div>{/* /nav + hero wrapper */}
 
       {/* ═══ Section 2: Features bar ═══ */}
       <img src={sectionDividerDark} alt="" className="w-full h-auto block" />
