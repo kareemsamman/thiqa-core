@@ -888,6 +888,144 @@ export default function Landing() {
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
+      {/* ═══ Section 3: Demo / Feature tabs ═══
+          Moved up from its old position (was below the 6-tile grid)
+          so the landing reads: hero → overwhelmed story → demo of
+          the fix → feature tiles. Dark-theme redesign inspired by
+          the Hebrew reference: a big black card split into a mockup
+          visual on the left (with atmospheric blurred backdrop + a
+          navy radial glow behind the device shot) and a dark
+          description/CTA card on the right. Two black stat cards
+          below mirror the reference's "+216% + small cards" row,
+          each with its own corner glow so the dark surface doesn't
+          read as flat. Tabs stay light on top for contrast. */}
+      <section id="demo" className="py-20 md:py-28 relative bg-white">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-10">
+            <p className="text-sm text-[#4a6cc7] mb-3 tracking-wide font-semibold">{ct(content, "showcase_label", "لماذا Thiqa بالذات؟")}</p>
+            <h2 className="text-3xl md:text-[2.8rem] font-bold leading-tight mb-4 text-black">
+              {ct(content, "showcase_title", "كل الأدوات لإدارة الوكالة تحت سقف واحد")}
+            </h2>
+            <p className="text-black/55 text-sm max-w-xl mx-auto">
+              {ct(content, "showcase_subtitle", "بنية تقنية متقدمة توفر لك الوقت، تمنع الأخطاء وتزيد الربحية.")}
+            </p>
+          </div>
+
+          {/* Tabs — light bar for contrast against the dark content below */}
+          <div className="flex overflow-x-auto border border-black/[0.08] rounded-xl mb-4 bg-white">
+            {featureTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex-1 min-w-[140px] px-4 py-4 text-center border-l border-black/[0.08] first:border-l-0 transition-colors ${
+                  activeTab === tab.id
+                    ? "bg-black/[0.04] text-black"
+                    : "text-black/50 hover:text-black/75 hover:bg-black/[0.02]"
+                }`}
+              >
+                <span className="text-xs text-black/40 block mb-1">{tab.num}</span>
+                <span className="text-sm font-semibold">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          {featureTabs.filter(t => t.id === activeTab).map(tab => (
+            <div key={tab.id} className="space-y-4">
+              {/* Main row: mockup card + description card */}
+              <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4">
+                {/* Left: Mockup card with blurred backdrop + navy glow */}
+                <div className="relative rounded-3xl bg-[#0b0b15] overflow-hidden min-h-[320px] md:min-h-[380px] lg:min-h-[440px] flex items-center justify-center p-6 md:p-10">
+                  {/* Blurred backdrop using the same mockup for ambient color */}
+                  <div
+                    className="absolute inset-0 opacity-30"
+                    style={{
+                      backgroundImage: `url(${featuresMockup})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                      filter: "blur(60px) saturate(1.2)",
+                      transform: "scale(1.3)",
+                    }}
+                    aria-hidden="true"
+                  />
+                  {/* Navy radial glow for the premium SaaS feel */}
+                  <div
+                    className="absolute inset-0 opacity-50"
+                    style={{
+                      background: "radial-gradient(ellipse 70% 60% at 30% 50%, rgba(74,108,199,0.45) 0%, transparent 60%)",
+                    }}
+                    aria-hidden="true"
+                  />
+                  {/* Mockup */}
+                  <img
+                    src={featuresMockup}
+                    alt=""
+                    className="relative z-10 w-full max-w-[88%] h-auto rounded-xl shadow-[0_30px_80px_-10px_rgba(0,0,0,0.6)]"
+                    loading="lazy"
+                  />
+                </div>
+
+                {/* Right: Description card */}
+                <div className="relative rounded-3xl bg-[#0b0b15] overflow-hidden p-8 lg:p-10 flex flex-col justify-between min-h-[320px] lg:min-h-[440px]">
+                  {/* Corner glow */}
+                  <div
+                    className="absolute -top-24 -right-24 h-64 w-64 opacity-40 pointer-events-none"
+                    style={{
+                      background: "radial-gradient(circle, rgba(74,108,199,0.5) 0%, transparent 70%)",
+                      filter: "blur(30px)",
+                    }}
+                    aria-hidden="true"
+                  />
+                  <div className="relative z-10">
+                    <span className="inline-flex text-[11px] text-white/40 font-bold tracking-[0.2em] mb-4 uppercase">
+                      {tab.num} · {tab.label}
+                    </span>
+                    <h3 className="text-2xl lg:text-[1.9rem] font-bold leading-tight whitespace-pre-line mb-4 text-white">
+                      {tab.title}
+                    </h3>
+                    <p className="text-white/60 text-sm leading-relaxed">
+                      {tab.desc}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => navigate("/login?view=signup")}
+                    className="relative z-10 mt-8 self-start flex items-center gap-2 px-6 py-3 text-sm font-bold text-white rounded-full bg-white/10 border border-white/20 hover:bg-white/20 transition-colors backdrop-blur-sm"
+                  >
+                    ابدأ التجربة الآن
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Bottom row: 2 stat cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {tab.stats.map((stat, j) => (
+                  <div key={j} className="relative rounded-3xl bg-[#0b0b15] overflow-hidden p-6 lg:p-8 text-white">
+                    <div
+                      className="absolute -top-20 -left-20 h-56 w-56 opacity-35 pointer-events-none"
+                      style={{
+                        background: "radial-gradient(circle, rgba(74,108,199,0.5) 0%, transparent 70%)",
+                        filter: "blur(40px)",
+                      }}
+                      aria-hidden="true"
+                    />
+                    <div className="relative z-10">
+                      <div className="text-4xl lg:text-5xl font-extrabold leading-none">
+                        {stat.value}
+                        <span className="text-xl lg:text-2xl font-medium text-white/50 mr-1">{stat.unit}</span>
+                      </div>
+                      <p className="text-xs lg:text-sm text-white/55 mt-3 leading-relaxed">{stat.label}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
+
       {/* ═══ Section 2: Feature highlights ═══
           Six real Thiqa capabilities, each in its own tile.
           IntersectionObserver flips `.fb-visible` on the whole
@@ -1446,75 +1584,6 @@ export default function Landing() {
       </section>
       </>}
       {/* ═══ end hidden features section ═══ */}
-
-      <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
-
-      <section id="demo" className="py-24 md:py-36 relative bg-white">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-12">
-            <p className="text-sm text-[#4a6cc7] mb-4 tracking-wide font-semibold">{ct(content, "showcase_label", "لماذا Thiqa بالذات؟")}</p>
-            <h2 className="text-3xl md:text-[2.8rem] font-bold leading-tight mb-4 text-black">
-              {ct(content, "showcase_title", "كل الأدوات لإدارة الوكالة تحت سقف واحد")}
-            </h2>
-            <p className="text-black/55 text-sm max-w-xl mx-auto">
-              {ct(content, "showcase_subtitle", "بنية تقنية متقدمة توفر لك الوقت، تمنع الأخطاء وتزيد الربحية.")}
-            </p>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex overflow-x-auto border border-black/[0.08] rounded-xl mb-0 bg-white">
-            {featureTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 min-w-[140px] px-4 py-4 text-center border-l border-black/[0.08] first:border-l-0 transition-colors ${
-                  activeTab === tab.id
-                    ? "bg-black/[0.04] text-black"
-                    : "text-black/50 hover:text-black/75 hover:bg-black/[0.02]"
-                }`}
-              >
-                <span className="text-xs text-black/40 block mb-1">{tab.num}</span>
-                <span className="text-sm font-semibold">{tab.label}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Tab Content */}
-          {featureTabs.filter(t => t.id === activeTab).map(tab => (
-            <div key={tab.id} className="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-black/[0.08] border-t-0 rounded-b-xl overflow-hidden bg-white">
-              <div className="p-8 lg:p-12 flex flex-col justify-center order-1 lg:order-none">
-                <h3 className="text-2xl md:text-3xl font-bold mb-4 leading-tight whitespace-pre-line text-black">{tab.title}</h3>
-                <p className="text-black/60 text-sm leading-relaxed mb-8">{tab.desc}</p>
-
-                <div className="grid grid-cols-2 gap-6">
-                  {tab.stats.map((stat, j) => (
-                    <div key={j}>
-                      <div className="text-3xl font-extrabold text-black">
-                        {stat.value}<span className="text-lg font-medium text-black/55 mr-1">{stat.unit}</span>
-                      </div>
-                      <p className="text-xs text-black/50 mt-2 leading-relaxed">{stat.label}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-8">
-                  <button
-                    onClick={() => navigate("/login?view=signup")}
-                    className="flex items-center gap-2 px-6 py-3 text-sm font-bold text-black hover:bg-black/[0.06] transition-colors bg-black/[0.03] border border-black/[0.12] rounded-lg"
-                  >
-                    ابدأ التجربة الآن
-                    <ArrowLeft className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-              <div className="bg-gradient-to-br from-[#eef1ff] to-[#e4eaff] min-h-[300px] lg:min-h-[400px] flex items-center justify-center order-2 lg:order-none">
-                <img src={featuresMockup} alt="" className="w-full h-full object-cover" loading="lazy" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
