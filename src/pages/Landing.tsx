@@ -241,122 +241,27 @@ export default function Landing() {
   // marquee's aria-hidden) still want the boolean. Kept cheap — flips
   // at most once when crossing the 8 px threshold.
   const [scrolled, setScrolled] = useState(false);
-  // Scroll-linked chrome — driven DIRECTLY on the DOM via refs in a
-  // requestAnimationFrame loop, NOT through React state. A large page
-  // like Landing re-rendering on every scroll tick was adding its own
-  // lag on top of the animation, especially on the way back to the
-  // top where the user is actively scrolling while the lerp settles.
-  // By writing to `.style` on pinned refs we bypass React entirely on
-  // every frame — the nav tracks the scroll 1:1 with no reconciler
-  // cost per event.
-  const marqueeChromeRef = useRef<HTMLDivElement | null>(null);
-  const navPillRef = useRef<HTMLDivElement | null>(null);
+  // Scroll-linked chrome — BINARY STATE, not interpolation. The old
+  // rAF loop wrote inline styles every frame to morph the nav on a
+  // 0→y pixel gradient; that left a wide "half-morph" dead zone and
+  // any tiny scroll event parked the user inside it. Now `scrolled`
+  // is the only signal and the two visual states (open / pill) are
+  // driven by CSS transitions on the elements themselves. The
+  // browser handles the animation in ~450 ms whether the user
+  // crossed the threshold via wheel, keyboard, touch, or anchor
+  // jump — no JS snap needed, no dead zone possible.
   useEffect(() => {
-    let ticking = false;
-    let lastScrolled = false;
-    const apply = () => {
-      const y = window.scrollY;
-      const p = Math.min(1, Math.max(0, y / 90));
-      const inv = 1 - p;
-      const m = marqueeChromeRef.current;
-      if (m) {
-        m.style.maxHeight = `${60 * inv}px`;
-        m.style.paddingTop = `${12 * inv}px`;
-        m.style.paddingBottom = `${12 * inv}px`;
-        m.style.opacity = String(inv);
-        m.style.transform = `translate3d(0, ${-60 * p}px, 0)`;
-        m.style.pointerEvents = p > 0.5 ? "none" : "auto";
-      }
-      const n = navPillRef.current;
-      if (n) {
-        n.style.width = `${90 - 6 * p}%`;
-        n.style.maxWidth = `${96 - 32 * p}rem`;
-        n.style.marginTop = `${12 * p}px`;
-        n.style.borderRadius = `${9999 * p}px`;
-        n.style.transform = `translate3d(0, ${44 * inv}px, 0)`;
-        if (p > 0.02) {
-          n.style.backdropFilter = "blur(8px)";
-          (n.style as CSSStyleDeclaration & { webkitBackdropFilter?: string }).webkitBackdropFilter = "blur(8px)";
-        } else {
-          n.style.backdropFilter = "none";
-          (n.style as CSSStyleDeclaration & { webkitBackdropFilter?: string }).webkitBackdropFilter = "none";
-        }
-        n.style.backgroundColor = `rgba(255, 255, 255, ${0.8 * p})`;
-        n.style.boxShadow = `0 1px 20px 0 rgba(0, 0, 0, ${0.12 * p})`;
-      }
-      const isScrolled = y > 8;
-      if (isScrolled !== lastScrolled) {
-        lastScrolled = isScrolled;
-        setScrolled(isScrolled);
-      }
-    };
+    let lastScrolled = window.scrollY > 8;
+    setScrolled(lastScrolled);
     const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        apply();
-        ticking = false;
-      });
+      const next = window.scrollY > 8;
+      if (next !== lastScrolled) {
+        lastScrolled = next;
+        setScrolled(next);
+      }
     };
-    apply();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  // ═══ Nav "dead zone" snap ═══
-  // Even though the chrome animation itself interpolates on y/90,
-  // the visual "bad zone" where the nav + marquee look half-morphed
-  // extends all the way to ~158 px (measured live). This effect
-  // watches for the user to actually *settle* inside 0 < y < 158
-  // (debounced ~140 ms after the last scroll event) and then nudges
-  // them the rest of the way out, respecting whichever direction
-  // they were heading:
-  //   • scrolling up   → snap to 0
-  //   • scrolling down → snap to 170 (158 + 12 px overshoot)
-  // Active scrolling resets the timer so we never fight the user,
-  // and a `snapping` guard prevents the smooth-scroll's own events
-  // from re-triggering the snap.
-  useEffect(() => {
-    const TRANSITION_END = 158;
-    const LOWER = 4;    // treat y ≤ 4 as "already at top"
-    const UPPER = TRANSITION_END - 2;
-    const OVERSHOOT = 12;
-    const SETTLE_MS = 140;
-
-    let prevY = window.scrollY;
-    let lastDir: "up" | "down" = "down";
-    let timer: number | null = null;
-    let snapping = false;
-    let releaseTimer: number | null = null;
-
-    const settle = () => {
-      if (snapping) return;
-      const y = window.scrollY;
-      if (y <= LOWER || y >= UPPER) return;
-      snapping = true;
-      const target = lastDir === "up" ? 0 : TRANSITION_END + OVERSHOOT;
-      window.scrollTo({ top: target, behavior: "smooth" });
-      if (releaseTimer) window.clearTimeout(releaseTimer);
-      releaseTimer = window.setTimeout(() => {
-        snapping = false;
-      }, 600);
-    };
-
-    const onScroll = () => {
-      const y = window.scrollY;
-      if (y !== prevY) lastDir = y > prevY ? "down" : "up";
-      prevY = y;
-      if (snapping) return;
-      if (timer) window.clearTimeout(timer);
-      timer = window.setTimeout(settle, SETTLE_MS);
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (timer) window.clearTimeout(timer);
-      if (releaseTimer) window.clearTimeout(releaseTimer);
-    };
   }, []);
 
   // Hero video — force playback after mount. Autoplay is fragile
@@ -514,17 +419,21 @@ export default function Landing() {
           in from off-screen-right. The inner Arabic text still renders
           its own RTL direction via each item's natural bidi. */}
       <div
-        ref={marqueeChromeRef}
         dir="ltr"
-        className="relative bg-white overflow-hidden transform-gpu origin-top will-change-[max-height,opacity,transform]"
+        className="relative bg-white overflow-hidden transform-gpu origin-top"
         style={{
-          // Initial values — the rAF loop rewrites these on every
-          // scroll event. React never re-runs to update them.
-          maxHeight: "60px",
-          paddingTop: "12px",
-          paddingBottom: "12px",
-          opacity: 1,
-          transform: "translate3d(0, 0, 0)",
+          // Binary open / closed state. All four properties share a
+          // single ~500 ms ease-out transition so the close reads as
+          // one coordinated motion instead of four racing animations.
+          maxHeight: scrolled ? 0 : 60,
+          paddingTop: scrolled ? 0 : 12,
+          paddingBottom: scrolled ? 0 : 12,
+          opacity: scrolled ? 0 : 1,
+          transform: scrolled ? "translate3d(0, -60px, 0)" : "translate3d(0, 0, 0)",
+          pointerEvents: scrolled ? "none" : "auto",
+          transitionProperty: "max-height, padding, opacity, transform",
+          transitionDuration: "500ms",
+          transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
         }}
         aria-label="مزايا النظام"
         aria-hidden={scrolled}
@@ -606,21 +515,24 @@ export default function Landing() {
           the layout each frame. */}
       <nav className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-2">
         <div
-          ref={navPillRef}
-          className="pointer-events-auto flex items-center justify-between px-6 h-14 md:h-16 mx-auto transform-gpu will-change-[transform,background-color,border-radius,box-shadow]"
+          className="pointer-events-auto flex items-center justify-between px-6 h-14 md:h-16 mx-auto transform-gpu"
           style={{
-            // Initial (unscrolled) values — rewritten per-frame by
-            // the rAF loop above without going through React.
-            width: "90%",
-            maxWidth: "96rem",
-            marginTop: "0px",
-            borderRadius: "0px",
-            transform: "translate3d(0, 44px, 0)",
-            backdropFilter: "none",
-            WebkitBackdropFilter: "none",
-            backgroundColor: "rgba(255, 255, 255, 0)",
-            boxShadow: "none",
+            // Two stable visual states, one shared 500 ms transition.
+            // `scrolled` flips once at y > 8 and the browser handles
+            // the rest — no per-frame JS, nothing to freeze.
+            width: scrolled ? "84%" : "90%",
+            maxWidth: scrolled ? "64rem" : "96rem",
+            marginTop: scrolled ? "12px" : "0px",
+            borderRadius: scrolled ? "9999px" : "0px",
+            transform: scrolled ? "translate3d(0, 0, 0)" : "translate3d(0, 44px, 0)",
+            backdropFilter: scrolled ? "blur(8px)" : "none",
+            WebkitBackdropFilter: scrolled ? "blur(8px)" : "none",
+            backgroundColor: scrolled ? "rgba(255, 255, 255, 0.8)" : "rgba(255, 255, 255, 0)",
+            boxShadow: scrolled ? "0 1px 20px 0 rgba(0, 0, 0, 0.12)" : "none",
             border: "none",
+            transitionProperty: "width, max-width, margin-top, border-radius, transform, backdrop-filter, background-color, box-shadow",
+            transitionDuration: "500ms",
+            transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
           }}
         >
           {/* Logo — always the black variant. currentColor on the
