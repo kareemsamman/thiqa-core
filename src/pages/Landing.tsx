@@ -103,12 +103,25 @@ export default function Landing() {
   // marquee's slide-up close. `scrolled` flips true once the user is
   // past a small threshold and stays true until they scroll back up.
   const [scrolled, setScrolled] = useState(false);
+  // Scroll-linked progress 0 → 1 driving the nav/marquee animation.
+  // Interpolating values against scrollY is always smooth because
+  // the change is tied directly to the user's input — no 700 ms
+  // transition fighting against the scroll gesture, so the nav
+  // never feels "frozen" while the page is scrolling.
+  const [scrollProgress, setScrollProgress] = useState(0);
   useEffect(() => {
-    // Lower threshold so the nav transition starts responding almost
-    // as soon as the user scrolls — the old 40 px threshold felt like
-    // the nav was "frozen" for the first quarter turn of the wheel
-    // before the animation kicked in.
-    const onScroll = () => setScrolled(window.scrollY > 8);
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = window.scrollY;
+        const p = Math.min(1, Math.max(0, y / 90));
+        setScrollProgress(p);
+        setScrolled(y > 8);
+        ticking = false;
+      });
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -270,18 +283,18 @@ export default function Landing() {
           its own RTL direction via each item's natural bidi. */}
       <div
         dir="ltr"
-        className={cn(
-          // No bottom border on the marquee — the bar sits directly
-          // above the hero so a divider line isn't needed. A longer
-          // duration + iOS-style ease lets the bar slide up rather
-          // than snap closed. -translate-y pairs with max-h-0 so the
-          // element pushes up while its flow space collapses — content
-          // below glides up into the gap instead of jumping.
-          "relative bg-white overflow-hidden transition-all duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)] transform-gpu origin-top",
-          scrolled
-            ? "max-h-0 py-0 opacity-0 pointer-events-none -translate-y-full"
-            : "max-h-[60px] py-3 opacity-100 translate-y-0",
-        )}
+        className="relative bg-white overflow-hidden transform-gpu origin-top will-change-[max-height,opacity,transform]"
+        style={{
+          // Scroll-linked morph — height, opacity and translateY all
+          // interpolate against scrollY so the retraction follows the
+          // scroll gesture 1:1 instead of a delayed 700 ms tween.
+          maxHeight: `${60 * (1 - scrollProgress)}px`,
+          paddingTop: `${12 * (1 - scrollProgress)}px`,
+          paddingBottom: `${12 * (1 - scrollProgress)}px`,
+          opacity: 1 - scrollProgress,
+          transform: `translate3d(0, ${-60 * scrollProgress}px, 0)`,
+          pointerEvents: scrollProgress > 0.5 ? "none" : "auto",
+        }}
         aria-label="مزايا النظام"
         aria-hidden={scrolled}
       >
@@ -360,29 +373,23 @@ export default function Landing() {
           no reflow jank — the nav tracks the scroll smoothly instead
           of "freezing" while the old top-property animation repaints
           the layout each frame. */}
-      <nav
-        className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-2"
-      >
+      <nav className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-2">
         <div
-          className={cn(
-            "pointer-events-auto flex items-center justify-between px-6 h-14 md:h-16 transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)] transform-gpu will-change-transform",
-            scrolled
-              ? "w-[92%] max-w-[64rem] mx-auto mt-3 rounded-full"
-              : "w-[90%] max-w-[96rem] mx-auto mt-0 rounded-none",
-          )}
+          className="pointer-events-auto flex items-center justify-between px-6 h-14 md:h-16 mx-auto transform-gpu will-change-[transform,background-color,border-radius,box-shadow]"
           style={{
-            // translateY drives the "drop into place from 44px below"
-            // motion on unscrolled → scrolled. Compositor-friendly,
-            // no layout triggered per frame.
-            transform: scrolled ? "translate3d(0, 0, 0)" : "translate3d(0, 44px, 0)",
-            // Only apply the frosted pill chrome when actually
-            // scrolled — over the hero the nav is fully transparent
-            // (no bg, no border, no shadow) so there's nothing that
-            // could look like a stray white line.
-            backdropFilter: scrolled ? "blur(8px)" : "none",
-            WebkitBackdropFilter: scrolled ? "blur(8px)" : "none",
-            backgroundColor: scrolled ? "rgba(255, 255, 255, 0.8)" : "transparent",
-            boxShadow: scrolled ? "0 1px 20px 0 rgba(0, 0, 0, 0.12)" : "none",
+            // Every visual property is a linear interpolation on
+            // scrollProgress. No CSS transition, no delayed tween —
+            // the nav follows the scroll gesture frame-for-frame, so
+            // there's nothing to "freeze" on slow scrolls.
+            width: `${90 - 6 * scrollProgress}%`,
+            maxWidth: `${96 - 32 * scrollProgress}rem`,
+            marginTop: `${12 * scrollProgress}px`,
+            borderRadius: `${9999 * scrollProgress}px`,
+            transform: `translate3d(0, ${44 * (1 - scrollProgress)}px, 0)`,
+            backdropFilter: scrollProgress > 0.02 ? "blur(8px)" : "none",
+            WebkitBackdropFilter: scrollProgress > 0.02 ? "blur(8px)" : "none",
+            backgroundColor: `rgba(255, 255, 255, ${0.8 * scrollProgress})`,
+            boxShadow: `0 1px 20px 0 rgba(0, 0, 0, ${0.12 * scrollProgress})`,
             border: "none",
           }}
         >
