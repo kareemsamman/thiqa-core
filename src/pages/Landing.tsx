@@ -783,13 +783,14 @@ export default function Landing() {
             down so the foreground image and glass pills pop against it. */}
         <div className="absolute inset-0 bg-white/25" aria-hidden="true" />
 
-        {/* Sharp foreground image — 70% of viewport width, centered,
-            full section height, object-cover. No rounded corners,
-            no shadow. Sits above the blurred backdrop. */}
+        {/* Sharp foreground image — 70% viewport width, 76% section
+            height, anchored to the bottom so the person's head sits
+            in the upper portion of the image (around ~25-45% of the
+            section) and the pills can crowd around it. */}
         <img
           src="https://thiqacrm.b-cdn.net/hf_20260416_155619_091100f5-d053-456f-9c9f-e9f80354c345%201.png"
           alt="وكيل تأمين غارق بالمهام قبل Thiqa"
-          className="hs-img absolute inset-y-0 left-1/2 -translate-x-1/2 w-[70%] h-full object-cover"
+          className="hs-img absolute bottom-0 left-1/2 -translate-x-1/2 w-[70%] h-[76%] object-cover object-bottom"
           loading="lazy"
         />
 
@@ -815,15 +816,18 @@ export default function Landing() {
             (hsFromLeft / hsFromRight) + gentle continuous float
             (hsFloat). Hidden below md breakpoint. */}
         <div className="absolute inset-0 z-20 pointer-events-none">
-          {/* Left pills */}
-          <div className="hs-pill hs-pill-l hs-d-1 hidden md:flex absolute top-[14%] left-[4%] lg:left-[7%] items-center gap-2.5 rounded-full bg-white/60 backdrop-blur-md border border-white/70 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.15)]">
+          {/* Left pills — tightly packed in the head-and-shoulders
+              band (22% → 46%). Glass: bg-white/40 + backdrop-blur-2xl
+              + saturate to make the frost actually show against the
+              already-blurred backdrop. */}
+          <div className="hs-pill hs-pill-l hs-d-1 hidden md:flex absolute top-[22%] left-[4%] lg:left-[7%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
             <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
               <AlertTriangle className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.5} />
             </span>
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">عاجل</span>
           </div>
 
-          <div className="hs-pill hs-pill-l hs-d-3 hidden md:flex absolute top-[26%] left-[2%] lg:left-[3%] items-center gap-2.5 rounded-full bg-white/60 backdrop-blur-md border border-white/70 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.15)]">
+          <div className="hs-pill hs-pill-l hs-d-3 hidden md:flex absolute top-[30%] left-[2%] lg:left-[3%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
             <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
               <Phone className="h-3.5 w-3.5 text-[#122042]" strokeWidth={2.4} />
             </span>
@@ -833,14 +837,14 @@ export default function Landing() {
             </span>
           </div>
 
-          <div className="hs-pill hs-pill-l hs-d-5 hidden md:flex absolute top-[39%] left-[5%] lg:left-[8%] items-center gap-2.5 rounded-full bg-white/60 backdrop-blur-md border border-white/70 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.15)]">
+          <div className="hs-pill hs-pill-l hs-d-5 hidden md:flex absolute top-[38%] left-[5%] lg:left-[8%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
             <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
               <MessageSquare className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.2} />
             </span>
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">شكوى عميل</span>
           </div>
 
-          <div className="hs-pill hs-pill-l hs-d-7 hidden md:flex absolute top-[52%] left-[3%] lg:left-[5%] items-center gap-2.5 rounded-full bg-white/60 backdrop-blur-md border border-white/70 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.15)]">
+          <div className="hs-pill hs-pill-l hs-d-7 hidden md:flex absolute top-[46%] left-[3%] lg:left-[5%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
             <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
               <BarChart3 className="h-3.5 w-3.5 text-amber-600" strokeWidth={2.2} />
             </span>
@@ -848,7 +852,7 @@ export default function Landing() {
           </div>
 
           {/* Right pills */}
-          <div className="hs-pill hs-pill-r hs-d-2 hidden md:flex absolute top-[12%] right-[4%] lg:right-[7%] items-center gap-2.5 rounded-full bg-white/60 backdrop-blur-md border border-white/70 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.15)]">
+          <div className="hs-pill hs-pill-r hs-d-2 hidden md:flex absolute top-[22%] right-[4%] lg:right-[7%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
             <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
               <Mail className="h-3.5 w-3.5 text-[#122042]" strokeWidth={2.2} />
             </span>
@@ -858,21 +862,21 @@ export default function Landing() {
             </span>
           </div>
 
-          <div className="hs-pill hs-pill-r hs-d-4 hidden md:flex absolute top-[25%] right-[2%] lg:right-[3%] items-center gap-2.5 rounded-full bg-white/60 backdrop-blur-md border border-white/70 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.15)]">
+          <div className="hs-pill hs-pill-r hs-d-4 hidden md:flex absolute top-[30%] right-[2%] lg:right-[3%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
             <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
               <Clock className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.4} />
             </span>
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">تجديد متأخر</span>
           </div>
 
-          <div className="hs-pill hs-pill-r hs-d-6 hidden md:flex absolute top-[38%] right-[5%] lg:right-[8%] items-center gap-2.5 rounded-full bg-white/60 backdrop-blur-md border border-white/70 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.15)]">
+          <div className="hs-pill hs-pill-r hs-d-6 hidden md:flex absolute top-[38%] right-[5%] lg:right-[8%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
             <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
               <Bell className="h-3.5 w-3.5 text-amber-600" strokeWidth={2.2} />
             </span>
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">مواعيد متراكمة</span>
           </div>
 
-          <div className="hs-pill hs-pill-r hs-d-8 hidden md:flex absolute top-[51%] right-[3%] lg:right-[5%] items-center gap-2.5 rounded-full bg-white/60 backdrop-blur-md border border-white/70 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.15)]">
+          <div className="hs-pill hs-pill-r hs-d-8 hidden md:flex absolute top-[46%] right-[3%] lg:right-[5%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
             <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
               <FileText className="h-3.5 w-3.5 text-[#7a5a36]" strokeWidth={2.2} />
             </span>
