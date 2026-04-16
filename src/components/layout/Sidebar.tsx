@@ -177,8 +177,15 @@ export const navigationGroups: NavGroup[] = [
   },
 ];
 
-function SidebarContent({ collapsed, onCollapse, onNavigate }: { 
-  collapsed: boolean; 
+// Module-level — survives sidebar remounts triggered by route navigation
+// (MainLayout wraps each page, so Sidebar is a new component instance
+// every time). Without this the nav would snap back to scrollTop=0 on
+// every click. See also the persistence effect below.
+let PRESERVED_NAV_SCROLL = 0;
+let HAS_DONE_INITIAL_ACTIVE_SCROLL = false;
+
+function SidebarContent({ collapsed, onCollapse, onNavigate }: {
+  collapsed: boolean;
   onCollapse?: (val: boolean) => void;
   onNavigate?: () => void;
 }) {
@@ -187,21 +194,50 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const lastScrolledPathRef = useRef<string | null>(null);
   const lastScrollTimersRef = useRef<number[]>([]);
+  const navRef = useRef<HTMLElement | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Callback ref attached to the active NavLink. Fires the moment the
-  // element mounts in the DOM so it works for both "navigate to a new
-  // page" and "land directly on a page after the auth profile loads and
-  // the group expands". Uses block: 'nearest' so it's a no-op when the
-  // active item is already in view — we don't want every click to yank
-  // the sidebar's scroll position to recenter the row.
+  // Preserve the nav's scrollTop across route navigations. On mount we
+  // restore what was saved last time; on every scroll we update the
+  // module-level cache so the next mount can restore it again.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    // Restore after layout so the restored value sticks. requestAnimationFrame
+    // covers most cases; a tiny timeout catches late layouts where
+    // collapsible groups expand on load.
+    const restore = () => { nav.scrollTop = PRESERVED_NAV_SCROLL; };
+    restore();
+    const raf = requestAnimationFrame(restore);
+    const handleScroll = () => {
+      PRESERVED_NAV_SCROLL = nav.scrollTop;
+    };
+    nav.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      nav.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  // Callback ref for the active NavLink. We only auto-scroll it into
+  // view ONCE per session — on the very first landing (deep-link /
+  // refresh / fresh login). After that, PRESERVED_NAV_SCROLL owns the
+  // scroll position so subsequent navigations keep whatever the user
+  // had scrolled to. This is guarded at the module level so remounts
+  // caused by route changes can't retrigger the snap-to-active.
   const activeNavLinkRef = useCallback(
     (node: HTMLAnchorElement | null) => {
       if (!node) return;
-      if (lastScrolledPathRef.current === location.pathname) return;
+      if (HAS_DONE_INITIAL_ACTIVE_SCROLL) return;
+      HAS_DONE_INITIAL_ACTIVE_SCROLL = true;
       lastScrolledPathRef.current = location.pathname;
-      const scroll = () => node.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+      const scroll = () => {
+        node.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+        // Capture the post-scroll position so the persistence layer
+        // starts from here instead of 0.
+        if (navRef.current) PRESERVED_NAV_SCROLL = navRef.current.scrollTop;
+      };
       requestAnimationFrame(scroll);
       const t1 = window.setTimeout(scroll, 150);
       const t2 = window.setTimeout(scroll, 450);
@@ -325,7 +361,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
       <SidebarSearch collapsed={collapsed} onNavigate={onNavigate} />
 
       {/* Navigation */}
-      <nav className="flex-1 flex flex-col gap-1 p-2 overflow-y-auto">
+      <nav ref={navRef} className="flex-1 flex flex-col gap-1 p-2 overflow-y-auto">
         {filteredGroups.map((group) => {
           const isOpen = openGroups[group.name] ?? false;
           const GroupIcon = group.icon;

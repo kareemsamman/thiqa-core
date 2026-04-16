@@ -403,9 +403,6 @@ export default function FinancialReports() {
                   <div className="text-2xl font-bold text-warning">
                     {formatCurrency(abWallet?.monthExpenses || 0)}
                   </div>
-                  <Link to="/expenses" className="text-xs text-primary hover:underline mt-1 inline-block">
-                    عرض كل المصاريف →
-                  </Link>
                 </CardContent>
               </Card>
             </>
