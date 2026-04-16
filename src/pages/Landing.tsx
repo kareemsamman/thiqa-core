@@ -256,6 +256,10 @@ export default function Landing() {
     let lastScrolled = false;
     const apply = () => {
       const y = window.scrollY;
+      // DEBUG: remove once the nav snap ranges are tuned. Logs the
+      // current scrollY on every rAF frame so we can tell exactly
+      // which positions look broken and adjust LOWER/UPPER below.
+      console.log("[scroll]", y);
       const p = Math.min(1, Math.max(0, y / 90));
       const inv = 1 - p;
       const m = marqueeChromeRef.current;
