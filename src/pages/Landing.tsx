@@ -578,7 +578,8 @@ export default function Landing() {
           </div>
 
           <div className="hidden md:flex items-center gap-10 text-[14px] font-medium text-black/70">
-            <a href="#features" className="transition-colors hover:text-black">لماذا نحن مختلفون</a>
+            {/* Hidden: features section is currently disabled. Restore alongside the `{false && …}` block below. */}
+            {false && <a href="#features" className="transition-colors hover:text-black">لماذا نحن مختلفون</a>}
             <a href="#demo" className="transition-colors hover:text-black">كيف يعمل</a>
             <a href="#faq" className="transition-colors hover:text-black">أسئلة وأجوبة</a>
             <a href="/pricing" className="transition-colors hover:text-black">الأسعار</a>
@@ -1052,6 +1053,10 @@ export default function Landing() {
         })()}
       </section>
 
+      {/* ═══ Features section — temporarily hidden ═══
+          Flip `false` → `true` to restore. Also unhide the
+          `#features` nav link above. */}
+      {false && <>
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
       {/* ═══ Section 3: The big 3 ═══
@@ -1260,6 +1265,8 @@ export default function Landing() {
           </button>
         </div>
       </section>
+      </>}
+      {/* ═══ end hidden features section ═══ */}
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
