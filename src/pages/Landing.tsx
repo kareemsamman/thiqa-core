@@ -244,11 +244,11 @@ export default function Landing() {
           below — the black styling is only visible over the hero. */}
       <nav className="absolute top-0 inset-x-0 z-50">
         <div className="w-[90%] max-w-[96rem] mx-auto flex items-center justify-between px-6 h-16">
-          <div className="flex items-center text-black">
+          <div className="flex items-center text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]">
             <ThiqaLogoAnimation
               iconSize={34}
               interactive={false}
-              iconSrc="https://thiqacrm.b-cdn.net/small_black.png"
+              iconSrc="https://thiqacrm.b-cdn.net/small_white.png"
             />
           </div>
           <div className="hidden md:flex items-center gap-10 text-[14px] text-black/70 font-medium">
@@ -320,24 +320,24 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* Hero framed mockup — static image at the 607×407 box size
-            the user asked for. `max-w-full` keeps it from blowing out
-            on narrow viewports; the aspect ratio is locked by the
-            explicit width/height so the box doesn't reflow on load. */}
+        {/* Hero framed mockup — 60% of the viewport, height follows the
+            image's intrinsic aspect ratio. Transparent frame (no more
+            black fill behind the image) so the rounded corners sit
+            cleanly on the video background. */}
         <div
           className="relative z-10 w-full mx-auto mt-16 px-6 hero-scale-in flex justify-center"
           style={{ animationDelay: '720ms' }}
         >
           <div
-            className="relative rounded-t-xl overflow-hidden border border-black/[0.12] border-b-0 shadow-2xl shadow-black/20 bg-black max-w-full"
-            style={{ width: '607px', height: '407px' }}
+            className="relative rounded-t-xl overflow-hidden border border-black/[0.12] border-b-0 shadow-2xl shadow-black/20 max-w-full"
+            style={{ width: '60%' }}
           >
             <img
               src="https://thiqacrm.b-cdn.net/1.png"
               alt="Thiqa CRM Dashboard"
               width={607}
               height={407}
-              className="w-full h-full object-cover block"
+              className="w-full h-auto block"
               loading="lazy"
             />
           </div>
