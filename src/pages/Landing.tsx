@@ -574,22 +574,124 @@ export default function Landing() {
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
-      {/* ═══ Section 2: Features bar ═══ */}
-      <section className="py-16 md:py-20 bg-white">
+      {/* ═══ Section 2: Feature highlights ═══
+          Six real Thiqa capabilities, each in its own tinted tile.
+          IntersectionObserver flips `visible` on the whole section
+          when it first enters the viewport; boxes animate in with a
+          staggered fade-up (+ light scale) via per-box
+          `transition-delay`. Hover lifts the tile and tints the icon
+          pill so the section feels alive instead of static. */}
+      <style>{`
+        .fb-tile {
+          opacity: 0;
+          transform: translate3d(0, 24px, 0) scale(0.96);
+          transition:
+            opacity 0.7s cubic-bezier(0.22,1,0.36,1),
+            transform 0.7s cubic-bezier(0.22,1,0.36,1),
+            box-shadow 0.25s ease,
+            background-color 0.25s ease;
+        }
+        .fb-visible .fb-tile {
+          opacity: 1;
+          transform: translate3d(0, 0, 0) scale(1);
+        }
+        .fb-tile:hover {
+          transform: translate3d(0, -4px, 0) scale(1);
+        }
+        .fb-tile .fb-icon {
+          transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), background-color 0.25s ease;
+        }
+        .fb-tile:hover .fb-icon {
+          transform: rotate(-6deg) scale(1.06);
+        }
+      `}</style>
+      <section
+        ref={(el) => {
+          // Attach IntersectionObserver to toggle the .fb-visible
+          // class once the section enters view. One-shot — once
+          // visible, stays visible.
+          if (!el) return;
+          if ((el as HTMLElement & { __fbBound?: boolean }).__fbBound) return;
+          (el as HTMLElement & { __fbBound?: boolean }).__fbBound = true;
+          const io = new IntersectionObserver(
+            (entries) => {
+              for (const e of entries) {
+                if (e.isIntersecting) {
+                  e.target.classList.add("fb-visible");
+                  io.disconnect();
+                  break;
+                }
+              }
+            },
+            { threshold: 0.2 },
+          );
+          io.observe(el);
+        }}
+        className="py-20 md:py-28 bg-white"
+      >
         <div className="max-w-6xl mx-auto px-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-6">
+          <div className="text-center mb-14">
+            <p className="text-sm text-[#4a6cc7] mb-3 tracking-wide font-semibold">كل ما تحتاجه وكالتك</p>
+            <h2 className="text-2xl md:text-[2.2rem] font-bold leading-tight text-black">
+              أدوات حقيقية تعمل من اليوم الأول
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
             {[
-              { title: "إدارة العملاء والوثائق", desc: "من البداية للنهاية", svg: <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="#111" fillOpacity="0.08"/><path d="M30 50C30 45.5817 33.5817 42 38 42C42.4183 42 46 45.5817 46 50H30ZM38 41C34.685 41 32 38.315 32 35C32 31.685 34.685 29 38 29C41.315 29 44 31.685 44 35C44 38.315 41.315 41 38 41ZM45.3628 43.2332C48.4482 44.0217 50.7679 46.7235 50.9836 50H48C48 47.3902 47.0002 45.0139 45.3628 43.2332ZM43.3401 40.9569C44.9728 39.4922 46 37.3661 46 35C46 33.5827 45.6314 32.2514 44.9849 31.0969C47.2753 31.554 49 33.5746 49 36C49 38.7625 46.7625 41 44 41C43.7763 41 43.556 40.9853 43.3401 40.9569Z" fill="#111" fillOpacity="0.4"/><rect x="76" width="4" height="4" fill="#111"/><rect x="76" y="76" width="4" height="4" fill="#111"/><rect width="4" height="4" fill="#111"/><rect y="76" width="4" height="4" fill="#111"/></svg> },
-              { title: "تحكم مالي، تحصيل", desc: "وحساب عمولات", svg: <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="#111" fillOpacity="0.08"/><path d="M40.5521 30.6667H51.9998C52.7362 30.6667 53.3332 31.2636 53.3332 32V50.6667C53.3332 51.4031 52.7362 52 51.9998 52H27.9998C27.2635 52 26.6665 51.4031 26.6665 50.6667V29.3333C26.6665 28.597 27.2635 28 27.9998 28H37.8854L40.5521 30.6667ZM38.6665 36V46.6667H41.3332V36H38.6665ZM43.9998 40V46.6667H46.6665V40H43.9998ZM33.3332 42.6667V46.6667H35.9998V42.6667H33.3332Z" fill="#111" fillOpacity="0.4"/><rect x="76" width="4" height="4" fill="#111"/><rect x="76" y="76" width="4" height="4" fill="#111"/><rect width="4" height="4" fill="#111"/><rect y="76" width="4" height="4" fill="#111"/></svg> },
-              { title: "أتمتة التسويق، SMS", desc: "وتوقيعات رقمية", svg: <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="#111" fillOpacity="0.08"/><path d="M33.0002 27.334C36.1298 27.334 38.6668 29.871 38.6668 33.0007V38.6673H33.0002C29.8705 38.6673 27.3335 36.1303 27.3335 33.0007C27.3335 29.871 29.8705 27.334 33.0002 27.334ZM33.0002 41.334H38.6668V47.0007C38.6668 50.1303 36.1298 52.6673 33.0002 52.6673C29.8705 52.6673 27.3335 50.1303 27.3335 47.0007C27.3335 43.8711 29.8705 41.334 33.0002 41.334ZM41.3335 41.334H47.0002C50.1298 41.334 52.6668 43.8711 52.6668 47.0007C52.6668 50.1303 50.1298 52.6673 47.0002 52.6673C43.8706 52.6673 41.3335 50.1303 41.3335 47.0007V41.334ZM48.0108 37.4267L47.6615 38.2276C47.4059 38.8139 46.5944 38.8139 46.3387 38.2276L45.9895 37.4267C45.367 35.9985 44.2455 34.8614 42.8462 34.2394L41.7699 33.761C41.188 33.5024 41.188 32.6561 41.7699 32.3974L42.7859 31.9457C44.2212 31.3077 45.3628 30.1286 45.9747 28.6519L46.3334 27.7864C46.5834 27.1832 47.417 27.1832 47.6668 27.7864L48.0255 28.6519C48.6375 30.1286 49.7791 31.3077 51.2144 31.9457L52.2303 32.3974C52.8123 32.6561 52.8123 33.5024 52.2303 33.761L51.1543 34.2394C49.7548 34.8614 48.6335 35.9985 48.0108 37.4267Z" fill="#111" fillOpacity="0.4"/><rect x="76" width="4" height="4" fill="#111"/><rect x="76" y="76" width="4" height="4" fill="#111"/><rect width="4" height="4" fill="#111"/><rect y="76" width="4" height="4" fill="#111"/></svg> },
-              { title: "رقابة متعددة الفروع", desc: "وتقارير أرباح فورية", svg: <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="#111" fillOpacity="0.08"/><path d="M40.5521 30.6667H51.9998C52.7362 30.6667 53.3332 31.2636 53.3332 32V50.6667C53.3332 51.4031 52.7362 52 51.9998 52H27.9998C27.2635 52 26.6665 51.4031 26.6665 50.6667V29.3333C26.6665 28.597 27.2635 28 27.9998 28H37.8854L40.5521 30.6667ZM38.6665 36V46.6667H41.3332V36H38.6665ZM43.9998 40V46.6667H46.6665V40H43.9998ZM33.3332 42.6667V46.6667H35.9998V42.6667H33.3332Z" fill="#111" fillOpacity="0.4"/><rect x="76" width="4" height="4" fill="#111"/><rect x="76" y="76" width="4" height="4" fill="#111"/><rect width="4" height="4" fill="#111"/><rect y="76" width="4" height="4" fill="#111"/></svg> },
-            ].map((item, i) => (
-              <div key={i} className="text-center flex flex-col items-center gap-3">
-                {item.svg}
-                <div>
-                  <p className="text-[14px] font-semibold text-black/90">{item.title}</p>
-                  <p className="text-[13px] text-black/50">{item.desc}</p>
+              {
+                icon: Users,
+                title: "إدارة العملاء والسيارات",
+                desc: "ملفات عملاء كاملة، سائقون إضافيون، مركبات وتاريخ الوثائق.",
+                tint: "bg-indigo-50 text-indigo-600",
+                hoverTint: "group-hover:bg-indigo-100",
+              },
+              {
+                icon: FileText,
+                title: "وثائق، باقات وتجديدات",
+                desc: "إنشاء إلزامي + ثالث/شامل + خدمات طريق في باقة واحدة، وتجديدات ذكية.",
+                tint: "bg-sky-50 text-sky-600",
+                hoverTint: "group-hover:bg-sky-100",
+              },
+              {
+                icon: CreditCard,
+                title: "تحصيل، شيكات وتقسيط",
+                desc: "نقدي، شيكات ببنك وفرع، تقسيط داخلي، وربط بسداد Tranzila.",
+                tint: "bg-emerald-50 text-emerald-600",
+                hoverTint: "group-hover:bg-emerald-100",
+              },
+              {
+                icon: Wallet,
+                title: "محفظة الوسطاء والتسويات",
+                desc: "حساب الوسيط، أرباحه، تسوياته — بدون جداول إكسل يدوية.",
+                tint: "bg-amber-50 text-amber-600",
+                hoverTint: "group-hover:bg-amber-100",
+              },
+              {
+                icon: MessageSquare,
+                title: "تذكيرات SMS تلقائية",
+                desc: "تذكير قبل انتهاء الوثيقة، وحملات تسويقية جماعية بضغطة زر.",
+                tint: "bg-rose-50 text-rose-600",
+                hoverTint: "group-hover:bg-rose-100",
+              },
+              {
+                icon: BarChart3,
+                title: "تقارير مالية لحظية",
+                desc: "أرباح، عمولات، ديون، وتقارير متعددة الفروع بالوقت الفعلي.",
+                tint: "bg-violet-50 text-violet-600",
+                hoverTint: "group-hover:bg-violet-100",
+              },
+            ].map(({ icon: Icon, title, desc, tint, hoverTint }, i) => (
+              <div
+                key={i}
+                className="fb-tile group rounded-2xl border border-black/[0.06] bg-white p-6 text-right hover:shadow-[0_12px_40px_-8px_rgba(0,0,0,0.12)] hover:bg-white"
+                style={{ transitionDelay: `${i * 90}ms` }}
+              >
+                <div className={cn("fb-icon inline-flex h-12 w-12 items-center justify-center rounded-xl mb-4", tint, hoverTint)}>
+                  <Icon className="h-6 w-6" strokeWidth={2} />
                 </div>
+                <h3 className="text-[15px] font-bold text-black mb-1.5">{title}</h3>
+                <p className="text-[13px] text-black/55 leading-relaxed">{desc}</p>
               </div>
             ))}
           </div>
