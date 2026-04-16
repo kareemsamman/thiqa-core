@@ -24,6 +24,26 @@ if (typeof document !== "undefined") {
   }
 }
 
+// Prefetch the icon the moment this module is parsed — earlier than
+// the component mount point — so the browser already has it decoded
+// by the time the login page renders. Also drop a high-priority
+// preload <link> so the HTTP request is marked important.
+if (typeof document !== "undefined" && typeof Image !== "undefined") {
+  if (!document.querySelector(`link[data-thiqa-logo-preload]`)) {
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = thiqaIconDefault;
+    (link as HTMLLinkElement & { fetchPriority?: string }).fetchPriority = "high";
+    link.setAttribute("data-thiqa-logo-preload", "");
+    document.head.appendChild(link);
+  }
+  const img = new Image();
+  (img as HTMLImageElement & { fetchPriority?: string }).fetchPriority = "high";
+  img.decoding = "async";
+  img.src = thiqaIconDefault;
+}
+
 interface ThiqaLogoAnimationProps {
   /** Pixel size of the circular icon. The wordmark scales off this. */
   iconSize?: number;
@@ -167,6 +187,11 @@ export function ThiqaLogoAnimation({
             src={iconSrc}
             alt=""
             draggable={false}
+            loading="eager"
+            decoding="async"
+            // Mark the login logo as a high-priority resource so the
+            // browser fetches and decodes it ahead of other assets.
+            {...({ fetchpriority: "high" } as Record<string, string>)}
             style={{
               width: "100%",
               height: "100%",
