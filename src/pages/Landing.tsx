@@ -25,6 +25,8 @@ import gridLogoBgDefault from "@/assets/landing/grid-logo-bg.png";
 // product tour. Same pattern the login background uses. Some browsers
 // reset playbackRate on the first `play` event (Safari) — we also
 // re-apply it in onPlay / onLoadedMetadata handlers.
+const SECTION_DIVIDER_URL = "https://thiqacrm.b-cdn.net/linewhite.png";
+
 const HERO_VIDEO_SPEED = 1.5;
 const reapplyHeroVideoSpeed = (e: React.SyntheticEvent<HTMLVideoElement>) => {
   (e.currentTarget as HTMLVideoElement).playbackRate = HERO_VIDEO_SPEED;
@@ -466,6 +468,7 @@ export default function Landing() {
         </div>
       </section>
 
+      <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
       {/* ═══ Section 2: Features bar ═══ */}
       <section className="py-16 md:py-20 bg-white">
@@ -488,6 +491,8 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
       <section id="features" className="py-24 md:py-36 relative bg-white">
         <div className="max-w-6xl mx-auto px-6 text-center">
@@ -543,6 +548,7 @@ export default function Landing() {
         </div>
       </section>
 
+      <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
       <section id="demo" className="py-24 md:py-36 relative bg-white">
         <div className="max-w-6xl mx-auto px-6">
@@ -610,6 +616,8 @@ export default function Landing() {
         </div>
       </section>
 
+
+      <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
       {/* ═══ Section 5: Slider ═══ */}
       <section className="relative py-24 md:py-36 overflow-hidden bg-white">
@@ -702,6 +710,8 @@ export default function Landing() {
       </section>
 
 
+      <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
+
       {/* ═══ Section 5: Grid Logo ═══ */}
       <section className="relative py-24 md:py-36 overflow-hidden bg-white">
         <div className="relative z-10 text-center px-6">
@@ -733,6 +743,8 @@ export default function Landing() {
         </div>
       </section>
 
+
+      <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
       {/* ═══ Section 6: Testimonials ═══ */}
       <section id="testimonials" className="py-24 md:py-36 relative overflow-hidden bg-white">
@@ -827,6 +839,8 @@ export default function Landing() {
       </section>
 
 
+      <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
+
       {/* ═══ FAQ ═══ */}
       <section id="faq" className="py-24 md:py-36 relative bg-white">
         <div className="relative max-w-6xl mx-auto px-6">
@@ -899,6 +913,8 @@ export default function Landing() {
         </div>
       </section>
 
+
+      <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
       {/* ═══ CTA ═══ */}
       <section className="relative overflow-hidden rounded-2xl mx-4 md:mx-8 lg:mx-16 my-8">
