@@ -68,6 +68,8 @@ interface Policy {
   start_date: string;
   end_date: string;
   broker_direction: 'from_broker' | 'to_broker' | null;
+  cancelled: boolean | null;
+  transferred: boolean | null;
   client: { full_name: string } | null;
   car: { car_number: string } | null;
 }
@@ -130,6 +132,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
         .from("policies")
         .select(`
           id, policy_type_parent, policy_type_child, insurance_price, broker_buy_price, profit, start_date, end_date, broker_direction,
+          cancelled, transferred,
           clients!policies_client_id_fkey(full_name),
           cars!policies_car_id_fkey(car_number)
         `)
@@ -549,15 +552,27 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                               {index + 1}
                             </TableCell>
                             <TableCell className="print:text-xs">
-                              {policy.broker_direction === 'from_broker' ? (
-                                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 print:bg-orange-50">
-                                  عن طريق {broker.name}
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 print:bg-green-50">
-                                  تم تصديرها عن طريقي
-                                </Badge>
-                              )}
+                              <div className="flex flex-wrap items-center gap-1">
+                                {policy.broker_direction === 'from_broker' ? (
+                                  <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 print:bg-orange-50">
+                                    عن طريق {broker.name}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 print:bg-green-50">
+                                    تم تصديرها عن طريقي
+                                  </Badge>
+                                )}
+                                {policy.cancelled && (
+                                  <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 print:bg-red-50">
+                                    ملغاة
+                                  </Badge>
+                                )}
+                                {policy.transferred && !policy.cancelled && (
+                                  <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 print:bg-amber-50">
+                                    محولة
+                                  </Badge>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="font-medium print:text-xs">
                               {policy.client?.full_name || "-"}

@@ -161,18 +161,22 @@ serve(async (req) => {
       company_location: (smsSettingsRow as any)?.company_location || '',
     };
 
-    // Totals — only count active policies toward money totals so cancelled
-    // rows don't inflate the accounting balance.
-    const activePolicies = (policies || []).filter((p: any) => !p.cancelled && !p.transferred);
+    // Totals — count every row the broker page counts (cancelled &
+    // transferred included). The page's "ملخص" card and the items
+    // المجموع all include those rows, so excluding them in the PDF
+    // used to produce a net balance that didn't reconcile. Keep the
+    // tag on the row in the table so the reader still sees which ones
+    // are cancelled/transferred, but don't drop them from the math.
+    const allPolicies = policies || [];
 
-    // from_broker row value = what we owe the broker for bringing the deal.
-    // Uses broker_buy_price when set, otherwise the insurance_price as a
-    // safe fallback (so legacy rows without a buy price still balance).
-    const fromBrokerTotal = activePolicies
+    // from_broker row value = what we owe the broker for bringing the
+    // deal. Uses broker_buy_price when set, otherwise insurance_price
+    // as a safe fallback (legacy rows without a buy price).
+    const fromBrokerTotal = allPolicies
       .filter((p: any) => p.broker_direction === 'from_broker')
       .reduce((sum: number, p: any) => sum + Number(p.broker_buy_price || p.insurance_price || 0), 0);
 
-    const toBrokerTotal = activePolicies
+    const toBrokerTotal = allPolicies
       .filter((p: any) => p.broker_direction === 'to_broker' || !p.broker_direction)
       .reduce((sum: number, p: any) => sum + Number(p.insurance_price || 0), 0);
 
