@@ -709,6 +709,210 @@ export default function Landing() {
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
+      {/* ═══ Section: Story / Social-proof ═══
+          Sits between the hero and the 6-tile feature grid. Layout:
+          centered hero image (placeholder — swap the inner div for an
+          <img> when the artwork lands) flanked by four floating cards
+          (chat bubble with typing-in message, PDF file card, apps
+          integration card, phone-call notification). The headline
+          above uses a staggered RTL typewriter reveal across four
+          segments — same clip-path + steps() technique as section 2,
+          sequenced so each segment finishes before the next starts.
+          After the headline finishes, the chat bubble message types
+          in last to complete the "live conversation" vibe.
+          IntersectionObserver toggles `.hs-visible` once on first
+          entry so everything animates together. */}
+      <style>{`
+        @keyframes hsTypeRtl {
+          from { clip-path: inset(0 0 0 100%); }
+          to   { clip-path: inset(0 0 0 0); }
+        }
+        @keyframes hsCardIn {
+          from { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.94); }
+          to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+        }
+        @keyframes hsDotBlink {
+          0%, 60%, 100% { opacity: 0.25; transform: scale(0.85); }
+          30%           { opacity: 1;    transform: scale(1); }
+        }
+        .hs-type {
+          display: inline-block;
+          clip-path: inset(0 0 0 100%);
+        }
+        .hs-visible .hs-type-1 { animation: hsTypeRtl 0.9s steps(22, end) 0.15s forwards; }
+        .hs-visible .hs-type-2 { animation: hsTypeRtl 0.8s steps(18, end) 1.00s forwards; }
+        .hs-visible .hs-type-3 { animation: hsTypeRtl 0.4s steps(8, end)  1.70s forwards; }
+        .hs-visible .hs-type-4 { animation: hsTypeRtl 0.9s steps(20, end) 1.95s forwards; }
+        .hs-visible .hs-chat-msg { animation: hsTypeRtl 1.4s steps(32, end) 3.10s forwards; }
+
+        .hs-card {
+          opacity: 0;
+          transform: translate3d(0, 14px, 0) scale(0.94);
+          will-change: transform, opacity;
+        }
+        .hs-visible .hs-card { animation: hsCardIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+        .hs-visible .hs-card-1 { animation-delay: 0.45s; }
+        .hs-visible .hs-card-2 { animation-delay: 0.75s; }
+        .hs-visible .hs-card-3 { animation-delay: 1.05s; }
+        .hs-visible .hs-card-4 { animation-delay: 1.35s; }
+
+        .hs-dot {
+          animation: hsDotBlink 1.3s ease-in-out infinite;
+          animation-play-state: paused;
+        }
+        .hs-visible .hs-dot { animation-play-state: running; }
+        .hs-dot-2 { animation-delay: 0.2s; }
+        .hs-dot-3 { animation-delay: 0.4s; }
+
+        .hs-highlight {
+          background: #122042;
+          color: #ffffff;
+          padding: 0 0.28em;
+          border-radius: 6px;
+        }
+      `}</style>
+      <section
+        ref={(el) => {
+          if (!el) return;
+          if ((el as HTMLElement & { __hsBound?: boolean }).__hsBound) return;
+          (el as HTMLElement & { __hsBound?: boolean }).__hsBound = true;
+          const io = new IntersectionObserver(
+            (entries) => {
+              for (const e of entries) {
+                if (e.isIntersecting) {
+                  e.target.classList.add("hs-visible");
+                  io.disconnect();
+                  break;
+                }
+              }
+            },
+            { threshold: 0.15 },
+          );
+          io.observe(el);
+        }}
+        className="relative py-16 md:py-24 bg-white overflow-hidden"
+      >
+        <div className="max-w-6xl mx-auto px-6">
+          {/* Headline — four segments typed in sequence */}
+          <h2 className="text-center text-2xl md:text-[2.5rem] font-bold leading-[1.45] md:leading-[1.35] text-black mb-14 md:mb-20">
+            <span className="hs-type hs-type-1">آلاف وكلاء التأمين</span>{" "}
+            <span className="hs-type hs-type-2">يديرون وكالاتهم</span>
+            <br />
+            <span className="hs-type hs-type-3">بشكل </span>
+            <span className="hs-type hs-type-4 hs-highlight">أكثر احترافاً</span>
+          </h2>
+
+          {/* Composition: central image + four floating cards */}
+          <div className="relative max-w-3xl mx-auto">
+            {/* Central image placeholder — swap inner div for <img> when ready */}
+            <div className="relative aspect-[4/5] max-w-xs md:max-w-sm mx-auto rounded-3xl overflow-hidden shadow-[0_30px_80px_-24px_rgba(18,32,66,0.25)]">
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #f5eee6 0%, #ebe0d1 60%, #d9c8b3 100%)",
+                }}
+              />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <Users className="h-16 w-16 text-black/20 mx-auto mb-2" strokeWidth={1.2} />
+                  <p className="text-xs text-black/30 font-medium">مكانك للصورة</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Chat bubble — top-left (hidden on mobile to keep layout clean) */}
+            <div className="hs-card hs-card-1 hidden md:block absolute top-4 left-0 lg:-left-8 w-[300px]">
+              <div className="rounded-3xl bg-[#f5eee6] p-4 flex items-start gap-3 shadow-[0_12px_30px_-10px_rgba(18,32,66,0.18)]">
+                <div
+                  className="flex-shrink-0 h-9 w-9 rounded-full"
+                  style={{
+                    background: "linear-gradient(135deg, #d9c8b3 0%, #b89870 100%)",
+                  }}
+                />
+                <div className="flex-1 min-w-0 text-right">
+                  <p className="hs-type hs-chat-msg text-[13px] text-black/80 leading-relaxed">
+                    مرحبا أحمد، بدي أجدد وثيقة التأمين اليوم قبل ما تنتهي.
+                  </p>
+                  <span className="block text-[11px] text-black/40 mt-1">20:09</span>
+                </div>
+              </div>
+              <div className="mt-3 mr-12 flex items-center gap-1.5">
+                <div className="hs-dot hs-dot-1 h-2 w-2 rounded-full bg-[#d97766]" />
+                <div className="hs-dot hs-dot-2 h-2 w-2 rounded-full bg-[#d97766]" />
+                <div className="hs-dot hs-dot-3 h-2 w-2 rounded-full bg-[#d97766]" />
+              </div>
+            </div>
+
+            {/* File PDF card — top-right */}
+            <div className="hs-card hs-card-2 hidden md:block absolute top-2 right-0 lg:-right-8 w-[280px]">
+              <div className="rounded-3xl bg-[#f5eee6] px-4 py-3 flex items-center gap-3 shadow-[0_12px_30px_-10px_rgba(18,32,66,0.18)]">
+                <div className="flex-1 min-w-0 text-right">
+                  <p className="text-[13px] font-semibold text-black truncate">
+                    وثيقة_تأمين_شامل.pdf
+                  </p>
+                  <span className="block text-[11px] text-black/50 mt-0.5">
+                    pdf · 14 MB
+                  </span>
+                </div>
+                <div
+                  className="flex-shrink-0 h-10 w-10 rounded-xl flex items-center justify-center"
+                  style={{ background: "#e9dcc8" }}
+                >
+                  <FileText className="h-5 w-5 text-[#7a5a36]" strokeWidth={1.8} />
+                </div>
+              </div>
+            </div>
+
+            {/* Apps integrations card — bottom-left */}
+            <div className="hs-card hs-card-3 hidden md:block absolute bottom-10 left-0 lg:-left-12 w-[320px]">
+              <div className="rounded-3xl bg-[#f5eee6] p-4 flex items-center gap-4 shadow-[0_12px_30px_-10px_rgba(18,32,66,0.18)]">
+                <div className="flex-1 min-w-0 text-right">
+                  <p className="text-[13px] text-black/80 leading-relaxed">
+                    تطبيقات وأدوات متكاملة تغير المشهد في ثانية.
+                  </p>
+                </div>
+                <div className="flex-shrink-0 grid grid-cols-2 gap-1.5 p-1.5 rounded-xl bg-white">
+                  <div className="h-7 w-7 rounded-md bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center">
+                    <Wallet className="h-3.5 w-3.5 text-emerald-700" />
+                  </div>
+                  <div className="h-7 w-7 rounded-md bg-gradient-to-br from-sky-100 to-sky-200 flex items-center justify-center">
+                    <MessageSquare className="h-3.5 w-3.5 text-sky-700" />
+                  </div>
+                  <div className="h-7 w-7 rounded-md bg-gradient-to-br from-rose-100 to-rose-200 flex items-center justify-center">
+                    <Bell className="h-3.5 w-3.5 text-rose-700" />
+                  </div>
+                  <div className="h-7 w-7 rounded-md bg-gradient-to-br from-violet-100 to-violet-200 flex items-center justify-center">
+                    <BarChart3 className="h-3.5 w-3.5 text-violet-700" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Phone call notification — bottom-right */}
+            <div className="hs-card hs-card-4 hidden md:block absolute bottom-12 right-0 lg:-right-10 w-[280px]">
+              <div className="rounded-full bg-white px-4 py-3 flex items-center gap-3 shadow-[0_12px_30px_-10px_rgba(18,32,66,0.18)] border border-black/[0.04]">
+                <div className="flex-1 min-w-0 text-right">
+                  <p className="text-[13px] font-semibold text-black">محمد يتصل</p>
+                  <span className="flex items-center justify-end gap-1 text-[11px] text-black/50 mt-0.5">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    9:22
+                  </span>
+                </div>
+                <div
+                  className="flex-shrink-0 h-9 w-9 rounded-full flex items-center justify-center"
+                  style={{ background: "#122042" }}
+                >
+                  <Phone className="h-4 w-4 text-white" strokeWidth={2} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
+
       {/* ═══ Section 2: Feature highlights ═══
           Six real Thiqa capabilities, each in its own tile.
           IntersectionObserver flips `.fb-visible` on the whole
