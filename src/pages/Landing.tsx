@@ -768,7 +768,7 @@ export default function Landing() {
             in the upper portion of the image (around ~25-45% of the
             section) and the pills can crowd around it. */}
         <img
-          src="https://thiqacrm.b-cdn.net/hf_20260416_155619_091100f5-d053-456f-9c9f-e9f80354c345%201.png"
+          src="https://thiqacrm.b-cdn.net/hf_20260416_191720_99f2169b-05a1-45de-9063-68dd989588c1%201.jpg"
           alt="وكيل تأمين غارق بالمهام قبل Thiqa"
           className="hs-img absolute bottom-0 left-1/2 -translate-x-1/2 w-[70%] h-[76%] object-cover object-bottom"
           loading="lazy"
