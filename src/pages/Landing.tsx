@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useLandingContent, ct, ci } from "@/hooks/useLandingContent";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
+import thiqaLogo from "@/assets/thiqa-logo-full.svg";
 import dashboardMockupDefault from "@/assets/landing/dashboard-mockup.png";
 import featuresMockupDefault from "@/assets/landing/features-mockup.png";
 import sectionDivider from "@/assets/landing/section-divider.png";
