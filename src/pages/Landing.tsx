@@ -354,39 +354,37 @@ export default function Landing() {
       </div>
 
       {/* ═══ Navbar — fixed to the viewport so it follows the scroll.
-          When the user is at the top, the nav sits just below the open
-          marquee (top-11 = 44px, matching the marquee's rendered
-          height) as a full-width translucent strip over the hero.
-          Past the scroll threshold the marquee collapses to zero and
-          the nav animates to top-0 while morphing into the centered
-          rounded pill the user specified. */}
+          The outer wrapper stays at top-0 always; the inner pill
+          translates down 44 px when the marquee is open and slides
+          up to 0 on scroll. translateY is GPU-composited, so there's
+          no reflow jank — the nav tracks the scroll smoothly instead
+          of "freezing" while the old top-property animation repaints
+          the layout each frame. */}
       <nav
-        className={cn(
-          // Match the marquee's duration + easing so the two transitions
-          // read as one coordinated motion: marquee slides up, nav
-          // drops from top-11 to top-0, pill morphs inward — all at
-          // the same rhythm.
-          "fixed inset-x-0 z-50 pointer-events-none mt-2 transition-[top] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-          scrolled ? "top-0" : "top-11",
-        )}
+        className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-2"
       >
         <div
           className={cn(
-            "pointer-events-auto flex items-center justify-between px-6 h-14 md:h-16 transition-all duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "pointer-events-auto flex items-center justify-between px-6 h-14 md:h-16 transition-all duration-[600ms] ease-[cubic-bezier(0.22,1,0.36,1)] transform-gpu will-change-transform",
             scrolled
-              ? "w-[92%] max-w-[64rem] mx-auto mt-3 border border-[rgb(245,245,245)] rounded-full"
-              : "w-[90%] max-w-[96rem] mx-auto mt-0 rounded-none border-0",
+              ? "w-[92%] max-w-[64rem] mx-auto mt-3 rounded-full"
+              : "w-[90%] max-w-[96rem] mx-auto mt-0 rounded-none",
           )}
-          style={
-            scrolled
-              ? {
-                  backdropFilter: "blur(8px)",
-                  WebkitBackdropFilter: "blur(8px)",
-                  backgroundColor: "rgba(255, 255, 255, 0.8)",
-                  boxShadow: "0 1px 20px 0 rgba(0, 0, 0, 0.12)",
-                }
-              : undefined
-          }
+          style={{
+            // translateY drives the "drop into place from 44px below"
+            // motion on unscrolled → scrolled. Compositor-friendly,
+            // no layout triggered per frame.
+            transform: scrolled ? "translate3d(0, 0, 0)" : "translate3d(0, 44px, 0)",
+            // Only apply the frosted pill chrome when actually
+            // scrolled — over the hero the nav is fully transparent
+            // (no bg, no border, no shadow) so there's nothing that
+            // could look like a stray white line.
+            backdropFilter: scrolled ? "blur(8px)" : "none",
+            WebkitBackdropFilter: scrolled ? "blur(8px)" : "none",
+            backgroundColor: scrolled ? "rgba(255, 255, 255, 0.8)" : "transparent",
+            boxShadow: scrolled ? "0 1px 20px 0 rgba(0, 0, 0, 0.12)" : "none",
+            border: "none",
+          }}
         >
           {/* Logo — always the black variant. currentColor on the
               wordmark inherits from the wrapper's text-black. */}
