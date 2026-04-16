@@ -8,7 +8,7 @@ import {
   Phone, Shield
 } from "lucide-react";
 import { useLandingContent, ct, ci } from "@/hooks/useLandingContent";
-import thiqaLogo from "@/assets/thiqa-logo-full.svg";
+import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import dashboardMockupDefault from "@/assets/landing/dashboard-mockup.png";
 import featuresMockupDefault from "@/assets/landing/features-mockup.png";
 import sectionDivider from "@/assets/landing/section-divider.png";
@@ -18,6 +18,15 @@ import featurePaperlessDefault from "@/assets/landing/feature-paperless.png";
 import featureMarketingDefault from "@/assets/landing/feature-marketing.png";
 import sliderBgDefault from "@/assets/landing/slider-bg.png";
 import gridLogoBgDefault from "@/assets/landing/grid-logo-bg.png";
+// Hero video plays back faster than real-time so the motion has more
+// "wow" energy without the viewer feeling like they're watching a slow
+// product tour. Same pattern the login background uses. Callback ref
+// so playbackRate lands before autoplay kicks off.
+const HERO_VIDEO_SPEED = 1.5;
+const setHeroVideoSpeed = (el: HTMLVideoElement | null) => {
+  if (el) el.playbackRate = HERO_VIDEO_SPEED;
+};
+
 const featureTabs = [
   {
     id: "invoicing",
@@ -131,11 +140,38 @@ export default function Landing() {
   return (
     <div className="min-h-screen text-white overflow-x-hidden bg-[#171719]" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
 
+      {/* Hero entrance animation — staggered fade + rise for each block
+          so the landing reveals itself instead of slamming in all at
+          once. Uses a smooth expo-out easing and per-element delays
+          via inline animationDelay so the cascade is predictable. */}
+      <style>{`
+        @keyframes heroReveal {
+          0% { opacity: 0; transform: translateY(28px); filter: blur(6px); }
+          100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+        }
+        @keyframes heroScaleIn {
+          0% { opacity: 0; transform: scale(0.96) translateY(20px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .hero-reveal {
+          opacity: 0;
+          animation: heroReveal 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        .hero-scale-in {
+          opacity: 0;
+          animation: heroScaleIn 1.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+      `}</style>
+
       {/* ═══ Navbar ═══ */}
       <nav className="absolute top-0 inset-x-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 h-16">
-          <div className="flex items-center gap-2.5">
-            <img src={thiqaLogo} alt="Thiqa" />
+          <div className="flex items-center text-white">
+            <ThiqaLogoAnimation
+              iconSize={34}
+              interactive={false}
+              iconSrc="https://thiqacrm.b-cdn.net/small_white.png"
+            />
           </div>
           <div className="hidden md:flex items-center gap-10 text-[14px] text-white/70 font-medium">
             <a href="#features" className="hover:text-white transition-colors">لماذا نحن مختلفون</a>
@@ -168,16 +204,22 @@ export default function Landing() {
         </div>
 
         <div className="relative z-10 max-w-4xl mx-auto text-center px-6 pt-20">
-          <h1 className="text-[2.2rem] md:text-[3.2rem] lg:text-[4rem] font-extrabold leading-[1.15] tracking-tight whitespace-pre-line">
+          <h1
+            className="text-[2.2rem] md:text-[3.2rem] lg:text-[4rem] font-extrabold leading-[1.15] tracking-tight whitespace-pre-line hero-reveal"
+            style={{ animationDelay: '120ms' }}
+          >
             {ct(content, "hero_title", "نظام CRM الأذكى\nلوكالات التأمين التي تريد أن تربح أكثر")}
           </h1>
-          <p className="mt-6 text-[15px] md:text-lg text-white/70 max-w-2xl mx-auto leading-relaxed whitespace-pre-line">
+          <p
+            className="mt-6 text-[15px] md:text-lg text-white/70 max-w-2xl mx-auto leading-relaxed whitespace-pre-line hero-reveal"
+            style={{ animationDelay: '340ms' }}
+          >
             {ct(content, "hero_subtitle", "حل شامل لإدارة الوثائق، الأموال والتسويق. سريع، آمن\nومصمم للعمل على نطاق واسع.")}
           </p>
-          <div className="mt-10">
+          <div className="mt-10 hero-reveal" style={{ animationDelay: '520ms' }}>
             <button
               onClick={() => navigate("/login?view=signup")}
-              className="text-[16px] font-bold text-white/90 hover:text-white transition-colors px-10 py-4"
+              className="text-[16px] font-bold text-white/90 hover:text-white transition-all px-10 py-4 hover:scale-105 hover:shadow-[0_0_32px_0_rgba(255,255,255,0.25)]"
               style={{
                 borderRadius: '100px',
                 border: '2px solid rgba(255, 255, 255, 0.40)',
@@ -190,9 +232,28 @@ export default function Landing() {
           </div>
         </div>
 
-        <div className="relative z-10 max-w-5xl mx-auto mt-16 px-6">
-          <div className="relative rounded-t-xl overflow-hidden border border-white/[0.1] border-b-0 shadow-2xl shadow-black/50">
-            <img src={dashboardMockup} alt="Thiqa CRM Dashboard" className="w-full block" loading="lazy" />
+        {/* Hero video — autoplay, muted, loop, inline so mobile (iOS/
+            Android) allows playback without a user tap. playbackRate is
+            set via the callback ref before autoplay starts so the first
+            rendered frame already runs at 1.5×. Poster keeps the box
+            from flashing black on slow connections. */}
+        <div
+          className="relative z-10 w-full max-w-5xl mx-auto mt-16 px-6 hero-scale-in"
+          style={{ animationDelay: '720ms' }}
+        >
+          <div className="relative rounded-t-xl overflow-hidden border border-white/[0.1] border-b-0 shadow-2xl shadow-black/50 aspect-video bg-black">
+            <video
+              ref={setHeroVideoSpeed}
+              className="w-full h-full object-cover block"
+              src="https://thiqacrm.b-cdn.net/video.mp4"
+              poster={dashboardMockup}
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="auto"
+              aria-hidden="true"
+            />
           </div>
         </div>
       </section>
