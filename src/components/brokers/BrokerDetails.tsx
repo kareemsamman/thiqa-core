@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
   Table,
@@ -340,34 +341,67 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
               </div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={() => handleExportPdf(false)} disabled={exporting}>
-              {exporting ? (
-                <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4 ml-2" />
+          <TooltipProvider delayDuration={150}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" onClick={() => handleExportPdf(false)} disabled={exporting}>
+                    {exporting ? (
+                      <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 ml-2" />
+                    )}
+                    تصدير التقرير
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="end" className="max-w-xs text-right">
+                  فتح تقرير الوسيط في نافذة جديدة للطباعة أو الحفظ
+                </TooltipContent>
+              </Tooltip>
+
+              {broker.phone && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" onClick={() => handleExportPdf(true)} disabled={exporting}>
+                      {exporting ? (
+                        <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                      ) : (
+                        <FileText className="h-4 w-4 ml-2" />
+                      )}
+                      إرسال التقرير SMS
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="end" className="max-w-xs text-right">
+                    إرسال رابط التقرير للوسيط عبر رسالة SMS على رقمه المسجّل
+                  </TooltipContent>
+                </Tooltip>
               )}
-              تصدير التقرير
-            </Button>
-            {broker.phone && (
-              <Button variant="outline" onClick={() => handleExportPdf(true)} disabled={exporting}>
-                {exporting ? (
-                  <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                ) : (
-                  <FileText className="h-4 w-4 ml-2" />
-                )}
-                إرسال التقرير SMS
-              </Button>
-            )}
-            <Button variant="outline" onClick={onEdit}>
-              <Pencil className="h-4 w-4 ml-2" />
-              تعديل
-            </Button>
-            <Button onClick={() => setWizardOpen(true)}>
-              <Plus className="h-4 w-4 ml-2" />
-              إضافة وثيقة
-            </Button>
-          </div>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" onClick={onEdit}>
+                    <Pencil className="h-4 w-4 ml-2" />
+                    تعديل
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="end" className="max-w-xs text-right">
+                  تعديل بيانات الوسيط (الاسم، الهاتف، الملاحظات)
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button onClick={() => setWizardOpen(true)}>
+                    <Plus className="h-4 w-4 ml-2" />
+                    إضافة وثيقة
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="end" className="max-w-xs text-right">
+                  إنشاء وثيقة تأمين جديدة مرتبطة بهذا الوسيط
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
         </div>
 
 
