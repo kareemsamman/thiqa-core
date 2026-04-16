@@ -174,7 +174,7 @@ export default function Landing() {
   };
 
   return (
-    <div className="min-h-screen text-white overflow-x-hidden bg-[#171719]" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
+    <div className="min-h-screen text-black overflow-x-hidden bg-white" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
 
       {/* Hero entrance animation — staggered fade + rise for each block
           so the landing reveals itself instead of slamming in all at
@@ -455,7 +455,7 @@ export default function Landing() {
             style={{ width: '50%' }}
           >
             <img
-              src="https://thiqacrm.b-cdn.net/1.png"
+              src="https://thiqacrm.b-cdn.net/1new.png"
               alt="Thiqa CRM Dashboard"
               width={607}
               height={407}
@@ -468,36 +468,34 @@ export default function Landing() {
 
 
       {/* ═══ Section 2: Features bar ═══ */}
-      <img src={sectionDividerDark} alt="" className="w-full h-auto block" />
-      <section className="py-16 md:py-20 bg-[#171719]">
+      <section className="py-16 md:py-20 bg-white">
         <div className="max-w-6xl mx-auto px-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-6">
             {[
-              { title: "إدارة العملاء والوثائق", desc: "من البداية للنهاية", svg: <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="white" fillOpacity="0.08"/><path d="M30 50C30 45.5817 33.5817 42 38 42C42.4183 42 46 45.5817 46 50H30ZM38 41C34.685 41 32 38.315 32 35C32 31.685 34.685 29 38 29C41.315 29 44 31.685 44 35C44 38.315 41.315 41 38 41ZM45.3628 43.2332C48.4482 44.0217 50.7679 46.7235 50.9836 50H48C48 47.3902 47.0002 45.0139 45.3628 43.2332ZM43.3401 40.9569C44.9728 39.4922 46 37.3661 46 35C46 33.5827 45.6314 32.2514 44.9849 31.0969C47.2753 31.554 49 33.5746 49 36C49 38.7625 46.7625 41 44 41C43.7763 41 43.556 40.9853 43.3401 40.9569Z" fill="white" fillOpacity="0.4"/><rect x="76" width="4" height="4" fill="white"/><rect x="76" y="76" width="4" height="4" fill="white"/><rect width="4" height="4" fill="white"/><rect y="76" width="4" height="4" fill="white"/></svg> },
-              { title: "تحكم مالي، تحصيل", desc: "وحساب عمولات", svg: <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="white" fillOpacity="0.08"/><path d="M40.5521 30.6667H51.9998C52.7362 30.6667 53.3332 31.2636 53.3332 32V50.6667C53.3332 51.4031 52.7362 52 51.9998 52H27.9998C27.2635 52 26.6665 51.4031 26.6665 50.6667V29.3333C26.6665 28.597 27.2635 28 27.9998 28H37.8854L40.5521 30.6667ZM38.6665 36V46.6667H41.3332V36H38.6665ZM43.9998 40V46.6667H46.6665V40H43.9998ZM33.3332 42.6667V46.6667H35.9998V42.6667H33.3332Z" fill="white" fillOpacity="0.4"/><rect x="76" width="4" height="4" fill="white"/><rect x="76" y="76" width="4" height="4" fill="white"/><rect width="4" height="4" fill="white"/><rect y="76" width="4" height="4" fill="white"/></svg> },
-              { title: "أتمتة التسويق، SMS", desc: "وتوقيعات رقمية", svg: <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="white" fillOpacity="0.08"/><path d="M33.0002 27.334C36.1298 27.334 38.6668 29.871 38.6668 33.0007V38.6673H33.0002C29.8705 38.6673 27.3335 36.1303 27.3335 33.0007C27.3335 29.871 29.8705 27.334 33.0002 27.334ZM33.0002 41.334H38.6668V47.0007C38.6668 50.1303 36.1298 52.6673 33.0002 52.6673C29.8705 52.6673 27.3335 50.1303 27.3335 47.0007C27.3335 43.8711 29.8705 41.334 33.0002 41.334ZM41.3335 41.334H47.0002C50.1298 41.334 52.6668 43.8711 52.6668 47.0007C52.6668 50.1303 50.1298 52.6673 47.0002 52.6673C43.8706 52.6673 41.3335 50.1303 41.3335 47.0007V41.334ZM48.0108 37.4267L47.6615 38.2276C47.4059 38.8139 46.5944 38.8139 46.3387 38.2276L45.9895 37.4267C45.367 35.9985 44.2455 34.8614 42.8462 34.2394L41.7699 33.761C41.188 33.5024 41.188 32.6561 41.7699 32.3974L42.7859 31.9457C44.2212 31.3077 45.3628 30.1286 45.9747 28.6519L46.3334 27.7864C46.5834 27.1832 47.417 27.1832 47.6668 27.7864L48.0255 28.6519C48.6375 30.1286 49.7791 31.3077 51.2144 31.9457L52.2303 32.3974C52.8123 32.6561 52.8123 33.5024 52.2303 33.761L51.1543 34.2394C49.7548 34.8614 48.6335 35.9985 48.0108 37.4267Z" fill="white" fillOpacity="0.4"/><rect x="76" width="4" height="4" fill="white"/><rect x="76" y="76" width="4" height="4" fill="white"/><rect width="4" height="4" fill="white"/><rect y="76" width="4" height="4" fill="white"/></svg> },
-              { title: "رقابة متعددة الفروع", desc: "وتقارير أرباح فورية", svg: <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="white" fillOpacity="0.08"/><path d="M40.5521 30.6667H51.9998C52.7362 30.6667 53.3332 31.2636 53.3332 32V50.6667C53.3332 51.4031 52.7362 52 51.9998 52H27.9998C27.2635 52 26.6665 51.4031 26.6665 50.6667V29.3333C26.6665 28.597 27.2635 28 27.9998 28H37.8854L40.5521 30.6667ZM38.6665 36V46.6667H41.3332V36H38.6665ZM43.9998 40V46.6667H46.6665V40H43.9998ZM33.3332 42.6667V46.6667H35.9998V42.6667H33.3332Z" fill="white" fillOpacity="0.4"/><rect x="76" width="4" height="4" fill="white"/><rect x="76" y="76" width="4" height="4" fill="white"/><rect width="4" height="4" fill="white"/><rect y="76" width="4" height="4" fill="white"/></svg> },
+              { title: "إدارة العملاء والوثائق", desc: "من البداية للنهاية", svg: <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="#111" fillOpacity="0.08"/><path d="M30 50C30 45.5817 33.5817 42 38 42C42.4183 42 46 45.5817 46 50H30ZM38 41C34.685 41 32 38.315 32 35C32 31.685 34.685 29 38 29C41.315 29 44 31.685 44 35C44 38.315 41.315 41 38 41ZM45.3628 43.2332C48.4482 44.0217 50.7679 46.7235 50.9836 50H48C48 47.3902 47.0002 45.0139 45.3628 43.2332ZM43.3401 40.9569C44.9728 39.4922 46 37.3661 46 35C46 33.5827 45.6314 32.2514 44.9849 31.0969C47.2753 31.554 49 33.5746 49 36C49 38.7625 46.7625 41 44 41C43.7763 41 43.556 40.9853 43.3401 40.9569Z" fill="#111" fillOpacity="0.4"/><rect x="76" width="4" height="4" fill="#111"/><rect x="76" y="76" width="4" height="4" fill="#111"/><rect width="4" height="4" fill="#111"/><rect y="76" width="4" height="4" fill="#111"/></svg> },
+              { title: "تحكم مالي، تحصيل", desc: "وحساب عمولات", svg: <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="#111" fillOpacity="0.08"/><path d="M40.5521 30.6667H51.9998C52.7362 30.6667 53.3332 31.2636 53.3332 32V50.6667C53.3332 51.4031 52.7362 52 51.9998 52H27.9998C27.2635 52 26.6665 51.4031 26.6665 50.6667V29.3333C26.6665 28.597 27.2635 28 27.9998 28H37.8854L40.5521 30.6667ZM38.6665 36V46.6667H41.3332V36H38.6665ZM43.9998 40V46.6667H46.6665V40H43.9998ZM33.3332 42.6667V46.6667H35.9998V42.6667H33.3332Z" fill="#111" fillOpacity="0.4"/><rect x="76" width="4" height="4" fill="#111"/><rect x="76" y="76" width="4" height="4" fill="#111"/><rect width="4" height="4" fill="#111"/><rect y="76" width="4" height="4" fill="#111"/></svg> },
+              { title: "أتمتة التسويق، SMS", desc: "وتوقيعات رقمية", svg: <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="#111" fillOpacity="0.08"/><path d="M33.0002 27.334C36.1298 27.334 38.6668 29.871 38.6668 33.0007V38.6673H33.0002C29.8705 38.6673 27.3335 36.1303 27.3335 33.0007C27.3335 29.871 29.8705 27.334 33.0002 27.334ZM33.0002 41.334H38.6668V47.0007C38.6668 50.1303 36.1298 52.6673 33.0002 52.6673C29.8705 52.6673 27.3335 50.1303 27.3335 47.0007C27.3335 43.8711 29.8705 41.334 33.0002 41.334ZM41.3335 41.334H47.0002C50.1298 41.334 52.6668 43.8711 52.6668 47.0007C52.6668 50.1303 50.1298 52.6673 47.0002 52.6673C43.8706 52.6673 41.3335 50.1303 41.3335 47.0007V41.334ZM48.0108 37.4267L47.6615 38.2276C47.4059 38.8139 46.5944 38.8139 46.3387 38.2276L45.9895 37.4267C45.367 35.9985 44.2455 34.8614 42.8462 34.2394L41.7699 33.761C41.188 33.5024 41.188 32.6561 41.7699 32.3974L42.7859 31.9457C44.2212 31.3077 45.3628 30.1286 45.9747 28.6519L46.3334 27.7864C46.5834 27.1832 47.417 27.1832 47.6668 27.7864L48.0255 28.6519C48.6375 30.1286 49.7791 31.3077 51.2144 31.9457L52.2303 32.3974C52.8123 32.6561 52.8123 33.5024 52.2303 33.761L51.1543 34.2394C49.7548 34.8614 48.6335 35.9985 48.0108 37.4267Z" fill="#111" fillOpacity="0.4"/><rect x="76" width="4" height="4" fill="#111"/><rect x="76" y="76" width="4" height="4" fill="#111"/><rect width="4" height="4" fill="#111"/><rect y="76" width="4" height="4" fill="#111"/></svg> },
+              { title: "رقابة متعددة الفروع", desc: "وتقارير أرباح فورية", svg: <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="#111" fillOpacity="0.08"/><path d="M40.5521 30.6667H51.9998C52.7362 30.6667 53.3332 31.2636 53.3332 32V50.6667C53.3332 51.4031 52.7362 52 51.9998 52H27.9998C27.2635 52 26.6665 51.4031 26.6665 50.6667V29.3333C26.6665 28.597 27.2635 28 27.9998 28H37.8854L40.5521 30.6667ZM38.6665 36V46.6667H41.3332V36H38.6665ZM43.9998 40V46.6667H46.6665V40H43.9998ZM33.3332 42.6667V46.6667H35.9998V42.6667H33.3332Z" fill="#111" fillOpacity="0.4"/><rect x="76" width="4" height="4" fill="#111"/><rect x="76" y="76" width="4" height="4" fill="#111"/><rect width="4" height="4" fill="#111"/><rect y="76" width="4" height="4" fill="#111"/></svg> },
             ].map((item, i) => (
               <div key={i} className="text-center flex flex-col items-center gap-3">
                 {item.svg}
                 <div>
-                  <p className="text-[14px] font-semibold text-white/90">{item.title}</p>
-                  <p className="text-[13px] text-white/40">{item.desc}</p>
+                  <p className="text-[14px] font-semibold text-black/90">{item.title}</p>
+                  <p className="text-[13px] text-black/50">{item.desc}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
       </section>
-      <img src={sectionDividerDark} alt="" className="w-full h-auto block" />
 
-      <section id="features" className="py-24 md:py-36 relative">
+      <section id="features" className="py-24 md:py-36 relative bg-white">
         <div className="max-w-6xl mx-auto px-6 text-center">
-          <p className="text-sm text-white/40 mb-4 tracking-wide">{ct(content, "benefits_section_label", "البيت الرقمي لوكالتك")}</p>
-          <h2 className="text-3xl md:text-[2.8rem] font-bold leading-tight mb-4">
+          <p className="text-sm text-black/50 mb-4 tracking-wide">{ct(content, "benefits_section_label", "البيت الرقمي لوكالتك")}</p>
+          <h2 className="text-3xl md:text-[2.8rem] font-bold leading-tight mb-4 text-black">
             {ct(content, "benefits_section_title", "كل الأدوات لإدارة الوكالة تحت سقف واحد")}
           </h2>
-          <p className="text-white/40 text-sm max-w-xl mx-auto mb-16">
+          <p className="text-black/55 text-sm max-w-xl mx-auto mb-16">
             {ct(content, "benefits_section_subtitle", "بنية تقنية متقدمة توفر لك الوقت، تمنع الأخطاء وتزيد الربحية.")}
           </p>
 
@@ -519,13 +517,13 @@ export default function Landing() {
                 desc: ct(content, "benefit_card_3_desc", "نظام تسويق مدمج لإرسال حملات عبر SMS وبريد إلكتروني. تذكيرات تلقائية للتجديدات، تحديثات عروض والحفاظ على العملاء بشكل فعّال."),
               },
             ].map((card, i) => (
-              <div key={i} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden text-center">
-                <div className="aspect-[4/3] overflow-hidden">
+              <div key={i} className="rounded-2xl border border-black/[0.08] bg-black/[0.02] overflow-hidden text-center shadow-sm">
+                <div className="aspect-[4/3] overflow-hidden bg-black/[0.03]">
                   <img src={card.img} alt="" className="w-full h-full object-cover" loading="lazy" />
                 </div>
                 <div className="p-6 pt-5">
-                  <h3 className="text-lg font-bold mb-2">{card.title}</h3>
-                  <p className="text-sm text-white/40 leading-relaxed">{card.desc}</p>
+                  <h3 className="text-lg font-bold mb-2 text-black">{card.title}</h3>
+                  <p className="text-sm text-black/60 leading-relaxed">{card.desc}</p>
                 </div>
               </div>
             ))}
@@ -533,11 +531,11 @@ export default function Landing() {
 
           <button
             onClick={() => navigate("/login?view=signup")}
-            className="px-10 py-4 text-[15px] font-bold text-white hover:text-white transition-colors"
+            className="px-10 py-4 text-[15px] font-bold text-white hover:opacity-90 transition-opacity"
             style={{
               borderRadius: '100px',
-              border: '2px solid rgba(255, 255, 255, 0.40)',
-              background: 'rgba(255, 255, 255, 0.10)',
+              background: '#111',
+              boxShadow: '0 4px 16px 0 rgba(0, 0, 0, 0.12)',
             }}
           >
             احصل على 35 يوم مجاناً
@@ -545,33 +543,32 @@ export default function Landing() {
         </div>
       </section>
 
-      <img src={sectionDividerDark} alt="" className="w-full h-auto block" />
 
-      <section id="demo" className="py-24 md:py-36 relative">
+      <section id="demo" className="py-24 md:py-36 relative bg-white">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-12">
-            <p className="text-sm text-[#7ba4f7] mb-4 tracking-wide">{ct(content, "showcase_label", "لماذا Thiqa بالذات؟")}</p>
-            <h2 className="text-3xl md:text-[2.8rem] font-bold leading-tight mb-4">
+            <p className="text-sm text-[#4a6cc7] mb-4 tracking-wide font-semibold">{ct(content, "showcase_label", "لماذا Thiqa بالذات؟")}</p>
+            <h2 className="text-3xl md:text-[2.8rem] font-bold leading-tight mb-4 text-black">
               {ct(content, "showcase_title", "كل الأدوات لإدارة الوكالة تحت سقف واحد")}
             </h2>
-            <p className="text-white/40 text-sm max-w-xl mx-auto">
+            <p className="text-black/55 text-sm max-w-xl mx-auto">
               {ct(content, "showcase_subtitle", "بنية تقنية متقدمة توفر لك الوقت، تمنع الأخطاء وتزيد الربحية.")}
             </p>
           </div>
 
           {/* Tabs */}
-          <div className="flex overflow-x-auto border border-white/[0.06] rounded-xl mb-0">
+          <div className="flex overflow-x-auto border border-black/[0.08] rounded-xl mb-0 bg-white">
             {featureTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 min-w-[140px] px-4 py-4 text-center border-l border-white/[0.06] first:border-l-0 transition-colors ${
+                className={`flex-1 min-w-[140px] px-4 py-4 text-center border-l border-black/[0.08] first:border-l-0 transition-colors ${
                   activeTab === tab.id
-                    ? "bg-white/[0.06] text-white"
-                    : "text-white/40 hover:text-white/60 hover:bg-white/[0.02]"
+                    ? "bg-black/[0.04] text-black"
+                    : "text-black/50 hover:text-black/75 hover:bg-black/[0.02]"
                 }`}
               >
-                <span className="text-xs text-white/30 block mb-1">{tab.num}</span>
+                <span className="text-xs text-black/40 block mb-1">{tab.num}</span>
                 <span className="text-sm font-semibold">{tab.label}</span>
               </button>
             ))}
@@ -579,18 +576,18 @@ export default function Landing() {
 
           {/* Tab Content */}
           {featureTabs.filter(t => t.id === activeTab).map(tab => (
-            <div key={tab.id} className="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-white/[0.06] border-t-0 rounded-b-xl overflow-hidden">
+            <div key={tab.id} className="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-black/[0.08] border-t-0 rounded-b-xl overflow-hidden bg-white">
               <div className="p-8 lg:p-12 flex flex-col justify-center order-1 lg:order-none">
-                <h3 className="text-2xl md:text-3xl font-bold mb-4 leading-tight whitespace-pre-line">{tab.title}</h3>
-                <p className="text-white/40 text-sm leading-relaxed mb-8">{tab.desc}</p>
+                <h3 className="text-2xl md:text-3xl font-bold mb-4 leading-tight whitespace-pre-line text-black">{tab.title}</h3>
+                <p className="text-black/60 text-sm leading-relaxed mb-8">{tab.desc}</p>
 
                 <div className="grid grid-cols-2 gap-6">
                   {tab.stats.map((stat, j) => (
                     <div key={j}>
-                      <div className="text-3xl font-extrabold text-white/90">
-                        {stat.value}<span className="text-lg font-medium text-white/50 mr-1">{stat.unit}</span>
+                      <div className="text-3xl font-extrabold text-black">
+                        {stat.value}<span className="text-lg font-medium text-black/55 mr-1">{stat.unit}</span>
                       </div>
-                      <p className="text-xs text-white/30 mt-2 leading-relaxed">{stat.label}</p>
+                      <p className="text-xs text-black/50 mt-2 leading-relaxed">{stat.label}</p>
                     </div>
                   ))}
                 </div>
@@ -598,14 +595,14 @@ export default function Landing() {
                 <div className="mt-8">
                   <button
                     onClick={() => navigate("/login?view=signup")}
-                    className="flex items-center gap-2 px-6 py-3 text-sm font-bold text-white/80 hover:text-white transition-colors bg-white/[0.04] border border-white/[0.08] rounded-lg"
+                    className="flex items-center gap-2 px-6 py-3 text-sm font-bold text-black hover:bg-black/[0.06] transition-colors bg-black/[0.03] border border-black/[0.12] rounded-lg"
                   >
                     ابدأ التجربة الآن
                     <ArrowLeft className="h-4 w-4" />
                   </button>
                 </div>
               </div>
-              <div className="bg-gradient-to-br from-[#4a6cc7]/30 to-[#7ba4f7]/10 min-h-[300px] lg:min-h-[400px] flex items-center justify-center order-2 lg:order-none">
+              <div className="bg-gradient-to-br from-[#eef1ff] to-[#e4eaff] min-h-[300px] lg:min-h-[400px] flex items-center justify-center order-2 lg:order-none">
                 <img src={featuresMockup} alt="" className="w-full h-full object-cover" loading="lazy" />
               </div>
             </div>
@@ -613,15 +610,21 @@ export default function Landing() {
         </div>
       </section>
 
-      <img src={sectionDividerDark} alt="" className="w-full h-auto block" />
 
       {/* ═══ Section 5: Slider ═══ */}
-      <section className="relative py-24 md:py-36 overflow-hidden">
-        <img src={sliderBg} alt="" className="absolute inset-0 w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-black/30" />
+      <section className="relative py-24 md:py-36 overflow-hidden bg-white">
+        {/* Subtle light gradient so the slider section has its own
+            rhythm without going dark. */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(135deg, #f5f7ff 0%, #ffffff 50%, #fff3f7 100%)",
+          }}
+        />
 
         <div className="relative z-10">
-          <h2 className="text-3xl md:text-[2.8rem] font-bold text-center mb-16">
+          <h2 className="text-3xl md:text-[2.8rem] font-bold text-center mb-16 text-black">
             {ct(content, "slider_title", "لا تنتظر التجديد. اصنعه بنفسك")}
           </h2>
 
@@ -651,23 +654,23 @@ export default function Landing() {
               <>
                 <div className="relative flex items-stretch w-full">
                   <div className="hidden lg:flex flex-shrink-0 w-[14%] opacity-60 transition-all duration-500">
-                    <div className="rounded-2xl overflow-hidden bg-white/[0.12] border border-white/[0.08] p-6 flex items-center justify-center w-full cursor-pointer" onClick={goPrev}>
-                      <h3 className="text-base font-bold text-center text-white/70">{slides[(slideIdx - 1 + slides.length) % slides.length].title}</h3>
+                    <div className="rounded-2xl overflow-hidden bg-black/[0.04] border border-black/[0.08] p-6 flex items-center justify-center w-full cursor-pointer hover:bg-black/[0.07] transition-colors" onClick={goPrev}>
+                      <h3 className="text-base font-bold text-center text-black/70">{slides[(slideIdx - 1 + slides.length) % slides.length].title}</h3>
                     </div>
                   </div>
 
                   <div className="flex-1 transition-all duration-500 mx-3 lg:mx-5">
-                    <div className="rounded-2xl overflow-hidden bg-black/40 backdrop-blur-sm border border-white/[0.08] flex flex-col h-full">
+                    <div className="rounded-2xl overflow-hidden bg-white border border-black/[0.08] shadow-lg flex flex-col h-full">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-0 flex-1">
-                        <div className="flex items-center justify-center p-6 md:p-10 order-2 md:order-1">
+                        <div className="flex items-center justify-center p-6 md:p-10 order-2 md:order-1 bg-black/[0.02]">
                           <img src={featuresMockup} alt="" className="max-h-[300px] object-contain rounded-lg" loading="lazy" />
                         </div>
                         <div className="p-8 md:p-12 flex flex-col justify-center order-1 md:order-2">
-                          <h3 className="text-xl md:text-2xl font-bold mb-4">{slides[slideIdx].title}</h3>
-                          <p className="text-sm text-white/50 leading-relaxed mb-8">{slides[slideIdx].desc}</p>
+                          <h3 className="text-xl md:text-2xl font-bold mb-4 text-black">{slides[slideIdx].title}</h3>
+                          <p className="text-sm text-black/60 leading-relaxed mb-8">{slides[slideIdx].desc}</p>
                           <button
                             onClick={() => navigate("/login?view=signup")}
-                            className="flex items-center gap-2 px-6 py-3 text-sm font-bold text-white/70 hover:text-white transition-colors bg-white/[0.06] border border-white/[0.1] rounded-lg w-fit"
+                            className="flex items-center gap-2 px-6 py-3 text-sm font-bold text-black hover:bg-black/[0.06] transition-colors bg-black/[0.03] border border-black/[0.12] rounded-lg w-fit"
                           >
                             <ArrowLeft className="h-4 w-4" />
                             {slides[slideIdx].cta}
@@ -678,17 +681,17 @@ export default function Landing() {
                   </div>
 
                   <div className="hidden lg:flex flex-shrink-0 w-[14%] opacity-60 transition-all duration-500">
-                    <div className="rounded-2xl overflow-hidden bg-white/[0.12] border border-white/[0.08] p-6 flex items-center justify-center w-full cursor-pointer" onClick={goNext}>
-                      <h3 className="text-base font-bold text-center text-white/70">{slides[(slideIdx + 1) % slides.length].title}</h3>
+                    <div className="rounded-2xl overflow-hidden bg-black/[0.04] border border-black/[0.08] p-6 flex items-center justify-center w-full cursor-pointer hover:bg-black/[0.07] transition-colors" onClick={goNext}>
+                      <h3 className="text-base font-bold text-center text-black/70">{slides[(slideIdx + 1) % slides.length].title}</h3>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex justify-center gap-3 mt-10">
-                  <button onClick={goPrev} className="h-11 w-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+                  <button onClick={goPrev} className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
                     <ChevronLeft className="h-5 w-5 rotate-180" />
                   </button>
-                  <button onClick={goNext} className="h-11 w-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+                  <button onClick={goNext} className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
                     <ChevronLeft className="h-5 w-5" />
                   </button>
                 </div>
@@ -698,13 +701,12 @@ export default function Landing() {
         </div>
       </section>
 
-      <img src={sectionDividerDark} alt="" className="w-full h-auto block" />
 
       {/* ═══ Section 5: Grid Logo ═══ */}
-      <section className="relative py-24 md:py-36 overflow-hidden bg-[#171719]">
+      <section className="relative py-24 md:py-36 overflow-hidden bg-white">
         <div className="relative z-10 text-center px-6">
-          <p className="text-sm text-white/40 mb-4 tracking-wide">{ct(content, "grid_label", "حل شامل وبسيط")}</p>
-          <h2 className="text-3xl md:text-[2.8rem] font-bold leading-tight mb-10">
+          <p className="text-sm text-black/55 mb-4 tracking-wide">{ct(content, "grid_label", "حل شامل وبسيط")}</p>
+          <h2 className="text-3xl md:text-[2.8rem] font-bold leading-tight mb-10 text-black">
             {ct(content, "grid_title", "كل ما تحتاجه الوكالة، تحت سقف واحد")}
           </h2>
         </div>
@@ -714,16 +716,16 @@ export default function Landing() {
         </div>
 
         <div className="relative z-10 text-center px-6 mt-10">
-          <p className="text-sm text-white/40 max-w-xl mx-auto mb-8 leading-relaxed whitespace-pre-line">
+          <p className="text-sm text-black/55 max-w-xl mx-auto mb-8 leading-relaxed whitespace-pre-line">
             {ct(content, "grid_desc", "إرسال وثائق للتوقيع الرقمي عبر SMS، إدارة مستندات آمنة في السحابة\nومتابعة كاملة لدورة حياة الوثيقة — كل شيء من الكمبيوتر أو الجوال.")}
           </p>
           <button
             onClick={() => navigate("/login?view=signup")}
-            className="px-8 py-3 text-[14px] font-bold text-white/90 hover:text-white transition-colors"
+            className="px-8 py-3 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
             style={{
               borderRadius: '100px',
-              border: '2px solid rgba(255, 255, 255, 0.40)',
-              background: 'rgba(255, 255, 255, 0.10)',
+              background: '#111',
+              boxShadow: '0 4px 16px 0 rgba(0, 0, 0, 0.12)',
             }}
           >
             {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
@@ -731,43 +733,37 @@ export default function Landing() {
         </div>
       </section>
 
-      <img src={sectionDividerDark} alt="" className="w-full h-auto block" />
 
       {/* ═══ Section 6: Testimonials ═══ */}
-      <section id="testimonials" className="py-24 md:py-36 relative overflow-hidden">
-        <div 
+      <section id="testimonials" className="py-24 md:py-36 relative overflow-hidden bg-white">
+        <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(75, 110, 200, 0.35) 0%, rgba(100, 140, 220, 0.15) 40%, transparent 70%)',
+            background: 'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(75, 110, 200, 0.08) 0%, rgba(100, 140, 220, 0.04) 40%, transparent 70%)',
           }}
         />
         <div className="relative max-w-6xl mx-auto px-6">
-          <p className="text-sm text-[#7ba4f7] text-center mb-4 tracking-wide">{ct(content, "testimonials_label", "قصص العملاء")}</p>
-          <h2 className="text-3xl md:text-[2.8rem] font-bold text-center mb-16">
+          <p className="text-sm text-[#4a6cc7] text-center mb-4 tracking-wide font-semibold">{ct(content, "testimonials_label", "قصص العملاء")}</p>
+          <h2 className="text-3xl md:text-[2.8rem] font-bold text-center mb-16 text-black">
             {ct(content, "testimonials_title", "تعالوا اسمعوا ماذا يقول وكلاؤنا")}
           </h2>
 
           <div className="relative">
             <button
               onClick={() => goTestimonial("up")}
-              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-14 hidden lg:flex h-11 w-11 rounded-full bg-white/10 hover:bg-white/20 items-center justify-center transition-colors z-10"
+              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-14 hidden lg:flex h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black items-center justify-center transition-colors z-10"
             >
               <ChevronLeft className="h-5 w-5 rotate-180" />
             </button>
             <button
               onClick={() => goTestimonial("down")}
-              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-14 hidden lg:flex h-11 w-11 rounded-full bg-white/10 hover:bg-white/20 items-center justify-center transition-colors z-10"
+              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-14 hidden lg:flex h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black items-center justify-center transition-colors z-10"
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
 
             <div
-              className="rounded-2xl overflow-hidden border border-white/[0.06]"
-              style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                backdropFilter: 'blur(26px)',
-                WebkitBackdropFilter: 'blur(26px)',
-              }}
+              className="rounded-2xl overflow-hidden border border-black/[0.08] bg-white shadow-xl shadow-black/5"
             >
               <div
                 className="grid grid-cols-1 md:grid-cols-[0.8fr_1.5fr] gap-0 transition-all duration-500"
@@ -777,30 +773,30 @@ export default function Landing() {
                   transition: "opacity 0.35s ease, transform 0.35s ease",
                 }}
               >
-                <div className="p-8 md:p-10 border-b md:border-b-0 md:border-l border-white/[0.06] flex flex-col justify-center gap-8 order-2 md:order-1">
+                <div className="p-8 md:p-10 border-b md:border-b-0 md:border-l border-black/[0.08] flex flex-col justify-center gap-8 order-2 md:order-1 bg-black/[0.02]">
                   <div>
-                    <div className="text-5xl md:text-6xl font-extrabold text-white/90 ltr-nums">{ct(content, "testimonials_stat_1", "320+")}</div>
-                    <p className="text-sm text-white/50 mt-2 leading-relaxed">{ct(content, "testimonials_stat_1_desc", "إرسال وثائق للتوقيع الرقمي عبر SMS، إدارة مستندات آمنة في السحابة ومتابعة كاملة")}</p>
+                    <div className="text-5xl md:text-6xl font-extrabold text-black ltr-nums">{ct(content, "testimonials_stat_1", "320+")}</div>
+                    <p className="text-sm text-black/60 mt-2 leading-relaxed">{ct(content, "testimonials_stat_1_desc", "إرسال وثائق للتوقيع الرقمي عبر SMS، إدارة مستندات آمنة في السحابة ومتابعة كاملة")}</p>
                   </div>
                   <div>
-                    <div className="text-5xl md:text-6xl font-extrabold text-white/90 ltr-nums">{ct(content, "testimonials_stat_2", "50%")}</div>
-                    <p className="text-sm text-white/50 mt-2 leading-relaxed">{ct(content, "testimonials_stat_2_desc", "إرسال وثائق للتوقيع الرقمي عبر SMS، إدارة مستندات آمنة في السحابة ومتابعة كاملة")}</p>
+                    <div className="text-5xl md:text-6xl font-extrabold text-black ltr-nums">{ct(content, "testimonials_stat_2", "50%")}</div>
+                    <p className="text-sm text-black/60 mt-2 leading-relaxed">{ct(content, "testimonials_stat_2_desc", "إرسال وثائق للتوقيع الرقمي عبر SMS، إدارة مستندات آمنة في السحابة ومتابعة كاملة")}</p>
                   </div>
                 </div>
 
                 <div className="p-8 md:p-12 flex flex-col justify-center order-1 md:order-2">
-                  <div className="text-5xl text-white/20 font-serif leading-none mb-4 text-left">״</div>
-                  <p className="text-lg md:text-xl text-white/70 leading-relaxed mb-1">
+                  <div className="text-5xl text-black/15 font-serif leading-none mb-4 text-left">״</div>
+                  <p className="text-lg md:text-xl text-black/70 leading-relaxed mb-1">
                     {testimonials[testimonialIdx].quote}
                   </p>
-                  <p className="text-lg md:text-xl text-white font-bold leading-relaxed mb-8">
+                  <p className="text-lg md:text-xl text-black font-bold leading-relaxed mb-8">
                     {testimonials[testimonialIdx].highlight}
                   </p>
                   <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 rounded-lg bg-white/10 flex-shrink-0" />
+                    <div className="h-12 w-12 rounded-lg bg-black/[0.08] flex-shrink-0" />
                     <div>
-                      <p className="font-bold text-white/90">{testimonials[testimonialIdx].name}</p>
-                      <p className="text-sm text-white/40">{testimonials[testimonialIdx].role}</p>
+                      <p className="font-bold text-black">{testimonials[testimonialIdx].name}</p>
+                      <p className="text-sm text-black/55">{testimonials[testimonialIdx].role}</p>
                     </div>
                   </div>
                 </div>
@@ -812,17 +808,17 @@ export default function Landing() {
                 <div
                   key={i}
                   className={`h-1 rounded-full transition-all duration-500 ${
-                    i === testimonialIdx ? "w-10 bg-[#7ba4f7]" : "w-6 bg-white/10"
+                    i === testimonialIdx ? "w-10 bg-[#4a6cc7]" : "w-6 bg-black/[0.12]"
                   }`}
                 />
               ))}
             </div>
 
             <div className="flex lg:hidden justify-center gap-3 mt-6">
-              <button onClick={() => goTestimonial("up")} className="h-11 w-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+              <button onClick={() => goTestimonial("up")} className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
                 <ChevronLeft className="h-5 w-5 rotate-180" />
               </button>
-              <button onClick={() => goTestimonial("down")} className="h-11 w-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+              <button onClick={() => goTestimonial("down")} className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
                 <ChevronLeft className="h-5 w-5" />
               </button>
             </div>
@@ -830,13 +826,12 @@ export default function Landing() {
         </div>
       </section>
 
-      <img src={sectionDividerDark} alt="" className="w-full h-auto block" />
 
       {/* ═══ FAQ ═══ */}
-      <section id="faq" className="py-24 md:py-36 relative">
+      <section id="faq" className="py-24 md:py-36 relative bg-white">
         <div className="relative max-w-6xl mx-auto px-6">
-          <p className="text-sm text-[#7ba4f7] text-center mb-4 tracking-wide">{ct(content, "faq_label", "أسئلة وأجوبة")}</p>
-          <h2 className="text-3xl md:text-[2.8rem] font-bold text-center mb-16">
+          <p className="text-sm text-[#4a6cc7] text-center mb-4 tracking-wide font-semibold">{ct(content, "faq_label", "أسئلة وأجوبة")}</p>
+          <h2 className="text-3xl md:text-[2.8rem] font-bold text-center mb-16 text-black">
             {ct(content, "faq_title", "كل ما يهمك معرفته عن Thiqa")}
           </h2>
           
@@ -853,8 +848,8 @@ export default function Landing() {
                   onClick={() => setFaqCategory(cat.key)}
                   className={`whitespace-nowrap px-5 py-3 rounded-xl text-sm font-medium transition-all text-right ${
                     faqCategory === cat.key
-                      ? "bg-white/10 text-white border border-white/10"
-                      : "text-white/40 hover:text-white/60 hover:bg-white/[0.03]"
+                      ? "bg-black/[0.06] text-black border border-black/[0.1]"
+                      : "text-black/55 hover:text-black/80 hover:bg-black/[0.03]"
                   }`}
                 >
                   {cat.label}
@@ -889,13 +884,13 @@ export default function Landing() {
                 return faqData[faqCategory]?.map((faq, i) => (
                   <details
                     key={i}
-                    className="group p-5 rounded-2xl border border-white/[0.04] bg-white/[0.015] cursor-pointer transition-colors hover:bg-white/[0.03]"
+                    className="group p-5 rounded-2xl border border-black/[0.08] bg-black/[0.02] cursor-pointer transition-colors hover:bg-black/[0.04]"
                   >
-                    <summary className="flex items-center justify-between font-semibold text-[15px] list-none">
+                    <summary className="flex items-center justify-between font-semibold text-[15px] list-none text-black">
                       {faq.q}
-                      <ChevronLeft className="h-4 w-4 text-white/30 transition-transform group-open:-rotate-90 shrink-0 mr-4" />
+                      <ChevronLeft className="h-4 w-4 text-black/40 transition-transform group-open:-rotate-90 shrink-0 mr-4" />
                     </summary>
-                    <p className="mt-3 text-sm text-white/40 leading-relaxed">{faq.a}</p>
+                    <p className="mt-3 text-sm text-black/60 leading-relaxed">{faq.a}</p>
                   </details>
                 ));
               })()}
@@ -904,7 +899,6 @@ export default function Landing() {
         </div>
       </section>
 
-      <img src={sectionDividerDark} alt="" className="w-full h-auto block" />
 
       {/* ═══ CTA ═══ */}
       <section className="relative overflow-hidden rounded-2xl mx-4 md:mx-8 lg:mx-16 my-8">
@@ -929,9 +923,9 @@ export default function Landing() {
       </section>
 
       {/* ═══ Footer ═══ */}
-      <footer className="border-t border-white/[0.04] pt-16 pb-8">
+      <footer className="border-t border-black/[0.08] pt-16 pb-8 bg-white">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col divide-y divide-white/[0.06]">
+          <div className="flex flex-col divide-y divide-black/[0.08]">
             {[
               { title: "معلومات", items: ["مركز المساعدة", "اتصل بنا"] },
               { title: "شروط وسياسات", items: ["شروط الاستخدام", "سياسة الخصوصية", "إمكانية الوصول"] },
@@ -939,13 +933,13 @@ export default function Landing() {
             ].map((section, idx) => (
               <details key={idx} className="group py-6">
                 <summary className="flex items-center justify-between cursor-pointer list-none">
-                  <span className="text-lg font-bold text-white/90">{section.title}</span>
-                  <span className="text-white/40 text-2xl font-light group-open:hidden">+</span>
-                  <span className="text-white/40 text-2xl font-light hidden group-open:inline">−</span>
+                  <span className="text-lg font-bold text-black">{section.title}</span>
+                  <span className="text-black/55 text-2xl font-light group-open:hidden">+</span>
+                  <span className="text-black/55 text-2xl font-light hidden group-open:inline">−</span>
                 </summary>
-                <ul className="mt-4 space-y-3 text-sm text-white/40 text-right">
+                <ul className="mt-4 space-y-3 text-sm text-black/60 text-right">
                   {section.items.map((item, j) => (
-                    <li key={j}><a href="#" className="hover:text-white/60 transition-colors">{item}</a></li>
+                    <li key={j}><a href="#" className="hover:text-black transition-colors">{item}</a></li>
                   ))}
                 </ul>
               </details>
@@ -953,15 +947,15 @@ export default function Landing() {
           </div>
 
           <div className="flex items-center gap-3 mt-8 mb-8">
-            <div className="h-1.5 w-1.5 rounded-full bg-white/20" />
-            <div className="flex-1 h-px bg-white/[0.06]" />
-            <div className="h-1.5 w-1.5 rounded-full bg-white/20" />
+            <div className="h-1.5 w-1.5 rounded-full bg-black/25" />
+            <div className="flex-1 h-px bg-black/[0.08]" />
+            <div className="h-1.5 w-1.5 rounded-full bg-black/25" />
           </div>
 
-          <p className="text-sm text-white/20 text-center mb-12">جميع الحقوق محفوظة © Thiqa {new Date().getFullYear()}</p>
+          <p className="text-sm text-black/40 text-center mb-12">جميع الحقوق محفوظة © Thiqa {new Date().getFullYear()}</p>
 
           <div className="flex justify-center overflow-hidden">
-            <img src={thiqaLogo} alt="Thiqa" className="w-[80%] md:w-[60%] max-w-[700px] opacity-[0.08]" />
+            <img src={thiqaLogo} alt="Thiqa" className="w-[80%] md:w-[60%] max-w-[700px] opacity-[0.06]" style={{ filter: "invert(1)" }} />
           </div>
         </div>
       </footer>
