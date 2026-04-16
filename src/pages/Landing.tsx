@@ -768,7 +768,7 @@ export default function Landing() {
             in the upper portion of the image (around ~25-45% of the
             section) and the pills can crowd around it. */}
         <img
-          src="https://thiqacrm.b-cdn.net/hf_20260416_191720_99f2169b-05a1-45de-9063-68dd989588c1%201.jpg"
+          src="https://thiqacrm.b-cdn.net/hf_20260416_191720_99f2169b-05a1-45de-9063-68dd989588c1%201%20(2)%20(1).jpg"
           alt="وكيل تأمين غارق بالمهام قبل Thiqa"
           className="hs-img absolute bottom-0 left-1/2 -translate-x-1/2 w-[70%] h-[76%] object-cover object-bottom"
           loading="lazy"
@@ -780,11 +780,11 @@ export default function Landing() {
             color shift. Both type in right-to-left via clip-path +
             steps(), the bold line starting after the light one
             finishes so the reveal reads as a natural sentence. */}
-        <h2 className="relative z-10 text-center text-[1.75rem] md:text-[2.75rem] leading-[1.3] md:leading-[1.25] pt-16 md:pt-20 px-6 text-black">
-          <span className="hs-type hs-type-1 block font-light">
+        <h2 className="relative z-10 flex flex-col justify-center items-center text-center leading-[1.25] md:leading-[1.2] pt-20 md:pt-24 px-6 text-black">
+          <span className="hs-type hs-type-1 block font-light text-[1.5rem] md:text-[2.25rem]">
             زهقت من الأكسل والأوراق؟
           </span>
-          <span className="hs-type hs-type-2 block font-bold mt-2">
+          <span className="hs-type hs-type-2 block font-bold mt-3 text-[2.5rem] md:text-[4rem] leading-[1.1]">
             ثقة هو الحل.
           </span>
         </h2>
@@ -797,70 +797,55 @@ export default function Landing() {
             (hsFromLeft / hsFromRight) + gentle continuous float
             (hsFloat). Hidden below md breakpoint. */}
         <div className="absolute inset-0 z-20 pointer-events-none">
-          {/* Left pills — tightly packed in the head-and-shoulders
-              band (22% → 46%). Glass: bg-white/40 + backdrop-blur-2xl
-              + saturate to make the frost actually show against the
-              already-blurred backdrop. */}
-          <div className="hs-pill hs-pill-l hs-d-1 hidden md:flex absolute top-[22%] left-[4%] lg:left-[7%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
-            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
-              <AlertTriangle className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.5} />
-            </span>
+          {/* Left pills — solid cream style matching the baked-in
+              cards in the hero image. Icon floats directly on the
+              pill surface (no inner white circle). Moved closer to
+              the person (13-18% from edge instead of 2-8%) so they
+              hug the head/shoulder area. */}
+          <div className="hs-pill hs-pill-l hs-d-1 hidden md:flex absolute top-[22%] left-[13%] lg:left-[16%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+            <AlertTriangle className="h-4 w-4 text-rose-500 flex-shrink-0" strokeWidth={2.4} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">عاجل</span>
           </div>
 
-          <div className="hs-pill hs-pill-l hs-d-3 hidden md:flex absolute top-[30%] left-[2%] lg:left-[3%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
-            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
-              <Phone className="h-3.5 w-3.5 text-[#122042]" strokeWidth={2.4} />
-            </span>
+          <div className="hs-pill hs-pill-l hs-d-3 hidden md:flex absolute top-[30%] left-[11%] lg:left-[13%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+            <Phone className="h-4 w-4 text-[#122042] flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">مكالمة فائتة</span>
-            <span className="flex-shrink-0 h-5 min-w-[20px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+            <span className="flex-shrink-0 h-5 min-w-[22px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
               7
             </span>
           </div>
 
-          <div className="hs-pill hs-pill-l hs-d-5 hidden md:flex absolute top-[38%] left-[5%] lg:left-[8%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
-            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
-              <MessageSquare className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.2} />
-            </span>
+          <div className="hs-pill hs-pill-l hs-d-5 hidden md:flex absolute top-[38%] left-[14%] lg:left-[17%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+            <MessageSquare className="h-4 w-4 text-rose-500 flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">شكوى عميل</span>
           </div>
 
-          <div className="hs-pill hs-pill-l hs-d-7 hidden md:flex absolute top-[46%] left-[3%] lg:left-[5%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
-            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
-              <BarChart3 className="h-3.5 w-3.5 text-amber-600" strokeWidth={2.2} />
-            </span>
+          <div className="hs-pill hs-pill-l hs-d-7 hidden md:flex absolute top-[46%] left-[12%] lg:left-[15%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+            <BarChart3 className="h-4 w-4 text-amber-600 flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">خطأ في الجدول</span>
           </div>
 
           {/* Right pills */}
-          <div className="hs-pill hs-pill-r hs-d-2 hidden md:flex absolute top-[22%] right-[4%] lg:right-[7%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
-            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
-              <Mail className="h-3.5 w-3.5 text-[#122042]" strokeWidth={2.2} />
-            </span>
+          <div className="hs-pill hs-pill-r hs-d-2 hidden md:flex absolute top-[22%] right-[13%] lg:right-[16%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+            <Mail className="h-4 w-4 text-[#122042] flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">بريد غير مقروء</span>
-            <span className="flex-shrink-0 h-5 min-w-[20px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+            <span className="flex-shrink-0 h-5 min-w-[22px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
               23
             </span>
           </div>
 
-          <div className="hs-pill hs-pill-r hs-d-4 hidden md:flex absolute top-[30%] right-[2%] lg:right-[3%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
-            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
-              <Clock className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.4} />
-            </span>
+          <div className="hs-pill hs-pill-r hs-d-4 hidden md:flex absolute top-[30%] right-[11%] lg:right-[13%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+            <Clock className="h-4 w-4 text-rose-500 flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">تجديد متأخر</span>
           </div>
 
-          <div className="hs-pill hs-pill-r hs-d-6 hidden md:flex absolute top-[38%] right-[5%] lg:right-[8%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
-            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
-              <Bell className="h-3.5 w-3.5 text-amber-600" strokeWidth={2.2} />
-            </span>
+          <div className="hs-pill hs-pill-r hs-d-6 hidden md:flex absolute top-[38%] right-[14%] lg:right-[17%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+            <Bell className="h-4 w-4 text-amber-600 flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">مواعيد متراكمة</span>
           </div>
 
-          <div className="hs-pill hs-pill-r hs-d-8 hidden md:flex absolute top-[46%] right-[3%] lg:right-[5%] items-center gap-2.5 rounded-full bg-white/40 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 pr-4 pl-2 py-2 shadow-[0_10px_30px_-10px_rgba(18,32,66,0.18)]">
-            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
-              <FileText className="h-3.5 w-3.5 text-[#7a5a36]" strokeWidth={2.2} />
-            </span>
+          <div className="hs-pill hs-pill-r hs-d-8 hidden md:flex absolute top-[46%] right-[12%] lg:right-[15%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+            <FileText className="h-4 w-4 text-[#7a5a36] flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">ملف PDF</span>
           </div>
         </div>
