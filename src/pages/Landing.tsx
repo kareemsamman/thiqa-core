@@ -200,21 +200,19 @@ export default function Landing() {
       `}</style>
 
       {/* ═══ Top marquee — CRM feature keywords ═══
-          Looping infinitely, no blank gap on wrap.
-          The "blank" the user saw before was caused by the track being
-          barely wider than 2× the viewport: translateX(-50%) at that
-          point leaves an empty strip on the leading edge. Fix: duplicate
-          the item list four times (always wider than 2× any realistic
-          viewport) and move by translateX(-25%) — exactly one copy's
-          width — per cycle. Three copies remain covering the viewport
-          at any instant, so there is no visible gap, ever. */}
+          Two-group structure: an outer track wraps two identical
+          <div> groups, each holding the full item list. The track
+          animates translateX 0 → -50%. At -50% the second group sits
+          exactly where the first one was, so the wrap is pixel-perfect
+          seamless. We keep multiple groups so even on ultrawide
+          monitors the track is always wider than 2× viewport. */}
       <style>{`
-        @keyframes marquee-rtl {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-25%); }
+        @keyframes marquee-slide {
+          from { transform: translateX(0); }
+          to { transform: translateX(-50%); }
         }
         .marquee-track {
-          animation: marquee-rtl 75s linear infinite;
+          animation: marquee-slide 75s linear infinite;
           will-change: transform;
         }
         .marquee-track:hover { animation-play-state: paused; }
@@ -227,7 +225,7 @@ export default function Landing() {
           "relative border-b border-black/[0.06] bg-white overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
           scrolled
             ? "max-h-0 py-0 border-0 opacity-0 pointer-events-none mb-0"
-            : "max-h-[60px] py-3 opacity-100 mb-6",
+            : "max-h-[60px] py-3 opacity-100 mb-0",
         )}
         aria-label="مزايا النظام"
         aria-hidden={scrolled}
@@ -237,7 +235,7 @@ export default function Landing() {
         <div className="pointer-events-none absolute inset-y-0 right-0 w-24 z-10 bg-gradient-to-l from-white to-transparent" />
         <div className="pointer-events-none absolute inset-y-0 left-0 w-24 z-10 bg-gradient-to-r from-white to-transparent" />
 
-        <div className="marquee-track flex items-center min-w-max will-change-transform">
+        <div className="marquee-track flex items-center w-max will-change-transform">
           {(() => {
             const items = [
               { icon: Users, label: "إدارة العملاء والمركبات" },
@@ -251,23 +249,33 @@ export default function Landing() {
               { icon: Bell, label: "إشعارات انتهاء الوثائق" },
               { icon: Phone, label: "توقيعات رقمية عن بعد" },
             ];
-            // 4 copies so the track is always wider than 2× the
-            // viewport; identical mx-5 on every item keeps the visual
-            // gap uniform across the wrap point.
-            const copies = [...items, ...items, ...items, ...items];
-            return copies.map(({ icon: Icon, label }, i) => (
+            // Render group N. Each group is the full items list,
+            // produces an identical-width block. Two groups = track
+            // of 2× single-group width; translate -50% swaps them.
+            const renderGroup = (copyIdx: number) => (
               <div
-                key={i}
-                aria-hidden={i >= items.length}
-                className="flex items-center gap-2.5 shrink-0 text-black/70 mx-5"
+                key={copyIdx}
+                className="flex items-center shrink-0"
+                aria-hidden={copyIdx > 0}
               >
-                <Icon className="h-4 w-4 text-black/50" />
-                <span className="text-[13px] font-medium whitespace-nowrap">
-                  {label}
-                </span>
-                <span className="mx-2 text-black/25 select-none">•</span>
+                {items.map(({ icon: Icon, label }, i) => (
+                  <div
+                    key={`${copyIdx}-${i}`}
+                    className="flex items-center gap-2.5 shrink-0 text-black/70 px-5"
+                  >
+                    <Icon className="h-4 w-4 text-black/50" />
+                    <span className="text-[13px] font-medium whitespace-nowrap">
+                      {label}
+                    </span>
+                    <span className="mx-2 text-black/25 select-none">•</span>
+                  </div>
+                ))}
               </div>
-            ));
+            );
+            // Four groups so the track always overflows the viewport,
+            // even on ultrawide monitors. translate(-50%) still swaps
+            // the first half with the second — seamless.
+            return [0, 1, 2, 3].map(renderGroup);
           })()}
         </div>
       </div>
