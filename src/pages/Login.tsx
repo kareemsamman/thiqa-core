@@ -494,7 +494,7 @@ export default function Login() {
               <ThiqaLogoAnimation
                 iconSize={64}
                 interactive={false}
-                iconFilter="invert(1)"
+                iconSrc="https://thiqacrm.b-cdn.net/small_black.png"
               />
             </div>
 
