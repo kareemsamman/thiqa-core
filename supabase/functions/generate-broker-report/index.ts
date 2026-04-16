@@ -1,5 +1,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
+import { THIQA_LOGO_SVG } from "../_shared/thiqa-logo.ts";
+import {
+  buildBunnyStorageUploadUrl,
+  normalizeBunnyCdnUrl,
+  resolveBunnyStorageZone,
+} from "../_shared/bunny-storage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,7 +20,7 @@ interface BrokerReportRequest {
   direction_filter?: 'from_broker' | 'to_broker' | 'all';
 }
 
-const policyTypeLabels: Record<string, string> = {
+const POLICY_TYPE_LABELS: Record<string, string> = {
   ELZAMI: 'إلزامي',
   THIRD_FULL: 'ثالث/شامل',
   ROAD_SERVICE: 'خدمات الطريق',
@@ -24,6 +31,14 @@ const policyTypeLabels: Record<string, string> = {
   TRAVEL: 'تأمين سفر',
   BUSINESS: 'تأمين أعمال',
   OTHER: 'أخرى',
+  THIRD: 'ثالث',
+  FULL: 'شامل',
+};
+
+const SETTLEMENT_STATUS_LABELS: Record<string, string> = {
+  pending: 'قيد التسوية',
+  partial: 'مدفوعة جزئياً',
+  completed: 'مكتملة',
 };
 
 serve(async (req) => {
@@ -31,16 +46,31 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let currentStep = "init";
+
   try {
+    currentStep = "read env";
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const bunnyApiKey = Deno.env.get("BUNNY_API_KEY")!;
-    const bunnyStorageZone = Deno.env.get("BUNNY_STORAGE_ZONE")!;
-    const bunnyCdnUrl = Deno.env.get('BUNNY_CDN_URL') || "https://kareem.b-cdn.net";
+    const bunnyApiKey = Deno.env.get("BUNNY_API_KEY");
+    const rawBunnyStorageZone = Deno.env.get("BUNNY_STORAGE_ZONE");
+    const bunnyCdnUrl = normalizeBunnyCdnUrl(Deno.env.get("BUNNY_CDN_URL"));
+    const bunnyStorageZone = resolveBunnyStorageZone(rawBunnyStorageZone, bunnyCdnUrl);
 
+    if (!bunnyApiKey || !bunnyStorageZone) {
+      return new Response(
+        JSON.stringify({
+          error: "إعدادات Bunny CDN غير مكتملة",
+          detail: "BUNNY_API_KEY / BUNNY_STORAGE_ZONE is missing",
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    currentStep = "create supabase client";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify auth
+    currentStep = "auth";
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No authorization header" }), {
@@ -50,9 +80,8 @@ serve(async (req) => {
     }
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
+      authHeader.replace("Bearer ", ""),
     );
-
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -60,8 +89,8 @@ serve(async (req) => {
       });
     }
 
+    currentStep = "parse body";
     const { broker_id, start_date, end_date, direction_filter }: BrokerReportRequest = await req.json();
-
     if (!broker_id) {
       return new Response(JSON.stringify({ error: "broker_id is required" }), {
         status: 400,
@@ -69,103 +98,125 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Generating report for broker: ${broker_id}`);
+    currentStep = "resolve agent branding";
+    const agentId = await resolveAgentId(supabase, user.id);
+    const branding = await getAgentBranding(supabase, agentId);
 
-    // Fetch broker data
+    currentStep = "fetch broker";
     const { data: broker, error: brokerError } = await supabase
       .from("brokers")
       .select("*")
       .eq("id", broker_id)
       .single();
-
     if (brokerError || !broker) {
-      console.error("Broker fetch error:", brokerError);
-      return new Response(JSON.stringify({ error: "Broker not found" }), {
+      return new Response(JSON.stringify({ error: "Broker not found", detail: brokerError?.message }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Build policies query with filters
+    currentStep = "fetch policies";
     let query = supabase
       .from("policies")
       .select(`
-        id, policy_number, policy_type_parent, policy_type_child, start_date, end_date, 
-        insurance_price, profit, broker_direction,
-        client:clients(full_name),
-        car:cars(car_number)
+        id, policy_number, policy_type_parent, policy_type_child, start_date, end_date,
+        insurance_price, office_commission, broker_buy_price, profit, broker_direction,
+        cancelled, transferred, notes,
+        company:insurance_companies(name, name_ar),
+        client:clients(full_name, phone_number, id_number),
+        car:cars(car_number, manufacturer_name, model, year)
       `)
       .eq("broker_id", broker_id)
       .is("deleted_at", null)
       .order("start_date", { ascending: false });
 
-    if (start_date) {
-      query = query.gte("start_date", start_date);
-    }
-    if (end_date) {
-      query = query.lte("start_date", end_date);
-    }
+    if (start_date) query = query.gte("start_date", start_date);
+    if (end_date) query = query.lte("start_date", end_date);
     if (direction_filter && direction_filter !== 'all') {
       query = query.eq("broker_direction", direction_filter);
     }
 
-    const { data: policies } = await query;
+    const { data: policies, error: policiesError } = await query;
+    if (policiesError) throw new Error(`policies query: ${policiesError.message}`);
 
-    // Calculate payment totals for filtered policies
-    const policyIds = (policies || []).map((p: any) => p.id);
-    let totalCollected = 0;
+    currentStep = "fetch settlements";
+    const { data: settlements, error: settlementsError } = await supabase
+      .from("broker_settlements")
+      .select("id, direction, total_amount, settlement_number, settlement_date, status, notes")
+      .eq("broker_id", broker_id)
+      .order("settlement_date", { ascending: false });
+    if (settlementsError) throw new Error(`broker_settlements query: ${settlementsError.message}`);
 
-    if (policyIds.length > 0) {
-      const { data: payments } = await supabase
-        .from("policy_payments")
-        .select("amount, refused")
-        .in("policy_id", policyIds);
+    currentStep = "fetch sms settings";
+    const { data: smsSettingsRow } = await supabase
+      .from("sms_settings")
+      .select("company_email, company_phones, company_whatsapp, company_location")
+      .limit(1)
+      .maybeSingle();
 
-      totalCollected = (payments || [])
-        .filter((p: any) => !p.refused)
-        .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
-    }
+    const companySettings = {
+      company_email: (smsSettingsRow as any)?.company_email || '',
+      company_phones: (smsSettingsRow as any)?.company_phones || [],
+      company_whatsapp: (smsSettingsRow as any)?.company_whatsapp || '',
+      company_location: (smsSettingsRow as any)?.company_location || '',
+    };
 
-    const totalPrice = (policies || []).reduce((sum: number, p: any) => sum + (p.insurance_price || 0), 0);
-    const totalRemaining = totalPrice - totalCollected;
+    // Totals — only count active policies toward money totals so cancelled
+    // rows don't inflate the accounting balance.
+    const activePolicies = (policies || []).filter((p: any) => !p.cancelled && !p.transferred);
 
-    // Calculate direction totals
-    const fromBrokerTotal = (policies || [])
+    // from_broker row value = what we owe the broker for bringing the deal.
+    // Uses broker_buy_price when set, otherwise the insurance_price as a
+    // safe fallback (so legacy rows without a buy price still balance).
+    const fromBrokerTotal = activePolicies
       .filter((p: any) => p.broker_direction === 'from_broker')
-      .reduce((sum: number, p: any) => sum + (p.insurance_price || 0), 0);
+      .reduce((sum: number, p: any) => sum + Number(p.broker_buy_price || p.insurance_price || 0), 0);
 
-    const toBrokerTotal = (policies || [])
+    const toBrokerTotal = activePolicies
       .filter((p: any) => p.broker_direction === 'to_broker' || !p.broker_direction)
-      .reduce((sum: number, p: any) => sum + (p.insurance_price || 0), 0);
+      .reduce((sum: number, p: any) => sum + Number(p.insurance_price || 0), 0);
 
-    const netBalance = toBrokerTotal - fromBrokerTotal;
+    // Settlements — only completed lines count against the balance. Pending /
+    // partial still appear in the log so the reader sees what's outstanding.
+    const paidToBroker = (settlements || [])
+      .filter((s: any) => s.direction === 'we_owe' && s.status === 'completed')
+      .reduce((sum: number, s: any) => sum + Number(s.total_amount || 0), 0);
 
-    // Generate HTML
-    const html = generateReportHtml(
+    const receivedFromBroker = (settlements || [])
+      .filter((s: any) => s.direction === 'broker_owes' && s.status === 'completed')
+      .reduce((sum: number, s: any) => sum + Number(s.total_amount || 0), 0);
+
+    // Net = (broker owes me + I received from broker)
+    //     − (I owe broker + I paid broker)
+    // Positive = broker still owes me. Negative = I still owe broker.
+    const policyNet = toBrokerTotal - fromBrokerTotal;
+    const settlementNet = receivedFromBroker - paidToBroker;
+    const netBalance = policyNet + settlementNet;
+
+    currentStep = "build html";
+    const html = generateReportHtml({
       broker,
-      policies || [],
-      {
-        totalCollected,
-        totalRemaining,
-        fromBrokerTotal,
-        toBrokerTotal,
-        netBalance,
-        totalPrice,
-      },
-      { start_date, end_date, direction_filter }
-    );
+      policies: policies || [],
+      settlements: settlements || [],
+      fromBrokerTotal,
+      toBrokerTotal,
+      paidToBroker,
+      receivedFromBroker,
+      netBalance,
+      branding,
+      companySettings,
+      filters: { start_date, end_date, direction_filter },
+    });
 
-    // Upload to Bunny CDN
+    currentStep = "upload to bunny";
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const timestamp = now.getTime();
-    const fileName = `broker_report_${broker.name.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_')}_${timestamp}.html`;
+    const safeName = broker.name.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "_");
+    const fileName = `broker_report_${safeName}_${timestamp}.html`;
     const storagePath = `uploads/${year}/${month}/${fileName}`;
-
-    const uploadUrl = `https://storage.bunnycdn.com/${bunnyStorageZone}/${storagePath}`;
-
-    console.log(`Uploading report to: ${uploadUrl}`);
+    const uploadUrl = buildBunnyStorageUploadUrl(bunnyStorageZone, storagePath);
 
     const uploadResponse = await fetch(uploadUrl, {
       method: "PUT",
@@ -178,12 +229,10 @@ serve(async (req) => {
 
     if (!uploadResponse.ok) {
       const errorText = await uploadResponse.text();
-      console.error("Bunny upload error:", errorText);
-      throw new Error(`Failed to upload to CDN: ${errorText}`);
+      throw new Error(`Bunny upload failed (${uploadResponse.status}): ${errorText}`);
     }
 
     const cdnUrl = `${bunnyCdnUrl}/${storagePath}`;
-    console.log(`Report uploaded successfully: ${cdnUrl}`);
 
     return new Response(
       JSON.stringify({
@@ -193,356 +242,772 @@ serve(async (req) => {
         phone: broker.phone,
         policies_count: (policies || []).length,
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error: unknown) {
-    console.error("Error generating broker report:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[generate-broker-report] failed at step "${currentStep}":`, message);
     return new Response(
-      JSON.stringify({ error: "An error occurred while generating the report." }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({
+        error: `فشل في توليد التقرير (${currentStep}): ${message}`,
+        step: currentStep,
+        detail: message,
+      }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
 
-function getDisplayLabel(parent: string, child: string | null): string {
-  if (parent === 'THIRD_FULL' && child) {
-    const childLabels: Record<string, string> = { THIRD: 'ثالث', FULL: 'شامل' };
-    return childLabels[child] || child;
+// ---------- Helpers ----------
+
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("en-GB");
+}
+
+function escapeHtml(text: string): string {
+  return (text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizePhoneForWhatsapp(phone: string): string {
+  if (!phone) return '';
+  let digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('0')) {
+    digits = '972' + digits.substring(1);
   }
-  return policyTypeLabels[parent] || parent;
+  return digits;
 }
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString("en-GB", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+function getPolicyTypeLabel(parent: string, child: string | null): string {
+  if (parent === 'THIRD_FULL' && child) {
+    return POLICY_TYPE_LABELS[child] || POLICY_TYPE_LABELS[parent] || parent;
+  }
+  return POLICY_TYPE_LABELS[parent] || parent;
 }
 
-function formatDateShort(dateStr: string | null): string {
-  if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString("en-GB");
-}
+// ---------- HTML generation ----------
 
-function generateReportHtml(
-  broker: any,
-  policies: any[],
-  stats: {
-    totalCollected: number;
-    totalRemaining: number;
-    fromBrokerTotal: number;
-    toBrokerTotal: number;
-    netBalance: number;
-    totalPrice: number;
-  },
+interface GenerateReportArgs {
+  broker: any;
+  policies: any[];
+  settlements: any[];
+  fromBrokerTotal: number;
+  toBrokerTotal: number;
+  paidToBroker: number;
+  receivedFromBroker: number;
+  netBalance: number;
+  branding: AgentBranding;
+  companySettings: {
+    company_email: string;
+    company_phones: string[];
+    company_whatsapp: string;
+    company_location: string;
+  };
   filters: {
     start_date?: string;
     end_date?: string;
     direction_filter?: string;
-  }
-): string {
-  const filterText = [];
-  if (filters.start_date) filterText.push(`من: ${formatDateShort(filters.start_date)}`);
-  if (filters.end_date) filterText.push(`إلى: ${formatDateShort(filters.end_date)}`);
-  if (filters.direction_filter && filters.direction_filter !== 'all') {
-    filterText.push(filters.direction_filter === 'from_broker' ? 'عن طريق الوسيط' : 'تم تصديرها');
-  }
-  const filterSummary = filterText.length > 0 ? filterText.join(' | ') : 'كل الفترات';
+  };
+}
 
-  const policiesHtml = policies.length > 0 ? policies.map((policy, i) => {
-    const direction = policy.broker_direction === 'from_broker' 
-      ? '<span class="badge badge-orange">عن طريق الوسيط</span>'
-      : '<span class="badge badge-green">تم تصديرها</span>';
-    
-    return `
-    <tr class="${i % 2 === 0 ? '' : 'alt'}">
-      <td>${i + 1}</td>
-      <td>${direction}</td>
-      <td>${policy.client?.full_name || '-'}</td>
-      <td class="ltr">${policy.car?.car_number ? `<span class="car-plate">${policy.car.car_number}</span>` : '-'}</td>
-      <td>${getDisplayLabel(policy.policy_type_parent, policy.policy_type_child)}</td>
-      <td class="price">₪${policy.insurance_price.toLocaleString()}</td>
-      <td class="ltr">${formatDateShort(policy.start_date)}</td>
-      <td class="ltr">${formatDateShort(policy.end_date)}</td>
-    </tr>
-  `}).join('') : '<tr><td colspan="8" class="empty">لا توجد وثائق</td></tr>';
+function generateReportHtml(args: GenerateReportArgs): string {
+  const {
+    broker,
+    policies,
+    settlements,
+    fromBrokerTotal,
+    toBrokerTotal,
+    paidToBroker,
+    receivedFromBroker,
+    netBalance,
+    branding,
+    companySettings,
+    filters,
+  } = args;
+
+  const today = new Date();
+
+  // Brand block: custom logo if the agent uploaded one, else the bundled
+  // Thiqa SVG — same rule the client report uses so paper output matches.
+  const brandBlock = branding.logoUrl
+    ? `<img class="logo" src="${branding.logoUrl}" alt="${branding.companyName}" />`
+    : `<div class="logo logo-svg">${THIQA_LOGO_SVG}</div>`;
+
+  // Period string for the meta box. Shows "كل الفترات" when no filter
+  // was applied so the reader knows nothing's being hidden.
+  const periodText = (filters.start_date || filters.end_date)
+    ? `${filters.start_date ? formatDate(filters.start_date) : '...'} → ${filters.end_date ? formatDate(filters.end_date) : '...'}`
+    : 'كل الفترات';
+
+  // Policy rows — one per policy. Description cell carries the direction
+  // tag ("من الوسيط" / "إلى الوسيط"), client name, car plate, company,
+  // and optional notes. Cancelled/transferred rows get the muted look
+  // from the shared `.cancelled-row` style.
+  const getCompany = (p: any): string => {
+    const c = Array.isArray(p.company) ? p.company[0] : p.company;
+    return c?.name_ar || c?.name || '-';
+  };
+  const getClient = (p: any): string => {
+    const c = Array.isArray(p.client) ? p.client[0] : p.client;
+    return c?.full_name || '-';
+  };
+  const getCar = (p: any): string => {
+    const car = Array.isArray(p.car) ? p.car[0] : p.car;
+    return car?.car_number || '';
+  };
+
+  const policyRowsHtml = policies.length > 0
+    ? policies.map((p: any, i: number) => {
+        const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
+        const companyName = getCompany(p);
+        const clientName = getClient(p);
+        const carNumber = getCar(p);
+        const direction = p.broker_direction;
+        const directionLabel = direction === 'from_broker'
+          ? 'من الوسيط'
+          : direction === 'to_broker'
+            ? 'إلى الوسيط'
+            : 'وسيط';
+        const directionClass = direction === 'from_broker' ? 'dir-from' : 'dir-to';
+        // Amount displayed: buy price for from_broker (what we owe), full
+        // insurance price for to_broker (what the broker owes).
+        const amount = direction === 'from_broker'
+          ? Number(p.broker_buy_price || p.insurance_price || 0)
+          : Number(p.insurance_price || 0);
+        const cancelledTag = p.cancelled ? `<span class="cancelled-tag">ملغاة</span>` : '';
+        const transferredTag = p.transferred && !p.cancelled ? `<span class="cancelled-tag">محولة</span>` : '';
+        const rowClass = p.cancelled || p.transferred ? 'cancelled-row' : '';
+        const notesLine = p.notes ? `<div class="item-meta">${escapeHtml(p.notes)}</div>` : '';
+        const carLine = carNumber
+          ? `<div class="item-meta">السيارة: <span class="tabular">${escapeHtml(carNumber)}</span></div>`
+          : '';
+        const periodStr = (p.start_date && p.end_date)
+          ? `${formatDate(p.start_date)} → ${formatDate(p.end_date)}`
+          : '-';
+        return `
+          <tr class="${rowClass}">
+            <td class="num">${i + 1}</td>
+            <td>
+              <div class="item-title">${escapeHtml(typeLabel)} ${cancelledTag} ${transferredTag}</div>
+              <div class="item-meta">العميل: ${escapeHtml(clientName)}</div>
+              ${carLine}
+              <div class="item-meta">${escapeHtml(companyName)}</div>
+              <div class="item-broker ${directionClass}">${directionLabel}</div>
+              ${notesLine}
+            </td>
+            <td class="period">${periodStr}</td>
+            <td class="num">₪${amount.toLocaleString('en-US')}</td>
+          </tr>
+        `;
+      }).join('')
+    : `<tr><td colspan="4" class="empty-cell">لا توجد وثائق لهذا الوسيط</td></tr>`;
+
+  // Settlements log — the "wallet" section. Lists every settlement record
+  // (completed + pending) so the reader sees the full accounting trail.
+  // Status column flags pending/partial rows that aren't counted in the
+  // totals yet.
+  const settlementsHtml = settlements.length > 0
+    ? `
+    <table class="payments">
+      <thead>
+        <tr>
+          <th style="width: 50px;">#</th>
+          <th style="width: 150px;">الرقم المرجعي</th>
+          <th style="width: 130px;">الاتجاه</th>
+          <th style="width: 120px;">التاريخ</th>
+          <th style="width: 120px;">الحالة</th>
+          <th>المبلغ</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${settlements.map((s: any, i: number) => {
+          const dirLabel = s.direction === 'we_owe'
+            ? 'دفعنا للوسيط'
+            : 'استلمنا من الوسيط';
+          const dirClass = s.direction === 'we_owe' ? 'dir-to' : 'dir-from';
+          const statusLabel = SETTLEMENT_STATUS_LABELS[s.status] || s.status;
+          return `
+          <tr>
+            <td class="num">${i + 1}</td>
+            <td class="num">${escapeHtml(s.settlement_number || '—')}</td>
+            <td><span class="item-broker ${dirClass}">${dirLabel}</span></td>
+            <td class="date">${formatDate(s.settlement_date)}</td>
+            <td>${statusLabel}</td>
+            <td class="amount">₪${Number(s.total_amount || 0).toLocaleString('en-US')}</td>
+          </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `
+    : `<div class="payments-empty">لا توجد تسويات مسجلة. ستظهر هنا الدفعات المتبادلة مع الوسيط فور تسجيلها من صفحة المحاسبة.</div>`;
+
+  // Contact footer — same merge strategy as the client report so the
+  // printed contact info stays consistent across document types.
+  const effectivePhones = branding.invoicePhones.length > 0
+    ? branding.invoicePhones
+    : (companySettings.company_phones || []);
+  const effectiveAddress = branding.invoiceAddress || companySettings.company_location || '';
+  const whatsappNormalized = normalizePhoneForWhatsapp(companySettings.company_whatsapp || '');
+  const contactLines: string[] = [];
+  if (effectivePhones.length > 0) {
+    contactLines.push(
+      `هاتف: ${effectivePhones
+        .map((phone: string) => `<a href="tel:${phone.replace(/[^0-9+]/g, '')}">${phone}</a>`)
+        .join(' / ')}`,
+    );
+  }
+  if (companySettings.company_whatsapp) {
+    contactLines.push(`واتساب: <a href="https://wa.me/${whatsappNormalized}">${companySettings.company_whatsapp}</a>`);
+  }
+  if (companySettings.company_email) {
+    contactLines.push(`بريد: <a href="mailto:${companySettings.company_email}">${companySettings.company_email}</a>`);
+  }
+  if (effectiveAddress) {
+    contactLines.push(effectiveAddress);
+  }
+  const contactFooterHtml = contactLines.length > 0
+    ? `<div class="contact">${contactLines.join(' &nbsp;•&nbsp; ')}</div>`
+    : '';
+
+  const reportNumber = `BRK-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-${(broker.id || '').slice(0, 4).toUpperCase()}`;
+
+  const netIsFavourable = netBalance >= 0;
 
   return `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>تقرير الوسيط - ${broker.name}</title>
+  <title>تقرير الوسيط - ${escapeHtml(broker.name || '')}</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
-      background: #122143;
-      min-height: 100vh;
-      padding: 24px 16px;
-      direction: rtl;
-    }
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
-      background: white;
-      border-radius: 20px;
-      box-shadow: 0 8px 40px rgba(0,0,0,0.25);
-      overflow: hidden;
-    }
-    .header {
-      background: linear-gradient(135deg, #122143 0%, #1a3260 100%);
-      color: white;
-      padding: 24px 20px;
-      text-align: center;
-    }
-    .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
-    .header p { font-size: 14px; opacity: 0.85; }
-    .header .filter-info { 
-      margin-top: 12px; 
-      padding: 8px 16px; 
-      background: rgba(255,255,255,0.15); 
-      border-radius: 8px;
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    @page { size: A4; margin: 14mm; }
+    html, body {
+      font-family: 'IBM Plex Sans Arabic', 'Tajawal', system-ui, -apple-system, 'Segoe UI', sans-serif;
       font-size: 13px;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background: #f4f4f5;
+      direction: rtl;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-feature-settings: "kern" 1, "liga" 1;
     }
-    
-    .content { padding: 20px; }
-    
-    .broker-card {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      padding: 20px;
+    body { padding: 32px 16px; }
+    .invoice {
+      max-width: 820px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 40px 44px;
+      border: 1px solid #1a1a1a;
+    }
+    a { color: inherit; text-decoration: none; }
+    a:hover { color: #18181b; }
+
+    .invoice-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid #1a1a1a;
       margin-bottom: 24px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
     }
-    .broker-avatar {
-      width: 64px;
-      height: 64px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #1a365d 0%, #2d4a7c 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 24px;
+    .brand { max-width: 55%; }
+    .brand .logo { max-height: 60px; max-width: 220px; object-fit: contain; display: block; margin-bottom: 10px; }
+    .brand .logo-svg { display: block; margin-bottom: 10px; }
+    .brand .logo-svg svg { height: 44px; width: auto; display: block; }
+    .brand .name { font-size: 15px; font-weight: 700; color: #1a1a1a; }
+    .brand .owner { font-size: 12px; color: #1a1a1a; margin-top: 4px; font-weight: 600; }
+    .brand .tax { font-size: 12px; color: #1a1a1a; margin-top: 2px; direction: ltr; text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+    .brand .tagline { font-size: 12px; color: #1a1a1a; margin-top: 2px; font-weight: 500; }
+    .brand .address { font-size: 12px; color: #1a1a1a; margin-top: 8px; max-width: 320px; line-height: 1.55; font-weight: 500; }
+
+    .invoice-meta { text-align: left; min-width: 240px; }
+    .invoice-meta .doc-title {
+      font-size: 42px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #1a1a1a;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .invoice-meta .subtitle {
+      font-size: 12px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-top: -8px;
+      margin-bottom: 14px;
+      letter-spacing: 0.5px;
+    }
+    .meta-rows { width: 100%; border: 1px solid #1a1a1a; font-size: 12px; }
+    .meta-rows .row { display: flex; }
+    .meta-rows .row + .row { border-top: 1px solid #1a1a1a; }
+    .meta-rows .label {
+      flex: 0 0 110px;
+      padding: 7px 12px;
+      background: #f4f4f5;
+      font-weight: 700;
+      color: #1a1a1a;
+      font-size: 11.5px;
+      text-align: right;
+      border-left: 1px solid #1a1a1a;
+      letter-spacing: 0.3px;
+    }
+    .meta-rows .val {
+      flex: 1;
+      padding: 7px 12px;
+      text-align: left;
+      direction: ltr;
+      font-weight: 700;
+      color: #1a1a1a;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .customer { margin-bottom: 20px; border: 1px solid #1a1a1a; }
+    .section-title {
+      padding: 8px 14px;
+      border-bottom: 1px solid #1a1a1a;
+      background: #f4f4f5;
+      font-size: 11px;
+      font-weight: 700;
+      color: #1a1a1a;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    .customer-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+    .customer-grid .cell { padding: 9px 14px; }
+    .customer-grid .cell:not(:nth-child(3n+1)) { border-right: 1px solid #1a1a1a; }
+    .customer-grid .cell:nth-child(n+4) { border-top: 1px solid #1a1a1a; }
+    .customer-grid .cell.full { grid-column: 1 / -1; }
+    .customer-grid .label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 3px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    .customer-grid .value { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+    .customer-grid .value.tabular { font-variant-numeric: tabular-nums; direction: ltr; text-align: right; }
+
+    .items tbody td { vertical-align: top; }
+    .items tbody td.num {
+      text-align: left;
+      direction: ltr;
+      white-space: nowrap;
       font-weight: 700;
     }
-    .broker-info h2 { font-size: 22px; font-weight: 700; color: #1a365d; }
-    .broker-info p { font-size: 14px; color: #64748b; direction: ltr; text-align: right; }
-    
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 12px;
-      margin-bottom: 24px;
+    .items tbody td.period {
+      direction: ltr;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-size: 12px;
+      white-space: nowrap;
     }
-    @media (max-width: 768px) {
-      .summary-grid { grid-template-columns: repeat(2, 1fr); }
+    .items tbody .item-title { font-weight: 700; font-size: 14px; color: #1a1a1a; }
+    .items tbody .item-meta {
+      color: #1a1a1a;
+      font-size: 11.5px;
+      margin-top: 3px;
+      font-weight: 500;
     }
-    .summary-card {
-      padding: 16px 12px;
-      border-radius: 10px;
+    .items tbody .item-meta .tabular { font-variant-numeric: tabular-nums; direction: ltr; }
+    /* Direction chip — green for to_broker / broker_owes (money coming
+       to me), orange/amber for from_broker / we_owe (money going out). */
+    .items tbody .item-broker,
+    .payments tbody .item-broker {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 8px;
+      margin-top: 4px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      border: 1px solid;
+    }
+    .item-broker.dir-from { color: #78350f; background: #fef3c7; border-color: #fcd34d; }
+    .item-broker.dir-to { color: #065f46; background: #d1fae5; border-color: #6ee7b7; }
+    .items tbody td.empty-cell,
+    .payments tbody td.empty-cell {
       text-align: center;
-      border: 1px solid #e2e8f0;
+      font-weight: 500;
+      opacity: 0.7;
     }
-    .summary-card.green { background: #f0fdf4; border-color: #bbf7d0; }
-    .summary-card.red { background: #fef2f2; border-color: #fecaca; }
-    .summary-card.orange { background: #fffbeb; border-color: #fde68a; }
-    .summary-card.blue { background: #eff6ff; border-color: #bfdbfe; }
-    .summary-icon { font-size: 24px; margin-bottom: 6px; }
-    .summary-label { font-size: 11px; color: #64748b; margin-bottom: 4px; }
-    .summary-value { font-size: 18px; font-weight: 700; }
-    .summary-card.green .summary-value { color: #16a34a; }
-    .summary-card.red .summary-value { color: #dc2626; }
-    .summary-card.orange .summary-value { color: #d97706; }
-    .summary-card.blue .summary-value { color: #1e40af; }
-    
-    .section { margin-bottom: 24px; }
-    .section-title {
-      font-size: 16px;
-      font-weight: 600;
-      color: #1a365d;
-      padding: 10px 16px;
-      background: #f1f5f9;
-      border-radius: 8px;
-      margin-bottom: 12px;
-    }
-    
-    .table-container {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      border-radius: 10px;
-      border: 1px solid #e2e8f0;
-    }
-    table {
+
+    .data-table {
       width: 100%;
-      min-width: 700px;
       border-collapse: collapse;
     }
-    th {
-      background: #1a365d;
-      color: white;
-      padding: 12px 10px;
-      font-size: 12px;
-      font-weight: 600;
+    .data-table thead th {
+      background: #f4f4f5;
+      color: #1a1a1a;
+      padding: 8px 12px;
       text-align: right;
-      white-space: nowrap;
-    }
-    td {
-      padding: 10px;
-      font-size: 12px;
-      border-bottom: 1px solid #e2e8f0;
-      background: white;
-    }
-    tr.alt td { background: #f8fafc; }
-    tr:last-child td { border-bottom: none; }
-    
-    .car-plate {
-      display: inline-block;
-      background: linear-gradient(135deg, #fef08a 0%, #fde047 100%);
-      border: 2px solid #1e293b;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-family: monospace;
+      font-size: 11px;
+      letter-spacing: 1.5px;
       font-weight: 700;
-      font-size: 10px;
-      white-space: nowrap;
+      text-transform: uppercase;
+      border-bottom: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
     }
-    
-    .badge {
-      display: inline-block;
-      padding: 3px 10px;
-      border-radius: 12px;
-      font-size: 10px;
-      font-weight: 600;
-      white-space: nowrap;
+    .data-table thead th:last-child { border-left: none; }
+    .data-table tbody td {
+      padding: 9px 12px;
+      border-top: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+      font-size: 13px;
+      color: #1a1a1a;
+      text-align: right;
+      font-weight: 500;
     }
-    .badge-green { background: #dcfce7; color: #16a34a; }
-    .badge-orange { background: #ffedd5; color: #ea580c; }
-    
-    .price { font-weight: 700; color: #1a365d; white-space: nowrap; }
-    .empty { text-align: center; color: #94a3b8; padding: 24px !important; }
-    .ltr { direction: ltr; text-align: center; }
-    
-    .totals-row {
-      background: #f1f5f9 !important;
-      font-weight: 700;
-    }
-    .totals-row td { border-top: 2px solid #1a365d; }
-    
-    .footer {
-      margin-top: 30px;
-      padding-top: 20px;
-      border-top: 2px solid #e2e8f0;
+    .data-table tbody td:last-child { border-left: none; }
+    .data-table tbody tr:first-child td { border-top: none; }
+    .data-table tbody td.num {
       text-align: center;
-      color: #64748b;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+    .data-table tbody td.tabular {
+      direction: ltr;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .payments-section { margin-bottom: 20px; }
+    .payments { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #1a1a1a; }
+    .payments thead th {
+      background: #f4f4f5;
+      color: #1a1a1a;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 9px 12px;
+      text-align: right;
+      border-bottom: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+    }
+    .payments thead th:last-child { border-left: none; }
+    .payments tbody td {
+      padding: 9px 12px;
+      border-top: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+      font-size: 12px;
+      color: #1a1a1a;
+      font-weight: 500;
+      vertical-align: middle;
+    }
+    .payments tbody td:last-child { border-left: none; }
+    .payments tbody tr:first-child td { border-top: none; }
+    .payments tbody td.num,
+    .payments tbody td.date,
+    .payments tbody td.amount {
+      direction: ltr;
+      text-align: left;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+    .payments-empty {
+      padding: 14px;
+      border: 1px solid #1a1a1a;
+      font-size: 12px;
+      color: #1a1a1a;
+      opacity: 0.75;
+      text-align: center;
+    }
+
+    .bottom {
+      display: flex;
+      justify-content: flex-end;
+      gap: 18px;
+      align-items: stretch;
+      margin-bottom: 20px;
+    }
+    .totals {
+      width: 360px;
+      border-collapse: collapse;
+      font-size: 13px;
+      align-self: flex-start;
+      border: 1px solid #1a1a1a;
+    }
+    .totals td {
+      padding: 9px 14px;
+      border-top: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+    }
+    .totals tr:first-child td { border-top: none; }
+    .totals td:last-child { border-left: none; }
+    .totals td.label {
+      font-weight: 700;
+      background: #f4f4f5;
+      color: #1a1a1a;
+      font-size: 11.5px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .totals td.val {
+      text-align: left;
+      direction: ltr;
+      font-weight: 700;
+      color: #1a1a1a;
+      font-variant-numeric: tabular-nums;
+    }
+    .totals tr.total td {
+      font-weight: 800;
+      background: #1a1a1a;
+      color: #ffffff;
+      font-size: 15px;
+      border-top: 1px solid #1a1a1a;
+      padding: 12px 14px;
+    }
+    .totals tr.total td.label { text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; }
+    .totals tr.total td.val { color: #ffffff; }
+
+    .cancelled-row td { color: #9ca3af; text-decoration: line-through; }
+    .cancelled-row td .cancelled-tag { text-decoration: none; }
+    .cancelled-tag {
+      display: inline-block;
+      background: #fee2e2;
+      color: #991b1b;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      margin-right: 6px;
+      border: 1px solid #fca5a5;
+      letter-spacing: 0.3px;
+      vertical-align: middle;
+    }
+
+    .footer {
+      margin-top: 28px;
+      padding-top: 18px;
+      border-top: 1px solid #1a1a1a;
+      text-align: center;
       font-size: 12px;
     }
-    .footer-brand { margin-bottom: 8px; }
-    .footer-brand-ar { font-size: 18px; font-weight: 700; color: #1a365d; }
-    .footer-brand-en { font-size: 10px; color: #94a3b8; letter-spacing: 2px; }
-    .footer-date { font-size: 11px; color: #94a3b8; }
-    .footer-page { margin-top: 8px; font-size: 10px; }
+    .footer .thanks { font-weight: 700; font-size: 14px; color: #1a1a1a; margin-bottom: 8px; letter-spacing: 0.3px; }
+    .footer .contact { color: #1a1a1a; margin-top: 8px; font-weight: 600; line-height: 1.7; }
+    .footer .contact a { color: #1a1a1a; }
+    .footer .issued { color: #1a1a1a; margin-top: 10px; font-size: 11px; font-variant-numeric: tabular-nums; opacity: 0.7; }
+
+    .actions { text-align: center; margin-top: 28px; }
+    .actions button {
+      background: #18181b;
+      color: #fff;
+      border: 1px solid #18181b;
+      padding: 10px 26px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      font-family: inherit;
+      margin: 0 5px;
+      border-radius: 4px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .actions button:hover { background: #fff; color: #18181b; }
 
     @media print {
-      body { background: white; padding: 0; }
-      .container { box-shadow: none; border-radius: 0; }
+      @page { size: A4; margin: 0; }
+      html, body { background: #fff; }
+      body { padding: 12mm 10mm; }
+      .no-print { display: none !important; }
+      .invoice { max-width: 100%; padding: 16px 20px; border: 1px solid #1a1a1a; }
+      .items thead th,
+      .items tbody .item-broker,
+      .payments tbody .item-broker,
+      .meta-rows .label,
+      .section-title,
+      .totals td.label,
+      .totals tr.total td,
+      .data-table thead th,
+      .payments thead th {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 14px 8px; font-size: 12px; }
+      .invoice { padding: 22px 18px; }
+      .invoice-top {
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        text-align: center;
+      }
+      .brand {
+        max-width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+      .brand .logo { max-height: 110px; max-width: 260px; margin: 0 auto; }
+      .brand .logo-svg { margin: 0 auto; }
+      .brand .logo-svg svg { height: 72px; }
+      .brand .address { max-width: 100%; text-align: center; }
+      .invoice-meta {
+        text-align: center;
+        min-width: 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .invoice-meta .doc-title { font-size: 36px; }
+      .invoice-meta .subtitle { text-align: center; }
+      .meta-rows { width: 100%; max-width: 320px; }
+      .customer-grid { grid-template-columns: 1fr; }
+      .customer-grid .cell:not(:nth-child(3n+1)) { border-right: none; }
+      .customer-grid .cell:nth-child(n+2) { border-top: 1px solid #1a1a1a; }
+      .bottom { flex-direction: column; }
+      .totals { width: 100%; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>${companyName}</h1>
-      <p>كشف حساب الوسيط</p>
-      <div class="filter-info">${filterSummary}</div>
+  <div class="invoice">
+
+    <div class="invoice-top">
+      <div class="brand">
+        ${brandBlock}
+        <div class="name">${escapeHtml(branding.companyName)}</div>
+        ${branding.ownerName && branding.ownerName.trim() !== branding.companyName.trim() ? `<div class="owner">${escapeHtml(branding.ownerName)}</div>` : ''}
+        ${branding.taxNumber ? `<div class="tax">رقم المشغل: ${escapeHtml(branding.taxNumber)}</div>` : ''}
+        ${branding.siteDescription ? `<div class="tagline">${escapeHtml(branding.siteDescription)}</div>` : ''}
+        ${effectiveAddress ? `<div class="address">${escapeHtml(effectiveAddress)}</div>` : ''}
+      </div>
+      <div class="invoice-meta">
+        <div class="doc-title">تقرير</div>
+        <div class="subtitle">كشف حساب الوسيط</div>
+        <div class="meta-rows">
+          <div class="row">
+            <div class="label">رقم التقرير</div>
+            <div class="val">${reportNumber}</div>
+          </div>
+          <div class="row">
+            <div class="label">التاريخ</div>
+            <div class="val">${formatDate(today.toISOString())}</div>
+          </div>
+          <div class="row">
+            <div class="label">الفترة</div>
+            <div class="val">${escapeHtml(periodText)}</div>
+          </div>
+        </div>
+      </div>
     </div>
-    
-    <div class="content">
-      <div class="broker-card">
-        <div class="broker-avatar">${broker.name.charAt(0)}</div>
-        <div class="broker-info">
-          <h2>${broker.name}</h2>
-          ${broker.phone ? `<p>${broker.phone}</p>` : ''}
-        </div>
-      </div>
 
-      <div class="summary-grid">
-        <div class="summary-card green">
-          <div class="summary-icon">💰</div>
-          <div class="summary-label">المحصل</div>
-          <div class="summary-value">₪${stats.totalCollected.toLocaleString()}</div>
+    <div class="customer">
+      <div class="section-title">معلومات الوسيط</div>
+      <div class="customer-grid">
+        <div class="cell">
+          <div class="label">الاسم</div>
+          <div class="value">${escapeHtml(broker.name || '-')}</div>
         </div>
-        <div class="summary-card red">
-          <div class="summary-icon">📋</div>
-          <div class="summary-label">المتبقي</div>
-          <div class="summary-value">₪${stats.totalRemaining.toLocaleString()}</div>
+        <div class="cell">
+          <div class="label">رقم الهاتف</div>
+          <div class="value tabular">${broker.phone || '-'}</div>
         </div>
-        <div class="summary-card orange">
-          <div class="summary-icon">⬇️</div>
-          <div class="summary-label">له علي</div>
-          <div class="summary-value">₪${stats.fromBrokerTotal.toLocaleString()}</div>
+        <div class="cell">
+          <div class="label">عدد الوثائق</div>
+          <div class="value tabular">${policies.length}</div>
         </div>
-        <div class="summary-card green">
-          <div class="summary-icon">⬆️</div>
-          <div class="summary-label">علي له</div>
-          <div class="summary-value">₪${stats.toBrokerTotal.toLocaleString()}</div>
+        ${broker.notes ? `
+        <div class="cell full">
+          <div class="label">ملاحظات</div>
+          <div class="value" style="font-size: 12px; font-weight: 500;">${escapeHtml(broker.notes)}</div>
         </div>
-        <div class="summary-card ${stats.netBalance >= 0 ? 'green' : 'red'}">
-          <div class="summary-icon">💼</div>
-          <div class="summary-label">${stats.netBalance >= 0 ? 'لي عليه' : 'له علي (صافي)'}</div>
-          <div class="summary-value">₪${Math.abs(stats.netBalance).toLocaleString()}</div>
-        </div>
+        ` : ''}
       </div>
+    </div>
 
-      <div class="section">
-        <div class="section-title">📄 الوثائق (${policies.length})</div>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>الجهة</th>
-                <th>العميل</th>
-                <th>السيارة</th>
-                <th>النوع</th>
-                <th>السعر</th>
-                <th>من</th>
-                <th>إلى</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${policiesHtml}
-              <tr class="totals-row">
-                <td colspan="5" style="text-align: left;">المجموع</td>
-                <td class="price">₪${stats.totalPrice.toLocaleString()}</td>
-                <td colspan="2"></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <div class="customer">
+      <div class="section-title">الوثائق</div>
+      <table class="data-table items">
+        <thead>
+          <tr>
+            <th style="width: 40px;">#</th>
+            <th>الوصف</th>
+            <th style="width: 170px;">المدة</th>
+            <th style="width: 120px;">المبلغ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${policyRowsHtml}
+        </tbody>
+      </table>
+    </div>
 
-      <div class="footer">
-        <div class="footer-brand">
-          <div class="footer-brand-ar">${companyName}</div>
-        </div>
-        <div class="footer-date">${formatDate(new Date().toISOString())}</div>
-        <div class="footer-page">صفحة 1 من 1</div>
-      </div>
+    <div class="payments-section">
+      <div class="section-title">سجل التسويات (محفظة الوسيط)</div>
+      ${settlementsHtml}
+    </div>
+
+    <div class="bottom">
+      <table class="totals">
+        <tr>
+          <td class="label">له عليّ (وثائق)</td>
+          <td class="val">₪${fromBrokerTotal.toLocaleString('en-US')}</td>
+        </tr>
+        <tr>
+          <td class="label">ليَ عليه (وثائق)</td>
+          <td class="val">₪${toBrokerTotal.toLocaleString('en-US')}</td>
+        </tr>
+        <tr>
+          <td class="label">دفعت للوسيط</td>
+          <td class="val">₪${paidToBroker.toLocaleString('en-US')}</td>
+        </tr>
+        <tr>
+          <td class="label">استلمت من الوسيط</td>
+          <td class="val">₪${receivedFromBroker.toLocaleString('en-US')}</td>
+        </tr>
+        <tr class="total">
+          <td class="label">${netIsFavourable ? 'ليَ عليه (صافي)' : 'له عليّ (صافي)'}</td>
+          <td class="val">₪${Math.abs(netBalance).toLocaleString('en-US')}</td>
+        </tr>
+      </table>
+    </div>
+
+    ${branding.invoicePrivacyText ? `
+    <div class="customer">
+      <div class="section-title">سياسة الخصوصية والشروط</div>
+      <div style="padding: 11px 14px; font-size: 12px; color: #1a1a1a; line-height: 1.7; white-space: pre-wrap; font-weight: 500;">${escapeHtml(branding.invoicePrivacyText)}</div>
+    </div>
+    ` : ''}
+
+    <div class="footer">
+      <div class="thanks">شكراً لثقتكم</div>
+      ${contactFooterHtml}
+      <div class="issued">تاريخ الإصدار: ${formatDate(today.toISOString())}</div>
+    </div>
+
+    <div class="actions no-print">
+      <button type="button" onclick="window.print()">طباعة</button>
+      <button type="button" onclick="shareReport()">مشاركة</button>
     </div>
   </div>
+
+  <script>
+    function shareReport() {
+      var url = window.location.href;
+      if (navigator.share) {
+        navigator.share({ title: 'تقرير الوسيط', url: url }).catch(function(){});
+      } else {
+        window.open('https://wa.me/?text=' + encodeURIComponent(url), '_blank');
+      }
+    }
+  </script>
 </body>
 </html>`;
 }
