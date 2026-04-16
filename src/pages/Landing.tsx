@@ -241,24 +241,38 @@ export default function Landing() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("policies");
   const [slideIdx, setSlideIdx] = useState(0);
-  // Slider section is scroll-pinned: the outer <section> is N ×
-  // viewport-height, an inner `sticky top-0 h-screen` container
-  // holds the slides, and scroll progress through the section
-  // drives `slideIdx`. The user can't leave the section until
-  // they've scrolled through all N slides — natural scroll feel,
-  // no wheel-hijacking needed.
+  // Slider section — JS-controlled pin. The outer <section> is
+  // 300vh tall; the inner pin-container is absolutely positioned at
+  // top:0 and translated on Y via rAF so it tracks the scroll like
+  // `position: sticky` would. We can't use native `sticky` here
+  // because the landing root has `overflow-x-hidden`, which breaks
+  // sticky in several browsers (especially Safari) — so a transform
+  // is the only reliable way to hold the inner content pinned while
+  // the user scrolls through the section's 3 viewport-heights. The
+  // same rAF pass calculates slide progress, so the dots + card
+  // positions track 1:1 with the scroll bar.
   const sliderSectionRef = useRef<HTMLElement | null>(null);
+  const sliderPinRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const section = sliderSectionRef.current;
-    if (!section) return;
+    const pin = sliderPinRef.current;
+    if (!section || !pin) return;
     const SLIDES = 3;
     let ticking = false;
     const apply = () => {
       const rect = section.getBoundingClientRect();
-      const scrollable = rect.height - window.innerHeight;
-      if (scrollable <= 0) return;
-      const scrolled = Math.max(0, -rect.top);
-      const progress = Math.min(0.9999, scrolled / scrollable);
+      const vh = window.innerHeight;
+      const scrollable = rect.height - vh;
+      if (scrollable <= 0) {
+        pin.style.transform = "translate3d(0, 0, 0)";
+        return;
+      }
+      // `scrolled` is how far the section top is above the viewport
+      // top, clamped to [0, scrollable]. Translating by that amount
+      // parks the inner at the viewport top for the duration.
+      const scrolled = Math.max(0, Math.min(scrollable, -rect.top));
+      pin.style.transform = `translate3d(0, ${scrolled}px, 0)`;
+      const progress = scrolled / scrollable;
       const idx = Math.min(SLIDES - 1, Math.floor(progress * SLIDES));
       setSlideIdx(idx);
     };
@@ -272,7 +286,11 @@ export default function Landing() {
     };
     apply();
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    window.addEventListener("resize", apply);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", apply);
+    };
   }, []);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
   const [testimonialAnim, setTestimonialAnim] = useState<"in" | "out">("in");
@@ -1729,10 +1747,17 @@ export default function Landing() {
           transition between slides animates smoothly. */}
       <section
         ref={sliderSectionRef}
-        className="relative bg-white"
+        className="relative bg-white overflow-hidden"
         style={{ height: "300vh" }}
       >
-        <div className="sticky top-0 h-screen overflow-hidden">
+        {/* Pin container — JS transforms its Y to track scroll. Sits
+            absolute:top:0 at the section's top, then `translateY`s
+            down as the user scrolls so it stays locked to the
+            viewport until the section's 3vh of scroll is exhausted. */}
+        <div
+          ref={sliderPinRef}
+          className="absolute top-0 left-0 w-full h-screen overflow-hidden will-change-transform"
+        >
           <img
             src="https://thiqacrm.b-cdn.net/Rectangle%207%20(1).png"
             alt=""
@@ -1741,32 +1766,32 @@ export default function Landing() {
             loading="lazy"
           />
 
-          <div className="relative z-10 h-full flex flex-col items-center justify-center px-6 py-12">
-            <h2 className="text-3xl md:text-[2.6rem] font-bold text-center mb-10 md:mb-14 text-white">
+          <div className="relative z-10 h-full flex flex-col items-center justify-center px-6 py-10">
+            <h2 className="text-3xl md:text-[2.6rem] font-bold text-center mb-8 md:mb-12 text-white">
               {ct(content, "slider_title", "لا تنتظر التجديد. اصنعه بنفسك")}
             </h2>
 
             {(() => {
               const slides = [
                 {
-                  icon: Wallet,
+                  image: featuresMockup,
                   eyebrow: "تحصيل ومالية",
                   title: "تحصيل بلا Excel،\nشيكات بلا عناء.",
-                  desc: "استلم الشيكات مع تسجيل البنك والفرع والتاريخ. التقسيط الداخلي ومتابعة المستحقات آلية بالكامل. ربط مع بوابات دفع متعددة (Tranzila أو غيرها حسب الطلب) لدفع بطاقات الائتمان من داخل الوثيقة.",
+                  desc: "استلم الشيكات مع تسجيل البنك والفرع. التقسيط الداخلي آلي. ربط مع بوابات دفع متعددة — Tranzila أو غيرها حسب الطلب.",
                   cta: "ابدأ التجربة الآن",
                 },
                 {
-                  icon: MessageSquare,
+                  image: featuresMockup,
                   eyebrow: "تذكيرات وحملات",
                   title: "النظام يذكّر العميل\nقبل ما تفكر فيه.",
-                  desc: "تذكيرات قبل شهر وأسبوع من انتهاء الوثيقة، حملات SMS جماعية باختيار ذكي للعملاء، نماذج مخصّصة لكل تنبيه. النتيجة: نسبة تجديد أعلى بـ 40%.",
+                  desc: "تذكيرات قبل شهر وأسبوع من الانتهاء، حملات SMS جماعية، نماذج مخصّصة لكل تنبيه. نسبة تجديد أعلى بـ 40%.",
                   cta: "ابدأ التجربة الآن",
                 },
                 {
-                  icon: BarChart3,
+                  image: featuresMockup,
                   eyebrow: "تقارير لحظية",
                   title: "كل شيكل مرصود،\nكل فرع تحت السيطرة.",
-                  desc: "أرباح وعمولات محسوبة بلحظتها، رصيد خزينة حيّ، متابعة أرصدة كل شركة تأمين، وتقارير متعددة الفروع — كل شيء قابل للتصدير إلى Excel في ثانية.",
+                  desc: "أرباح وعمولات محسوبة بلحظتها، رصيد خزينة حيّ، متابعة أرصدة الشركات، تصدير فوري إلى Excel.",
                   cta: "ابدأ التجربة الآن",
                 },
               ];
@@ -1774,52 +1799,60 @@ export default function Landing() {
               return (
                 <>
                   {/* Three-up card rail. Each card is absolutely
-                      positioned at the center; translateX offset +
-                      scale + opacity give the left-preview / active
-                      / right-preview effect. */}
-                  <div className="relative w-full max-w-5xl h-[440px] md:h-[500px]">
+                      positioned at the rail's center; translateX
+                      offset + scale + opacity give the left-preview
+                      / active / right-preview effect. */}
+                  <div className="relative w-full max-w-5xl h-[520px] md:h-[560px]">
                     {slides.map((slide, i) => {
                       const offset = i - slideIdx;
                       const abs = Math.abs(offset);
-                      const Icon = slide.icon;
                       return (
                         <div
                           key={i}
-                          className="absolute top-0 left-1/2 rounded-3xl overflow-hidden transition-all duration-500 ease-out w-[320px] md:w-[360px] h-full"
+                          className="absolute top-0 left-1/2 rounded-3xl overflow-hidden transition-all duration-500 ease-out w-[340px] md:w-[380px] h-full flex flex-col"
                           style={{
                             background: "rgba(255, 255, 255, 0.06)",
                             backdropFilter: "blur(24px) saturate(1.3)",
                             WebkitBackdropFilter: "blur(24px) saturate(1.3)",
                             border: "1px solid rgba(255, 255, 255, 0.14)",
-                            transform: `translateX(calc(-50% + ${offset * 110}%)) scale(${abs === 0 ? 1 : 0.88})`,
+                            transform: `translateX(calc(-50% + ${offset * 108}%)) scale(${abs === 0 ? 1 : 0.9})`,
                             opacity: abs <= 1 ? (abs === 0 ? 1 : 0.45) : 0,
                             pointerEvents: abs === 0 ? "auto" : "none",
                             zIndex: abs === 0 ? 10 : 5,
                             boxShadow: abs === 0 ? "0 30px 80px -16px rgba(18,32,66,0.45)" : "none",
                           }}
                         >
-                          <div className="h-full p-8 md:p-10 flex flex-col text-white">
-                            <div
-                              className="h-14 w-14 rounded-2xl flex items-center justify-center mb-6"
-                              style={{ background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.22)" }}
-                            >
-                              <Icon className="h-7 w-7 text-white" strokeWidth={1.8} />
-                            </div>
+                          {/* Visual area — aspect box ready to
+                              accept the user's own image. Swap the
+                              <img> below for your asset. */}
+                          <div
+                            className="relative aspect-[16/10] w-full overflow-hidden border-b"
+                            style={{ borderColor: "rgba(255,255,255,0.12)" }}
+                          >
+                            <img
+                              src={slide.image}
+                              alt=""
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+
+                          <div className="flex-1 p-7 md:p-8 flex flex-col text-white">
                             <span className="text-[11px] text-white/70 font-bold tracking-[0.2em] uppercase mb-3">
                               0{i + 1} · {slide.eyebrow}
                             </span>
-                            <h3 className="text-xl md:text-[1.55rem] font-bold leading-[1.25] whitespace-pre-line mb-4">
+                            <h3 className="text-xl md:text-[1.4rem] font-bold leading-[1.25] whitespace-pre-line mb-3">
                               {slide.title}
                             </h3>
-                            <p className="text-sm text-white/80 leading-relaxed mb-8 flex-1">
+                            <p className="text-[13px] md:text-sm text-white/80 leading-relaxed mb-6 flex-1">
                               {slide.desc}
                             </p>
                             <button
                               onClick={() => navigate("/login?view=signup")}
-                              className="self-start flex items-center gap-2 px-6 py-3 text-sm font-bold text-white rounded-full bg-white/15 border border-white/30 hover:bg-white/25 transition-colors backdrop-blur-sm"
+                              className="self-start flex items-center gap-2 px-5 py-2.5 text-[13px] font-bold text-white rounded-full bg-white/15 border border-white/30 hover:bg-white/25 transition-colors backdrop-blur-sm"
                             >
                               {slide.cta}
-                              <ArrowLeft className="h-4 w-4" />
+                              <ArrowLeft className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         </div>
@@ -1827,10 +1860,9 @@ export default function Landing() {
                     })}
                   </div>
 
-                  {/* Progress dots — driven by slideIdx, also acts
-                      as a visual "where am I in the scroll lock"
-                      indicator. */}
-                  <div className="flex gap-2 mt-10">
+                  {/* Progress dots — driven by slideIdx, doubles as
+                      a "where am I in the scroll lock" indicator. */}
+                  <div className="flex gap-2 mt-8">
                     {slides.map((_, i) => (
                       <div
                         key={i}
