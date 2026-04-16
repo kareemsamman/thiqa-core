@@ -352,7 +352,7 @@ export default function Landing() {
           rounded pill the user specified. */}
       <nav
         className={cn(
-          "fixed inset-x-0 z-50 pointer-events-none transition-[top] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+          "fixed inset-x-0 z-50 pointer-events-none mt-2 transition-[top] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
           scrolled ? "top-0" : "top-11",
         )}
       >
