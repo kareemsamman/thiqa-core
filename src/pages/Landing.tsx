@@ -133,17 +133,36 @@ export default function Landing() {
     };
   }, []);
 
-  // Top marquee — JS-driven scroll. CSS percentage-based marquees
-  // kept producing a sub-pixel blank at the wrap on this user's setup
-  // no matter how many copies we added, so the loop is now driven
-  // by requestAnimationFrame against the measured group width. The
-  // track holds exactly two identical group children. On every frame
-  // we shift the track left by `SPEED` px; when the offset reaches
-  // one full group width we subtract the group width — the visual
-  // result is that copy 2 slides into copy 1's position exactly,
-  // pixel-perfect, with no blank ever.
+  // Top marquee — JS-driven scroll, dynamically padded so the track
+  // always covers more than the viewport. rAF loop measures group1's
+  // width every frame; when the running offset reaches -groupWidth we
+  // add groupWidth back, so the snap is by exactly one pixel-identical
+  // group width (no sub-pixel gap possible). On mount we also measure
+  // against innerWidth and, if a single group is narrower than the
+  // viewport, ask React to render extra clones so the track always
+  // covers at least 2× viewport — that's what prevents the blank on
+  // wider monitors.
   const marqueeTrackRef = useRef<HTMLDivElement | null>(null);
   const marqueeGroupRef = useRef<HTMLDivElement | null>(null);
+  const [marqueeClones, setMarqueeClones] = useState(3);
+  useEffect(() => {
+    const group = marqueeGroupRef.current;
+    if (!group) return;
+    const measure = () => {
+      const groupW = group.offsetWidth;
+      const vw = window.innerWidth || 0;
+      if (groupW <= 0 || vw <= 0) return;
+      // We want total track width ≥ 2 × viewport so the wrap (by 1
+      // groupWidth) always leaves at least one extra groupWidth of
+      // content visible on the leading edge. clones = number of
+      // additional identical groups after the primary one.
+      const needed = Math.max(1, Math.ceil((2 * vw) / groupW));
+      setMarqueeClones((prev) => (prev >= needed ? prev : needed));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
   useEffect(() => {
     const track = marqueeTrackRef.current;
     const group = marqueeGroupRef.current;
@@ -158,8 +177,6 @@ export default function Landing() {
       const groupW = group.offsetWidth;
       if (groupW > 0) {
         offset -= SPEED_PX_PER_SEC * dt;
-        // Wrap by exactly one group width. Because group 2 is a
-        // pixel-identical clone of group 1, the wrap is invisible.
         if (offset <= -groupW) offset += groupW;
         track.style.transform = `translate3d(${offset}px, 0, 0)`;
       }
@@ -299,12 +316,20 @@ export default function Landing() {
                 <div ref={marqueeGroupRef} className="flex items-center shrink-0">
                   {items.map((it, i) => renderItem(it, `a-${i}`))}
                 </div>
-                {/* Clone, pixel-identical content. When the track has
-                    moved left by exactly group1's width, this clone is
-                    now at group1's starting x — no blank, no jump. */}
-                <div className="flex items-center shrink-0" aria-hidden="true">
-                  {items.map((it, i) => renderItem(it, `b-${i}`))}
-                </div>
+                {/* N identical clones. The resize effect picks N so
+                    total track width ≥ 2 × viewport — guarantees at
+                    least one full extra group stays visible after the
+                    wrap, so the leading edge never reveals a blank
+                    even on ultrawide monitors. */}
+                {Array.from({ length: marqueeClones }).map((_, cIdx) => (
+                  <div
+                    key={`c-${cIdx}`}
+                    className="flex items-center shrink-0"
+                    aria-hidden="true"
+                  >
+                    {items.map((it, i) => renderItem(it, `c-${cIdx}-${i}`))}
+                  </div>
+                ))}
               </>
             );
           })()}
