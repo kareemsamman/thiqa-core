@@ -463,6 +463,7 @@ export default function Login() {
           <ThiqaLogoAnimation
             iconSize={104}
             interactive={false}
+            iconSrc="https://thiqacrm.b-cdn.net/small_white.png"
             subtitle="نظام إدارة التأمين"
             subtitleClassName="text-white/80 text-lg font-light tracking-wide"
           />
