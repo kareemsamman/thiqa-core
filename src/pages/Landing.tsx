@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   ChevronLeft, CheckCircle, Star, ArrowLeft, Play,
   Users, FileText, CreditCard, BarChart3, Bell, MessageSquare,
-  Phone, Shield
+  Phone, Shield, RefreshCcw, Wallet,
 } from "lucide-react";
 import { useLandingContent, ct, ci } from "@/hooks/useLandingContent";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
@@ -255,6 +255,72 @@ export default function Landing() {
               aria-hidden="true"
             />
           </div>
+        </div>
+      </section>
+
+      {/* ═══ Running marquee — CRM feature keywords ═══
+          A slow horizontal ticker right under the hero. The track is
+          duplicated (-aria-hidden for the clone) and translated to -50%
+          so the loop is seamless — when the original reaches -50% the
+          clone is exactly where the original started, and the CSS resets
+          without a visible jump. `whitespace-nowrap` + `min-w-max` keeps
+          everything on one line regardless of viewport. */}
+      <style>{`
+        @keyframes marquee-rtl {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .marquee-track {
+          animation: marquee-rtl 42s linear infinite;
+          will-change: transform;
+        }
+        .marquee-track:hover { animation-play-state: paused; }
+        @media (max-width: 640px) {
+          .marquee-track { animation-duration: 28s; }
+        }
+      `}</style>
+      <section
+        className="relative border-y border-white/[0.06] bg-white/[0.015] py-4 overflow-hidden hero-reveal"
+        style={{ animationDelay: '900ms' }}
+        aria-label="مزايا النظام"
+      >
+        {/* Edge fades so items dissolve into the background instead of
+            getting hard-clipped at the viewport edges. */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-24 z-10 bg-gradient-to-l from-[#171719] to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-24 z-10 bg-gradient-to-r from-[#171719] to-transparent" />
+
+        <div className="marquee-track flex items-center gap-10 min-w-max will-change-transform">
+          {[...Array(2)].map((_, dupIdx) => (
+            <div
+              key={dupIdx}
+              className="flex items-center gap-10 shrink-0"
+              aria-hidden={dupIdx === 1}
+            >
+              {[
+                { icon: Users, label: "إدارة العملاء والمركبات" },
+                { icon: FileText, label: "وثائق، تجديدات وباقات تأمين" },
+                { icon: RefreshCcw, label: "تجديد تلقائي مع تذكيرات SMS" },
+                { icon: CreditCard, label: "تحصيل وشيكات وتقسيط" },
+                { icon: Wallet, label: "محفظة الوسطاء والعمولات" },
+                { icon: BarChart3, label: "تقارير ربحية لحظية" },
+                { icon: MessageSquare, label: "حملات SMS تسويقية" },
+                { icon: Shield, label: "بيانات آمنة بتشفير كامل" },
+                { icon: Bell, label: "إشعارات انتهاء الوثائق" },
+                { icon: Phone, label: "توقيعات رقمية عن بعد" },
+              ].map(({ icon: Icon, label }, i) => (
+                <div
+                  key={`${dupIdx}-${i}`}
+                  className="flex items-center gap-2.5 shrink-0 text-white/55"
+                >
+                  <Icon className="h-4 w-4 text-white/35" />
+                  <span className="text-[14px] font-medium whitespace-nowrap">
+                    {label}
+                  </span>
+                  <span className="mx-3 text-white/20 select-none">•</span>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       </section>
 
