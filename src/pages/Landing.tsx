@@ -174,6 +174,8 @@ const featureTabs = [
     num: "01",
     title: "إصدار وثائق التأمين\nبضغطة واحدة.",
     desc: "معالج ذكي يقودك خطوة بخطوة: اختيار العميل والمركبة، حساب أسعار الإلزامي والثالث والشامل تلقائياً حسب قواعد كل شركة تأمين، وإضافة خدمات الطريق والحوادث في نفس الباقة. الوثيقة جاهزة للتوقيع الرقمي بعد دقائق.",
+    gradient: "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%)",
+    glow: "radial-gradient(70% 60% at 30% 50%, rgba(255,255,255,0.38) 0%, transparent 60%)",
     stats: [
       { value: "3", unit: "دقائق", label: "متوسط الوقت لإصدار وثيقة جديدة — من اختيار العميل إلى الإرسال للتوقيع." },
       { value: "100%", unit: "", label: "دقة في حساب السعر والعمولة حسب قواعد كل شركة تأمين." },
@@ -185,6 +187,8 @@ const featureTabs = [
     num: "02",
     title: "تحصيل كامل بدون Excel،\nشيكات بلا عناء.",
     desc: "استلام الشيكات مع تسجيل البنك والفرع والتاريخ، تقسيط داخلي مع متابعة المستحقات على العميل، ربط مباشر مع Tranzila لبطاقات الائتمان، وإيصالات نقدية قابلة للطباعة أو الإرسال عبر SMS — كل ذلك في ملف واحد.",
+    gradient: "linear-gradient(180deg, #3B6FBB 0%, #85A9D1 100%)",
+    glow: "radial-gradient(70% 60% at 72% 45%, rgba(255,255,255,0.38) 0%, transparent 60%)",
     stats: [
       { value: "Tranzila", unit: "", label: "ربط مباشر لدفع بطاقات الائتمان بضغطة زر من داخل الوثيقة." },
       { value: "65%", unit: "", label: "تقليص في وقت متابعة الديون وتسوية الشيكات بلا Excel يدوي." },
@@ -196,6 +200,8 @@ const featureTabs = [
     num: "03",
     title: "النظام يذكّر العميل\nقبل ما تفكر فيه.",
     desc: "تذكيرات تجديد تلقائية قبل شهر وأسبوع من انتهاء الوثيقة، حملات SMS جماعية مع اختيار عملاء ذكي حسب الفرع أو الشركة، نماذج رسائل مخصصة لكل نوع تنبيه، وتتبع كامل لحالة الإرسال مع تقارير DLR.",
+    gradient: "linear-gradient(180deg, #5A4FBB 0%, #9E95CB 100%)",
+    glow: "radial-gradient(60% 70% at 50% 25%, rgba(255,255,255,0.42) 0%, transparent 60%)",
     stats: [
       { value: "40%", unit: "", label: "ارتفاع في نسبة تجديد الوثائق بفضل التذكيرات التلقائية قبل الانتهاء." },
       { value: "5K+", unit: "", label: "رسائل SMS تُرسل شهرياً — تذكيرات، تسويات، وحملات مستهدفة." },
@@ -207,6 +213,8 @@ const featureTabs = [
     num: "04",
     title: "كل شيكل مرصود،\nكل فرع تحت السيطرة.",
     desc: "تقارير أرباح مع تفصيل العمولات والمصاريف، رصيد خزينة حيّ مع فصل الدخل عن المصروفات، متابعة الأرصدة المستحقة لكل شركة تأمين، وتقارير متعددة الفروع بالوقت الفعلي — مع تصدير فوري إلى Excel.",
+    gradient: "linear-gradient(180deg, #2E4DB5 0%, #7887C5 100%)",
+    glow: "radial-gradient(60% 70% at 50% 75%, rgba(255,255,255,0.38) 0%, transparent 60%)",
     stats: [
       { value: "لحظياً", unit: "", label: "محرك حسابات الأرباح يُحدَّث مع كل عملية — بدون انتظار نهاية الشهر." },
       { value: "∞", unit: "", label: "تقارير مخصصة حسب الفرع والوسيط والشركة والفترة، قابلة للتصدير." },
@@ -218,6 +226,8 @@ const featureTabs = [
     num: "05",
     title: "عمولات محسوبة تلقائياً،\nتسويات دقيقة.",
     desc: "حساب العمولات تلقائياً على كل وثيقة، تسويات مع الوسطاء مع تتبع الأرصدة والمستحقات، تسويات مع شركات التأمين بأسعارهم ومدفوعاتهم، وتقارير مفصلة لكل علاقة مالية — بدون جداول إكسل يدوية.",
+    gradient: "linear-gradient(180deg, #4E62C8 0%, #92A0D8 100%)",
+    glow: "radial-gradient(85% 55% at 50% 50%, rgba(255,255,255,0.34) 0%, transparent 70%)",
     stats: [
       { value: "0", unit: "", label: "عمولات ضائعة — كل شيكل محسوب على صاحبه من لحظة الإصدار." },
       { value: "∞", unit: "", label: "وسطاء وشركات تأمين، كل واحد بمحفظة مالية منفصلة." },
@@ -522,17 +532,15 @@ export default function Landing() {
             />
           </div>
 
-          <div
-            className={cn(
-              "hidden md:flex items-center gap-10 text-[14px] font-medium transition-colors duration-300",
-              scrolled ? "text-black/70" : "text-white/90",
-            )}
-          >
-            {/* Hidden: features section is currently disabled. Restore alongside the `{false && …}` block below. */}
-            {false && <a href="#features" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>لماذا نحن مختلفون</a>}
-            <a href="#demo" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>كيف يعمل</a>
-            <a href="#faq" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>أسئلة وأجوبة</a>
-            <a href="/pricing" className={cn("transition-colors", scrolled ? "hover:text-black" : "hover:text-white")}>الأسعار</a>
+          <div className="hidden md:flex items-center gap-10 text-[14px] font-medium text-black/75">
+            {/* Nav links stay black in both scroll states — user
+                wants the one exception to the white-over-hero rule.
+                Logo + CTA still swap colors on scroll. */}
+            {/* Hidden: features section is currently disabled. */}
+            {false && <a href="#features" className="transition-colors hover:text-black">لماذا نحن مختلفون</a>}
+            <a href="#demo" className="transition-colors hover:text-black">كيف يعمل</a>
+            <a href="#faq" className="transition-colors hover:text-black">أسئلة وأجوبة</a>
+            <a href="/pricing" className="transition-colors hover:text-black">الأسعار</a>
           </div>
 
           {/* CTA pill — white text + white ring over the hero video,
@@ -959,18 +967,25 @@ export default function Landing() {
             ))}
           </div>
 
-          {/* Tab content */}
+          {/* Tab content. Each tab carries its own `gradient` + `glow`
+              so switching tabs paints the three cards in a
+              different colour mood. `key={tab.id}` forces a remount
+              on change so the `demoFadeIn` keyframe replays. */}
+          <style>{`
+            @keyframes demoFadeIn {
+              from { opacity: 0; transform: translateY(8px); }
+              to   { opacity: 1; transform: translateY(0); }
+            }
+            .demo-fade { animation: demoFadeIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+          `}</style>
           {featureTabs.filter(t => t.id === activeTab).map(tab => (
-            <div key={tab.id} className="space-y-4">
+            <div key={tab.id} className="demo-fade space-y-4">
               {/* Main row: mockup card + description card */}
               <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4">
-                {/* Left: Mockup card — periwinkle gradient + white
-                    glow + blurred mockup echo in the backdrop */}
+                {/* Left: Mockup card with per-tab gradient + glow */}
                 <div
                   className="relative rounded-3xl overflow-hidden min-h-[320px] md:min-h-[380px] lg:min-h-[440px] flex items-center justify-center p-6 md:p-10"
-                  style={{
-                    background: "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%)",
-                  }}
+                  style={{ background: tab.gradient }}
                 >
                   <div
                     className="absolute inset-0 opacity-20"
@@ -983,13 +998,9 @@ export default function Landing() {
                     }}
                     aria-hidden="true"
                   />
-                  {/* Soft white ambient glow — complements the blue
-                      base and makes the mockup pop off the surface. */}
                   <div
-                    className="absolute inset-0 opacity-50"
-                    style={{
-                      background: "radial-gradient(ellipse 70% 60% at 30% 50%, rgba(255,255,255,0.35) 0%, transparent 60%)",
-                    }}
+                    className="absolute inset-0"
+                    style={{ background: tab.glow }}
                     aria-hidden="true"
                   />
                   <img
@@ -1000,20 +1011,14 @@ export default function Landing() {
                   />
                 </div>
 
-                {/* Right: Description card — same gradient, white
-                    corner highlight. */}
+                {/* Right: Description card — same per-tab gradient */}
                 <div
                   className="relative rounded-3xl overflow-hidden p-8 lg:p-10 flex flex-col justify-between min-h-[320px] lg:min-h-[440px]"
-                  style={{
-                    background: "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%)",
-                  }}
+                  style={{ background: tab.gradient }}
                 >
                   <div
-                    className="absolute -top-24 -right-24 h-64 w-64 opacity-60 pointer-events-none"
-                    style={{
-                      background: "radial-gradient(circle, rgba(255,255,255,0.45) 0%, transparent 70%)",
-                      filter: "blur(30px)",
-                    }}
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ background: tab.glow }}
                     aria-hidden="true"
                   />
                   <div className="relative z-10">
@@ -1037,22 +1042,17 @@ export default function Landing() {
                 </div>
               </div>
 
-              {/* Bottom row: 2 stat cards — same gradient, corner glow */}
+              {/* Bottom row: 2 stat cards — same per-tab gradient */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {tab.stats.map((stat, j) => (
                   <div
                     key={j}
                     className="relative rounded-3xl overflow-hidden p-6 lg:p-8 text-white"
-                    style={{
-                      background: "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%)",
-                    }}
+                    style={{ background: tab.gradient }}
                   >
                     <div
-                      className="absolute -top-20 -left-20 h-56 w-56 opacity-55 pointer-events-none"
-                      style={{
-                        background: "radial-gradient(circle, rgba(255,255,255,0.45) 0%, transparent 70%)",
-                        filter: "blur(40px)",
-                      }}
+                      className="absolute inset-0 pointer-events-none"
+                      style={{ background: tab.glow }}
                       aria-hidden="true"
                     />
                     <div className="relative z-10">
