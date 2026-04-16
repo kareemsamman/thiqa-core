@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { Button } from "@/components/ui/button";
 import {
-  ChevronLeft, CheckCircle, Star, ArrowLeft, Play,
+  ChevronLeft, CheckCircle, Star, ArrowLeft, Play, X, Check,
   Users, FileText, CreditCard, BarChart3, Bell, MessageSquare,
   Phone, Shield, RefreshCcw, Wallet,
 } from "lucide-react";
@@ -31,6 +31,122 @@ const HERO_VIDEO_SPEED = 1.5;
 const reapplyHeroVideoSpeed = (e: React.SyntheticEvent<HTMLVideoElement>) => {
   (e.currentTarget as HTMLVideoElement).playbackRate = HERO_VIDEO_SPEED;
 };
+
+// Section-2 feature tiles. Each tile is also the source of truth
+// for its modal: `intro` + `bullets` describe real Thiqa features
+// (pulled from the actual pages under src/pages/) and the `gradient`
+// / `accent` colors drive the modal hero visual. Change the copy
+// here and the popup updates automatically.
+const featureTiles = [
+  {
+    icon: Users,
+    title: "إدارة العملاء والسيارات",
+    desc: "ملفات عملاء كاملة، سائقون إضافيون، مركبات وتاريخ الوثائق.",
+    tint: "bg-indigo-50 text-indigo-600",
+    hoverTint: "group-hover:bg-indigo-100",
+    gradient: "linear-gradient(135deg, #eef2ff 0%, #c7d2fe 100%)",
+    accent: "#4f46e5",
+    intro: "ملف عميل موحّد يجمع كل شيء: الهوية، المركبات، السائقين الإضافيين، تاريخ الوثائق والمطالبات — بدون التنقّل بين ملفات Excel.",
+    bullets: [
+      "ملف عميل مفصّل: الهوية، رقم الملف والملاحظات الطبية",
+      "إدارة السائقين الإضافيين وسائقي الأعمار تحت 24",
+      "سجل كامل للمركبات والوثائق والتجديدات",
+      "تسجيل الحوادث والمطالبات المرتبطة بكل عميل",
+      "بحث متقدم وتصفية حسب الفرع والحالة والوسيط",
+    ],
+    decorBadges: ["ملف طبي", "سائق إضافي", "تاريخ الوثائق"],
+  },
+  {
+    icon: FileText,
+    title: "وثائق، باقات وتجديدات",
+    desc: "إنشاء إلزامي + ثالث/شامل + خدمات طريق في باقة واحدة، وتجديدات ذكية.",
+    tint: "bg-sky-50 text-sky-600",
+    hoverTint: "group-hover:bg-sky-100",
+    gradient: "linear-gradient(135deg, #f0f9ff 0%, #bae6fd 100%)",
+    accent: "#0284c7",
+    intro: "معالج إصدار وثيقة يدمج الإلزامي + الشامل + خدمات الطريق في باقة واحدة، مع حساب سعر تلقائي حسب قواعد كل شركة تأمين.",
+    bullets: [
+      "إصدار إلزامي + ثالث/شامل في باقة واحدة",
+      "حساب السعر تلقائياً حسب قواعد كل شركة تأمين",
+      "خدمات الطريق والحوادث مدمجة بالباقة",
+      "تجديدات ذكية مع سجل كامل لكل وثيقة",
+      "إلغاءات وتحويلات بين المركبات بضغطة زر",
+    ],
+    decorBadges: ["إلزامي", "شامل", "خدمات طريق"],
+  },
+  {
+    icon: CreditCard,
+    title: "تحصيل، شيكات وتقسيط",
+    desc: "نقدي، شيكات ببنك وفرع، تقسيط داخلي، وربط بسداد Tranzila.",
+    tint: "bg-emerald-50 text-emerald-600",
+    hoverTint: "group-hover:bg-emerald-100",
+    gradient: "linear-gradient(135deg, #ecfdf5 0%, #a7f3d0 100%)",
+    accent: "#059669",
+    intro: "نظام تحصيل كامل يدعم النقدي، الشيكات، التقسيط الداخلي والدفع ببطاقة الائتمان عبر Tranzila — مع متابعة حالة كل دفعة.",
+    bullets: [
+      "استلام شيكات مع تسجيل البنك والفرع والتاريخ",
+      "تقسيط داخلي مع متابعة المستحقات على العميل",
+      "إيصالات نقدية قابلة للطباعة وإرسال SMS",
+      "ربط مباشر مع Tranzila لدفع بطاقات الائتمان",
+      "تتبع حالة كل دفعة: مكتمل، مرفوض، معلّق",
+    ],
+    decorBadges: ["شيكات", "Tranzila", "تقسيط داخلي"],
+  },
+  {
+    icon: Wallet,
+    title: "محفظة الوسطاء والتسويات",
+    desc: "حساب الوسيط، أرباحه، تسوياته — بدون جداول إكسل يدوية.",
+    tint: "bg-amber-50 text-amber-600",
+    hoverTint: "group-hover:bg-amber-100",
+    gradient: "linear-gradient(135deg, #fffbeb 0%, #fde68a 100%)",
+    accent: "#d97706",
+    intro: "محفظة مالية لكل وسيط تحسب العمولات تلقائياً على كل وثيقة، وتدير التسويات مع الوسطاء وشركات التأمين من لوحة واحدة.",
+    bullets: [
+      "حساب العمولات تلقائياً على كل وثيقة",
+      "تسويات الوسطاء مع تتبع الأرصدة والمستحقات",
+      "تسويات مع شركات التأمين بأسعارهم ودفعاتهم",
+      "محفظة كاملة: الدخل، المصاريف وصافي الربح",
+      "تقارير مفصلة لكل وسيط وكل شركة تأمين",
+    ],
+    decorBadges: ["عمولات", "تسويات", "أرصدة حيّة"],
+  },
+  {
+    icon: MessageSquare,
+    title: "تذكيرات SMS تلقائية",
+    desc: "تذكير قبل انتهاء الوثيقة، وحملات تسويقية جماعية بضغطة زر.",
+    tint: "bg-rose-50 text-rose-600",
+    hoverTint: "group-hover:bg-rose-100",
+    gradient: "linear-gradient(135deg, #fff1f2 0%, #fecdd3 100%)",
+    accent: "#e11d48",
+    intro: "تذكيرات ذكية وحملات SMS جماعية: النظام يُرسل قبل الانتهاء، في عيد الميلاد، وعند انتهاء الرخصة — بدون تدخّل يدوي.",
+    bullets: [
+      "تذكيرات قبل انتهاء الوثيقة (شهر وأسبوع)",
+      "حملات SMS جماعية مع اختيار عملاء متعدد",
+      "نماذج رسائل مخصّصة لكل نوع تنبيه",
+      "تذكيرات عيد الميلاد وانتهاء الرخصة تلقائياً",
+      "تتبع حالة الإرسال مع تقارير DLR",
+    ],
+    decorBadges: ["تذكيرات", "حملات", "تقارير DLR"],
+  },
+  {
+    icon: BarChart3,
+    title: "تقارير مالية لحظية",
+    desc: "أرباح، عمولات، ديون، وتقارير متعددة الفروع بالوقت الفعلي.",
+    tint: "bg-violet-50 text-violet-600",
+    hoverTint: "group-hover:bg-violet-100",
+    gradient: "linear-gradient(135deg, #f5f3ff 0%, #ddd6fe 100%)",
+    accent: "#7c3aed",
+    intro: "تقارير مالية محدّثة بالوقت الفعلي: أرباح، عمولات، أرصدة مستحقة وتقارير متعددة الفروع — مع تصدير فوري لـ Excel.",
+    bullets: [
+      "تقارير أرباح مع تفصيل العمولات والمصاريف",
+      "متابعة الأرصدة المستحقة لكل شركة تأمين",
+      "رصيد الخزينة مع فصل الدخل عن المصروفات",
+      "تقارير متعددة الفروع مع مقارنات زمنية",
+      "تصدير كامل إلى Excel بحسابات مفصّلة",
+    ],
+    decorBadges: ["أرباح حيّة", "متعدد الفروع", "تصدير Excel"],
+  },
+];
 
 const featureTabs = [
   {
@@ -99,6 +215,24 @@ export default function Landing() {
   const [testimonialIdx, setTestimonialIdx] = useState(0);
   const [testimonialAnim, setTestimonialAnim] = useState<"in" | "out">("in");
   const [faqCategory, setFaqCategory] = useState("general");
+  // Section-2 feature tile → pro modal. Index points at the tile in
+  // the `featureTiles` array below (null = closed). Body scroll is
+  // frozen while open and ESC closes — so the modal behaves like a
+  // real dialog, not a popover.
+  const [openTile, setOpenTile] = useState<number | null>(null);
+  useEffect(() => {
+    if (openTile === null) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenTile(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [openTile]);
   // Track scroll to drive the nav's sticky pill transition + the top
   // marquee's slide-up close. `scrolled` flips true once the user is
   // past a small threshold and stays true until they scroll back up.
@@ -590,10 +724,11 @@ export default function Landing() {
           from { clip-path: inset(0 0 0 100%); }
           to   { clip-path: inset(0 0 0 0); }
         }
-        @keyframes fbCaretBlink {
-          0%, 49% { opacity: 1; }
-          50%, 100% { opacity: 0; }
-        }
+        /* Pre-animation state: fully clipped so text is invisible
+           before IntersectionObserver flips .fb-visible. Once
+           typing runs its course, clip-path lands at 0 and the
+           final text reads as plain text — no cursor, no residual
+           typing artifact. */
         .fb-type {
           display: inline-block;
           clip-path: inset(0 0 0 100%);
@@ -603,27 +738,6 @@ export default function Landing() {
         }
         .fb-visible .fb-type-title {
           animation: fbTypeRtl 1.5s steps(34, end) 0.85s forwards;
-        }
-        .fb-caret {
-          display: inline-block;
-          width: 2px;
-          height: 1em;
-          vertical-align: -0.12em;
-          background: currentColor;
-          margin-inline-start: 4px;
-          opacity: 0;
-          animation: fbCaretBlink 0.9s step-end infinite;
-          animation-play-state: paused;
-        }
-        .fb-visible .fb-caret-label {
-          animation-play-state: running;
-          animation-delay: 0.15s;
-          opacity: 1;
-        }
-        .fb-visible .fb-caret-title {
-          animation-play-state: running;
-          animation-delay: 0.85s;
-          opacity: 1;
         }
 
         .fb-tile {
@@ -699,6 +813,47 @@ export default function Landing() {
           opacity: 1;
           transform: translateX(0);
         }
+
+        /* ── Modal ────────────────────────────────────────────── */
+        @keyframes fbBackdropIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        @keyframes fbPanelIn {
+          from { opacity: 0; transform: translateY(28px) scale(0.96); }
+          to   { opacity: 1; transform: translateY(0)    scale(1); }
+        }
+        @keyframes fbHeroIconIn {
+          from { opacity: 0; transform: scale(0.6) rotate(-12deg); }
+          to   { opacity: 1; transform: scale(1)   rotate(0); }
+        }
+        @keyframes fbBadgeIn {
+          from { opacity: 0; transform: translateY(8px) scale(0.9); }
+          to   { opacity: 1; transform: translateY(0)   scale(1); }
+        }
+        @keyframes fbBulletIn {
+          from { opacity: 0; transform: translateX(-12px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        .fb-modal-backdrop {
+          animation: fbBackdropIn 0.35s ease forwards;
+        }
+        .fb-modal-panel {
+          opacity: 0;
+          animation: fbPanelIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards;
+        }
+        .fb-hero-icon {
+          opacity: 0;
+          animation: fbHeroIconIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards;
+        }
+        .fb-badge {
+          opacity: 0;
+          animation: fbBadgeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .fb-bullet {
+          opacity: 0;
+          animation: fbBulletIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
       `}</style>
       <section
         ref={(el) => {
@@ -728,63 +883,21 @@ export default function Landing() {
           <div className="text-center mb-14">
             <p className="text-sm mb-3 tracking-wide font-semibold">
               <span className="fb-type fb-type-label text-[#4a6cc7]">كل ما تحتاجه وكالتك</span>
-              <span className="fb-caret fb-caret-label text-[#4a6cc7]" aria-hidden="true" />
             </p>
             <h2 className="text-2xl md:text-[2.2rem] font-bold leading-tight" style={{ color: '#122143' }}>
               <span className="fb-type fb-type-title">أدوات حقيقية تعمل من اليوم الأول</span>
-              <span className="fb-caret fb-caret-title" aria-hidden="true" />
             </h2>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
-            {[
-              {
-                icon: Users,
-                title: "إدارة العملاء والسيارات",
-                desc: "ملفات عملاء كاملة، سائقون إضافيون، مركبات وتاريخ الوثائق.",
-                tint: "bg-indigo-50 text-indigo-600",
-                hoverTint: "group-hover:bg-indigo-100",
-              },
-              {
-                icon: FileText,
-                title: "وثائق، باقات وتجديدات",
-                desc: "إنشاء إلزامي + ثالث/شامل + خدمات طريق في باقة واحدة، وتجديدات ذكية.",
-                tint: "bg-sky-50 text-sky-600",
-                hoverTint: "group-hover:bg-sky-100",
-              },
-              {
-                icon: CreditCard,
-                title: "تحصيل، شيكات وتقسيط",
-                desc: "نقدي، شيكات ببنك وفرع، تقسيط داخلي، وربط بسداد Tranzila.",
-                tint: "bg-emerald-50 text-emerald-600",
-                hoverTint: "group-hover:bg-emerald-100",
-              },
-              {
-                icon: Wallet,
-                title: "محفظة الوسطاء والتسويات",
-                desc: "حساب الوسيط، أرباحه، تسوياته — بدون جداول إكسل يدوية.",
-                tint: "bg-amber-50 text-amber-600",
-                hoverTint: "group-hover:bg-amber-100",
-              },
-              {
-                icon: MessageSquare,
-                title: "تذكيرات SMS تلقائية",
-                desc: "تذكير قبل انتهاء الوثيقة، وحملات تسويقية جماعية بضغطة زر.",
-                tint: "bg-rose-50 text-rose-600",
-                hoverTint: "group-hover:bg-rose-100",
-              },
-              {
-                icon: BarChart3,
-                title: "تقارير مالية لحظية",
-                desc: "أرباح، عمولات، ديون، وتقارير متعددة الفروع بالوقت الفعلي.",
-                tint: "bg-violet-50 text-violet-600",
-                hoverTint: "group-hover:bg-violet-100",
-              },
-            ].map(({ icon: Icon, title, desc, tint, hoverTint }, i) => (
-              <div
+            {featureTiles.map(({ icon: Icon, title, desc, tint, hoverTint }, i) => (
+              <button
                 key={i}
-                className="fb-tile group relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white p-6 text-right hover:border-[#122143]/20 hover:shadow-[0_20px_50px_-14px_rgba(18,33,67,0.22)]"
+                type="button"
+                onClick={() => setOpenTile(i)}
+                className="fb-tile group relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white p-6 text-right hover:border-[#122143]/20 hover:shadow-[0_20px_50px_-14px_rgba(18,33,67,0.22)] cursor-pointer w-full"
                 style={{ transitionDelay: `${i * 90}ms` }}
+                aria-label={`افتح تفاصيل: ${title}`}
               >
                 <div className="relative z-10">
                   <div className={cn("fb-icon inline-flex h-12 w-12 items-center justify-center rounded-xl mb-4", tint, hoverTint)}>
@@ -797,10 +910,147 @@ export default function Landing() {
                     <ArrowLeft className="h-3 w-3" />
                   </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
+
+        {/* ═══ Feature tile modal ═══
+            Opens when a tile is clicked. Hero panel uses the tile's
+            own gradient + icon + "decor badges" so each feature has
+            its own on-brand visual (no stock imagery required). The
+            bulleted capability list is sourced from `featureTiles`
+            above, which itself was built by auditing the actual
+            pages under src/pages/ — so everything the popup
+            promises is a real, shipping feature. */}
+        {openTile !== null && (() => {
+          const tile = featureTiles[openTile];
+          const Icon = tile.icon;
+          return (
+            <div
+              className="fixed inset-0 z-[70] flex items-center justify-center p-4 md:p-6"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="fb-modal-title"
+            >
+              <div
+                className="fb-modal-backdrop absolute inset-0 bg-[#0b1530]/60 backdrop-blur-md"
+                onClick={() => setOpenTile(null)}
+              />
+              <div className="fb-modal-panel relative z-10 w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white shadow-[0_40px_100px_-20px_rgba(18,33,67,0.45)]">
+                {/* Hero visual — gradient + big icon + decorative
+                    sub-feature chips + soft grid. Per-tile accent
+                    color keeps each popup visually distinct. */}
+                <div
+                  className="relative h-52 md:h-60 overflow-hidden"
+                  style={{ background: tile.gradient }}
+                  dir="rtl"
+                >
+                  <div
+                    className="absolute inset-0 opacity-[0.18]"
+                    style={{
+                      backgroundImage:
+                        "radial-gradient(circle at 1px 1px, rgba(18,33,67,0.35) 1px, transparent 0)",
+                      backgroundSize: "18px 18px",
+                    }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div
+                      className="fb-hero-icon h-24 w-24 md:h-28 md:w-28 rounded-3xl bg-white/85 backdrop-blur-sm flex items-center justify-center"
+                      style={{
+                        boxShadow: `0 20px 60px -12px ${tile.accent}66`,
+                      }}
+                    >
+                      <Icon className="h-12 w-12 md:h-14 md:w-14" strokeWidth={1.6} style={{ color: tile.accent }} />
+                    </div>
+                  </div>
+                  {/* Floating chips — three sub-feature hints drawn
+                      from `decorBadges`. Staggered fade-in. */}
+                  {tile.decorBadges.map((badge, idx) => {
+                    const positions = [
+                      "top-5 right-5",
+                      "bottom-6 right-10",
+                      "top-10 left-6",
+                    ];
+                    return (
+                      <span
+                        key={idx}
+                        className={cn(
+                          "fb-badge absolute text-[11px] md:text-xs font-semibold px-3 py-1.5 rounded-full bg-white/90 backdrop-blur-sm border border-white shadow-sm",
+                          positions[idx],
+                        )}
+                        style={{
+                          color: tile.accent,
+                          animationDelay: `${0.45 + idx * 0.12}s`,
+                        }}
+                      >
+                        {badge}
+                      </span>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => setOpenTile(null)}
+                    className="absolute top-4 left-4 h-9 w-9 rounded-full bg-white/90 hover:bg-white text-[#122143] flex items-center justify-center shadow-sm transition-colors"
+                    aria-label="إغلاق"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="p-7 md:p-9 text-right" dir="rtl">
+                  <h3
+                    id="fb-modal-title"
+                    className="text-xl md:text-[1.6rem] font-extrabold leading-tight mb-3"
+                    style={{ color: "#122143" }}
+                  >
+                    {tile.title}
+                  </h3>
+                  <p className="text-[13px] md:text-sm text-black/65 leading-relaxed mb-6">
+                    {tile.intro}
+                  </p>
+
+                  <ul className="space-y-3 mb-7">
+                    {tile.bullets.map((b, idx) => (
+                      <li
+                        key={idx}
+                        className="fb-bullet flex items-start gap-3"
+                        style={{ animationDelay: `${0.35 + idx * 0.08}s` }}
+                      >
+                        <span
+                          className="flex-shrink-0 mt-0.5 h-5 w-5 rounded-full flex items-center justify-center"
+                          style={{ background: tile.accent }}
+                        >
+                          <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                        </span>
+                        <span className="text-[13px] md:text-sm text-black/80 leading-relaxed">
+                          {b}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenTile(null);
+                      navigate("/login?view=signup");
+                    }}
+                    className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-3.5 rounded-full text-white font-bold text-sm transition-transform hover:scale-[1.02]"
+                    style={{
+                      background: "#122143",
+                      boxShadow: "0 12px 30px -8px rgba(18,33,67,0.4)",
+                    }}
+                  >
+                    جرّب هذه الميزة مجاناً
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </section>
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
