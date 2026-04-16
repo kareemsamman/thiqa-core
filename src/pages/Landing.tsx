@@ -267,10 +267,15 @@ export default function Landing() {
       <div
         dir="ltr"
         className={cn(
-          "relative border-b border-black/[0.06] bg-white overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+          // A longer duration + an iOS-style ease-out curve lets the
+          // bar really "slide up" rather than snap closed. -translate-y
+          // pairs with max-h-0 so the element pushes up while its flow
+          // space collapses underneath — content below glides up into
+          // the gap instead of jumping.
+          "relative border-b border-black/[0.06] bg-white overflow-hidden transition-all duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)] transform-gpu origin-top",
           scrolled
-            ? "max-h-0 py-0 border-0 opacity-0 pointer-events-none"
-            : "max-h-[60px] py-3 opacity-100",
+            ? "max-h-0 py-0 border-0 opacity-0 pointer-events-none -translate-y-full"
+            : "max-h-[60px] py-3 opacity-100 translate-y-0",
         )}
         aria-label="مزايا النظام"
         aria-hidden={scrolled}
@@ -352,13 +357,17 @@ export default function Landing() {
           rounded pill the user specified. */}
       <nav
         className={cn(
-          "fixed inset-x-0 z-50 pointer-events-none mt-2 transition-[top] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+          // Match the marquee's duration + easing so the two transitions
+          // read as one coordinated motion: marquee slides up, nav
+          // drops from top-11 to top-0, pill morphs inward — all at
+          // the same rhythm.
+          "fixed inset-x-0 z-50 pointer-events-none mt-2 transition-[top] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
           scrolled ? "top-0" : "top-11",
         )}
       >
         <div
           className={cn(
-            "pointer-events-auto flex items-center justify-between px-6 h-14 md:h-16 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
+            "pointer-events-auto flex items-center justify-between px-6 h-14 md:h-16 transition-all duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
             scrolled
               ? "w-[92%] max-w-[64rem] mx-auto mt-3 border border-[rgb(245,245,245)] rounded-full"
               : "w-[90%] max-w-[96rem] mx-auto mt-0 rounded-none border-0",
