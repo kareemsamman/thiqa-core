@@ -164,29 +164,32 @@ export default function Landing() {
         }
       `}</style>
 
-      {/* ═══ Navbar ═══ */}
+      {/* ═══ Navbar — sits on top of the light-veiled hero, so text and
+          borders are black for readability. The navbar is absolute, not
+          fixed, so it doesn't follow the scroll onto the dark sections
+          below — the black styling is only visible over the hero. */}
       <nav className="absolute top-0 inset-x-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 h-16">
-          <div className="flex items-center text-white">
+          <div className="flex items-center text-black">
             <ThiqaLogoAnimation
               iconSize={34}
               interactive={false}
-              iconSrc="https://thiqacrm.b-cdn.net/small_white.png"
+              iconSrc="https://thiqacrm.b-cdn.net/small_black.png"
             />
           </div>
-          <div className="hidden md:flex items-center gap-10 text-[14px] text-white/70 font-medium">
-            <a href="#features" className="hover:text-white transition-colors">لماذا نحن مختلفون</a>
-            <a href="#demo" className="hover:text-white transition-colors">كيف يعمل</a>
-            <a href="#faq" className="hover:text-white transition-colors">أسئلة وأجوبة</a>
-            <a href="/pricing" className="hover:text-white transition-colors">الأسعار</a>
+          <div className="hidden md:flex items-center gap-10 text-[14px] text-black/70 font-medium">
+            <a href="#features" className="hover:text-black transition-colors">لماذا نحن مختلفون</a>
+            <a href="#demo" className="hover:text-black transition-colors">كيف يعمل</a>
+            <a href="#faq" className="hover:text-black transition-colors">أسئلة وأجوبة</a>
+            <a href="/pricing" className="hover:text-black transition-colors">الأسعار</a>
           </div>
             <button
               onClick={() => { trackEvent("signup_click", "/landing"); navigate("/login?view=signup"); }}
-            className="px-6 py-2 text-[13px] font-bold text-white/90 hover:text-white transition-colors"
+            className="px-6 py-2 text-[13px] font-bold text-black hover:text-black transition-colors"
             style={{
               borderRadius: '100px',
-              border: '2px solid rgba(255, 255, 255, 0.40)',
-              background: 'rgba(255, 255, 255, 0.10)',
+              border: '2px solid rgba(0, 0, 0, 0.40)',
+              background: 'rgba(255, 255, 255, 0.55)',
             }}
           >
             {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
@@ -194,25 +197,39 @@ export default function Landing() {
         </div>
       </nav>
 
-      {/* ═══ HERO with gradient background ═══ */}
+      {/* ═══ HERO with video background ═══ */}
       <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
         <div className="absolute inset-0 z-0">
-          <img 
-            src={ci(content, "hero_bg_image", "/images/hero-gradient-bg.png")} 
-            alt="" 
-            className="w-full h-full object-cover"
+          {/* Background video — autoplay, muted, loop, playsInline so
+              iPhone Safari allows playback without going full-screen.
+              playbackRate is set via the callback ref before autoplay
+              so the very first frame is already at 1.5×. */}
+          <video
+            ref={setHeroVideoSpeed}
+            className="w-full h-full object-cover block"
+            src="https://thiqacrm.b-cdn.net/video.mp4"
+            poster={ci(content, "hero_bg_image", "/images/hero-gradient-bg.png")}
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="auto"
+            aria-hidden="true"
           />
+          {/* Soft white veil so black hero text stays readable regardless
+              of which frame is on screen. */}
+          <div className="absolute inset-0 bg-white/55" />
         </div>
 
         <div className="relative z-10 max-w-4xl mx-auto text-center px-6 pt-20">
           <h1
-            className="text-[2.2rem] md:text-[3.2rem] lg:text-[4rem] font-extrabold leading-[1.15] tracking-tight whitespace-pre-line hero-reveal"
+            className="text-[2.2rem] md:text-[3.2rem] lg:text-[4rem] font-extrabold leading-[1.15] tracking-tight whitespace-pre-line hero-reveal text-black"
             style={{ animationDelay: '120ms' }}
           >
             {ct(content, "hero_title", "نظام CRM الأذكى\nلوكالات التأمين التي تريد أن تربح أكثر")}
           </h1>
           <p
-            className="mt-6 text-[15px] md:text-lg text-white/70 max-w-2xl mx-auto leading-relaxed whitespace-pre-line hero-reveal"
+            className="mt-6 text-[15px] md:text-lg text-black/70 max-w-2xl mx-auto leading-relaxed whitespace-pre-line hero-reveal"
             style={{ animationDelay: '340ms' }}
           >
             {ct(content, "hero_subtitle", "حل شامل لإدارة الوثائق، الأموال والتسويق. سريع، آمن\nومصمم للعمل على نطاق واسع.")}
@@ -220,12 +237,12 @@ export default function Landing() {
           <div className="mt-10 hero-reveal" style={{ animationDelay: '520ms' }}>
             <button
               onClick={() => navigate("/login?view=signup")}
-              className="text-[16px] font-bold text-white/90 hover:text-white transition-all px-10 py-4 hover:scale-105 hover:shadow-[0_0_32px_0_rgba(255,255,255,0.25)]"
+              className="text-[16px] font-bold text-black hover:text-black transition-all px-10 py-4 hover:scale-105 hover:shadow-[0_0_32px_0_rgba(0,0,0,0.18)]"
               style={{
                 borderRadius: '100px',
-                border: '2px solid rgba(255, 255, 255, 0.40)',
-                background: 'rgba(255, 255, 255, 0.10)',
-                boxShadow: '0 4px 16px 0 rgba(0, 0, 0, 0.08)',
+                border: '2px solid rgba(0, 0, 0, 0.40)',
+                background: 'rgba(255, 255, 255, 0.55)',
+                boxShadow: '0 4px 16px 0 rgba(0, 0, 0, 0.10)',
               }}
             >
               {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
@@ -233,27 +250,25 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* Hero video — autoplay, muted, loop, inline so mobile (iOS/
-            Android) allows playback without a user tap. playbackRate is
-            set via the callback ref before autoplay starts so the first
-            rendered frame already runs at 1.5×. Poster keeps the box
-            from flashing black on slow connections. */}
+        {/* Hero framed mockup — static image at the 607×407 box size
+            the user asked for. `max-w-full` keeps it from blowing out
+            on narrow viewports; the aspect ratio is locked by the
+            explicit width/height so the box doesn't reflow on load. */}
         <div
-          className="relative z-10 w-full max-w-5xl mx-auto mt-16 px-6 hero-scale-in"
+          className="relative z-10 w-full mx-auto mt-16 px-6 hero-scale-in flex justify-center"
           style={{ animationDelay: '720ms' }}
         >
-          <div className="relative rounded-t-xl overflow-hidden border border-white/[0.1] border-b-0 shadow-2xl shadow-black/50 aspect-video bg-black">
-            <video
-              ref={setHeroVideoSpeed}
+          <div
+            className="relative rounded-t-xl overflow-hidden border border-black/[0.12] border-b-0 shadow-2xl shadow-black/20 bg-black max-w-full"
+            style={{ width: '607px', height: '407px' }}
+          >
+            <img
+              src={dashboardMockup}
+              alt="Thiqa CRM Dashboard"
+              width={607}
+              height={407}
               className="w-full h-full object-cover block"
-              src="https://thiqacrm.b-cdn.net/video.mp4"
-              poster={dashboardMockup}
-              autoPlay
-              loop
-              muted
-              playsInline
-              preload="auto"
-              aria-hidden="true"
+              loading="lazy"
             />
           </div>
         </div>
