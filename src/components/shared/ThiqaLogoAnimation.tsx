@@ -101,12 +101,14 @@ export function ThiqaLogoAnimation({
   }, [play]);
 
   // ── Timeline phases ─────────────────────────────────────────────
-  // Icon, gap and wordmark position are fixed at the final state
-  // from the very first paint — no empty slot on load. Only two
-  // subtle motions remain:
-  //   • wordmark letters slide up into place (0 → 0.7)
-  //   • subtitle words stagger in underneath    (0.4 → 1.0)
-  const textBase = progress(t, 0, 0.7);
+  // Icon is fixed at its final state from the very first paint — no
+  // empty slot on load. The entry motion is concentrated on the
+  // wordmark (fade + rise + tiny scale, staggered L→R) so the
+  // animation is clearly perceived, then the subtitle words stagger
+  // in underneath.
+  //   • wordmark letters     (0   → 0.55)
+  //   • subtitle words       (0.4 → 1.0)
+  const textBase = progress(t, 0, 0.55);
   const subtitleBase = progress(t, 0.4, 1.0);
 
   // Split on whitespace so Arabic letters stay connected (per-char
@@ -166,21 +168,28 @@ export function ThiqaLogoAnimation({
           }}
         >
           {TEXT.split("").map((char, i) => {
-            // Letters are always visible on first paint; they just
-            // settle into place with a small vertical slide. No more
-            // "icon visible next to an empty slot" on mount.
-            const ls = (i * 0.14) / TEXT.length;
-            const le = Math.min(ls + 0.45, 1);
+            // The icon is fixed from frame 1 so there's no empty slot,
+            // but the wordmark still earns the eye's attention: each
+            // letter fades in + rises + settles from a slight scale,
+            // staggered L→R so the entrance reads as motion rather
+            // than a static pop-in.
+            const ls = (i * 0.18) / TEXT.length;
+            const le = Math.min(ls + 0.55, 1);
             const raw = progress(textBase, ls, le);
-            const y = lerp(8, 0, easeOutQuint(raw));
+            const eased = easeOutQuint(raw);
+            const op = easeOutExpo(raw);
+            const y = lerp(22, 0, eased);
+            const sc = lerp(0.85, 1, eased);
 
             return (
               <span
                 key={i}
                 style={{
                   display: "inline-block",
-                  transform: `translateY(${y}px)`,
-                  willChange: "transform",
+                  opacity: op,
+                  transform: `translateY(${y}px) scale(${sc})`,
+                  transformOrigin: "50% 100%",
+                  willChange: "transform, opacity",
                 }}
               >
                 {char}
