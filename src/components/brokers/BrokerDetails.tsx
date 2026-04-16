@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,9 +29,7 @@ import {
   Download,
   CalendarIcon,
   X,
-  MessageSquare,
   Loader2,
-  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,7 +38,6 @@ import { ClientDrawer } from "@/components/clients/ClientDrawer";
 import { PolicyWizard } from "@/components/policies/PolicyWizard";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { RowActionsMenu } from "@/components/shared/RowActionsMenu";
-import { BrokerSmsModal } from "./BrokerSmsModal";
 import { format } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
@@ -93,7 +89,6 @@ const policyTypeLabels: Record<string, string> = {
 };
 
 export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetailsProps) {
-  const navigate = useNavigate();
   const { data: siteSettings } = useSiteSettings();
   const [clients, setClients] = useState<Client[]>([]);
   const [policies, setPolicies] = useState<Policy[]>([]);
@@ -109,7 +104,6 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
   const [clientDrawerOpen, setClientDrawerOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [viewingPolicyId, setViewingPolicyId] = useState<string | null>(null);
-  const [smsModalOpen, setSmsModalOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   
   // Date filter state
@@ -346,12 +340,6 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {broker.phone && (
-              <Button variant="outline" onClick={() => setSmsModalOpen(true)}>
-                <MessageSquare className="h-4 w-4 ml-2" />
-                إرسال SMS
-              </Button>
-            )}
             <Button variant="outline" onClick={() => handleExportPdf(false)} disabled={exporting}>
               {exporting ? (
                 <Loader2 className="h-4 w-4 ml-2 animate-spin" />
@@ -373,10 +361,6 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
             <Button variant="outline" onClick={onEdit}>
               <Pencil className="h-4 w-4 ml-2" />
               تعديل
-            </Button>
-            <Button variant="secondary" onClick={() => navigate(`/brokers/${broker.id}/wallet`)}>
-              <CreditCard className="h-4 w-4 ml-2" />
-              دفعة جديدة
             </Button>
             <Button onClick={() => setWizardOpen(true)}>
               <Plus className="h-4 w-4 ml-2" />
@@ -651,13 +635,6 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
         }}
       />
 
-      {/* SMS Modal */}
-      <BrokerSmsModal
-        open={smsModalOpen}
-        onOpenChange={setSmsModalOpen}
-        broker={{ id: broker.id, name: broker.name, phone: broker.phone }}
-        defaultMessage={`مرحباً ${broker.name}،\n\nنود إعلامك بتحديثات جديدة على حسابك.\n\n${siteSettings?.site_title || 'وكالة التأمين'} 🚗`}
-      />
     </MainLayout>
   );
 }

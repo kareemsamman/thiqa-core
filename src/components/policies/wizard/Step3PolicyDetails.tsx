@@ -836,8 +836,10 @@ export function Step3PolicyDetails({
         </div>
       )}
 
-      {/* Price Input - RIGHT AFTER Company select, before Package section */}
-      {/* Only show when NOT linked to broker (broker pricing section handles this case below) */}
+      {/* Price Input — right after Company select. For broker-linked
+          companies we render the 3-column broker pricing card here
+          instead of the plain input so the price field is always
+          visible on screen without scrolling past dates/package. */}
       {policy.company_id && !companies.find(c => c.id === policy.company_id)?.broker_id && (
         <div>
           <Label>السعر (₪) *</Label>
@@ -851,6 +853,61 @@ export function Step3PolicyDetails({
           <FieldError error={errors.insurance_price} />
         </div>
       )}
+
+      {(() => {
+        const selectedCompany = companies.find(c => c.id === policy.company_id);
+        if (!selectedCompany?.broker_id) return null;
+
+        const brokerBuyPrice = parseFloat(policy.broker_buy_price) || 0;
+        const sellingPrice = parseFloat(policy.insurance_price) || 0;
+        const profit = sellingPrice - brokerBuyPrice;
+
+        return (
+          <Card className="p-4 space-y-4 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+            <div className="flex items-center gap-2 mb-2">
+              <ArrowLeftRight className="h-4 w-4 text-amber-600" />
+              <Label className="font-medium text-amber-700 dark:text-amber-300">تسعير الوسيط</Label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <Label className="text-sm">سعر الشراء من الوسيط (₪)</Label>
+                <Input
+                  type="number"
+                  value={policy.broker_buy_price}
+                  onChange={(e) => setPolicy({ ...policy, broker_buy_price: e.target.value })}
+                  placeholder="0"
+                  className="text-lg"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm">سعر البيع للعميل (₪) *</Label>
+                <Input
+                  type="number"
+                  value={policy.insurance_price}
+                  onChange={(e) => setPolicy({ ...policy, insurance_price: e.target.value })}
+                  placeholder="0"
+                  className={cn("text-lg", errors.insurance_price ? "border-destructive" : "")}
+                />
+                <FieldError error={errors.insurance_price} />
+              </div>
+
+              <div>
+                <Label className="text-sm">الربح (₪)</Label>
+                <div className={cn(
+                  "h-10 flex items-center justify-center rounded-md text-lg font-bold",
+                  profit >= 0
+                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                    : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                )}>
+                  ₪{profit.toLocaleString()}
+                </div>
+              </div>
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* Office Commission for ELZAMI main policy */}
       {policy.policy_type_parent === 'ELZAMI' && policy.company_id && (
@@ -1064,65 +1121,6 @@ export function Step3PolicyDetails({
                 )}
               </div>
             )}
-          </Card>
-        );
-      })()}
-
-      {/* Broker Buy Price - Show when company is linked to a broker */}
-      {(() => {
-        const selectedCompany = companies.find(c => c.id === policy.company_id);
-        const isCompanyLinkedToBroker = !!selectedCompany?.broker_id;
-        
-        if (!isCompanyLinkedToBroker) return null;
-        
-        const brokerBuyPrice = parseFloat(policy.broker_buy_price) || 0;
-        const sellingPrice = parseFloat(policy.insurance_price) || 0;
-        const profit = sellingPrice - brokerBuyPrice;
-        
-        return (
-          <Card className="p-4 space-y-4 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
-            <div className="flex items-center gap-2 mb-2">
-              <ArrowLeftRight className="h-4 w-4 text-amber-600" />
-              <Label className="font-medium text-amber-700 dark:text-amber-300">تسعير الوسيط</Label>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Broker Buy Price */}
-              <div>
-                <Label className="text-sm">سعر الشراء من الوسيط (₪)</Label>
-                <Input
-                  type="number"
-                  value={policy.broker_buy_price}
-                  onChange={(e) => setPolicy({ ...policy, broker_buy_price: e.target.value })}
-                  placeholder="0"
-                  className="text-lg"
-                />
-              </div>
-              
-              {/* Selling Price */}
-              <div>
-                <Label className="text-sm">سعر البيع للعميل (₪) *</Label>
-                <Input
-                  type="number"
-                  value={policy.insurance_price}
-                  onChange={(e) => setPolicy({ ...policy, insurance_price: e.target.value })}
-                  placeholder="0"
-                  className={cn("text-lg", errors.insurance_price ? "border-destructive" : "")}
-                />
-                <FieldError error={errors.insurance_price} />
-              </div>
-              
-              {/* Profit Display */}
-              <div>
-                <Label className="text-sm">الربح (₪)</Label>
-                <div className={cn(
-                  "h-10 flex items-center justify-center rounded-md text-lg font-bold",
-                  profit >= 0 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                )}>
-                  ₪{profit.toLocaleString()}
-                </div>
-              </div>
-            </div>
           </Card>
         );
       })()}
