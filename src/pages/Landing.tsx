@@ -170,63 +170,65 @@ export default function Landing() {
 
       {/* ═══ Top marquee — CRM feature keywords ═══
           Lives at the very top of the page, above the nav, looping
-          infinitely. Duplicated track + translate(-50%) makes the loop
-          seamless. `animation-play-state: paused` on hover lets a
-          visitor stop on a keyword. */}
+          infinitely. Seamless loop: the item list is duplicated in a
+          flat flex row (no nested wrappers, no parent flex-gap) and
+          each item carries its own symmetric horizontal margin. That
+          way translateX(0 → -50%) lands exactly on the start of the
+          second set — no visible jump, no "blank" gap. */}
       <style>{`
         @keyframes marquee-rtl {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
         }
         .marquee-track {
-          animation: marquee-rtl 42s linear infinite;
+          animation: marquee-rtl 75s linear infinite;
           will-change: transform;
         }
         .marquee-track:hover { animation-play-state: paused; }
         @media (max-width: 640px) {
-          .marquee-track { animation-duration: 28s; }
+          .marquee-track { animation-duration: 50s; }
         }
       `}</style>
       <div
-        className="relative border-b border-white/[0.06] bg-[#0f0f11] py-3 overflow-hidden"
+        className="relative border-b border-black/[0.06] bg-white py-3 overflow-hidden"
         aria-label="مزايا النظام"
       >
-        {/* Edge fades so items dissolve into the bg instead of hard-clipping. */}
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-24 z-10 bg-gradient-to-l from-[#0f0f11] to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-24 z-10 bg-gradient-to-r from-[#0f0f11] to-transparent" />
+        {/* Edge fades so items dissolve into the white bg at both ends
+            instead of hard-clipping at the viewport edges. */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-24 z-10 bg-gradient-to-l from-white to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-24 z-10 bg-gradient-to-r from-white to-transparent" />
 
-        <div className="marquee-track flex items-center gap-10 min-w-max will-change-transform">
-          {[...Array(2)].map((_, dupIdx) => (
-            <div
-              key={dupIdx}
-              className="flex items-center gap-10 shrink-0"
-              aria-hidden={dupIdx === 1}
-            >
-              {[
-                { icon: Users, label: "إدارة العملاء والمركبات" },
-                { icon: FileText, label: "وثائق، تجديدات وباقات تأمين" },
-                { icon: RefreshCcw, label: "تجديد تلقائي مع تذكيرات SMS" },
-                { icon: CreditCard, label: "تحصيل وشيكات وتقسيط" },
-                { icon: Wallet, label: "محفظة الوسطاء والعمولات" },
-                { icon: BarChart3, label: "تقارير ربحية لحظية" },
-                { icon: MessageSquare, label: "حملات SMS تسويقية" },
-                { icon: Shield, label: "بيانات آمنة بتشفير كامل" },
-                { icon: Bell, label: "إشعارات انتهاء الوثائق" },
-                { icon: Phone, label: "توقيعات رقمية عن بعد" },
-              ].map(({ icon: Icon, label }, i) => (
-                <div
-                  key={`${dupIdx}-${i}`}
-                  className="flex items-center gap-2.5 shrink-0 text-white/60"
-                >
-                  <Icon className="h-4 w-4 text-white/40" />
-                  <span className="text-[13px] font-medium whitespace-nowrap">
-                    {label}
-                  </span>
-                  <span className="mx-3 text-white/20 select-none">•</span>
-                </div>
-              ))}
-            </div>
-          ))}
+        <div className="marquee-track flex items-center min-w-max will-change-transform">
+          {(() => {
+            const items = [
+              { icon: Users, label: "إدارة العملاء والمركبات" },
+              { icon: FileText, label: "وثائق، تجديدات وباقات تأمين" },
+              { icon: RefreshCcw, label: "تجديد تلقائي مع تذكيرات SMS" },
+              { icon: CreditCard, label: "تحصيل وشيكات وتقسيط" },
+              { icon: Wallet, label: "محفظة الوسطاء والعمولات" },
+              { icon: BarChart3, label: "تقارير ربحية لحظية" },
+              { icon: MessageSquare, label: "حملات SMS تسويقية" },
+              { icon: Shield, label: "بيانات آمنة بتشفير كامل" },
+              { icon: Bell, label: "إشعارات انتهاء الوثائق" },
+              { icon: Phone, label: "توقيعات رقمية عن بعد" },
+            ];
+            // Flat, doubled list. Each item carries its own mx-5 so
+            // gaps are identical across every neighbour pair —
+            // including the wrap point where the two copies meet.
+            return [...items, ...items].map(({ icon: Icon, label }, i) => (
+              <div
+                key={i}
+                aria-hidden={i >= items.length}
+                className="flex items-center gap-2.5 shrink-0 text-black/70 mx-5"
+              >
+                <Icon className="h-4 w-4 text-black/50" />
+                <span className="text-[13px] font-medium whitespace-nowrap">
+                  {label}
+                </span>
+                <span className="mx-2 text-black/25 select-none">•</span>
+              </div>
+            ));
+          })()}
         </div>
       </div>
 
