@@ -664,8 +664,8 @@ export default function Landing() {
           to   { opacity: 1; transform: translate3d(0, 0, 0)         scale(1); }
         }
         @keyframes hsImgIn {
-          from { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.96); }
-          to   { opacity: 1; transform: translate3d(0, 0, 0)   scale(1); }
+          from { opacity: 0; }
+          to   { opacity: 1; }
         }
         .hs-type {
           display: inline-block;
@@ -676,14 +676,13 @@ export default function Landing() {
         .hs-visible .hs-type-3 { animation: hsTypeRtl 0.4s steps(8, end)  1.70s forwards; }
         .hs-visible .hs-type-4 { animation: hsTypeRtl 0.9s steps(20, end) 1.95s forwards; }
 
-        /* Central image scales in gently once the section becomes
-           visible — anchors the composition before the cards appear. */
+        /* Full-width hero image fades in once the section becomes
+           visible. Sits absolutely behind the headline + pill layer. */
         .hs-img {
           opacity: 0;
-          transform: translate3d(0, 18px, 0) scale(0.96);
         }
         .hs-visible .hs-img {
-          animation: hsImgIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
+          animation: hsImgIn 1.0s cubic-bezier(0.22, 1, 0.36, 1) 0.2s forwards;
         }
 
         /* Each pill card slides in from its own side, scale-bouncing
@@ -733,100 +732,96 @@ export default function Landing() {
           );
           io.observe(el);
         }}
-        className="relative py-16 md:py-24 bg-white overflow-hidden"
+        className="relative w-full min-h-screen overflow-hidden bg-white"
       >
-        <div className="max-w-6xl mx-auto px-6">
-          {/* Headline — four segments typed in sequence */}
-          <h2 className="text-center text-2xl md:text-[2.5rem] font-bold leading-[1.45] md:leading-[1.35] text-black mb-14 md:mb-20">
-            <span className="hs-type hs-type-1">آلاف وكلاء التأمين</span>{" "}
-            <span className="hs-type hs-type-2">يديرون وكالاتهم</span>
-            <br />
-            <span className="hs-type hs-type-3">بشكل </span>
-            <span className="hs-type hs-type-4 hs-highlight">أكثر احترافاً</span>
-          </h2>
+        {/* Full-width hero image — fills the entire section, no
+            rounded corners, no container. `object-cover` keeps the
+            aspect correct while the image stretches to any viewport. */}
+        <img
+          src="https://thiqacrm.b-cdn.net/hf_20260416_155619_091100f5-d053-456f-9c9f-e9f80354c345%201.png"
+          alt="وكيل تأمين غارق بالمهام قبل Thiqa"
+          className="hs-img absolute inset-0 w-full h-full object-cover"
+          loading="lazy"
+        />
 
-          {/* Composition — central image with small pill-shaped
-              notification cards arranged on BOTH sides. Each card is
-              a self-contained rounded-full pill with an icon, short
-              Arabic label, and (optionally) a red counter badge. They
-              slide in from their respective sides with staggered
-              delays so the composition assembles itself after the
-              image lands. Hidden on mobile to keep the layout clean;
-              desktop shows the full "orbit" effect. */}
-          <div className="relative max-w-5xl mx-auto min-h-[480px] md:min-h-[560px]">
-            {/* Central hero image */}
-            <div className="hs-img relative mx-auto w-full max-w-md md:max-w-lg">
-              <img
-                src="https://thiqacrm.b-cdn.net/hf_20260416_155619_091100f5-d053-456f-9c9f-e9f80354c345%201.png"
-                alt="وكيل تأمين غارق بالمهام قبل Thiqa"
-                className="w-full h-auto rounded-3xl shadow-[0_30px_80px_-24px_rgba(18,32,66,0.25)]"
-                loading="lazy"
-              />
-            </div>
+        {/* Headline — overlays the top of the image. Black text on
+            the mostly-white upper portion of the hero photo. */}
+        <h2 className="relative z-10 text-center text-2xl md:text-[2.5rem] font-bold leading-[1.45] md:leading-[1.35] text-black pt-16 md:pt-20 px-6">
+          <span className="hs-type hs-type-1">آلاف وكلاء التأمين</span>{" "}
+          <span className="hs-type hs-type-2">يديرون وكالاتهم</span>
+          <br />
+          <span className="hs-type hs-type-3">بشكل </span>
+          <span className="hs-type hs-type-4 hs-highlight">أكثر احترافاً</span>
+        </h2>
 
-            {/* Left-side pills — slide in from the left */}
-            <div className="hs-pill hs-pill-l hs-d-1 hidden md:flex absolute top-4 left-2 lg:-left-4 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
-              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
-                <AlertTriangle className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.5} />
-              </span>
-              <span className="text-[13px] font-semibold text-black whitespace-nowrap">عاجل</span>
-            </div>
+        {/* Pill notification cards — positioned over the image with
+            percentage-based coordinates so they re-flow with the
+            viewport. 4 slide-in-from-left + 4 slide-in-from-right,
+            staggered. Hidden on mobile because overlaying eight pills
+            on a small phone screen just becomes noise. */}
+        <div className="absolute inset-0 z-20 pointer-events-none">
+          {/* Left pills */}
+          <div className="hs-pill hs-pill-l hs-d-1 hidden md:flex absolute top-[22%] left-[4%] lg:left-[8%] items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+              <AlertTriangle className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.5} />
+            </span>
+            <span className="text-[13px] font-semibold text-black whitespace-nowrap">عاجل</span>
+          </div>
 
-            <div className="hs-pill hs-pill-l hs-d-3 hidden md:flex absolute top-28 -left-2 lg:-left-12 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
-              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
-                <Phone className="h-3.5 w-3.5 text-[#122042]" strokeWidth={2.4} />
-              </span>
-              <span className="text-[13px] font-semibold text-black whitespace-nowrap">مكالمة فائتة</span>
-              <span className="flex-shrink-0 h-5 min-w-[20px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
-                7
-              </span>
-            </div>
+          <div className="hs-pill hs-pill-l hs-d-3 hidden md:flex absolute top-[37%] left-[2%] lg:left-[4%] items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+              <Phone className="h-3.5 w-3.5 text-[#122042]" strokeWidth={2.4} />
+            </span>
+            <span className="text-[13px] font-semibold text-black whitespace-nowrap">مكالمة فائتة</span>
+            <span className="flex-shrink-0 h-5 min-w-[20px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+              7
+            </span>
+          </div>
 
-            <div className="hs-pill hs-pill-l hs-d-5 hidden md:flex absolute top-56 left-6 lg:left-0 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
-              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
-                <MessageSquare className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.2} />
-              </span>
-              <span className="text-[13px] font-semibold text-black whitespace-nowrap">شكوى عميل</span>
-            </div>
+          <div className="hs-pill hs-pill-l hs-d-5 hidden md:flex absolute top-[55%] left-[5%] lg:left-[9%] items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+              <MessageSquare className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.2} />
+            </span>
+            <span className="text-[13px] font-semibold text-black whitespace-nowrap">شكوى عميل</span>
+          </div>
 
-            <div className="hs-pill hs-pill-l hs-d-7 hidden md:flex absolute bottom-20 -left-2 lg:-left-10 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
-              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
-                <BarChart3 className="h-3.5 w-3.5 text-amber-600" strokeWidth={2.2} />
-              </span>
-              <span className="text-[13px] font-semibold text-black whitespace-nowrap">خطأ في الجدول</span>
-            </div>
+          <div className="hs-pill hs-pill-l hs-d-7 hidden md:flex absolute top-[74%] left-[3%] lg:left-[6%] items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+              <BarChart3 className="h-3.5 w-3.5 text-amber-600" strokeWidth={2.2} />
+            </span>
+            <span className="text-[13px] font-semibold text-black whitespace-nowrap">خطأ في الجدول</span>
+          </div>
 
-            {/* Right-side pills — slide in from the right */}
-            <div className="hs-pill hs-pill-r hs-d-2 hidden md:flex absolute top-2 right-2 lg:-right-4 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
-              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
-                <Mail className="h-3.5 w-3.5 text-[#122042]" strokeWidth={2.2} />
-              </span>
-              <span className="text-[13px] font-semibold text-black whitespace-nowrap">بريد غير مقروء</span>
-              <span className="flex-shrink-0 h-5 min-w-[20px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
-                23
-              </span>
-            </div>
+          {/* Right pills */}
+          <div className="hs-pill hs-pill-r hs-d-2 hidden md:flex absolute top-[20%] right-[4%] lg:right-[8%] items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+              <Mail className="h-3.5 w-3.5 text-[#122042]" strokeWidth={2.2} />
+            </span>
+            <span className="text-[13px] font-semibold text-black whitespace-nowrap">بريد غير مقروء</span>
+            <span className="flex-shrink-0 h-5 min-w-[20px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+              23
+            </span>
+          </div>
 
-            <div className="hs-pill hs-pill-r hs-d-4 hidden md:flex absolute top-24 -right-2 lg:-right-14 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
-              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
-                <Clock className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.4} />
-              </span>
-              <span className="text-[13px] font-semibold text-black whitespace-nowrap">تجديد متأخر</span>
-            </div>
+          <div className="hs-pill hs-pill-r hs-d-4 hidden md:flex absolute top-[36%] right-[2%] lg:right-[4%] items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+              <Clock className="h-3.5 w-3.5 text-rose-500" strokeWidth={2.4} />
+            </span>
+            <span className="text-[13px] font-semibold text-black whitespace-nowrap">تجديد متأخر</span>
+          </div>
 
-            <div className="hs-pill hs-pill-r hs-d-6 hidden md:flex absolute top-52 right-4 lg:right-0 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
-              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
-                <Bell className="h-3.5 w-3.5 text-amber-600" strokeWidth={2.2} />
-              </span>
-              <span className="text-[13px] font-semibold text-black whitespace-nowrap">مواعيد متراكمة</span>
-            </div>
+          <div className="hs-pill hs-pill-r hs-d-6 hidden md:flex absolute top-[54%] right-[5%] lg:right-[9%] items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+              <Bell className="h-3.5 w-3.5 text-amber-600" strokeWidth={2.2} />
+            </span>
+            <span className="text-[13px] font-semibold text-black whitespace-nowrap">مواعيد متراكمة</span>
+          </div>
 
-            <div className="hs-pill hs-pill-r hs-d-8 hidden md:flex absolute bottom-20 -right-2 lg:-right-12 items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
-              <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
-                <FileText className="h-3.5 w-3.5 text-[#7a5a36]" strokeWidth={2.2} />
-              </span>
-              <span className="text-[13px] font-semibold text-black whitespace-nowrap">ملف PDF</span>
-            </div>
+          <div className="hs-pill hs-pill-r hs-d-8 hidden md:flex absolute top-[73%] right-[3%] lg:right-[6%] items-center gap-2.5 rounded-full bg-[#f5eee6] pr-4 pl-2 py-2 shadow-[0_12px_30px_-12px_rgba(18,32,66,0.18)]">
+            <span className="flex-shrink-0 h-7 w-7 rounded-full bg-white flex items-center justify-center">
+              <FileText className="h-3.5 w-3.5 text-[#7a5a36]" strokeWidth={2.2} />
+            </span>
+            <span className="text-[13px] font-semibold text-black whitespace-nowrap">ملف PDF</span>
           </div>
         </div>
       </section>
