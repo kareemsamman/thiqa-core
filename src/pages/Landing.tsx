@@ -133,6 +133,42 @@ export default function Landing() {
     };
   }, []);
 
+  // Top marquee — JS-driven scroll. CSS percentage-based marquees
+  // kept producing a sub-pixel blank at the wrap on this user's setup
+  // no matter how many copies we added, so the loop is now driven
+  // by requestAnimationFrame against the measured group width. The
+  // track holds exactly two identical group children. On every frame
+  // we shift the track left by `SPEED` px; when the offset reaches
+  // one full group width we subtract the group width — the visual
+  // result is that copy 2 slides into copy 1's position exactly,
+  // pixel-perfect, with no blank ever.
+  const marqueeTrackRef = useRef<HTMLDivElement | null>(null);
+  const marqueeGroupRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const track = marqueeTrackRef.current;
+    const group = marqueeGroupRef.current;
+    if (!track || !group) return;
+    const SPEED_PX_PER_SEC = 35;
+    let offset = 0;
+    let lastTs = performance.now();
+    let raf = 0;
+    const loop = (ts: number) => {
+      const dt = (ts - lastTs) / 1000;
+      lastTs = ts;
+      const groupW = group.offsetWidth;
+      if (groupW > 0) {
+        offset -= SPEED_PX_PER_SEC * dt;
+        // Wrap by exactly one group width. Because group 2 is a
+        // pixel-identical clone of group 1, the wrap is invisible.
+        if (offset <= -groupW) offset += groupW;
+        track.style.transform = `translate3d(${offset}px, 0, 0)`;
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   // CMS-driven images with fallbacks
   const dashboardMockup = ci(content, "dashboard_mockup_image", dashboardMockupDefault);
   const featuresMockup = ci(content, "features_mockup_image", featuresMockupDefault);
@@ -202,38 +238,19 @@ export default function Landing() {
       `}</style>
 
       {/* ═══ Top marquee — CRM feature keywords ═══
-          Seamless infinite scroll. Six identical groups make the track
-          6× a single group wide. translate3d(-50%, 0, 0) shifts it by
-          3 group-widths, so groups 4/5/6 land exactly where groups
-          1/2/3 were — a pixel-perfect wrap. translate3d + GPU hints
-          remove the sub-pixel rounding jitter that caused the "blank"
-          on some browsers. No hover-pause (it was causing visible
-          resets on mouse-out). */}
-      <style>{`
-        @keyframes marquee-slide {
-          from { transform: translate3d(0, 0, 0); }
-          to { transform: translate3d(-50%, 0, 0); }
-        }
-        .marquee-track {
-          animation-name: marquee-slide;
-          animation-duration: 120s;
-          animation-timing-function: linear;
-          animation-iteration-count: infinite;
-          animation-fill-mode: none;
-          will-change: transform;
-          transform: translateZ(0);
-          backface-visibility: hidden;
-        }
-        @media (max-width: 640px) {
-          .marquee-track { animation-duration: 80s; }
-        }
-      `}</style>
+          JS-driven infinite scroll. The previous CSS-percentage version
+          kept leaving a one-frame blank at the wrap point on this
+          user's browser no matter how many copies the track held, so
+          the animation is now measured-pixel-based via
+          requestAnimationFrame (see marqueeTrackRef + groupRef above).
+          Two identical group children; the loop resets offset by the
+          measured group width, which is pixel-perfect seamless. */}
       <div
         className={cn(
           "relative border-b border-black/[0.06] bg-white overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
           scrolled
-            ? "max-h-0 py-0 border-0 opacity-0 pointer-events-none mb-0"
-            : "max-h-[60px] py-3 opacity-100 mb-8",
+            ? "max-h-0 py-0 border-0 opacity-0 pointer-events-none"
+            : "max-h-[60px] py-3 opacity-100",
         )}
         aria-label="مزايا النظام"
         aria-hidden={scrolled}
@@ -243,7 +260,11 @@ export default function Landing() {
         <div className="pointer-events-none absolute inset-y-0 right-0 w-24 z-10 bg-gradient-to-l from-white to-transparent" />
         <div className="pointer-events-none absolute inset-y-0 left-0 w-24 z-10 bg-gradient-to-r from-white to-transparent" />
 
-        <div className="marquee-track flex items-center w-max will-change-transform">
+        <div
+          ref={marqueeTrackRef}
+          className="flex items-center w-max will-change-transform"
+          style={{ transform: "translate3d(0, 0, 0)" }}
+        >
           {(() => {
             const items = [
               { icon: Users, label: "إدارة العملاء والمركبات" },
@@ -257,31 +278,35 @@ export default function Landing() {
               { icon: Bell, label: "إشعارات انتهاء الوثائق" },
               { icon: Phone, label: "توقيعات رقمية عن بعد" },
             ];
-            // Render group N. Each group is the full items list and
-            // produces an identical-width block. Six groups makes the
-            // track exactly 6× a single-group width; translate -50%
-            // swaps the first three groups with the last three.
-            const renderGroup = (copyIdx: number) => (
+            const renderItem = (
+              { icon: Icon, label }: { icon: typeof Users; label: string },
+              key: string,
+            ) => (
               <div
-                key={copyIdx}
-                className="flex items-center shrink-0"
-                aria-hidden={copyIdx > 0}
+                key={key}
+                className="flex items-center gap-2.5 shrink-0 text-black/70 px-5"
               >
-                {items.map(({ icon: Icon, label }, i) => (
-                  <div
-                    key={`${copyIdx}-${i}`}
-                    className="flex items-center gap-2.5 shrink-0 text-black/70 px-5"
-                  >
-                    <Icon className="h-4 w-4 text-black/50" />
-                    <span className="text-[13px] font-medium whitespace-nowrap">
-                      {label}
-                    </span>
-                    <span className="mx-2 text-black/25 select-none">•</span>
-                  </div>
-                ))}
+                <Icon className="h-4 w-4 text-black/50" />
+                <span className="text-[13px] font-medium whitespace-nowrap">
+                  {label}
+                </span>
+                <span className="mx-2 text-black/25 select-none">•</span>
               </div>
             );
-            return [0, 1, 2, 3, 4, 5].map(renderGroup);
+            return (
+              <>
+                {/* Primary group — its measured width drives the wrap. */}
+                <div ref={marqueeGroupRef} className="flex items-center shrink-0">
+                  {items.map((it, i) => renderItem(it, `a-${i}`))}
+                </div>
+                {/* Clone, pixel-identical content. When the track has
+                    moved left by exactly group1's width, this clone is
+                    now at group1's starting x — no blank, no jump. */}
+                <div className="flex items-center shrink-0" aria-hidden="true">
+                  {items.map((it, i) => renderItem(it, `b-${i}`))}
+                </div>
+              </>
+            );
           })()}
         </div>
       </div>
