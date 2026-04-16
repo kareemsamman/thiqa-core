@@ -822,7 +822,7 @@ export default function Landing() {
           right: 0;
           width: 3px;
           border-radius: 3px 0 0 3px;
-          background: linear-gradient(180deg, #122143 0%, #4a6cc7 100%);
+          background: linear-gradient(180deg, #122042 0%, #4a6cc7 100%);
           transform: scaleY(0);
           transform-origin: top;
           transition: transform 0.5s cubic-bezier(0.22,1,0.36,1);
@@ -852,13 +852,13 @@ export default function Landing() {
         }
         .fb-tile:hover .fb-icon {
           transform: rotate(-6deg) scale(1.08);
-          box-shadow: 0 8px 24px -8px rgba(18, 33, 67, 0.35);
+          box-shadow: 0 8px 24px -8px rgba(18, 32, 66, 0.35);
         }
         .fb-tile .fb-cta {
           display: inline-flex;
           align-items: center;
           gap: 4px;
-          color: #122143;
+          color: #122042;
           font-size: 12px;
           font-weight: 700;
           opacity: 0;
@@ -940,7 +940,7 @@ export default function Landing() {
             <p className="text-sm mb-3 tracking-wide font-semibold">
               <span className="fb-type fb-type-label text-[#4a6cc7]">كل ما تحتاجه وكالتك</span>
             </p>
-            <h2 className="text-2xl md:text-[2.2rem] font-bold leading-tight" style={{ color: '#122143' }}>
+            <h2 className="text-2xl md:text-[2.2rem] font-bold leading-tight text-black">
               <span className="fb-type fb-type-title">أدوات حقيقية تعمل من اليوم الأول</span>
             </h2>
           </div>
@@ -951,7 +951,7 @@ export default function Landing() {
                 key={i}
                 type="button"
                 onClick={() => setOpenTile(i)}
-                className="fb-tile group relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white p-6 text-right hover:border-[#122143]/20 hover:shadow-[0_20px_50px_-14px_rgba(18,33,67,0.22)] cursor-pointer w-full"
+                className="fb-tile group relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white p-6 text-right hover:border-[#122042]/20 hover:shadow-[0_20px_50px_-14px_rgba(18,32,66,0.22)] cursor-pointer w-full"
                 style={{ transitionDelay: `${i * 90}ms` }}
                 aria-label={`افتح تفاصيل: ${title}`}
               >
@@ -959,7 +959,7 @@ export default function Landing() {
                   <div className={cn("fb-icon inline-flex h-12 w-12 items-center justify-center rounded-xl mb-4", tint, hoverTint)}>
                     <Icon className="h-6 w-6" strokeWidth={2} />
                   </div>
-                  <h3 className="text-[15px] font-bold mb-1.5" style={{ color: '#122143' }}>{title}</h3>
+                  <h3 className="text-[15px] font-bold mb-1.5 text-black">{title}</h3>
                   <p className="text-[13px] text-black/55 leading-relaxed">{desc}</p>
                   <div className="fb-cta mt-3">
                     اعرف المزيد
@@ -993,7 +993,7 @@ export default function Landing() {
                 className="fb-modal-backdrop absolute inset-0 bg-[#0b1530]/60 backdrop-blur-md"
                 onClick={() => setOpenTile(null)}
               />
-              <div className="fb-modal-panel relative z-10 w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white shadow-[0_40px_100px_-20px_rgba(18,33,67,0.45)]">
+              <div className="fb-modal-panel relative z-10 w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white shadow-[0_40px_100px_-20px_rgba(18,32,66,0.45)]">
                 {/* Hero visual — gradient + big icon + decorative
                     sub-feature chips + soft grid. Per-tile accent
                     color keeps each popup visually distinct. */}
@@ -1006,7 +1006,7 @@ export default function Landing() {
                     className="absolute inset-0 opacity-[0.18]"
                     style={{
                       backgroundImage:
-                        "radial-gradient(circle at 1px 1px, rgba(18,33,67,0.35) 1px, transparent 0)",
+                        "radial-gradient(circle at 1px 1px, rgba(18,32,66,0.35) 1px, transparent 0)",
                       backgroundSize: "18px 18px",
                     }}
                   />
@@ -1048,7 +1048,7 @@ export default function Landing() {
                   <button
                     type="button"
                     onClick={() => setOpenTile(null)}
-                    className="absolute top-4 left-4 h-9 w-9 rounded-full bg-white/90 hover:bg-white text-[#122143] flex items-center justify-center shadow-sm transition-colors"
+                    className="absolute top-4 left-4 h-9 w-9 rounded-full bg-white/90 hover:bg-white text-[#122042] flex items-center justify-center shadow-sm transition-colors"
                     aria-label="إغلاق"
                   >
                     <X className="h-4 w-4" />
@@ -1058,8 +1058,7 @@ export default function Landing() {
                 <div className="p-7 md:p-9 text-right" dir="rtl">
                   <h3
                     id="fb-modal-title"
-                    className="text-xl md:text-[1.6rem] font-extrabold leading-tight mb-3"
-                    style={{ color: "#122143" }}
+                    className="text-xl md:text-[1.6rem] font-extrabold leading-tight mb-3 text-black"
                   >
                     {tile.title}
                   </h3>
@@ -1095,8 +1094,8 @@ export default function Landing() {
                     }}
                     className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-3.5 rounded-full text-white font-bold text-sm transition-transform hover:scale-[1.02]"
                     style={{
-                      background: "#122143",
-                      boxShadow: "0 12px 30px -8px rgba(18,33,67,0.4)",
+                      background: "#122042",
+                      boxShadow: "0 12px 30px -8px rgba(18,32,66,0.4)",
                     }}
                   >
                     جرّب هذه الميزة مجاناً
