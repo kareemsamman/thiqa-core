@@ -1798,36 +1798,45 @@ export default function Landing() {
 
               return (
                 <>
-                  {/* Three-up card rail. Each card is absolutely
-                      positioned at the rail's center; translateX
-                      offset + scale + opacity give the left-preview
-                      / active / right-preview effect. */}
-                  <div className="relative w-full max-w-5xl h-[520px] md:h-[560px]">
+                  {/* Three-up card rail — RTL-aware. translateX sign
+                      is flipped so "next" slides appear on the LEFT
+                      of the current card (natural RTL reading flow)
+                      and previously-seen slides stack to the right.
+                      Cards are horizontal: image on the right side
+                      (flex-row first child reads right-first in RTL),
+                      description on the left. */}
+                  <div className="relative w-full max-w-6xl h-[380px] md:h-[420px]">
                     {slides.map((slide, i) => {
                       const offset = i - slideIdx;
                       const abs = Math.abs(offset);
                       return (
                         <div
                           key={i}
-                          className="absolute top-0 left-1/2 rounded-3xl overflow-hidden transition-all duration-500 ease-out w-[340px] md:w-[380px] h-full flex flex-col"
+                          className="absolute top-0 left-1/2 rounded-3xl overflow-hidden transition-all duration-500 ease-out w-[440px] md:w-[540px] h-full flex flex-row"
                           style={{
-                            background: "rgba(255, 255, 255, 0.06)",
-                            backdropFilter: "blur(24px) saturate(1.3)",
-                            WebkitBackdropFilter: "blur(24px) saturate(1.3)",
-                            border: "1px solid rgba(255, 255, 255, 0.14)",
-                            transform: `translateX(calc(-50% + ${offset * 108}%)) scale(${abs === 0 ? 1 : 0.9})`,
+                            // Liquid-glass surface per user spec.
+                            background: "rgba(0, 0, 0, 0.40)",
+                            backdropFilter: "blur(30px) saturate(1.5)",
+                            WebkitBackdropFilter: "blur(30px) saturate(1.5)",
+                            border: "1px solid rgba(255, 255, 255, 0.12)",
+                            // Sign flipped (was `offset * 108%`) so
+                            // next slides slide in from the left in
+                            // RTL; previously-seen slides fade to
+                            // the right. Matches Arabic reading flow.
+                            transform: `translateX(calc(-50% + ${-offset * 92}%)) scale(${abs === 0 ? 1 : 0.9})`,
                             opacity: abs <= 1 ? (abs === 0 ? 1 : 0.45) : 0,
                             pointerEvents: abs === 0 ? "auto" : "none",
                             zIndex: abs === 0 ? 10 : 5,
-                            boxShadow: abs === 0 ? "0 30px 80px -16px rgba(18,32,66,0.45)" : "none",
+                            boxShadow: abs === 0 ? "0 30px 80px -16px rgba(0,0,0,0.55)" : "none",
                           }}
                         >
-                          {/* Visual area — aspect box ready to
-                              accept the user's own image. Swap the
-                              <img> below for your asset. */}
+                          {/* Right side: image (swap the <img> src
+                              per-slide for real art). First child
+                              in a flex-row under RTL renders on the
+                              visual right. */}
                           <div
-                            className="relative aspect-[16/10] w-full overflow-hidden border-b"
-                            style={{ borderColor: "rgba(255,255,255,0.12)" }}
+                            className="relative w-[45%] h-full overflow-hidden border-l flex-shrink-0"
+                            style={{ borderColor: "rgba(255,255,255,0.10)" }}
                           >
                             <img
                               src={slide.image}
@@ -1837,7 +1846,8 @@ export default function Landing() {
                             />
                           </div>
 
-                          <div className="flex-1 p-7 md:p-8 flex flex-col text-white">
+                          {/* Left side: text + CTA */}
+                          <div className="flex-1 p-6 md:p-8 flex flex-col text-white text-right">
                             <span className="text-[11px] text-white/70 font-bold tracking-[0.2em] uppercase mb-3">
                               0{i + 1} · {slide.eyebrow}
                             </span>
