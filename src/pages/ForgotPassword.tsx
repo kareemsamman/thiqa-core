@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, ArrowRight, CheckCircle2, Mail } from "lucide-react";
 import { toast } from "sonner";
-import loginBgMobile from "@/assets/login-bg-mobile.png";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -65,12 +64,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative" dir="rtl">
-      <div className="fixed inset-0 lg:hidden -z-10">
-        <img src={loginBgMobile} alt="" className="w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-black/30 backdrop-blur-md" />
-      </div>
-      <div className="hidden lg:block fixed inset-0 -z-10 bg-white" />
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative bg-white" dir="rtl">
 
       <div className="w-full max-w-md animate-scale-in">
         <div className="rounded-2xl border border-black/10 bg-white dark:bg-card overflow-hidden">
