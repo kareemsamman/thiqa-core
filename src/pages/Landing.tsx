@@ -268,6 +268,13 @@ export default function Landing() {
     let locked = false;
     let lastAdvance = 0;
     let touchStartY = 0;
+    // After the user legitimately releases the lock at a boundary we
+    // mark that direction as "exited" so the scroll-listener backup
+    // below doesn't yank them back into the trap. These reset once
+    // the section is fully off-screen so re-entering scroll-wise
+    // engages the trap again.
+    let exitedDown = false;
+    let exitedUp = false;
 
     const inTrapZone = () => {
       const rect = section.getBoundingClientRect();
@@ -295,6 +302,12 @@ export default function Landing() {
       lastAdvance = performance.now();
     };
 
+    const engageLock = () => {
+      locked = true;
+      snapToTop();
+      lastAdvance = performance.now();
+    };
+
     const handleIntent = (dir: 1 | -1, e: Event) => {
       const now = performance.now();
 
@@ -309,9 +322,9 @@ export default function Landing() {
       // section into place and eat this event so the user visibly
       // "lands" on the slider before anything advances.
       if (!locked) {
-        locked = true;
-        snapToTop();
-        lastAdvance = now;
+        // Respect a recent legitimate release so the user can leave.
+        if ((dir > 0 && exitedDown) || (dir < 0 && exitedUp)) return;
+        engageLock();
         e.preventDefault();
         return;
       }
@@ -326,6 +339,7 @@ export default function Landing() {
           return;
         }
         locked = false;
+        if (dir > 0) exitedDown = true; else exitedUp = true;
         return; // fall through: default scroll will carry the user out
       }
 
@@ -335,6 +349,28 @@ export default function Landing() {
       if (now - lastAdvance < THROTTLE_MS) return;
       snapToTop();
       advance(dir);
+    };
+
+    // Scroll-listener backup. Fast trackpad flicks can carry inertia
+    // through the section between wheel events — by the time our
+    // wheel handler wakes up the section may already be half gone.
+    // This runs on every scroll event and, if we find ourselves in
+    // the trap zone without being locked (and haven't just released
+    // in a matching direction), we snap back and engage. Once the
+    // section is entirely off-screen the exited flags clear so a
+    // return visit re-engages normally.
+    const onScroll = () => {
+      const rect = section.getBoundingClientRect();
+      const vh = window.innerHeight;
+      if (rect.bottom < 0) exitedDown = false;
+      if (rect.top > vh) exitedUp = false;
+      if (!inTrapZone()) {
+        locked = false;
+        return;
+      }
+      if (locked) return;
+      if (exitedDown || exitedUp) return;
+      engageLock();
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -369,11 +405,13 @@ export default function Landing() {
     window.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchmove", onTouchMove, { passive: false });
     window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll);
     };
   }, []);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
