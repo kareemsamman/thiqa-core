@@ -484,12 +484,13 @@ export default function Login() {
   const passwordStrength = checkPasswordStrength(signupPasswordDisplay);
 
   return (
-    <div className="min-h-[100dvh] flex flex-col lg:flex-row-reverse relative" dir="rtl">
-      {/* Mobile background — same looping video as the desktop left
-          panel. `loginBgMobile` acts as the poster so the user sees a
-          frame immediately while the first video chunk decodes, and as
-          a fallback on browsers that block autoplay. */}
-      <div className="fixed inset-0 lg:hidden -z-10">
+    <div className="min-h-[100dvh] flex flex-col lg:flex-row-reverse relative bg-white" dir="rtl">
+      {/* Mobile video banner — sits as a 30vh strip at the top of the
+          screen instead of a full-screen fixed background, so the form
+          below reads as flat content on a white body (matches desktop
+          and the new design reference). Hidden on lg+ since the desktop
+          left panel already shows the looping video. */}
+      <div className="lg:hidden relative w-full h-[30vh] overflow-hidden flex-shrink-0">
         <video
           ref={setVideoSpeed}
           className="w-full h-full object-cover"
@@ -502,7 +503,6 @@ export default function Login() {
           preload="auto"
           aria-hidden="true"
         />
-        <div className="absolute inset-0 bg-black/30 backdrop-blur-md" />
       </div>
 
       {/* Left panel - background (desktop) */}
@@ -538,37 +538,17 @@ export default function Login() {
       </div>
 
       {/* Form panel — sits on the RIGHT on desktop (flex-row-reverse
-          with RTL). Plain white background, no card chrome on desktop:
-          the form reads as text on a clean page instead of a floating
-          dialog. Mobile keeps the glass-card look over the video bg.
-          Flex-col layout pushes the legal footer to the very bottom
-          of the column regardless of how short the form is. */}
-      <div className="flex-1 flex flex-col px-5 sm:p-6 lg:bg-white pt-14 pb-6">
+          with RTL). Plain white background everywhere, no card chrome
+          on either breakpoint: the form reads as text on a clean page
+          instead of a floating dialog. Mobile gets a video banner
+          above this (rendered earlier). Flex-col layout pushes the
+          legal footer to the bottom of the column. */}
+      <div className="flex-1 flex flex-col px-5 sm:p-6 bg-white pt-8 lg:pt-14 pb-6">
         <div className="flex-1 flex items-start sm:items-center justify-center w-full">
         <div className="w-full max-w-lg animate-scale-in">
-          <div className="rounded-2xl sm:rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden lg:rounded-none lg:border-0 lg:bg-transparent lg:dark:bg-transparent lg:backdrop-blur-0 lg:shadow-none lg:overflow-visible">
-            {/* Mobile-only header — animated Thiqa lockup. Hidden on
-                desktop (`lg:hidden`) because the desktop left panel
-                already shows a larger version of the same animation,
-                and rendering both looks redundant.
-                * `interactive={false}` — no click-to-replay in the
-                  card header.
-                * `iconFilter="invert(1)"` — the bundled
-                  thiqa-logo-icon.svg wraps a light-content raster
-                  designed for dark backgrounds, so we flip it to
-                  dark pixels for the white/light card.
-                * `currentColor` on the wordmark + outline inherits
-                  `text-foreground` for correct light/dark theming. */}
-            <div className="flex justify-center pt-10 pb-8 px-6 sm:px-8 text-foreground lg:hidden">
-              <ThiqaLogoAnimation
-                iconSize={64}
-                interactive={false}
-                iconSrc="https://thiqacrm.b-cdn.net/small_black.png"
-              />
-            </div>
-
+          <div>
             {/* Content */}
-            <div className="px-6 sm:px-8 pb-8 sm:pb-8 space-y-4 sm:space-y-4">
+            <div className="px-2 sm:px-2 pb-2 space-y-4">
               {isInIframe && (
                 <Alert className="border-amber-300/60 bg-amber-50/80 dark:bg-amber-900/20 backdrop-blur-sm rounded-xl">
                   <AlertCircle className="h-4 w-4 text-amber-600" />
