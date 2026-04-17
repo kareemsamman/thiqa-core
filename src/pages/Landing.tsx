@@ -241,65 +241,108 @@ export default function Landing() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("policies");
   const [slideIdx, setSlideIdx] = useState(0);
-  // Fractional progress through the slider pin (0 → SLIDES-1). Drives
-  // the card transform directly so cards slide smoothly with the
-  // user's scroll instead of snapping between integer positions.
-  const [slideProgress, setSlideProgress] = useState(0);
-  // Slider section — JS-controlled pin. The outer <section> is
-  // 300vh tall; the inner pin-container is absolutely positioned at
-  // top:0 and translated on Y via rAF so it tracks the scroll like
-  // `position: sticky` would. We can't use native `sticky` here
-  // because the landing root has `overflow-x-hidden`, which breaks
-  // sticky in several browsers (especially Safari) — so a transform
-  // is the only reliable way to hold the inner content pinned while
-  // the user scrolls through the section's 3 viewport-heights. The
-  // same rAF pass calculates slide progress, so the dots + card
-  // positions track 1:1 with the scroll bar.
+  // Slider section — scroll-jacked. Section is 100vh; when it's the
+  // active region of the viewport we intercept wheel / touch events,
+  // advance slideIdx one step per intent (debounced), and let CSS
+  // transitions handle the smooth card glide. At slide boundaries
+  // (first slide scrolling up, last slide scrolling down) we stop
+  // intercepting so normal page scroll resumes.
   const sliderSectionRef = useRef<HTMLElement | null>(null);
-  const sliderPinRef = useRef<HTMLDivElement | null>(null);
+  const slideIdxRef = useRef(0);
+  useEffect(() => {
+    slideIdxRef.current = slideIdx;
+  }, [slideIdx]);
   useEffect(() => {
     const section = sliderSectionRef.current;
-    const pin = sliderPinRef.current;
-    if (!section || !pin) return;
+    if (!section) return;
     const SLIDES = 3;
-    let ticking = false;
-    const apply = () => {
+    const THROTTLE_MS = 750;
+    let lastAdvance = 0;
+    let lastEventTime = 0;
+    let touchStartY = 0;
+
+    const isActive = () => {
       const rect = section.getBoundingClientRect();
       const vh = window.innerHeight;
-      const scrollable = rect.height - vh;
-      if (scrollable <= 0) {
-        pin.style.transform = "translate3d(0, 0, 0)";
+      // Section is "caught" when its top is at or above the viewport
+      // top and its bottom is at or below the viewport bottom — i.e.
+      // it's currently covering the screen.
+      return rect.top <= 2 && rect.bottom >= vh - 2;
+    };
+
+    const nearCatch = () => {
+      // A slightly more generous window used to decide when to snap
+      // the section into position if the user overscrolled past the
+      // perfect-aligned state on the first intercepted event.
+      const rect = section.getBoundingClientRect();
+      const vh = window.innerHeight;
+      return rect.top <= vh * 0.2 && rect.bottom >= vh * 0.8;
+    };
+
+    const snapToSection = () => {
+      const rect = section.getBoundingClientRect();
+      if (Math.abs(rect.top) > 1) {
+        window.scrollTo({ top: window.scrollY + rect.top });
+      }
+    };
+
+    const tryAdvance = (dir: 1 | -1): "handled" | "release" => {
+      const idx = slideIdxRef.current;
+      // At the edges, scrolling further in the same direction should
+      // release the pin so the next section can appear naturally.
+      if (dir > 0 && idx >= SLIDES - 1) return "release";
+      if (dir < 0 && idx <= 0) return "release";
+      const now = performance.now();
+      if (now - lastAdvance < THROTTLE_MS) return "handled";
+      lastAdvance = now;
+      setSlideIdx(Math.max(0, Math.min(SLIDES - 1, idx + dir)));
+      return "handled";
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      const active = isActive();
+      if (!active && !nearCatch()) return;
+      const dir = (e.deltaY > 0 ? 1 : -1) as 1 | -1;
+      // Coalesce trackpad momentum: repeated events within a short
+      // window all count as one intent.
+      const now = performance.now();
+      const continuation = now - lastEventTime < 120;
+      lastEventTime = now;
+      const result = tryAdvance(dir);
+      if (result === "release" && active && continuation) {
+        // While trackpad inertia is still firing after we released,
+        // don't let it drag us past the section in one flick.
         return;
       }
-      // `scrolled` is how far the section top is above the viewport
-      // top, clamped to [0, scrollable]. Translating by that amount
-      // parks the inner at the viewport top for the duration.
-      const scrolled = Math.max(0, Math.min(scrollable, -rect.top));
-      pin.style.transform = `translate3d(0, ${scrolled}px, 0)`;
-      const progress = scrolled / scrollable;
-      // Map [0, 1] scroll progress onto [0, SLIDES-1] with a short
-      // settle band at each end so the first and last cards hold
-      // steady before and after the travel portion.
-      const SETTLE = 0.08;
-      const t = Math.max(0, Math.min(1, (progress - SETTLE) / (1 - SETTLE * 2)));
-      const frac = t * (SLIDES - 1);
-      setSlideProgress(frac);
-      setSlideIdx(Math.round(frac));
+      if (result === "handled") {
+        e.preventDefault();
+        if (!active) snapToSection();
+      }
     };
-    const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        apply();
-        ticking = false;
-      });
+
+    const onTouchStart = (e: TouchEvent) => {
+      touchStartY = e.touches[0].clientY;
     };
-    apply();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", apply);
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isActive() && !nearCatch()) return;
+      const delta = touchStartY - e.touches[0].clientY;
+      if (Math.abs(delta) < 40) return;
+      const dir = (delta > 0 ? 1 : -1) as 1 | -1;
+      const result = tryAdvance(dir);
+      if (result === "handled") {
+        e.preventDefault();
+        touchStartY = e.touches[0].clientY;
+      }
+    };
+
+    window.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", apply);
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
     };
   }, []);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
@@ -1740,43 +1783,24 @@ export default function Landing() {
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
       {/* ═══ Section 5: Slider ═══
-          Scroll-pinned slider. The outer <section> is 3× viewport-
-          height; the inner `sticky top-0 h-screen` container holds
-          the slider UI. A scroll listener (see the useEffect above)
-          maps scroll progress through the section to slideIdx —
-          each ~33% of the section's scrollable distance advances
-          one slide. The user literally can't scroll past the
-          section until they've seen all three cards, but it doesn't
-          feel like "scroll hijacking" because the browser is
-          doing its normal native scroll the whole time.
-
-          Cards: portrait, taller than wide, glass background
-          (rgba(255,255,255,0.06) + backdrop-blur), three-up layout
-          with the active slide centered + two neighbors peeking at
-          40% opacity. Positioned via translateX offsets so the
-          transition between slides animates smoothly. */}
+          Scroll-jacked slider. Section is 100vh; a useEffect above
+          intercepts wheel/touch while the section is the active
+          viewport region and advances slideIdx one step per intent
+          (debounced). Cards use CSS transitions on transform/opacity
+          so the movement between slides is smooth and continuous. */}
       <section
         ref={sliderSectionRef}
-        className="relative bg-white overflow-hidden"
-        style={{ height: "550vh" }}
+        className="relative bg-white overflow-hidden h-screen"
       >
-        {/* Pin container — JS transforms its Y to track scroll. Sits
-            absolute:top:0 at the section's top, then `translateY`s
-            down as the user scrolls so it stays locked to the
-            viewport until the section's 3vh of scroll is exhausted. */}
-        <div
-          ref={sliderPinRef}
-          className="absolute top-0 left-0 w-full h-screen overflow-hidden will-change-transform"
-        >
-          <img
-            src="https://thiqacrm.b-cdn.net/Rectangle%207%20(1).png"
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-            aria-hidden="true"
-            loading="lazy"
-          />
+        <img
+          src="https://thiqacrm.b-cdn.net/Rectangle%207%20(1).png"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+          aria-hidden="true"
+          loading="lazy"
+        />
 
-          <div className="relative z-10 h-full flex flex-col items-center justify-center px-6 py-10">
+        <div className="relative z-10 h-full flex flex-col items-center justify-center px-6 py-10">
             <h2 className="text-3xl md:text-[2.6rem] font-bold text-center mb-8 md:mb-12 text-white">
               {ct(content, "slider_title", "لا تنتظر التجديد. اصنعه بنفسك")}
             </h2>
@@ -1817,28 +1841,29 @@ export default function Landing() {
                       description on the left. */}
                   <div className="relative w-full max-w-[1280px] h-[460px] md:h-[520px]">
                     {slides.map((slide, i) => {
-                      // Fractional offset in slide-units. As the user
-                      // scrolls, this glides from +N → 0 → −N, so each
-                      // card slides smoothly rather than jumping.
-                      const offset = i - slideProgress;
+                      // Integer offset — CSS `transition` on transform
+                      // and opacity turns the discrete index change
+                      // into a smooth glide between slide slots.
+                      const offset = i - slideIdx;
                       const abs = Math.abs(offset);
-                      const clamped = Math.min(1, abs);
-                      const scale = 1 - 0.1 * clamped;
-                      const opacity = abs < 1 ? 1 - 0.55 * abs : Math.max(0, 1 - (abs - 0) * 0.55 - (abs - 1) * 0.45);
+                      const scale = abs === 0 ? 1 : 0.9;
+                      const opacity = abs === 0 ? 1 : abs === 1 ? 0.45 : 0;
                       return (
                         <div
                           key={i}
-                          className="absolute top-0 left-1/2 rounded-2xl overflow-hidden w-[760px] md:w-[1060px] h-full flex flex-col"
+                          className="absolute top-0 left-1/2 rounded-2xl overflow-hidden w-[760px] md:w-[1060px] h-full flex flex-col will-change-transform"
                           style={{
                             background: "rgba(22, 26, 48, 0.38)",
                             backdropFilter: "blur(24px) saturate(1.2)",
                             WebkitBackdropFilter: "blur(24px) saturate(1.2)",
                             border: "1px solid rgba(255, 255, 255, 0.12)",
                             transform: `translateX(calc(-50% + ${-offset * 62}%)) scale(${scale})`,
-                            opacity: Math.max(0, opacity),
-                            pointerEvents: abs < 0.5 ? "auto" : "none",
-                            zIndex: abs < 0.5 ? 10 : 5,
-                            boxShadow: abs < 0.5 ? "0 30px 80px -16px rgba(10,15,35,0.55)" : "none",
+                            opacity,
+                            pointerEvents: abs === 0 ? "auto" : "none",
+                            zIndex: abs === 0 ? 10 : 5,
+                            boxShadow: abs === 0 ? "0 30px 80px -16px rgba(10,15,35,0.55)" : "none",
+                            transition:
+                              "transform 700ms cubic-bezier(0.4, 0, 0.2, 1), opacity 600ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 500ms",
                           }}
                         >
                           {/* Top row: text column + image panel */}
@@ -1917,7 +1942,6 @@ export default function Landing() {
               );
             })()}
           </div>
-        </div>
       </section>
 
 
