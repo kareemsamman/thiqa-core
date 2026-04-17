@@ -18,6 +18,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
+import dashboardMockup from "@/assets/landing/dashboard-mockup.png";
+import featuresMockup from "@/assets/landing/features-mockup.png";
+import featureMarketing from "@/assets/landing/feature-marketing.png";
+import featurePaperless from "@/assets/landing/feature-paperless.png";
+import featureProfit from "@/assets/landing/feature-profit-engine.png";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { Separator } from "@/components/ui/separator";
 import { digitsOnly } from "@/lib/validation";
@@ -541,7 +546,7 @@ export default function Login() {
                   <div className="space-y-2.5">
                     <div className="space-y-1">
                       <Label htmlFor="login-email" className="text-xs sm:text-sm font-medium">البريد الإلكتروني</Label>
-                      <Input id="login-email" type="email" placeholder="your-email@example.com" value={email} onChange={(e) => setEmail(e.target.value)} onBlur={handleEmailBlur} className="h-10 text-sm rounded-xl bg-white/60 dark:bg-card/60 border-border/60" disabled={loading || !!lockoutMessage} dir="ltr" autoComplete="email" />
+                      <Input id="login-email" type="email" placeholder="your-email@example.com" value={email} onChange={(e) => setEmail(e.target.value)} onBlur={handleEmailBlur} className="h-12 text-sm rounded-xl bg-[#f6f6f9] border-transparent focus:border-primary/40" disabled={loading || !!lockoutMessage} dir="ltr" autoComplete="email" />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="login-password" className="text-xs sm:text-sm font-medium">كلمة المرور</Label>
@@ -551,7 +556,7 @@ export default function Login() {
                           id="login-password"
                           type={showPassword ? "text" : "password"}
                           placeholder="••••••••"
-                          className="flex w-full border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 hover:border-primary/30 disabled:cursor-not-allowed disabled:opacity-50 h-10 rounded-xl bg-white/60 dark:bg-card/60 border-border/60 pl-10"
+                          className="flex w-full border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-50 h-12 rounded-xl bg-[#f6f6f9] border-transparent pl-10"
                           disabled={loading || !!lockoutMessage}
                           dir="ltr"
                           autoComplete="current-password"
@@ -561,7 +566,7 @@ export default function Login() {
                         </button>
                       </div>
                     </div>
-                    <Button className="w-full h-11 text-sm gap-2 rounded-xl shadow-lg flex-row-reverse" onClick={handleEmailPasswordLogin} disabled={loading || !email || !!lockoutMessage}>
+                    <Button className="w-full h-12 text-sm gap-2 rounded-xl shadow-lg flex-row-reverse" onClick={handleEmailPasswordLogin} disabled={loading || !email || !!lockoutMessage}>
                       {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5 rotate-180" />}
                       {loading ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
                     </Button>
@@ -607,14 +612,36 @@ export default function Login() {
                     </Button>
                   )}
 
-                  <Separator />
+                  {/* Switch-form CTA card — beige rounded card with a
+                      small mockup grid. Mirrors the design reference;
+                      replaces the previous plain outline button. */}
+                  <div className="rounded-2xl bg-[#F0E7D4] flex items-center gap-4 p-3">
+                    <div className="grid grid-cols-3 grid-rows-2 gap-1 flex-shrink-0">
+                      {[dashboardMockup, featuresMockup, featureMarketing, featurePaperless, featureProfit, dashboardMockup].map((img, i) => (
+                        <div key={i} className="w-9 h-9 rounded-md overflow-hidden bg-white shadow-sm">
+                          <img src={img} alt="" draggable={false} className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex-1 text-right">
+                      <p className="text-[13px] font-semibold text-black mb-2 leading-tight">
+                        وكلاء جدد؟ انضموا إلينا
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setPageView("signup")}
+                        className="bg-black hover:bg-black/85 text-white text-[12px] font-bold rounded-full px-5 h-9 transition-colors inline-flex items-center"
+                      >
+                        تسجيل مجاني
+                      </button>
+                    </div>
+                  </div>
 
-                  <div className="text-center">
-                    <p className="text-xs sm:text-sm text-muted-foreground mb-1.5">ليس لديك حساب؟</p>
-                    <Button variant="outline" className="w-full h-10 rounded-xl gap-2 text-sm" onClick={() => setPageView("signup")}>
-                      <UserPlus className="h-4 w-4" />
-                      إنشاء حساب وكيل جديد
-                    </Button>
+                  {/* Legal footer */}
+                  <div className="text-center text-[11px] text-muted-foreground pt-2">
+                    <a href="#terms" className="hover:underline hover:text-foreground transition-colors">شروط الاستخدام</a>
+                    <span className="mx-2 opacity-50">|</span>
+                    <a href="#privacy" className="hover:underline hover:text-foreground transition-colors">سياسة الخصوصية</a>
                   </div>
                 </>
               ) : (
@@ -658,21 +685,21 @@ export default function Login() {
                     {/* Full Name */}
                     <div className="space-y-0.5">
                       <Label className="text-xs font-medium">الاسم الكامل *</Label>
-                      <Input value={fullName} onChange={(e) => { setFullName(e.target.value); setSignupErrors(prev => ({ ...prev, fullName: "" })); }} placeholder="الاسم الأول والأخير" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.fullName ? "border-destructive" : ""}`} disabled={loading} />
+                      <Input value={fullName} onChange={(e) => { setFullName(e.target.value); setSignupErrors(prev => ({ ...prev, fullName: "" })); }} placeholder="الاسم الأول والأخير" className={`h-11 text-sm rounded-xl bg-[#f6f6f9] border-transparent focus:border-primary/40 ${signupErrors.fullName ? "border-destructive" : ""}`} disabled={loading} />
                       {signupErrors.fullName && <p className="text-[10px] text-destructive">{signupErrors.fullName}</p>}
                     </div>
 
                     {/* Email */}
                     <div className="space-y-0.5">
                       <Label className="text-xs font-medium">البريد الإلكتروني *</Label>
-                      <Input type="email" value={signupEmail} onChange={(e) => { setSignupEmail(e.target.value); setSignupErrors(prev => ({ ...prev, signupEmail: "" })); }} placeholder="your-email@example.com" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupEmail ? "border-destructive" : ""}`} disabled={loading} dir="ltr" autoComplete="email" />
+                      <Input type="email" value={signupEmail} onChange={(e) => { setSignupEmail(e.target.value); setSignupErrors(prev => ({ ...prev, signupEmail: "" })); }} placeholder="your-email@example.com" className={`h-11 text-sm rounded-xl bg-[#f6f6f9] border-transparent focus:border-primary/40 ${signupErrors.signupEmail ? "border-destructive" : ""}`} disabled={loading} dir="ltr" autoComplete="email" />
                       {signupErrors.signupEmail && <p className="text-[10px] text-destructive">{signupErrors.signupEmail}</p>}
                     </div>
 
                     {/* Phone */}
                     <div className="space-y-0.5">
                       <Label className="text-xs font-medium">رقم الهاتف <span className="text-muted-foreground font-normal">(اختياري)</span></Label>
-                      <Input type="tel" value={signupPhone} onChange={(e) => { setSignupPhone(digitsOnly(e.target.value).slice(0, 10)); setSignupErrors(prev => ({ ...prev, signupPhone: "" })); }} placeholder="05xxxxxxxx" className={`h-9 text-sm rounded-lg bg-white/60 dark:bg-card/60 border-border/60 ${signupErrors.signupPhone ? "border-destructive" : ""}`} disabled={loading} dir="ltr" maxLength={10} />
+                      <Input type="tel" value={signupPhone} onChange={(e) => { setSignupPhone(digitsOnly(e.target.value).slice(0, 10)); setSignupErrors(prev => ({ ...prev, signupPhone: "" })); }} placeholder="05xxxxxxxx" className={`h-11 text-sm rounded-xl bg-[#f6f6f9] border-transparent focus:border-primary/40 ${signupErrors.signupPhone ? "border-destructive" : ""}`} disabled={loading} dir="ltr" maxLength={10} />
                       {signupErrors.signupPhone && <p className="text-[10px] text-destructive">{signupErrors.signupPhone}</p>}
                     </div>
 
@@ -685,7 +712,7 @@ export default function Login() {
                           type={showSignupPassword ? "text" : "password"}
                           placeholder="8 أحرف، حرف كبير، رقم، ورمز"
                           onChange={(e) => { setSignupPasswordDisplay(e.target.value); setSignupErrors(prev => ({ ...prev, signupPassword: "" })); }}
-                          className={`flex w-full border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 disabled:cursor-not-allowed disabled:opacity-50 h-9 rounded-lg bg-white/60 dark:bg-card/60 pl-10 ${signupErrors.signupPassword ? "border-destructive" : "border-border/60"}`}
+                          className={`flex w-full border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-50 h-11 rounded-xl bg-[#f6f6f9] pl-10 ${signupErrors.signupPassword ? "border-destructive" : "border-transparent"}`}
                           disabled={loading}
                           dir="ltr"
                           autoComplete="new-password"
@@ -722,7 +749,7 @@ export default function Login() {
                         type="password"
                         placeholder="أعد إدخال كلمة المرور"
                         onChange={() => setSignupErrors(prev => ({ ...prev, signupConfirmPassword: "" }))}
-                        className={`flex w-full border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 disabled:cursor-not-allowed disabled:opacity-50 h-9 rounded-lg bg-white/60 dark:bg-card/60 ${signupErrors.signupConfirmPassword ? "border-destructive" : "border-border/60"}`}
+                        className={`flex w-full border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-50 h-11 rounded-xl bg-[#f6f6f9] ${signupErrors.signupConfirmPassword ? "border-destructive" : "border-transparent"}`}
                         disabled={loading}
                         dir="ltr"
                         autoComplete="new-password"
@@ -730,7 +757,7 @@ export default function Login() {
                       {signupErrors.signupConfirmPassword && <p className="text-[10px] text-destructive">{signupErrors.signupConfirmPassword}</p>}
                     </div>
 
-                    <Button className="w-full h-10 text-sm gap-2 rounded-xl shadow-lg" onClick={handleSignup} disabled={loading}>
+                    <Button className="w-full h-12 text-sm gap-2 rounded-xl shadow-lg" onClick={handleSignup} disabled={loading}>
                       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
                       {loading ? "جاري التسجيل..." : "تسجيل وكيل جديد"}
                     </Button>
@@ -757,11 +784,35 @@ export default function Login() {
                     )}
                   </div>
 
-                  <div className="text-center pt-0.5">
-                    <p className="text-[11px] text-muted-foreground mb-0.5">لديك حساب بالفعل؟</p>
-                    <Button variant="ghost" size="sm" className="w-full h-8 rounded-lg text-xs" onClick={() => setPageView("login")}>
-                      تسجيل الدخول
-                    </Button>
+                  {/* Switch back to login — same beige card pattern as
+                      the login view, with the question flipped. */}
+                  <div className="rounded-2xl bg-[#F0E7D4] flex items-center gap-4 p-3 mt-2">
+                    <div className="grid grid-cols-3 grid-rows-2 gap-1 flex-shrink-0">
+                      {[dashboardMockup, featuresMockup, featureMarketing, featurePaperless, featureProfit, dashboardMockup].map((img, i) => (
+                        <div key={i} className="w-9 h-9 rounded-md overflow-hidden bg-white shadow-sm">
+                          <img src={img} alt="" draggable={false} className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex-1 text-right">
+                      <p className="text-[13px] font-semibold text-black mb-2 leading-tight">
+                        لديك حساب بالفعل؟
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setPageView("login")}
+                        className="bg-black hover:bg-black/85 text-white text-[12px] font-bold rounded-full px-5 h-9 transition-colors inline-flex items-center"
+                      >
+                        تسجيل الدخول
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Legal footer */}
+                  <div className="text-center text-[11px] text-muted-foreground pt-2">
+                    <a href="#terms" className="hover:underline hover:text-foreground transition-colors">شروط الاستخدام</a>
+                    <span className="mx-2 opacity-50">|</span>
+                    <a href="#privacy" className="hover:underline hover:text-foreground transition-colors">سياسة الخصوصية</a>
                   </div>
                 </>
               )}
