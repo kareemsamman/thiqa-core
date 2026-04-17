@@ -485,15 +485,14 @@ export default function Login() {
 
   return (
     <div className="min-h-[100dvh] flex flex-col lg:flex-row-reverse relative bg-white" dir="rtl">
-      {/* Mobile video banner — sits as a 30vh strip at the top of the
-          screen instead of a full-screen fixed background, so the form
-          below reads as flat content on a white body (matches desktop
-          and the new design reference). Hidden on lg+ since the desktop
-          left panel already shows the looping video. */}
-      <div className="lg:hidden relative w-full h-[30vh] overflow-hidden flex-shrink-0">
+      {/* Mobile video banner — short (15vh) strip at the top of the
+          screen with the white Thiqa lockup centered on top. Hidden
+          on lg+ since the desktop left panel already shows the same
+          video + brand. */}
+      <div className="lg:hidden relative w-full h-[15vh] overflow-hidden flex-shrink-0">
         <video
           ref={setVideoSpeed}
-          className="w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover"
           src="https://thiqacrm.b-cdn.net/video.mp4"
           poster={loginBgMobile}
           autoPlay
@@ -503,6 +502,16 @@ export default function Login() {
           preload="auto"
           aria-hidden="true"
         />
+        {/* Soft dark wash so the white logo always reads regardless of
+            which frame of the video is showing. */}
+        <div className="absolute inset-0 bg-black/30" />
+        <div className="relative z-10 h-full flex items-center justify-center text-white">
+          <ThiqaLogoAnimation
+            iconSize={56}
+            interactive={false}
+            iconSrc="https://thiqacrm.b-cdn.net/small_white.png"
+          />
+        </div>
       </div>
 
       {/* Left panel - background (desktop) */}
