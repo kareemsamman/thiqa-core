@@ -70,10 +70,10 @@ export default function ForgotPassword() {
         <img src={loginBgMobile} alt="" className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-black/30 backdrop-blur-md" />
       </div>
-      <div className="hidden lg:block fixed inset-0 -z-10 bg-gradient-to-br from-muted/40 to-background" />
+      <div className="hidden lg:block fixed inset-0 -z-10 bg-white" />
 
       <div className="w-full max-w-md animate-scale-in">
-        <div className="rounded-3xl border border-black/10 bg-white dark:bg-card overflow-hidden">
+        <div className="rounded-2xl border border-black/10 bg-white dark:bg-card overflow-hidden">
           <div className="text-right pt-8 pb-4 px-6 sm:px-8">
             <h1 className="text-2xl font-bold text-foreground">
               {isGoogleAccount ? "حساب Google" : "نسيت كلمة المرور؟"}
