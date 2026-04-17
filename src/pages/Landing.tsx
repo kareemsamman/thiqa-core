@@ -278,6 +278,9 @@ export default function Landing() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("policies");
   const [slideIdx, setSlideIdx] = useState(0);
+  const [sliderInView, setSliderInView] = useState(false);
+  const dragStartXRef = useRef<number | null>(null);
+  const dragPausedRef = useRef(false);
   // Slider section — no scroll-trap. The page scrolls normally;
   // the slider just auto-cycles between slides on a timer while the
   // section is anywhere in view. Dramatically simpler (and far less
@@ -294,6 +297,7 @@ export default function Landing() {
     const start = () => {
       if (intervalId !== null) return;
       intervalId = window.setInterval(() => {
+        if (dragPausedRef.current) return;
         setSlideIdx((prev) => (prev + 1) % SLIDES);
       }, 4500);
     };
@@ -307,10 +311,15 @@ export default function Landing() {
       (entries) => {
         for (const e of entries) {
           inView = e.isIntersecting;
-          if (inView) start(); else stop();
+          if (inView) {
+            setSliderInView(true);
+            start();
+          } else {
+            stop();
+          }
         }
       },
-      { threshold: 0.25 },
+      { threshold: 0.15 },
     );
     io.observe(section);
     return () => {
@@ -1789,10 +1798,34 @@ export default function Landing() {
           above starts an interval while the section is in view that
           cycles slideIdx every 4.5s; leaving view stops the
           interval. Cards animate between positions via CSS
-          transitions on transform/opacity. */}
+          transitions on transform/opacity. Pointer/touch drag lets
+          the user swipe between slides; dragging pauses the timer
+          for the current tick. */}
+      <style>{`
+        @keyframes slFadeUp {
+          from { opacity: 0; transform: translate3d(0, 24px, 0); }
+          to   { opacity: 1; transform: translate3d(0, 0, 0); }
+        }
+        @keyframes slRiseIn {
+          from { opacity: 0; transform: translate3d(0, 40px, 0) scale(0.97); }
+          to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+        }
+        .sl-title { opacity: 0; }
+        .sl-rail  { opacity: 0; }
+        .sl-dots  { opacity: 0; }
+        .sl-visible .sl-title {
+          animation: slFadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0s forwards;
+        }
+        .sl-visible .sl-rail {
+          animation: slRiseIn 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards;
+        }
+        .sl-visible .sl-dots {
+          animation: slFadeUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.4s forwards;
+        }
+      `}</style>
       <section
         ref={sliderSectionRef}
-        className="relative bg-white overflow-hidden py-20 md:py-28"
+        className={`relative bg-white overflow-hidden py-20 md:py-28 ${sliderInView ? "sl-visible" : ""}`}
       >
         <img
           src="https://thiqacrm.b-cdn.net/Rectangle%207%20(1).png"
@@ -1803,7 +1836,7 @@ export default function Landing() {
         />
 
         <div className="relative z-10 flex flex-col items-center justify-center px-6">
-            <h2 className="text-3xl md:text-[2.6rem] font-bold text-center mb-8 md:mb-12 text-white">
+            <h2 className="sl-title text-3xl md:text-[2.6rem] font-bold text-center mb-8 md:mb-12 text-white">
               {ct(content, "slider_title", "لا تنتظر التجديد. اصنعه بنفسك")}
             </h2>
 
@@ -1840,8 +1873,38 @@ export default function Landing() {
                       and previously-seen slides stack to the right.
                       Cards are horizontal: image on the right side
                       (flex-row first child reads right-first in RTL),
-                      description on the left. */}
-                  <div className="relative w-full max-w-[1280px] h-[460px] md:h-[520px]">
+                      description on the left. Pointer handlers let
+                      the user drag/swipe through slides. */}
+                  <div
+                    className="sl-rail relative w-full max-w-[1280px] h-[460px] md:h-[520px] select-none cursor-grab active:cursor-grabbing"
+                    style={{ touchAction: "pan-y" }}
+                    onPointerDown={(e) => {
+                      dragStartXRef.current = e.clientX;
+                      dragPausedRef.current = true;
+                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                    }}
+                    onPointerUp={(e) => {
+                      const start = dragStartXRef.current;
+                      dragStartXRef.current = null;
+                      dragPausedRef.current = false;
+                      if (start === null) return;
+                      const delta = e.clientX - start;
+                      const threshold = 50;
+                      if (Math.abs(delta) < threshold) return;
+                      const SLIDES = 3;
+                      // RTL: drag-right advances (reveals next from left),
+                      // drag-left goes back.
+                      if (delta > 0) {
+                        setSlideIdx((prev) => (prev + 1) % SLIDES);
+                      } else {
+                        setSlideIdx((prev) => (prev - 1 + SLIDES) % SLIDES);
+                      }
+                    }}
+                    onPointerCancel={() => {
+                      dragStartXRef.current = null;
+                      dragPausedRef.current = false;
+                    }}
+                  >
                     {slides.map((slide, i) => {
                       // Integer offset — CSS `transition` on transform
                       // and opacity turns the discrete index change
@@ -1901,17 +1964,22 @@ export default function Landing() {
                           </div>
 
                           {/* Bottom CTA bar — spans full card width.
-                              Diagonal-stripe square at the far left
-                              holds the arrow; the rest of the bar is
-                              the click target with the label right-
-                              aligned (natural for RTL Arabic). */}
+                              Diagonal-stripe square at the physical
+                              left (end in RTL) holds the arrow. The
+                              text sits at the physical right (start
+                              in RTL) with generous padding so there's
+                              a clear gap between label and arrow. */}
                           <button
-                            onClick={() => navigate("/login?view=signup")}
-                            className="relative flex items-center w-full h-16 md:h-[72px] text-white text-right px-8 md:px-12 font-bold text-[14px] md:text-[15px] hover:bg-white/[0.04] transition-colors"
+                            onClick={(e) => { e.stopPropagation(); navigate("/login?view=signup"); }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            className="relative flex items-center w-full h-16 md:h-[72px] text-white font-bold text-[14px] md:text-[15px] hover:bg-white/[0.04] transition-colors"
                             style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
                           >
+                            <span className="flex-1 text-right px-8 md:px-12">
+                              {slide.cta}
+                            </span>
                             <div
-                              className="absolute left-0 top-0 bottom-0 w-20 md:w-[88px] flex items-center justify-center border-r border-white/10"
+                              className="h-full w-20 md:w-[88px] flex items-center justify-center border-r border-white/10 flex-shrink-0"
                               style={{
                                 backgroundImage:
                                   "repeating-linear-gradient(-45deg, rgba(255,255,255,0.09) 0, rgba(255,255,255,0.09) 1px, transparent 1px, transparent 9px)",
@@ -1919,7 +1987,6 @@ export default function Landing() {
                             >
                               <ArrowLeft className="h-4 w-4" />
                             </div>
-                            <span className="mr-auto">{slide.cta}</span>
                           </button>
                         </div>
                       );
@@ -1928,11 +1995,13 @@ export default function Landing() {
 
                   {/* Progress dots — driven by slideIdx, doubles as
                       a "where am I in the scroll lock" indicator. */}
-                  <div className="flex gap-2 mt-8">
+                  <div className="sl-dots flex gap-2 mt-8">
                     {slides.map((_, i) => (
-                      <div
+                      <button
                         key={i}
-                        className="h-1 rounded-full transition-all duration-500"
+                        onClick={() => setSlideIdx(i)}
+                        aria-label={`slide ${i + 1}`}
+                        className="h-1 rounded-full transition-all duration-500 cursor-pointer"
                         style={{
                           width: i === slideIdx ? "2rem" : "1rem",
                           background: i === slideIdx ? "#ffffff" : "rgba(255,255,255,0.35)",
@@ -1961,30 +2030,30 @@ export default function Landing() {
           to   { clip-path: inset(0 0 0 0); }
         }
         @keyframes glFadeUp {
-          from { opacity: 0; transform: translate3d(0, 20px, 0); }
+          from { opacity: 0; transform: translate3d(0, 12px, 0); }
           to   { opacity: 1; transform: translate3d(0, 0, 0); }
         }
         @keyframes glImageIn {
-          from { opacity: 0; transform: scale(0.97); }
+          from { opacity: 0; transform: scale(0.985); }
           to   { opacity: 1; transform: scale(1); }
         }
         .gl-type { display: inline-block; clip-path: inset(0 0 0 100%); }
         .gl-fade { opacity: 0; }
-        .gl-image { opacity: 0; transform: scale(0.97); }
+        .gl-image { opacity: 0; transform: scale(0.985); }
         .gl-visible .gl-type-label {
-          animation: glTypeRtl 0.8s steps(14, end) 0.1s forwards;
+          animation: glTypeRtl 0.35s steps(10, end) 0s forwards;
         }
         .gl-visible .gl-type-title {
-          animation: glTypeRtl 1.4s steps(32, end) 0.75s forwards;
+          animation: glTypeRtl 0.55s steps(18, end) 0.1s forwards;
         }
         .gl-visible .gl-image {
-          animation: glImageIn 0.9s cubic-bezier(0.22, 1, 0.36, 1) 1.1s forwards;
+          animation: glImageIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.05s forwards;
         }
         .gl-visible .gl-fade-desc {
-          animation: glFadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 1.5s forwards;
+          animation: glFadeUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.35s forwards;
         }
         .gl-visible .gl-fade-cta {
-          animation: glFadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 1.75s forwards;
+          animation: glFadeUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.45s forwards;
         }
       `}</style>
       <section
