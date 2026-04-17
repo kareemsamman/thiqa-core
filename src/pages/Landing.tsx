@@ -1587,43 +1587,37 @@ export default function Landing() {
           );
           io.observe(el);
         }}
-        className="relative py-24 md:py-32 overflow-hidden"
-        style={{ background: "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%)" }}
+        className="relative py-20 md:py-28 bg-white overflow-hidden"
       >
-        {/* Soft blurred bloom layers so the gradient reads as a
-            dreamy atmosphere rather than a flat block. */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(60% 45% at 25% 20%, rgba(255,255,255,0.30) 0%, transparent 65%), radial-gradient(45% 40% at 85% 80%, rgba(255,255,255,0.18) 0%, transparent 65%)",
-            filter: "blur(40px)",
-          }}
-          aria-hidden="true"
-        />
-
         <div className="relative max-w-6xl mx-auto px-6">
           <div
             className="grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-10 md:gap-16 lg:gap-20 items-center"
             dir="ltr"
           >
-            {/* LEFT — product mockup. Made bigger via grid column
-                ratio (1.15fr) and a softly shadowed frame. */}
-            <div className="gr-image relative rounded-[28px] overflow-hidden shadow-[0_40px_100px_-24px_rgba(10,15,35,0.55)]">
+            {/* LEFT — product mockup. Sits inside a padded card with
+                a warm multi-stop gradient so the image reads as a
+                hero tile against the white section. */}
+            <div
+              className="gr-image relative rounded-[28px] overflow-hidden p-8 md:p-10 shadow-[0_40px_100px_-24px_rgba(26,26,46,0.30)]"
+              style={{
+                background:
+                  "linear-gradient(135deg, #6b7fbc 0%, #a8b5d6 20%, #d4b8a0 40%, #c9a88a 55%, #9eadd4 75%, #7b93c8 100%)",
+              }}
+            >
               <img
                 src={featuresMockup}
                 alt=""
-                className="w-full h-auto block"
+                className="relative w-full h-auto block rounded-2xl"
                 loading="lazy"
               />
             </div>
 
             {/* RIGHT — eyebrow + heading + accordion + CTA. */}
             <div className="gr-text text-right" dir="rtl">
-              <p className="text-sm mb-3 tracking-[0.2em] font-light uppercase text-white/75">
+              <p className="text-sm mb-3 tracking-[0.2em] font-light uppercase text-black/60">
                 حلول شاملة
               </p>
-              <h2 className="text-[2rem] md:text-[2.8rem] font-extrabold leading-[1.2] mb-8 md:mb-10 text-white">
+              <h2 className="text-[2rem] md:text-[2.8rem] font-extrabold leading-[1.2] mb-8 md:mb-10 text-black">
                 كل ما تحتاجه لتنمو
               </h2>
 
@@ -1649,7 +1643,7 @@ export default function Landing() {
                   return (
                     <div
                       key={i}
-                      className="gr-item border-b border-white/20"
+                      className="gr-item border-b border-black/10"
                       style={{ transitionDelay: `${0.45 + i * 0.1}s` }}
                     >
                       <button
@@ -1658,15 +1652,15 @@ export default function Landing() {
                         className="w-full py-5 flex items-center gap-4 text-right"
                         aria-expanded={open}
                       >
-                        <h3 className="flex-1 text-[16px] md:text-[17px] font-bold text-white leading-snug">
+                        <h3 className="flex-1 text-[16px] md:text-[17px] font-bold text-black leading-snug">
                           {item.title}
                         </h3>
                         <span
                           className={cn(
                             "flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center transition-colors",
                             open
-                              ? "bg-[#122042] text-white"
-                              : "bg-white/85 text-black/60",
+                              ? "bg-black text-white"
+                              : "bg-[#f3f0ea] text-black/60",
                           )}
                         >
                           {open ? (
@@ -1678,7 +1672,7 @@ export default function Landing() {
                       </button>
                       <div className={cn("gr-body", open && "gr-open")}>
                         <div>
-                          <p className="text-[14px] md:text-[15px] text-white/80 leading-relaxed pb-5 pl-14">
+                          <p className="text-[14px] md:text-[15px] text-black/60 leading-relaxed pb-5 pl-14">
                             {item.body}
                           </p>
                         </div>
@@ -1696,7 +1690,7 @@ export default function Landing() {
                   style={{
                     borderRadius: "100px",
                     background: "#111",
-                    boxShadow: "0 10px 30px -8px rgba(10,15,35,0.5)",
+                    boxShadow: "0 10px 30px -8px rgba(26,26,46,0.25)",
                   }}
                 >
                   {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
