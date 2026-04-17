@@ -417,7 +417,7 @@ export default function Login() {
   const passwordStrength = checkPasswordStrength(signupPasswordDisplay);
 
   return (
-    <div className="min-h-[100dvh] flex flex-col lg:flex-row relative" dir="rtl">
+    <div className="min-h-[100dvh] flex flex-col lg:flex-row-reverse relative" dir="rtl">
       {/* Mobile background — same looping video as the desktop left
           panel. `loginBgMobile` acts as the poster so the user sees a
           frame immediately while the first video chunk decodes, and as
@@ -470,14 +470,17 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Right panel */}
+      {/* Form panel — sits on the RIGHT on desktop (flex-row-reverse
+          with RTL). Plain white background, no card chrome on desktop:
+          the form reads as text on a clean page instead of a floating
+          dialog. Mobile keeps the glass-card look over the video bg. */}
       <div
-        className={`flex-1 flex items-start sm:items-center justify-center px-5 sm:p-6 lg:bg-gradient-to-br lg:from-muted/40 lg:to-background ${
+        className={`flex-1 flex items-start sm:items-center justify-center px-5 sm:p-6 lg:bg-white ${
           pageView === "login" ? "pt-14 pb-8" : "pt-6 pb-6"
         }`}
       >
         <div className="w-full max-w-md animate-scale-in">
-          <div className="rounded-2xl sm:rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 lg:bg-white/70 lg:dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
+          <div className="rounded-2xl sm:rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden lg:rounded-none lg:border-0 lg:bg-transparent lg:dark:bg-transparent lg:backdrop-blur-0 lg:shadow-none lg:overflow-visible">
             {/* Mobile-only header — animated Thiqa lockup. Hidden on
                 desktop (`lg:hidden`) because the desktop left panel
                 already shows a larger version of the same animation,
@@ -516,9 +519,9 @@ export default function Login() {
                       above the heading since the desktop card doesn't
                       have the animated logo above it (the big logo
                       lives in the left panel). */}
-                  <div className="text-center lg:pt-4">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-foreground">تسجيل الدخول</h1>
-                    <p className="text-sm text-muted-foreground mt-1">
+                  <div className="text-center lg:pt-4 lg:mb-8">
+                    <h1 className="text-2xl sm:text-4xl font-bold text-foreground">أهلاً، هيا نبدأ؟</h1>
+                    <p className="text-sm text-muted-foreground mt-2 lg:hidden">
                       أدخل بياناتك للمتابعة إلى حسابك
                     </p>
                   </div>
