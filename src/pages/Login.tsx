@@ -1,7 +1,7 @@
 import { forwardRef, useCallback, useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { trackEvent } from "@/hooks/useAnalyticsTracker";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Loader2, ExternalLink, AlertCircle, ArrowRight, Eye, EyeOff, UserPlus, CheckCircle2, Info, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -121,16 +121,13 @@ export default function Login() {
     return searchParams.get("view") === "signup" ? "signup" : "login";
   });
 
-  // Keep URL ↔ view in sync when the user clicks the switch-form
-  // cards. Using replaceState (not navigate) means the back button
-  // skips the toggle, which is what users expect.
-  const switchView = (next: PageView) => {
-    setPageView(next);
-    const target = next === "signup" ? "/register" : "/login";
-    if (location.pathname !== target) {
-      window.history.replaceState({}, "", target);
-    }
-  };
+  // The two switch-form cards are <Link>s, so navigation between
+  // /login and /register is real router navigation. Login stays
+  // mounted across the swap, so we keep pageView in sync with the
+  // pathname here instead of toggling it imperatively.
+  useEffect(() => {
+    setPageView(location.pathname === "/register" ? "signup" : "login");
+  }, [location.pathname]);
   const [email, setEmail] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
@@ -679,31 +676,30 @@ export default function Login() {
                     </Button>
                   )}
 
-                  {/* Switch-form CTA card — uses the marketing
-                      illustration as the full card background (text
-                      sits on the right where the artwork has a soft
-                      area). Inner mockup removed. */}
-                  <div
-                    className="rounded-2xl flex items-center p-3 min-h-[94px] bg-[#f2f3f6]"
+                  {/* Switch-form CTA card — full card is a real
+                      router <Link> to /register so the entire surface
+                      is clickable. The inner button styling lives on
+                      a span (since <button> can't nest inside <a>). */}
+                  <Link
+                    to="/register"
+                    className="block rounded-2xl p-3 min-h-[94px] bg-[#f2f3f6] hover:opacity-95 transition-opacity"
                     style={{
                       backgroundImage: "url('https://thiqacrm.b-cdn.net/image%20222.png')",
                       backgroundSize: "cover",
                       backgroundPosition: "center",
                     }}
                   >
-                    <div className="flex-1 text-right pr-2">
-                      <p className="text-[13px] font-semibold text-black mb-2 leading-tight">
-                        وكلاء جدد؟ انضموا إلينا
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => switchView("signup")}
-                        className="bg-black hover:bg-black/85 text-white text-[12px] font-bold rounded-full px-5 h-9 transition-colors inline-flex items-center"
-                      >
-                        تسجيل مجاني
-                      </button>
+                    <div className="flex items-center h-full">
+                      <div className="flex-1 text-right pr-2">
+                        <p className="text-[13px] font-semibold text-black mb-2 leading-tight">
+                          وكلاء جدد؟ انضموا إلينا
+                        </p>
+                        <span className="bg-black text-white text-[12px] font-bold rounded-full px-5 h-9 inline-flex items-center">
+                          تسجيل مجاني
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  </Link>
                 </>
               ) : (
                 /* Signup Form */
@@ -872,30 +868,29 @@ export default function Login() {
                     )}
                   </div>
 
-                  {/* Switch back to login — uses a different marketing
-                      illustration than the login view's signup card so
-                      each direction has its own art. */}
-                  <div
-                    className="rounded-2xl flex items-center p-3 mt-2 min-h-[94px] bg-[#f2f3f6]"
+                  {/* Switch back to login — full card is a router
+                      <Link> to /login. Uses image%20223 so each
+                      direction gets its own art. */}
+                  <Link
+                    to="/login"
+                    className="block rounded-2xl p-3 mt-2 min-h-[94px] bg-[#f2f3f6] hover:opacity-95 transition-opacity"
                     style={{
                       backgroundImage: "url('https://thiqacrm.b-cdn.net/image%20223.png')",
                       backgroundSize: "cover",
                       backgroundPosition: "center",
                     }}
                   >
-                    <div className="flex-1 text-right pr-2">
-                      <p className="text-[13px] font-semibold text-black mb-2 leading-tight">
-                        لديك حساب بالفعل؟
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => switchView("login")}
-                        className="bg-black hover:bg-black/85 text-white text-[12px] font-bold rounded-full px-5 h-9 transition-colors inline-flex items-center"
-                      >
-                        تسجيل الدخول
-                      </button>
+                    <div className="flex items-center h-full">
+                      <div className="flex-1 text-right pr-2">
+                        <p className="text-[13px] font-semibold text-black mb-2 leading-tight">
+                          لديك حساب بالفعل؟
+                        </p>
+                        <span className="bg-black text-white text-[12px] font-bold rounded-full px-5 h-9 inline-flex items-center">
+                          تسجيل الدخول
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  </Link>
                 </>
               )}
             </div>
