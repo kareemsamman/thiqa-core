@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GlobalQuotaDialogHost } from "@/components/subscription/GlobalQuotaDialogHost";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { Loader2 } from "lucide-react";
 import { RecentClientProvider } from "@/hooks/useRecentClient";
 import { PolicyWizardControllerProvider } from "@/hooks/usePolicyWizardController";
 import { GlobalPolicyWizardHost } from "@/components/policies/GlobalPolicyWizardHost";
@@ -104,6 +105,28 @@ function SessionTrackerWrapper({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Root route: getthiqa.com serves the marketing landing to logged-out
+// visitors, and hands logged-in users over to the authenticated app
+// (ProtectedRoute handles the usual profile/subscription redirects from
+// there). Lock on auth loading so we don't briefly flash the landing
+// while the session hydrates.
+function HomeRoute() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  if (!user) return <Landing />;
+  return (
+    <ProtectedRoute>
+      <Index />
+    </ProtectedRoute>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <HelmetProvider>
@@ -139,11 +162,7 @@ const App = () => (
               <Route path="/thiqa/settings" element={<ThiqaAdminRoute><ThiqaSettings /></ThiqaAdminRoute>} />
               <Route path="/thiqa/landing-cms" element={<ThiqaAdminRoute><ThiqaLandingCMS /></ThiqaAdminRoute>} />
               <Route path="/thiqa/analytics" element={<ThiqaAdminRoute><ThiqaAnalytics /></ThiqaAdminRoute>} />
-              <Route path="/" element={
-                <ProtectedRoute>
-                  <Index />
-                </ProtectedRoute>
-              } />
+              <Route path="/" element={<HomeRoute />} />
               <Route path="/tasks" element={
                 <ProtectedRoute>
                   <Tasks />

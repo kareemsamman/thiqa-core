@@ -679,34 +679,48 @@ export default function Landing() {
             <a href="/pricing" className="transition-colors hover:text-black">الأسعار</a>
           </div>
 
-          {/* CTA pill — white text + white ring over the hero video,
-              black text + black ring once scrolled onto the glass
-              pill. Bigger than the old version (px-8 py-3, text-[14px])
-              so the button anchors the right side of the nav. */}
-          <button
-            onClick={() => { trackEvent("signup_click", "/landing"); navigate("/login?view=signup"); }}
-            className={cn(
-              "px-8 py-3 text-[14px] font-bold transition-all",
-              scrolled ? "text-black hover:bg-black/5" : "text-white hover:bg-white/20",
-            )}
-            style={
-              scrolled
-                ? {
-                    borderRadius: "100px",
-                    border: "2px solid rgba(0, 0, 0, 0.22)",
-                    background: "rgba(255, 255, 255, 0.0)",
-                    boxShadow: "0 2px 8px 0 rgba(0, 0, 0, 0.06)",
-                  }
-                : {
-                    borderRadius: "100px",
-                    border: "2px solid rgba(255, 255, 255, 0.55)",
-                    background: "rgba(255, 255, 255, 0.12)",
-                    boxShadow: "0 4px 16px 0 rgba(0, 0, 0, 0.12)",
-                  }
-            }
-          >
-            {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
-          </button>
+          {/* CTA cluster — simple login link sits alongside the signup
+              pill. Login link inherits the same scrolled/unscrolled
+              color swap as the nav. */}
+          <div className="flex items-center gap-3 md:gap-5">
+            <button
+              onClick={() => navigate("/login")}
+              className={cn(
+                "text-[14px] font-semibold transition-colors hidden sm:inline-flex items-center",
+                scrolled ? "text-black/80 hover:text-black" : "text-white/90 hover:text-white",
+              )}
+            >
+              {ct(content, "navbar_login", "تسجيل الدخول")}
+            </button>
+
+            {/* Signup pill — white text + white ring over the hero video,
+                black text + black ring once scrolled onto the glass
+                pill. */}
+            <button
+              onClick={() => { trackEvent("signup_click", "/landing"); navigate("/login?view=signup"); }}
+              className={cn(
+                "px-8 py-3 text-[14px] font-bold transition-all",
+                scrolled ? "text-black hover:bg-black/5" : "text-white hover:bg-white/20",
+              )}
+              style={
+                scrolled
+                  ? {
+                      borderRadius: "100px",
+                      border: "2px solid rgba(0, 0, 0, 0.22)",
+                      background: "rgba(255, 255, 255, 0.0)",
+                      boxShadow: "0 2px 8px 0 rgba(0, 0, 0, 0.06)",
+                    }
+                  : {
+                      borderRadius: "100px",
+                      border: "2px solid rgba(255, 255, 255, 0.55)",
+                      background: "rgba(255, 255, 255, 0.12)",
+                      boxShadow: "0 4px 16px 0 rgba(0, 0, 0, 0.12)",
+                    }
+              }
+            >
+              {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -2451,6 +2465,70 @@ export default function Landing() {
               className="w-full h-auto block"
               loading="lazy"
             />
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ Demo-call CTA ═══
+          White rounded card with three tilted feature cards peeking
+          above it. The card is the "book a 1:1 demo" pitch that sits
+          between the marketing copy and the footer — low-commitment,
+          personal-touch ask for visitors who aren't ready to sign up
+          without seeing the product live. */}
+      <section className="relative bg-white pt-28 md:pt-36 pb-20 md:pb-28">
+        <div className="relative max-w-4xl mx-auto px-6">
+          {/* Tilted peek cards. They overhang the top of the white
+              card (negative bottom margin pulls the card up to
+              overlap them). Each has a small pill label describing
+              a Thiqa area — dashboard, reports, clients. */}
+          <div className="relative h-44 md:h-52 flex items-end justify-center gap-3 md:gap-6">
+            {[
+              { img: dashboardMockupDefault, label: "لوحة القيادة", rotate: -10, y: 10 },
+              { img: featuresMockup, label: "التقارير", rotate: 0, y: 0 },
+              { img: dashboardMockupDefault, label: "العملاء", rotate: 10, y: 10 },
+            ].map((card, i) => (
+              <div
+                key={i}
+                className="relative w-[140px] h-[96px] md:w-[180px] md:h-[120px] rounded-xl overflow-hidden bg-white border border-black/[0.06] shadow-[0_12px_30px_-10px_rgba(0,0,0,0.15)]"
+                style={{
+                  transform: `rotate(${card.rotate}deg) translateY(${card.y}px)`,
+                  zIndex: i === 1 ? 3 : 1,
+                }}
+              >
+                <img
+                  src={card.img}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  draggable={false}
+                  loading="lazy"
+                />
+                {/* Label pill — small beige chip on the card corner. */}
+                <div
+                  className="absolute -top-3 right-3 flex items-center gap-2 bg-[#E8E0D0] text-black/70 text-[11px] font-semibold rounded-full px-3 py-1 shadow-sm"
+                  style={{ transform: `rotate(${-card.rotate}deg)` }}
+                >
+                  <span className="h-4 w-4 rounded-full bg-black/15 flex-shrink-0" />
+                  {card.label}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Main card — white, rounded, subtle shadow. Sits -40px
+              upward so the peek cards appear tucked behind it. */}
+          <div className="relative -mt-10 md:-mt-14 bg-white rounded-[2.5rem] border border-black/[0.06] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.12)] px-6 pt-16 md:pt-20 pb-12 md:pb-16 text-center">
+            <h2 className="text-[1.8rem] md:text-[2.6rem] font-extrabold text-black leading-[1.2] mb-4">
+              {ct(content, "demo_title", "نريكم Thiqa في مكالمة؟")}
+            </h2>
+            <p className="text-[14px] md:text-[16px] text-black/55 max-w-xl mx-auto mb-10 leading-relaxed">
+              {ct(content, "demo_subtitle", "مكالمة واحد-لواحد مع ممثّل لعرض عملي للنظام — بدون التزام وبدون أي تكلفة.")}
+            </p>
+            <button
+              onClick={() => navigate("/login?view=signup")}
+              className="inline-flex items-center gap-2 bg-[#E8E0D0] hover:bg-[#ddd4c0] text-black font-bold text-[14px] md:text-[15px] rounded-full px-8 py-4 transition-colors"
+            >
+              {ct(content, "demo_cta", "احجز مكالمة تجريبية")}
+            </button>
           </div>
         </div>
       </section>
