@@ -854,12 +854,13 @@ export default function Login() {
                     )}
                   </div>
 
-                  {/* Switch back to login — same illustration-as-bg
-                      treatment, with the question + button flipped. */}
+                  {/* Switch back to login — uses a different marketing
+                      illustration than the login view's signup card so
+                      each direction has its own art. */}
                   <div
                     className="rounded-2xl flex items-center p-3 mt-2 min-h-[94px] bg-[#f2f3f6]"
                     style={{
-                      backgroundImage: "url('https://thiqacrm.b-cdn.net/image%20222.png')",
+                      backgroundImage: "url('https://thiqacrm.b-cdn.net/image%20223.png')",
                       backgroundSize: "cover",
                       backgroundPosition: "center",
                     }}

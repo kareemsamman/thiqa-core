@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, ArrowRight, CheckCircle2, Mail } from "lucide-react";
 import { toast } from "sonner";
-import thiqaLogoDark from "@/assets/thiqa-logo-dark.svg";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
 
 export default function ForgotPassword() {
@@ -76,7 +75,6 @@ export default function ForgotPassword() {
       <div className="w-full max-w-md animate-scale-in">
         <div className="rounded-3xl border border-black/10 bg-white dark:bg-card overflow-hidden">
           <div className="text-right pt-8 pb-4 px-6 sm:px-8">
-            <img src={thiqaLogoDark} alt="ثقة" className="h-10 w-auto object-contain mb-3" />
             <h1 className="text-2xl font-bold text-foreground">
               {isGoogleAccount ? "حساب Google" : "نسيت كلمة المرور؟"}
             </h1>
