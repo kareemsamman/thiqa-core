@@ -70,11 +70,11 @@ const featureUpdates = [
   { version: "v1.4", title: "إصدار وثائق بخطوة واحدة", date: "8 أبريل 2026" },
   { version: "v1.3", title: "بوابات دفع متعددة", date: "22 مارس 2026" },
   { version: "v1.2", title: "تذكيرات SMS ذكية", date: "5 مارس 2026" },
-  { version: "v1.1", title: "محفظة الوسطاء الجديدة", date: "18 فبراير 2026" },
-  { version: "v1.0", title: "تقارير متعددة الفروع", date: "1 فبراير 2026" },
+  { version: "v1.1", title: "توقيع العملاء الرقمي", date: "18 فبراير 2026" },
+  { version: "v1.0", title: "بلاغات الحوادث والمطالبات", date: "1 فبراير 2026" },
   { version: "v0.9", title: "إدارة السائقين الإضافيين", date: "15 يناير 2026" },
   { version: "v0.8", title: "شيكات متعددة البنوك", date: "28 ديسمبر 2025" },
-  { version: "v0.7", title: "تصدير Excel متقدم", date: "10 ديسمبر 2025" },
+  { version: "v0.7", title: "سجل نشاطات المستخدمين", date: "10 ديسمبر 2025" },
 ];
 
 const featureTiles = [
@@ -281,14 +281,11 @@ export default function Landing() {
   const sliderSectionRef = useRef<HTMLElement | null>(null);
   const slideIdxRef = useRef(0);
   const updatesRailRef = useRef<HTMLDivElement | null>(null);
-  const [updatesHovered, setUpdatesHovered] = useState(false);
   // "Grow with Thiqa" accordion — first item open by default.
   const [growAccordionIdx, setGrowAccordionIdx] = useState<number>(0);
-  // Autoplay: every 3.5s advance the rail by one card. Loops back to
-  // the start on reaching the end. Pauses while the user is hovering
-  // so they can stop and read a card.
+  // Autoplay: every 3.5s advance the rail by one card. Runs
+  // continuously and loops back to the start on reaching the end.
   useEffect(() => {
-    if (updatesHovered) return;
     const rail = updatesRailRef.current;
     if (!rail) return;
     const tick = () => {
@@ -305,7 +302,7 @@ export default function Landing() {
     };
     const id = window.setInterval(tick, 3500);
     return () => window.clearInterval(id);
-  }, [updatesHovered]);
+  }, []);
   useEffect(() => {
     slideIdxRef.current = slideIdx;
   }, [slideIdx]);
@@ -1486,12 +1483,10 @@ export default function Landing() {
 
         {/* Full-width horizontal rail. Lives outside the max-w-6xl
             wrapper so cards can peek off the edges of the screen.
-            Autoplay (see useEffect) advances the rail; pointer hover
-            pauses it via updatesHovered. */}
+            Autoplay (see useEffect) advances the rail continuously
+            and loops back to the start on reaching the end. */}
         <div
           ref={updatesRailRef}
-          onMouseEnter={() => setUpdatesHovered(true)}
-          onMouseLeave={() => setUpdatesHovered(false)}
           className="updates-rail flex gap-5 md:gap-6 overflow-x-auto px-6 md:px-12 pb-4 snap-x snap-mandatory scroll-smooth"
           dir="ltr"
         >
