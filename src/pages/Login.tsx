@@ -1,7 +1,7 @@
 import { forwardRef, useCallback, useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { trackEvent } from "@/hooks/useAnalyticsTracker";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Loader2, ExternalLink, AlertCircle, ArrowRight, Eye, EyeOff, UserPlus, CheckCircle2, Info, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -111,8 +111,26 @@ export default function Login() {
   const navigate = useNavigate();
   const { user, isActive, isSuperAdmin, loading: authLoading } = useAuth();
 
+  const location = useLocation();
+
   const [searchParams] = useState(() => new URLSearchParams(window.location.search));
-  const [pageView, setPageView] = useState<PageView>(searchParams.get("view") === "signup" ? "signup" : "login");
+  // /register lands on the signup view; /login (with optional
+  // ?view=signup for legacy links) honours its query.
+  const [pageView, setPageView] = useState<PageView>(() => {
+    if (window.location.pathname === "/register") return "signup";
+    return searchParams.get("view") === "signup" ? "signup" : "login";
+  });
+
+  // Keep URL ↔ view in sync when the user clicks the switch-form
+  // cards. Using replaceState (not navigate) means the back button
+  // skips the toggle, which is what users expect.
+  const switchView = (next: PageView) => {
+    setPageView(next);
+    const target = next === "signup" ? "/register" : "/login";
+    if (location.pathname !== target) {
+      window.history.replaceState({}, "", target);
+    }
+  };
   const [email, setEmail] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
@@ -679,7 +697,7 @@ export default function Login() {
                       </p>
                       <button
                         type="button"
-                        onClick={() => setPageView("signup")}
+                        onClick={() => switchView("signup")}
                         className="bg-black hover:bg-black/85 text-white text-[12px] font-bold rounded-full px-5 h-9 transition-colors inline-flex items-center"
                       >
                         تسجيل مجاني
@@ -871,7 +889,7 @@ export default function Login() {
                       </p>
                       <button
                         type="button"
-                        onClick={() => setPageView("login")}
+                        onClick={() => switchView("login")}
                         className="bg-black hover:bg-black/85 text-white text-[12px] font-bold rounded-full px-5 h-9 transition-colors inline-flex items-center"
                       >
                         تسجيل الدخول

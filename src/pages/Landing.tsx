@@ -684,7 +684,7 @@ export default function Landing() {
             </button>
 
             <button
-              onClick={() => { trackEvent("signup_click", "/landing"); navigate("/login?view=signup"); }}
+              onClick={() => { trackEvent("signup_click", "/landing"); navigate("/register"); }}
               className="px-8 py-3 text-[14px] font-bold text-black hover:bg-black/5 transition-all"
               style={{
                 borderRadius: "100px",
@@ -754,7 +754,7 @@ export default function Landing() {
           <div className="mt-8 hero-reveal" style={{ animationDelay: '520ms' }}>
             {/* Solid white pill, no border — the user's explicit spec. */}
             <button
-              onClick={() => navigate("/login?view=signup")}
+              onClick={() => navigate("/register")}
               className="text-[15px] font-bold text-black px-9 py-3.5 transition-all hover:scale-[1.03] hover:shadow-[0_10px_28px_-6px_rgba(0,0,0,0.25)]"
               style={{
                 borderRadius: '100px',
@@ -1241,7 +1241,7 @@ export default function Landing() {
                     </p>
                   </div>
                   <button
-                    onClick={() => navigate("/login?view=signup")}
+                    onClick={() => navigate("/register")}
                     className="relative z-10 mt-8 self-start flex items-center gap-2 px-6 py-3 text-sm font-bold text-white rounded-full bg-white/20 border border-white/40 hover:bg-white/30 transition-colors backdrop-blur-sm"
                   >
                     ابدأ التجربة الآن
@@ -1423,7 +1423,7 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-6 mt-10 md:mt-12 text-center">
           <button
             type="button"
-            onClick={() => navigate("/login?view=signup")}
+            onClick={() => navigate("/register")}
             className="px-8 py-3 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
             style={{
               borderRadius: "100px",
@@ -1580,7 +1580,7 @@ export default function Landing() {
               <div className="mt-10">
                 <button
                   type="button"
-                  onClick={() => navigate("/login?view=signup")}
+                  onClick={() => navigate("/register")}
                   className="px-8 py-3.5 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
                   style={{
                     borderRadius: "100px",
@@ -1814,7 +1814,7 @@ export default function Landing() {
           </div>
 
           <button
-            onClick={() => navigate("/login?view=signup")}
+            onClick={() => navigate("/register")}
             className="px-10 py-4 text-[15px] font-bold text-white hover:opacity-90 transition-opacity"
             style={{
               borderRadius: "100px",
@@ -2043,7 +2043,7 @@ export default function Landing() {
                               in RTL) with generous padding so there's
                               a clear gap between label and arrow. */}
                           <button
-                            onClick={(e) => { e.stopPropagation(); navigate("/login?view=signup"); }}
+                            onClick={(e) => { e.stopPropagation(); navigate("/register"); }}
                             onPointerDown={(e) => e.stopPropagation()}
                             className="relative flex items-center w-full h-16 md:h-[72px] text-white font-bold text-[14px] md:text-[15px] hover:bg-white/[0.04] transition-colors"
                             style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
@@ -2178,7 +2178,7 @@ export default function Landing() {
             {ct(content, "grid_desc", "إرسال وثائق للتوقيع الرقمي عبر SMS، إدارة مستندات آمنة في السحابة\nومتابعة كاملة لدورة حياة الوثيقة — كل شيء من الكمبيوتر أو الجوال.")}
           </p>
           <button
-            onClick={() => navigate("/login?view=signup")}
+            onClick={() => navigate("/register")}
             className="gl-fade gl-fade-cta px-8 py-3 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
             style={{
               borderRadius: "100px",
@@ -2381,7 +2381,7 @@ export default function Landing() {
           <p className="mt-12 text-center text-[14px] md:text-[15px] text-black/55">
             {ct(content, "faq_more_prompt", "هل لديك أسئلة إضافية؟")}{" "}
             <button
-              onClick={() => navigate("/login?view=signup")}
+              onClick={() => navigate("/register")}
               className="font-bold text-black underline underline-offset-4 decoration-2 decoration-[#4a6cc7] hover:opacity-80 transition-opacity"
             >
               {ct(content, "faq_more_cta", "تواصل معنا.")}
@@ -2415,7 +2415,7 @@ export default function Landing() {
           <div className="flex flex-wrap items-center justify-center gap-3 mb-14 md:mb-16">
             <button
               type="button"
-              onClick={() => navigate("/login?view=signup")}
+              onClick={() => navigate("/register")}
               className="bg-white hover:bg-white/95 text-[#1a1a2e] rounded-full px-10 h-[52px] text-sm font-bold shadow-[0_10px_30px_-8px_rgba(26,26,46,0.35)] transition-colors"
             >
               اشتركوا مجاناً
@@ -2499,7 +2499,7 @@ export default function Landing() {
               {ct(content, "demo_subtitle", "مكالمة واحد-لواحد مع ممثّل لعرض عملي للنظام — بدون التزام وبدون أي تكلفة.")}
             </p>
             <button
-              onClick={() => navigate("/login?view=signup")}
+              onClick={() => navigate("/register")}
               className="inline-flex items-center gap-2 bg-[#E8E0D0] hover:bg-[#ddd4c0] text-black font-bold text-[14px] md:text-[15px] rounded-full px-8 py-4 transition-colors"
             >
               {ct(content, "demo_cta", "احجز مكالمة تجريبية")}
