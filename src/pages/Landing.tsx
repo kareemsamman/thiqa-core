@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { Button } from "@/components/ui/button";
 import {
-  ChevronLeft, CheckCircle, Star, ArrowLeft, Play, X, Check,
+  ChevronLeft, CheckCircle, Star, ArrowLeft, ArrowRight, Play, X, Check,
   Users, FileText, CreditCard, BarChart3, Bell, MessageSquare,
   Phone, Shield, RefreshCcw, Wallet, AlertTriangle, Mail, Clock,
 } from "lucide-react";
@@ -49,6 +49,32 @@ const marqueeMessages = [
   "طرق دفع مرنة: شيكات، بطاقات، تقسيط وبوابات دفع متعددة",
   "ألغِ اشتراكك متى شئت — بدون التزامات ولا أسئلة",
   "دعم تقني بالعربية جنبك من اليوم الأول",
+];
+
+// "What's new" slider — one card per shipped feature. Cards scroll
+// horizontally; each carries its own gradient so the rail feels
+// colourful rather than repetitive. Dates are realistic but placeholder
+// (the user will tighten them); all fall before 17 Apr 2026 per spec.
+const FEATURE_UPDATE_GRADIENTS = [
+  "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%)",
+  "linear-gradient(180deg, #3B6FBB 0%, #85A9D1 100%)",
+  "linear-gradient(180deg, #5A4FBB 0%, #9E95CB 100%)",
+  "linear-gradient(180deg, #2E4DB5 0%, #7887C5 100%)",
+  "linear-gradient(180deg, #4E62C8 0%, #92A0D8 100%)",
+  "linear-gradient(180deg, #3A7BBD 0%, #8BA9CE 100%)",
+  "linear-gradient(180deg, #624FBB 0%, #A095CB 100%)",
+  "linear-gradient(180deg, #2E5EB5 0%, #7897C5 100%)",
+];
+
+const featureUpdates = [
+  { version: "v1.4", title: "إصدار وثائق بخطوة واحدة", date: "8 أبريل 2026" },
+  { version: "v1.3", title: "بوابات دفع متعددة", date: "22 مارس 2026" },
+  { version: "v1.2", title: "تذكيرات SMS ذكية", date: "5 مارس 2026" },
+  { version: "v1.1", title: "محفظة الوسطاء الجديدة", date: "18 فبراير 2026" },
+  { version: "v1.0", title: "تقارير متعددة الفروع", date: "1 فبراير 2026" },
+  { version: "v0.9", title: "إدارة السائقين الإضافيين", date: "15 يناير 2026" },
+  { version: "v0.8", title: "شيكات متعددة البنوك", date: "28 ديسمبر 2025" },
+  { version: "v0.7", title: "تصدير Excel متقدم", date: "10 ديسمبر 2025" },
 ];
 
 const featureTiles = [
@@ -254,6 +280,15 @@ export default function Landing() {
   // intercepting so normal page scroll resumes.
   const sliderSectionRef = useRef<HTMLElement | null>(null);
   const slideIdxRef = useRef(0);
+  const updatesRailRef = useRef<HTMLDivElement | null>(null);
+  const scrollUpdates = (dir: 1 | -1) => {
+    const rail = updatesRailRef.current;
+    if (!rail) return;
+    const firstCard = rail.querySelector<HTMLElement>(".updates-card");
+    const cardW = firstCard?.offsetWidth ?? 320;
+    const gap = 24;
+    rail.scrollBy({ left: (cardW + gap) * dir, behavior: "smooth" });
+  };
   useEffect(() => {
     slideIdxRef.current = slideIdx;
   }, [slideIdx]);
@@ -1336,17 +1371,14 @@ export default function Landing() {
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
-      {/* ═══ Section 2: Feature highlights ═══
-          Six real Thiqa capabilities, each in its own tile.
-          IntersectionObserver flips `.fb-visible` on the whole
-          section when it first enters the viewport. Two things then
-          animate:
-            1. Label + title do an RTL typewriter reveal via
-               clip-path + steps() — the clip window slides leftward
-               so the Arabic text appears right-to-left like a real
-               typist.
-            2. Cards fade-up in sequence and grow a primary-color
-               accent bar on their right edge on hover. */}
+      {/* ═══ Section 2: What's new (feature updates) ═══
+          Full-width horizontal rail of release cards. Each card has
+          its own gradient so the rail reads as a colourful changelog.
+          Native horizontal scroll with scroll-snap handles
+          navigation; the prev/next buttons call scrollUpdates() which
+          scrolls by one card width at a time. An IntersectionObserver
+          flips `.fb-visible` on first viewport entry so the title
+          typewrites and cards fade-up in sequence. */}
       <style>{`
         @keyframes fbTypeRtl {
           from { clip-path: inset(0 0 0 100%); }
@@ -1368,119 +1400,27 @@ export default function Landing() {
           animation: fbTypeRtl 1.5s steps(34, end) 0.85s forwards;
         }
 
-        .fb-tile {
+        /* Release cards — staggered fade-up once the section
+           enters the viewport. Each card has its own
+           `transition-delay` inline so they arrive in sequence. */
+        .updates-card {
           opacity: 0;
-          transform: translate3d(0, 24px, 0) scale(0.96);
+          transform: translate3d(0, 28px, 0);
           transition:
-            opacity 0.7s cubic-bezier(0.22,1,0.36,1),
-            transform 0.7s cubic-bezier(0.22,1,0.36,1),
-            box-shadow 0.35s ease,
-            border-color 0.35s ease;
+            opacity 0.75s cubic-bezier(0.22,1,0.36,1),
+            transform 0.75s cubic-bezier(0.22,1,0.36,1);
         }
-        .fb-visible .fb-tile {
+        .fb-visible .updates-card {
           opacity: 1;
-          transform: translate3d(0, 0, 0) scale(1);
+          transform: translate3d(0, 0, 0);
         }
-        .fb-tile:hover {
-          transform: translate3d(0, -5px, 0) scale(1);
+        /* Hide the scrollbar without disabling scrolling. */
+        .updates-rail {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
         }
-        /* Right-edge accent bar — grows top-to-bottom on hover and
-           tints in the primary brand color. */
-        .fb-tile::before {
-          content: "";
-          position: absolute;
-          top: 14%;
-          bottom: 14%;
-          right: 0;
-          width: 3px;
-          border-radius: 3px 0 0 3px;
-          background: linear-gradient(180deg, #122042 0%, #4a6cc7 100%);
-          transform: scaleY(0);
-          transform-origin: top;
-          transition: transform 0.5s cubic-bezier(0.22,1,0.36,1);
-        }
-        .fb-tile:hover::before {
-          transform: scaleY(1);
-        }
-        /* Soft corner glow that fades in on hover. */
-        .fb-tile::after {
-          content: "";
-          position: absolute;
-          top: -40px;
-          right: -40px;
-          width: 140px;
-          height: 140px;
-          border-radius: 9999px;
-          background: radial-gradient(circle, rgba(74,108,199,0.18) 0%, rgba(74,108,199,0) 70%);
-          opacity: 0;
-          transition: opacity 0.45s ease;
-          pointer-events: none;
-        }
-        .fb-tile:hover::after {
-          opacity: 1;
-        }
-        .fb-tile .fb-icon {
-          transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), background-color 0.25s ease, box-shadow 0.35s ease;
-        }
-        .fb-tile:hover .fb-icon {
-          transform: rotate(-6deg) scale(1.08);
-          box-shadow: 0 8px 24px -8px rgba(18, 32, 66, 0.35);
-        }
-        .fb-tile .fb-cta {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          color: #122042;
-          font-size: 12px;
-          font-weight: 700;
-          opacity: 0;
-          transform: translateX(6px);
-          transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.22,1,0.36,1);
-        }
-        .fb-tile:hover .fb-cta {
-          opacity: 1;
-          transform: translateX(0);
-        }
-
-        /* ── Modal ────────────────────────────────────────────── */
-        @keyframes fbBackdropIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
-        }
-        @keyframes fbPanelIn {
-          from { opacity: 0; transform: translateY(28px) scale(0.96); }
-          to   { opacity: 1; transform: translateY(0)    scale(1); }
-        }
-        @keyframes fbHeroIconIn {
-          from { opacity: 0; transform: scale(0.6) rotate(-12deg); }
-          to   { opacity: 1; transform: scale(1)   rotate(0); }
-        }
-        @keyframes fbBadgeIn {
-          from { opacity: 0; transform: translateY(8px) scale(0.9); }
-          to   { opacity: 1; transform: translateY(0)   scale(1); }
-        }
-        @keyframes fbBulletIn {
-          from { opacity: 0; transform: translateX(-12px); }
-          to   { opacity: 1; transform: translateX(0); }
-        }
-        .fb-modal-backdrop {
-          animation: fbBackdropIn 0.35s ease forwards;
-        }
-        .fb-modal-panel {
-          opacity: 0;
-          animation: fbPanelIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards;
-        }
-        .fb-hero-icon {
-          opacity: 0;
-          animation: fbHeroIconIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards;
-        }
-        .fb-badge {
-          opacity: 0;
-          animation: fbBadgeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        .fb-bullet {
-          opacity: 0;
-          animation: fbBulletIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        .updates-rail::-webkit-scrollbar {
+          display: none;
         }
       `}</style>
       <section
@@ -1505,179 +1445,90 @@ export default function Landing() {
           );
           io.observe(el);
         }}
-        className="py-20 md:py-28 bg-white"
+        className="py-20 md:py-28 bg-white overflow-hidden"
       >
         <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
+          <div className="text-center mb-12 md:mb-14">
             <p className="text-sm mb-3 tracking-wide font-semibold">
-              <span className="fb-type fb-type-label text-[#4a6cc7]">كل ما تحتاجه وكالتك</span>
+              <span className="fb-type fb-type-label text-[#c97a4a]">ما الجديد</span>
             </p>
-            <h2 className="text-2xl md:text-[2.2rem] font-bold leading-tight text-black">
-              <span className="fb-type fb-type-title">أدوات حقيقية تعمل من اليوم الأول</span>
+            <h2 className="text-[2rem] md:text-[2.6rem] font-bold leading-tight text-black">
+              <span className="fb-type fb-type-title">نحن لا نتوقف عن التطوير</span>
             </h2>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
-            {featureTiles.map(({ icon: Icon, title, desc, tint, hoverTint }, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => setOpenTile(i)}
-                className="fb-tile group relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white p-6 text-right hover:border-[#122042]/20 hover:shadow-[0_20px_50px_-14px_rgba(18,32,66,0.22)] cursor-pointer w-full"
-                style={{ transitionDelay: `${i * 90}ms` }}
-                aria-label={`افتح تفاصيل: ${title}`}
-              >
-                <div className="relative z-10">
-                  <div className={cn("fb-icon inline-flex h-12 w-12 items-center justify-center rounded-xl mb-4", tint, hoverTint)}>
-                    <Icon className="h-6 w-6" strokeWidth={2} />
-                  </div>
-                  <h3 className="text-[15px] font-bold mb-1.5 text-black">{title}</h3>
-                  <p className="text-[13px] text-black/55 leading-relaxed">{desc}</p>
-                  <div className="fb-cta mt-3">
-                    اعرف المزيد
-                    <ArrowLeft className="h-3 w-3" />
-                  </div>
-                </div>
-              </button>
-            ))}
           </div>
         </div>
 
-        {/* ═══ Feature tile modal ═══
-            Opens when a tile is clicked. Hero panel uses the tile's
-            own gradient + icon + "decor badges" so each feature has
-            its own on-brand visual (no stock imagery required). The
-            bulleted capability list is sourced from `featureTiles`
-            above, which itself was built by auditing the actual
-            pages under src/pages/ — so everything the popup
-            promises is a real, shipping feature. */}
-        {openTile !== null && (() => {
-          const tile = featureTiles[openTile];
-          const Icon = tile.icon;
-          return (
+        {/* Full-width horizontal rail. Lives outside the max-w-6xl
+            wrapper so cards can peek off the edges of the screen. */}
+        <div
+          ref={updatesRailRef}
+          className="updates-rail flex gap-5 md:gap-6 overflow-x-auto px-6 md:px-12 pb-4 snap-x snap-mandatory scroll-smooth"
+          dir="ltr"
+        >
+          {featureUpdates.map((u, i) => (
             <div
-              className="fixed inset-0 z-[70] flex items-center justify-center p-4 md:p-6"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="fb-modal-title"
+              key={i}
+              className="updates-card snap-center flex-shrink-0 w-[280px] md:w-[340px]"
+              style={{ transitionDelay: `${i * 80}ms` }}
             >
+              {/* Gradient card with centred mockup image. */}
               <div
-                className="fb-modal-backdrop absolute inset-0 bg-[#0b1530]/60 backdrop-blur-md"
-                onClick={() => setOpenTile(null)}
-              />
-              <div className="fb-modal-panel relative z-10 w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white shadow-[0_40px_100px_-20px_rgba(18,32,66,0.45)]">
-                {/* Hero visual — gradient + big icon + decorative
-                    sub-feature chips + soft grid. Per-tile accent
-                    color keeps each popup visually distinct. */}
+                className="relative aspect-[4/5] rounded-[28px] overflow-hidden p-6 md:p-8 flex items-center justify-center"
+                style={{ background: FEATURE_UPDATE_GRADIENTS[i % FEATURE_UPDATE_GRADIENTS.length] }}
+              >
                 <div
-                  className="relative h-52 md:h-60 overflow-hidden"
-                  style={{ background: tile.gradient }}
-                  dir="rtl"
-                >
-                  <div
-                    className="absolute inset-0 opacity-[0.18]"
-                    style={{
-                      backgroundImage:
-                        "radial-gradient(circle at 1px 1px, rgba(18,32,66,0.35) 1px, transparent 0)",
-                      backgroundSize: "18px 18px",
-                    }}
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div
-                      className="fb-hero-icon h-24 w-24 md:h-28 md:w-28 rounded-3xl bg-white/85 backdrop-blur-sm flex items-center justify-center"
-                      style={{
-                        boxShadow: `0 20px 60px -12px ${tile.accent}66`,
-                      }}
-                    >
-                      <Icon className="h-12 w-12 md:h-14 md:w-14" strokeWidth={1.6} style={{ color: tile.accent }} />
-                    </div>
-                  </div>
-                  {/* Floating chips — three sub-feature hints drawn
-                      from `decorBadges`. Staggered fade-in. */}
-                  {tile.decorBadges.map((badge, idx) => {
-                    const positions = [
-                      "top-5 right-5",
-                      "bottom-6 right-10",
-                      "top-10 left-6",
-                    ];
-                    return (
-                      <span
-                        key={idx}
-                        className={cn(
-                          "fb-badge absolute text-[11px] md:text-xs font-semibold px-3 py-1.5 rounded-full bg-white/90 backdrop-blur-sm border border-white shadow-sm",
-                          positions[idx],
-                        )}
-                        style={{
-                          color: tile.accent,
-                          animationDelay: `${0.45 + idx * 0.12}s`,
-                        }}
-                      >
-                        {badge}
-                      </span>
-                    );
-                  })}
-
-                  <button
-                    type="button"
-                    onClick={() => setOpenTile(null)}
-                    className="absolute top-4 left-4 h-9 w-9 rounded-full bg-white/90 hover:bg-white text-[#122042] flex items-center justify-center shadow-sm transition-colors"
-                    aria-label="إغلاق"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="p-7 md:p-9 text-right" dir="rtl">
-                  <h3
-                    id="fb-modal-title"
-                    className="text-xl md:text-[1.6rem] font-extrabold leading-tight mb-3 text-black"
-                  >
-                    {tile.title}
-                  </h3>
-                  <p className="text-[13px] md:text-sm text-black/65 leading-relaxed mb-6">
-                    {tile.intro}
-                  </p>
-
-                  <ul className="space-y-3 mb-7">
-                    {tile.bullets.map((b, idx) => (
-                      <li
-                        key={idx}
-                        className="fb-bullet flex items-start gap-3"
-                        style={{ animationDelay: `${0.35 + idx * 0.08}s` }}
-                      >
-                        <span
-                          className="flex-shrink-0 mt-0.5 h-5 w-5 rounded-full flex items-center justify-center"
-                          style={{ background: tile.accent }}
-                        >
-                          <Check className="h-3 w-3 text-white" strokeWidth={3} />
-                        </span>
-                        <span className="text-[13px] md:text-sm text-black/80 leading-relaxed">
-                          {b}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpenTile(null);
-                      navigate("/login?view=signup");
-                    }}
-                    className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-3.5 rounded-full text-white font-bold text-sm transition-transform hover:scale-[1.02]"
-                    style={{
-                      background: "#122042",
-                      boxShadow: "0 12px 30px -8px rgba(18,32,66,0.4)",
-                    }}
-                  >
-                    جرّب هذه الميزة مجاناً
-                    <ArrowLeft className="h-4 w-4" />
-                  </button>
-                </div>
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background:
+                      "radial-gradient(65% 50% at 50% 30%, rgba(255,255,255,0.35) 0%, transparent 65%)",
+                  }}
+                  aria-hidden="true"
+                />
+                <img
+                  src={featuresMockup}
+                  alt=""
+                  className="relative max-w-full max-h-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
+                  loading="lazy"
+                />
+              </div>
+              {/* Version + title + date below the card. */}
+              <div className="pt-5 px-1 text-right" dir="rtl">
+                <p className="text-[12px] font-bold tracking-[0.18em] uppercase text-[#c97a4a]">
+                  {u.version}
+                </p>
+                <h3 className="text-[17px] md:text-[18px] font-bold text-black mt-2 leading-snug">
+                  {u.title}
+                </h3>
+                <p className="text-[12px] text-black/45 mt-1.5">
+                  {u.date}
+                </p>
               </div>
             </div>
-          );
-        })()}
+          ))}
+          {/* Trailing spacer so the last card can snap to centre. */}
+          <div className="flex-shrink-0 w-2 md:w-8" aria-hidden="true" />
+        </div>
+
+        {/* Prev / next controls. Arrow directions are RTL-natural:
+            the left-pointing arrow advances to the "next" card. */}
+        <div className="max-w-6xl mx-auto px-6 mt-8 flex justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => scrollUpdates(1)}
+            className="h-11 w-11 rounded-full bg-black/[0.05] hover:bg-black/[0.09] text-black transition-colors flex items-center justify-center"
+            aria-label="السابق"
+          >
+            <ArrowRight className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => scrollUpdates(-1)}
+            className="h-11 w-11 rounded-full bg-[#122042] hover:bg-[#1a2b54] text-white transition-colors flex items-center justify-center"
+            aria-label="التالي"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+        </div>
       </section>
 
       {/* ═══ Features section — temporarily hidden ═══
