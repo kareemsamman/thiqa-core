@@ -232,7 +232,7 @@ const featureTabs = [
     desc: "حساب العمولات تلقائياً على كل وثيقة، تسويات مع الوسطاء مع تتبع الأرصدة والمستحقات، تسويات مع شركات التأمين بأسعارهم ومدفوعاتهم، وتقارير مفصلة لكل علاقة مالية — بدون جداول إكسل يدوية.",
     gradient: "linear-gradient(180deg, #4E62C8 0%, #92A0D8 100%)",
     glow: "radial-gradient(85% 55% at 50% 50%, rgba(255,255,255,0.34) 0%, transparent 70%)",
-    image: "https://thiqacrm.b-cdn.net/Group%201000011506.png",
+    image: "https://thiqacrm.b-cdn.net/Group%201000011506%20(1).png",
     stats: [
       { value: "0", unit: "", label: "عمولات ضائعة — كل شيكل محسوب على صاحبه من لحظة الإصدار." },
       { value: "∞", unit: "", label: "وسطاء وشركات تأمين، كل واحد بمحفظة مالية منفصلة." },
