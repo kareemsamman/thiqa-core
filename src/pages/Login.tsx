@@ -635,13 +635,12 @@ export default function Login() {
                       {loading ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
                     </Button>
 
-                    <button
-                      type="button"
-                      className="w-full text-center text-xs sm:text-sm text-primary hover:underline"
-                      onClick={() => navigate("/forgot-password")}
+                    <Link
+                      to="/forgot-password"
+                      className="block w-full text-center text-xs sm:text-sm text-primary hover:underline"
                     >
                       نسيت كلمة المرور؟
-                    </button>
+                    </Link>
                   </div>
 
                   {/* "أو" divider + Google button, moved below the
