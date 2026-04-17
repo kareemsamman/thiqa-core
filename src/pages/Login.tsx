@@ -777,11 +777,11 @@ export default function Login() {
                     <div className="space-y-2 pt-2">
                       <p className="text-xs text-muted-foreground leading-normal text-start [&_a]:text-foreground" dir="rtl">
                         بالضغط على التسجيل، أوافق على{" "}
-                        <a href="#terms" target="_blank" rel="noopener noreferrer" className="font-medium text-foreground hover:text-foreground/80">
+                        <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-foreground hover:text-foreground/80">
                           شروط الاستخدام
                         </a>
                         {" "}وأؤكد أنني قرأت{" "}
-                        <a href="#privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-foreground hover:text-foreground/80">
+                        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-foreground hover:text-foreground/80">
                           سياسة الخصوصية
                         </a>
                         .
@@ -890,9 +890,9 @@ export default function Login() {
             via the parent's flex-col + flex-1 spacer above. Same row
             on both login and signup. */}
         <div className="text-center text-[11px] text-muted-foreground pt-6">
-          <a href="#terms" className="hover:underline hover:text-foreground transition-colors">شروط الاستخدام</a>
+          <a href="/terms" className="hover:underline hover:text-foreground transition-colors">شروط الاستخدام</a>
           <span className="mx-2 opacity-50">|</span>
-          <a href="#privacy" className="hover:underline hover:text-foreground transition-colors">سياسة الخصوصية</a>
+          <a href="/privacy" className="hover:underline hover:text-foreground transition-colors">سياسة الخصوصية</a>
         </div>
       </div>
 

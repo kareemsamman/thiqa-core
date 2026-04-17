@@ -2513,9 +2513,9 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col divide-y divide-black/[0.08]">
             {[
-              { title: "معلومات", items: ["مركز المساعدة", "اتصل بنا"] },
-              { title: "شروط وسياسات", items: ["شروط الاستخدام", "سياسة الخصوصية", "إمكانية الوصول"] },
-              { title: "الدعم", items: ["دردشة الدعم", "أسئلة شائعة", "info@thiqa.co.il"] },
+              { title: "معلومات", items: [{ label: "مركز المساعدة", href: "#" }, { label: "اتصل بنا", href: "#" }] },
+              { title: "شروط وسياسات", items: [{ label: "شروط الاستخدام", href: "/terms" }, { label: "سياسة الخصوصية", href: "/privacy" }, { label: "إمكانية الوصول", href: "#" }] },
+              { title: "الدعم", items: [{ label: "دردشة الدعم", href: "#" }, { label: "أسئلة شائعة", href: "#faq" }, { label: "info@thiqa.co.il", href: "mailto:info@thiqa.co.il" }] },
             ].map((section, idx) => (
               <details key={idx} className="group py-6">
                 <summary className="flex items-center justify-between cursor-pointer list-none">
@@ -2525,7 +2525,7 @@ export default function Landing() {
                 </summary>
                 <ul className="mt-4 space-y-3 text-sm text-black/60 text-right">
                   {section.items.map((item, j) => (
-                    <li key={j}><a href="#" className="hover:text-black transition-colors">{item}</a></li>
+                    <li key={j}><a href={item.href} className="hover:text-black transition-colors">{item.label}</a></li>
                   ))}
                 </ul>
               </details>

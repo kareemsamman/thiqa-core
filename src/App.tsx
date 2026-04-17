@@ -89,6 +89,8 @@ import VerifyEmail from "./pages/VerifyEmail";
 import Pricing from "./pages/Pricing";
 import ResetPassword from "./pages/ResetPassword";
 import ForgotPassword from "./pages/ForgotPassword";
+import Privacy from "./pages/Privacy";
+import TermsOfUse from "./pages/TermsOfUse";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -148,6 +150,8 @@ const App = () => (
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<TermsOfUse />} />
               <Route path="/subscription-expired" element={<SubscriptionExpired />} />
               {/* Thiqa Super Admin routes */}
               <Route path="/thiqa" element={<ThiqaAdminRoute><ThiqaDashboard /></ThiqaAdminRoute>} />
