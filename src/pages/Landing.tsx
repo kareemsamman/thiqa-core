@@ -329,7 +329,7 @@ export default function Landing() {
   }, []);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
   const [testimonialAnim, setTestimonialAnim] = useState<"in" | "out">("in");
-  const [faqCategory, setFaqCategory] = useState("general");
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
   // Section-2 feature tile → pro modal. Index points at the tile in
   // the `featureTiles` array below (null = closed). Body scroll is
   // frozen while open and ESC closes — so the modal behaves like a
@@ -2216,75 +2216,94 @@ export default function Landing() {
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
-      {/* ═══ FAQ ═══ */}
+      {/* ═══ FAQ ═══
+          Single-column accordion, first item open by default, at most
+          one open at a time. Clean dividers between rows, circular
+          chevron control on the end side. */}
       <section id="faq" className="py-24 md:py-36 relative bg-white">
-        <div className="relative max-w-6xl mx-auto px-6">
+        <div className="relative max-w-4xl mx-auto px-6">
           <p className="text-sm text-[#4a6cc7] text-center mb-4 tracking-wide font-semibold">{ct(content, "faq_label", "أسئلة وأجوبة")}</p>
           <h2 className="text-3xl md:text-[2.8rem] font-bold text-center mb-16 text-black">
             {ct(content, "faq_title", "كل ما يهمك معرفته عن Thiqa")}
           </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-8 md:gap-12">
-            <div className="flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-4 md:pb-0">
-              {[
-                { key: "general", label: "عام ودعم" },
-                { key: "pricing", label: "أسعار ومدفوعات" },
-                { key: "features", label: "ميزات وإمكانيات" },
-                { key: "security", label: "أمان وخصوصية" },
-              ].map((cat) => (
-                <button
-                  key={cat.key}
-                  onClick={() => setFaqCategory(cat.key)}
-                  className={`whitespace-nowrap px-5 py-3 rounded-xl text-sm font-medium transition-all text-right ${
-                    faqCategory === cat.key
-                      ? "bg-black/[0.06] text-black border border-black/[0.1]"
-                      : "text-black/55 hover:text-black/80 hover:bg-black/[0.03]"
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
 
-            <div className="flex flex-col gap-4">
-              {(() => {
-                const faqData: Record<string, { q: string; a: string }[]> = {
-                  general: [
-                    { q: "ما هو Thiqa؟", a: "نظام CRM متقدم مصمم خصيصاً لوكالات التأمين. إدارة العملاء، الوثائق، المدفوعات والتقارير — كل شيء في مكان واحد." },
-                    { q: "هل البرنامج يدعم العربية؟", a: "نعم، النظام مبني بالعربية بالكامل مع واجهة RTL احترافية." },
-                    { q: "هل يوجد دعم تقني؟", a: "نعم، فريق الدعم متاح بالهاتف وعبر واتساب في أيام العمل. متوسط وقت الرد: أقل من 30 دقيقة." },
-                  ],
-                  pricing: [
-                    { q: "كم يكلف الاشتراك؟", a: "نقدم خطتين: Basic للوكالات الصغيرة و-Pro للوكالات الكبيرة مع جميع الميزات. تواصلوا معنا للتفاصيل." },
-                    { q: "هل يوجد فترة تجريبية؟", a: "نعم، نقدم 35 يوم تجربة مجانية بدون الحاجة لبطاقة ائتمان." },
-                    { q: "هل يمكن الإلغاء في أي وقت؟", a: "بالتأكيد. لا يوجد التزام ويمكن إلغاء الاشتراك في أي وقت." },
-                  ],
-                  features: [
-                    { q: "هل يمكن استيراد بيانات من نظام قائم؟", a: "بالتأكيد. لدينا أداة استيراد مدمجة تدعم نقل البيانات من أنظمة WordPress ومصادر أخرى." },
-                    { q: "هل يوجد تطبيق للجوال؟", a: "النظام متوافق بالكامل مع الجوال ويعمل بشكل ممتاز في أي متصفح على الهاتف." },
-                    { q: "هل يوجد توقيع رقمي؟", a: "نعم، يمكن إرسال وثائق للتوقيع الرقمي عبر SMS والحصول على تأكيد فوري." },
-                  ],
-                  security: [
-                    { q: "هل معلوماتي آمنة؟", a: "نعم، نستخدم تقنيات تشفير متقدمة مع نسخ احتياطية يومية تلقائية." },
-                    { q: "أين يتم تخزين البيانات؟", a: "كل البيانات مخزنة في خوادم آمنة بمعايير أمان صارمة." },
-                    { q: "من يمكنه الوصول لمعلوماتي؟", a: "أنتم فقط والمستخدمون الذين تعتمدونهم. يوجد نظام صلاحيات كامل." },
-                  ],
-                };
-                return faqData[faqCategory]?.map((faq, i) => (
-                  <details
-                    key={i}
-                    className="group p-5 rounded-2xl border border-black/[0.08] bg-black/[0.02] cursor-pointer transition-colors hover:bg-black/[0.04]"
-                  >
-                    <summary className="flex items-center justify-between font-semibold text-[15px] list-none text-black">
-                      {faq.q}
-                      <ChevronLeft className="h-4 w-4 text-black/40 transition-transform group-open:-rotate-90 shrink-0 mr-4" />
-                    </summary>
-                    <p className="mt-3 text-sm text-black/60 leading-relaxed">{faq.a}</p>
-                  </details>
-                ));
-              })()}
-            </div>
+          <div className="flex flex-col">
+            {(() => {
+              const faqs: { q: string; a: string }[] = [
+                {
+                  q: "ما هو Thiqa؟",
+                  a: "نظام CRM مخصّص لوكالات التأمين — إدارة العملاء والوثائق والمدفوعات والتقارير في مكان واحد. مصمّم لواقع الوكالات في منطقتنا مع دعم كامل للعربية وواجهة RTL احترافية.",
+                },
+                {
+                  q: "هل يمكنني إلغاء الاشتراك في أي وقت؟",
+                  a: "نعم، الإلغاء مجاني ومتاح في أي وقت بدون التزام أو رسوم إضافية. عند الإلغاء نرسل لك نسخة احتياطية كاملة من قاعدة بياناتك لتحتفظ بها، وتبقى لديك إمكانية العودة متى شئت بنفس البيانات.",
+                },
+                {
+                  q: "هل يمكن الانتقال بين خطة Pro وBasic؟",
+                  a: "نعم. الترقية من Basic إلى Pro تتم فوراً من صفحة الاشتراك وتُفعَّل الميزات الإضافية مباشرة. الانتقال من Pro إلى Basic متاح أيضاً في أي وقت، ويُحتسب فرق السعر بالتناسب مع المدة المتبقية في فاتورتك القادمة.",
+                },
+                {
+                  q: "هل يوجد فترة تجريبية مجانية؟",
+                  a: "نعم، 35 يوماً تجربة مجانية بدون الحاجة لبطاقة ائتمان. جميع ميزات خطة Pro متاحة خلال التجربة لتختبر النظام بالكامل قبل الاشتراك.",
+                },
+                {
+                  q: "هل معلوماتي وبيانات عملائي آمنة؟",
+                  a: "نعم — تشفير متقدم لجميع البيانات، نسخ احتياطية يومية تلقائية، ونظام صلاحيات كامل يتحكم بمن يستطيع الوصول إلى أي معلومة داخل وكالتك. أنتم الوحيدون الذين يصلون لبياناتكم.",
+                },
+              ];
+              return faqs.map((faq, i) => {
+                const isOpen = openFaq === i;
+                const isLast = i === faqs.length - 1;
+                return (
+                  <div key={i}>
+                    <button
+                      onClick={() => setOpenFaq(isOpen ? null : i)}
+                      className="w-full flex items-center gap-4 py-6 md:py-7 text-right group"
+                      aria-expanded={isOpen}
+                    >
+                      <h3 className="flex-1 text-right font-bold text-[16px] md:text-[18px] text-black leading-snug">
+                        {faq.q}
+                      </h3>
+                      <div
+                        className={`h-11 w-11 md:h-12 md:w-12 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
+                          isOpen
+                            ? "bg-black text-white"
+                            : "bg-black/[0.05] text-black group-hover:bg-black/[0.08]"
+                        }`}
+                      >
+                        {isOpen ? (
+                          <ChevronUp className="h-4 w-4" strokeWidth={2.5} />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
+                        )}
+                      </div>
+                    </button>
+                    <div
+                      className="grid overflow-hidden transition-all duration-300 ease-out"
+                      style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
+                    >
+                      <div className="min-h-0">
+                        <p className="text-right text-[14px] md:text-[15px] text-black/60 leading-relaxed pb-6 md:pb-7 pl-14 md:pl-16">
+                          {faq.a}
+                        </p>
+                      </div>
+                    </div>
+                    {!isLast && <div className="h-px bg-black/[0.08]" />}
+                  </div>
+                );
+              });
+            })()}
           </div>
+
+          <p className="mt-12 text-center text-[14px] md:text-[15px] text-black/55">
+            {ct(content, "faq_more_prompt", "هل لديك أسئلة إضافية؟")}{" "}
+            <button
+              onClick={() => navigate("/login?view=signup")}
+              className="font-bold text-black underline underline-offset-4 decoration-2 decoration-[#4a6cc7] hover:opacity-80 transition-opacity"
+            >
+              {ct(content, "faq_more_cta", "تواصل معنا.")}
+            </button>
+          </p>
         </div>
       </section>
 
