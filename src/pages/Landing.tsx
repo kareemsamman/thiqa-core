@@ -297,7 +297,7 @@ export default function Landing() {
   useEffect(() => {
     const section = sliderSectionRef.current;
     if (!section) return;
-    const SLIDES = 3;
+    const SLIDES = 5;
     let inView = false;
     let intervalId: number | null = null;
     const start = () => {
@@ -335,6 +335,49 @@ export default function Landing() {
   }, []);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
   const [testimonialAnim, setTestimonialAnim] = useState<"in" | "out">("in");
+  // Testimonials auto-play: when the section is in view, cycle every
+  // 6s with an infinite loop. Manual arrow/dot clicks reset the timer
+  // so the user always sees the clicked slide for the full interval.
+  const testimonialsSectionRef = useRef<HTMLElement | null>(null);
+  const testimonialTickRef = useRef(0);
+  useEffect(() => {
+    const section = testimonialsSectionRef.current;
+    if (!section) return;
+    const COUNT = 3;
+    let intervalId: number | null = null;
+    const start = () => {
+      if (intervalId !== null) return;
+      intervalId = window.setInterval(() => {
+        // Cross-fade via the same anim state the arrows use.
+        setTestimonialAnim("out");
+        const tick = ++testimonialTickRef.current;
+        window.setTimeout(() => {
+          if (tick !== testimonialTickRef.current) return;
+          setTestimonialIdx((p) => (p + 1) % COUNT);
+          setTestimonialAnim("in");
+        }, 350);
+      }, 6000);
+    };
+    const stop = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) start(); else stop();
+        }
+      },
+      { threshold: 0.2 },
+    );
+    io.observe(section);
+    return () => {
+      io.disconnect();
+      stop();
+    };
+  }, []);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   // Section-2 feature tile → pro modal. Index points at the tile in
   // the `featureTiles` array below (null = closed). Body scroll is
@@ -485,6 +528,7 @@ export default function Landing() {
   ];
 
   const goTestimonial = (dir: "up" | "down") => {
+    testimonialTickRef.current++;
     setTestimonialAnim("out");
     setTimeout(() => {
       setTestimonialIdx((p) =>
@@ -1842,7 +1886,7 @@ export default function Landing() {
         />
 
         <div className="relative z-10 flex flex-col items-center justify-center px-6">
-            <h2 className="sl-title text-3xl md:text-[2.6rem] font-bold text-center mb-8 md:mb-12 text-white">
+            <h2 className="sl-title select-none text-3xl md:text-[2.6rem] font-bold text-center mb-8 md:mb-12 text-white">
               {ct(content, "slider_title", "لا تنتظر التجديد. اصنعه بنفسك")}
             </h2>
 
@@ -1852,21 +1896,35 @@ export default function Landing() {
                   image: featuresMockup,
                   eyebrow: "تحصيل ومالية",
                   title: "تحصيل بلا Excel،\nشيكات بلا عناء.",
-                  desc: "استلم الشيكات مع تسجيل البنك والفرع. التقسيط الداخلي آلي. ربط مع بوابات دفع متعددة — Tranzila أو غيرها حسب الطلب.",
+                  desc: "استلم الشيكات مع تسجيل البنك والفرع، وتقسيط داخلي آلي، وربط مع بوابات دفع متعددة — Tranzila أو غيرها حسب الطلب.",
                   cta: "ابدأ التجربة الآن",
                 },
                 {
                   image: featuresMockup,
                   eyebrow: "تذكيرات وحملات",
                   title: "النظام يذكّر العميل\nقبل ما تفكر فيه.",
-                  desc: "تذكيرات قبل شهر وأسبوع من الانتهاء، حملات SMS جماعية، نماذج مخصّصة لكل تنبيه. نسبة تجديد أعلى بـ 40%.",
+                  desc: "تذكيرات قبل شهر وأسبوع من الانتهاء، حملات SMS جماعية، ونماذج مخصّصة لكل تنبيه — نسبة تجديد أعلى بـ 40%.",
                   cta: "ابدأ التجربة الآن",
                 },
                 {
                   image: featuresMockup,
                   eyebrow: "تقارير لحظية",
                   title: "كل شيكل مرصود،\nكل فرع تحت السيطرة.",
-                  desc: "أرباح وعمولات محسوبة بلحظتها، رصيد خزينة حيّ، متابعة أرصدة الشركات، تصدير فوري إلى Excel.",
+                  desc: "أرباح وعمولات محسوبة بلحظتها، رصيد خزينة حيّ، متابعة أرصدة الشركات، وتصدير فوري إلى Excel.",
+                  cta: "ابدأ التجربة الآن",
+                },
+                {
+                  image: featuresMockup,
+                  eyebrow: "توقيع ومستندات",
+                  title: "وثائق موقّعة في دقائق،\nلا في أسابيع.",
+                  desc: "أرسل الوثيقة للعميل عبر SMS، وقّعها بنقرة، وتُؤرشَف مباشرة في ملفه. سجلّ كامل وقابل للمراجعة في أي وقت.",
+                  cta: "ابدأ التجربة الآن",
+                },
+                {
+                  image: featuresMockup,
+                  eyebrow: "فرق وصلاحيات",
+                  title: "كل عضو في فريقك\nيرى ما يخصّه فقط.",
+                  desc: "صلاحيات دقيقة لكل دور، فروع منفصلة تحت إدارة واحدة، وسجل أنشطة كامل يوضّح من فعل ماذا ومتى.",
                   cta: "ابدأ التجربة الآن",
                 },
               ];
@@ -1906,7 +1964,7 @@ export default function Landing() {
                       const delta = e.clientX - start;
                       const threshold = 50;
                       if (Math.abs(delta) < threshold) return;
-                      const SLIDES = 3;
+                      const SLIDES = 5;
                       // RTL: drag-right advances (reveals next from left),
                       // drag-left goes back.
                       if (delta > 0) {
@@ -2148,7 +2206,7 @@ export default function Landing() {
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
       {/* ═══ Section 6: Testimonials ═══ */}
-      <section id="testimonials" className="py-24 md:py-36 relative overflow-hidden bg-white">
+      <section id="testimonials" ref={testimonialsSectionRef} className="py-24 md:py-36 relative overflow-hidden bg-white">
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
@@ -2218,10 +2276,20 @@ export default function Landing() {
 
             <div className="flex justify-center gap-2 mt-8">
               {testimonials.map((_, i) => (
-                <div
+                <button
                   key={i}
-                  className={`h-1 rounded-full transition-all duration-500 ${
-                    i === testimonialIdx ? "w-10 bg-[#4a6cc7]" : "w-6 bg-black/[0.12]"
+                  onClick={() => {
+                    if (i === testimonialIdx) return;
+                    testimonialTickRef.current++;
+                    setTestimonialAnim("out");
+                    setTimeout(() => {
+                      setTestimonialIdx(i);
+                      setTestimonialAnim("in");
+                    }, 350);
+                  }}
+                  aria-label={`testimonial ${i + 1}`}
+                  className={`h-1 rounded-full transition-all duration-500 cursor-pointer ${
+                    i === testimonialIdx ? "w-10 bg-[#4a6cc7]" : "w-6 bg-black/[0.12] hover:bg-black/[0.2]"
                   }`}
                 />
               ))}
