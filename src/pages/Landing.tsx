@@ -1617,12 +1617,29 @@ export default function Landing() {
           );
           io.observe(el);
         }}
-        className="py-20 md:py-28 bg-white overflow-hidden"
+        className="relative py-24 md:py-32 overflow-hidden"
+        style={{ background: "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%)" }}
       >
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_1fr] gap-10 md:gap-14 items-center">
-            {/* LEFT — product mockup. */}
-            <div className="gr-image relative rounded-[28px] overflow-hidden">
+        {/* Soft blurred bloom layers so the gradient reads as a
+            dreamy atmosphere rather than a flat block. */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(60% 45% at 25% 20%, rgba(255,255,255,0.30) 0%, transparent 65%), radial-gradient(45% 40% at 85% 80%, rgba(255,255,255,0.18) 0%, transparent 65%)",
+            filter: "blur(40px)",
+          }}
+          aria-hidden="true"
+        />
+
+        <div className="relative max-w-6xl mx-auto px-6">
+          <div
+            className="grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-10 md:gap-16 lg:gap-20 items-center"
+            dir="ltr"
+          >
+            {/* LEFT — product mockup. Made bigger via grid column
+                ratio (1.15fr) and a softly shadowed frame. */}
+            <div className="gr-image relative rounded-[28px] overflow-hidden shadow-[0_40px_100px_-24px_rgba(10,15,35,0.55)]">
               <img
                 src={featuresMockup}
                 alt=""
@@ -1631,9 +1648,12 @@ export default function Landing() {
               />
             </div>
 
-            {/* RIGHT — heading, accordion, CTA. */}
+            {/* RIGHT — eyebrow + heading + accordion + CTA. */}
             <div className="gr-text text-right" dir="rtl">
-              <h2 className="text-[2rem] md:text-[2.6rem] font-extrabold leading-[1.2] mb-8 md:mb-10 text-black">
+              <p className="text-sm mb-3 tracking-[0.2em] font-light uppercase text-white/75">
+                حلول شاملة
+              </p>
+              <h2 className="text-[2rem] md:text-[2.8rem] font-extrabold leading-[1.2] mb-8 md:mb-10 text-white">
                 كل ما تحتاجه لتنمو
               </h2>
 
@@ -1642,7 +1662,7 @@ export default function Landing() {
                   {
                     title: "سيطرة كاملة وتقليل عبء الإدارة",
                     body:
-                      "لوحة تحكم واحدة تجمع كل عمليات الوكالة: وثائق، تحصيل، شيكات، عملاء وتقارير — ترى كل شيء بلحظتها وتتخذ قرارات مبنية على أرقام حقيقية بدلاً من جداول Excel متفرّقة.",
+                      "لوحة تحكم واحدة تجمع كل عمليات الوكالة: وثائق، تحصيل، شيكات، عملاء وتقارير — ترى كل شيء بلحظتها وتتخذ قرارات مبنية على أرقام حقيقية.",
                   },
                   {
                     title: "إدارة الفريق وصلاحيات دقيقة",
@@ -1659,7 +1679,7 @@ export default function Landing() {
                   return (
                     <div
                       key={i}
-                      className="gr-item border-b border-black/10"
+                      className="gr-item border-b border-white/20"
                       style={{ transitionDelay: `${0.45 + i * 0.1}s` }}
                     >
                       <button
@@ -1668,15 +1688,15 @@ export default function Landing() {
                         className="w-full py-5 flex items-center gap-4 text-right"
                         aria-expanded={open}
                       >
-                        <h3 className="flex-1 text-[16px] md:text-[17px] font-bold text-black leading-snug">
+                        <h3 className="flex-1 text-[16px] md:text-[17px] font-bold text-white leading-snug">
                           {item.title}
                         </h3>
                         <span
                           className={cn(
                             "flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center transition-colors",
                             open
-                              ? "bg-black text-white"
-                              : "bg-[#f3ede3] text-black/70",
+                              ? "bg-[#122042] text-white"
+                              : "bg-white/85 text-black/60",
                           )}
                         >
                           {open ? (
@@ -1688,7 +1708,7 @@ export default function Landing() {
                       </button>
                       <div className={cn("gr-body", open && "gr-open")}>
                         <div>
-                          <p className="text-[14px] md:text-[15px] text-black/60 leading-relaxed pb-5 pl-14">
+                          <p className="text-[14px] md:text-[15px] text-white/80 leading-relaxed pb-5 pl-14">
                             {item.body}
                           </p>
                         </div>
@@ -1706,7 +1726,7 @@ export default function Landing() {
                   style={{
                     borderRadius: "100px",
                     background: "#111",
-                    boxShadow: "0 4px 16px 0 rgba(0, 0, 0, 0.12)",
+                    boxShadow: "0 10px 30px -8px rgba(10,15,35,0.5)",
                   }}
                 >
                   {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
