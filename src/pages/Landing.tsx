@@ -241,6 +241,10 @@ export default function Landing() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("policies");
   const [slideIdx, setSlideIdx] = useState(0);
+  // Fractional progress through the slider pin (0 → SLIDES-1). Drives
+  // the card transform directly so cards slide smoothly with the
+  // user's scroll instead of snapping between integer positions.
+  const [slideProgress, setSlideProgress] = useState(0);
   // Slider section — JS-controlled pin. The outer <section> is
   // 300vh tall; the inner pin-container is absolutely positioned at
   // top:0 and translated on Y via rAF so it tracks the scroll like
@@ -273,8 +277,14 @@ export default function Landing() {
       const scrolled = Math.max(0, Math.min(scrollable, -rect.top));
       pin.style.transform = `translate3d(0, ${scrolled}px, 0)`;
       const progress = scrolled / scrollable;
-      const idx = Math.min(SLIDES - 1, Math.floor(progress * SLIDES));
-      setSlideIdx(idx);
+      // Map [0, 1] scroll progress onto [0, SLIDES-1] with a short
+      // settle band at each end so the first and last cards hold
+      // steady before and after the travel portion.
+      const SETTLE = 0.08;
+      const t = Math.max(0, Math.min(1, (progress - SETTLE) / (1 - SETTLE * 2)));
+      const frac = t * (SLIDES - 1);
+      setSlideProgress(frac);
+      setSlideIdx(Math.round(frac));
     };
     const onScroll = () => {
       if (ticking) return;
@@ -1748,7 +1758,7 @@ export default function Landing() {
       <section
         ref={sliderSectionRef}
         className="relative bg-white overflow-hidden"
-        style={{ height: "300vh" }}
+        style={{ height: "550vh" }}
       >
         {/* Pin container — JS transforms its Y to track scroll. Sits
             absolute:top:0 at the section's top, then `translateY`s
@@ -1807,25 +1817,28 @@ export default function Landing() {
                       description on the left. */}
                   <div className="relative w-full max-w-[1280px] h-[460px] md:h-[520px]">
                     {slides.map((slide, i) => {
-                      const offset = i - slideIdx;
+                      // Fractional offset in slide-units. As the user
+                      // scrolls, this glides from +N → 0 → −N, so each
+                      // card slides smoothly rather than jumping.
+                      const offset = i - slideProgress;
                       const abs = Math.abs(offset);
+                      const clamped = Math.min(1, abs);
+                      const scale = 1 - 0.1 * clamped;
+                      const opacity = abs < 1 ? 1 - 0.55 * abs : Math.max(0, 1 - (abs - 0) * 0.55 - (abs - 1) * 0.45);
                       return (
                         <div
                           key={i}
-                          className="absolute top-0 left-1/2 rounded-2xl overflow-hidden transition-all duration-500 ease-out w-[760px] md:w-[1060px] h-full flex flex-col"
+                          className="absolute top-0 left-1/2 rounded-2xl overflow-hidden w-[760px] md:w-[1060px] h-full flex flex-col"
                           style={{
-                            // Darker, cooler glass surface — sits on top of
-                            // the background gradient as a tinted plate
-                            // rather than a bright highlight.
                             background: "rgba(22, 26, 48, 0.38)",
                             backdropFilter: "blur(24px) saturate(1.2)",
                             WebkitBackdropFilter: "blur(24px) saturate(1.2)",
                             border: "1px solid rgba(255, 255, 255, 0.12)",
-                            transform: `translateX(calc(-50% + ${-offset * 62}%)) scale(${abs === 0 ? 1 : 0.9})`,
-                            opacity: abs <= 1 ? (abs === 0 ? 1 : 0.4) : 0,
-                            pointerEvents: abs === 0 ? "auto" : "none",
-                            zIndex: abs === 0 ? 10 : 5,
-                            boxShadow: abs === 0 ? "0 30px 80px -16px rgba(10,15,35,0.55)" : "none",
+                            transform: `translateX(calc(-50% + ${-offset * 62}%)) scale(${scale})`,
+                            opacity: Math.max(0, opacity),
+                            pointerEvents: abs < 0.5 ? "auto" : "none",
+                            zIndex: abs < 0.5 ? 10 : 5,
+                            boxShadow: abs < 0.5 ? "0 30px 80px -16px rgba(10,15,35,0.55)" : "none",
                           }}
                         >
                           {/* Top row: text column + image panel */}
