@@ -8,11 +8,15 @@ import { ThaqibPanel } from "./ThaqibPanel";
 // appear. Keeping the list here (instead of wrapping every public Route
 // in App.tsx) means new public pages automatically inherit the hide
 // behavior as long as their path starts with one of these prefixes.
+// "/" is handled separately below because every path starts with it.
 const PUBLIC_ROUTE_PREFIXES = [
   "/login",
+  "/register",
   "/signup",
   "/landing",
   "/pricing",
+  "/terms",
+  "/privacy",
   "/verify-email",
   "/reset-password",
   "/forgot-password",
@@ -25,7 +29,11 @@ export function ThaqibWidget() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
 
-  const isPublicRoute = PUBLIC_ROUTE_PREFIXES.some((prefix) =>
+  // Exact "/" is the landing for logged-out visitors. Logged-in users
+  // get redirected to /dashboard by HomeRoute, so hiding the widget
+  // on "/" only ever affects the public landing.
+  const isLanding = location.pathname === "/";
+  const isPublicRoute = isLanding || PUBLIC_ROUTE_PREFIXES.some((prefix) =>
     location.pathname === prefix || location.pathname.startsWith(`${prefix}/`)
   );
 
