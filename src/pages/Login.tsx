@@ -530,7 +530,7 @@ export default function Login() {
           of the column regardless of how short the form is. */}
       <div className="flex-1 flex flex-col px-5 sm:p-6 lg:bg-white pt-14 pb-6">
         <div className="flex-1 flex items-start sm:items-center justify-center w-full">
-        <div className="w-full max-w-xl animate-scale-in">
+        <div className="w-full max-w-lg animate-scale-in">
           <div className="rounded-2xl sm:rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden lg:rounded-none lg:border-0 lg:bg-transparent lg:dark:bg-transparent lg:backdrop-blur-0 lg:shadow-none lg:overflow-visible">
             {/* Mobile-only header — animated Thiqa lockup. Hidden on
                 desktop (`lg:hidden`) because the desktop left panel
