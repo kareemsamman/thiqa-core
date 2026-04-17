@@ -209,7 +209,7 @@ export default function Privacy() {
             لأي استفسار يخصّ خصوصيتك أو لطلب الوصول إلى بياناتك أو حذفها:
           </p>
           <ul>
-            <li>البريد الإلكتروني: <a href="mailto:privacy@getthiqa.com" className="text-[#4a6cc7] hover:underline" dir="ltr">privacy@getthiqa.com</a></li>
+            <li>الدعم العام: <a href="mailto:support@getthiqa.com" className="text-[#4a6cc7] hover:underline" dir="ltr">support@getthiqa.com</a></li>
           </ul>
           <p>
             نلتزم بالردّ خلال 5 أيام عمل كحد أقصى.

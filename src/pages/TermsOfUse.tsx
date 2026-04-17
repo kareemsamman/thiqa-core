@@ -159,7 +159,6 @@ export default function TermsOfUse() {
         <Section icon={<Mail className="h-5 w-5" />} number="12" title="تواصل معنا">
           <ul>
             <li>الدعم العام: <a href="mailto:support@getthiqa.com" className="text-[#4a6cc7] hover:underline" dir="ltr">support@getthiqa.com</a></li>
-            <li>المسائل القانونية: <a href="mailto:legal@getthiqa.com" className="text-[#4a6cc7] hover:underline" dir="ltr">legal@getthiqa.com</a></li>
           </ul>
         </Section>
 
