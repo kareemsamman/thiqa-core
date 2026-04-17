@@ -261,125 +261,110 @@ export default function Landing() {
     const section = sliderSectionRef.current;
     if (!section) return;
     const SLIDES = 3;
-    const THROTTLE_MS = 700;
-    // `locked` is the trap state. Once the section enters the
-    // viewport center we flip it true: from that point every wheel /
-    // touch event is captured (preventDefault), the section is
-    // snapped to the top of the viewport, and each intent advances a
-    // single slide. Only when the user is at a slide boundary AND
-    // still pushing in the "away" direction do we flip locked back
-    // off so normal page scroll resumes.
+    const THROTTLE_MS = 650;
+    // Hard scroll-trap. Instead of relying on preventDefault on
+    // wheel events (which trackpad inertia can outrun), we physically
+    // freeze the document the moment the section crosses into the
+    // viewport center: `position: fixed` on the body with a negative
+    // `top` offset that mirrors the saved scrollY. No scroll input
+    // of any kind can move the page until we release.
     let locked = false;
     let lastAdvance = 0;
     let touchStartY = 0;
-    // After the user legitimately releases the lock at a boundary we
-    // mark that direction as "exited" so the scroll-listener backup
-    // below doesn't yank them back into the trap. These reset once
-    // the section is fully off-screen so re-entering scroll-wise
-    // engages the trap again.
+    let savedScrollY = 0;
     let exitedDown = false;
     let exitedUp = false;
-
-    const inTrapZone = () => {
-      const rect = section.getBoundingClientRect();
-      const vh = window.innerHeight;
-      // The section is "in the way" whenever it overlaps the middle
-      // of the viewport. Generous on purpose so we catch fast flicks.
-      return rect.top <= vh * 0.5 && rect.bottom >= vh * 0.5;
-    };
-
-    const snapToTop = () => {
-      const rect = section.getBoundingClientRect();
-      if (Math.abs(rect.top) > 1) {
-        window.scrollTo({ top: window.scrollY + rect.top });
-      }
-    };
-
-    const atBoundary = (dir: 1 | -1) => {
-      const idx = slideIdxRef.current;
-      return (dir > 0 && idx >= SLIDES - 1) || (dir < 0 && idx <= 0);
-    };
-
-    const advance = (dir: 1 | -1) => {
-      const idx = slideIdxRef.current;
-      setSlideIdx(Math.max(0, Math.min(SLIDES - 1, idx + dir)));
-      lastAdvance = performance.now();
-    };
+    let prevRectTop = Number.POSITIVE_INFINITY;
 
     const engageLock = () => {
+      if (locked) return;
+      const rect = section.getBoundingClientRect();
+      savedScrollY = window.scrollY + rect.top;
+      // Snap to the section's top before freezing so the user
+      // visibly lands on the slider rather than mid-transition.
+      window.scrollTo({ top: savedScrollY });
       locked = true;
-      snapToTop();
+      // Freeze the document. With position:fixed + top:-y the
+      // viewport stays where it is but the page stops scrolling.
+      document.documentElement.style.overflow = "hidden";
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${savedScrollY}px`;
+      document.body.style.left = "0";
+      document.body.style.right = "0";
+      document.body.style.width = "100%";
       lastAdvance = performance.now();
     };
 
-    const handleIntent = (dir: 1 | -1, e: Event) => {
-      const now = performance.now();
-
-      if (!inTrapZone()) {
-        // User has scrolled well past the section — make sure we're
-        // not still holding a stale lock.
-        locked = false;
-        return;
-      }
-
-      // First contact with the zone: engage the trap. Snap the
-      // section into place and eat this event so the user visibly
-      // "lands" on the slider before anything advances.
-      if (!locked) {
-        // Respect a recent legitimate release so the user can leave.
-        if ((dir > 0 && exitedDown) || (dir < 0 && exitedUp)) return;
-        engageLock();
-        e.preventDefault();
-        return;
-      }
-
-      // At a boundary + pushing away → release the lock so the next
-      // event scrolls normally out of the section.
-      if (atBoundary(dir)) {
-        // Still within throttle from the last advance: keep eating
-        // events so trackpad inertia doesn't skip the release moment.
-        if (now - lastAdvance < THROTTLE_MS) {
-          e.preventDefault();
-          return;
-        }
-        locked = false;
-        if (dir > 0) exitedDown = true; else exitedUp = true;
-        return; // fall through: default scroll will carry the user out
-      }
-
-      // Normal advance. Eat the event regardless so page never
-      // scrolls; only change slide when throttle has elapsed.
-      e.preventDefault();
-      if (now - lastAdvance < THROTTLE_MS) return;
-      snapToTop();
-      advance(dir);
+    const releaseLock = (dir: 1 | -1) => {
+      if (!locked) return;
+      locked = false;
+      document.documentElement.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      document.body.style.width = "";
+      // Drop the user on the correct side of the section so the
+      // scroll-trap doesn't re-engage on the same event.
+      const sectionH = section.offsetHeight;
+      const exitY = dir > 0 ? savedScrollY + sectionH + 4 : savedScrollY - window.innerHeight - 4;
+      window.scrollTo({ top: Math.max(0, exitY) });
+      if (dir > 0) exitedDown = true; else exitedUp = true;
     };
 
-    // Scroll-listener backup. Fast trackpad flicks can carry inertia
-    // through the section between wheel events — by the time our
-    // wheel handler wakes up the section may already be half gone.
-    // This runs on every scroll event and, if we find ourselves in
-    // the trap zone without being locked (and haven't just released
-    // in a matching direction), we snap back and engage. Once the
-    // section is entirely off-screen the exited flags clear so a
-    // return visit re-engages normally.
-    const onScroll = () => {
-      const rect = section.getBoundingClientRect();
-      const vh = window.innerHeight;
-      if (rect.bottom < 0) exitedDown = false;
-      if (rect.top > vh) exitedUp = false;
-      if (!inTrapZone()) {
-        locked = false;
+    const tryAdvance = (dir: 1 | -1) => {
+      if (!locked) return;
+      const now = performance.now();
+      if (now - lastAdvance < THROTTLE_MS) return;
+      const idx = slideIdxRef.current;
+      if ((dir > 0 && idx >= SLIDES - 1) || (dir < 0 && idx <= 0)) {
+        releaseLock(dir);
         return;
       }
+      setSlideIdx(Math.max(0, Math.min(SLIDES - 1, idx + dir)));
+      lastAdvance = now;
+    };
+
+    // Detection layer. Fires on every scroll event: watches the
+    // section's position and engages the trap the moment the section
+    // overlaps the viewport center — or, if a single fast flick
+    // carried the section all the way past, detects the traversal
+    // after the fact and yanks the user back.
+    const onScroll = () => {
       if (locked) return;
-      if (exitedDown || exitedUp) return;
+      const rect = section.getBoundingClientRect();
+      const vh = window.innerHeight;
+      // Reset exit flags once the user is well clear of the section.
+      if (rect.bottom < -vh * 0.5) exitedDown = false;
+      if (rect.top > vh * 1.5) exitedUp = false;
+
+      const inCenter = rect.top < vh * 0.5 && rect.bottom > vh * 0.5;
+      const flewDown = prevRectTop > vh * 0.5 && rect.bottom < vh * 0.5;
+      const flewUp = prevRectTop < -section.offsetHeight + vh * 0.5 && rect.top > vh * 0.5;
+      prevRectTop = rect.top;
+
+      if (!inCenter && !flewDown && !flewUp) return;
+      if (exitedDown && (flewDown || (inCenter && !flewUp))) return;
+      if (exitedUp && (flewUp || (inCenter && !flewDown))) return;
       engageLock();
     };
 
     const onWheel = (e: WheelEvent) => {
+      if (locked) {
+        e.preventDefault();
+        tryAdvance(e.deltaY > 0 ? 1 : -1);
+        return;
+      }
+      // Backup engagement path: if the user is already over the
+      // section when the first wheel fires, engage immediately.
+      const rect = section.getBoundingClientRect();
+      const vh = window.innerHeight;
+      const inTrap = rect.top < vh * 0.5 && rect.bottom > vh * 0.5;
+      if (!inTrap) return;
       const dir = (e.deltaY > 0 ? 1 : -1) as 1 | -1;
-      handleIntent(dir, e);
+      if ((dir > 0 && exitedDown) || (dir < 0 && exitedUp)) return;
+      e.preventDefault();
+      engageLock();
     };
 
     const onTouchStart = (e: TouchEvent) => {
@@ -387,35 +372,54 @@ export default function Landing() {
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      if (!locked) return;
+      e.preventDefault();
       const delta = touchStartY - e.touches[0].clientY;
       if (Math.abs(delta) < 30) return;
-      const dir = (delta > 0 ? 1 : -1) as 1 | -1;
-      handleIntent(dir, e);
-      // Reset the anchor so the next swipe is measured fresh.
+      tryAdvance(delta > 0 ? 1 : -1);
       touchStartY = e.touches[0].clientY;
     };
 
-    // Keyboard: arrow keys / page keys also count as intent while
-    // the trap is engaged so keyboard users get the same experience.
     const onKey = (e: KeyboardEvent) => {
-      if (!inTrapZone()) return;
       const down = e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ";
       const up = e.key === "ArrowUp" || e.key === "PageUp";
       if (!down && !up) return;
-      handleIntent(down ? 1 : -1, e);
+      if (locked) {
+        e.preventDefault();
+        tryAdvance(down ? 1 : -1);
+        return;
+      }
+      const rect = section.getBoundingClientRect();
+      const vh = window.innerHeight;
+      if (rect.top < vh * 0.5 && rect.bottom > vh * 0.5) {
+        e.preventDefault();
+        engageLock();
+      }
     };
 
+    window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchmove", onTouchMove, { passive: false });
     window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, { passive: true });
+    // In case the page loads already scrolled into the section.
+    onScroll();
     return () => {
+      window.removeEventListener("scroll", onScroll);
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll);
+      // Never leave the document frozen if the component unmounts.
+      if (locked) {
+        document.documentElement.style.overflow = "";
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.left = "";
+        document.body.style.right = "";
+        document.body.style.width = "";
+        window.scrollTo({ top: savedScrollY });
+      }
     };
   }, []);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
