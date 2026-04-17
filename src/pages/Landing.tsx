@@ -1526,27 +1526,30 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ═══ Section 2b: Grow with Thiqa (image + accordion) ═══
-          Split layout — left column shows a product mockup, right
-          column has the section heading, a 3-item accordion, and a
-          signup CTA. First accordion item is open by default; the
-          rest expand on click. IntersectionObserver flips `.gr-vis`
-          on first view so the image and right column slide in. */}
+      <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
+
+      {/* ═══ Section 2b: Grow with Thiqa (accordion + image) ═══
+          Split layout — left column has the section heading, a
+          3-item accordion, and a signup CTA; right column is a
+          product mockup tile. First accordion item is open by
+          default; the rest expand on click. IntersectionObserver
+          flips `.gr-vis` on first view so the text column slides in
+          from the left and the image tile from the right. */}
       <style>{`
         @keyframes grInLeft {
-          from { opacity: 0; transform: translate3d(-40px, 0, 0) scale(0.96); }
-          to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+          from { opacity: 0; transform: translate3d(-40px, 0, 0); }
+          to   { opacity: 1; transform: translate3d(0, 0, 0); }
         }
         @keyframes grInRight {
-          from { opacity: 0; transform: translate3d(40px, 0, 0); }
-          to   { opacity: 1; transform: translate3d(0, 0, 0); }
+          from { opacity: 0; transform: translate3d(40px, 0, 0) scale(0.96); }
+          to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
         }
         .gr-image { opacity: 0; }
         .gr-text  { opacity: 0; }
-        .gr-vis .gr-image {
+        .gr-vis .gr-text {
           animation: grInLeft 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.1s forwards;
         }
-        .gr-vis .gr-text {
+        .gr-vis .gr-image {
           animation: grInRight 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
         }
         .gr-item {
@@ -1589,30 +1592,12 @@ export default function Landing() {
         }}
         className="relative py-20 md:py-28 bg-white overflow-hidden"
       >
-        <div className="relative max-w-6xl mx-auto px-6">
+        <div className="relative max-w-[87rem] mx-auto px-6">
           <div
-            className="grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-10 md:gap-16 lg:gap-20 items-center"
+            className="grid grid-cols-1 lg:grid-cols-[1fr_1.15fr] gap-10 md:gap-16 lg:gap-20 items-center"
             dir="ltr"
           >
-            {/* LEFT — product mockup. Sits inside a padded card with
-                a warm multi-stop gradient so the image reads as a
-                hero tile against the white section. */}
-            <div
-              className="gr-image relative rounded-[28px] overflow-hidden p-8 md:p-10 shadow-[0_40px_100px_-24px_rgba(26,26,46,0.30)]"
-              style={{
-                background:
-                  "linear-gradient(135deg, #6b7fbc 0%, #a8b5d6 20%, #d4b8a0 40%, #c9a88a 55%, #9eadd4 75%, #7b93c8 100%)",
-              }}
-            >
-              <img
-                src={featuresMockup}
-                alt=""
-                className="relative w-full h-auto block rounded-2xl"
-                loading="lazy"
-              />
-            </div>
-
-            {/* RIGHT — eyebrow + heading + accordion + CTA. */}
+            {/* LEFT — eyebrow + heading + accordion + CTA. */}
             <div className="gr-text text-right" dir="rtl">
               <p className="text-sm mb-3 tracking-[0.2em] font-light uppercase text-black/60">
                 حلول شاملة
@@ -1660,7 +1645,7 @@ export default function Landing() {
                             "flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center transition-colors",
                             open
                               ? "bg-black text-white"
-                              : "bg-[#f3f0ea] text-black/60",
+                              : "bg-[#eaeaea] text-black/60",
                           )}
                         >
                           {open ? (
@@ -1696,6 +1681,24 @@ export default function Landing() {
                   {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
                 </button>
               </div>
+            </div>
+
+            {/* RIGHT — product mockup. Sits inside a padded card with
+                a warm multi-stop gradient so the image reads as a
+                hero tile against the white section. */}
+            <div
+              className="gr-image relative rounded-[28px] overflow-hidden p-8 md:p-10 shadow-[0_40px_100px_-24px_rgba(26,26,46,0.30)]"
+              style={{
+                background:
+                  "linear-gradient(135deg, #6b7fbc 0%, #a8b5d6 20%, #d4b8a0 40%, #c9a88a 55%, #9eadd4 75%, #7b93c8 100%)",
+              }}
+            >
+              <img
+                src={featuresMockup}
+                alt=""
+                className="relative w-full h-auto block rounded-2xl"
+                loading="lazy"
+              />
             </div>
           </div>
         </div>
