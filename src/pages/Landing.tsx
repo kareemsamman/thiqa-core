@@ -626,12 +626,12 @@ export default function Landing() {
           the layout each frame. */}
       <nav className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-2">
         <div
-          className="pointer-events-auto flex items-center justify-between px-6 h-14 md:h-16 mx-auto transform-gpu"
+          className="pointer-events-auto flex items-center px-6 h-14 md:h-16 mx-auto transform-gpu"
           style={{
             // Nav width stays pinned at 75% across both states. Only
-            // the pill chrome (margin, radius, blur, bg, shadow) and
-            // content colors swap when `scrolled` flips at y > 8 —
-            // the layout never shifts sideways during scroll.
+            // the pill chrome (margin, radius, blur, bg, shadow)
+            // swaps when `scrolled` flips at y > 8 — colors and logo
+            // are now black at all times per the new design.
             width: "75%",
             maxWidth: "72rem",
             marginTop: scrolled ? "12px" : "0px",
@@ -647,76 +647,51 @@ export default function Landing() {
             transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
           }}
         >
-          {/* Logo — swaps between the white variant (over the hero
-              video before scroll) and the black variant (on the glass
-              pill after scroll). The wordmark inherits its color from
-              the wrapper's text-{white,black} via currentColor. */}
-          <div
-            className={cn(
-              "flex items-center transition-colors duration-300",
-              scrolled ? "text-black" : "text-white",
-            )}
-          >
-            <ThiqaLogoAnimation
-              iconSize={32}
-              interactive={false}
-              iconSrc={
-                scrolled
-                  ? "https://thiqacrm.b-cdn.net/small_black.png"
-                  : "https://thiqacrm.b-cdn.net/small_white.png"
-              }
-            />
+          {/* Three-zone layout with `flex-1` outer columns — guarantees
+              the menu sits in the true visual center of the bar
+              regardless of how wide the logo or CTA cluster are. */}
+
+          {/* Logo (right side under RTL because it's the first child).
+              Always black: icon source and wordmark color do not
+              swap on scroll anymore. */}
+          <div className="flex-1 flex justify-start">
+            <div className="flex items-center text-black">
+              <ThiqaLogoAnimation
+                iconSize={32}
+                interactive={false}
+                iconSrc="https://thiqacrm.b-cdn.net/small_black.png"
+              />
+            </div>
           </div>
 
+          {/* Menu — centered. */}
           <div className="hidden md:flex items-center gap-10 text-[14px] font-medium text-black/75">
-            {/* Nav links stay black in both scroll states — user
-                wants the one exception to the white-over-hero rule.
-                Logo + CTA still swap colors on scroll. */}
-            {/* Hidden: features section is currently disabled. */}
             {false && <a href="#features" className="transition-colors hover:text-black">لماذا نحن مختلفون</a>}
             <a href="#demo" className="transition-colors hover:text-black">كيف يعمل</a>
             <a href="#faq" className="transition-colors hover:text-black">أسئلة وأجوبة</a>
             <a href="/pricing" className="transition-colors hover:text-black">الأسعار</a>
           </div>
 
-          {/* CTA cluster — simple login link sits alongside the signup
-              pill. Login link inherits the same scrolled/unscrolled
-              color swap as the nav. */}
-          <div className="flex items-center gap-3 md:gap-5">
+          {/* CTA cluster (left side under RTL because it's the last
+              child). Always black text and dark ring on the signup
+              pill. */}
+          <div className="flex-1 flex justify-end items-center gap-3 md:gap-5">
             <button
               onClick={() => navigate("/login")}
-              className={cn(
-                "text-[14px] font-semibold transition-colors hidden sm:inline-flex items-center",
-                scrolled ? "text-black/80 hover:text-black" : "text-white/90 hover:text-white",
-              )}
+              className="text-[14px] font-semibold text-black/80 hover:text-black transition-colors hidden sm:inline-flex items-center"
             >
               {ct(content, "navbar_login", "تسجيل الدخول")}
             </button>
 
-            {/* Signup pill — white text + white ring over the hero video,
-                black text + black ring once scrolled onto the glass
-                pill. */}
             <button
               onClick={() => { trackEvent("signup_click", "/landing"); navigate("/login?view=signup"); }}
-              className={cn(
-                "px-8 py-3 text-[14px] font-bold transition-all",
-                scrolled ? "text-black hover:bg-black/5" : "text-white hover:bg-white/20",
-              )}
-              style={
-                scrolled
-                  ? {
-                      borderRadius: "100px",
-                      border: "2px solid rgba(0, 0, 0, 0.22)",
-                      background: "rgba(255, 255, 255, 0.0)",
-                      boxShadow: "0 2px 8px 0 rgba(0, 0, 0, 0.06)",
-                    }
-                  : {
-                      borderRadius: "100px",
-                      border: "2px solid rgba(255, 255, 255, 0.55)",
-                      background: "rgba(255, 255, 255, 0.12)",
-                      boxShadow: "0 4px 16px 0 rgba(0, 0, 0, 0.12)",
-                    }
-              }
+              className="px-8 py-3 text-[14px] font-bold text-black hover:bg-black/5 transition-all"
+              style={{
+                borderRadius: "100px",
+                border: "2px solid rgba(0, 0, 0, 0.22)",
+                background: "rgba(255, 255, 255, 0.0)",
+                boxShadow: "0 2px 8px 0 rgba(0, 0, 0, 0.06)",
+              }}
             >
               {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
             </button>

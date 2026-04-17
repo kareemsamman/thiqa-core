@@ -93,7 +93,7 @@ export const navigationGroups: NavGroup[] = [
     icon: LayoutDashboard,
     defaultOpen: true,
     items: [
-      { name: "لوحة التحكم", href: "/", icon: LayoutDashboard },
+      { name: "لوحة التحكم", href: "/dashboard", icon: LayoutDashboard },
       { name: "المهام", href: "/tasks", icon: ListTodo, badge: 'tasks' },
       { name: "سجل النشاط", href: "/activity", icon: Activity },
       { name: "التنبيهات", href: "/notifications", icon: Bell, badge: 'notifications' },
@@ -613,12 +613,12 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             {isAdmin && !isThiqaSuperAdmin && (
               <DropdownMenuItem
                 onClick={() => {
-                  if (location.pathname === '/' || location.pathname === '') {
+                  if (location.pathname === '/dashboard') {
                     window.dispatchEvent(new Event('show-onboarding'));
                     return;
                   }
 
-                  navigate('/');
+                  navigate('/dashboard');
                   setTimeout(() => {
                     window.dispatchEvent(new Event('show-onboarding'));
                   }, 150);
@@ -927,10 +927,10 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
                   type="button"
                   onClick={() => {
                     onNavigate();
-                    if (location.pathname === '/' || location.pathname === '') {
+                    if (location.pathname === '/dashboard') {
                       window.dispatchEvent(new Event('show-onboarding'));
                     } else {
-                      navigate('/');
+                      navigate('/dashboard');
                       setTimeout(() => {
                         window.dispatchEvent(new Event('show-onboarding'));
                       }, 150);
