@@ -1925,14 +1925,17 @@ export default function Landing() {
                     {slides.map((slide, i) => {
                       // Integer offset — CSS `transition` on transform
                       // and opacity turns the discrete index change
-                      // into a smooth glide between slide slots.
+                      // into a smooth glide between slide slots. The
+                      // 88% spacing keeps adjacent cards mostly to the
+                      // side (tiny peek) instead of crashing into the
+                      // center card.
                       const offset = i - slideIdx;
                       const abs = Math.abs(offset);
                       // While dragging, scale down slightly so the card
                       // gives a subtle "picked up" cue.
                       const dragScaleBoost = isDragging && abs === 0 ? -0.02 : 0;
-                      const scale = (abs === 0 ? 1 : 0.9) + dragScaleBoost;
-                      const opacity = abs === 0 ? 1 : abs === 1 ? 0.55 : 0;
+                      const scale = (abs === 0 ? 1 : 0.85) + dragScaleBoost;
+                      const opacity = abs === 0 ? 1 : abs === 1 ? 0.28 : 0;
                       return (
                         <div
                           key={i}
@@ -1942,14 +1945,15 @@ export default function Landing() {
                             backdropFilter: "blur(24px) saturate(1.2)",
                             WebkitBackdropFilter: "blur(24px) saturate(1.2)",
                             border: "1px solid rgba(255, 255, 255, 0.12)",
-                            transform: `translateX(calc(-50% + ${-offset * 62}% + ${dragDelta}px)) scale(${scale})`,
+                            transform: `translateX(calc(-50% + ${-offset * 88}% + ${dragDelta}px)) scale(${scale})`,
                             opacity,
+                            filter: abs === 0 ? "none" : "blur(2px)",
                             pointerEvents: abs === 0 ? "auto" : "none",
                             zIndex: abs === 0 ? 10 : 5,
                             boxShadow: abs === 0 ? "0 30px 80px -16px rgba(10,15,35,0.55)" : "none",
                             transition: isDragging
                               ? "none"
-                              : "transform 700ms cubic-bezier(0.4, 0, 0.2, 1), opacity 600ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 500ms",
+                              : "transform 700ms cubic-bezier(0.4, 0, 0.2, 1), opacity 600ms cubic-bezier(0.4, 0, 0.2, 1), filter 500ms, box-shadow 500ms",
                           }}
                         >
                           {/* Top row: text column + image panel */}
