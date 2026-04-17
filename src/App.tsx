@@ -11,6 +11,9 @@ import { RecentClientProvider } from "@/hooks/useRecentClient";
 import { PolicyWizardControllerProvider } from "@/hooks/usePolicyWizardController";
 import { GlobalPolicyWizardHost } from "@/components/policies/GlobalPolicyWizardHost";
 import { ThaqibWidget } from "@/components/ai-assistant/ThaqibWidget";
+import { CookieConsent } from "@/components/public/CookieConsent";
+import { AccessibilityWidget } from "@/components/public/AccessibilityWidget";
+import { useLocation } from "react-router-dom";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
 import { SidebarStateProvider } from "@/hooks/useSidebarState";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -107,6 +110,30 @@ function SessionTrackerWrapper({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Public-page widgets: cookie banner + accessibility FAB. Mounted only
+// on the marketing landing and the auth/legal pages so the
+// authenticated CRM stays uncluttered. The list is intentionally
+// short — exact paths only, no startsWith fan-out, since "/" would
+// otherwise match every route.
+const PUBLIC_WIDGET_PATHS = new Set([
+  "/",
+  "/login",
+  "/register",
+  "/terms",
+  "/privacy",
+]);
+
+function PublicWidgets() {
+  const location = useLocation();
+  if (!PUBLIC_WIDGET_PATHS.has(location.pathname)) return null;
+  return (
+    <>
+      <CookieConsent />
+      <AccessibilityWidget />
+    </>
+  );
+}
+
 // Root route: getthiqa.com serves the marketing landing to logged-out
 // visitors. Logged-in users are redirected to the canonical /dashboard
 // URL so the app UI lives under its own path instead of "/". The
@@ -141,6 +168,7 @@ const App = () => (
             <PolicyWizardControllerProvider>
             <GlobalPolicyWizardHost />
             <ThaqibWidget />
+            <PublicWidgets />
             <Routes>
               <Route path="/landing" element={<Landing />} />
               <Route path="/pricing" element={<Pricing />} />

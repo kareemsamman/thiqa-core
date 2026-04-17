@@ -507,3 +507,31 @@
 
   .print\:block { display: block !important; }
 }
+
+/* ─── Accessibility widget — public pages ──────────────────────────
+   Toggled via data-* attributes on <html> by AccessibilityWidget.tsx.
+   All rules below intentionally use `!important` so user-set a11y
+   overrides win over component-level styles.                          */
+
+html[data-a11y-font-size="large"] { font-size: 18px; }
+html[data-a11y-font-size="xlarge"] { font-size: 20px; }
+
+html[data-a11y-high-contrast="true"] body { filter: contrast(1.45); }
+html[data-a11y-grayscale="true"] body { filter: grayscale(100%); }
+html[data-a11y-high-contrast="true"][data-a11y-grayscale="true"] body {
+  filter: contrast(1.45) grayscale(100%);
+}
+
+html[data-a11y-highlight-links="true"] a {
+  text-decoration: underline !important;
+  text-underline-offset: 3px !important;
+  text-decoration-thickness: 2px !important;
+  font-weight: 700 !important;
+  outline: 1px dashed currentColor !important;
+  outline-offset: 2px !important;
+}
+
+html[data-a11y-big-cursor="true"],
+html[data-a11y-big-cursor="true"] * {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 32 32'><path fill='black' stroke='white' stroke-width='1.5' stroke-linejoin='round' d='M5 3 L5 26 L11 20 L15 28 L19 26 L15 18 L23 18 Z'/></svg>") 2 2, auto !important;
+}
