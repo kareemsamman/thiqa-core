@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
-import dashboardMockup from "@/assets/landing/dashboard-mockup.png";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { digitsOnly } from "@/lib/validation";
 import {
@@ -662,11 +661,18 @@ export default function Login() {
                     </Button>
                   )}
 
-                  {/* Switch-form CTA card — soft gray rounded card.
-                      DOM order [text, image] places the text on the
-                      right and the mockup on the left under RTL,
-                      matching the design reference. */}
-                  <div className="rounded-2xl bg-[#f2f3f6] flex items-center gap-4 p-3">
+                  {/* Switch-form CTA card — uses the marketing
+                      illustration as the full card background (text
+                      sits on the right where the artwork has a soft
+                      area). Inner mockup removed. */}
+                  <div
+                    className="rounded-2xl flex items-center p-3 min-h-[94px] bg-[#f2f3f6]"
+                    style={{
+                      backgroundImage: "url('https://thiqacrm.b-cdn.net/image%20222.png')",
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }}
+                  >
                     <div className="flex-1 text-right pr-2">
                       <p className="text-[13px] font-semibold text-black mb-2 leading-tight">
                         وكلاء جدد؟ انضموا إلينا
@@ -678,9 +684,6 @@ export default function Login() {
                       >
                         تسجيل مجاني
                       </button>
-                    </div>
-                    <div className="w-[110px] h-[78px] rounded-lg overflow-hidden bg-white shadow-sm flex-shrink-0">
-                      <img src={dashboardMockup} alt="" draggable={false} className="w-full h-full object-cover" />
                     </div>
                   </div>
                 </>
@@ -851,9 +854,16 @@ export default function Login() {
                     )}
                   </div>
 
-                  {/* Switch back to login — same gray card pattern as
-                      the login view, with the question flipped. */}
-                  <div className="rounded-2xl bg-[#f2f3f6] flex items-center gap-4 p-3 mt-2">
+                  {/* Switch back to login — same illustration-as-bg
+                      treatment, with the question + button flipped. */}
+                  <div
+                    className="rounded-2xl flex items-center p-3 mt-2 min-h-[94px] bg-[#f2f3f6]"
+                    style={{
+                      backgroundImage: "url('https://thiqacrm.b-cdn.net/image%20222.png')",
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }}
+                  >
                     <div className="flex-1 text-right pr-2">
                       <p className="text-[13px] font-semibold text-black mb-2 leading-tight">
                         لديك حساب بالفعل؟
@@ -865,9 +875,6 @@ export default function Login() {
                       >
                         تسجيل الدخول
                       </button>
-                    </div>
-                    <div className="w-[110px] h-[78px] rounded-lg overflow-hidden bg-white shadow-sm flex-shrink-0">
-                      <img src={dashboardMockup} alt="" draggable={false} className="w-full h-full object-cover" />
                     </div>
                   </div>
                 </>
