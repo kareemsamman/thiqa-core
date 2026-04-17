@@ -77,7 +77,7 @@ const featureUpdates = [
   { version: "v0.7", title: "سجل نشاطات المستخدمين", date: "10 ديسمبر 2025" },
   { version: "v0.6", title: "تقارير شركات التأمين", date: "22 نوفمبر 2025" },
   { version: "v0.5", title: "ترويسات مخصّصة للوثائق", date: "5 نوفمبر 2025" },
-  { version: "v0.4", title: "حملات SMS تسويقية", date: "18 أكتوبر 2025" },
+  { version: "v0.4", title: "حملات SMS تسويقية", date: "18 أكتوبر 2025", image: "https://thiqacrm.b-cdn.net/Group%201000011509.png" },
   { version: "v0.3", title: "إيصالات رقمية وطباعة", date: "1 أكتوبر 2025" },
   { version: "v0.2", title: "نظام المهام والمتابعات", date: "15 سبتمبر 2025" },
   { version: "v0.1", title: "نظام التنبيهات المركزي", date: "1 سبتمبر 2025" },
@@ -1486,7 +1486,7 @@ export default function Landing() {
                     aria-hidden="true"
                   />
                   <img
-                    src={featuresMockup}
+                    src={("image" in u && u.image) ? u.image : featuresMockup}
                     alt=""
                     className="relative max-w-full max-h-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
                     loading="lazy"
