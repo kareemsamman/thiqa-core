@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { Button } from "@/components/ui/button";
 import {
-  ChevronLeft, CheckCircle, Star, ArrowLeft, Play, X, Check,
+  ChevronLeft, ChevronUp, ChevronDown, CheckCircle, Star, ArrowLeft, Play, X, Check,
   Users, FileText, CreditCard, BarChart3, Bell, MessageSquare,
   Phone, Shield, RefreshCcw, Wallet, AlertTriangle, Mail, Clock,
 } from "lucide-react";
@@ -282,6 +282,8 @@ export default function Landing() {
   const slideIdxRef = useRef(0);
   const updatesRailRef = useRef<HTMLDivElement | null>(null);
   const [updatesHovered, setUpdatesHovered] = useState(false);
+  // "Grow with Thiqa" accordion — first item open by default.
+  const [growAccordionIdx, setGrowAccordionIdx] = useState<number>(0);
   // Autoplay: every 3.5s advance the rail by one card. Loops back to
   // the start on reaching the end. Pauses while the user is hovering
   // so they can stop and read a card.
@@ -1556,6 +1558,167 @@ export default function Landing() {
           >
             {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
           </button>
+        </div>
+      </section>
+
+      {/* ═══ Section 2b: Grow with Thiqa (image + accordion) ═══
+          Split layout — left column shows a product mockup, right
+          column has the section heading, a 3-item accordion, and a
+          signup CTA. First accordion item is open by default; the
+          rest expand on click. IntersectionObserver flips `.gr-vis`
+          on first view so the image and right column slide in. */}
+      <style>{`
+        @keyframes grInLeft {
+          from { opacity: 0; transform: translate3d(-40px, 0, 0) scale(0.96); }
+          to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+        }
+        @keyframes grInRight {
+          from { opacity: 0; transform: translate3d(40px, 0, 0); }
+          to   { opacity: 1; transform: translate3d(0, 0, 0); }
+        }
+        .gr-image { opacity: 0; }
+        .gr-text  { opacity: 0; }
+        .gr-vis .gr-image {
+          animation: grInLeft 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.1s forwards;
+        }
+        .gr-vis .gr-text {
+          animation: grInRight 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
+        }
+        .gr-item {
+          opacity: 0;
+          transform: translate3d(0, 12px, 0);
+          transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+        .gr-vis .gr-item { opacity: 1; transform: translate3d(0, 0, 0); }
+        /* Smooth expand/collapse of the accordion body. */
+        .gr-body {
+          display: grid;
+          grid-template-rows: 0fr;
+          transition: grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .gr-body.gr-open {
+          grid-template-rows: 1fr;
+        }
+        .gr-body > div {
+          overflow: hidden;
+        }
+      `}</style>
+      <section
+        ref={(el) => {
+          if (!el) return;
+          if ((el as HTMLElement & { __grBound?: boolean }).__grBound) return;
+          (el as HTMLElement & { __grBound?: boolean }).__grBound = true;
+          const io = new IntersectionObserver(
+            (entries) => {
+              for (const e of entries) {
+                if (e.isIntersecting) {
+                  e.target.classList.add("gr-vis");
+                  io.disconnect();
+                  break;
+                }
+              }
+            },
+            { threshold: 0.2 },
+          );
+          io.observe(el);
+        }}
+        className="py-20 md:py-28 bg-white overflow-hidden"
+      >
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_1fr] gap-10 md:gap-14 items-center">
+            {/* LEFT — product mockup. */}
+            <div className="gr-image relative rounded-[28px] overflow-hidden">
+              <img
+                src={featuresMockup}
+                alt=""
+                className="w-full h-auto block"
+                loading="lazy"
+              />
+            </div>
+
+            {/* RIGHT — heading, accordion, CTA. */}
+            <div className="gr-text text-right" dir="rtl">
+              <h2 className="text-[2rem] md:text-[2.6rem] font-extrabold leading-[1.2] mb-8 md:mb-10 text-black">
+                كل ما تحتاجه لتنمو
+              </h2>
+
+              <div className="space-y-1">
+                {[
+                  {
+                    title: "سيطرة كاملة وتقليل عبء الإدارة",
+                    body:
+                      "لوحة تحكم واحدة تجمع كل عمليات الوكالة: وثائق، تحصيل، شيكات، عملاء وتقارير — ترى كل شيء بلحظتها وتتخذ قرارات مبنية على أرقام حقيقية بدلاً من جداول Excel متفرّقة.",
+                  },
+                  {
+                    title: "إدارة الفريق وصلاحيات دقيقة",
+                    body:
+                      "أنشئ حسابات للموظفين والوسطاء، حدّد صلاحيات كل دور، وتابع نشاط كل مستخدم — الفرع أو الوكالة كلها تحت إدارتك.",
+                  },
+                  {
+                    title: "جدولة المهام والتذكيرات بسهولة",
+                    body:
+                      "أضف مهام ومتابعات لأي عميل، وخصّص تذكيرات قبل الاستحقاق بأيام أو أسابيع — لا تنسى تجديد، لا تنسى تحصيل، لا تنسى متابعة.",
+                  },
+                ].map((item, i) => {
+                  const open = growAccordionIdx === i;
+                  return (
+                    <div
+                      key={i}
+                      className="gr-item border-b border-black/10"
+                      style={{ transitionDelay: `${0.45 + i * 0.1}s` }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setGrowAccordionIdx(open ? -1 : i)}
+                        className="w-full py-5 flex items-center gap-4 text-right"
+                        aria-expanded={open}
+                      >
+                        <h3 className="flex-1 text-[16px] md:text-[17px] font-bold text-black leading-snug">
+                          {item.title}
+                        </h3>
+                        <span
+                          className={cn(
+                            "flex-shrink-0 h-11 w-11 rounded-full flex items-center justify-center transition-colors",
+                            open
+                              ? "bg-black text-white"
+                              : "bg-[#f3ede3] text-black/70",
+                          )}
+                        >
+                          {open ? (
+                            <ChevronUp className="h-4 w-4" strokeWidth={2.5} />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
+                          )}
+                        </span>
+                      </button>
+                      <div className={cn("gr-body", open && "gr-open")}>
+                        <div>
+                          <p className="text-[14px] md:text-[15px] text-black/60 leading-relaxed pb-5 pl-14">
+                            {item.body}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-10">
+                <button
+                  type="button"
+                  onClick={() => navigate("/login?view=signup")}
+                  className="px-8 py-3.5 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
+                  style={{
+                    borderRadius: "100px",
+                    background: "#111",
+                    boxShadow: "0 4px 16px 0 rgba(0, 0, 0, 0.12)",
+                  }}
+                >
+                  {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
