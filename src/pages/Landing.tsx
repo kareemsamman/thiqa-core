@@ -1913,30 +1913,99 @@ export default function Landing() {
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
-      {/* ═══ Section 5: Grid Logo ═══ */}
-      <section className="relative py-24 md:py-36 overflow-hidden bg-white">
-        <div className="relative z-10 text-center px-6">
-          <p className="text-sm text-black/55 mb-4 tracking-wide">{ct(content, "grid_label", "حل شامل وبسيط")}</p>
-          <h2 className="text-3xl md:text-[2.8rem] font-bold leading-tight mb-10 text-black">
-            {ct(content, "grid_title", "كل ما تحتاجه الوكالة، تحت سقف واحد")}
+      {/* ═══ Section 5: Grid Logo ═══
+          One big hero image with a typewriter-reveal title and
+          staggered fade-ups on the description + CTA. Image is
+          edge-to-edge (no max-width cap). IntersectionObserver
+          toggles `.gl-visible` on first view so the whole section
+          plays a single coordinated animation sequence. */}
+      <style>{`
+        @keyframes glTypeRtl {
+          from { clip-path: inset(0 0 0 100%); }
+          to   { clip-path: inset(0 0 0 0); }
+        }
+        @keyframes glFadeUp {
+          from { opacity: 0; transform: translate3d(0, 20px, 0); }
+          to   { opacity: 1; transform: translate3d(0, 0, 0); }
+        }
+        @keyframes glImageIn {
+          from { opacity: 0; transform: scale(0.97); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+        .gl-type { display: inline-block; clip-path: inset(0 0 0 100%); }
+        .gl-fade { opacity: 0; }
+        .gl-image { opacity: 0; transform: scale(0.97); }
+        .gl-visible .gl-type-label {
+          animation: glTypeRtl 0.8s steps(14, end) 0.1s forwards;
+        }
+        .gl-visible .gl-type-title {
+          animation: glTypeRtl 1.4s steps(32, end) 0.75s forwards;
+        }
+        .gl-visible .gl-image {
+          animation: glImageIn 0.9s cubic-bezier(0.22, 1, 0.36, 1) 1.1s forwards;
+        }
+        .gl-visible .gl-fade-desc {
+          animation: glFadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 1.5s forwards;
+        }
+        .gl-visible .gl-fade-cta {
+          animation: glFadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 1.75s forwards;
+        }
+      `}</style>
+      <section
+        ref={(el) => {
+          if (!el) return;
+          if ((el as HTMLElement & { __glBound?: boolean }).__glBound) return;
+          (el as HTMLElement & { __glBound?: boolean }).__glBound = true;
+          const io = new IntersectionObserver(
+            (entries) => {
+              for (const e of entries) {
+                if (e.isIntersecting) {
+                  e.target.classList.add("gl-visible");
+                  io.disconnect();
+                  break;
+                }
+              }
+            },
+            { threshold: 0.2 },
+          );
+          io.observe(el);
+        }}
+        className="relative pt-10 md:pt-14 pb-24 md:pb-32 overflow-hidden bg-white"
+      >
+        <div className="relative z-10 text-center px-6 mb-10 md:mb-14">
+          <p className="text-[13px] md:text-sm mb-4 tracking-[0.2em] font-semibold uppercase">
+            <span className="gl-type gl-type-label text-[#4a6cc7]">
+              {ct(content, "grid_label", "حل شامل وبسيط")}
+            </span>
+          </p>
+          <h2 className="text-[2rem] md:text-[3.2rem] font-extrabold leading-[1.15] text-black">
+            <span className="gl-type gl-type-title">
+              {ct(content, "grid_title", "كل ما تحتاجه الوكالة، تحت سقف واحد")}
+            </span>
           </h2>
         </div>
 
-        <div className="relative w-full max-w-5xl mx-auto">
-          <img src={gridLogoBg} alt="" className="w-full h-auto" loading="lazy" />
+        {/* Full-width hero image — edge to edge. */}
+        <div className="relative w-full gl-image">
+          <img
+            src="https://thiqacrm.b-cdn.net/Desktop%201%20(1).png"
+            alt=""
+            className="w-full h-auto block"
+            loading="lazy"
+          />
         </div>
 
         <div className="relative z-10 text-center px-6 mt-10">
-          <p className="text-sm text-black/55 max-w-xl mx-auto mb-8 leading-relaxed whitespace-pre-line">
+          <p className="gl-fade gl-fade-desc text-[14px] md:text-[15px] text-black/60 max-w-xl mx-auto mb-8 leading-relaxed whitespace-pre-line">
             {ct(content, "grid_desc", "إرسال وثائق للتوقيع الرقمي عبر SMS، إدارة مستندات آمنة في السحابة\nومتابعة كاملة لدورة حياة الوثيقة — كل شيء من الكمبيوتر أو الجوال.")}
           </p>
           <button
             onClick={() => navigate("/login?view=signup")}
-            className="px-8 py-3 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
+            className="gl-fade gl-fade-cta px-8 py-3 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
             style={{
-              borderRadius: '100px',
-              background: '#111',
-              boxShadow: '0 4px 16px 0 rgba(0, 0, 0, 0.12)',
+              borderRadius: "100px",
+              background: "#111",
+              boxShadow: "0 4px 16px 0 rgba(0, 0, 0, 0.12)",
             }}
           >
             {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
