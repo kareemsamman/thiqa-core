@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import { trackEvent } from "@/hooks/useAnalyticsTracker";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,8 +8,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -19,12 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
 import dashboardMockup from "@/assets/landing/dashboard-mockup.png";
-import featuresMockup from "@/assets/landing/features-mockup.png";
-import featureMarketing from "@/assets/landing/feature-marketing.png";
-import featurePaperless from "@/assets/landing/feature-paperless.png";
-import featureProfit from "@/assets/landing/feature-profit-engine.png";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
-import { Separator } from "@/components/ui/separator";
 import { digitsOnly } from "@/lib/validation";
 import {
   checkPasswordStrength,
@@ -53,6 +47,64 @@ const setVideoSpeed = (el: HTMLVideoElement | null) => {
   if (el) el.playbackRate = BACKGROUND_VIDEO_SPEED;
 };
 
+// Floating-label input. The label sits centered inside the field while
+// the input is empty + unfocused, then shrinks and floats to the top
+// as soon as the user focuses or types. CSS-only via the `peer` +
+// `placeholder-shown` pattern — no React state needed, so it works
+// for both controlled and uncontrolled (ref-based) inputs.
+type FloatingFieldProps = InputHTMLAttributes<HTMLInputElement> & {
+  label: string;
+  hasError?: boolean;
+  endSlot?: ReactNode;
+  inputClassName?: string;
+};
+
+const FloatingField = forwardRef<HTMLInputElement, FloatingFieldProps>(
+  ({ id, label, hasError, endSlot, inputClassName, className, ...inputProps }, ref) => {
+    return (
+      <div className={cn("relative", className)}>
+        <input
+          {...inputProps}
+          id={id}
+          ref={ref}
+          // Placeholder must be a non-empty string so :placeholder-shown
+          // is true while the field is empty. A single space is invisible.
+          placeholder=" "
+          className={cn(
+            "peer h-12 w-full rounded-xl bg-[#f6f6f9] border border-transparent text-sm text-foreground transition-all",
+            "focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/30",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            "px-4 pt-5 pb-1",
+            endSlot && "pl-10",
+            hasError && "border-destructive",
+            inputClassName,
+          )}
+        />
+        <label
+          htmlFor={id}
+          className={cn(
+            "pointer-events-none absolute right-4 text-muted-foreground transition-all",
+            // Default = floating (small, near the top of the field)
+            "top-1.5 text-[10px]",
+            // Empty + unfocused → centered, full size
+            "peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-sm",
+            // Focused → back to floating (overrides placeholder-shown)
+            "peer-focus:top-1.5 peer-focus:translate-y-0 peer-focus:text-[10px]",
+          )}
+        >
+          {label}
+        </label>
+        {endSlot && (
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center text-muted-foreground">
+            {endSlot}
+          </div>
+        )}
+      </div>
+    );
+  },
+);
+FloatingField.displayName = "FloatingField";
+
 export default function Login() {
   const [loading, setLoading] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
@@ -68,7 +120,6 @@ export default function Login() {
   // Use refs for password fields to avoid exposing values in DOM
   const loginPasswordRef = useRef<HTMLInputElement>(null);
   const signupPasswordRef = useRef<HTMLInputElement>(null);
-  const signupConfirmPasswordRef = useRef<HTMLInputElement>(null);
 
   // Signup fields
   const [fullName, setFullName] = useState("");
@@ -310,7 +361,6 @@ export default function Login() {
   const validateSignupForm = (): Record<string, string> => {
     const errors: Record<string, string> = {};
     const pw = signupPasswordRef.current?.value || "";
-    const confirmPw = signupConfirmPasswordRef.current?.value || "";
 
     // Full name: require first + last
     const nameParts = fullName.trim().split(/\s+/);
@@ -334,13 +384,6 @@ export default function Login() {
       errors.signupPassword = "كلمة المرور مطلوبة";
     } else if (!isPasswordValid(pw)) {
       errors.signupPassword = "كلمة المرور يجب أن تحتوي على 8 أحرف، حرف كبير، رقم، ورمز";
-    }
-
-    // Confirm password
-    if (!confirmPw) {
-      errors.signupConfirmPassword = "تأكيد كلمة المرور مطلوب";
-    } else if (pw !== confirmPw) {
-      errors.signupConfirmPassword = "كلمة المرور غير متطابقة";
     }
 
     return errors;
@@ -478,12 +521,11 @@ export default function Login() {
       {/* Form panel — sits on the RIGHT on desktop (flex-row-reverse
           with RTL). Plain white background, no card chrome on desktop:
           the form reads as text on a clean page instead of a floating
-          dialog. Mobile keeps the glass-card look over the video bg. */}
-      <div
-        className={`flex-1 flex items-start sm:items-center justify-center px-5 sm:p-6 lg:bg-white ${
-          pageView === "login" ? "pt-14 pb-8" : "pt-6 pb-6"
-        }`}
-      >
+          dialog. Mobile keeps the glass-card look over the video bg.
+          Flex-col layout pushes the legal footer to the very bottom
+          of the column regardless of how short the form is. */}
+      <div className="flex-1 flex flex-col px-5 sm:p-6 lg:bg-white pt-14 pb-6">
+        <div className="flex-1 flex items-start sm:items-center justify-center w-full">
         <div className="w-full max-w-md animate-scale-in">
           <div className="rounded-2xl sm:rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden lg:rounded-none lg:border-0 lg:bg-transparent lg:dark:bg-transparent lg:backdrop-blur-0 lg:shadow-none lg:overflow-visible">
             {/* Mobile-only header — animated Thiqa lockup. Hidden on
@@ -544,28 +586,31 @@ export default function Login() {
                       first. Google becomes the secondary option under
                       the "أو" divider. */}
                   <div className="space-y-2.5">
-                    <div className="space-y-1">
-                      <Label htmlFor="login-email" className="text-xs sm:text-sm font-medium">البريد الإلكتروني</Label>
-                      <Input id="login-email" type="email" placeholder="your-email@example.com" value={email} onChange={(e) => setEmail(e.target.value)} onBlur={handleEmailBlur} className="h-12 text-sm rounded-xl bg-[#f6f6f9] border-transparent focus:border-primary/40" disabled={loading || !!lockoutMessage} dir="ltr" autoComplete="email" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="login-password" className="text-xs sm:text-sm font-medium">كلمة المرور</Label>
-                      <div className="relative">
-                        <input
-                          ref={loginPasswordRef}
-                          id="login-password"
-                          type={showPassword ? "text" : "password"}
-                          placeholder="••••••••"
-                          className="flex w-full border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-50 h-12 rounded-xl bg-[#f6f6f9] border-transparent pl-10"
-                          disabled={loading || !!lockoutMessage}
-                          dir="ltr"
-                          autoComplete="current-password"
-                        />
-                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <FloatingField
+                      id="login-email"
+                      label="البريد الإلكتروني"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      onBlur={handleEmailBlur}
+                      disabled={loading || !!lockoutMessage}
+                      dir="ltr"
+                      autoComplete="email"
+                    />
+                    <FloatingField
+                      ref={loginPasswordRef}
+                      id="login-password"
+                      label="كلمة المرور"
+                      type={showPassword ? "text" : "password"}
+                      disabled={loading || !!lockoutMessage}
+                      dir="ltr"
+                      autoComplete="current-password"
+                      endSlot={
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="hover:text-foreground">
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
-                      </div>
-                    </div>
+                      }
+                    />
                     <Button className="w-full h-12 text-sm gap-2 rounded-xl shadow-lg flex-row-reverse" onClick={handleEmailPasswordLogin} disabled={loading || !email || !!lockoutMessage}>
                       {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5 rotate-180" />}
                       {loading ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
@@ -612,18 +657,12 @@ export default function Login() {
                     </Button>
                   )}
 
-                  {/* Switch-form CTA card — beige rounded card with a
-                      small mockup grid. Mirrors the design reference;
-                      replaces the previous plain outline button. */}
-                  <div className="rounded-2xl bg-[#F0E7D4] flex items-center gap-4 p-3">
-                    <div className="grid grid-cols-3 grid-rows-2 gap-1 flex-shrink-0">
-                      {[dashboardMockup, featuresMockup, featureMarketing, featurePaperless, featureProfit, dashboardMockup].map((img, i) => (
-                        <div key={i} className="w-9 h-9 rounded-md overflow-hidden bg-white shadow-sm">
-                          <img src={img} alt="" draggable={false} className="w-full h-full object-cover" />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex-1 text-right">
+                  {/* Switch-form CTA card — soft gray rounded card.
+                      DOM order [text, image] places the text on the
+                      right and the mockup on the left under RTL,
+                      matching the design reference. */}
+                  <div className="rounded-2xl bg-[#f2f3f6] flex items-center gap-4 p-3">
+                    <div className="flex-1 text-right pr-2">
                       <p className="text-[13px] font-semibold text-black mb-2 leading-tight">
                         وكلاء جدد؟ انضموا إلينا
                       </p>
@@ -635,132 +674,126 @@ export default function Login() {
                         تسجيل مجاني
                       </button>
                     </div>
-                  </div>
-
-                  {/* Legal footer */}
-                  <div className="text-center text-[11px] text-muted-foreground pt-2">
-                    <a href="#terms" className="hover:underline hover:text-foreground transition-colors">شروط الاستخدام</a>
-                    <span className="mx-2 opacity-50">|</span>
-                    <a href="#privacy" className="hover:underline hover:text-foreground transition-colors">سياسة الخصوصية</a>
+                    <div className="w-[110px] h-[78px] rounded-lg overflow-hidden bg-white shadow-sm flex-shrink-0">
+                      <img src={dashboardMockup} alt="" draggable={false} className="w-full h-full object-cover" />
+                    </div>
                   </div>
                 </>
               ) : (
                 /* Signup Form */
                 <>
-                  {/* Google Signup */}
-                  {!isInIframe && (
-                    <>
-                      <Button
-                        variant="outline"
-                        className="w-full h-10 text-sm gap-2 rounded-xl border-border/60 bg-white/60 dark:bg-card/60 hover:bg-white hover:border-primary/40 transition-all duration-200 shadow-sm"
-                        onClick={handleGoogleLogin}
-                        disabled={loading}
-                      >
-                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
-                          <svg className="h-4 w-4" viewBox="0 0 24 24">
-                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                          </svg>
-                        )}
-                        التسجيل بـ Google
-                      </Button>
-
-                      <div className="relative">
-                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border/40" /></div>
-                        <div className="relative flex justify-center text-xs">
-                          <span className="dark:bg-card px-3 text-muted-foreground">أو سجّل يدوياً</span>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Trial banner */}
-                  <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-1.5 text-center">
-                    <p className="text-[11px] font-bold text-primary">35 يوم مجاناً — تسجيل وكالة جديدة مستقلة</p>
+                  {/* Page heading — mirrors the login view's heading
+                      style so both views feel like one page. Subtitle
+                      is hidden on desktop to keep the column tight. */}
+                  <div className="text-center lg:pt-4 lg:mb-8">
+                    <h1 className="text-2xl sm:text-4xl font-bold text-foreground">ابدأ مع Thiqa</h1>
+                    <p className="text-sm text-muted-foreground mt-2 lg:hidden">
+                      تسجيل وكالة جديدة — 35 يوم تجربة مجانية بدون بطاقة ائتمان
+                    </p>
                   </div>
 
-                  <div className="space-y-2">
-                    {/* Full Name */}
-                    <div className="space-y-0.5">
-                      <Label className="text-xs font-medium">الاسم الكامل *</Label>
-                      <Input value={fullName} onChange={(e) => { setFullName(e.target.value); setSignupErrors(prev => ({ ...prev, fullName: "" })); }} placeholder="الاسم الأول والأخير" className={`h-11 text-sm rounded-xl bg-[#f6f6f9] border-transparent focus:border-primary/40 ${signupErrors.fullName ? "border-destructive" : ""}`} disabled={loading} />
-                      {signupErrors.fullName && <p className="text-[10px] text-destructive">{signupErrors.fullName}</p>}
-                    </div>
+                  <div className="space-y-2.5">
+                    <FloatingField
+                      label="الاسم الكامل"
+                      value={fullName}
+                      onChange={(e) => { setFullName(e.target.value); setSignupErrors(prev => ({ ...prev, fullName: "" })); }}
+                      hasError={!!signupErrors.fullName}
+                      disabled={loading}
+                    />
+                    {signupErrors.fullName && <p className="text-[10px] text-destructive pr-1">{signupErrors.fullName}</p>}
 
-                    {/* Email */}
-                    <div className="space-y-0.5">
-                      <Label className="text-xs font-medium">البريد الإلكتروني *</Label>
-                      <Input type="email" value={signupEmail} onChange={(e) => { setSignupEmail(e.target.value); setSignupErrors(prev => ({ ...prev, signupEmail: "" })); }} placeholder="your-email@example.com" className={`h-11 text-sm rounded-xl bg-[#f6f6f9] border-transparent focus:border-primary/40 ${signupErrors.signupEmail ? "border-destructive" : ""}`} disabled={loading} dir="ltr" autoComplete="email" />
-                      {signupErrors.signupEmail && <p className="text-[10px] text-destructive">{signupErrors.signupEmail}</p>}
-                    </div>
+                    <FloatingField
+                      label="البريد الإلكتروني"
+                      type="email"
+                      value={signupEmail}
+                      onChange={(e) => { setSignupEmail(e.target.value); setSignupErrors(prev => ({ ...prev, signupEmail: "" })); }}
+                      hasError={!!signupErrors.signupEmail}
+                      disabled={loading}
+                      dir="ltr"
+                      autoComplete="email"
+                    />
+                    {signupErrors.signupEmail && <p className="text-[10px] text-destructive pr-1">{signupErrors.signupEmail}</p>}
 
-                    {/* Phone */}
-                    <div className="space-y-0.5">
-                      <Label className="text-xs font-medium">رقم الهاتف <span className="text-muted-foreground font-normal">(اختياري)</span></Label>
-                      <Input type="tel" value={signupPhone} onChange={(e) => { setSignupPhone(digitsOnly(e.target.value).slice(0, 10)); setSignupErrors(prev => ({ ...prev, signupPhone: "" })); }} placeholder="05xxxxxxxx" className={`h-11 text-sm rounded-xl bg-[#f6f6f9] border-transparent focus:border-primary/40 ${signupErrors.signupPhone ? "border-destructive" : ""}`} disabled={loading} dir="ltr" maxLength={10} />
-                      {signupErrors.signupPhone && <p className="text-[10px] text-destructive">{signupErrors.signupPhone}</p>}
-                    </div>
+                    <FloatingField
+                      label="رقم الهاتف (اختياري)"
+                      type="tel"
+                      value={signupPhone}
+                      onChange={(e) => { setSignupPhone(digitsOnly(e.target.value).slice(0, 10)); setSignupErrors(prev => ({ ...prev, signupPhone: "" })); }}
+                      hasError={!!signupErrors.signupPhone}
+                      disabled={loading}
+                      dir="ltr"
+                      maxLength={10}
+                    />
+                    {signupErrors.signupPhone && <p className="text-[10px] text-destructive pr-1">{signupErrors.signupPhone}</p>}
 
-                    {/* Password */}
-                    <div className="space-y-0.5">
-                      <Label className="text-xs font-medium">كلمة المرور *</Label>
-                      <div className="relative">
-                        <input
-                          ref={signupPasswordRef}
-                          type={showSignupPassword ? "text" : "password"}
-                          placeholder="8 أحرف، حرف كبير، رقم، ورمز"
-                          onChange={(e) => { setSignupPasswordDisplay(e.target.value); setSignupErrors(prev => ({ ...prev, signupPassword: "" })); }}
-                          className={`flex w-full border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-50 h-11 rounded-xl bg-[#f6f6f9] pl-10 ${signupErrors.signupPassword ? "border-destructive" : "border-transparent"}`}
-                          disabled={loading}
-                          dir="ltr"
-                          autoComplete="new-password"
-                        />
-                        <button type="button" onClick={() => setShowSignupPassword(!showSignupPassword)} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                          {showSignupPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    <FloatingField
+                      ref={signupPasswordRef}
+                      label="كلمة المرور"
+                      type={showSignupPassword ? "text" : "password"}
+                      onChange={(e) => { setSignupPasswordDisplay(e.target.value); setSignupErrors(prev => ({ ...prev, signupPassword: "" })); }}
+                      hasError={!!signupErrors.signupPassword}
+                      disabled={loading}
+                      dir="ltr"
+                      autoComplete="new-password"
+                      endSlot={
+                        <button type="button" onClick={() => setShowSignupPassword(!showSignupPassword)} className="hover:text-foreground">
+                          {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
-                      </div>
-                      {signupErrors.signupPassword && <p className="text-[10px] text-destructive">{signupErrors.signupPassword}</p>}
+                      }
+                    />
+                    {signupErrors.signupPassword && <p className="text-[10px] text-destructive pr-1">{signupErrors.signupPassword}</p>}
 
-                      {/* Password strength indicator */}
-                      {signupPasswordDisplay.length > 0 && (
-                        <div className="space-y-1 pt-0.5">
-                          <div className="flex gap-1">
-                            {[0, 1, 2, 3].map((i) => (
-                              <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i < passwordStrength.score ? passwordStrength.color : "bg-border"}`} />
-                            ))}
-                          </div>
-                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
-                            <span className={passwordStrength.checks.minLength ? "text-green-600" : "text-muted-foreground"}>8+ أحرف {passwordStrength.checks.minLength ? "✓" : ""}</span>
-                            <span className={passwordStrength.checks.hasUpper ? "text-green-600" : "text-muted-foreground"}>حرف كبير {passwordStrength.checks.hasUpper ? "✓" : ""}</span>
-                            <span className={passwordStrength.checks.hasNumber ? "text-green-600" : "text-muted-foreground"}>رقم {passwordStrength.checks.hasNumber ? "✓" : ""}</span>
-                            <span className={passwordStrength.checks.hasSymbol ? "text-green-600" : "text-muted-foreground"}>رمز {passwordStrength.checks.hasSymbol ? "✓" : ""}</span>
-                          </div>
+                    {/* Password strength indicator */}
+                    {signupPasswordDisplay.length > 0 && (
+                      <div className="space-y-1 pt-0.5 px-1">
+                        <div className="flex gap-1">
+                          {[0, 1, 2, 3].map((i) => (
+                            <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i < passwordStrength.score ? passwordStrength.color : "bg-border"}`} />
+                          ))}
                         </div>
-                      )}
-                    </div>
-
-                    {/* Confirm Password */}
-                    <div className="space-y-0.5">
-                      <Label className="text-xs font-medium">تأكيد كلمة المرور *</Label>
-                      <input
-                        ref={signupConfirmPasswordRef}
-                        type="password"
-                        placeholder="أعد إدخال كلمة المرور"
-                        onChange={() => setSignupErrors(prev => ({ ...prev, signupConfirmPassword: "" }))}
-                        className={`flex w-full border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/40 disabled:cursor-not-allowed disabled:opacity-50 h-11 rounded-xl bg-[#f6f6f9] ${signupErrors.signupConfirmPassword ? "border-destructive" : "border-transparent"}`}
-                        disabled={loading}
-                        dir="ltr"
-                        autoComplete="new-password"
-                      />
-                      {signupErrors.signupConfirmPassword && <p className="text-[10px] text-destructive">{signupErrors.signupConfirmPassword}</p>}
-                    </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+                          <span className={passwordStrength.checks.minLength ? "text-green-600" : "text-muted-foreground"}>8+ أحرف {passwordStrength.checks.minLength ? "✓" : ""}</span>
+                          <span className={passwordStrength.checks.hasUpper ? "text-green-600" : "text-muted-foreground"}>حرف كبير {passwordStrength.checks.hasUpper ? "✓" : ""}</span>
+                          <span className={passwordStrength.checks.hasNumber ? "text-green-600" : "text-muted-foreground"}>رقم {passwordStrength.checks.hasNumber ? "✓" : ""}</span>
+                          <span className={passwordStrength.checks.hasSymbol ? "text-green-600" : "text-muted-foreground"}>رمز {passwordStrength.checks.hasSymbol ? "✓" : ""}</span>
+                        </div>
+                      </div>
+                    )}
 
                     <Button className="w-full h-12 text-sm gap-2 rounded-xl shadow-lg" onClick={handleSignup} disabled={loading}>
                       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
                       {loading ? "جاري التسجيل..." : "تسجيل وكيل جديد"}
                     </Button>
+
+                    {/* Google signup — placed AFTER the manual submit
+                        button per the new design (alternative path,
+                        not the primary CTA). */}
+                    {!isInIframe && (
+                      <>
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border/40" /></div>
+                          <div className="relative flex justify-center text-xs">
+                            <span className="px-3 text-muted-foreground bg-white lg:bg-white">أو</span>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          className="w-full h-12 text-sm gap-3 rounded-xl border-border/60 bg-white hover:bg-[#f6f6f9] hover:border-primary/40 transition-all duration-200 shadow-sm"
+                          onClick={handleGoogleLogin}
+                          disabled={loading}
+                        >
+                          {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (
+                            <svg className="h-5 w-5" viewBox="0 0 24 24">
+                              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                            </svg>
+                          )}
+                          التسجيل بـ Google
+                        </Button>
+                      </>
+                    )}
 
                     {signupFeedback && (
                       <div
@@ -784,17 +817,10 @@ export default function Login() {
                     )}
                   </div>
 
-                  {/* Switch back to login — same beige card pattern as
+                  {/* Switch back to login — same gray card pattern as
                       the login view, with the question flipped. */}
-                  <div className="rounded-2xl bg-[#F0E7D4] flex items-center gap-4 p-3 mt-2">
-                    <div className="grid grid-cols-3 grid-rows-2 gap-1 flex-shrink-0">
-                      {[dashboardMockup, featuresMockup, featureMarketing, featurePaperless, featureProfit, dashboardMockup].map((img, i) => (
-                        <div key={i} className="w-9 h-9 rounded-md overflow-hidden bg-white shadow-sm">
-                          <img src={img} alt="" draggable={false} className="w-full h-full object-cover" />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex-1 text-right">
+                  <div className="rounded-2xl bg-[#f2f3f6] flex items-center gap-4 p-3 mt-2">
+                    <div className="flex-1 text-right pr-2">
                       <p className="text-[13px] font-semibold text-black mb-2 leading-tight">
                         لديك حساب بالفعل؟
                       </p>
@@ -806,18 +832,24 @@ export default function Login() {
                         تسجيل الدخول
                       </button>
                     </div>
-                  </div>
-
-                  {/* Legal footer */}
-                  <div className="text-center text-[11px] text-muted-foreground pt-2">
-                    <a href="#terms" className="hover:underline hover:text-foreground transition-colors">شروط الاستخدام</a>
-                    <span className="mx-2 opacity-50">|</span>
-                    <a href="#privacy" className="hover:underline hover:text-foreground transition-colors">سياسة الخصوصية</a>
+                    <div className="w-[110px] h-[78px] rounded-lg overflow-hidden bg-white shadow-sm flex-shrink-0">
+                      <img src={dashboardMockup} alt="" draggable={false} className="w-full h-full object-cover" />
+                    </div>
                   </div>
                 </>
               )}
             </div>
           </div>
+        </div>
+        </div>
+
+        {/* Legal footer — pushed to the very bottom of the form panel
+            via the parent's flex-col + flex-1 spacer above. Same row
+            on both login and signup. */}
+        <div className="text-center text-[11px] text-muted-foreground pt-6">
+          <a href="#terms" className="hover:underline hover:text-foreground transition-colors">شروط الاستخدام</a>
+          <span className="mx-2 opacity-50">|</span>
+          <a href="#privacy" className="hover:underline hover:text-foreground transition-colors">سياسة الخصوصية</a>
         </div>
       </div>
 
