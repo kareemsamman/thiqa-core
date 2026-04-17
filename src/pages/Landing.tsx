@@ -2362,25 +2362,54 @@ export default function Landing() {
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
-      {/* ═══ CTA ═══ */}
+      {/* ═══ CTA ═══
+          Bold question headline + subtitle + two CTAs (filled
+          primary / outlined secondary) + a product image anchoring
+          the bottom. Background gradient preserved per user spec. */}
       <section className="relative overflow-hidden rounded-2xl mx-4 md:mx-8 lg:mx-16 my-8">
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            background: 'linear-gradient(135deg, #6b7fbc 0%, #a8b5d6 20%, #d4b8a0 40%, #c9a88a 55%, #9eadd4 75%, #7b93c8 100%)',
+            background:
+              "linear-gradient(135deg, #6b7fbc 0%, #a8b5d6 20%, #d4b8a0 40%, #c9a88a 55%, #9eadd4 75%, #7b93c8 100%)",
           }}
         />
-        <div className="relative py-20 md:py-28 text-center px-6">
-          <h2 className="text-3xl md:text-[2.8rem] font-bold mb-8 leading-tight text-[#1a1a2e]">
-            لأن وكالتكم تستحق أكثر من إدارة عادية.
+        <div className="relative pt-20 md:pt-24 px-6 text-center">
+          <h2 className="text-[2.4rem] md:text-[3.4rem] font-extrabold leading-[1.12] text-[#1a1a2e] mb-5">
+            قلنا لكم إنها مجاناً؟
           </h2>
-          <Button
-            size="lg"
-            onClick={() => navigate("/login?view=signup")}
-            className="bg-white text-[#1a1a2e] hover:bg-white/90 rounded-full px-10 h-[52px] text-sm font-bold shadow-lg"
-          >
-            ابدأ الآن مجاناً
-          </Button>
+          <p className="text-base md:text-lg text-[#1a1a2e]/75 max-w-xl mx-auto mb-10 leading-relaxed">
+            انضموا إلى ثقة بالخطة الأساسية — ستعرف وكالتكم الفرق من اليوم الأول.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-14 md:mb-16">
+            <button
+              type="button"
+              onClick={() => navigate("/login?view=signup")}
+              className="bg-white hover:bg-white/95 text-[#1a1a2e] rounded-full px-10 h-[52px] text-sm font-bold shadow-[0_10px_30px_-8px_rgba(26,26,46,0.35)] transition-colors"
+            >
+              اشتركوا مجاناً
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" });
+              }}
+              className="bg-transparent hover:bg-[#1a1a2e]/5 text-[#1a1a2e] border border-[#1a1a2e]/30 rounded-full px-10 h-[52px] text-sm font-bold transition-colors"
+            >
+              كل الخطط
+            </button>
+          </div>
+
+          {/* Bottom mockup image — placeholder for now; swap via the
+              `src` when the final artwork is ready. */}
+          <div className="max-w-3xl mx-auto">
+            <img
+              src={featuresMockup}
+              alt=""
+              className="w-full h-auto block"
+              loading="lazy"
+            />
+          </div>
         </div>
       </section>
 
