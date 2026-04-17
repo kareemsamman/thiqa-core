@@ -279,6 +279,12 @@ export default function Landing() {
   const [activeTab, setActiveTab] = useState("policies");
   const [slideIdx, setSlideIdx] = useState(0);
   const [sliderInView, setSliderInView] = useState(false);
+  // Live-drag state: dragDelta is added to each card's transform while
+  // the user is dragging so the rail follows the pointer in real time,
+  // then snaps to the nearest slide on release. isDragging disables
+  // the CSS transition during drag to keep response instant.
+  const [dragDelta, setDragDelta] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const dragStartXRef = useRef<number | null>(null);
   const dragPausedRef = useRef(false);
   // Slider section — no scroll-trap. The page scrolls normally;
@@ -1878,15 +1884,24 @@ export default function Landing() {
                   <div
                     className="sl-rail relative w-full max-w-[1280px] h-[460px] md:h-[520px] select-none cursor-grab active:cursor-grabbing"
                     style={{ touchAction: "pan-y" }}
+                    onDragStart={(e) => e.preventDefault()}
                     onPointerDown={(e) => {
                       dragStartXRef.current = e.clientX;
                       dragPausedRef.current = true;
+                      setIsDragging(true);
+                      setDragDelta(0);
                       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                    }}
+                    onPointerMove={(e) => {
+                      if (dragStartXRef.current === null) return;
+                      setDragDelta(e.clientX - dragStartXRef.current);
                     }}
                     onPointerUp={(e) => {
                       const start = dragStartXRef.current;
                       dragStartXRef.current = null;
                       dragPausedRef.current = false;
+                      setIsDragging(false);
+                      setDragDelta(0);
                       if (start === null) return;
                       const delta = e.clientX - start;
                       const threshold = 50;
@@ -1903,6 +1918,8 @@ export default function Landing() {
                     onPointerCancel={() => {
                       dragStartXRef.current = null;
                       dragPausedRef.current = false;
+                      setIsDragging(false);
+                      setDragDelta(0);
                     }}
                   >
                     {slides.map((slide, i) => {
@@ -1911,8 +1928,11 @@ export default function Landing() {
                       // into a smooth glide between slide slots.
                       const offset = i - slideIdx;
                       const abs = Math.abs(offset);
-                      const scale = abs === 0 ? 1 : 0.9;
-                      const opacity = abs === 0 ? 1 : abs === 1 ? 0.45 : 0;
+                      // While dragging, scale down slightly so the card
+                      // gives a subtle "picked up" cue.
+                      const dragScaleBoost = isDragging && abs === 0 ? -0.02 : 0;
+                      const scale = (abs === 0 ? 1 : 0.9) + dragScaleBoost;
+                      const opacity = abs === 0 ? 1 : abs === 1 ? 0.55 : 0;
                       return (
                         <div
                           key={i}
@@ -1922,13 +1942,14 @@ export default function Landing() {
                             backdropFilter: "blur(24px) saturate(1.2)",
                             WebkitBackdropFilter: "blur(24px) saturate(1.2)",
                             border: "1px solid rgba(255, 255, 255, 0.12)",
-                            transform: `translateX(calc(-50% + ${-offset * 62}%)) scale(${scale})`,
+                            transform: `translateX(calc(-50% + ${-offset * 62}% + ${dragDelta}px)) scale(${scale})`,
                             opacity,
                             pointerEvents: abs === 0 ? "auto" : "none",
                             zIndex: abs === 0 ? 10 : 5,
                             boxShadow: abs === 0 ? "0 30px 80px -16px rgba(10,15,35,0.55)" : "none",
-                            transition:
-                              "transform 700ms cubic-bezier(0.4, 0, 0.2, 1), opacity 600ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 500ms",
+                            transition: isDragging
+                              ? "none"
+                              : "transform 700ms cubic-bezier(0.4, 0, 0.2, 1), opacity 600ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 500ms",
                           }}
                         >
                           {/* Top row: text column + image panel */}
@@ -1943,7 +1964,8 @@ export default function Landing() {
                               <img
                                 src={slide.image}
                                 alt=""
-                                className="max-w-full max-h-full object-contain rounded-xl shadow-[0_20px_50px_-12px_rgba(10,15,35,0.5)]"
+                                draggable={false}
+                                className="max-w-full max-h-full object-contain rounded-xl shadow-[0_20px_50px_-12px_rgba(10,15,35,0.5)] pointer-events-none"
                                 loading="lazy"
                               />
                             </div>
