@@ -1473,8 +1473,8 @@ export default function Landing() {
       >
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-12 md:mb-14">
-            <p className="text-sm mb-3 tracking-wide font-semibold">
-              <span className="fb-type fb-type-label text-[#c97a4a]">ما الجديد</span>
+            <p className="text-sm mb-3 tracking-wide font-light text-black/70">
+              <span className="fb-type fb-type-label">ما الجديد</span>
             </p>
             <h2 className="text-[2rem] md:text-[2.6rem] font-bold leading-tight text-black">
               <span className="fb-type fb-type-title">نحن لا نتوقف عن التطوير</span>
@@ -1539,6 +1539,23 @@ export default function Landing() {
           ))}
           {/* Trailing spacer so the last card can snap to centre. */}
           <div className="flex-shrink-0 w-2 md:w-8" aria-hidden="true" />
+        </div>
+
+        {/* Signup CTA — sits centred below the rail so the section
+            closes with a clear next-step for the user. */}
+        <div className="max-w-6xl mx-auto px-6 mt-10 md:mt-12 text-center">
+          <button
+            type="button"
+            onClick={() => navigate("/login?view=signup")}
+            className="px-8 py-3 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
+            style={{
+              borderRadius: "100px",
+              background: "#111",
+              boxShadow: "0 4px 16px 0 rgba(0, 0, 0, 0.12)",
+            }}
+          >
+            {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
+          </button>
         </div>
       </section>
 
@@ -1999,7 +2016,7 @@ export default function Landing() {
         {/* Full-width hero image — edge to edge. */}
         <div className="relative w-full gl-image">
           <img
-            src="https://thiqacrm.b-cdn.net/Desktop%201%20(1).png"
+            src="https://thiqacrm.b-cdn.net/Group%201000011508%20(1).png"
             alt=""
             className="w-full h-auto block"
             loading="lazy"
