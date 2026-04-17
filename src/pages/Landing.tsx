@@ -75,6 +75,12 @@ const featureUpdates = [
   { version: "v0.9", title: "إدارة السائقين الإضافيين", date: "15 يناير 2026" },
   { version: "v0.8", title: "شيكات متعددة البنوك", date: "28 ديسمبر 2025" },
   { version: "v0.7", title: "سجل نشاطات المستخدمين", date: "10 ديسمبر 2025" },
+  { version: "v0.6", title: "تقارير شركات التأمين", date: "22 نوفمبر 2025" },
+  { version: "v0.5", title: "ترويسات مخصّصة للوثائق", date: "5 نوفمبر 2025" },
+  { version: "v0.4", title: "حملات SMS تسويقية", date: "18 أكتوبر 2025" },
+  { version: "v0.3", title: "إيصالات رقمية وطباعة", date: "1 أكتوبر 2025" },
+  { version: "v0.2", title: "نظام المهام والمتابعات", date: "15 سبتمبر 2025" },
+  { version: "v0.1", title: "نظام التنبيهات المركزي", date: "1 سبتمبر 2025" },
 ];
 
 const featureTiles = [
@@ -280,29 +286,8 @@ export default function Landing() {
   // intercepting so normal page scroll resumes.
   const sliderSectionRef = useRef<HTMLElement | null>(null);
   const slideIdxRef = useRef(0);
-  const updatesRailRef = useRef<HTMLDivElement | null>(null);
   // "Grow with Thiqa" accordion — first item open by default.
   const [growAccordionIdx, setGrowAccordionIdx] = useState<number>(0);
-  // Autoplay: every 3.5s advance the rail by one card. Runs
-  // continuously and loops back to the start on reaching the end.
-  useEffect(() => {
-    const rail = updatesRailRef.current;
-    if (!rail) return;
-    const tick = () => {
-      const firstCard = rail.querySelector<HTMLElement>(".updates-card");
-      const cardW = firstCard?.offsetWidth ?? 320;
-      const gap = 24;
-      const step = cardW + gap;
-      const maxScroll = rail.scrollWidth - rail.clientWidth;
-      if (rail.scrollLeft >= maxScroll - 8) {
-        rail.scrollTo({ left: 0, behavior: "smooth" });
-      } else {
-        rail.scrollBy({ left: step, behavior: "smooth" });
-      }
-    };
-    const id = window.setInterval(tick, 3500);
-    return () => window.clearInterval(id);
-  }, []);
   useEffect(() => {
     slideIdxRef.current = slideIdx;
   }, [slideIdx]);
@@ -1414,20 +1399,6 @@ export default function Landing() {
           animation: fbTypeRtl 1.5s steps(34, end) 0.85s forwards;
         }
 
-        /* Release cards — staggered slide-in + scale once the section
-           enters the viewport. Each card has its own
-           transition-delay inline so they arrive in sequence. */
-        .updates-card {
-          opacity: 0;
-          transform: translate3d(40px, 20px, 0) scale(0.92);
-          transition:
-            opacity 0.85s cubic-bezier(0.22,1,0.36,1),
-            transform 0.85s cubic-bezier(0.22,1,0.36,1);
-        }
-        .fb-visible .updates-card {
-          opacity: 1;
-          transform: translate3d(0, 0, 0) scale(1);
-        }
         /* Inner blurred gradient layer — extended beyond the card's
            edges so the gaussian blur doesn't reveal transparent
            corners inside the rounded frame. */
@@ -1437,13 +1408,18 @@ export default function Landing() {
           filter: blur(28px) saturate(1.1);
           will-change: filter;
         }
-        /* Hide the scrollbar without disabling scrolling. */
-        .updates-rail {
-          scrollbar-width: none;
-          -ms-overflow-style: none;
+        /* Infinite marquee. The rail renders the card set twice
+           in the DOM, then translates from 0 → −50% in a continuous
+           linear loop. Because the two halves are identical,
+           resetting to 0 at the end is visually seamless. */
+        .updates-marquee {
+          width: max-content;
+          animation: updatesMarquee 80s linear infinite;
+          will-change: transform;
         }
-        .updates-rail::-webkit-scrollbar {
-          display: none;
+        @keyframes updatesMarquee {
+          from { transform: translate3d(0, 0, 0); }
+          to   { transform: translate3d(-50%, 0, 0); }
         }
       `}</style>
       <section
@@ -1481,61 +1457,55 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* Full-width horizontal rail. Lives outside the max-w-6xl
-            wrapper so cards can peek off the edges of the screen.
-            Autoplay (see useEffect) advances the rail continuously
-            and loops back to the start on reaching the end. */}
-        <div
-          ref={updatesRailRef}
-          className="updates-rail flex gap-5 md:gap-6 overflow-x-auto px-6 md:px-12 pb-4 snap-x snap-mandatory scroll-smooth"
-          dir="ltr"
-        >
-          {featureUpdates.map((u, i) => (
-            <div
-              key={i}
-              className="updates-card snap-center flex-shrink-0 w-[280px] md:w-[340px]"
-              style={{ transitionDelay: `${i * 90}ms` }}
-            >
-              {/* Gradient card with centred mockup image. The blurred
-                  layer sits behind a crisp radial bloom to keep the
-                  image punchy while softening the gradient. */}
-              <div className="relative aspect-[8/9] rounded-[28px] overflow-hidden p-6 md:p-8 flex items-center justify-center">
-                <div
-                  className="updates-bg-blur"
-                  style={{ background: FEATURE_UPDATE_GRADIENTS[i % FEATURE_UPDATE_GRADIENTS.length] }}
-                  aria-hidden="true"
-                />
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    background:
-                      "radial-gradient(60% 50% at 50% 25%, rgba(255,255,255,0.40) 0%, transparent 65%)",
-                  }}
-                  aria-hidden="true"
-                />
-                <img
-                  src={featuresMockup}
-                  alt=""
-                  className="relative max-w-full max-h-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
-                  loading="lazy"
-                />
+        {/* Full-width marquee rail. The outer div clips overflow;
+            the inner .updates-marquee translates leftward forever.
+            The card list is rendered twice so the loop seam is
+            invisible — at the end of set 1, set 2 is already
+            perfectly in place. Motion is right → left (new cards
+            appear from the right edge). */}
+        <div className="overflow-hidden" dir="ltr">
+          <div className="updates-marquee flex gap-5 md:gap-6">
+            {[...featureUpdates, ...featureUpdates].map((u, i) => (
+              <div
+                key={i}
+                className="flex-shrink-0 w-[260px] md:w-[320px]"
+                aria-hidden={i >= featureUpdates.length ? "true" : undefined}
+              >
+                <div className="relative aspect-[8/9] rounded-[28px] overflow-hidden p-6 md:p-8 flex items-center justify-center">
+                  <div
+                    className="updates-bg-blur"
+                    style={{ background: FEATURE_UPDATE_GRADIENTS[i % FEATURE_UPDATE_GRADIENTS.length] }}
+                    aria-hidden="true"
+                  />
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      background:
+                        "radial-gradient(60% 50% at 50% 25%, rgba(255,255,255,0.40) 0%, transparent 65%)",
+                    }}
+                    aria-hidden="true"
+                  />
+                  <img
+                    src={featuresMockup}
+                    alt=""
+                    className="relative max-w-full max-h-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="pt-5 px-1 text-right" dir="rtl">
+                  <p className="text-[12px] font-light tracking-[0.18em] uppercase text-black/70">
+                    {u.version}
+                  </p>
+                  <h3 className="text-[16px] md:text-[17px] font-bold text-black mt-2 leading-snug">
+                    {u.title}
+                  </h3>
+                  <p className="text-[12px] text-black/45 mt-1.5">
+                    {u.date}
+                  </p>
+                </div>
               </div>
-              {/* Version + title + date below the card. */}
-              <div className="pt-5 px-1 text-right" dir="rtl">
-                <p className="text-[12px] font-light tracking-[0.18em] uppercase text-black/70">
-                  {u.version}
-                </p>
-                <h3 className="text-[17px] md:text-[18px] font-bold text-black mt-2 leading-snug">
-                  {u.title}
-                </h3>
-                <p className="text-[12px] text-black/45 mt-1.5">
-                  {u.date}
-                </p>
-              </div>
-            </div>
-          ))}
-          {/* Trailing spacer so the last card can snap to centre. */}
-          <div className="flex-shrink-0 w-2 md:w-8" aria-hidden="true" />
+            ))}
+          </div>
         </div>
 
         {/* Signup CTA — sits centred below the rail so the section
