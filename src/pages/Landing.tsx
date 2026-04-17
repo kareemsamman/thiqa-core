@@ -278,182 +278,44 @@ export default function Landing() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("policies");
   const [slideIdx, setSlideIdx] = useState(0);
-  // Slider section — scroll-jacked. Section is 100vh; when it's the
-  // active region of the viewport we intercept wheel / touch events,
-  // advance slideIdx one step per intent (debounced), and let CSS
-  // transitions handle the smooth card glide. At slide boundaries
-  // (first slide scrolling up, last slide scrolling down) we stop
-  // intercepting so normal page scroll resumes.
+  // Slider section — no scroll-trap. The page scrolls normally;
+  // the slider just auto-cycles between slides on a timer while the
+  // section is anywhere in view. Dramatically simpler (and far less
+  // disorienting) than the previous body-lock scroll-jack.
   const sliderSectionRef = useRef<HTMLElement | null>(null);
-  const slideIdxRef = useRef(0);
   // "Grow with Thiqa" accordion — first item open by default.
   const [growAccordionIdx, setGrowAccordionIdx] = useState<number>(0);
-  useEffect(() => {
-    slideIdxRef.current = slideIdx;
-  }, [slideIdx]);
   useEffect(() => {
     const section = sliderSectionRef.current;
     if (!section) return;
     const SLIDES = 3;
-    const THROTTLE_MS = 650;
-    // Hard scroll-trap. Instead of relying on preventDefault on
-    // wheel events (which trackpad inertia can outrun), we physically
-    // freeze the document the moment the section crosses into the
-    // viewport center: `position: fixed` on the body with a negative
-    // `top` offset that mirrors the saved scrollY. No scroll input
-    // of any kind can move the page until we release.
-    let locked = false;
-    let lastAdvance = 0;
-    let touchStartY = 0;
-    let savedScrollY = 0;
-    let exitedDown = false;
-    let exitedUp = false;
-    let prevRectTop = Number.POSITIVE_INFINITY;
-
-    const engageLock = () => {
-      if (locked) return;
-      const rect = section.getBoundingClientRect();
-      savedScrollY = window.scrollY + rect.top;
-      // Snap to the section's top before freezing so the user
-      // visibly lands on the slider rather than mid-transition.
-      window.scrollTo({ top: savedScrollY });
-      locked = true;
-      // Freeze the document. With position:fixed + top:-y the
-      // viewport stays where it is but the page stops scrolling.
-      document.documentElement.style.overflow = "hidden";
-      document.body.style.position = "fixed";
-      document.body.style.top = `-${savedScrollY}px`;
-      document.body.style.left = "0";
-      document.body.style.right = "0";
-      document.body.style.width = "100%";
-      lastAdvance = performance.now();
+    let inView = false;
+    let intervalId: number | null = null;
+    const start = () => {
+      if (intervalId !== null) return;
+      intervalId = window.setInterval(() => {
+        setSlideIdx((prev) => (prev + 1) % SLIDES);
+      }, 4500);
     };
-
-    const releaseLock = (dir: 1 | -1) => {
-      if (!locked) return;
-      locked = false;
-      document.documentElement.style.overflow = "";
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.left = "";
-      document.body.style.right = "";
-      document.body.style.width = "";
-      // Drop the user on the correct side of the section so the
-      // scroll-trap doesn't re-engage on the same event.
-      const sectionH = section.offsetHeight;
-      const exitY = dir > 0 ? savedScrollY + sectionH + 4 : savedScrollY - window.innerHeight - 4;
-      window.scrollTo({ top: Math.max(0, exitY) });
-      if (dir > 0) exitedDown = true; else exitedUp = true;
-    };
-
-    const tryAdvance = (dir: 1 | -1) => {
-      if (!locked) return;
-      const now = performance.now();
-      if (now - lastAdvance < THROTTLE_MS) return;
-      const idx = slideIdxRef.current;
-      if ((dir > 0 && idx >= SLIDES - 1) || (dir < 0 && idx <= 0)) {
-        releaseLock(dir);
-        return;
-      }
-      setSlideIdx(Math.max(0, Math.min(SLIDES - 1, idx + dir)));
-      lastAdvance = now;
-    };
-
-    // Detection layer. Fires on every scroll event: watches the
-    // section's position and engages the trap the moment the section
-    // overlaps the viewport center — or, if a single fast flick
-    // carried the section all the way past, detects the traversal
-    // after the fact and yanks the user back.
-    const onScroll = () => {
-      if (locked) return;
-      const rect = section.getBoundingClientRect();
-      const vh = window.innerHeight;
-      // Reset exit flags once the user is well clear of the section.
-      if (rect.bottom < -vh * 0.5) exitedDown = false;
-      if (rect.top > vh * 1.5) exitedUp = false;
-
-      const inCenter = rect.top < vh * 0.5 && rect.bottom > vh * 0.5;
-      const flewDown = prevRectTop > vh * 0.5 && rect.bottom < vh * 0.5;
-      const flewUp = prevRectTop < -section.offsetHeight + vh * 0.5 && rect.top > vh * 0.5;
-      prevRectTop = rect.top;
-
-      if (!inCenter && !flewDown && !flewUp) return;
-      if (exitedDown && (flewDown || (inCenter && !flewUp))) return;
-      if (exitedUp && (flewUp || (inCenter && !flewDown))) return;
-      engageLock();
-    };
-
-    const onWheel = (e: WheelEvent) => {
-      if (locked) {
-        e.preventDefault();
-        tryAdvance(e.deltaY > 0 ? 1 : -1);
-        return;
-      }
-      // Backup engagement path: if the user is already over the
-      // section when the first wheel fires, engage immediately.
-      const rect = section.getBoundingClientRect();
-      const vh = window.innerHeight;
-      const inTrap = rect.top < vh * 0.5 && rect.bottom > vh * 0.5;
-      if (!inTrap) return;
-      const dir = (e.deltaY > 0 ? 1 : -1) as 1 | -1;
-      if ((dir > 0 && exitedDown) || (dir < 0 && exitedUp)) return;
-      e.preventDefault();
-      engageLock();
-    };
-
-    const onTouchStart = (e: TouchEvent) => {
-      touchStartY = e.touches[0].clientY;
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (!locked) return;
-      e.preventDefault();
-      const delta = touchStartY - e.touches[0].clientY;
-      if (Math.abs(delta) < 30) return;
-      tryAdvance(delta > 0 ? 1 : -1);
-      touchStartY = e.touches[0].clientY;
-    };
-
-    const onKey = (e: KeyboardEvent) => {
-      const down = e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ";
-      const up = e.key === "ArrowUp" || e.key === "PageUp";
-      if (!down && !up) return;
-      if (locked) {
-        e.preventDefault();
-        tryAdvance(down ? 1 : -1);
-        return;
-      }
-      const rect = section.getBoundingClientRect();
-      const vh = window.innerHeight;
-      if (rect.top < vh * 0.5 && rect.bottom > vh * 0.5) {
-        e.preventDefault();
-        engageLock();
+    const stop = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
       }
     };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("wheel", onWheel, { passive: false });
-    window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: false });
-    window.addEventListener("keydown", onKey);
-    // In case the page loads already scrolled into the section.
-    onScroll();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          inView = e.isIntersecting;
+          if (inView) start(); else stop();
+        }
+      },
+      { threshold: 0.25 },
+    );
+    io.observe(section);
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("wheel", onWheel);
-      window.removeEventListener("touchstart", onTouchStart);
-      window.removeEventListener("touchmove", onTouchMove);
-      window.removeEventListener("keydown", onKey);
-      // Never leave the document frozen if the component unmounts.
-      if (locked) {
-        document.documentElement.style.overflow = "";
-        document.body.style.position = "";
-        document.body.style.top = "";
-        document.body.style.left = "";
-        document.body.style.right = "";
-        document.body.style.width = "";
-        window.scrollTo({ top: savedScrollY });
-      }
+      io.disconnect();
+      stop();
     };
   }, []);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
@@ -1922,14 +1784,15 @@ export default function Landing() {
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
       {/* ═══ Section 5: Slider ═══
-          Scroll-jacked slider. Section is 100vh; a useEffect above
-          intercepts wheel/touch while the section is the active
-          viewport region and advances slideIdx one step per intent
-          (debounced). Cards use CSS transitions on transform/opacity
-          so the movement between slides is smooth and continuous. */}
+          Simple auto-advancing slider. No scroll-trap, no body-lock —
+          the page scrolls normally through the section. A useEffect
+          above starts an interval while the section is in view that
+          cycles slideIdx every 4.5s; leaving view stops the
+          interval. Cards animate between positions via CSS
+          transitions on transform/opacity. */}
       <section
         ref={sliderSectionRef}
-        className="relative bg-white overflow-hidden h-screen"
+        className="relative bg-white overflow-hidden py-20 md:py-28"
       >
         <img
           src="https://thiqacrm.b-cdn.net/Rectangle%207%20(1).png"
@@ -1939,7 +1802,7 @@ export default function Landing() {
           loading="lazy"
         />
 
-        <div className="relative z-10 h-full flex flex-col items-center justify-center px-6 py-10">
+        <div className="relative z-10 flex flex-col items-center justify-center px-6">
             <h2 className="text-3xl md:text-[2.6rem] font-bold text-center mb-8 md:mb-12 text-white">
               {ct(content, "slider_title", "لا تنتظر التجديد. اصنعه بنفسك")}
             </h2>
