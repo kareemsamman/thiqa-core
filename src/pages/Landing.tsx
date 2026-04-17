@@ -176,6 +176,7 @@ const featureTabs = [
     desc: "معالج ذكي يقودك خطوة بخطوة: اختيار العميل والمركبة، حساب أسعار الإلزامي والثالث والشامل تلقائياً حسب قواعد كل شركة تأمين، وإضافة خدمات الطريق والحوادث في نفس الباقة. الوثيقة جاهزة للتوقيع الرقمي بعد دقائق.",
     gradient: "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%)",
     glow: "radial-gradient(70% 60% at 30% 50%, rgba(255,255,255,0.38) 0%, transparent 60%)",
+    image: "https://thiqacrm.b-cdn.net/image%20213.png",
     stats: [
       { value: "3", unit: "دقائق", label: "متوسط الوقت لإصدار وثيقة جديدة — من اختيار العميل إلى الإرسال للتوقيع." },
       { value: "100%", unit: "", label: "دقة في حساب السعر والعمولة حسب قواعد كل شركة تأمين." },
@@ -1207,7 +1208,7 @@ export default function Landing() {
                   <div
                     className="absolute inset-0 opacity-20"
                     style={{
-                      backgroundImage: `url(${featuresMockup})`,
+                      backgroundImage: `url(${tab.image ?? featuresMockup})`,
                       backgroundSize: "cover",
                       backgroundPosition: "center",
                       filter: "blur(60px) saturate(1.1)",
@@ -1221,7 +1222,7 @@ export default function Landing() {
                     aria-hidden="true"
                   />
                   <img
-                    src={featuresMockup}
+                    src={tab.image ?? featuresMockup}
                     alt=""
                     className="relative z-10 w-full max-w-[88%] h-auto rounded-xl shadow-[0_30px_80px_-10px_rgba(18,32,66,0.45)]"
                     loading="lazy"
