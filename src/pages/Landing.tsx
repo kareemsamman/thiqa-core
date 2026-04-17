@@ -1402,7 +1402,7 @@ export default function Landing() {
 
         /* Release cards — staggered fade-up once the section
            enters the viewport. Each card has its own
-           `transition-delay` inline so they arrive in sequence. */
+           transition-delay inline so they arrive in sequence. */
         .updates-card {
           opacity: 0;
           transform: translate3d(0, 28px, 0);
