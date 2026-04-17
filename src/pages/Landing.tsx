@@ -256,68 +256,89 @@ export default function Landing() {
     const section = sliderSectionRef.current;
     if (!section) return;
     const SLIDES = 3;
-    const THROTTLE_MS = 750;
+    const THROTTLE_MS = 700;
+    // `locked` is the trap state. Once the section enters the
+    // viewport center we flip it true: from that point every wheel /
+    // touch event is captured (preventDefault), the section is
+    // snapped to the top of the viewport, and each intent advances a
+    // single slide. Only when the user is at a slide boundary AND
+    // still pushing in the "away" direction do we flip locked back
+    // off so normal page scroll resumes.
+    let locked = false;
     let lastAdvance = 0;
-    let lastEventTime = 0;
     let touchStartY = 0;
 
-    const isActive = () => {
+    const inTrapZone = () => {
       const rect = section.getBoundingClientRect();
       const vh = window.innerHeight;
-      // Section is "caught" when its top is at or above the viewport
-      // top and its bottom is at or below the viewport bottom — i.e.
-      // it's currently covering the screen.
-      return rect.top <= 2 && rect.bottom >= vh - 2;
+      // The section is "in the way" whenever it overlaps the middle
+      // of the viewport. Generous on purpose so we catch fast flicks.
+      return rect.top <= vh * 0.5 && rect.bottom >= vh * 0.5;
     };
 
-    const nearCatch = () => {
-      // A slightly more generous window used to decide when to snap
-      // the section into position if the user overscrolled past the
-      // perfect-aligned state on the first intercepted event.
-      const rect = section.getBoundingClientRect();
-      const vh = window.innerHeight;
-      return rect.top <= vh * 0.2 && rect.bottom >= vh * 0.8;
-    };
-
-    const snapToSection = () => {
+    const snapToTop = () => {
       const rect = section.getBoundingClientRect();
       if (Math.abs(rect.top) > 1) {
         window.scrollTo({ top: window.scrollY + rect.top });
       }
     };
 
-    const tryAdvance = (dir: 1 | -1): "handled" | "release" => {
+    const atBoundary = (dir: 1 | -1) => {
       const idx = slideIdxRef.current;
-      // At the edges, scrolling further in the same direction should
-      // release the pin so the next section can appear naturally.
-      if (dir > 0 && idx >= SLIDES - 1) return "release";
-      if (dir < 0 && idx <= 0) return "release";
-      const now = performance.now();
-      if (now - lastAdvance < THROTTLE_MS) return "handled";
-      lastAdvance = now;
+      return (dir > 0 && idx >= SLIDES - 1) || (dir < 0 && idx <= 0);
+    };
+
+    const advance = (dir: 1 | -1) => {
+      const idx = slideIdxRef.current;
       setSlideIdx(Math.max(0, Math.min(SLIDES - 1, idx + dir)));
-      return "handled";
+      lastAdvance = performance.now();
+    };
+
+    const handleIntent = (dir: 1 | -1, e: Event) => {
+      const now = performance.now();
+
+      if (!inTrapZone()) {
+        // User has scrolled well past the section — make sure we're
+        // not still holding a stale lock.
+        locked = false;
+        return;
+      }
+
+      // First contact with the zone: engage the trap. Snap the
+      // section into place and eat this event so the user visibly
+      // "lands" on the slider before anything advances.
+      if (!locked) {
+        locked = true;
+        snapToTop();
+        lastAdvance = now;
+        e.preventDefault();
+        return;
+      }
+
+      // At a boundary + pushing away → release the lock so the next
+      // event scrolls normally out of the section.
+      if (atBoundary(dir)) {
+        // Still within throttle from the last advance: keep eating
+        // events so trackpad inertia doesn't skip the release moment.
+        if (now - lastAdvance < THROTTLE_MS) {
+          e.preventDefault();
+          return;
+        }
+        locked = false;
+        return; // fall through: default scroll will carry the user out
+      }
+
+      // Normal advance. Eat the event regardless so page never
+      // scrolls; only change slide when throttle has elapsed.
+      e.preventDefault();
+      if (now - lastAdvance < THROTTLE_MS) return;
+      snapToTop();
+      advance(dir);
     };
 
     const onWheel = (e: WheelEvent) => {
-      const active = isActive();
-      if (!active && !nearCatch()) return;
       const dir = (e.deltaY > 0 ? 1 : -1) as 1 | -1;
-      // Coalesce trackpad momentum: repeated events within a short
-      // window all count as one intent.
-      const now = performance.now();
-      const continuation = now - lastEventTime < 120;
-      lastEventTime = now;
-      const result = tryAdvance(dir);
-      if (result === "release" && active && continuation) {
-        // While trackpad inertia is still firing after we released,
-        // don't let it drag us past the section in one flick.
-        return;
-      }
-      if (result === "handled") {
-        e.preventDefault();
-        if (!active) snapToSection();
-      }
+      handleIntent(dir, e);
     };
 
     const onTouchStart = (e: TouchEvent) => {
@@ -325,24 +346,33 @@ export default function Landing() {
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (!isActive() && !nearCatch()) return;
       const delta = touchStartY - e.touches[0].clientY;
-      if (Math.abs(delta) < 40) return;
+      if (Math.abs(delta) < 30) return;
       const dir = (delta > 0 ? 1 : -1) as 1 | -1;
-      const result = tryAdvance(dir);
-      if (result === "handled") {
-        e.preventDefault();
-        touchStartY = e.touches[0].clientY;
-      }
+      handleIntent(dir, e);
+      // Reset the anchor so the next swipe is measured fresh.
+      touchStartY = e.touches[0].clientY;
+    };
+
+    // Keyboard: arrow keys / page keys also count as intent while
+    // the trap is engaged so keyboard users get the same experience.
+    const onKey = (e: KeyboardEvent) => {
+      if (!inTrapZone()) return;
+      const down = e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ";
+      const up = e.key === "ArrowUp" || e.key === "PageUp";
+      if (!down && !up) return;
+      handleIntent(down ? 1 : -1, e);
     };
 
     window.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("keydown", onKey);
     };
   }, []);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
