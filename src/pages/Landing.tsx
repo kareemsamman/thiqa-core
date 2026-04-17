@@ -204,7 +204,7 @@ const featureTabs = [
     desc: "تذكيرات تجديد تلقائية قبل شهر وأسبوع من انتهاء الوثيقة، حملات SMS جماعية مع اختيار عملاء ذكي حسب الفرع أو الشركة، نماذج رسائل مخصصة لكل نوع تنبيه، وتتبع كامل لحالة الإرسال مع تقارير DLR.",
     gradient: "linear-gradient(180deg, #5A4FBB 0%, #9E95CB 100%)",
     glow: "radial-gradient(60% 70% at 50% 25%, rgba(255,255,255,0.42) 0%, transparent 60%)",
-    image: "https://thiqacrm.b-cdn.net/image%20216.png",
+    image: "https://thiqacrm.b-cdn.net/Group%201000011503.png",
     stats: [
       { value: "40%", unit: "", label: "ارتفاع في نسبة تجديد الوثائق بفضل التذكيرات التلقائية قبل الانتهاء." },
       { value: "5K+", unit: "", label: "رسائل SMS تُرسل شهرياً — تذكيرات، تسويات، وحملات مستهدفة." },
