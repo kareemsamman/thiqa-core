@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { Button } from "@/components/ui/button";
 import {
-  ChevronLeft, CheckCircle, Star, ArrowLeft, ArrowRight, Play, X, Check,
+  ChevronLeft, CheckCircle, Star, ArrowLeft, Play, X, Check,
   Users, FileText, CreditCard, BarChart3, Bell, MessageSquare,
   Phone, Shield, RefreshCcw, Wallet, AlertTriangle, Mail, Clock,
 } from "lucide-react";
@@ -281,14 +281,29 @@ export default function Landing() {
   const sliderSectionRef = useRef<HTMLElement | null>(null);
   const slideIdxRef = useRef(0);
   const updatesRailRef = useRef<HTMLDivElement | null>(null);
-  const scrollUpdates = (dir: 1 | -1) => {
+  const [updatesHovered, setUpdatesHovered] = useState(false);
+  // Autoplay: every 3.5s advance the rail by one card. Loops back to
+  // the start on reaching the end. Pauses while the user is hovering
+  // so they can stop and read a card.
+  useEffect(() => {
+    if (updatesHovered) return;
     const rail = updatesRailRef.current;
     if (!rail) return;
-    const firstCard = rail.querySelector<HTMLElement>(".updates-card");
-    const cardW = firstCard?.offsetWidth ?? 320;
-    const gap = 24;
-    rail.scrollBy({ left: (cardW + gap) * dir, behavior: "smooth" });
-  };
+    const tick = () => {
+      const firstCard = rail.querySelector<HTMLElement>(".updates-card");
+      const cardW = firstCard?.offsetWidth ?? 320;
+      const gap = 24;
+      const step = cardW + gap;
+      const maxScroll = rail.scrollWidth - rail.clientWidth;
+      if (rail.scrollLeft >= maxScroll - 8) {
+        rail.scrollTo({ left: 0, behavior: "smooth" });
+      } else {
+        rail.scrollBy({ left: step, behavior: "smooth" });
+      }
+    };
+    const id = window.setInterval(tick, 3500);
+    return () => window.clearInterval(id);
+  }, [updatesHovered]);
   useEffect(() => {
     slideIdxRef.current = slideIdx;
   }, [slideIdx]);
@@ -1373,12 +1388,12 @@ export default function Landing() {
 
       {/* ═══ Section 2: What's new (feature updates) ═══
           Full-width horizontal rail of release cards. Each card has
-          its own gradient so the rail reads as a colourful changelog.
-          Native horizontal scroll with scroll-snap handles
-          navigation; the prev/next buttons call scrollUpdates() which
-          scrolls by one card width at a time. An IntersectionObserver
-          flips `.fb-visible` on first viewport entry so the title
-          typewrites and cards fade-up in sequence. */}
+          its own blurred gradient so the rail reads as a colourful
+          changelog. Autoplay (see the updates useEffect) advances
+          the rail every 3.5s and loops; hovering the rail pauses it.
+          An IntersectionObserver flips `.fb-visible` on first
+          viewport entry so the title typewrites and cards slide in
+          with a staggered scale-up. */}
       <style>{`
         @keyframes fbTypeRtl {
           from { clip-path: inset(0 0 0 100%); }
@@ -1400,19 +1415,28 @@ export default function Landing() {
           animation: fbTypeRtl 1.5s steps(34, end) 0.85s forwards;
         }
 
-        /* Release cards — staggered fade-up once the section
+        /* Release cards — staggered slide-in + scale once the section
            enters the viewport. Each card has its own
            transition-delay inline so they arrive in sequence. */
         .updates-card {
           opacity: 0;
-          transform: translate3d(0, 28px, 0);
+          transform: translate3d(40px, 20px, 0) scale(0.92);
           transition:
-            opacity 0.75s cubic-bezier(0.22,1,0.36,1),
-            transform 0.75s cubic-bezier(0.22,1,0.36,1);
+            opacity 0.85s cubic-bezier(0.22,1,0.36,1),
+            transform 0.85s cubic-bezier(0.22,1,0.36,1);
         }
         .fb-visible .updates-card {
           opacity: 1;
-          transform: translate3d(0, 0, 0);
+          transform: translate3d(0, 0, 0) scale(1);
+        }
+        /* Inner blurred gradient layer — extended beyond the card's
+           edges so the gaussian blur doesn't reveal transparent
+           corners inside the rounded frame. */
+        .updates-bg-blur {
+          position: absolute;
+          inset: -24px;
+          filter: blur(28px) saturate(1.1);
+          will-change: filter;
         }
         /* Hide the scrollbar without disabling scrolling. */
         .updates-rail {
@@ -1459,9 +1483,13 @@ export default function Landing() {
         </div>
 
         {/* Full-width horizontal rail. Lives outside the max-w-6xl
-            wrapper so cards can peek off the edges of the screen. */}
+            wrapper so cards can peek off the edges of the screen.
+            Autoplay (see useEffect) advances the rail; pointer hover
+            pauses it via updatesHovered. */}
         <div
           ref={updatesRailRef}
+          onMouseEnter={() => setUpdatesHovered(true)}
+          onMouseLeave={() => setUpdatesHovered(false)}
           className="updates-rail flex gap-5 md:gap-6 overflow-x-auto px-6 md:px-12 pb-4 snap-x snap-mandatory scroll-smooth"
           dir="ltr"
         >
@@ -1469,18 +1497,22 @@ export default function Landing() {
             <div
               key={i}
               className="updates-card snap-center flex-shrink-0 w-[280px] md:w-[340px]"
-              style={{ transitionDelay: `${i * 80}ms` }}
+              style={{ transitionDelay: `${i * 90}ms` }}
             >
-              {/* Gradient card with centred mockup image. */}
-              <div
-                className="relative aspect-[4/5] rounded-[28px] overflow-hidden p-6 md:p-8 flex items-center justify-center"
-                style={{ background: FEATURE_UPDATE_GRADIENTS[i % FEATURE_UPDATE_GRADIENTS.length] }}
-              >
+              {/* Gradient card with centred mockup image. The blurred
+                  layer sits behind a crisp radial bloom to keep the
+                  image punchy while softening the gradient. */}
+              <div className="relative aspect-[8/9] rounded-[28px] overflow-hidden p-6 md:p-8 flex items-center justify-center">
+                <div
+                  className="updates-bg-blur"
+                  style={{ background: FEATURE_UPDATE_GRADIENTS[i % FEATURE_UPDATE_GRADIENTS.length] }}
+                  aria-hidden="true"
+                />
                 <div
                   className="absolute inset-0 pointer-events-none"
                   style={{
                     background:
-                      "radial-gradient(65% 50% at 50% 30%, rgba(255,255,255,0.35) 0%, transparent 65%)",
+                      "radial-gradient(60% 50% at 50% 25%, rgba(255,255,255,0.40) 0%, transparent 65%)",
                   }}
                   aria-hidden="true"
                 />
@@ -1493,7 +1525,7 @@ export default function Landing() {
               </div>
               {/* Version + title + date below the card. */}
               <div className="pt-5 px-1 text-right" dir="rtl">
-                <p className="text-[12px] font-bold tracking-[0.18em] uppercase text-[#c97a4a]">
+                <p className="text-[12px] font-light tracking-[0.18em] uppercase text-black/70">
                   {u.version}
                 </p>
                 <h3 className="text-[17px] md:text-[18px] font-bold text-black mt-2 leading-snug">
@@ -1507,27 +1539,6 @@ export default function Landing() {
           ))}
           {/* Trailing spacer so the last card can snap to centre. */}
           <div className="flex-shrink-0 w-2 md:w-8" aria-hidden="true" />
-        </div>
-
-        {/* Prev / next controls. Arrow directions are RTL-natural:
-            the left-pointing arrow advances to the "next" card. */}
-        <div className="max-w-6xl mx-auto px-6 mt-8 flex justify-center gap-3">
-          <button
-            type="button"
-            onClick={() => scrollUpdates(1)}
-            className="h-11 w-11 rounded-full bg-black/[0.05] hover:bg-black/[0.09] text-black transition-colors flex items-center justify-center"
-            aria-label="السابق"
-          >
-            <ArrowRight className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollUpdates(-1)}
-            className="h-11 w-11 rounded-full bg-[#122042] hover:bg-[#1a2b54] text-white transition-colors flex items-center justify-center"
-            aria-label="التالي"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
         </div>
       </section>
 
