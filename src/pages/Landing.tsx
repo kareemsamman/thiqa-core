@@ -1098,42 +1098,80 @@ export default function Landing() {
             </p>
           </div>
 
-          {/* Tabs — light bar for contrast against the dark content below */}
+          {/* Tabs — light bar for contrast against the dark content
+              below. Active tab grows an animated underline bar at the
+              bottom edge so the click has a visible accent anchor. */}
           <div className="flex overflow-x-auto border border-black/[0.08] rounded-xl mb-4 bg-white">
-            {featureTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 min-w-[140px] px-4 py-4 text-center border-l border-black/[0.08] first:border-l-0 transition-colors ${
-                  activeTab === tab.id
-                    ? "bg-black/[0.04] text-black"
-                    : "text-black/50 hover:text-black/75 hover:bg-black/[0.02]"
-                }`}
-              >
-                <span className="text-xs text-black/40 block mb-1">{tab.num}</span>
-                <span className="text-sm font-semibold">{tab.label}</span>
-              </button>
-            ))}
+            {featureTabs.map((tab) => {
+              const active = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative flex-1 min-w-[140px] px-4 py-4 text-center border-l border-black/[0.08] first:border-l-0 transition-all duration-300 ${
+                    active
+                      ? "bg-black/[0.04] text-black"
+                      : "text-black/50 hover:text-black/75 hover:bg-black/[0.02]"
+                  }`}
+                >
+                  <span className={`text-xs block mb-1 transition-colors duration-300 ${active ? "text-black/70" : "text-black/40"}`}>
+                    {tab.num}
+                  </span>
+                  <span className="text-sm font-semibold">{tab.label}</span>
+                  <span
+                    className="absolute left-3 right-3 bottom-0 h-[2px] rounded-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] origin-center"
+                    style={{
+                      background: "linear-gradient(90deg, #122042 0%, #4a6cc7 100%)",
+                      transform: active ? "scaleX(1)" : "scaleX(0)",
+                    }}
+                  />
+                </button>
+              );
+            })}
           </div>
 
           {/* Tab content. Each tab carries its own `gradient` + `glow`
               so switching tabs paints the three cards in a
               different colour mood. `key={tab.id}` forces a remount
-              on change so the `demoFadeIn` keyframe replays. */}
+              on change so the staggered card-enter animations replay
+              on every tab click. The animations are also gated by
+              `.dh-visible` (set by the section's IntersectionObserver
+              above) so the first reveal runs only once the user has
+              actually scrolled the section into view. */}
           <style>{`
-            @keyframes demoFadeIn {
-              from { opacity: 0; transform: translateY(8px); }
-              to   { opacity: 1; transform: translateY(0); }
+            @keyframes demoInFromRight {
+              from { opacity: 0; transform: translate3d(60px, 12px, 0) scale(0.95); }
+              to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
             }
-            .demo-fade { animation: demoFadeIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+            @keyframes demoInFromLeft {
+              from { opacity: 0; transform: translate3d(-60px, 12px, 0) scale(0.95); }
+              to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+            }
+            @keyframes demoInUp {
+              from { opacity: 0; transform: translate3d(0, 34px, 0) scale(0.96); }
+              to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+            }
+            .demo-card { opacity: 0; will-change: transform, opacity; }
+            .dh-visible .demo-card-mockup {
+              animation: demoInFromRight 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
+            }
+            .dh-visible .demo-card-desc {
+              animation: demoInFromLeft 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+            }
+            .dh-visible .demo-card-stat-1 {
+              animation: demoInUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.38s both;
+            }
+            .dh-visible .demo-card-stat-2 {
+              animation: demoInUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.5s both;
+            }
           `}</style>
           {featureTabs.filter(t => t.id === activeTab).map(tab => (
-            <div key={tab.id} className="demo-fade space-y-4">
+            <div key={tab.id} className="space-y-4">
               {/* Main row: mockup card + description card */}
               <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4">
                 {/* Left: Mockup card with per-tab gradient + glow */}
                 <div
-                  className="relative rounded-3xl overflow-hidden min-h-[320px] md:min-h-[380px] lg:min-h-[440px] flex items-center justify-center p-6 md:p-10"
+                  className="demo-card demo-card-mockup relative rounded-3xl overflow-hidden min-h-[320px] md:min-h-[380px] lg:min-h-[440px] flex items-center justify-center p-6 md:p-10"
                   style={{ background: tab.gradient }}
                 >
                   <div
@@ -1162,7 +1200,7 @@ export default function Landing() {
 
                 {/* Right: Description card — same per-tab gradient */}
                 <div
-                  className="relative rounded-3xl overflow-hidden p-8 lg:p-10 flex flex-col justify-between min-h-[320px] lg:min-h-[440px]"
+                  className="demo-card demo-card-desc relative rounded-3xl overflow-hidden p-8 lg:p-10 flex flex-col justify-between min-h-[320px] lg:min-h-[440px]"
                   style={{ background: tab.gradient }}
                 >
                   <div
@@ -1196,7 +1234,7 @@ export default function Landing() {
                 {tab.stats.map((stat, j) => (
                   <div
                     key={j}
-                    className="relative rounded-3xl overflow-hidden p-6 lg:p-8 text-white"
+                    className={`demo-card demo-card-stat-${j + 1} relative rounded-3xl overflow-hidden p-6 lg:p-8 text-white`}
                     style={{ background: tab.gradient }}
                   >
                     <div
