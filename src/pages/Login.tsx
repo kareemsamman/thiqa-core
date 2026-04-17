@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
 import dashboardMockup from "@/assets/landing/dashboard-mockup.png";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
@@ -127,6 +128,10 @@ export default function Login() {
   const [signupPhone, setSignupPhone] = useState("");
   // Track password for strength indicator only (not bound to input value)
   const [signupPasswordDisplay, setSignupPasswordDisplay] = useState("");
+  // Marketing-consent checkbox (independent of the required terms +
+  // privacy agreement that's implied by submitting the form). Default
+  // ON to match the reference design.
+  const [marketingConsent, setMarketingConsent] = useState(true);
 
   // Signup validation errors (shown per-field)
   const [signupErrors, setSignupErrors] = useState<Record<string, string>>({});
@@ -684,11 +689,12 @@ export default function Login() {
                 <>
                   {/* Page heading — mirrors the login view's heading
                       style so both views feel like one page. Subtitle
-                      is hidden on desktop to keep the column tight. */}
-                  <div className="text-center lg:pt-4 lg:mb-8">
-                    <h1 className="text-2xl sm:text-4xl font-bold text-foreground">ابدأ مع Thiqa</h1>
-                    <p className="text-sm text-muted-foreground mt-2 lg:hidden">
-                      تسجيل وكالة جديدة — 35 يوم تجربة مجانية بدون بطاقة ائتمان
+                      stays visible on desktop so the trial offer is
+                      always in view. */}
+                  <div className="text-center lg:pt-4 lg:mb-6">
+                    <h1 className="text-2xl sm:text-4xl font-bold text-foreground">ابدأ مع ثقة</h1>
+                    <p className="text-sm text-muted-foreground mt-3">
+                      جرّب النظام مجاناً لمدة 35 يوماً — بدون بطاقة ائتمان وبدون التزام.
                     </p>
                   </div>
 
@@ -759,6 +765,34 @@ export default function Login() {
                         </div>
                       </div>
                     )}
+
+                    {/* Implicit terms agreement (just informational
+                        text — submitting the form constitutes consent)
+                        + opt-in marketing consent checkbox. */}
+                    <div className="space-y-2 pt-2">
+                      <p className="text-xs text-muted-foreground leading-normal text-start [&_a]:text-foreground" dir="rtl">
+                        بالضغط على التسجيل، أوافق على{" "}
+                        <a href="#terms" target="_blank" rel="noopener noreferrer" className="font-medium text-foreground hover:text-foreground/80">
+                          شروط الاستخدام
+                        </a>
+                        {" "}وأؤكد أنني قرأت{" "}
+                        <a href="#privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-foreground hover:text-foreground/80">
+                          سياسة الخصوصية
+                        </a>
+                        .
+                      </p>
+                      <div className="flex items-center justify-start gap-2 text-start" dir="rtl">
+                        <Checkbox
+                          id="marketing-consent"
+                          checked={marketingConsent}
+                          onCheckedChange={(v) => setMarketingConsent(v === true)}
+                          className="rounded-[4px] border-[1.5px] border-gray-300 data-[state=checked]:border-primary"
+                        />
+                        <label htmlFor="marketing-consent" className="text-xs text-muted-foreground leading-normal cursor-pointer text-start">
+                          أوافق على استلام تحديثات وعروض تسويقية على بريدي الإلكتروني.
+                        </label>
+                      </div>
+                    </div>
 
                     <Button className="w-full h-12 text-sm gap-2 rounded-xl shadow-lg" onClick={handleSignup} disabled={loading}>
                       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
