@@ -74,16 +74,16 @@ export default function ForgotPassword() {
       <div className="hidden lg:block fixed inset-0 -z-10 bg-gradient-to-br from-muted/40 to-background" />
 
       <div className="w-full max-w-md animate-scale-in">
-        <div className="rounded-3xl border border-white/20 bg-white/95 dark:bg-card/95 lg:bg-white/70 lg:dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
-          <div className="text-center pt-8 pb-4 px-5 sm:px-8">
-            <img src={thiqaLogoDark} alt="ثقة" className="mx-auto h-10 w-auto object-contain mb-2" />
+        <div className="rounded-3xl border border-black/10 bg-white dark:bg-card overflow-hidden">
+          <div className="text-right pt-8 pb-4 px-6 sm:px-8">
+            <img src={thiqaLogoDark} alt="ثقة" className="h-10 w-auto object-contain mb-3" />
             <h1 className="text-2xl font-bold text-foreground">
               {isGoogleAccount ? "حساب Google" : "نسيت كلمة المرور؟"}
             </h1>
             {/* Hide the "reset link sent" subtitle for Google-only accounts
                 since no reset email was actually sent to them. */}
             {!isGoogleAccount && (
-              <p className="text-muted-foreground mt-1 text-sm">
+              <p className="text-muted-foreground mt-2 text-sm">
                 {sent
                   ? "تم إرسال رابط إعادة التعيين"
                   : "أدخل بريدك الإلكتروني وسنرسل لك رابط لإعادة تعيين كلمة المرور"}
@@ -91,12 +91,12 @@ export default function ForgotPassword() {
             )}
           </div>
 
-          <div className="px-5 sm:px-8 pb-8 space-y-4">
+          <div className="px-6 sm:px-8 pb-8 space-y-4">
             {sent ? (
-              <div className="text-center space-y-4 py-4">
+              <div className="text-right space-y-4 py-4">
                 {isGoogleAccount ? (
                   <>
-                    <div className="mx-auto w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
                       <svg className="h-8 w-8" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -116,7 +116,7 @@ export default function ForgotPassword() {
                   </>
                 ) : (
                   <>
-                    <div className="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
                       <CheckCircle2 className="h-8 w-8 text-green-600" />
                     </div>
                     <div className="space-y-2">
