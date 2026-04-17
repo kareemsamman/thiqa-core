@@ -1805,61 +1805,82 @@ export default function Landing() {
                       Cards are horizontal: image on the right side
                       (flex-row first child reads right-first in RTL),
                       description on the left. */}
-                  <div className="relative w-full max-w-[1200px] h-[420px] md:h-[460px]">
+                  <div className="relative w-full max-w-[1280px] h-[460px] md:h-[520px]">
                     {slides.map((slide, i) => {
                       const offset = i - slideIdx;
                       const abs = Math.abs(offset);
                       return (
                         <div
                           key={i}
-                          className="absolute top-0 left-1/2 rounded-3xl overflow-hidden transition-all duration-500 ease-out w-[560px] md:w-[720px] h-full flex flex-row"
+                          className="absolute top-0 left-1/2 rounded-2xl overflow-hidden transition-all duration-500 ease-out w-[760px] md:w-[1060px] h-full flex flex-col"
                           style={{
-                            // Light liquid-glass surface per user spec.
-                            background: "rgba(255, 255, 255, 0.06)",
-                            backdropFilter: "blur(30px) saturate(1.4)",
-                            WebkitBackdropFilter: "blur(30px) saturate(1.4)",
-                            border: "1px solid rgba(255, 255, 255, 0.14)",
-                            transform: `translateX(calc(-50% + ${-offset * 78}%)) scale(${abs === 0 ? 1 : 0.9})`,
-                            opacity: abs <= 1 ? (abs === 0 ? 1 : 0.45) : 0,
+                            // Darker, cooler glass surface — sits on top of
+                            // the background gradient as a tinted plate
+                            // rather than a bright highlight.
+                            background: "rgba(22, 26, 48, 0.38)",
+                            backdropFilter: "blur(24px) saturate(1.2)",
+                            WebkitBackdropFilter: "blur(24px) saturate(1.2)",
+                            border: "1px solid rgba(255, 255, 255, 0.12)",
+                            transform: `translateX(calc(-50% + ${-offset * 62}%)) scale(${abs === 0 ? 1 : 0.9})`,
+                            opacity: abs <= 1 ? (abs === 0 ? 1 : 0.4) : 0,
                             pointerEvents: abs === 0 ? "auto" : "none",
                             zIndex: abs === 0 ? 10 : 5,
-                            boxShadow: abs === 0 ? "0 30px 80px -16px rgba(18,32,66,0.35)" : "none",
+                            boxShadow: abs === 0 ? "0 30px 80px -16px rgba(10,15,35,0.55)" : "none",
                           }}
                         >
-                          {/* Right side (first child under RTL):
-                              padded container that floats a smaller
-                              mockup image in the middle. The image
-                              no longer fills — it sits with
-                              breathing space all around so the card
-                              background shows through. */}
-                          <div className="w-[48%] h-full flex items-center justify-center p-6 md:p-8 flex-shrink-0">
-                            <img
-                              src={slide.image}
-                              alt=""
-                              className="max-w-full max-h-full object-contain rounded-2xl shadow-[0_20px_50px_-12px_rgba(18,32,66,0.4)]"
-                              loading="lazy"
-                            />
+                          {/* Top row: text column + image panel */}
+                          <div className="flex flex-row flex-1 min-h-0">
+                            {/* First child → right side under RTL:
+                                image panel with a subtly darker tint
+                                so the mockup reads as a separate plate. */}
+                            <div
+                              className="w-[46%] h-full flex items-center justify-center p-8 md:p-10 flex-shrink-0"
+                              style={{ background: "rgba(10, 14, 30, 0.28)" }}
+                            >
+                              <img
+                                src={slide.image}
+                                alt=""
+                                className="max-w-full max-h-full object-contain rounded-xl shadow-[0_20px_50px_-12px_rgba(10,15,35,0.5)]"
+                                loading="lazy"
+                              />
+                            </div>
+
+                            {/* Second child → left side under RTL:
+                                text block, right-aligned Arabic copy. */}
+                            <div className="flex-1 p-10 md:p-14 flex flex-col justify-center text-white text-right">
+                              <span className="text-[11px] text-white/60 font-bold tracking-[0.2em] uppercase mb-4">
+                                0{i + 1} · {slide.eyebrow}
+                              </span>
+                              <h3 className="text-[1.7rem] md:text-[2.1rem] font-bold leading-[1.25] whitespace-pre-line mb-5">
+                                {slide.title}
+                              </h3>
+                              <p className="text-[15px] md:text-[16px] text-white/80 leading-relaxed">
+                                {slide.desc}
+                              </p>
+                            </div>
                           </div>
 
-                          {/* Left side: text + CTA */}
-                          <div className="flex-1 p-7 md:p-10 flex flex-col text-white text-right">
-                            <span className="text-[11px] text-white/75 font-bold tracking-[0.2em] uppercase mb-3">
-                              0{i + 1} · {slide.eyebrow}
-                            </span>
-                            <h3 className="text-2xl md:text-[1.7rem] font-bold leading-[1.2] whitespace-pre-line mb-4">
-                              {slide.title}
-                            </h3>
-                            <p className="text-sm md:text-[15px] text-white/85 leading-relaxed mb-6 flex-1">
-                              {slide.desc}
-                            </p>
-                            <button
-                              onClick={() => navigate("/login?view=signup")}
-                              className="self-start flex items-center gap-2 px-6 py-3 text-[13px] font-bold text-white rounded-full bg-white/15 border border-white/30 hover:bg-white/25 transition-colors backdrop-blur-sm"
+                          {/* Bottom CTA bar — spans full card width.
+                              Diagonal-stripe square at the far left
+                              holds the arrow; the rest of the bar is
+                              the click target with the label right-
+                              aligned (natural for RTL Arabic). */}
+                          <button
+                            onClick={() => navigate("/login?view=signup")}
+                            className="relative flex items-center w-full h-16 md:h-[72px] text-white text-right px-8 md:px-12 font-bold text-[14px] md:text-[15px] hover:bg-white/[0.04] transition-colors"
+                            style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
+                          >
+                            <div
+                              className="absolute left-0 top-0 bottom-0 w-20 md:w-[88px] flex items-center justify-center border-r border-white/10"
+                              style={{
+                                backgroundImage:
+                                  "repeating-linear-gradient(-45deg, rgba(255,255,255,0.09) 0, rgba(255,255,255,0.09) 1px, transparent 1px, transparent 9px)",
+                              }}
                             >
-                              {slide.cta}
-                              <ArrowLeft className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
+                              <ArrowLeft className="h-4 w-4" />
+                            </div>
+                            <span className="mr-auto">{slide.cta}</span>
+                          </button>
                         </div>
                       );
                     })}
