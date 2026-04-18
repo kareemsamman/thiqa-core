@@ -643,7 +643,7 @@ export default function Landing() {
           the layout each frame. */}
       <nav className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-2">
         <div
-          className="pointer-events-auto flex items-center px-4 md:px-6 h-14 md:h-16 mx-auto transform-gpu w-[92%] md:w-[75%] max-w-[72rem]"
+          className="pointer-events-auto flex flex-row-reverse md:flex-row items-center px-4 md:px-6 h-14 md:h-16 mx-auto transform-gpu w-[92%] md:w-[75%] max-w-[72rem]"
           style={{
             // Mobile (< md): 92% width so the pill has real breathing
             // room on phones; desktop pins at 75%. Only the pill chrome
@@ -691,7 +691,7 @@ export default function Landing() {
               child). On mobile this collapses to login text + a
               hamburger that opens the drawer; desktop keeps the full
               signup pill CTA. */}
-          <div className="flex-1 flex justify-end items-center gap-3 md:gap-5">
+          <div className="flex-1 flex flex-row-reverse md:flex-row justify-end items-center gap-3 md:gap-5">
             <button
               onClick={() => navigate("/login")}
               className="text-[14px] font-semibold text-black/80 hover:text-black transition-colors inline-flex items-center"
@@ -748,9 +748,9 @@ export default function Landing() {
           aria-modal="true"
           aria-label="قائمة التنقل"
           className={cn(
-            "absolute top-0 left-0 h-full w-[82%] max-w-[360px] bg-white shadow-2xl",
+            "absolute top-0 right-0 h-full w-[82%] max-w-[360px] bg-white shadow-2xl",
             "flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-            mobileMenuOpen ? "translate-x-0" : "-translate-x-full",
+            mobileMenuOpen ? "translate-x-0" : "translate-x-full",
           )}
           style={{ fontFamily: "'Cairo', sans-serif" }}
         >
