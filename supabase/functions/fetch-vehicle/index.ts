@@ -145,11 +145,14 @@ serve(async (req) => {
       });
     }
 
-    // Prefer in this order: private_commercial → public_transport →
-    // heavy_truck → motorcycle. Two datasets returning the same plate
-    // is rare but possible; the priority order picks the most useful
-    // record (private_commercial has the richest fields).
-    const priority: DatasetKind[] = ['private_commercial', 'public_transport', 'heavy_truck', 'motorcycle'];
+    // Prefer the MOST SPECIFIC dataset when more than one answers.
+    // A taxi plate appears in both `private_commercial` (the catch-all
+    // registry) and `public_transport` (only taxis/buses/minibuses) —
+    // letting the catch-all win classified taxis as "خصوصي". The
+    // specialised registries hold all the same enrichment fields
+    // (tozeret/kinuy_mishari/shnat_yitzur/tzeva_rechev) plus the
+    // category we actually want, so they win first.
+    const priority: DatasetKind[] = ['public_transport', 'heavy_truck', 'motorcycle', 'private_commercial'];
     hits.sort((a, b) => priority.indexOf(a.kind) - priority.indexOf(b.kind));
     const winner = hits[0];
 
