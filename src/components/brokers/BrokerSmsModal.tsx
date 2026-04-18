@@ -68,7 +68,7 @@ export function BrokerSmsModal({
       if (error) throw error;
 
       // Log the SMS
-      await supabase.from("sms_logs").insert({
+      await (supabase.from("sms_logs") as any).insert({
         phone_number: phone,
         message,
         sms_type: "manual",
@@ -88,7 +88,7 @@ export function BrokerSmsModal({
       const description = await extractFunctionErrorMessage(error);
 
       // Log failed SMS
-      await supabase.from("sms_logs").insert({
+      await (supabase.from("sms_logs") as any).insert({
         phone_number: phone,
         message,
         sms_type: "manual",

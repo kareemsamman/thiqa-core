@@ -865,45 +865,51 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
         const tasks: Promise<void>[] = [];
         if (snap.selectedCategoryId) {
           tasks.push(
-            supabase
-              .from("insurance_categories")
-              .select("*")
-              .eq("id", snap.selectedCategoryId)
-              .maybeSingle()
-              .then(({ data }) => {
-                if (!cancelled && data) {
-                  setSelectedCategory({
-                    ...(data as any),
-                    mode: (data as any).mode as "FULL" | "LIGHT",
-                  });
-                }
-              }),
+            Promise.resolve(
+              supabase
+                .from("insurance_categories")
+                .select("*")
+                .eq("id", snap.selectedCategoryId)
+                .maybeSingle()
+                .then(({ data }) => {
+                  if (!cancelled && data) {
+                    setSelectedCategory({
+                      ...(data as any),
+                      mode: (data as any).mode as "FULL" | "LIGHT",
+                    });
+                  }
+                }),
+            ),
           );
         }
         if (snap.selectedClientId) {
           tasks.push(
-            supabase
-              .from("clients")
-              .select(
-                "id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes",
-              )
-              .eq("id", snap.selectedClientId)
-              .maybeSingle()
-              .then(({ data }) => {
-                if (!cancelled && data) setSelectedClient(data as Client);
-              }),
+            Promise.resolve(
+              supabase
+                .from("clients")
+                .select(
+                  "id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes",
+                )
+                .eq("id", snap.selectedClientId)
+                .maybeSingle()
+                .then(({ data }) => {
+                  if (!cancelled && data) setSelectedClient(data as Client);
+                }),
+            ),
           );
         }
         if (snap.selectedCarId) {
           tasks.push(
-            supabase
-              .from("cars")
-              .select("*")
-              .eq("id", snap.selectedCarId)
-              .maybeSingle()
-              .then(({ data }) => {
-                if (!cancelled && data) setSelectedCar(data as CarRecord);
-              }),
+            Promise.resolve(
+              supabase
+                .from("cars")
+                .select("*")
+                .eq("id", snap.selectedCarId)
+                .maybeSingle()
+                .then(({ data }) => {
+                  if (!cancelled && data) setSelectedCar(data as CarRecord);
+                }),
+            ),
           );
         }
         await Promise.all(tasks);

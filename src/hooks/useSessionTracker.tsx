@@ -66,8 +66,8 @@ export function useSessionTracker() {
         // Fetch IP address
         const ipAddress = await getClientIP();
 
-        const { data, error } = await supabase
-          .from('user_sessions')
+        const { data, error } = await (supabase
+          .from('user_sessions') as any)
           .insert({
             user_id: user.id,
             user_agent: ua,
