@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   ChevronLeft, ChevronUp, ChevronDown, CheckCircle, Star, ArrowLeft, Play, X, Check,
   Users, FileText, CreditCard, BarChart3, Bell, MessageSquare,
-  Phone, Shield, RefreshCcw, Wallet, AlertTriangle, Mail, Clock,
+  Phone, Shield, RefreshCcw, Wallet, AlertTriangle, Mail, Clock, Menu,
 } from "lucide-react";
 import { useLandingContent, ct, ci } from "@/hooks/useLandingContent";
 import { cn } from "@/lib/utils";
@@ -379,6 +379,23 @@ export default function Landing() {
     };
   }, []);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  // Mobile hamburger drawer. Slides in from the left (visual side in
+  // RTL — the same side as the hamburger button) and locks body scroll
+  // while open so the backdrop doesn't scroll under it. ESC closes.
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [mobileMenuOpen]);
   // Section-2 feature tile → pro modal. Index points at the tile in
   // the `featureTiles` array below (null = closed). Body scroll is
   // frozen while open and ESC closes — so the modal behaves like a
@@ -626,14 +643,12 @@ export default function Landing() {
           the layout each frame. */}
       <nav className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-2">
         <div
-          className="pointer-events-auto flex items-center px-6 h-14 md:h-16 mx-auto transform-gpu"
+          className="pointer-events-auto flex items-center px-4 md:px-6 h-14 md:h-16 mx-auto transform-gpu w-[92%] md:w-[75%] max-w-[72rem]"
           style={{
-            // Nav width stays pinned at 75% across both states. Only
-            // the pill chrome (margin, radius, blur, bg, shadow)
-            // swaps when `scrolled` flips at y > 8 — colors and logo
-            // are now black at all times per the new design.
-            width: "75%",
-            maxWidth: "72rem",
+            // Mobile (< md): 92% width so the pill has real breathing
+            // room on phones; desktop pins at 75%. Only the pill chrome
+            // (margin, radius, blur, bg, shadow) swaps when `scrolled`
+            // flips at y > 8 — colors and logo are black at all times.
             marginTop: scrolled ? "12px" : "0px",
             borderRadius: scrolled ? "9999px" : "0px",
             transform: scrolled ? "translate3d(0, 0, 0)" : "translate3d(0, 44px, 0)",
@@ -664,7 +679,7 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Menu — centered. */}
+          {/* Menu — centered (desktop only). */}
           <div className="hidden md:flex items-center gap-10 text-[14px] font-medium text-black/75">
             {false && <a href="#features" className="transition-colors hover:text-black">لماذا نحن مختلفون</a>}
             <a href="#demo" className="transition-colors hover:text-black">كيف يعمل</a>
@@ -673,19 +688,20 @@ export default function Landing() {
           </div>
 
           {/* CTA cluster (left side under RTL because it's the last
-              child). Always black text and dark ring on the signup
-              pill. */}
+              child). On mobile this collapses to login text + a
+              hamburger that opens the drawer; desktop keeps the full
+              signup pill CTA. */}
           <div className="flex-1 flex justify-end items-center gap-3 md:gap-5">
             <button
               onClick={() => navigate("/login")}
-              className="text-[14px] font-semibold text-black/80 hover:text-black transition-colors hidden sm:inline-flex items-center"
+              className="text-[14px] font-semibold text-black/80 hover:text-black transition-colors inline-flex items-center"
             >
               {ct(content, "navbar_login", "تسجيل الدخول")}
             </button>
 
             <button
               onClick={() => { trackEvent("signup_click", "/landing"); navigate("/register"); }}
-              className="px-8 py-3 text-[14px] font-bold text-black hover:bg-black/5 transition-all"
+              className="hidden md:inline-flex px-8 py-3 text-[14px] font-bold text-black hover:bg-black/5 transition-all"
               style={{
                 borderRadius: "100px",
                 border: "2px solid rgba(0, 0, 0, 0.22)",
@@ -695,9 +711,115 @@ export default function Landing() {
             >
               {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
             </button>
+
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-full text-black hover:bg-black/5 transition-colors"
+              aria-label="فتح القائمة"
+              aria-expanded={mobileMenuOpen}
+            >
+              <Menu className="w-6 h-6" strokeWidth={2.2} />
+            </button>
           </div>
         </div>
       </nav>
+
+      {/* ═══ Mobile menu drawer ═══
+          Full-height slide-in panel anchored to the left visual edge
+          (the hamburger side in this RTL layout). Backdrop fades in
+          from 0 → 0.45 opacity; the drawer itself slides in from -100%.
+          Closed instantly when the user taps any link so navigation
+          feels snappy. */}
+      <div
+        className={cn(
+          "fixed inset-0 z-[60] md:hidden transition-opacity duration-300",
+          mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
+        )}
+        aria-hidden={!mobileMenuOpen}
+      >
+        <div
+          className="absolute inset-0 bg-black/45 backdrop-blur-sm"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+        <aside
+          dir="rtl"
+          role="dialog"
+          aria-modal="true"
+          aria-label="قائمة التنقل"
+          className={cn(
+            "absolute top-0 left-0 h-full w-[82%] max-w-[360px] bg-white shadow-2xl",
+            "flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            mobileMenuOpen ? "translate-x-0" : "-translate-x-full",
+          )}
+          style={{ fontFamily: "'Cairo', sans-serif" }}
+        >
+          <div className="flex items-center justify-between px-5 h-14 border-b border-black/10">
+            <div className="flex items-center text-black">
+              <ThiqaLogoAnimation
+                iconSize={28}
+                interactive={false}
+                iconSrc="https://thiqacrm.b-cdn.net/small_black.png"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="inline-flex items-center justify-center w-9 h-9 rounded-full text-black hover:bg-black/5 transition-colors"
+              aria-label="إغلاق القائمة"
+            >
+              <X className="w-5 h-5" strokeWidth={2.2} />
+            </button>
+          </div>
+
+          <nav className="flex-1 overflow-y-auto px-5 py-6">
+            <ul className="flex flex-col gap-1 text-[16px] font-medium text-black">
+              <li>
+                <a
+                  href="#demo"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block py-3 px-2 rounded-lg hover:bg-black/5 transition-colors"
+                >
+                  كيف يعمل
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#faq"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block py-3 px-2 rounded-lg hover:bg-black/5 transition-colors"
+                >
+                  أسئلة وأجوبة
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/pricing"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block py-3 px-2 rounded-lg hover:bg-black/5 transition-colors"
+                >
+                  الأسعار
+                </a>
+              </li>
+            </ul>
+          </nav>
+
+          <div className="px-5 pb-6 pt-4 border-t border-black/10 flex flex-col gap-3">
+            <button
+              onClick={() => { setMobileMenuOpen(false); navigate("/login"); }}
+              className="w-full py-3 text-[15px] font-semibold text-black rounded-full border-2 border-black/15 hover:bg-black/5 transition-all"
+            >
+              {ct(content, "navbar_login", "تسجيل الدخول")}
+            </button>
+            <button
+              onClick={() => { trackEvent("signup_click", "/landing"); setMobileMenuOpen(false); navigate("/register"); }}
+              className="w-full py-3.5 text-[15px] font-bold text-white bg-black rounded-full hover:bg-black/90 transition-all shadow-[0_6px_20px_-6px_rgba(0,0,0,0.4)]"
+            >
+              {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
+            </button>
+          </div>
+        </aside>
+      </div>
 
       {/* ═══ HERO with video background ═══
           justify-between (not justify-center) so the title block
