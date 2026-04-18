@@ -168,10 +168,10 @@ export default function Pricing() {
           landing page. Mobile collapses to login + hamburger + drawer. */}
       <nav className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-3">
         <div
-          className="pointer-events-auto flex flex-row-reverse md:flex-row items-center px-4 md:px-6 h-14 md:h-16 mx-auto w-[92%] md:w-[75%] max-w-[72rem] rounded-full bg-white/75 backdrop-blur-md shadow-[0_1px_20px_0_rgba(0,0,0,0.10)]"
+          className="pointer-events-auto flex flex-row-reverse md:flex-row items-center justify-between md:justify-normal px-4 md:px-6 h-14 md:h-16 mx-auto w-[92%] md:w-[75%] max-w-[72rem] rounded-full bg-white/75 backdrop-blur-md shadow-[0_1px_20px_0_rgba(0,0,0,0.10)]"
         >
           {/* Logo */}
-          <div className="flex-1 flex justify-start">
+          <div className="md:flex-1 md:flex md:justify-start">
             <a href="/landing" className="flex items-center text-black">
               <ThiqaLogoAnimation
                 iconSize={32}
@@ -292,7 +292,7 @@ export default function Pricing() {
           </div>
 
           {/* CTA cluster */}
-          <div className="flex-1 flex flex-row-reverse md:flex-row justify-end items-center gap-3 md:gap-5">
+          <div className="md:flex-1 flex flex-row-reverse md:flex-row md:justify-end items-center gap-3 md:gap-5">
             <button
               onClick={() => navigate("/login")}
               className="text-[14px] font-semibold text-black/80 hover:text-black transition-colors inline-flex items-center"

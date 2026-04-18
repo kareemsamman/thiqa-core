@@ -651,7 +651,7 @@ export default function Landing() {
           the layout each frame. */}
       <nav className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-2">
         <div
-          className="pointer-events-auto flex flex-row-reverse md:flex-row items-center px-4 md:px-6 h-14 md:h-16 mx-auto transform-gpu w-[92%] md:w-[75%] max-w-[72rem]"
+          className="pointer-events-auto flex flex-row-reverse md:flex-row items-center justify-between md:justify-normal px-4 md:px-6 h-14 md:h-16 mx-auto transform-gpu w-[92%] md:w-[75%] max-w-[72rem]"
           style={{
             // Mobile (< md): 92% width so the pill has real breathing
             // room on phones; desktop pins at 75%. Only the pill chrome
@@ -677,7 +677,7 @@ export default function Landing() {
           {/* Logo (right side under RTL because it's the first child).
               Always black: icon source and wordmark color do not
               swap on scroll anymore. */}
-          <div className="flex-1 flex justify-start">
+          <div className="md:flex-1 md:flex md:justify-start">
             <div className="flex items-center text-black">
               <ThiqaLogoAnimation
                 iconSize={32}
@@ -836,7 +836,7 @@ export default function Landing() {
               child). On mobile this collapses to login text + a
               hamburger that opens the drawer; desktop keeps the full
               signup pill CTA. */}
-          <div className="flex-1 flex flex-row-reverse md:flex-row justify-end items-center gap-3 md:gap-5">
+          <div className="md:flex-1 flex flex-row-reverse md:flex-row md:justify-end items-center gap-3 md:gap-5">
             <button
               onClick={() => navigate("/login")}
               className="text-[14px] font-semibold text-black/80 hover:text-black transition-colors inline-flex items-center"
@@ -1083,8 +1083,11 @@ export default function Landing() {
       {/* ═══ HERO with video background ═══
           justify-between (not justify-center) so the title block
           parks near the top with breathing room from the nav, and
-          the mockup frame sticks to the bottom of the hero. */}
-      <section className="relative min-h-screen flex flex-col items-center justify-between overflow-hidden">
+          the mockup frame sticks to the bottom of the hero. On mobile
+          the viewport is tall and narrow, so we drop min-h-screen
+          there — the section sizes itself to its content (title +
+          mockup) instead of leaving a giant empty gap in the middle. */}
+      <section className="relative md:min-h-screen flex flex-col items-center justify-between overflow-hidden">
         {/* Hero background layer. A soft light gradient sits under the
             video as a fallback — if autoplay is blocked or the file
             hasn't loaded yet, the hero is still a bright, branded
@@ -1119,7 +1122,7 @@ export default function Landing() {
           <div className="absolute inset-0 bg-white/20" />
         </div>
 
-        <div className="relative z-10 w-[90%] max-w-[56rem] mx-auto text-center pt-40 md:pt-44">
+        <div className="relative z-10 w-[92%] max-w-[56rem] mx-auto text-center pt-28 md:pt-44">
           <h1
             className="text-[1.6rem] md:text-[2.2rem] lg:text-[2.8rem] font-extrabold leading-[1.2] tracking-tight whitespace-pre-line hero-reveal text-black"
             style={{ animationDelay: '120ms' }}
@@ -1148,17 +1151,15 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* Hero framed mockup — 50% of the viewport, stuck to the
-            bottom of the hero section. Transparent frame so the rounded
-            top corners sit cleanly on the video background. */}
+        {/* Hero framed mockup — 85% wide on mobile (so it actually
+            reads), 50% from md+ where the viewport has room. Stays
+            stuck to the bottom of the hero; transparent rounded-top
+            frame so the corners sit cleanly on the video bg. */}
         <div
-          className="relative z-10 w-full mx-auto px-6 pb-0 hero-scale-in flex justify-center"
+          className="relative z-10 w-full mx-auto px-6 pt-10 md:pt-0 pb-0 hero-scale-in flex justify-center"
           style={{ animationDelay: '720ms' }}
         >
-          <div
-            className="relative rounded-t-xl overflow-hidden border border-black/[0.12] border-b-0 shadow-2xl shadow-black/20 max-w-full"
-            style={{ width: '50%' }}
-          >
+          <div className="relative rounded-t-xl overflow-hidden border border-black/[0.12] border-b-0 shadow-2xl shadow-black/20 max-w-full w-[85%] md:w-1/2">
             <img
               src="https://thiqacrm.b-cdn.net/1new.png"
               alt="Thiqa CRM Dashboard"
