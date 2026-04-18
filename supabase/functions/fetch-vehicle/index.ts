@@ -233,9 +233,23 @@ function mapCarType(kind: DatasetKind, licenseType: string | null, record: any):
       if (text.includes('אוטובוס') || text.includes('bus')) return 'small';
       return 'taxi';
     }
-    case 'heavy_truck':
-      // > 3.5T trucks → "tjeraup4" (>4T commercial bucket).
+    case 'heavy_truck': {
+      // Despite the dataset's name ("over 3.5T"), it actually holds
+      // BOTH heavy trucks AND vehicles missing a model code, so weights
+      // span the whole range. Decide off mishkal_kolel:
+      //   > 4000 kg  → tjeraup4
+      //   3500–4000 → tjeradown4
+      //   < 3500    → cargo (light commercial)
+      const weight = parseInt(record?.mishkal_kolel ?? '', 10);
+      if (Number.isFinite(weight)) {
+        if (weight > 4000) return 'tjeraup4';
+        if (weight >= 3500) return 'tjeradown4';
+        return 'cargo';
+      }
+      // No weight on the record — assume the dataset's nominal "heavy"
+      // bucket and default to tjeraup4.
       return 'tjeraup4';
+    }
     case 'motorcycle':
       // No dropdown option for motorcycles; minibus bucket is the
       // closest visual fit and the user can switch it manually.
