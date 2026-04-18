@@ -3,10 +3,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GlobalQuotaDialogHost } from "@/components/subscription/GlobalQuotaDialogHost";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
-import { AuthProvider, useAuth } from "@/hooks/useAuth";
-import { Loader2 } from "lucide-react";
+import { AuthProvider } from "@/hooks/useAuth";
 import { RecentClientProvider } from "@/hooks/useRecentClient";
 import { PolicyWizardControllerProvider } from "@/hooks/usePolicyWizardController";
 import { GlobalPolicyWizardHost } from "@/components/policies/GlobalPolicyWizardHost";
@@ -134,23 +133,6 @@ function PublicWidgets() {
   );
 }
 
-// Root route: getthiqa.com serves the marketing landing to logged-out
-// visitors. Logged-in users are redirected to the canonical /dashboard
-// URL so the app UI lives under its own path instead of "/". The
-// loader lock prevents a landing-page flash while the session hydrates.
-function HomeRoute() {
-  const { user, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-  if (!user) return <Landing />;
-  return <Navigate to="/dashboard" replace />;
-}
-
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <HelmetProvider>
@@ -190,7 +172,7 @@ const App = () => (
               <Route path="/thiqa/settings" element={<ThiqaAdminRoute><ThiqaSettings /></ThiqaAdminRoute>} />
               <Route path="/thiqa/landing-cms" element={<ThiqaAdminRoute><ThiqaLandingCMS /></ThiqaAdminRoute>} />
               <Route path="/thiqa/analytics" element={<ThiqaAdminRoute><ThiqaAnalytics /></ThiqaAdminRoute>} />
-              <Route path="/" element={<HomeRoute />} />
+              <Route path="/" element={<Landing />} />
               <Route path="/dashboard" element={
                 <ProtectedRoute>
                   <Index />

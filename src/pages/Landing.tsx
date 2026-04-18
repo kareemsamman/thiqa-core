@@ -1094,7 +1094,7 @@ export default function Landing() {
             className="text-[1.5rem] md:text-[2.2rem] lg:text-[2.8rem] font-extrabold leading-[1.3] md:leading-[1.2] tracking-tight whitespace-pre-line hero-reveal text-black"
             style={{ animationDelay: '120ms' }}
           >
-            {ct(content, "hero_title", "CRM لوكالات التأمين.\nأبسط، أسرع، أذكى.")}
+            {ct(content, "hero_title", "نظام إدارة وكالات التأمين الأذكى\nلمن يريد أن يربح أكثر.")}
           </h1>
           <p
             className="mt-5 text-[14px] md:text-[15px] text-black/70 max-w-xl mx-auto leading-relaxed whitespace-pre-line hero-reveal"
@@ -1129,7 +1129,7 @@ export default function Landing() {
           <div className="relative rounded-t-xl overflow-hidden border border-black/[0.12] border-b-0 shadow-2xl shadow-black/20 max-w-full w-[95%] md:w-1/2">
             <img
               src="https://thiqacrm.b-cdn.net/1new.png"
-              alt="Thiqa CRM Dashboard"
+              alt="Thiqa — نظام إدارة وكالات التأمين"
               width={607}
               height={407}
               className="w-full h-auto block"
@@ -2707,7 +2707,7 @@ export default function Landing() {
               const faqs: { q: string; a: string }[] = [
                 {
                   q: "ما هو Thiqa؟",
-                  a: "نظام CRM مخصّص لوكالات التأمين — إدارة العملاء والوثائق والمدفوعات والتقارير في مكان واحد. مصمّم لواقع الوكالات في منطقتنا مع دعم كامل للعربية وواجهة RTL احترافية.",
+                  a: "نظام إدارة مخصّص لوكالات التأمين — إدارة العملاء والوثائق والمدفوعات والتقارير في مكان واحد. مصمّم لواقع الوكالات في منطقتنا مع دعم كامل للعربية وواجهة RTL احترافية.",
                 },
                 {
                   q: "هل يمكنني إلغاء الاشتراك في أي وقت؟",

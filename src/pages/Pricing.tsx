@@ -508,7 +508,7 @@ export default function Pricing() {
           {ct(content, "pricing_label", "الأسعار")}
         </p>
         <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-white drop-shadow-[0_2px_12px_rgba(15,40,120,0.22)]">
-          {ct(content, "pricing_title", "جرّب نظام CRM لمدة 35 يوم مجاناً *")}
+          {ct(content, "pricing_title", "جرّب نظام إدارة وكالات التأمين لمدة 35 يوم مجاناً *")}
         </h1>
         <p className="text-white/85 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed">
           {ct(content, "pricing_subtitle", "* جميع الميزات مفتوحة بالكامل — بدون بطاقة ائتمان.")}
