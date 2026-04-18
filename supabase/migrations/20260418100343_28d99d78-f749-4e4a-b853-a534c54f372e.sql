@@ -1,0 +1,2 @@
+UPDATE public.landing_content SET text_value = E'نظام الإدارة الأذكى\nلوكالات التأمين التي تريد أن تربح أكثر' WHERE section_key = 'hero_title';
+UPDATE public.landing_content SET text_value = 'جرّب نظام الإدارة لمدة 35 يوم مجاناً *' WHERE section_key = 'pricing_title';
