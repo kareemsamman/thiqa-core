@@ -726,11 +726,14 @@ export default function Landing() {
       </nav>
 
       {/* ═══ Mobile menu drawer ═══
-          Full-height slide-in panel anchored to the left visual edge
-          (the hamburger side in this RTL layout). Backdrop fades in
-          from 0 → 0.45 opacity; the drawer itself slides in from -100%.
-          Closed instantly when the user taps any link so navigation
-          feels snappy. */}
+          Slides down from the top of the viewport as a full-width
+          sheet (matches the strain-style reference the user shared).
+          Header mirrors the navbar — logo on the right (RTL), login
+          pill + close X on the left. Menu items stack vertically, and
+          the signup CTA lives at the bottom. Backdrop fades in from
+          0 → 0.45 opacity; sheet translates from -100% → 0. Closed
+          instantly when the user taps any link so navigation feels
+          snappy. */}
       <div
         className={cn(
           "fixed inset-0 z-[60] md:hidden transition-opacity duration-300",
@@ -748,72 +751,79 @@ export default function Landing() {
           aria-modal="true"
           aria-label="قائمة التنقل"
           className={cn(
-            "absolute top-0 right-0 h-full w-[82%] max-w-[360px] bg-white shadow-2xl",
+            "absolute top-0 inset-x-0 bg-white shadow-2xl rounded-b-3xl",
             "flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-            mobileMenuOpen ? "translate-x-0" : "translate-x-full",
+            "max-h-[90vh]",
+            mobileMenuOpen ? "translate-y-0" : "-translate-y-full",
           )}
           style={{ fontFamily: "'Cairo', sans-serif" }}
         >
-          <div className="flex items-center justify-between px-5 h-14 border-b border-black/10">
+          {/* Header row — logo right, login pill + close X left. Same
+              visual order as the navbar that opened this drawer. */}
+          <div className="flex flex-row-reverse items-center justify-between px-5 h-16">
             <div className="flex items-center text-black">
               <ThiqaLogoAnimation
-                iconSize={28}
+                iconSize={30}
                 interactive={false}
                 iconSrc="https://thiqacrm.b-cdn.net/small_black.png"
               />
             </div>
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(false)}
-              className="inline-flex items-center justify-center w-9 h-9 rounded-full text-black hover:bg-black/5 transition-colors"
-              aria-label="إغلاق القائمة"
-            >
-              <X className="w-5 h-5" strokeWidth={2.2} />
-            </button>
+            <div className="flex flex-row-reverse items-center gap-2">
+              <button
+                onClick={() => { setMobileMenuOpen(false); navigate("/login"); }}
+                className="px-5 py-2 text-[14px] font-semibold text-black rounded-full bg-[#f1ece4] hover:bg-[#e8e2d6] transition-colors"
+              >
+                {ct(content, "navbar_login", "تسجيل الدخول")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="inline-flex items-center justify-center w-10 h-10 rounded-full text-black hover:bg-black/5 transition-colors"
+                aria-label="إغلاق القائمة"
+              >
+                <X className="w-6 h-6" strokeWidth={2.2} />
+              </button>
+            </div>
           </div>
 
-          <nav className="flex-1 overflow-y-auto px-5 py-6">
-            <ul className="flex flex-col gap-1 text-[16px] font-medium text-black">
-              <li>
+          {/* Menu links — each item on its own row, separated by a
+              hairline, large hit target. */}
+          <nav className="overflow-y-auto px-5 pt-4">
+            <ul className="flex flex-col text-[18px] font-medium text-black">
+              <li className="border-t border-black/10">
                 <a
                   href="#demo"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="block py-3 px-2 rounded-lg hover:bg-black/5 transition-colors"
+                  className="flex items-center justify-between py-5 hover:text-black/70 transition-colors"
                 >
-                  كيف يعمل
+                  <span>كيف يعمل</span>
                 </a>
               </li>
-              <li>
+              <li className="border-t border-black/10">
                 <a
                   href="#faq"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="block py-3 px-2 rounded-lg hover:bg-black/5 transition-colors"
+                  className="flex items-center justify-between py-5 hover:text-black/70 transition-colors"
                 >
-                  أسئلة وأجوبة
+                  <span>أسئلة وأجوبة</span>
                 </a>
               </li>
-              <li>
+              <li className="border-t border-b border-black/10">
                 <a
                   href="/pricing"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="block py-3 px-2 rounded-lg hover:bg-black/5 transition-colors"
+                  className="flex items-center justify-between py-5 hover:text-black/70 transition-colors"
                 >
-                  الأسعار
+                  <span>الأسعار</span>
                 </a>
               </li>
             </ul>
           </nav>
 
-          <div className="px-5 pb-6 pt-4 border-t border-black/10 flex flex-col gap-3">
-            <button
-              onClick={() => { setMobileMenuOpen(false); navigate("/login"); }}
-              className="w-full py-3 text-[15px] font-semibold text-black rounded-full border-2 border-black/15 hover:bg-black/5 transition-all"
-            >
-              {ct(content, "navbar_login", "تسجيل الدخول")}
-            </button>
+          <div className="px-5 pt-6 pb-7">
             <button
               onClick={() => { trackEvent("signup_click", "/landing"); setMobileMenuOpen(false); navigate("/register"); }}
-              className="w-full py-3.5 text-[15px] font-bold text-white bg-black rounded-full hover:bg-black/90 transition-all shadow-[0_6px_20px_-6px_rgba(0,0,0,0.4)]"
+              className="w-full py-4 text-[15px] font-bold text-white bg-black rounded-full hover:bg-black/90 transition-all shadow-[0_6px_20px_-6px_rgba(0,0,0,0.4)]"
             >
               {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
             </button>
