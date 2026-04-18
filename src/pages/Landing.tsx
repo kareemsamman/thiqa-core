@@ -166,7 +166,7 @@ const featureUpdates = [
   { version: "v0.4", title: "حملات SMS تسويقية", date: "18 أكتوبر 2025", image: "https://thiqacrm.b-cdn.net/Group%201000011509%20(2).png" },
   { version: "v0.3", title: "إيصالات رقمية وطباعة", date: "1 أكتوبر 2025" },
   { version: "v0.2", title: "نظام المهام والمتابعات", date: "15 سبتمبر 2025", image: "https://thiqacrm.b-cdn.net/image%20224%20(1).png" },
-  { version: "v0.1", title: "نظام التنبيهات المركزي", date: "1 سبتمبر 2025" },
+  { version: "v0.1", title: "نظام التنبيهات المركزي", date: "1 سبتمبر 2025", image: "https://thiqacrm.b-cdn.net/image%20226%20(1).png" },
 ];
 
 const featureTiles = [
