@@ -6,6 +6,7 @@ import {
   ChevronLeft, ChevronUp, ChevronDown, CheckCircle, Star, ArrowLeft, Play, X, Check,
   Users, FileText, CreditCard, BarChart3, Bell, MessageSquare,
   Phone, Shield, RefreshCcw, Wallet, AlertTriangle, Mail, Clock, Menu,
+  HelpCircle, Sparkles,
 } from "lucide-react";
 import { useLandingContent, ct, ci } from "@/hooks/useLandingContent";
 import { cn } from "@/lib/utils";
@@ -383,8 +384,15 @@ export default function Landing() {
   // RTL — the same side as the hamburger button) and locks body scroll
   // while open so the backdrop doesn't scroll under it. ESC closes.
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Which submenu (info center / support) is expanded inside the
+  // mobile drawer. Only one is open at a time — matches the strain
+  // reference and keeps the sheet compact.
+  const [mobileSubmenu, setMobileSubmenu] = useState<"info" | "support" | null>(null);
   useEffect(() => {
-    if (!mobileMenuOpen) return;
+    if (!mobileMenuOpen) {
+      setMobileSubmenu(null);
+      return;
+    }
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
@@ -679,12 +687,111 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Menu — centered (desktop only). */}
+          {/* Menu — centered (desktop only). First link is a direct
+              route; the next two are hover dropdowns (info center +
+              support) that open on hover with a small bridging gap so
+              mouse-intent doesn't break when the user tracks down
+              toward the panel. */}
           <div className="hidden md:flex items-center gap-10 text-[14px] font-medium text-black/75">
-            {false && <a href="#features" className="transition-colors hover:text-black">لماذا نحن مختلفون</a>}
-            <a href="#demo" className="transition-colors hover:text-black">كيف يعمل</a>
-            <a href="#faq" className="transition-colors hover:text-black">أسئلة وأجوبة</a>
             <a href="/pricing" className="transition-colors hover:text-black">الأسعار</a>
+
+            {/* مركز المعلومات — scroll-to-section dropdown. */}
+            <div className="relative group">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 transition-colors hover:text-black group-hover:text-black"
+              >
+                مركز المعلومات
+                <ChevronDown className="w-3.5 h-3.5 transition-transform duration-200 group-hover:rotate-180" strokeWidth={2.5} />
+              </button>
+              {/* Hover-bridge wrapper — the `pt-4` padding is the
+                  invisible gap that keeps the hover state alive while
+                  the cursor moves from the trigger to the panel. */}
+              <div className="absolute top-full right-1/2 translate-x-1/2 pt-4 invisible opacity-0 translate-y-1 group-hover:visible group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
+                <div
+                  dir="rtl"
+                  className="w-[360px] rounded-2xl bg-white border border-black/[0.06] shadow-[0_18px_48px_-12px_rgba(0,0,0,0.18)] p-3"
+                >
+                  {[
+                    { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "#demo" },
+                    { title: "الميزات", desc: "كل ما يقدّمه Thiqa للوكلاء", icon: Sparkles, href: "#features" },
+                    { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "#testimonials" },
+                    { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "#faq" },
+                  ].map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <a
+                        key={item.href}
+                        href={item.href}
+                        className="flex items-center gap-4 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
+                          <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
+                        </div>
+                        <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-[#f1ece4] text-black">
+                          <Icon className="w-4 h-4" strokeWidth={2.2} />
+                        </div>
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* الدعم — contact + demo dropdown. */}
+            <div className="relative group">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 transition-colors hover:text-black group-hover:text-black"
+              >
+                الدعم
+                <ChevronDown className="w-3.5 h-3.5 transition-transform duration-200 group-hover:rotate-180" strokeWidth={2.5} />
+              </button>
+              <div className="absolute top-full right-1/2 translate-x-1/2 pt-4 invisible opacity-0 translate-y-1 group-hover:visible group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
+                <div
+                  dir="rtl"
+                  className="w-[340px] rounded-2xl bg-white border border-black/[0.06] shadow-[0_18px_48px_-12px_rgba(0,0,0,0.18)] p-3"
+                >
+                  {[
+                    {
+                      title: "عرض توضيحي",
+                      desc: "احجز جلسة تعريفية مع ممثلنا",
+                      icon: MessageSquare,
+                      href: "mailto:support@getthiqa.com?subject=طلب%20عرض%20توضيحي",
+                      filled: true,
+                    },
+                    {
+                      title: "تواصل معنا",
+                      desc: "هل لديك أسئلة؟ تحدّث معنا",
+                      icon: HelpCircle,
+                      href: "mailto:support@getthiqa.com",
+                      filled: false,
+                    },
+                  ].map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <a
+                        key={item.title}
+                        href={item.href}
+                        className="flex items-center gap-4 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
+                          <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
+                        </div>
+                        <div className={cn(
+                          "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg",
+                          item.filled ? "bg-black text-white" : "bg-[#f1ece4] text-black",
+                        )}>
+                          <Icon className="w-4 h-4" strokeWidth={2.2} />
+                        </div>
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* CTA cluster (left side under RTL because it's the last
@@ -786,29 +893,12 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Menu links — each item on its own row, separated by a
-              hairline, large hit target. */}
+          {/* Menu links — price is a direct link; the next two rows
+              expand in place (accordion) to reveal their sub-items.
+              Chevron rotates 180° when that section is open. */}
           <nav className="overflow-y-auto px-5 pt-4">
             <ul className="flex flex-col text-[18px] font-medium text-black">
               <li className="border-t border-black/10">
-                <a
-                  href="#demo"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center justify-between py-5 hover:text-black/70 transition-colors"
-                >
-                  <span>كيف يعمل</span>
-                </a>
-              </li>
-              <li className="border-t border-black/10">
-                <a
-                  href="#faq"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center justify-between py-5 hover:text-black/70 transition-colors"
-                >
-                  <span>أسئلة وأجوبة</span>
-                </a>
-              </li>
-              <li className="border-t border-b border-black/10">
                 <a
                   href="/pricing"
                   onClick={() => setMobileMenuOpen(false)}
@@ -816,6 +906,127 @@ export default function Landing() {
                 >
                   <span>الأسعار</span>
                 </a>
+              </li>
+
+              <li className="border-t border-black/10">
+                <button
+                  type="button"
+                  onClick={() => setMobileSubmenu((s) => (s === "info" ? null : "info"))}
+                  className="w-full flex items-center justify-between py-5 hover:text-black/70 transition-colors"
+                  aria-expanded={mobileSubmenu === "info"}
+                >
+                  <span>مركز المعلومات</span>
+                  <ChevronDown
+                    className={cn(
+                      "w-5 h-5 transition-transform duration-200",
+                      mobileSubmenu === "info" && "rotate-180",
+                    )}
+                    strokeWidth={2.2}
+                  />
+                </button>
+                <div
+                  className={cn(
+                    "grid transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                    mobileSubmenu === "info" ? "grid-rows-[1fr] opacity-100 pb-4" : "grid-rows-[0fr] opacity-0",
+                  )}
+                >
+                  <div className="overflow-hidden">
+                    <ul className="flex flex-col gap-1">
+                      {[
+                        { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "#demo" },
+                        { title: "الميزات", desc: "كل ما يقدّمه Thiqa للوكلاء", icon: Sparkles, href: "#features" },
+                        { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "#testimonials" },
+                        { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "#faq" },
+                      ].map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <li key={item.href}>
+                            <a
+                              href={item.href}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
+                                <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
+                              </div>
+                              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-[#f1ece4] text-black">
+                                <Icon className="w-4 h-4" strokeWidth={2.2} />
+                              </div>
+                            </a>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+              </li>
+
+              <li className="border-t border-b border-black/10">
+                <button
+                  type="button"
+                  onClick={() => setMobileSubmenu((s) => (s === "support" ? null : "support"))}
+                  className="w-full flex items-center justify-between py-5 hover:text-black/70 transition-colors"
+                  aria-expanded={mobileSubmenu === "support"}
+                >
+                  <span>الدعم</span>
+                  <ChevronDown
+                    className={cn(
+                      "w-5 h-5 transition-transform duration-200",
+                      mobileSubmenu === "support" && "rotate-180",
+                    )}
+                    strokeWidth={2.2}
+                  />
+                </button>
+                <div
+                  className={cn(
+                    "grid transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                    mobileSubmenu === "support" ? "grid-rows-[1fr] opacity-100 pb-4" : "grid-rows-[0fr] opacity-0",
+                  )}
+                >
+                  <div className="overflow-hidden">
+                    <ul className="flex flex-col gap-1">
+                      {[
+                        {
+                          title: "عرض توضيحي",
+                          desc: "احجز جلسة تعريفية مع ممثلنا",
+                          icon: MessageSquare,
+                          href: "mailto:support@getthiqa.com?subject=طلب%20عرض%20توضيحي",
+                          filled: true,
+                        },
+                        {
+                          title: "تواصل معنا",
+                          desc: "هل لديك أسئلة؟ تحدّث معنا",
+                          icon: HelpCircle,
+                          href: "mailto:support@getthiqa.com",
+                          filled: false,
+                        },
+                      ].map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <li key={item.title}>
+                            <a
+                              href={item.href}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
+                                <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
+                              </div>
+                              <div className={cn(
+                                "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg",
+                                item.filled ? "bg-black text-white" : "bg-[#f1ece4] text-black",
+                              )}>
+                                <Icon className="w-4 h-4" strokeWidth={2.2} />
+                              </div>
+                            </a>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
               </li>
             </ul>
           </nav>
