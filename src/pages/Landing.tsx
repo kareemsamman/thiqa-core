@@ -295,6 +295,16 @@ export default function Landing() {
   const sliderSectionRef = useRef<HTMLElement | null>(null);
   // "Grow with Thiqa" accordion — first item open by default.
   const [growAccordionIdx, setGrowAccordionIdx] = useState<number>(0);
+  // Mobile breakpoint sniff — used by the slider to decide whether
+  // adjacent cards should peek (desktop) or fully clear the viewport
+  // (mobile). SSR-safe default: treat as desktop until we measure.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
   useEffect(() => {
     const section = sliderSectionRef.current;
     if (!section) return;
@@ -2306,7 +2316,7 @@ export default function Landing() {
                       description on the left. Pointer handlers let
                       the user drag/swipe through slides. */}
                   <div
-                    className="sl-rail relative w-full max-w-[1280px] h-[460px] md:h-[520px] select-none cursor-grab active:cursor-grabbing"
+                    className="sl-rail relative w-full max-w-[1280px] h-[600px] md:h-[520px] select-none cursor-grab active:cursor-grabbing"
                     style={{ touchAction: "pan-y" }}
                     onDragStart={(e) => e.preventDefault()}
                     onPointerDown={(e) => {
@@ -2349,27 +2359,29 @@ export default function Landing() {
                     {slides.map((slide, i) => {
                       // Integer offset — CSS `transition` on transform
                       // and opacity turns the discrete index change
-                      // into a smooth glide between slide slots. The
-                      // 88% spacing keeps adjacent cards mostly to the
-                      // side (tiny peek) instead of crashing into the
-                      // center card.
+                      // into a smooth glide between slide slots.
+                      // Peek width: 88% on desktop (adjacent cards
+                      // peek into the frame); 100% on mobile so the
+                      // full-width card fully clears and only one
+                      // slide is visible at a time.
                       const offset = i - slideIdx;
                       const abs = Math.abs(offset);
+                      const peekPct = isMobile ? 100 : 88;
                       // While dragging, scale down slightly so the card
                       // gives a subtle "picked up" cue.
                       const dragScaleBoost = isDragging && abs === 0 ? -0.02 : 0;
                       const scale = (abs === 0 ? 1 : 0.85) + dragScaleBoost;
-                      const opacity = abs === 0 ? 1 : abs === 1 ? 0.28 : 0;
+                      const opacity = abs === 0 ? 1 : isMobile ? 0 : abs === 1 ? 0.28 : 0;
                       return (
                         <div
                           key={i}
-                          className="absolute top-0 left-1/2 rounded-2xl overflow-hidden w-[760px] md:w-[1060px] h-full flex flex-col will-change-transform"
+                          className="absolute top-0 left-1/2 rounded-2xl overflow-hidden w-[92vw] md:w-[1060px] h-full flex flex-col will-change-transform"
                           style={{
                             background: "rgba(22, 26, 48, 0.38)",
                             backdropFilter: "blur(24px) saturate(1.2)",
                             WebkitBackdropFilter: "blur(24px) saturate(1.2)",
                             border: "1px solid rgba(255, 255, 255, 0.12)",
-                            transform: `translateX(calc(-50% + ${-offset * 88}% + ${dragDelta}px)) scale(${scale})`,
+                            transform: `translateX(calc(-50% + ${-offset * peekPct}% + ${dragDelta}px)) scale(${scale})`,
                             opacity,
                             filter: abs === 0 ? "none" : "blur(2px)",
                             pointerEvents: abs === 0 ? "auto" : "none",
@@ -2380,13 +2392,16 @@ export default function Landing() {
                               : "transform 700ms cubic-bezier(0.4, 0, 0.2, 1), opacity 600ms cubic-bezier(0.4, 0, 0.2, 1), filter 500ms, box-shadow 500ms",
                           }}
                         >
-                          {/* Top row: text column + image panel */}
-                          <div className="flex flex-row flex-1 min-h-0">
-                            {/* First child → right side under RTL:
-                                image panel with a subtly darker tint
-                                so the mockup reads as a separate plate. */}
+                          {/* Top row: text column + image panel. Mobile
+                              stacks vertically (image → text); desktop
+                              keeps the side-by-side split. */}
+                          <div className="flex flex-col md:flex-row flex-1 min-h-0">
+                            {/* First child → top on mobile / right side
+                                under RTL on desktop: image panel with a
+                                subtly darker tint so the mockup reads
+                                as a separate plate. */}
                             <div
-                              className="w-[46%] h-full flex items-center justify-center p-8 md:p-10 flex-shrink-0"
+                              className="w-full h-[240px] md:w-[46%] md:h-full flex items-center justify-center p-5 md:p-10 flex-shrink-0"
                               style={{ background: "rgba(10, 14, 30, 0.28)" }}
                             >
                               <img
@@ -2398,16 +2413,17 @@ export default function Landing() {
                               />
                             </div>
 
-                            {/* Second child → left side under RTL:
-                                text block, right-aligned Arabic copy. */}
-                            <div className="flex-1 p-10 md:p-14 flex flex-col justify-center text-white text-right">
-                              <span className="text-[11px] text-white/60 font-bold tracking-[0.2em] uppercase mb-4">
+                            {/* Second child → bottom on mobile / left
+                                side under RTL on desktop: text block,
+                                right-aligned Arabic copy. */}
+                            <div className="flex-1 p-6 md:p-14 flex flex-col justify-center text-white text-right">
+                              <span className="text-[11px] text-white/60 font-bold tracking-[0.2em] uppercase mb-3 md:mb-4">
                                 0{i + 1} · {slide.eyebrow}
                               </span>
-                              <h3 className="text-[1.7rem] md:text-[2.1rem] font-bold leading-[1.25] whitespace-pre-line mb-5">
+                              <h3 className="text-[1.4rem] md:text-[2.1rem] font-bold leading-[1.25] whitespace-pre-line mb-3 md:mb-5">
                                 {slide.title}
                               </h3>
-                              <p className="text-[15px] md:text-[16px] text-white/80 leading-relaxed">
+                              <p className="text-[14px] md:text-[16px] text-white/80 leading-relaxed">
                                 {slide.desc}
                               </p>
                             </div>
