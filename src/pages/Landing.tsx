@@ -695,14 +695,14 @@ export default function Landing() {
           <div className="hidden md:flex items-center gap-10 text-[14px] font-medium text-black/75">
             <a href="/pricing" className="transition-colors hover:text-black">الأسعار</a>
 
-            {/* مركز المعلومات — scroll-to-section dropdown. */}
+            {/* مركز المعلومات — scroll-to-section dropdown with a
+                featured gradient card on the left (end of RTL row). */}
             <div className="relative group">
               <button
                 type="button"
-                className="inline-flex items-center gap-1 transition-colors hover:text-black group-hover:text-black"
+                className="inline-flex items-center transition-colors hover:text-black group-hover:text-black"
               >
                 مركز المعلومات
-                <ChevronDown className="w-3.5 h-3.5 transition-transform duration-200 group-hover:rotate-180" strokeWidth={2.5} />
               </button>
               {/* Hover-bridge wrapper — the `pt-4` padding is the
                   invisible gap that keeps the hover state alive while
@@ -710,31 +710,70 @@ export default function Landing() {
               <div className="absolute top-full right-1/2 translate-x-1/2 pt-4 invisible opacity-0 translate-y-1 group-hover:visible group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
                 <div
                   dir="rtl"
-                  className="w-[360px] rounded-2xl bg-white border border-black/[0.06] shadow-[0_18px_48px_-12px_rgba(0,0,0,0.18)] p-3"
+                  className="w-[560px] rounded-2xl bg-white border border-black/[0.06] shadow-[0_18px_48px_-12px_rgba(0,0,0,0.18)] p-3 flex gap-3"
                 >
-                  {[
-                    { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "#demo" },
-                    { title: "الميزات", desc: "كل ما يقدّمه Thiqa للوكلاء", icon: Sparkles, href: "#features" },
-                    { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "#testimonials" },
-                    { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "#faq" },
-                  ].map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <a
-                        key={item.href}
-                        href={item.href}
-                        className="flex items-center gap-4 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
-                          <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
-                        </div>
-                        <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-[#f1ece4] text-black">
-                          <Icon className="w-4 h-4" strokeWidth={2.2} />
-                        </div>
-                      </a>
-                    );
-                  })}
+                  {/* Items list (right in RTL) */}
+                  <div className="flex-1 flex flex-col">
+                    {[
+                      { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "#demo" },
+                      { title: "الميزات", desc: "كل ما يقدّمه Thiqa للوكلاء", icon: Sparkles, href: "#features" },
+                      { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "#testimonials" },
+                      { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "#faq" },
+                    ].map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <a
+                          key={item.href}
+                          href={item.href}
+                          className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-black/[0.03] transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
+                            <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
+                          </div>
+                          <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-black/[0.05] text-black">
+                            <Icon className="w-4 h-4" strokeWidth={2.2} />
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+
+                  {/* Featured gradient card (left in RTL — end of the
+                      row). Blue→purple gradient matches the landing
+                      page's slider gradients. A blurred highlight
+                      spot plus the Thiqa wordmark centered on top. */}
+                  <a
+                    href="/register"
+                    onClick={() => trackEvent("signup_click", "/landing:nav-info-card")}
+                    className="relative flex-shrink-0 w-[200px] rounded-xl overflow-hidden flex items-center justify-center text-center"
+                    style={{
+                      background: "linear-gradient(160deg, #3B5AD9 0%, #6A7FD8 55%, #A8B5E6 100%)",
+                    }}
+                  >
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{
+                        background:
+                          "radial-gradient(circle at 30% 75%, rgba(255,255,255,0.35), transparent 55%)",
+                        filter: "blur(14px)",
+                      }}
+                    />
+                    <div className="relative z-10 px-5 py-8 flex flex-col items-center">
+                      <img
+                        src="https://thiqacrm.b-cdn.net/small_black.png"
+                        alt=""
+                        className="w-8 h-8 mb-3 opacity-90 invert"
+                        aria-hidden="true"
+                      />
+                      <div className="text-white text-[22px] font-bold leading-tight">
+                        اكتشف Thiqa
+                      </div>
+                      <div className="text-white/80 text-[12px] mt-2 leading-snug">
+                        جولة سريعة في النظام
+                      </div>
+                    </div>
+                  </a>
                 </div>
               </div>
             </div>
@@ -743,10 +782,9 @@ export default function Landing() {
             <div className="relative group">
               <button
                 type="button"
-                className="inline-flex items-center gap-1 transition-colors hover:text-black group-hover:text-black"
+                className="inline-flex items-center transition-colors hover:text-black group-hover:text-black"
               >
                 الدعم
-                <ChevronDown className="w-3.5 h-3.5 transition-transform duration-200 group-hover:rotate-180" strokeWidth={2.5} />
               </button>
               <div className="absolute top-full right-1/2 translate-x-1/2 pt-4 invisible opacity-0 translate-y-1 group-hover:visible group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
                 <div
@@ -782,7 +820,7 @@ export default function Landing() {
                         </div>
                         <div className={cn(
                           "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg",
-                          item.filled ? "bg-black text-white" : "bg-[#f1ece4] text-black",
+                          item.filled ? "bg-black text-white" : "bg-black/[0.05] text-black",
                         )}>
                           <Icon className="w-4 h-4" strokeWidth={2.2} />
                         </div>
@@ -950,7 +988,7 @@ export default function Landing() {
                                 <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
                                 <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
                               </div>
-                              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-[#f1ece4] text-black">
+                              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-black/[0.05] text-black">
                                 <Icon className="w-4 h-4" strokeWidth={2.2} />
                               </div>
                             </a>
@@ -1016,7 +1054,7 @@ export default function Landing() {
                               </div>
                               <div className={cn(
                                 "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg",
-                                item.filled ? "bg-black text-white" : "bg-[#f1ece4] text-black",
+                                item.filled ? "bg-black text-white" : "bg-black/[0.05] text-black",
                               )}>
                                 <Icon className="w-4 h-4" strokeWidth={2.2} />
                               </div>

@@ -3,6 +3,15 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Smooth anchor scroll for same-page navigation (e.g. nav info-center
+   items scrolling to #features, #demo, etc). */
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
 /* RTL: make the Switch thumb move LEFT when checked */
 [dir="rtl"] button[role="switch"] > span[data-state="checked"] {
   --tw-translate-x: -1.25rem; /* equals translate-x-5 */
