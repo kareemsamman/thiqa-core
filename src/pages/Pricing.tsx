@@ -206,12 +206,12 @@ export default function Pricing() {
                           href={item.href}
                           className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-black/[0.03] transition-colors"
                         >
+                          <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-black/[0.05] text-black">
+                            <Icon className="w-4 h-4" strokeWidth={2.2} />
+                          </div>
                           <div className="flex-1 min-w-0">
                             <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
                             <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
-                          </div>
-                          <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-black/[0.05] text-black">
-                            <Icon className="w-4 h-4" strokeWidth={2.2} />
                           </div>
                         </a>
                       );
@@ -273,15 +273,15 @@ export default function Pricing() {
                         href={item.href}
                         className="flex items-center gap-4 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors"
                       >
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
-                          <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
-                        </div>
                         <div className={cn(
                           "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg",
                           item.filled ? "bg-black text-white" : "bg-black/[0.05] text-black",
                         )}>
                           <Icon className="w-4 h-4" strokeWidth={2.2} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
+                          <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
                         </div>
                       </a>
                     );
@@ -421,12 +421,12 @@ export default function Pricing() {
                               onClick={() => setMobileMenuOpen(false)}
                               className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors"
                             >
+                              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-black/[0.05] text-black">
+                                <Icon className="w-4 h-4" strokeWidth={2.2} />
+                              </div>
                               <div className="flex-1 min-w-0">
                                 <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
                                 <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
-                              </div>
-                              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-black/[0.05] text-black">
-                                <Icon className="w-4 h-4" strokeWidth={2.2} />
                               </div>
                             </a>
                           </li>
@@ -470,15 +470,15 @@ export default function Pricing() {
                               onClick={() => setMobileMenuOpen(false)}
                               className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors"
                             >
-                              <div className="flex-1 min-w-0">
-                                <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
-                                <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
-                              </div>
                               <div className={cn(
                                 "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg",
                                 item.filled ? "bg-black text-white" : "bg-black/[0.05] text-black",
                               )}>
                                 <Icon className="w-4 h-4" strokeWidth={2.2} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
+                                <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
                               </div>
                             </a>
                           </li>
