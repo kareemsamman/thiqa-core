@@ -14,9 +14,37 @@ import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { PublicSEO } from "@/components/public/PublicSEO";
 import { Helmet } from "react-helmet-async";
 
+// FAQ data — single source of truth shared by the rendered accordion
+// (inside the FAQ section) and the FAQPage JSON-LD below, so a wording
+// change can never put the two out of sync.
+const LANDING_FAQS: { q: string; a: string }[] = [
+  {
+    q: "ما هو Thiqa؟",
+    a: "نظام إدارة مخصّص لوكالات التأمين — إدارة العملاء والوثائق والمدفوعات والتقارير في مكان واحد. مصمّم لواقع الوكالات في منطقتنا مع دعم كامل للعربية وواجهة RTL احترافية.",
+  },
+  {
+    q: "هل يمكنني إلغاء الاشتراك في أي وقت؟",
+    a: "نعم، الإلغاء مجاني ومتاح في أي وقت بدون التزام أو رسوم إضافية. عند الإلغاء نرسل لك نسخة احتياطية كاملة من قاعدة بياناتك لتحتفظ بها، وتبقى لديك إمكانية العودة متى شئت بنفس البيانات.",
+  },
+  {
+    q: "هل يمكن الانتقال بين خطة Pro وBasic؟",
+    a: "نعم. الترقية من Basic إلى Pro تتم فوراً من صفحة الاشتراك وتُفعَّل الميزات الإضافية مباشرة. الانتقال من Pro إلى Basic متاح أيضاً في أي وقت، ويُحتسب فرق السعر بالتناسب مع المدة المتبقية في فاتورتك القادمة.",
+  },
+  {
+    q: "هل يوجد فترة تجريبية مجانية؟",
+    a: "نعم، 35 يوماً تجربة مجانية بدون الحاجة لبطاقة ائتمان. جميع ميزات خطة Pro متاحة خلال التجربة لتختبر النظام بالكامل قبل الاشتراك.",
+  },
+  {
+    q: "هل معلوماتي وبيانات عملائي آمنة؟",
+    a: "نعم — تشفير متقدم لجميع البيانات، نسخ احتياطية يومية تلقائية، ونظام صلاحيات كامل يتحكم بمن يستطيع الوصول إلى أي معلومة داخل وكالتك. أنتم الوحيدون الذين يصلون لبياناتكم.",
+  },
+];
+
 // JSON-LD structured data for the home page. Tells Google we are a
 // SaaS product (SoftwareApplication) tied to the Thiqa Organization
 // — this is what enables the rich-result card with logo + sitelinks.
+// Includes a FAQPage entity so the FAQ section is eligible for FAQ
+// rich results in search.
 const LANDING_JSON_LD = {
   "@context": "https://schema.org",
   "@graph": [
@@ -27,6 +55,7 @@ const LANDING_JSON_LD = {
       alternateName: "ثقة",
       url: "https://getthiqa.com/",
       logo: "https://thiqacrm.b-cdn.net/small_black.png",
+      image: "https://thiqacrm.b-cdn.net/Screenshot%202026-04-18%20130915.png",
       sameAs: [
         "https://www.facebook.com/getthiqa",
         "https://www.instagram.com/getthiqa",
@@ -40,6 +69,7 @@ const LANDING_JSON_LD = {
       inLanguage: "ar",
       description:
         "نظام سحابي متكامل لإدارة وكالات التأمين: العملاء، الوثائق، الأقساط، التحصيل، الشيكات، التقارير، والتنبيهات.",
+      image: "https://thiqacrm.b-cdn.net/Screenshot%202026-04-18%20130915.png",
       offers: {
         "@type": "Offer",
         price: "0",
@@ -53,6 +83,17 @@ const LANDING_JSON_LD = {
       name: "Thiqa",
       inLanguage: "ar",
       publisher: { "@id": "https://getthiqa.com/#org" },
+    },
+    {
+      "@type": "FAQPage",
+      mainEntity: LANDING_FAQS.map((f) => ({
+        "@type": "Question",
+        name: f.q,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: f.a,
+        },
+      })),
     },
   ],
 };
@@ -2775,34 +2816,11 @@ export default function Landing() {
           </h2>
 
           <div className="flex flex-col">
-            {(() => {
-              const faqs: { q: string; a: string }[] = [
-                {
-                  q: "ما هو Thiqa؟",
-                  a: "نظام إدارة مخصّص لوكالات التأمين — إدارة العملاء والوثائق والمدفوعات والتقارير في مكان واحد. مصمّم لواقع الوكالات في منطقتنا مع دعم كامل للعربية وواجهة RTL احترافية.",
-                },
-                {
-                  q: "هل يمكنني إلغاء الاشتراك في أي وقت؟",
-                  a: "نعم، الإلغاء مجاني ومتاح في أي وقت بدون التزام أو رسوم إضافية. عند الإلغاء نرسل لك نسخة احتياطية كاملة من قاعدة بياناتك لتحتفظ بها، وتبقى لديك إمكانية العودة متى شئت بنفس البيانات.",
-                },
-                {
-                  q: "هل يمكن الانتقال بين خطة Pro وBasic؟",
-                  a: "نعم. الترقية من Basic إلى Pro تتم فوراً من صفحة الاشتراك وتُفعَّل الميزات الإضافية مباشرة. الانتقال من Pro إلى Basic متاح أيضاً في أي وقت، ويُحتسب فرق السعر بالتناسب مع المدة المتبقية في فاتورتك القادمة.",
-                },
-                {
-                  q: "هل يوجد فترة تجريبية مجانية؟",
-                  a: "نعم، 35 يوماً تجربة مجانية بدون الحاجة لبطاقة ائتمان. جميع ميزات خطة Pro متاحة خلال التجربة لتختبر النظام بالكامل قبل الاشتراك.",
-                },
-                {
-                  q: "هل معلوماتي وبيانات عملائي آمنة؟",
-                  a: "نعم — تشفير متقدم لجميع البيانات، نسخ احتياطية يومية تلقائية، ونظام صلاحيات كامل يتحكم بمن يستطيع الوصول إلى أي معلومة داخل وكالتك. أنتم الوحيدون الذين يصلون لبياناتكم.",
-                },
-              ];
-              return faqs.map((faq, i) => {
-                const isOpen = openFaq === i;
-                const isLast = i === faqs.length - 1;
-                return (
-                  <div key={i}>
+            {LANDING_FAQS.map((faq, i) => {
+              const isOpen = openFaq === i;
+              const isLast = i === LANDING_FAQS.length - 1;
+              return (
+                <div key={i}>
                     <button
                       onClick={() => setOpenFaq(isOpen ? null : i)}
                       className="w-full flex items-center gap-4 py-6 md:py-7 text-right group"
@@ -2838,8 +2856,7 @@ export default function Landing() {
                     {!isLast && <div className="h-px bg-black/[0.08]" />}
                   </div>
                 );
-              });
-            })()}
+            })}
           </div>
 
           <p className="mt-12 text-center text-[14px] md:text-[15px] text-black/55">

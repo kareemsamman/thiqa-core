@@ -525,7 +525,12 @@ export default function Pricing() {
           shadow to lift off the page. The card with a `badge` gets a
           violet pill on top plus a slight ring so the "most popular"
           option reads instantly. */}
-      <section className="relative z-10 pb-24 px-4 md:px-6">
+      <section className="relative z-10 pb-24 px-4 md:px-6" aria-labelledby="pricing-plans-heading">
+        {/* Visually subtle but semantically real H2 — gives the
+            document a proper H1 → H2 → H3 outline for crawlers. */}
+        <h2 id="pricing-plans-heading" className="sr-only">
+          خطط أسعار Thiqa
+        </h2>
         <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
           {plans.map((plan) => {
             const isPopular = !!plan.badge;

@@ -941,7 +941,7 @@ function generateHtmlOverlayReport(
     let totalPages = 0;
     let pageContainers = [];
     
-    const CRM_BASE_URL = 'https://3846f912-c591-4c1e-b01f-723e45f1efc1.lovableproject.com';
+    const CRM_BASE_URL = 'https://getthiqa.com';
     
     function backToReport() {
       window.location.href = CRM_BASE_URL + '/accidents/' + REPORT_ID;

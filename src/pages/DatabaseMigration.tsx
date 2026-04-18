@@ -378,7 +378,7 @@ export default function DatabaseMigration() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>تحذير مهم</AlertTitle>
           <AlertDescription>
-            تأكد من تصدير البيانات قبل إلغاء اشتراك Lovable. بعد الإلغاء لن تتمكن من الوصول إلى قاعدة البيانات.
+            تأكد من تصدير البيانات قبل أي عملية ترحيل أو إلغاء للخدمة. بعد ذلك قد لا تتمكن من الوصول إلى قاعدة البيانات.
           </AlertDescription>
         </Alert>
 

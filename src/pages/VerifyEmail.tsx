@@ -145,7 +145,7 @@ export default function VerifyEmail() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-muted/40 to-background p-6" dir="rtl">
+    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-muted/40 to-background p-6" dir="rtl">
       <PublicSEO
         title="Thiqa | تأكيد البريد الإلكتروني"
         description="أكمل تسجيل حسابك في Thiqa بتأكيد بريدك الإلكتروني."
@@ -233,6 +233,6 @@ export default function VerifyEmail() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

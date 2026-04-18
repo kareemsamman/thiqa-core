@@ -82,7 +82,7 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative" dir="rtl">
+    <main className="min-h-screen flex flex-col items-center justify-center p-4 relative" dir="rtl">
       <PublicSEO
         title="Thiqa | تعيين كلمة مرور جديدة"
         description="أعد تعيين كلمة المرور لحسابك في Thiqa بأمان."
@@ -208,6 +208,6 @@ export default function ResetPassword() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

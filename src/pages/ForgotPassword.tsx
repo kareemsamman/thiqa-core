@@ -65,7 +65,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative bg-white" dir="rtl">
+    <main className="min-h-screen flex flex-col items-center justify-center p-4 relative bg-white" dir="rtl">
       <PublicSEO
         title="Thiqa | استعادة كلمة المرور"
         description="استعد كلمة المرور لحسابك في Thiqa عبر بريدك الإلكتروني المسجّل، خلال دقائق."
@@ -188,6 +188,6 @@ export default function ForgotPassword() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

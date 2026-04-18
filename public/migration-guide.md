@@ -126,7 +126,7 @@ https://YOUR-PROJECT-ID.supabase.co/auth/v1/callback
 
 ## الخطوة 4: تصدير البيانات
 
-### من صفحة نقل قاعدة البيانات في Lovable:
+### من صفحة نقل قاعدة البيانات داخل لوحة التحكم:
 
 1. اذهب إلى `/admin/database-migration`
 2. تبويب **"تصدير البيانات"**
