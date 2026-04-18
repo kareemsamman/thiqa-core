@@ -430,57 +430,15 @@ export default function Landing() {
   // marquee's aria-hidden) still want the boolean. Kept cheap — flips
   // at most once when crossing the 8 px threshold.
   const [scrolled, setScrolled] = useState(false);
-  // Scroll-linked chrome — binary state + *instant* scroll snap.
-  //
-  // Two moving parts, working together:
-  //   1. `scrolled` flips once at y > 8 and drives two stable visual
-  //      states (open / pill) via conditional inline styles + a
-  //      short CSS transition on the elements themselves.
-  //   2. The scroll listener additionally TELEPORTS the window past
-  //      the 0→DEAD_ZONE_END range the instant the user crosses
-  //      into it — scrolling up jumps to 0, scrolling down jumps to
-  //      DEAD_ZONE_END + 12. `behavior: "auto"` (not smooth) so the
-  //      user literally never sees an in-between scroll position.
-  //
-  // Together: no per-frame JS, no interpolation, no half-morph
-  // frames, and no way to park inside the dead zone. The nav you
-  // see is always either fully-open or fully-pill.
+  // Scroll listener — flips `scrolled` once the user passes the 8 px
+  // threshold. The nav transition still interpolates via CSS, so the
+  // user sees a smooth pill morph instead of the previous teleport
+  // that felt like the page was freezing at the very top.
   useEffect(() => {
-    const DEAD_ZONE_END = 158;
-    let prevY = window.scrollY;
-    let lastScrolled = prevY > 8;
-    setScrolled(lastScrolled);
-    let snapping = false;
-
     const onScroll = () => {
-      if (snapping) return;
-      const y = window.scrollY;
-      const dir: "up" | "down" = y > prevY ? "down" : "up";
-
-      if (y > 0 && y < DEAD_ZONE_END) {
-        snapping = true;
-        const target = dir === "up" ? 0 : DEAD_ZONE_END + 12;
-        window.scrollTo({ top: target, behavior: "auto" });
-        requestAnimationFrame(() => {
-          prevY = window.scrollY;
-          const next = prevY > 8;
-          if (next !== lastScrolled) {
-            lastScrolled = next;
-            setScrolled(next);
-          }
-          snapping = false;
-        });
-        return;
-      }
-
-      prevY = y;
-      const next = y > 8;
-      if (next !== lastScrolled) {
-        lastScrolled = next;
-        setScrolled(next);
-      }
+      setScrolled(window.scrollY > 8);
     };
-
+    onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -1122,9 +1080,9 @@ export default function Landing() {
           <div className="absolute inset-0 bg-white/20" />
         </div>
 
-        <div className="relative z-10 w-[92%] max-w-[56rem] mx-auto text-center pt-28 md:pt-44">
+        <div className="relative z-10 w-[94%] max-w-[56rem] mx-auto text-center pt-40 md:pt-44">
           <h1
-            className="text-[1.6rem] md:text-[2.2rem] lg:text-[2.8rem] font-extrabold leading-[1.2] tracking-tight whitespace-pre-line hero-reveal text-black"
+            className="text-[1.2rem] md:text-[2.2rem] lg:text-[2.8rem] font-extrabold leading-[1.35] md:leading-[1.2] tracking-tight whitespace-pre-line hero-reveal text-black"
             style={{ animationDelay: '120ms' }}
           >
             {ct(content, "hero_title", "CRM لوكالات التأمين.\nأبسط، أسرع، أذكى.")}
