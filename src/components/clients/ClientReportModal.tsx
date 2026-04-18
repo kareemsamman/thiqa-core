@@ -731,7 +731,7 @@ export function ClientReportModal({
       });
       if (smsResponse.error) throw smsResponse.error;
 
-      await supabase.from('sms_logs').insert([
+      await (supabase.from('sms_logs') as any).insert([
         {
           phone_number: client.phone_number,
           message,

@@ -143,7 +143,7 @@ export default function Cars() {
       }
 
       if (filters.carType !== "all") {
-        query = query.eq("car_type", filters.carType);
+        query = query.eq("car_type", filters.carType as any);
       }
 
       if (filters.branchId !== "all") {
