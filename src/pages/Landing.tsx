@@ -1117,7 +1117,7 @@ export default function Landing() {
           className="relative z-10 w-full mx-auto px-6 pt-10 md:pt-0 pb-0 hero-scale-in flex justify-center"
           style={{ animationDelay: '720ms' }}
         >
-          <div className="relative rounded-t-xl overflow-hidden border border-black/[0.12] border-b-0 shadow-2xl shadow-black/20 max-w-full w-[85%] md:w-1/2">
+          <div className="relative rounded-t-xl overflow-hidden border border-black/[0.12] border-b-0 shadow-2xl shadow-black/20 max-w-full w-[95%] md:w-1/2">
             <img
               src="https://thiqacrm.b-cdn.net/1new.png"
               alt="Thiqa CRM Dashboard"
@@ -1253,16 +1253,18 @@ export default function Landing() {
           );
           io.observe(el);
         }}
-        className="relative w-full min-h-screen overflow-hidden bg-white"
+        className="relative w-full md:min-h-screen overflow-hidden bg-white pb-10 md:pb-0"
       >
-        {/* Sharp foreground image — 70% viewport width, 76% section
-            height, anchored to the bottom so the person's head sits
-            in the upper portion of the image (around ~25-45% of the
-            section) and the pills can crowd around it. */}
+        {/* Sharp foreground image — desktop: 70% viewport width, 76%
+            section height, absolutely anchored bottom so pills can
+            crowd around the head. Mobile: flows naturally below the
+            headline + pill grid, 88% of the viewport wide, natural
+            aspect ratio so the whole person is visible (not
+            top-cropped). */}
         <img
           src="https://thiqacrm.b-cdn.net/hf_20260416_191720_99f2169b-05a1-45de-9063-68dd989588c1%201%20(2)%20(1).jpg"
           alt="وكيل تأمين غارق بالمهام قبل Thiqa"
-          className="hs-img absolute bottom-0 left-1/2 -translate-x-1/2 w-[70%] h-[76%] object-cover object-bottom"
+          className="hs-img relative mx-auto mt-6 w-[88%] h-auto block md:absolute md:bottom-0 md:left-1/2 md:-translate-x-1/2 md:w-[70%] md:h-[76%] md:object-cover md:object-bottom md:mt-0"
           loading="lazy"
         />
 
@@ -1272,14 +1274,47 @@ export default function Landing() {
             color shift. Both type in right-to-left via clip-path +
             steps(), the bold line starting after the light one
             finishes so the reveal reads as a natural sentence. */}
-        <h2 className="relative z-10 flex flex-col justify-center items-center text-center leading-[1.25] md:leading-[1.2] pt-20 md:pt-24 px-6 text-black">
-          <span className="hs-type hs-type-1 block font-light text-[1.5rem] md:text-[2.25rem]">
+        <h2 className="relative z-10 flex flex-col justify-center items-center text-center leading-[1.25] md:leading-[1.2] pt-16 md:pt-24 px-6 text-black">
+          <span className="hs-type hs-type-1 block font-light text-[1.35rem] md:text-[2.25rem]">
             زهقت من الأكسل والأوراق؟
           </span>
-          <span className="hs-type hs-type-2 block font-bold mt-3 text-[2.5rem] md:text-[4rem] leading-[1.1]">
+          <span className="hs-type hs-type-2 block font-bold mt-3 text-[2.25rem] md:text-[4rem] leading-[1.1]">
             ثقة هو الحل.
           </span>
         </h2>
+
+        {/* Mobile pill grid — compressed 2-col wrap of the most
+            important "notifications" so the mobile story still reads
+            as "drowning in tasks". Hidden on md+ where the absolute
+            pills take over. */}
+        <div className="relative z-10 md:hidden px-5 mt-6 grid grid-cols-2 gap-2.5">
+          {[
+            { icon: AlertTriangle, label: "عاجل", color: "text-rose-500" },
+            { icon: Phone, label: "مكالمة فائتة", color: "text-[#122042]", badge: "7" },
+            { icon: Mail, label: "بريد غير مقروء", color: "text-[#122042]", badge: "23" },
+            { icon: MessageSquare, label: "شكوى عميل", color: "text-rose-500" },
+            { icon: Clock, label: "تجديد متأخر", color: "text-rose-500" },
+            { icon: Wallet, label: "دفعة متأخرة", color: "text-amber-600", badge: "3" },
+          ].map((pill) => {
+            const Icon = pill.icon;
+            return (
+              <div
+                key={pill.label}
+                className="flex items-center gap-2 rounded-full bg-[#faf5ef] border border-black/[0.04] px-3 py-2 shadow-[0_6px_18px_-6px_rgba(18,32,66,0.12)]"
+              >
+                <Icon className={cn("h-4 w-4 flex-shrink-0", pill.color)} strokeWidth={2.2} />
+                <span className="text-[12px] font-semibold text-black whitespace-nowrap flex-1 min-w-0 truncate">
+                  {pill.label}
+                </span>
+                {pill.badge && (
+                  <span className="flex-shrink-0 h-4 min-w-[18px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {pill.badge}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
 
         {/* Pill notifications — glassmorphism cards concentrated in
             the upper half of the section with percentage-based
