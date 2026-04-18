@@ -8,6 +8,7 @@ import { useLandingContent, ct } from "@/hooks/useLandingContent";
 import { supabase } from "@/integrations/supabase/client";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { cn } from "@/lib/utils";
+import { PublicSEO } from "@/components/public/PublicSEO";
 
 interface PlanData {
   id: string;
@@ -151,6 +152,11 @@ export default function Pricing() {
       dir="rtl"
       style={{ fontFamily: "'Cairo', sans-serif" }}
     >
+      <PublicSEO
+        title="Thiqa | الأسعار والخطط"
+        description="خطط أسعار Thiqa لإدارة وكالات التأمين: ابدأ بالخطة المجانية ووسّع حسب حاجة وكالتك. أسعار شفافة، اشتراكات شهرية وسنوية، وبدون التزامات طويلة."
+        keywords="أسعار Thiqa, خطط اشتراك Thiqa, تكلفة نظام إدارة التأمين, اشتراك مجاني, خطة احترافية"
+      />
       {/* Top blue gradient — covers hero area, fades into white by the
           time the pricing cards start. Absolute so it layers under the
           content without pushing anything around. */}

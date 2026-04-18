@@ -1,12 +1,18 @@
 import { Link } from "react-router-dom";
 import { FileText, UserCheck, CreditCard, RefreshCw, Database, Ban, Wrench, AlertTriangle, ScrollText, Mail, ArrowLeft } from "lucide-react";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
+import { PublicSEO } from "@/components/public/PublicSEO";
 
 // Public legal page — no auth, no CRM chrome. Same layout as Privacy.tsx
 // so the two read as a single set.
 export default function TermsOfUse() {
   return (
     <div className="min-h-screen bg-white text-foreground" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
+      <PublicSEO
+        title="Thiqa | شروط الاستخدام"
+        description="شروط استخدام منصة Thiqa لإدارة وكالات التأمين: حقوق وواجبات المستخدم، الاشتراكات والمدفوعات، حدود المسؤولية، وسياسات الإلغاء."
+        keywords="شروط استخدام Thiqa, اتفاقية الخدمة, شروط الاشتراك"
+      />
       {/* Top bar */}
       <header className="border-b border-black/[0.06]">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import thiqaLogoDark from "@/assets/thiqa-logo-dark.svg";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
 import { checkPasswordStrength, isPasswordValid } from "@/lib/authValidation";
+import { PublicSEO } from "@/components/public/PublicSEO";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -82,6 +83,10 @@ export default function ResetPassword() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative" dir="rtl">
+      <PublicSEO
+        title="Thiqa | تعيين كلمة مرور جديدة"
+        description="أعد تعيين كلمة المرور لحسابك في Thiqa بأمان."
+      />
       <div className="fixed inset-0 lg:hidden -z-10">
         <img src={loginBgMobile} alt="" className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-black/30 backdrop-blur-md" />

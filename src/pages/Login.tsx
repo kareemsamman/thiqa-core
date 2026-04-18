@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
+import { PublicSEO } from "@/components/public/PublicSEO";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { digitsOnly } from "@/lib/validation";
 import {
@@ -483,8 +484,18 @@ export default function Login() {
 
   const passwordStrength = checkPasswordStrength(signupPasswordDisplay);
 
+  const isSignup = pageView === "signup";
   return (
     <div className="min-h-[100dvh] flex flex-col lg:flex-row-reverse relative bg-white" dir="rtl">
+      <PublicSEO
+        title={isSignup ? "Thiqa | إنشاء حساب جديد" : "Thiqa | تسجيل الدخول"}
+        description={
+          isSignup
+            ? "انضم إلى Thiqa وابدأ بإدارة وكالة التأمين خاصتك إلكترونياً. تجربة مجانية 35 يوم بدون بطاقة ائتمان."
+            : "سجّل دخولك إلى Thiqa لإدارة عملاء وكالتك ووثائقك وأقساطك ومدفوعاتك في مكان واحد."
+        }
+        keywords={isSignup ? "تسجيل في Thiqa, إنشاء حساب, اشتراك مجاني, نظام تأمين" : "تسجيل دخول Thiqa, دخول للنظام"}
+      />
       {/* Mobile video banner — short (15vh) strip at the top of the
           screen with the white Thiqa lockup centered on top. Hidden
           on lg+ since the desktop left panel already shows the same

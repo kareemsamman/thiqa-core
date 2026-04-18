@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, ArrowRight, CheckCircle2, Mail } from "lucide-react";
 import { toast } from "sonner";
+import { PublicSEO } from "@/components/public/PublicSEO";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -65,6 +66,10 @@ export default function ForgotPassword() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative bg-white" dir="rtl">
+      <PublicSEO
+        title="Thiqa | استعادة كلمة المرور"
+        description="استعد كلمة المرور لحسابك في Thiqa عبر بريدك الإلكتروني المسجّل، خلال دقائق."
+      />
 
       <div className="w-full max-w-md animate-scale-in">
         <div className="rounded-2xl border border-black/10 bg-white dark:bg-card overflow-hidden">

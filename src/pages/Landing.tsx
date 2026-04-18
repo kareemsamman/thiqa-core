@@ -11,6 +11,51 @@ import {
 import { useLandingContent, ct, ci } from "@/hooks/useLandingContent";
 import { cn } from "@/lib/utils";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
+import { PublicSEO } from "@/components/public/PublicSEO";
+import { Helmet } from "react-helmet-async";
+
+// JSON-LD structured data for the home page. Tells Google we are a
+// SaaS product (SoftwareApplication) tied to the Thiqa Organization
+// — this is what enables the rich-result card with logo + sitelinks.
+const LANDING_JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://getthiqa.com/#org",
+      name: "Thiqa",
+      alternateName: "ثقة",
+      url: "https://getthiqa.com/",
+      logo: "https://thiqacrm.b-cdn.net/small_black.png",
+      sameAs: [
+        "https://www.facebook.com/getthiqa",
+        "https://www.instagram.com/getthiqa",
+      ],
+    },
+    {
+      "@type": "SoftwareApplication",
+      name: "Thiqa",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      inLanguage: "ar",
+      description:
+        "نظام سحابي متكامل لإدارة وكالات التأمين: العملاء، الوثائق، الأقساط، التحصيل، الشيكات، التقارير، والتنبيهات.",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "ILS",
+      },
+      publisher: { "@id": "https://getthiqa.com/#org" },
+    },
+    {
+      "@type": "WebSite",
+      url: "https://getthiqa.com/",
+      name: "Thiqa",
+      inLanguage: "ar",
+      publisher: { "@id": "https://getthiqa.com/#org" },
+    },
+  ],
+};
 import dashboardMockupDefault from "@/assets/landing/dashboard-mockup.png";
 import featuresMockupDefault from "@/assets/landing/features-mockup.png";
 import sectionDivider from "@/assets/landing/section-divider.png";
@@ -534,6 +579,17 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen text-black overflow-x-hidden bg-white" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
+      <PublicSEO
+        title="Thiqa | نظام إدارة وكالات التأمين"
+        description="Thiqa — نظام سحابي متكامل لإدارة وكالات التأمين بالعربية: عملاء، وثائق، أقساط، تحصيل، شيكات، تقارير، وتنبيهات. جرّب 35 يوم مجاناً."
+        keywords="نظام إدارة التأمين, برنامج وكالات التأمين, إدارة وثائق التأمين, CRM للتأمين, نظام تحصيل أقساط, إدارة شيكات التأمين, ثقة, Thiqa"
+        pathname="/"
+      />
+      <Helmet>
+        <script type="application/ld+json">
+          {JSON.stringify(LANDING_JSON_LD)}
+        </script>
+      </Helmet>
 
       {/* Hero entrance animation — staggered fade + rise for each block
           so the landing reveals itself instead of slamming in all at
@@ -679,7 +735,11 @@ export default function Landing() {
                   dir="rtl"
                   className="w-[560px] rounded-2xl bg-white border border-black/[0.06] shadow-[0_18px_48px_-12px_rgba(0,0,0,0.18)] p-3 flex gap-3"
                 >
-                  {/* Items list (right in RTL) */}
+                  {/* Items list (right in RTL). Each row is fully
+                      clickable (entire `<a>`); onClick performs a
+                      smooth-scroll jump to the section instead of the
+                      default instant hash jump, so the navigation feels
+                      tied to the page motion. */}
                   <div className="flex-1 flex flex-col">
                     {[
                       { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "#demo" },
@@ -688,16 +748,27 @@ export default function Landing() {
                       { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "#faq" },
                     ].map((item) => {
                       const Icon = item.icon;
+                      const targetId = item.href.slice(1);
                       return (
                         <a
                           key={item.href}
                           href={item.href}
-                          className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-black/[0.03] transition-colors"
+                          onClick={(e) => {
+                            const el = document.getElementById(targetId);
+                            if (el) {
+                              e.preventDefault();
+                              el.scrollIntoView({ behavior: "smooth", block: "start" });
+                              if (typeof window !== "undefined") {
+                                window.history.replaceState(null, "", item.href);
+                              }
+                            }
+                          }}
+                          className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-black/[0.03] transition-colors cursor-pointer"
                         >
-                          <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-black/[0.05] text-black">
+                          <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-black/[0.05] text-black pointer-events-none">
                             <Icon className="w-4 h-4" strokeWidth={2.2} />
                           </div>
-                          <div className="flex-1 min-w-0">
+                          <div className="flex-1 min-w-0 pointer-events-none">
                             <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
                             <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
                           </div>
@@ -713,7 +784,7 @@ export default function Landing() {
                   <a
                     href="/register"
                     onClick={() => trackEvent("signup_click", "/landing:nav-info-card")}
-                    className="relative flex-shrink-0 w-[200px] rounded-xl overflow-hidden flex items-center justify-center text-center"
+                    className="relative flex-shrink-0 w-[200px] rounded-xl overflow-hidden flex items-center justify-center text-center cursor-pointer"
                     style={{
                       background: "linear-gradient(160deg, #3B5AD9 0%, #6A7FD8 55%, #A8B5E6 100%)",
                     }}
@@ -779,15 +850,15 @@ export default function Landing() {
                       <a
                         key={item.title}
                         href={item.href}
-                        className="flex items-center gap-4 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors"
+                        className="flex items-center gap-4 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors cursor-pointer"
                       >
                         <div className={cn(
-                          "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg",
+                          "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg pointer-events-none",
                           item.filled ? "bg-black text-white" : "bg-black/[0.05] text-black",
                         )}>
                           <Icon className="w-4 h-4" strokeWidth={2.2} />
                         </div>
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 pointer-events-none">
                           <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
                           <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
                         </div>

@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import thiqaLogoDark from "@/assets/thiqa-logo-dark.svg";
 import { OtpInput } from "@/components/auth/OtpInput";
+import { PublicSEO } from "@/components/public/PublicSEO";
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
@@ -145,6 +146,10 @@ export default function VerifyEmail() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-muted/40 to-background p-6" dir="rtl">
+      <PublicSEO
+        title="Thiqa | تأكيد البريد الإلكتروني"
+        description="أكمل تسجيل حسابك في Thiqa بتأكيد بريدك الإلكتروني."
+      />
       <div className="w-full max-w-md animate-scale-in">
         <div className="rounded-3xl border border-white/20 bg-white/70 dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
           <div className="text-center pt-10 pb-4 px-8">

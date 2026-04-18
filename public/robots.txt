@@ -1,14 +1,45 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
+# Thiqa — public marketing/auth/legal pages are indexable.
+# Authenticated CRM and admin areas are not.
 
 User-agent: *
-Allow: /
+Allow: /$
+Allow: /landing
+Allow: /pricing
+Allow: /login
+Allow: /register
+Allow: /forgot-password
+Allow: /reset-password
+Allow: /verify-email
+Allow: /privacy
+Allow: /terms
+
+# CRM, admin, and Thiqa super-admin areas — never index.
+Disallow: /dashboard
+Disallow: /clients
+Disallow: /cars
+Disallow: /policies
+Disallow: /companies
+Disallow: /brokers
+Disallow: /cheques
+Disallow: /media
+Disallow: /receipts
+Disallow: /accounting
+Disallow: /reports
+Disallow: /notifications
+Disallow: /tasks
+Disallow: /activity
+Disallow: /contacts
+Disallow: /accidents
+Disallow: /sms-history
+Disallow: /debt-tracking
+Disallow: /form-templates
+Disallow: /leads
+Disallow: /subscription
+Disallow: /subscription-expired
+Disallow: /no-access
+Disallow: /admin/
+Disallow: /thiqa/
+Disallow: /sign/
+Disallow: /payment/
+
+Sitemap: https://getthiqa.com/sitemap.xml
