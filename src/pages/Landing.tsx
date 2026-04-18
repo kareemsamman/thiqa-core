@@ -160,12 +160,12 @@ const featureUpdates = [
   { version: "v1.0", title: "بلاغات الحوادث والمطالبات", date: "1 فبراير 2026" },
   { version: "v0.9", title: "إدارة السائقين الإضافيين", date: "15 يناير 2026" },
   { version: "v0.8", title: "شيكات متعددة البنوك", date: "28 ديسمبر 2025" },
-  { version: "v0.7", title: "سجل نشاطات المستخدمين", date: "10 ديسمبر 2025" },
+  { version: "v0.7", title: "سجل نشاطات المستخدمين", date: "10 ديسمبر 2025", image: "https://thiqacrm.b-cdn.net/image%20225%20(1).png" },
   { version: "v0.6", title: "تقارير شركات التأمين", date: "22 نوفمبر 2025" },
   { version: "v0.5", title: "ترويسات مخصصة للوكيل", date: "5 نوفمبر 2025" },
   { version: "v0.4", title: "حملات SMS تسويقية", date: "18 أكتوبر 2025", image: "https://thiqacrm.b-cdn.net/Group%201000011509%20(2).png" },
   { version: "v0.3", title: "إيصالات رقمية وطباعة", date: "1 أكتوبر 2025" },
-  { version: "v0.2", title: "نظام المهام والمتابعات", date: "15 سبتمبر 2025" },
+  { version: "v0.2", title: "نظام المهام والمتابعات", date: "15 سبتمبر 2025", image: "https://thiqacrm.b-cdn.net/image%20224%20(1).png" },
   { version: "v0.1", title: "نظام التنبيهات المركزي", date: "1 سبتمبر 2025" },
 ];
 
