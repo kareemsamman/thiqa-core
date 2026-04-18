@@ -1255,25 +1255,15 @@ export default function Landing() {
         }}
         className="relative w-full md:min-h-screen overflow-hidden bg-white pb-10 md:pb-0"
       >
-        {/* Sharp foreground image — desktop: 70% viewport width, 76%
-            section height, absolutely anchored bottom so pills can
-            crowd around the head. Mobile: flows naturally below the
-            headline + pill grid, 88% of the viewport wide, natural
-            aspect ratio so the whole person is visible (not
-            top-cropped). */}
-        <img
-          src="https://thiqacrm.b-cdn.net/hf_20260416_191720_99f2169b-05a1-45de-9063-68dd989588c1%201%20(2)%20(1).jpg"
-          alt="وكيل تأمين غارق بالمهام قبل Thiqa"
-          className="hs-img relative mx-auto mt-6 w-[88%] h-auto block md:absolute md:bottom-0 md:left-1/2 md:-translate-x-1/2 md:w-[70%] md:h-[76%] md:object-cover md:object-bottom md:mt-0"
-          loading="lazy"
-        />
-
         {/* Headline — two stacked lines, both black. The lead-in is
             font-light (300) and the punchline is font-bold (700) so
             the weight contrast carries the emphasis instead of a
             color shift. Both type in right-to-left via clip-path +
             steps(), the bold line starting after the light one
-            finishes so the reveal reads as a natural sentence. */}
+            finishes so the reveal reads as a natural sentence.
+            Source-order first so mobile reads: headline → photo →
+            pills. Desktop positioning is unchanged (photo is
+            absolute at the bottom of the section). */}
         <h2 className="relative z-10 flex flex-col justify-center items-center text-center leading-[1.25] md:leading-[1.2] pt-16 md:pt-24 px-6 text-black">
           <span className="hs-type hs-type-1 block font-light text-[1.35rem] md:text-[2.25rem]">
             زهقت من الأكسل والأوراق؟
@@ -1282,6 +1272,18 @@ export default function Landing() {
             ثقة هو الحل.
           </span>
         </h2>
+
+        {/* Sharp foreground image — desktop: 70% viewport width, 76%
+            section height, absolutely anchored bottom so pills can
+            crowd around the head. Mobile: flows naturally under the
+            headline, 88% of the viewport wide, natural aspect ratio
+            so the whole person is visible (not top-cropped). */}
+        <img
+          src="https://thiqacrm.b-cdn.net/hf_20260416_191720_99f2169b-05a1-45de-9063-68dd989588c1%201%20(2)%20(1).jpg"
+          alt="وكيل تأمين غارق بالمهام قبل Thiqa"
+          className="hs-img relative mx-auto mt-6 w-[88%] h-auto block md:absolute md:bottom-0 md:left-1/2 md:-translate-x-1/2 md:w-[70%] md:h-[76%] md:object-cover md:object-bottom md:mt-0"
+          loading="lazy"
+        />
 
         {/* Mobile pill grid — compressed 2-col wrap of the most
             important "notifications" so the mobile story still reads
