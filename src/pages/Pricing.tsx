@@ -7,7 +7,6 @@ import {
 import { useLandingContent, ct } from "@/hooks/useLandingContent";
 import { supabase } from "@/integrations/supabase/client";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
-import thiqaLogo from "@/assets/thiqa-logo-full.svg";
 import { cn } from "@/lib/utils";
 
 interface PlanData {
@@ -612,42 +611,105 @@ export default function Pricing() {
         </div>
       </section>
 
-      {/* ═══ Footer — light theme. Collapsible sections on mobile
-          (native <details>) match the landing-page pattern. */}
-      <footer className="relative z-10 border-t border-black/[0.08] pt-16 pb-8 bg-white">
+      {/* ═══ Footer — same 4-column desktop grid / mobile accordion
+          pattern as the landing page. */}
+      <footer className="relative z-10 border-t border-black/[0.08] pt-16 pb-0 bg-white">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col divide-y divide-black/[0.06]">
-            {[
-              { title: "معلومات", items: ["مركز المساعدة", "اتصل بنا"] },
-              { title: "شروط وسياسات", items: ["شروط الاستخدام", "سياسة الخصوصية", "إمكانية الوصول"] },
-              { title: "الدعم", items: ["دردشة الدعم", "أسئلة شائعة", "support@getthiqa.com"] },
-            ].map((section, idx) => (
-              <details key={idx} className="group py-6">
-                <summary className="flex items-center justify-between cursor-pointer list-none">
-                  <span className="text-lg font-bold text-black">{section.title}</span>
-                  <span className="text-black/40 text-2xl font-light group-open:hidden">+</span>
-                  <span className="text-black/40 text-2xl font-light hidden group-open:inline">−</span>
-                </summary>
-                <ul className="mt-4 space-y-3 text-sm text-black/55 text-right">
-                  {section.items.map((item, j) => (
-                    <li key={j}><a href="#" className="hover:text-black/80 transition-colors">{item}</a></li>
+          {(() => {
+            const sections = [
+              {
+                title: "كيف تبدأ؟",
+                items: [
+                  { label: "جرّب مجاناً", href: "/register" },
+                  { label: "تسجيل الدخول", href: "/login" },
+                ],
+              },
+              {
+                title: "مركز المعلومات",
+                items: [
+                  { label: "الأسعار", href: "/pricing" },
+                  { label: "كيف يعمل", href: "/landing#demo" },
+                  { label: "الميزات", href: "/landing#features" },
+                  { label: "أسئلة وأجوبة", href: "/landing#faq" },
+                ],
+              },
+              {
+                title: "الدعم والمساعدة",
+                items: [
+                  { label: "عرض توضيحي", href: "mailto:support@getthiqa.com?subject=طلب%20عرض%20توضيحي" },
+                  { label: "تواصل معنا", href: "mailto:support@getthiqa.com" },
+                ],
+              },
+              {
+                title: "شروط وسياسات",
+                items: [
+                  { label: "شروط الاستخدام", href: "/terms" },
+                  { label: "سياسة الخصوصية", href: "/privacy" },
+                ],
+              },
+            ];
+            return (
+              <>
+                <div className="hidden md:grid grid-cols-4 gap-8 text-right">
+                  {sections.map((section) => (
+                    <div key={section.title}>
+                      <h4 className="text-[15px] font-bold text-black mb-5">{section.title}</h4>
+                      <ul className="space-y-3">
+                        {section.items.map((item) => (
+                          <li key={item.label}>
+                            <a
+                              href={item.href}
+                              className="text-[14px] text-black/60 hover:text-black transition-colors"
+                            >
+                              {item.label}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   ))}
-                </ul>
-              </details>
-            ))}
-          </div>
+                </div>
 
-          <div className="flex items-center gap-3 mt-8 mb-8">
+                <div className="md:hidden flex flex-col divide-y divide-black/[0.06]">
+                  {sections.map((section) => (
+                    <details key={section.title} className="group py-6">
+                      <summary className="flex items-center justify-between cursor-pointer list-none">
+                        <span className="text-lg font-bold text-black">{section.title}</span>
+                        <span className="text-black/40 text-2xl font-light group-open:hidden">+</span>
+                        <span className="text-black/40 text-2xl font-light hidden group-open:inline">−</span>
+                      </summary>
+                      <ul className="mt-4 space-y-3 text-sm text-black/55 text-right">
+                        {section.items.map((item) => (
+                          <li key={item.label}>
+                            <a href={item.href} className="hover:text-black/80 transition-colors">{item.label}</a>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+
+          <div className="flex items-center gap-3 mt-10 mb-6">
             <div className="h-1.5 w-1.5 rounded-full bg-black/20" />
             <div className="flex-1 h-px bg-black/[0.08]" />
             <div className="h-1.5 w-1.5 rounded-full bg-black/20" />
           </div>
 
-          <p className="text-sm text-black/40 text-center mb-12">جميع الحقوق محفوظة © Thiqa {new Date().getFullYear()}</p>
+          <p className="text-sm text-black/50 text-center mb-8">
+            © Thiqa {new Date().getFullYear()} جميع الحقوق محفوظة
+          </p>
+        </div>
 
-          <div className="flex justify-center overflow-hidden">
-            <img src={thiqaLogo} alt="Thiqa" className="w-[80%] md:w-[60%] max-w-[700px] opacity-[0.08]" />
-          </div>
+        <div className="w-full overflow-hidden">
+          <img
+            src="https://thiqacrm.b-cdn.net/Group%201000011511.png"
+            alt="Thiqa"
+            className="w-full h-auto block"
+            loading="lazy"
+          />
         </div>
       </footer>
     </div>

@@ -11,7 +11,6 @@ import {
 import { useLandingContent, ct, ci } from "@/hooks/useLandingContent";
 import { cn } from "@/lib/utils";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
-import thiqaLogo from "@/assets/thiqa-logo-full.svg";
 import dashboardMockupDefault from "@/assets/landing/dashboard-mockup.png";
 import featuresMockupDefault from "@/assets/landing/features-mockup.png";
 import sectionDivider from "@/assets/landing/section-divider.png";
@@ -2901,41 +2900,113 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ═══ Footer ═══ */}
-      <footer className="border-t border-black/[0.08] pt-16 pb-8 bg-white">
+      {/* ═══ Footer ═══
+          Desktop: 4-column link grid (RTL order: how-to-start,
+          info center, support, legal). Mobile: the same four
+          sections collapse into accordion rows with + / − toggles.
+          Below sits the copyright strip and a full-width Thiqa
+          lockup image that anchors the bottom of the page. */}
+      <footer className="border-t border-black/[0.08] pt-16 pb-0 bg-white">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col divide-y divide-black/[0.08]">
-            {[
-              { title: "معلومات", items: [{ label: "مركز المساعدة", href: "#" }, { label: "اتصل بنا", href: "#" }] },
-              { title: "شروط وسياسات", items: [{ label: "شروط الاستخدام", href: "/terms" }, { label: "سياسة الخصوصية", href: "/privacy" }, { label: "إمكانية الوصول", href: "#" }] },
-              { title: "الدعم", items: [{ label: "دردشة الدعم", href: "#" }, { label: "أسئلة شائعة", href: "#faq" }, { label: "info@thiqa.co.il", href: "mailto:info@thiqa.co.il" }] },
-            ].map((section, idx) => (
-              <details key={idx} className="group py-6">
-                <summary className="flex items-center justify-between cursor-pointer list-none">
-                  <span className="text-lg font-bold text-black">{section.title}</span>
-                  <span className="text-black/55 text-2xl font-light group-open:hidden">+</span>
-                  <span className="text-black/55 text-2xl font-light hidden group-open:inline">−</span>
-                </summary>
-                <ul className="mt-4 space-y-3 text-sm text-black/60 text-right">
-                  {section.items.map((item, j) => (
-                    <li key={j}><a href={item.href} className="hover:text-black transition-colors">{item.label}</a></li>
+          {(() => {
+            const sections = [
+              {
+                title: "كيف تبدأ؟",
+                items: [
+                  { label: "جرّب مجاناً", href: "/register" },
+                  { label: "تسجيل الدخول", href: "/login" },
+                ],
+              },
+              {
+                title: "مركز المعلومات",
+                items: [
+                  { label: "الأسعار", href: "/pricing" },
+                  { label: "كيف يعمل", href: "/#demo" },
+                  { label: "الميزات", href: "/#features" },
+                  { label: "أسئلة وأجوبة", href: "/#faq" },
+                ],
+              },
+              {
+                title: "الدعم والمساعدة",
+                items: [
+                  { label: "عرض توضيحي", href: "mailto:support@getthiqa.com?subject=طلب%20عرض%20توضيحي" },
+                  { label: "تواصل معنا", href: "mailto:support@getthiqa.com" },
+                ],
+              },
+              {
+                title: "شروط وسياسات",
+                items: [
+                  { label: "شروط الاستخدام", href: "/terms" },
+                  { label: "سياسة الخصوصية", href: "/privacy" },
+                ],
+              },
+            ];
+            return (
+              <>
+                {/* Desktop 4-column grid — right-aligned Arabic. */}
+                <div className="hidden md:grid grid-cols-4 gap-8 text-right">
+                  {sections.map((section) => (
+                    <div key={section.title}>
+                      <h4 className="text-[15px] font-bold text-black mb-5">{section.title}</h4>
+                      <ul className="space-y-3">
+                        {section.items.map((item) => (
+                          <li key={item.label}>
+                            <a
+                              href={item.href}
+                              className="text-[14px] text-black/60 hover:text-black transition-colors"
+                            >
+                              {item.label}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   ))}
-                </ul>
-              </details>
-            ))}
-          </div>
+                </div>
 
-          <div className="flex items-center gap-3 mt-8 mb-8">
+                {/* Mobile accordion — same four sections, each row
+                    expands on tap. */}
+                <div className="md:hidden flex flex-col divide-y divide-black/[0.08]">
+                  {sections.map((section) => (
+                    <details key={section.title} className="group py-6">
+                      <summary className="flex items-center justify-between cursor-pointer list-none">
+                        <span className="text-lg font-bold text-black">{section.title}</span>
+                        <span className="text-black/55 text-2xl font-light group-open:hidden">+</span>
+                        <span className="text-black/55 text-2xl font-light hidden group-open:inline">−</span>
+                      </summary>
+                      <ul className="mt-4 space-y-3 text-sm text-black/60 text-right">
+                        {section.items.map((item) => (
+                          <li key={item.label}>
+                            <a href={item.href} className="hover:text-black transition-colors">{item.label}</a>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+
+          <div className="flex items-center gap-3 mt-10 mb-6">
             <div className="h-1.5 w-1.5 rounded-full bg-black/25" />
             <div className="flex-1 h-px bg-black/[0.08]" />
             <div className="h-1.5 w-1.5 rounded-full bg-black/25" />
           </div>
 
-          <p className="text-sm text-black/40 text-center mb-12">جميع الحقوق محفوظة © Thiqa {new Date().getFullYear()}</p>
+          <p className="text-sm text-black/50 text-center mb-8">
+            © Thiqa {new Date().getFullYear()} جميع الحقوق محفوظة
+          </p>
+        </div>
 
-          <div className="flex justify-center overflow-hidden">
-            <img src={thiqaLogo} alt="Thiqa" className="w-[80%] md:w-[60%] max-w-[700px] opacity-[0.06]" style={{ filter: "invert(1)" }} />
-          </div>
+        {/* Full-width Thiqa lockup image — anchors the bottom. */}
+        <div className="w-full overflow-hidden">
+          <img
+            src="https://thiqacrm.b-cdn.net/Group%201000011511.png"
+            alt="Thiqa"
+            className="w-full h-auto block"
+            loading="lazy"
+          />
         </div>
       </footer>
     </div>
