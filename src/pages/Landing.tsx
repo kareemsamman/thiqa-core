@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronUp, ChevronDown, CheckCircle, Star, ArrowLeft, Play, X, Check,
   Users, FileText, CreditCard, BarChart3, Bell, MessageSquare,
   Phone, Shield, RefreshCcw, Wallet, AlertTriangle, Mail, Clock, Menu,
-  HelpCircle, Sparkles,
+  HelpCircle, Sparkles, Facebook, Instagram,
 } from "lucide-react";
 import { useLandingContent, ct, ci } from "@/hooks/useLandingContent";
 import { cn } from "@/lib/utils";
@@ -2994,9 +2994,33 @@ export default function Landing() {
             <div className="h-1.5 w-1.5 rounded-full bg-black/25" />
           </div>
 
-          <p className="text-sm text-black/50 text-center mb-8">
-            © Thiqa {new Date().getFullYear()} جميع الحقوق محفوظة
-          </p>
+          {/* Bottom strip — copyright on the right (RTL start), social
+              icons on the left (RTL end). Stacks on mobile. */}
+          <div className="flex flex-col-reverse md:flex-row items-center justify-between gap-6 mb-8">
+            <p className="text-sm text-black/50">
+              © Thiqa {new Date().getFullYear()} جميع الحقوق محفوظة
+            </p>
+            <div className="flex items-center gap-3">
+              <a
+                href="https://www.facebook.com/getthiqa"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Facebook"
+                className="h-10 w-10 rounded-full border border-black/10 flex items-center justify-center text-black/60 hover:text-black hover:border-black/30 transition-colors"
+              >
+                <Facebook className="h-4 w-4" />
+              </a>
+              <a
+                href="https://www.instagram.com/getthiqa"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Instagram"
+                className="h-10 w-10 rounded-full border border-black/10 flex items-center justify-center text-black/60 hover:text-black hover:border-black/30 transition-colors"
+              >
+                <Instagram className="h-4 w-4" />
+              </a>
+            </div>
+          </div>
         </div>
 
         {/* Full-width Thiqa lockup image — anchors the bottom. */}
