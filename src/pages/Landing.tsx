@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { Button } from "@/components/ui/button";
 import {
@@ -320,7 +320,6 @@ const featureTabs = [
 export default function Landing() {
   usePageView("/landing");
   const { data: content } = useLandingContent();
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("policies");
   const [slideIdx, setSlideIdx] = useState(0);
   const [sliderInView, setSliderInView] = useState(false);
@@ -875,15 +874,16 @@ export default function Landing() {
               hamburger that opens the drawer; desktop keeps the full
               signup pill CTA. */}
           <div className="md:flex-1 flex flex-row-reverse md:flex-row md:justify-end items-center gap-3 md:gap-5">
-            <button
-              onClick={() => navigate("/login")}
+            <Link
+              to="/login"
               className="text-[14px] font-semibold text-black/80 hover:text-black transition-colors inline-flex items-center"
             >
               {ct(content, "navbar_login", "تسجيل الدخول")}
-            </button>
+            </Link>
 
-            <button
-              onClick={() => { trackEvent("signup_click", "/landing"); navigate("/register"); }}
+            <Link
+              to="/register"
+              onClick={() => trackEvent("signup_click", "/landing")}
               className="hidden md:inline-flex px-8 py-3 text-[14px] font-bold text-black hover:bg-black/5 transition-all"
               style={{
                 borderRadius: "100px",
@@ -893,7 +893,7 @@ export default function Landing() {
               }}
             >
               {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
-            </button>
+            </Link>
 
             <button
               type="button"
@@ -952,12 +952,13 @@ export default function Landing() {
               />
             </div>
             <div className="flex flex-row-reverse items-center gap-2">
-              <button
-                onClick={() => { setMobileMenuOpen(false); navigate("/login"); }}
+              <Link
+                to="/login"
+                onClick={() => setMobileMenuOpen(false)}
                 className="px-5 py-2 text-[14px] font-semibold text-black rounded-full bg-[#f1ece4] hover:bg-[#e8e2d6] transition-colors"
               >
                 {ct(content, "navbar_login", "تسجيل الدخول")}
-              </button>
+              </Link>
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}
@@ -1108,12 +1109,13 @@ export default function Landing() {
           </nav>
 
           <div className="px-5 pt-6 pb-7">
-            <button
-              onClick={() => { trackEvent("signup_click", "/landing"); setMobileMenuOpen(false); navigate("/register"); }}
-              className="w-full py-4 text-[15px] font-bold text-white bg-black rounded-full hover:bg-black/90 transition-all shadow-[0_6px_20px_-6px_rgba(0,0,0,0.4)]"
+            <Link
+              to="/register"
+              onClick={() => { trackEvent("signup_click", "/landing"); setMobileMenuOpen(false); }}
+              className="block text-center w-full py-4 text-[15px] font-bold text-white bg-black rounded-full hover:bg-black/90 transition-all shadow-[0_6px_20px_-6px_rgba(0,0,0,0.4)]"
             >
               {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
-            </button>
+            </Link>
           </div>
         </aside>
       </div>
@@ -1175,9 +1177,9 @@ export default function Landing() {
           </p>
           <div className="mt-8 hero-reveal" style={{ animationDelay: '520ms' }}>
             {/* Solid white pill, no border — the user's explicit spec. */}
-            <button
-              onClick={() => navigate("/register")}
-              className="text-[15px] font-bold text-black px-9 py-3.5 transition-all hover:scale-[1.03] hover:shadow-[0_10px_28px_-6px_rgba(0,0,0,0.25)]"
+            <Link
+              to="/register"
+              className="inline-block text-[15px] font-bold text-black px-9 py-3.5 transition-all hover:scale-[1.03] hover:shadow-[0_10px_28px_-6px_rgba(0,0,0,0.25)]"
               style={{
                 borderRadius: '100px',
                 background: '#FFF',
@@ -1185,7 +1187,7 @@ export default function Landing() {
               }}
             >
               {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
-            </button>
+            </Link>
           </div>
         </div>
 
@@ -1697,13 +1699,13 @@ export default function Landing() {
                       {tab.desc}
                     </p>
                   </div>
-                  <button
-                    onClick={() => navigate("/register")}
+                  <Link
+                    to="/register"
                     className="relative z-10 mt-8 self-start flex items-center gap-2 px-6 py-3 text-sm font-bold text-white rounded-full bg-white/20 border border-white/40 hover:bg-white/30 transition-colors backdrop-blur-sm"
                   >
                     ابدأ التجربة الآن
                     <ArrowLeft className="h-4 w-4" />
-                  </button>
+                  </Link>
                 </div>
               </div>
 
@@ -1878,10 +1880,9 @@ export default function Landing() {
         {/* Signup CTA — sits centred below the rail so the section
             closes with a clear next-step for the user. */}
         <div className="max-w-6xl mx-auto px-6 mt-10 md:mt-12 text-center">
-          <button
-            type="button"
-            onClick={() => navigate("/register")}
-            className="px-8 py-3 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
+          <Link
+            to="/register"
+            className="inline-block px-8 py-3 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
             style={{
               borderRadius: "100px",
               background: "#111",
@@ -1889,7 +1890,7 @@ export default function Landing() {
             }}
           >
             {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
-          </button>
+          </Link>
         </div>
       </section>
 
@@ -2035,10 +2036,9 @@ export default function Landing() {
               </div>
 
               <div className="mt-10">
-                <button
-                  type="button"
-                  onClick={() => navigate("/register")}
-                  className="px-8 py-3.5 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
+                <Link
+                  to="/register"
+                  className="inline-block px-8 py-3.5 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
                   style={{
                     borderRadius: "100px",
                     background: "#111",
@@ -2046,7 +2046,7 @@ export default function Landing() {
                   }}
                 >
                   {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
-                </button>
+                </Link>
               </div>
             </div>
 
@@ -2270,9 +2270,9 @@ export default function Landing() {
             })}
           </div>
 
-          <button
-            onClick={() => navigate("/register")}
-            className="px-10 py-4 text-[15px] font-bold text-white hover:opacity-90 transition-opacity"
+          <Link
+            to="/register"
+            className="inline-block px-10 py-4 text-[15px] font-bold text-white hover:opacity-90 transition-opacity"
             style={{
               borderRadius: "100px",
               background: "#122042",
@@ -2280,7 +2280,7 @@ export default function Landing() {
             }}
           >
             احصل على 35 يوم مجاناً
-          </button>
+          </Link>
         </div>
       </section>
       </>}
@@ -2505,8 +2505,9 @@ export default function Landing() {
                               text sits at the physical right (start
                               in RTL) with generous padding so there's
                               a clear gap between label and arrow. */}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); navigate("/register"); }}
+                          <Link
+                            to="/register"
+                            onClick={(e) => e.stopPropagation()}
                             onPointerDown={(e) => e.stopPropagation()}
                             className="relative flex items-center w-full h-16 md:h-[72px] text-white font-bold text-[14px] md:text-[15px] hover:bg-white/[0.04] transition-colors"
                             style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}
@@ -2523,7 +2524,7 @@ export default function Landing() {
                             >
                               <ArrowLeft className="h-4 w-4" />
                             </div>
-                          </button>
+                          </Link>
                         </div>
                       );
                     })}
@@ -2640,9 +2641,9 @@ export default function Landing() {
           <p className="gl-fade gl-fade-desc text-[14px] md:text-[15px] text-black/60 max-w-xl mx-auto mb-8 leading-relaxed whitespace-pre-line">
             {ct(content, "grid_desc", "إرسال وثائق للتوقيع الرقمي عبر SMS، إدارة مستندات آمنة في السحابة\nومتابعة كاملة لدورة حياة الوثيقة — كل شيء من الكمبيوتر أو الجوال.")}
           </p>
-          <button
-            onClick={() => navigate("/register")}
-            className="gl-fade gl-fade-cta px-8 py-3 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
+          <Link
+            to="/register"
+            className="gl-fade gl-fade-cta inline-block px-8 py-3 text-[14px] font-bold text-white hover:opacity-90 transition-opacity"
             style={{
               borderRadius: "100px",
               background: "#111",
@@ -2650,7 +2651,7 @@ export default function Landing() {
             }}
           >
             {ct(content, "hero_cta", "احصل على 35 يوم مجاناً")}
-          </button>
+          </Link>
         </div>
       </section>
 
@@ -2843,12 +2844,12 @@ export default function Landing() {
 
           <p className="mt-12 text-center text-[14px] md:text-[15px] text-black/55">
             {ct(content, "faq_more_prompt", "هل لديك أسئلة إضافية؟")}{" "}
-            <button
-              onClick={() => navigate("/register")}
+            <Link
+              to="/register"
               className="font-bold text-black underline underline-offset-4 decoration-2 decoration-[#4a6cc7] hover:opacity-80 transition-opacity"
             >
               {ct(content, "faq_more_cta", "تواصل معنا.")}
-            </button>
+            </Link>
           </p>
         </div>
       </section>
@@ -2876,22 +2877,18 @@ export default function Landing() {
             انضموا إلى ثقة بالخطة الأساسية — ستعرف وكالتكم الفرق من اليوم الأول.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3 mb-14 md:mb-16">
-            <button
-              type="button"
-              onClick={() => navigate("/register")}
-              className="bg-white hover:bg-white/95 text-[#1a1a2e] rounded-full px-10 h-[52px] text-sm font-bold shadow-[0_10px_30px_-8px_rgba(26,26,46,0.35)] transition-colors"
+            <Link
+              to="/register"
+              className="inline-flex items-center justify-center bg-white hover:bg-white/95 text-[#1a1a2e] rounded-full px-10 h-[52px] text-sm font-bold shadow-[0_10px_30px_-8px_rgba(26,26,46,0.35)] transition-colors"
             >
               اشتركوا مجاناً
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" });
-              }}
-              className="bg-transparent hover:bg-[#1a1a2e]/5 text-[#1a1a2e] border border-[#1a1a2e]/30 rounded-full px-10 h-[52px] text-sm font-bold transition-colors"
+            </Link>
+            <Link
+              to="/pricing"
+              className="inline-flex items-center justify-center bg-transparent hover:bg-[#1a1a2e]/5 text-[#1a1a2e] border border-[#1a1a2e]/30 rounded-full px-10 h-[52px] text-sm font-bold transition-colors"
             >
               كل الخطط
-            </button>
+            </Link>
           </div>
 
           {/* Bottom mockup image — placeholder for now; swap via the
@@ -2961,12 +2958,12 @@ export default function Landing() {
             <p className="text-[14px] md:text-[16px] text-black/55 max-w-xl mx-auto mb-10 leading-relaxed">
               {ct(content, "demo_subtitle", "مكالمة واحد-لواحد مع ممثّل لعرض عملي للنظام — بدون التزام وبدون أي تكلفة.")}
             </p>
-            <button
-              onClick={() => navigate("/register")}
+            <Link
+              to="/register"
               className="inline-flex items-center gap-2 bg-[#E8E0D0] hover:bg-[#ddd4c0] text-black font-bold text-[14px] md:text-[15px] rounded-full px-8 py-4 transition-colors"
             >
               {ct(content, "demo_cta", "احجز مكالمة تجريبية")}
-            </button>
+            </Link>
           </div>
         </div>
       </section>
@@ -3066,8 +3063,10 @@ export default function Landing() {
           </div>
 
           {/* Bottom strip — copyright on the right (RTL start), social
-              icons on the left (RTL end). Stacks on mobile. */}
-          <div className="flex flex-col-reverse md:flex-row items-center justify-between gap-6 mb-8">
+              icons on the left (RTL end). Stacks on mobile. The icons
+              use a blue→light-blue gradient over a faint white tint
+              that matches the slider/feature gradients on the page. */}
+          <div className="flex flex-col-reverse md:flex-row items-center justify-between gap-6 mb-16">
             <p className="text-sm text-black/50">
               © Thiqa {new Date().getFullYear()} جميع الحقوق محفوظة
             </p>
@@ -3077,18 +3076,26 @@ export default function Landing() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Facebook"
-                className="h-10 w-10 rounded-full border border-black/10 flex items-center justify-center text-black/60 hover:text-black hover:border-black/30 transition-colors"
+                className="h-11 w-11 rounded-full flex items-center justify-center text-white shadow-[0_6px_18px_-6px_rgba(69,94,187,0.55)] hover:opacity-90 transition-opacity"
+                style={{
+                  background:
+                    "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%), rgba(255, 255, 255, 0.02)",
+                }}
               >
-                <Facebook className="h-4 w-4" />
+                <Facebook className="h-[18px] w-[18px]" />
               </a>
               <a
                 href="https://www.instagram.com/getthiqa"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Instagram"
-                className="h-10 w-10 rounded-full border border-black/10 flex items-center justify-center text-black/60 hover:text-black hover:border-black/30 transition-colors"
+                className="h-11 w-11 rounded-full flex items-center justify-center text-white shadow-[0_6px_18px_-6px_rgba(69,94,187,0.55)] hover:opacity-90 transition-opacity"
+                style={{
+                  background:
+                    "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%), rgba(255, 255, 255, 0.02)",
+                }}
               >
-                <Instagram className="h-4 w-4" />
+                <Instagram className="h-[18px] w-[18px]" />
               </a>
             </div>
           </div>

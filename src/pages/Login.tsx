@@ -218,7 +218,7 @@ export default function Login() {
               }
               // Refresh auth to pick up the new profile
               toast.success(setupData?.message || "تم إعداد حسابك بنجاح!");
-              navigate('/', { replace: true });
+              navigate('/dashboard', { replace: true });
               return;
             }
           }
@@ -235,14 +235,14 @@ export default function Login() {
           }
 
           if (emailConfirmed || isActive) {
-            navigate('/', { replace: true });
+            navigate('/dashboard', { replace: true });
           } else {
             navigate('/no-access', { replace: true });
           }
         } catch (err) {
           console.error('[Login] checkAndSetupUser error:', err);
           if (isActive) {
-            navigate('/', { replace: true });
+            navigate('/dashboard', { replace: true });
           } else {
             navigate('/no-access', { replace: true });
           }
@@ -453,12 +453,12 @@ export default function Login() {
         autoLoginError?.message?.includes("Email not confirmed");
 
       if (!autoLoginError) {
-        navigate("/", { replace: true });
+        navigate("/dashboard", { replace: true });
       } else if (requiresVerification) {
         const bypassed = await tryBypassEmailVerification(normalizedEmail);
         if (bypassed) {
           const { error: retryError } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password: pw });
-          if (!retryError) { navigate("/", { replace: true }); return; }
+          if (!retryError) { navigate("/dashboard", { replace: true }); return; }
         }
         const params = new URLSearchParams({ email: normalizedEmail, p: pw });
         navigate(`/verify-email?${params.toString()}`, { replace: true });
