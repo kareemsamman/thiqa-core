@@ -2,7 +2,7 @@ import { Helmet } from "react-helmet-async";
 import { useLocation } from "react-router-dom";
 
 const SITE_ORIGIN = "https://getthiqa.com";
-const DEFAULT_OG_IMAGE = "https://thiqacrm.b-cdn.net/Screenshot%202026-04-18%20130915.png";
+const DEFAULT_OG_IMAGE = "https://thiqacrm.b-cdn.net/fav.png";
 const DEFAULT_OG_IMAGE_WIDTH = "1200";
 const DEFAULT_OG_IMAGE_HEIGHT = "630";
 

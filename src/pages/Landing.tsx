@@ -55,7 +55,7 @@ const LANDING_JSON_LD = {
       alternateName: "ثقة",
       url: "https://getthiqa.com/",
       logo: "https://thiqacrm.b-cdn.net/small_black.png",
-      image: "https://thiqacrm.b-cdn.net/Screenshot%202026-04-18%20130915.png",
+      image: "https://thiqacrm.b-cdn.net/fav.png",
       sameAs: [
         "https://www.facebook.com/getthiqa",
         "https://www.instagram.com/getthiqa",
@@ -69,7 +69,7 @@ const LANDING_JSON_LD = {
       inLanguage: "ar",
       description:
         "نظام سحابي متكامل لإدارة وكالات التأمين: العملاء، الوثائق، الأقساط، التحصيل، الشيكات، التقارير، والتنبيهات.",
-      image: "https://thiqacrm.b-cdn.net/Screenshot%202026-04-18%20130915.png",
+      image: "https://thiqacrm.b-cdn.net/fav.png",
       offers: {
         "@type": "Offer",
         price: "0",
