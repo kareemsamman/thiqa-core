@@ -1082,7 +1082,7 @@ export default function Landing() {
 
         <div className="relative z-10 w-[94%] max-w-[56rem] mx-auto text-center pt-40 md:pt-44">
           <h1
-            className="text-[1.2rem] md:text-[2.2rem] lg:text-[2.8rem] font-extrabold leading-[1.35] md:leading-[1.2] tracking-tight whitespace-pre-line hero-reveal text-black"
+            className="text-[1.5rem] md:text-[2.2rem] lg:text-[2.8rem] font-extrabold leading-[1.3] md:leading-[1.2] tracking-tight whitespace-pre-line hero-reveal text-black"
             style={{ animationDelay: '120ms' }}
           >
             {ct(content, "hero_title", "CRM لوكالات التأمين.\nأبسط، أسرع، أذكى.")}
@@ -1114,7 +1114,7 @@ export default function Landing() {
             stuck to the bottom of the hero; transparent rounded-top
             frame so the corners sit cleanly on the video bg. */}
         <div
-          className="relative z-10 w-full mx-auto px-6 pt-10 md:pt-0 pb-0 hero-scale-in flex justify-center"
+          className="relative z-10 w-full mx-auto px-0 md:px-6 pt-20 md:pt-0 pb-0 hero-scale-in flex justify-center"
           style={{ animationDelay: '720ms' }}
         >
           <div className="relative rounded-t-xl overflow-hidden border border-black/[0.12] border-b-0 shadow-2xl shadow-black/20 max-w-full w-[95%] md:w-1/2">
