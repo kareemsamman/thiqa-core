@@ -9,7 +9,6 @@ import {
   ChevronLeft, 
   Eye, 
   Calendar,
-  Building2,
   Car,
   Banknote,
   FileText,
@@ -1584,23 +1583,13 @@ function PolicyPackageCard({
           </div>
         </div>
 
-        {/* Main Content: Key Info Grid — period column removed since the
-            date range is already visible inside the مكونات rows below. */}
+        {/* Main Content: Key Info Grid — company column removed since the
+            insurer name is already visible inside the مكونات rows below;
+            period column likewise lives in those rows. */}
         <div
-          className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm cursor-pointer"
+          className="grid grid-cols-2 gap-3 text-sm cursor-pointer"
           onClick={() => onPolicyClick(policy.id)}
         >
-          {/* Company */}
-          <div className="flex items-start gap-2">
-            <Building2 className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">الشركة</p>
-              <p className={cn("font-medium truncate", !isActive && "text-muted-foreground")}>
-                {policy.company?.name_ar || policy.company?.name || '-'}
-              </p>
-            </div>
-          </div>
-
           {/* Car */}
           <div ref={periodRef} className="flex items-start gap-2">
             <Car className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
@@ -1893,8 +1882,8 @@ function PackageComponentRow({
           </span>
         )}
         <span className={cn(
-          "truncate",
-          isActive ? "text-muted-foreground" : "text-muted-foreground/70"
+          "truncate text-sm font-medium",
+          isActive ? "text-foreground" : "text-muted-foreground"
         )}>
           {getProviderName()}
         </span>
