@@ -487,19 +487,24 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 </HoverCardTrigger>
                 <HoverCardContent
                   side="left"
-                  sideOffset={10}
+                  sideOffset={0}
                   align="start"
                   alignOffset={-8}
                   collisionPadding={8}
                   className={cn(
-                    "p-0 [direction:rtl] rounded-2xl border border-black/[0.06] bg-white",
-                    "shadow-[0_8px_30px_-12px_rgba(15,23,42,0.18)]",
+                    // Round only the left side + drop the right
+                    // border so the panel visually MERGES with the
+                    // rail (no seam between them).
+                    "p-0 [direction:rtl] rounded-l-2xl rounded-r-none border-y border-l border-r-0 border-black/[0.06] bg-white",
+                    "shadow-[-8px_8px_30px_-12px_rgba(15,23,42,0.18)]",
                     "w-[240px] flex flex-col",
                   )}
                   style={{ height: 'calc(100vh - 16px)' }}
                 >
-                  {/* Header — group name */}
-                  <div className="px-4 h-16 flex items-center border-b border-black/[0.06] flex-shrink-0">
+                  {/* Header — group name. h-20 + border-b match the
+                      rail's logo header dimensions exactly so the two
+                      divider lines sit on the same Y. */}
+                  <div className="px-4 h-20 flex items-center border-b border-black/[0.06] flex-shrink-0">
                     <span className="text-[15px] font-bold text-black flex items-center gap-2">
                       <GroupIcon className="h-[18px] w-[18px] text-black" weight="bold" />
                       {group.name}
