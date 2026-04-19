@@ -295,6 +295,41 @@ html {
     to { opacity: 1; transform: scale(1); }
   }
 
+  /* LoadingScreen — slow rotating ring around the Thiqa lockup. */
+  .animate-thiqa-spin-slow {
+    animation: thiqaSpinSlow 6s linear infinite;
+  }
+  @keyframes thiqaSpinSlow {
+    to { transform: rotate(360deg); }
+  }
+
+  /* LoadingScreen — soft expanding aura behind the logo plate. */
+  .animate-thiqa-loader-pulse {
+    animation: thiqaLoaderPulse 2.4s ease-in-out infinite;
+  }
+  @keyframes thiqaLoaderPulse {
+    0%, 100% { transform: scale(0.9); opacity: 0.55; }
+    50%      { transform: scale(1.12); opacity: 0.15; }
+  }
+
+  /* LoadingScreen — gentle breath on the logo plate itself. */
+  .animate-thiqa-loader-breath {
+    animation: thiqaLoaderBreath 2.4s ease-in-out infinite;
+  }
+  @keyframes thiqaLoaderBreath {
+    0%, 100% { transform: scale(1);    box-shadow: 0 4px 14px hsl(var(--primary) / 0.18); }
+    50%      { transform: scale(1.04); box-shadow: 0 6px 22px hsl(var(--primary) / 0.30); }
+  }
+
+  /* LoadingScreen — caption fades in/out so the screen feels alive. */
+  .animate-thiqa-loader-fade {
+    animation: thiqaLoaderFade 2.4s ease-in-out infinite;
+  }
+  @keyframes thiqaLoaderFade {
+    0%, 100% { opacity: 0.55; }
+    50%      { opacity: 1; }
+  }
+
   .stagger-1 { animation-delay: 0.05s; }
   .stagger-2 { animation-delay: 0.1s; }
   .stagger-3 { animation-delay: 0.15s; }

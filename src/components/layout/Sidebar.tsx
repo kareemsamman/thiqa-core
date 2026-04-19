@@ -71,7 +71,6 @@ import { ProfileEditDrawer } from "./ProfileEditDrawer";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import thiqaLogo from "@/assets/thiqa-logo-full.svg";
-import thiqaLogoIcon from "@/assets/thiqa-logo-icon.svg";
 import { useSidebarState } from "@/hooks/useSidebarState";
 
 interface NavItem {
@@ -417,7 +416,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 <img src={thiqaLogo} alt="Thiqa" className="rounded-lg object-contain" />
               ) : (
                 <>
-                  <img src={thiqaLogoIcon} alt="Thiqa" className="h-9 w-9 rounded-lg object-contain" />
+                  <img src="https://thiqacrm.b-cdn.net/Group%201000011517.png" alt="Thiqa" className="h-9 w-9 rounded-lg object-contain" />
                   <span className="text-base font-semibold text-slate-900">Thiqa</span>
                 </>
               )}
@@ -435,7 +434,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
           </>
         )}
         {collapsed && (
-          <img src={thiqaLogoIcon} alt="Thiqa" className="mx-auto h-8 w-8 object-contain" />
+          <img src="https://thiqacrm.b-cdn.net/Group%201000011517.png" alt="Thiqa" className="mx-auto h-9 w-9 rounded-lg object-contain" />
         )}
       </div>
 
@@ -1069,7 +1068,7 @@ function MobileTopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
         dir="rtl"
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <img src={thiqaLogoIcon} alt="Thiqa" className="h-7 w-7 object-contain shrink-0" />
+          <img src="https://thiqacrm.b-cdn.net/Group%201000011517.png" alt="Thiqa" className="h-7 w-7 rounded object-contain shrink-0" />
           <span className="text-white/90 text-sm font-semibold truncate">Thiqa</span>
         </div>
 
@@ -1187,7 +1186,7 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
           {isThiqaSuperAdmin ? (
             <img src={thiqaLogo} alt="Thiqa" className="max-h-full max-w-full object-contain" />
           ) : (
-            <img src={thiqaLogoIcon} alt="Thiqa" className="max-h-full max-w-full object-contain" />
+            <img src="https://thiqacrm.b-cdn.net/Group%201000011517.png" alt="Thiqa" className="max-h-full max-w-full object-contain" />
           )}
         </div>
         <div className="flex-1 min-w-0">

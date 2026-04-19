@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAgentContext } from '@/hooks/useAgentContext';
-import { Loader2 } from 'lucide-react';
+import { LoadingScreen } from '@/components/shared/LoadingScreen';
 
 interface AdminRouteProps {
   children: ReactNode;
@@ -20,14 +20,7 @@ export function AdminRoute({ children }: AdminRouteProps) {
   const needsProfileLoading = user && !isSuperAdmin && profileLoading && !profile;
   
   if (loading || needsProfileLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">جاري التحميل...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   // No user = go to login
