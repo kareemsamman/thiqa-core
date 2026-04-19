@@ -484,12 +484,18 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 />
               </CollapsibleTrigger>
               <CollapsibleContent>
-                {/* Submenu container — thin vertical guide on the
-                    right (RTL "start" edge) connecting all child
-                    items, like the Untitled UI reference. Line color
-                    matches the inactive item color so the dot punches
-                    visibly through it when active. */}
-                <div className="relative mt-1 mr-[18px] pr-4 pl-1 py-0.5 space-y-0.5 border-r border-[#878b8b]/40">
+                {/* Submenu — text-only items (no leaf icons), matching
+                    the Untitled UI reference. A separate absolute
+                    `<span>` renders the vertical guide line so the
+                    dot's offset math is decoupled from padding/border:
+                    line is at right:0 of this wrapper, the active
+                    dot's centre is also at right:0 → dot sits ON the
+                    line. */}
+                <div className="relative mt-1 mr-[14px] pr-5 pl-1 py-1 space-y-0.5">
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute right-0 top-1.5 bottom-1.5 w-px bg-[#878b8b]/55"
+                  />
                   {group.items.map((item) => {
                     const isActiveRoute = location.pathname === item.href;
                     return (
@@ -499,32 +505,28 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         ref={isActiveRoute ? activeNavLinkRef : undefined}
                         onClick={handleNavClick}
                         className={cn(
-                          "relative flex items-center gap-3 rounded-md px-3 py-2 text-[13.5px] font-medium transition-colors duration-150",
+                          "relative flex items-center justify-end rounded-md px-3 py-2 text-[13.5px] font-normal transition-colors duration-150",
                           isActiveRoute
                             ? "bg-slate-100 text-black"
                             : "text-[#878b8b] hover:bg-slate-50 hover:text-black",
                         )}
                       >
-                        {/* Active marker — a 9px black dot centred ON
-                            the 1px guide line. The line sits at
-                            right:-1px of the parent. Offset -4.5px
-                            puts the dot's centre exactly on the line
-                            — no halo so it sits *on* the line, not
-                            punching through. */}
+                        {/* Active marker — 10px black dot centred ON
+                            the guide line. Math: dot's right edge is
+                            +5px past NavLink's right; the line sits
+                            another 20px (pr-5) to the right of
+                            NavLink's right edge. Offset -25px puts
+                            dot's right edge AT the line, then
+                            translateX(50%) shifts dot half its width
+                            right so the dot's centre lands ON the
+                            line. */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
-                            className="absolute top-1/2 -translate-y-1/2 -right-[4.5px] h-[9px] w-[9px] rounded-full bg-black"
+                            className="absolute top-1/2 -right-[20px] -translate-y-1/2 translate-x-1/2 h-[10px] w-[10px] rounded-full bg-black"
                           />
                         )}
-                        <item.icon
-                          className={cn(
-                            "h-[16px] w-[16px] flex-shrink-0 transition-colors",
-                            isActiveRoute ? "text-black" : "text-[#878b8b] group-hover:text-black",
-                          )}
-                          strokeWidth={2}
-                        />
-                        <span className="flex-1 text-right">{item.name}</span>
+                        <span className="text-right">{item.name}</span>
                       </NavLink>
                     );
                   })}
