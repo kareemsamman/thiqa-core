@@ -27,9 +27,15 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
     consumeDockOrigin,
   } = usePolicyWizardController();
 
-  const minimizedInstances = instances.filter((i) => i.id !== activeId);
-  const lastMinimizedId =
-    minimizedInstances[minimizedInstances.length - 1]?.id ?? null;
+  // Sort minimized drafts newest-first by their first-minimize timestamp
+  // so the latest parked draft always tops the list. Missing timestamps
+  // fall back to 0 (legacy/open instances).
+  const minimizedInstances = instances
+    .filter((i) => i.id !== activeId)
+    .slice()
+    .sort((a, b) => (b.minimizedAt ?? 0) - (a.minimizedAt ?? 0));
+  const newestMinimizedId = minimizedInstances[0]?.id ?? null;
+  const lastMinimizedId = newestMinimizedId;
 
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -128,6 +134,7 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
           <DraftRow
             key={instance.id}
             instance={instance}
+            isNewest={instance.id === newestMinimizedId}
             onRestore={(id) => {
               setOpen(false);
               restoreInstance(id);
@@ -140,12 +147,34 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
   );
 }
 
+// Arabic-locale formatter: short date + short time in one pass (e.g.
+// "١٩‏/٤‏/٢٠٢٦ ٢:٥٣ م"). Instantiated once at module load — new
+// formatters per-render are surprisingly expensive in hot lists.
+const DRAFT_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat("ar", {
+  year: "2-digit",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function formatMinimizedAt(ts: number | null): string {
+  if (!ts) return "";
+  try {
+    return DRAFT_TIMESTAMP_FORMATTER.format(new Date(ts));
+  } catch {
+    return "";
+  }
+}
+
 function DraftRow({
   instance,
+  isNewest,
   onRestore,
   onClose,
 }: {
   instance: WizardInstance;
+  isNewest: boolean;
   onRestore: (id: string) => void;
   onClose: (id: string) => void;
 }) {
@@ -153,6 +182,17 @@ function DraftRow({
   const title = summary
     ? `استئناف: ${summary.clientName || "وثيقة جديدة"} — ${summary.stepTitle}`
     : "استئناف وثيقة جديدة";
+  const stamp = formatMinimizedAt(instance.minimizedAt);
+
+  // The newest minimized draft gets a distinct blue gradient so the user
+  // can spot "the one I just parked" at a glance. Older drafts fall back
+  // to the standard dark primary background.
+  const newestBadgeStyle = isNewest
+    ? {
+        backgroundImage:
+          "linear-gradient(rgb(69, 94, 187) 0%, rgb(138, 150, 203) 100%), rgba(255, 255, 255, 0.02)",
+      }
+    : undefined;
 
   return (
     <div
@@ -166,9 +206,12 @@ function DraftRow({
         type="button"
         onClick={() => onRestore(instance.id)}
         title={title}
-        className="relative flex flex-1 min-w-0 items-center gap-2 h-11 pr-3 pl-2 text-right"
+        className="relative flex flex-1 min-w-0 items-center gap-2 min-h-11 py-1.5 pr-3 pl-2 text-right"
       >
-        <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15">
+        <span
+          className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15"
+          style={newestBadgeStyle}
+        >
           <FileText className="h-4 w-4" />
           <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-primary animate-pulse" />
         </span>
@@ -181,6 +224,11 @@ function DraftRow({
               ? `${summary.stepNumber}/${summary.totalSteps} · ${summary.stepTitle}`
               : "اضغط للاستئناف"}
           </span>
+          {stamp && (
+            <span className="text-[9px] opacity-55 truncate w-full">
+              {stamp}
+            </span>
+          )}
         </span>
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15">
           <Maximize2 className="h-3.5 w-3.5" />
@@ -194,7 +242,7 @@ function DraftRow({
         }}
         title="إغلاق هذه المسودة"
         aria-label="إغلاق هذه المسودة"
-        className="flex h-11 w-9 items-center justify-center border-r border-primary-foreground/20 hover:bg-primary-foreground/15"
+        className="flex w-9 self-stretch items-center justify-center border-r border-primary-foreground/20 hover:bg-primary-foreground/15"
       >
         <X className="h-4 w-4" />
       </button>

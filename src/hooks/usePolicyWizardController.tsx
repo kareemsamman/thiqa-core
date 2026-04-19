@@ -37,6 +37,10 @@ export interface WizardInstance {
   id: string;
   preselectedClientId?: string;
   draftSummary: WizardDraftSummary | null;
+  // Timestamp of the FIRST time this draft was minimized. Stays fixed
+  // across later restore/minimize cycles so the drafts list can sort and
+  // label each chip by when the user parked it originally.
+  minimizedAt: number | null;
 }
 
 interface PolicyWizardControllerState {
@@ -80,10 +84,18 @@ function loadPersistedInstances(): WizardInstance[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     // Filter to well-shaped entries and ignore anything that looks broken.
-    return parsed.filter(
-      (entry): entry is WizardInstance =>
-        entry && typeof entry === "object" && typeof entry.id === "string",
-    );
+    // Backfill minimizedAt for older persisted drafts that predate the
+    // field so they still sort/show a timestamp.
+    return parsed
+      .filter(
+        (entry): entry is WizardInstance =>
+          entry && typeof entry === "object" && typeof entry.id === "string",
+      )
+      .map((entry) => ({
+        ...entry,
+        minimizedAt:
+          typeof entry.minimizedAt === "number" ? entry.minimizedAt : Date.now(),
+      }));
   } catch {
     return [];
   }
@@ -120,7 +132,7 @@ export function PolicyWizardControllerProvider({ children }: { children: ReactNo
     const id = generateId();
     setInstances((prev) => [
       ...prev,
-      { id, preselectedClientId: opts?.clientId, draftSummary: null },
+      { id, preselectedClientId: opts?.clientId, draftSummary: null, minimizedAt: null },
     ]);
     setActiveId(id);
     return id;
@@ -141,6 +153,12 @@ export function PolicyWizardControllerProvider({ children }: { children: ReactNo
   const minimizeInstance = useCallback((id: string, origin?: DockOrigin) => {
     if (origin) dockOriginRef.current = origin;
     setActiveId((prev) => (prev === id ? null : prev));
+    // Stamp the first-minimize time only. Re-minimizing the same draft
+    // must not refresh its position in the list — the "last minimized"
+    // ordering is about original parking time, not most recent touch.
+    setInstances((prev) =>
+      prev.map((i) => (i.id === id && i.minimizedAt == null ? { ...i, minimizedAt: Date.now() } : i)),
+    );
   }, []);
 
   const restoreInstance = useCallback((id: string) => {
