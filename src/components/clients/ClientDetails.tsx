@@ -3,6 +3,7 @@ import { Helmet } from 'react-helmet-async';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { useRecentClient } from '@/hooks/useRecentClient';
+import { useSidebarState } from '@/hooks/useSidebarState';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -287,6 +288,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const { getBranchName } = useBranches();
   const { isAdmin, isSuperAdmin, profile, user } = useAuth();
   const { setRecentClient } = useRecentClient();
+  // Sidebar-aware content width: when the sidebar is collapsed there's
+  // ~10rem of extra horizontal room, so let the client profile stretch
+  // wider to use it. Expanded sidebar keeps the old 6xl cap so layouts
+  // with a lot of body copy stay readable.
+  const { collapsed: sidebarCollapsed } = useSidebarState();
   const { count: accidentCount, hasActiveReports } = useClientAccidentInfo(client.id);
   const [cars, setCars] = useState<CarRecord[]>([]);
   const [policies, setPolicies] = useState<PolicyRecord[]>([]);
@@ -1381,7 +1387,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           <title>{client.full_name} | ثقة للتأمين</title>
         </Helmet>
         <Header title={client.full_name} subtitle="العملاء" />
-        <div className="max-w-6xl mx-auto space-y-6">
+        <div className={`${sidebarCollapsed ? "max-w-[96rem]" : "max-w-6xl"} mx-auto space-y-6`}>
           {/* Header Skeleton */}
           <Card className="overflow-hidden">
             <div className="bg-gradient-to-l from-primary/10 via-primary/5 to-transparent p-6">
@@ -1460,7 +1466,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         subtitle="العملاء"
       />
 
-      <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6">
+      <div className={`${sidebarCollapsed ? "max-w-[96rem]" : "max-w-6xl"} mx-auto space-y-4 sm:space-y-6`}>
         {/* Professional Header Card */}
         <Card className="overflow-hidden">
           <div className="bg-gradient-to-l from-primary/10 via-primary/5 to-transparent p-4 sm:p-6">
