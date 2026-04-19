@@ -11,15 +11,15 @@ export function ThaqibButton({ onClick, visible }: ThaqibButtonProps) {
     <button
       onClick={onClick}
       className={cn(
-        "fixed bottom-28 md:bottom-4 left-4 z-50 h-12 w-12 rounded-full shadow-lg",
-        "bg-[#122143] hover:bg-[#1a3260] text-white",
+        "fixed bottom-28 left-4 md:bottom-4 md:left-12 z-50 h-14 w-14 md:h-16 md:w-16 rounded-full shadow-xl",
+        "bg-black hover:bg-neutral-800 text-white ring-1 ring-white/10",
         "flex items-center justify-center transition-all duration-300",
         "hover:scale-110 active:scale-95",
         visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
       )}
       title="ثاقب — المساعد الذكي"
     >
-      <Bot className="h-5 w-5" />
+      <Bot className="h-6 w-6 md:h-7 md:w-7" />
     </button>
   );
 }
