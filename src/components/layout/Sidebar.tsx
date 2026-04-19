@@ -458,27 +458,27 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             >
               <CollapsibleTrigger
                 className={cn(
-                  "group flex items-center w-full px-3 py-2.5 rounded-lg gap-3 transition-colors duration-150",
-                  isActiveGroup
-                    ? "bg-slate-100 text-slate-900"
-                    : "text-slate-700 hover:bg-slate-50 hover:text-slate-900",
+                  "group flex items-center w-full px-3 py-2.5 rounded-lg gap-3 text-black transition-colors duration-150",
+                  "hover:bg-slate-50",
+                  isActiveGroup && "bg-slate-100",
                 )}
               >
                 <GroupIcon
-                  className={cn(
-                    "h-[18px] w-[18px] shrink-0 transition-colors",
-                    isActiveGroup ? "text-slate-900" : "text-slate-500 group-hover:text-slate-900",
-                  )}
-                  strokeWidth={2}
+                  className="h-[18px] w-[18px] shrink-0 text-black"
+                  strokeWidth={isActiveGroup ? 2.5 : 2}
                 />
-                <span className="flex-1 text-right text-[14px] font-semibold tracking-[0.01em] whitespace-nowrap">
+                <span
+                  className={cn(
+                    "flex-1 text-right text-[14px] tracking-[0.01em] whitespace-nowrap text-black",
+                    isActiveGroup ? "font-bold" : "font-semibold",
+                  )}
+                >
                   {group.name}
                 </span>
                 <ChevronDown
                   className={cn(
-                    "h-[14px] w-[14px] shrink-0 transition-transform duration-200",
+                    "h-[14px] w-[14px] shrink-0 text-black transition-transform duration-200",
                     isOpen ? "rotate-180" : "rotate-0",
-                    isActiveGroup ? "text-slate-700" : "text-slate-400 group-hover:text-slate-700",
                   )}
                   strokeWidth={2.25}
                 />
@@ -486,8 +486,10 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
               <CollapsibleContent>
                 {/* Submenu container — thin vertical guide on the
                     right (RTL "start" edge) connecting all child
-                    items, like the Untitled UI reference. */}
-                <div className="relative mt-1 mr-[18px] pr-4 pl-1 py-0.5 space-y-0.5 border-r border-slate-200">
+                    items, like the Untitled UI reference. Line color
+                    matches the inactive item color so the dot punches
+                    visibly through it when active. */}
+                <div className="relative mt-1 mr-[18px] pr-4 pl-1 py-0.5 space-y-0.5 border-r border-[#878b8b]/40">
                   {group.items.map((item) => {
                     const isActiveRoute = location.pathname === item.href;
                     return (
@@ -499,27 +501,26 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         className={cn(
                           "relative flex items-center gap-3 rounded-md px-3 py-2 text-[13.5px] font-medium transition-colors duration-150",
                           isActiveRoute
-                            ? "bg-slate-100 text-slate-900"
-                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                            ? "bg-slate-100 text-black"
+                            : "text-[#878b8b] hover:bg-slate-50 hover:text-black",
                         )}
                       >
-                        {/* Active marker — a black dot centred ON the
-                            1px guide line. The line sits at right:-1px
-                            of this NavLink's parent (the dashed div).
-                            Centering an 8px dot on that line means
-                            offsetting it so its centre lands on the
-                            line: right: -1 - 4 = -5px. No halo —
-                            the dot is meant to *sit on* the line. */}
+                        {/* Active marker — a 9px black dot centred ON
+                            the 1px guide line. The line sits at
+                            right:-1px of the parent. Offset -4.5px
+                            puts the dot's centre exactly on the line
+                            — no halo so it sits *on* the line, not
+                            punching through. */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
-                            className="absolute top-1/2 -translate-y-1/2 -right-[4.5px] h-[9px] w-[9px] rounded-full bg-slate-900"
+                            className="absolute top-1/2 -translate-y-1/2 -right-[4.5px] h-[9px] w-[9px] rounded-full bg-black"
                           />
                         )}
                         <item.icon
                           className={cn(
                             "h-[16px] w-[16px] flex-shrink-0 transition-colors",
-                            isActiveRoute ? "text-slate-900" : "text-slate-500 group-hover:text-slate-900",
+                            isActiveRoute ? "text-black" : "text-[#878b8b] group-hover:text-black",
                           )}
                           strokeWidth={2}
                         />
@@ -1028,7 +1029,7 @@ export function Sidebar() {
       <aside
         className={cn(
           "fixed right-2 top-2 bottom-2 z-40 rounded-2xl border border-black/[0.06] bg-white transition-all duration-300 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)] hidden md:block overflow-hidden",
-          collapsed ? "w-16" : "w-64"
+          collapsed ? "w-16" : "w-[222px]"
         )}
       >
         <SidebarContent 
@@ -1042,5 +1043,5 @@ export function Sidebar() {
 
 // Export for MainLayout to know sidebar width
 export function useSidebarWidth() {
-  return { desktop: 256, collapsed: 64 };
+  return { desktop: 222, collapsed: 64 };
 }

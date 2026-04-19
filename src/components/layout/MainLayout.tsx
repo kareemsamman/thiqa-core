@@ -24,8 +24,10 @@ export function MainLayout({ children }: MainLayoutProps) {
     navigate('/thiqa');
   };
 
-  // Desktop sidebar: 64px collapsed (w-16) + 8px gap, 256px expanded (w-64) + 8px gap
-  const sidebarMargin = collapsed ? 'md:mr-[4.5rem]' : 'md:mr-[17.5rem]';
+  // Desktop sidebar: 64px collapsed (w-16) + 8px gap, 222px expanded
+  // (w-[222px]) + 8px gap. Margins below match `right-2` + width + a
+  // small content gap so page content sits flush against the sidebar.
+  const sidebarMargin = collapsed ? 'md:mr-[4.5rem]' : 'md:mr-[15rem]';
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
