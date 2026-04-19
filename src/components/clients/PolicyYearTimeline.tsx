@@ -1179,11 +1179,11 @@ function PolicyPackageCard({
                 e.stopPropagation();
                 navigator.clipboard
                   .writeText(policy.policy_number!)
-                  .then(() => toast.success(`تم نسخ رقم المعاملة: ${policy.policy_number}`))
-                  .catch(() => toast.error('فشل نسخ رقم المعاملة'));
+                  .then(() => toast.success(`تم نسخ رقم البوليصة: ${policy.policy_number}`))
+                  .catch(() => toast.error('فشل نسخ رقم البوليصة'));
               }}
               className="focus:outline-none"
-              title="اضغط لنسخ رقم المعاملة"
+              title="اضغط لنسخ رقم البوليصة"
             >
               <Badge
                 variant="outline"
@@ -1203,6 +1203,28 @@ function PolicyPackageCard({
               RTL), then the main + addon type chips. For singles: the single
               type chip. The transfer-from / broker badges are rendered AFTER
               the types so they appear to the LEFT of them in RTL. */}
+          {(() => {
+            // The card itself is one معاملة. Show its رقم البوليصة by
+            // pulling from the first بوليصة in the card that has a
+            // policy_number set (main first, then addons). When none of
+            // the policies have a number yet, the chip is hidden.
+            const policiesInCard: PolicyRecord[] = isPkg && pkg.mainPolicy
+              ? [pkg.mainPolicy, ...pkg.addons]
+              : [policy];
+            const numbered = policiesInCard.find(p => p.policy_number && p.policy_number.trim());
+            if (!numbered?.policy_number) return null;
+            return (
+              <Badge
+                variant="outline"
+                className="gap-1.5 text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-700 font-mono ltr-nums"
+                title={`رقم المعاملة (من بوليصة ${getDisplayLabel(numbered)}): ${numbered.policy_number}`}
+              >
+                <Hash className="h-3 w-3" />
+                <span className="font-semibold tracking-tight">{numbered.policy_number}</span>
+              </Badge>
+            );
+          })()}
+
           {isPkg && pkg.mainPolicy ? (
             <div className="flex flex-wrap items-center gap-1">
               <Badge variant="outline" className="gap-1 text-xs bg-primary/5 border-primary/20 text-primary">
@@ -1211,15 +1233,13 @@ function PolicyPackageCard({
               </Badge>
               <PolicyTypeChip
                 policy={pkg.mainPolicy}
-                index={1}
                 onPulse={pulsePolicyRow(pkg.mainPolicy.id)}
               />
-              {pkg.addons.map((addon, idx) => (
+              {pkg.addons.map((addon) => (
                 <span key={addon.id} className="flex items-center gap-1">
                   <span className="text-muted-foreground text-xs">+</span>
                   <PolicyTypeChip
                     policy={addon}
-                    index={idx + 2}
                     onPulse={pulsePolicyRow(addon.id)}
                     bold={false}
                   />
@@ -1229,7 +1249,6 @@ function PolicyPackageCard({
           ) : (
             <PolicyTypeChip
               policy={policy}
-              index={1}
               onPulse={pulsePolicyRow(policy.id)}
               asButton={false}
             />
@@ -1633,10 +1652,10 @@ function PolicyPackageCard({
               مكونات الباقة
             </div>
             <div className="rounded-lg border border-border/60 overflow-hidden bg-muted/20">
-              {/* Table header */}
+              {/* Table header — each row is a بوليصة, not a standalone معاملة. */}
               <div className="grid grid-cols-[minmax(80px,auto)_1fr_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
-                <span>رقم المعاملة</span>
-                <span>المعاملة</span>
+                <span>رقم البوليصة</span>
+                <span>البوليصة</span>
                 <span className="text-left min-w-[70px]">السعر</span>
               </div>
               {/* Main policy */}
@@ -1644,16 +1663,14 @@ function PolicyPackageCard({
                 policy={pkg.mainPolicy}
                 isActive={isActive}
                 onPoliciesUpdate={onPoliciesUpdate}
-                index={1}
               />
               {/* Addons */}
-              {pkg.addons.map((addon, idx) => (
+              {pkg.addons.map((addon) => (
                 <PackageComponentRow
                   key={addon.id}
                   policy={addon}
                   isActive={isActive}
                   onPoliciesUpdate={onPoliciesUpdate}
-                  index={idx + 2}
                 />
               ))}
               {/* Totals footer row */}
@@ -1708,15 +1725,14 @@ function PolicyPackageCard({
             </div>
             <div className="rounded-lg border border-border/60 overflow-hidden bg-muted/20 mb-2">
               <div className="grid grid-cols-[minmax(80px,auto)_1fr_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
-                <span>رقم المعاملة</span>
-                <span>المعاملة</span>
+                <span>رقم البوليصة</span>
+                <span>البوليصة</span>
                 <span className="text-left min-w-[70px]">السعر</span>
               </div>
               <PackageComponentRow
                 policy={policy}
                 isActive={isActive}
                 onPoliciesUpdate={onPoliciesUpdate}
-                index={1}
               />
             </div>
             <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
@@ -1835,19 +1851,17 @@ function PolicyPackageCard({
   );
 }
 
-// Single type chip used in the card header. Renders the type badge
-// with the row index (#N) and the issued policy_number (when present)
-// stamped onto its leading edge so staff can identify which row each
-// chip refers to without scrolling to the body table.
+// Single type chip used in the card header. Renders the type label
+// inside its colored badge; clicking pulses the matching row in the
+// body table. Does NOT carry per-chip index / policy_number stamps —
+// each chip represents a بوليصة, not its own معاملة.
 function PolicyTypeChip({
   policy,
-  index,
   onPulse,
   bold = true,
   asButton = true,
 }: {
   policy: PolicyRecord;
-  index: number;
   onPulse: (e: React.MouseEvent) => void;
   bold?: boolean;
   asButton?: boolean;
@@ -1857,30 +1871,21 @@ function PolicyTypeChip({
   const badgeContent = (
     <Badge
       className={cn(
-        "border text-xs cursor-pointer gap-1.5 ltr-nums",
+        "border text-xs cursor-pointer",
         bold && "font-semibold",
         color,
       )}
     >
-      <span className="font-mono text-[10px] opacity-70">#{index}</span>
-      {policy.policy_number && (
-        <span className="font-mono text-[10px] font-semibold tracking-tight">
-          {policy.policy_number}
-        </span>
-      )}
-      <span>{label}</span>
+      {label}
     </Badge>
   );
   if (!asButton) return badgeContent;
-  const tooltip = policy.policy_number
-    ? `المعاملة #${index} — رقم ${policy.policy_number} (اضغط لإبراز الصف)`
-    : `المعاملة #${index} (اضغط لإبراز الصف)`;
   return (
     <button
       type="button"
       onClick={onPulse}
       className="focus:outline-none"
-      title={tooltip}
+      title="اضغط لإبراز هذه البوليصة في القائمة"
     >
       {badgeContent}
     </button>
@@ -1892,12 +1897,10 @@ function PackageComponentRow({
   policy,
   isActive,
   onPoliciesUpdate,
-  index,
 }: {
   policy: PolicyRecord;
   isActive: boolean;
   onPoliciesUpdate?: () => void;
-  index?: number;
 }) {
   const typeLabel = getDisplayLabel(policy);
   const typeColor = policyTypeColors[policy.policy_type_parent];
@@ -1918,25 +1921,15 @@ function PackageComponentRow({
         !isActive && "opacity-70"
       )}
     >
-      {/* Policy-number column (inline-editable). Replaces the old
-          sequential `#N` indicator — staff wanted the actual issued
-          policy number right here. */}
+      {/* رقم البوليصة column (inline-editable). */}
       <PolicyNumberInlineEdit
         policyId={policy.id}
         policyNumber={policy.policy_number ?? null}
         onSaved={onPoliciesUpdate}
       />
 
-      {/* Policy column: row index (#N) + type badge + service subtype + company */}
+      {/* Policy column: type badge + service subtype + company */}
       <div className="flex items-center gap-2 min-w-0">
-        {index !== undefined && (
-          <span
-            className="text-[10px] font-mono font-semibold text-muted-foreground/80 ltr-nums shrink-0 tabular-nums"
-            title={`المعاملة رقم ${index} في الباقة`}
-          >
-            #{index}
-          </span>
-        )}
         <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border shrink-0", typeColor)}>
           {typeLabel}
         </Badge>
@@ -2024,11 +2017,11 @@ function PolicyNumberInlineEdit({
     setSaving(false);
     setEditing(false);
     if (error) {
-      toast.error("فشل حفظ رقم المعاملة");
+      toast.error("فشل حفظ رقم البوليصة");
       setValue(prev);
       return;
     }
-    toast.success(next ? "تم حفظ رقم المعاملة" : "تم مسح رقم المعاملة");
+    toast.success(next ? "تم حفظ رقم البوليصة" : "تم مسح رقم البوليصة");
     onSaved?.();
   };
 
@@ -2061,7 +2054,7 @@ function PolicyNumberInlineEdit({
       <button
         type="button"
         onClick={beginEdit}
-        title="اضغط لتعديل رقم المعاملة"
+        title="اضغط لتعديل رقم البوليصة"
         className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold ltr-nums text-foreground bg-background border border-border/60 rounded px-1.5 h-6 hover:border-primary/40 transition-colors"
       >
         <Hash className="h-2.5 w-2.5 text-muted-foreground" />
@@ -2074,7 +2067,7 @@ function PolicyNumberInlineEdit({
     <button
       type="button"
       onClick={beginEdit}
-      title="إضافة رقم المعاملة"
+      title="إضافة رقم البوليصة"
       className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary border border-dashed border-border/60 hover:border-primary/40 rounded px-1.5 h-6 transition-colors"
     >
       <Pencil className="h-2.5 w-2.5" />
