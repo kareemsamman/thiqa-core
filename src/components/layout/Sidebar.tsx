@@ -421,7 +421,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 </>
               ) : (
                 <>
-                  <img src="https://thiqacrm.b-cdn.net/Group%201000011516.png" alt="Thiqa" className="h-9 w-9 rounded-full object-cover" />
+                  <img src="https://thiqacrm.b-cdn.net/Group%201000011517.png" alt="Thiqa" className="h-9 w-9 rounded-full object-cover" />
                   <span className="text-base font-semibold text-slate-900">Thiqa</span>
                 </>
               )}
@@ -444,7 +444,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
           ) : siteSettings?.logo_url ? (
             <img src={siteSettings.logo_url} alt="Logo" className="mx-auto h-9 w-9 rounded-full object-cover" />
           ) : (
-            <img src="https://thiqacrm.b-cdn.net/Group%201000011516.png" alt="Thiqa" className="mx-auto h-9 w-9 rounded-full object-cover" />
+            <img src="https://thiqacrm.b-cdn.net/Group%201000011517.png" alt="Thiqa" className="mx-auto h-9 w-9 rounded-full object-cover" />
           )
         )}
       </div>
