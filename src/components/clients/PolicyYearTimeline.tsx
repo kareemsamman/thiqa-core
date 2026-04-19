@@ -1645,14 +1645,16 @@ function PolicyPackageCard({
                 policy={pkg.mainPolicy}
                 isActive={isActive}
                 onPoliciesUpdate={onPoliciesUpdate}
+                index={1}
               />
               {/* Addons */}
-              {pkg.addons.map((addon) => (
+              {pkg.addons.map((addon, idx) => (
                 <PackageComponentRow
                   key={addon.id}
                   policy={addon}
                   isActive={isActive}
                   onPoliciesUpdate={onPoliciesUpdate}
+                  index={idx + 2}
                 />
               ))}
               {/* Totals footer row */}
@@ -1715,6 +1717,7 @@ function PolicyPackageCard({
                 policy={policy}
                 isActive={isActive}
                 onPoliciesUpdate={onPoliciesUpdate}
+                index={1}
               />
             </div>
             <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
@@ -1838,10 +1841,12 @@ function PackageComponentRow({
   policy,
   isActive,
   onPoliciesUpdate,
+  index,
 }: {
   policy: PolicyRecord;
   isActive: boolean;
   onPoliciesUpdate?: () => void;
+  index?: number;
 }) {
   const typeLabel = getDisplayLabel(policy);
   const typeColor = policyTypeColors[policy.policy_type_parent];
@@ -1871,8 +1876,16 @@ function PackageComponentRow({
         onSaved={onPoliciesUpdate}
       />
 
-      {/* Policy column: type badge + service subtype + company */}
+      {/* Policy column: row index (#N) + type badge + service subtype + company */}
       <div className="flex items-center gap-2 min-w-0">
+        {index !== undefined && (
+          <span
+            className="text-[10px] font-mono font-semibold text-muted-foreground/80 ltr-nums shrink-0 tabular-nums"
+            title={`المعاملة رقم ${index} في الباقة`}
+          >
+            #{index}
+          </span>
+        )}
         <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-medium border shrink-0", typeColor)}>
           {typeLabel}
         </Badge>
