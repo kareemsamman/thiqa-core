@@ -35,7 +35,6 @@ import {
   CircleNotch,
   SignOut,
   List,
-  SidebarSimple,
   Plus,
   Minus,
   Gear,
@@ -44,10 +43,15 @@ import {
   Palette,
   Crown,
 } from "@phosphor-icons/react";
+// PanelLeftClose / PanelLeftOpen kept on lucide-react — the user
+// specifically picked the lucide design (rounded rect + vertical
+// divider + chevron) for the sidebar collapse toggle.
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -394,7 +398,14 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
           button on the left (RTL end).
           Collapsed: brand mark centred; the expand button moves to the
           row below so the small column doesn't get crowded. */}
-      <div className="flex h-20 items-center justify-between border-b border-black/[0.06] px-4">
+      <div
+        className={cn(
+          "flex h-20 items-center justify-between border-b border-black/[0.06]",
+          // Padded only when expanded; collapsed mode lets the logo
+          // centre itself in the narrow column with no gutter.
+          collapsed ? "px-0" : "px-4",
+        )}
+      >
         {!collapsed && (
           <>
             <div className="flex items-center gap-2">
@@ -421,7 +432,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 className="inline-flex items-center justify-center h-8 w-8 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
                 aria-label="تصغير القائمة"
               >
-                <SidebarSimple className="h-5 w-5" weight="regular" />
+                <PanelLeftClose className="h-5 w-5" strokeWidth={2} />
               </button>
             )}
           </>
@@ -447,31 +458,64 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
           const GroupIcon = group.icon;
           
           if (collapsed) {
-            // When collapsed, show only icons without groups. Light
-            // theme to match the expanded sidebar.
+            // Collapsed mode: ONE icon button per group (not per item).
+            // Hovering opens a HoverCard panel that lists the group's
+            // items, just like the Untitled UI reference. Clicking
+            // the button navigates to the first item in the group so
+            // touch users / keyboard users still have a working path.
+            const isActiveGroup = isGroupActive(group);
+            const GroupIcon = group.icon;
+            const firstItem = group.items[0];
             return (
-              <div key={group.name} className="space-y-1">
-                {group.items.map((item) => {
-                  const isActiveRoute = location.pathname === item.href;
-                  return (
-                    <NavLink
-                      key={item.name}
-                      to={item.href}
-                      ref={isActiveRoute ? activeNavLinkRef : undefined}
-                      onClick={handleNavClick}
-                      title={item.name}
-                      className={cn(
-                        "flex items-center justify-center rounded-lg p-2.5 transition-colors duration-150 relative",
-                        isActiveRoute
-                          ? "bg-slate-900 text-white"
-                          : "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
-                      )}
-                    >
-                      <item.icon className="h-5 w-5" weight="regular" />
-                    </NavLink>
-                  );
-                })}
-              </div>
+              <HoverCard key={group.name} openDelay={120} closeDelay={120}>
+                <HoverCardTrigger asChild>
+                  <NavLink
+                    to={firstItem.href}
+                    ref={isActiveGroup ? activeNavLinkRef : undefined}
+                    onClick={handleNavClick}
+                    title={group.name}
+                    className={cn(
+                      "flex items-center justify-center rounded-[0.2rem] p-2.5 transition-colors duration-150 relative mx-2",
+                      isActiveGroup
+                        ? "bg-slate-900 text-white"
+                        : "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
+                    )}
+                  >
+                    <GroupIcon className="h-5 w-5" weight={isActiveGroup ? "bold" : "regular"} />
+                  </NavLink>
+                </HoverCardTrigger>
+                <HoverCardContent
+                  side="left"
+                  sideOffset={12}
+                  align="start"
+                  className="w-60 p-2 [direction:rtl] rounded-xl"
+                >
+                  <p className="px-2 pt-1 pb-2 text-[12px] font-bold text-slate-900">
+                    {group.name}
+                  </p>
+                  <div className="flex flex-col">
+                    {group.items.map((item) => {
+                      const isActive = location.pathname === item.href;
+                      return (
+                        <NavLink
+                          key={item.name}
+                          to={item.href}
+                          onClick={handleNavClick}
+                          className={cn(
+                            "flex items-center gap-2.5 px-2 py-2 text-[13px] rounded-[0.2rem] transition-colors",
+                            isActive
+                              ? "bg-[#f3f5f7] text-black font-bold"
+                              : "text-[#656565] font-normal hover:bg-slate-50 hover:text-black",
+                          )}
+                        >
+                          <item.icon className={cn("h-4 w-4 flex-shrink-0", isActive ? "text-black" : "text-slate-500")} weight={isActive ? "bold" : "regular"} />
+                          <span className="flex-1 text-right">{item.name}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
             );
           }
 
@@ -526,15 +570,6 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                     dot (centred on the line) ends up fully embedded
                     inside the pill. */}
                 <div className="nav-leaves relative mt-1 py-1 space-y-0.5">
-                  {/* Vertical guide line, inset 17px from the start
-                      edge so it sits directly UNDER the parent group
-                      icon column. z-10 so it stays visible passing
-                      THROUGH the active pill. */}
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute top-1.5 bottom-1.5 w-px bg-[#e9e9e9] z-10"
-                    style={{ insetInlineStart: '17px' }}
-                  />
                   {group.items.map((item, idx) => {
                     const isActiveRoute = location.pathname === item.href;
                     return (
@@ -551,12 +586,25 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                             : "text-[#656565] font-normal hover:text-black hover:bg-slate-50",
                         )}
                       >
+                        {/* Per-row guide line segment. Rendered INSIDE
+                            the NavLink (not the wrapper) because the
+                            entrance animation puts a `transform` on
+                            each row, which creates a stacking context
+                            — keeping the line in the same context as
+                            the dot lets z-index actually work. The
+                            `top:-1px / bottom:-1px` overshoot fills
+                            the 2px space-y-0.5 gap between rows so
+                            the segments visually merge into one
+                            continuous line. */}
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute w-px bg-[#e9e9e9] z-10"
+                          style={{ insetInlineStart: '17px', top: '-1px', bottom: '-1px' }}
+                        />
                         {/* Active pill bg — STOPS 24px before the
                             inline-start edge so the line + dot
                             column stays visible to the right of the
-                            pill (matches the Untitled UI reference,
-                            where the active row's pill ends BEFORE
-                            the marker column). */}
+                            pill. */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
@@ -564,11 +612,12 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                             style={{ insetInlineEnd: 0, insetInlineStart: '24px' }}
                           />
                         )}
-                        {/* Black dot centred ON the line. The line is
-                            1px wide at inset-inline-start:17px (centre
-                            17.5px). 8px dot → start edge at 17.5 - 4
-                            = 13.5px puts the dot's centre exactly on
-                            the line. z-30 so it sits above the line. */}
+                        {/* Black dot centred ON the line. 1px line at
+                            inset-inline-start:17px → centre 17.5px.
+                            8px dot → start at 17.5 - 4 = 13.5px so
+                            the dot centre lands on the line centre.
+                            z-30 sits above the line (z-10) inside
+                            the same NavLink stacking context. */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
@@ -577,7 +626,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                           />
                         )}
                         <span
-                          className="relative z-10 flex-1 text-right"
+                          className="relative z-20 flex-1 text-right"
                           style={{ paddingInline: '33px 12px' }}
                         >
                           {item.name}
@@ -604,7 +653,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             className="w-full justify-center h-10 px-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
             aria-label="توسيع القائمة"
           >
-            <SidebarSimple className="h-5 w-5" weight="regular" />
+            <PanelLeftOpen className="h-5 w-5" strokeWidth={2} />
           </Button>
         </div>
       )}
