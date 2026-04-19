@@ -658,16 +658,9 @@ export function Step3PolicyDetails({
         </Card>
       )}
 
-      {/* Policy Type + (subtype) + Company: one row so top-of-form essentials live together */}
+      {/* Policy Type + subtype + Company: one row so top-of-form essentials live together */}
       {!isLightMode && (
-        <div
-          className={cn(
-            "grid gap-3",
-            policy.policy_type_parent === 'THIRD_FULL'
-              ? "md:grid-cols-3"
-              : "md:grid-cols-2",
-          )}
-        >
+        <div className="grid gap-3 md:grid-cols-3">
           {/* Policy Type */}
           <div>
             <Label>نوع الوثيقة *</Label>
@@ -689,25 +682,27 @@ export function Step3PolicyDetails({
             <FieldError error={errors.policy_type_parent} />
           </div>
 
-          {/* THIRD/FULL child type */}
-          {policy.policy_type_parent === 'THIRD_FULL' && (
-            <div>
-              <Label>النوع الفرعي *</Label>
-              <Select
-                value={policy.policy_type_child}
-                onValueChange={(v) => setPolicy({ ...policy, policy_type_child: v })}
-              >
-                <SelectTrigger className={cn(errors.policy_type_child ? "border-destructive" : "")}>
-                  <SelectValue placeholder="اختر النوع الفرعي" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="THIRD">ثالث</SelectItem>
-                  <SelectItem value="FULL">شامل</SelectItem>
-                </SelectContent>
-              </Select>
-              <FieldError error={errors.policy_type_child} />
-            </div>
-          )}
+          {/* THIRD/FULL child type — always in the row so columns stay stable; disabled when parent isn't THIRD_FULL */}
+          <div>
+            <Label>النوع الفرعي{policy.policy_type_parent === 'THIRD_FULL' ? ' *' : ''}</Label>
+            <Select
+              value={policy.policy_type_child}
+              onValueChange={(v) => setPolicy({ ...policy, policy_type_child: v })}
+              disabled={policy.policy_type_parent !== 'THIRD_FULL'}
+            >
+              <SelectTrigger className={cn(
+                errors.policy_type_child ? "border-destructive" : "",
+                policy.policy_type_parent !== 'THIRD_FULL' && "opacity-50"
+              )}>
+                <SelectValue placeholder={policy.policy_type_parent === 'THIRD_FULL' ? "اختر النوع الفرعي" : "غير مطلوب"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="THIRD">ثالث</SelectItem>
+                <SelectItem value="FULL">شامل</SelectItem>
+              </SelectContent>
+            </Select>
+            <FieldError error={errors.policy_type_child} />
+          </div>
 
           {/* Company */}
           <div>
@@ -848,7 +843,7 @@ export function Step3PolicyDetails({
           companies we render the 3-column broker pricing card here
           instead of the plain input so the price field is always
           visible on screen without scrolling past dates/package. */}
-      {policy.company_id && !companies.find(c => c.id === policy.company_id)?.broker_id && (
+      {!companies.find(c => c.id === policy.company_id)?.broker_id && (
         <div>
           <Label>السعر (₪) *</Label>
           <Input
@@ -856,7 +851,7 @@ export function Step3PolicyDetails({
             value={policy.insurance_price}
             onChange={(e) => setPolicy({ ...policy, insurance_price: e.target.value })}
             placeholder="أدخل السعر"
-            className={cn("text-lg", errors.insurance_price ? "border-destructive" : "")}
+            className={cn(errors.insurance_price ? "border-destructive" : "")}
           />
           <FieldError error={errors.insurance_price} />
         </div>
