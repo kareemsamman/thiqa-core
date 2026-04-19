@@ -1337,7 +1337,11 @@ function PolicyPackageCard({
           {isTransferred && (
             <Badge variant="warning" className="gap-1">
               <ArrowRightLeft className="h-3 w-3" />
-              محولة {wasTransferredTo && <span className="font-mono ltr-nums">← {wasTransferredTo}</span>}
+              {wasTransferredTo ? (
+                <>محولة إلى رقم سيارة <span className="font-mono ltr-nums">{wasTransferredTo}</span></>
+              ) : (
+                <>محولة</>
+              )}
             </Badge>
           )}
           {isCancelled && (
