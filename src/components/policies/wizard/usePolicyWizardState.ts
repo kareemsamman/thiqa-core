@@ -44,7 +44,7 @@ interface UsePolicyWizardStateProps {
 
 export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaultBrokerDirection, preselectedClientId, renewalData }: UsePolicyWizardStateProps) {
   const { user, isAdmin, branchId: userBranchId } = useAuth();
-  const { branches, refetch: refetchBranches } = useBranches();
+  const { branches, loading: loadingBranches, refetch: refetchBranches } = useBranches();
   const initialBrokerDirection = defaultBrokerDirection || "";
 
   // Core wizard state
@@ -1008,6 +1008,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     setSelectedBranchId,
     effectiveBranchId,
     branches,
+    loadingBranches,
     refetchBranches,
     isAdmin,
 

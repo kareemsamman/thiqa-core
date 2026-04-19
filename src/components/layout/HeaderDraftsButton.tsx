@@ -186,11 +186,14 @@ function DraftRow({
 
   // The newest minimized draft gets a distinct blue gradient so the user
   // can spot "the one I just parked" at a glance. Older drafts fall back
-  // to the standard dark primary background.
+  // to the standard dark primary background. NOTE: `rgba()` is not a
+  // valid `background-image` layer; split it across image + color so the
+  // property actually paints.
   const newestBadgeStyle = isNewest
     ? {
         backgroundImage:
-          "linear-gradient(rgb(69, 94, 187) 0%, rgb(138, 150, 203) 100%), rgba(255, 255, 255, 0.02)",
+          "linear-gradient(rgb(69, 94, 187) 0%, rgb(138, 150, 203) 100%)",
+        backgroundColor: "rgba(255, 255, 255, 0.02)",
       }
     : undefined;
 

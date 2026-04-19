@@ -23,6 +23,7 @@ interface Step1Props {
   // Branch
   isAdmin: boolean;
   branches: Array<{ id: string; name: string; name_ar: string | null }>;
+  loadingBranches?: boolean;
   selectedBranchId: string;
   setSelectedBranchId: (id: string) => void;
   onBranchesChanged?: (createdId?: string) => void | Promise<void>;
@@ -63,6 +64,7 @@ interface Step1Props {
 export function Step1BranchTypeClient({
   isAdmin,
   branches,
+  loadingBranches,
   selectedBranchId,
   setSelectedBranchId,
   onBranchesChanged,
@@ -267,7 +269,12 @@ export function Step1BranchTypeClient({
             )}
           </div>
 
-          {branches.length === 0 ? (
+          {loadingBranches ? (
+            // While branches are still fetching, render a neutral
+            // skeleton so the user never sees a flash of "no branches
+            // yet" followed immediately by the select appearing.
+            <div className="h-10 rounded-md border border-dashed bg-muted/30 animate-pulse" />
+          ) : branches.length === 0 ? (
             <Card className="p-4 border-dashed border-destructive/50 bg-destructive/5">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">

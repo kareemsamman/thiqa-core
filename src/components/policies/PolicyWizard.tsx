@@ -199,6 +199,7 @@ export function PolicyWizard({
     isAdmin,
     userBranchId,
     branches,
+    loadingBranches,
     refetchBranches,
   } = wizardState;
 
@@ -1793,6 +1794,7 @@ export function PolicyWizard({
               <Step1BranchTypeClient
                 isAdmin={isAdmin}
                 branches={branches}
+                loadingBranches={loadingBranches}
                 selectedBranchId={selectedBranchId}
                 setSelectedBranchId={handleBranchChange}
                 onBranchesChanged={async (createdId) => {
