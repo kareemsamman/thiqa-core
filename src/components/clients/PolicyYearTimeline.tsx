@@ -53,6 +53,7 @@ import { useAuth } from '@/hooks/useAuth';
 interface PolicyRecord {
   id: string;
   policy_number: string | null;
+  document_number: string | null;
   policy_type_parent: string;
   policy_type_child: string | null;
   start_date: string;
@@ -1204,22 +1205,18 @@ function PolicyPackageCard({
               type chip. The transfer-from / broker badges are rendered AFTER
               the types so they appear to the LEFT of them in RTL. */}
           {(() => {
-            // The card itself is one معاملة. Surface its رقم المعاملة
-            // chip ALWAYS — when any بوليصة in the card already has a
-            // policy_number, show it; otherwise render an inline-edit
-            // affordance that lets staff stamp a number onto the main
-            // (or fallback first) بوليصة directly from the header.
+            // رقم المعاملة chip — pulls from policies.document_number,
+            // which is the human-readable 'NN/YYYY' identifier the DB
+            // trigger stamps on every بوليصة. Read-only on the card
+            // (the value is system-assigned, not staff-entered).
             const policiesInCard: PolicyRecord[] = isPkg && pkg.mainPolicy
               ? [pkg.mainPolicy, ...pkg.addons]
               : [policy];
-            const numbered = policiesInCard.find(p => p.policy_number && p.policy_number.trim());
-            const targetPolicy = numbered ?? pkg.mainPolicy ?? policy;
+            const stamped = policiesInCard.find(p => p.document_number && p.document_number.trim());
+            if (!stamped?.document_number) return null;
             return (
               <CardLevelPolicyNumberChip
-                policyId={targetPolicy.id}
-                policyNumber={numbered?.policy_number ?? null}
-                policyLabel={numbered ? getDisplayLabel(numbered) : getDisplayLabel(targetPolicy)}
-                onSaved={onPoliciesUpdate}
+                value={stamped.document_number}
               />
             );
           })()}
@@ -1972,107 +1969,27 @@ function PackageComponentRow({
   );
 }
 
-// Card-level رقم المعاملة chip. Renders at the start of the card
-// header. When any بوليصة in the card already has a policy_number it
-// shows that number (read + click-to-edit). When none does, it shows a
-// dashed '+ رقم المعاملة' affordance that opens the same compact input
-// inline — committed value is written to the chosen target بوليصة (the
-// main policy in a package, or the standalone policy itself).
-function CardLevelPolicyNumberChip({
-  policyId,
-  policyNumber,
-  policyLabel,
-  onSaved,
-}: {
-  policyId: string;
-  policyNumber: string | null;
-  policyLabel: string;
-  onSaved?: () => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(policyNumber ?? "");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!editing) setValue(policyNumber ?? "");
-  }, [policyNumber, editing]);
-
-  const beginEdit = (e: React.MouseEvent) => {
+// Card-level رقم المعاملة chip. Read-only — the value comes from
+// policies.document_number, which is auto-assigned by a DB trigger
+// (format 'NN/YYYY'). Click copies the number to the clipboard so
+// staff can paste it elsewhere quickly.
+function CardLevelPolicyNumberChip({ value }: { value: string }) {
+  const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setValue(policyNumber ?? "");
-    setEditing(true);
+    navigator.clipboard
+      .writeText(value)
+      .then(() => toast.success(`تم نسخ رقم المعاملة: ${value}`))
+      .catch(() => toast.error("فشل نسخ رقم المعاملة"));
   };
-
-  const commit = async () => {
-    const next = value.trim();
-    const prev = policyNumber ?? "";
-    if (next === prev) {
-      setEditing(false);
-      return;
-    }
-    setSaving(true);
-    const { error } = await supabase
-      .from("policies")
-      .update({ policy_number: next || null })
-      .eq("id", policyId);
-    setSaving(false);
-    setEditing(false);
-    if (error) {
-      toast.error("فشل حفظ رقم المعاملة");
-      setValue(prev);
-      return;
-    }
-    toast.success(next ? "تم حفظ رقم المعاملة" : "تم مسح رقم المعاملة");
-    onSaved?.();
-  };
-
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        disabled={saving}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onClick={(e) => e.stopPropagation()}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            (e.currentTarget as HTMLInputElement).blur();
-          } else if (e.key === "Escape") {
-            setValue(policyNumber ?? "");
-            setEditing(false);
-          }
-        }}
-        placeholder="36/2026"
-        className="w-[110px] h-6 rounded-full border border-emerald-500/40 bg-background px-2 text-[11px] font-mono ltr-nums focus:outline-none focus:ring-1 focus:ring-emerald-500/60"
-      />
-    );
-  }
-
-  if (policyNumber) {
-    return (
-      <button
-        type="button"
-        onClick={beginEdit}
-        title={`رقم المعاملة (من بوليصة ${policyLabel}): ${policyNumber} — اضغط للتعديل`}
-        className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-700 font-mono ltr-nums hover:bg-emerald-500/15 hover:border-emerald-500/50 transition-colors"
-      >
-        <Hash className="h-3 w-3" />
-        <span className="font-semibold tracking-tight">{policyNumber}</span>
-      </button>
-    );
-  }
-
   return (
     <button
       type="button"
-      onClick={beginEdit}
-      title="إضافة رقم المعاملة"
-      className="inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-xs text-muted-foreground border-border/60 hover:text-emerald-700 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-colors"
+      onClick={handleClick}
+      title={`رقم المعاملة: ${value} — اضغط للنسخ`}
+      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-700 font-mono ltr-nums hover:bg-emerald-500/15 hover:border-emerald-500/50 transition-colors"
     >
       <Hash className="h-3 w-3" />
-      <span>رقم المعاملة</span>
+      <span className="font-semibold tracking-tight">{value}</span>
     </button>
   );
 }

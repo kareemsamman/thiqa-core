@@ -149,6 +149,7 @@ interface CarRecord {
 interface PolicyRecord {
   id: string;
   policy_number: string | null;
+  document_number: string | null;
   policy_type_parent: string;
   policy_type_child: string | null;
   start_date: string;
@@ -520,7 +521,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       const { data, error } = await supabase
         .from('policies')
         .select(`
-          id, policy_number, policy_type_parent, policy_type_child, start_date, end_date,
+          id, policy_number, document_number, policy_type_parent, policy_type_child, start_date, end_date,
           insurance_price, office_commission, profit, cancelled, transferred, group_id,
           transferred_car_number, transferred_to_car_number, transferred_from_policy_id,
           created_at, branch_id, notes,
