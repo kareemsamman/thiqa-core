@@ -45,7 +45,12 @@ const NOTIFICATION_COLORS: Record<string, string> = {
   general: 'bg-muted/50',
 };
 
-export function NotificationsDropdown() {
+interface NotificationsDropdownProps {
+  className?: string;
+  iconClassName?: string;
+}
+
+export function NotificationsDropdown({ className, iconClassName }: NotificationsDropdownProps = {}) {
   const navigate = useNavigate();
   const { 
     notifications, 
@@ -80,15 +85,16 @@ export function NotificationsDropdown() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           className={cn(
             "relative h-9 w-9 md:h-10 md:w-10",
-            badgePulse && "animate-pulse"
+            badgePulse && "animate-pulse",
+            className
           )}
         >
-          <Bell className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
+          <Bell className={cn("h-4 w-4 md:h-5 md:w-5 text-muted-foreground", iconClassName)} />
           {unreadCount > 0 && (
             <Badge 
               className={cn(
