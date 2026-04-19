@@ -48,9 +48,10 @@ const NOTIFICATION_COLORS: Record<string, string> = {
 interface NotificationsDropdownProps {
   className?: string;
   iconClassName?: string;
+  badgeVariant?: "count" | "dot";
 }
 
-export function NotificationsDropdown({ className, iconClassName }: NotificationsDropdownProps = {}) {
+export function NotificationsDropdown({ className, iconClassName, badgeVariant = "count" }: NotificationsDropdownProps = {}) {
   const navigate = useNavigate();
   const { 
     notifications, 
@@ -96,15 +97,24 @@ export function NotificationsDropdown({ className, iconClassName }: Notification
         >
           <Bell className={cn("h-4 w-4 md:h-5 md:w-5 text-muted-foreground", iconClassName)} />
           {unreadCount > 0 && (
-            <Badge 
-              className={cn(
-                "absolute -left-1 -top-1 h-5 w-5 rounded-full p-0 text-[10px] flex items-center justify-center border-2 border-background",
-                badgePulse && "ring-2 ring-destructive/50"
-              )}
-              variant="destructive"
-            >
-              <span className="ltr-nums">{unreadCount > 99 ? '99+' : unreadCount}</span>
-            </Badge>
+            badgeVariant === "dot" ? (
+              <span
+                className={cn(
+                  "absolute left-2 top-2 h-2 w-2 rounded-full bg-destructive border border-background",
+                  badgePulse && "ring-2 ring-destructive/50"
+                )}
+              />
+            ) : (
+              <Badge
+                className={cn(
+                  "absolute -left-1 -top-1 h-5 w-5 rounded-full p-0 text-[10px] flex items-center justify-center border-2 border-background",
+                  badgePulse && "ring-2 ring-destructive/50"
+                )}
+                variant="destructive"
+              >
+                <span className="ltr-nums">{unreadCount > 99 ? '99+' : unreadCount}</span>
+              </Badge>
+            )
           )}
         </Button>
       </PopoverTrigger>

@@ -1,14 +1,15 @@
 import { useState, useMemo, useRef, useEffect, ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Search, Plus, X, Mail } from "lucide-react";
+import { Search, Plus, X, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { GlobalPolicySearch } from "./GlobalPolicySearch";
 import { NotificationsDropdown } from "./NotificationsDropdown";
 import { navigationGroups } from "./Sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
+import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
+import { useRecentClient } from "@/hooks/useRecentClient";
 
 interface HeaderProps {
   title: string;
@@ -21,17 +22,24 @@ interface HeaderProps {
 }
 
 const ICON_BUTTON_CLASS =
-  "h-11 w-11 rounded-full bg-secondary/70 hover:bg-secondary transition-colors";
-const ICON_CLASS = "h-[18px] w-[18px] text-muted-foreground";
+  "h-11 w-11 rounded-full bg-secondary/70 hover:bg-secondary transition-colors text-foreground";
+const ICON_CLASS = "h-[18px] w-[18px] text-foreground";
 
-export function Header({ title, subtitle, action }: HeaderProps) {
-  const [searchOpen, setSearchOpen] = useState(false);
+// `action` is kept in the prop signature so existing callers don't break,
+// but the header no longer renders it — per-page primary actions now live
+// in the page body next to filters. Safe to drop from callers over time.
+export function Header({ title, subtitle }: HeaderProps) {
   const [searchExpanded, setSearchExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
   const { isAdmin, isSuperAdmin } = useAuth();
   const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
+  const { openWizard } = usePolicyWizardController();
+  const { recentClient } = useRecentClient();
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const isOnClientProfilePage = /^\/clients\/[^/]+/.test(location.pathname);
 
   const siblingTabs = useMemo(() => {
     const matchesPath = (href: string) =>
@@ -61,14 +69,15 @@ export function Header({ title, subtitle, action }: HeaderProps) {
     }
   }, [searchExpanded]);
 
-  const openSearch = () => {
-    setSearchExpanded(true);
-    setSearchOpen(true);
+  const openNewPolicy = () => {
+    openWizard({
+      clientId: isOnClientProfilePage ? recentClient?.id : undefined,
+    });
   };
 
-  const closeSearchModal = (open: boolean) => {
-    setSearchOpen(open);
-    if (!open) setSearchExpanded(false);
+  const collapseSearch = () => {
+    setSearchExpanded(false);
+    setSearchQuery("");
   };
 
   return (
@@ -107,23 +116,27 @@ export function Header({ title, subtitle, action }: HeaderProps) {
           </div>
         </nav>
 
-        {/* Left: search, mail, bell, action */}
+        {/* Left: search, new-policy button, bell */}
         <div className="flex items-center gap-2 flex-shrink-0">
           {searchExpanded ? (
             <div className="relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground pointer-events-none" />
               <Input
                 ref={searchInputRef}
                 placeholder="بحث..."
-                onFocus={() => setSearchOpen(true)}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onBlur={() => {
+                  if (!searchQuery) collapseSearch();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") collapseSearch();
+                }}
                 className="h-11 w-[220px] rounded-full pr-9 pl-9 bg-secondary/70 border-transparent focus-visible:bg-background"
               />
               <button
                 type="button"
-                onClick={() => {
-                  setSearchExpanded(false);
-                  setSearchOpen(false);
-                }}
+                onClick={collapseSearch}
                 className="absolute left-2 top-1/2 -translate-y-1/2 h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-background"
                 aria-label="إغلاق البحث"
               >
@@ -135,7 +148,7 @@ export function Header({ title, subtitle, action }: HeaderProps) {
               variant="ghost"
               size="icon"
               className={ICON_BUTTON_CLASS}
-              onClick={openSearch}
+              onClick={() => setSearchExpanded(true)}
               aria-label="بحث"
             >
               <Search className={ICON_CLASS} />
@@ -143,30 +156,18 @@ export function Header({ title, subtitle, action }: HeaderProps) {
           )}
 
           <Button
-            variant="ghost"
-            size="icon"
-            className={cn(ICON_BUTTON_CLASS, "relative")}
-            onClick={() => navigate("/admin/correspondence")}
-            aria-label="الرسائل"
+            onClick={openNewPolicy}
+            className="h-11 px-4 rounded-full gap-2 shadow-md hover:shadow-lg hover:shadow-primary/20 active:scale-[0.98] text-[15px]"
           >
-            <Mail className={ICON_CLASS} />
+            <Plus className="h-4 w-4" />
+            <span>وثيقة جديدة</span>
           </Button>
 
           <NotificationsDropdown
             className={cn(ICON_BUTTON_CLASS, "md:h-11 md:w-11")}
-            iconClassName="md:h-[18px] md:w-[18px]"
+            iconClassName="md:h-[18px] md:w-[18px] text-foreground"
+            badgeVariant="dot"
           />
-
-          {action && (
-            <Button
-              onClick={action.onClick}
-              size="sm"
-              className="h-11 px-4 rounded-full gap-2 shadow-md hover:shadow-lg hover:shadow-primary/20 text-[15px]"
-            >
-              {action.icon || <Plus className="h-4 w-4" />}
-              {action.label && <span>{action.label}</span>}
-            </Button>
-          )}
         </div>
       </header>
 
@@ -183,22 +184,21 @@ export function Header({ title, subtitle, action }: HeaderProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 rounded-full bg-secondary/70 hover:bg-secondary"
-              onClick={openSearch}
+              className="h-9 w-9 rounded-full bg-secondary/70 hover:bg-secondary text-foreground"
+              onClick={() => setSearchExpanded(true)}
               aria-label="بحث"
             >
-              <Search className="h-4 w-4 text-muted-foreground" />
+              <Search className="h-4 w-4 text-foreground" />
             </Button>
-            {action && (
-              <Button
-                onClick={action.onClick}
-                size="sm"
-                className="h-9 px-3 rounded-full text-xs gap-1"
-              >
-                {action.icon || <Plus className="h-3.5 w-3.5" />}
-                {action.label && <span>{action.label}</span>}
-              </Button>
-            )}
+            <Button
+              onClick={openNewPolicy}
+              size="sm"
+              className="h-9 px-3 rounded-full gap-2"
+            >
+              <Plus className="h-4 w-4 sm:hidden" />
+              <FileText className="h-4 w-4 hidden sm:inline" />
+              <span className="hidden sm:inline">وثيقة جديدة</span>
+            </Button>
           </div>
         </div>
 
@@ -225,9 +225,6 @@ export function Header({ title, subtitle, action }: HeaderProps) {
           </nav>
         )}
       </div>
-
-      {/* Global Policy Search Dialog */}
-      <GlobalPolicySearch open={searchOpen} onOpenChange={closeSearchModal} />
     </>
   );
 }

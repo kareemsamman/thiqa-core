@@ -23,6 +23,7 @@ import {
   Phone,
   FileText,
   X,
+  Plus,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -299,13 +300,6 @@ export default function Brokers() {
       <Header
         title="الوسطاء"
         subtitle="إدارة الوسطاء والعمولات"
-        action={{
-          label: "إضافة وسيط",
-          onClick: () => {
-            setSelectedBroker(null);
-            setDrawerOpen(true);
-          },
-        }}
       />
 
       <div className="p-6 space-y-4">
@@ -324,8 +318,19 @@ export default function Brokers() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <Button 
-              variant={showFilters ? "default" : "outline"} 
+            <Button
+              size="sm"
+              onClick={() => {
+                setSelectedBroker(null);
+                setDrawerOpen(true);
+              }}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              إضافة وسيط
+            </Button>
+            <Button
+              variant={showFilters ? "default" : "outline"}
               size="sm"
               onClick={() => setShowFilters(!showFilters)}
             >
