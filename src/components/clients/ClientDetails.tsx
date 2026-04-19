@@ -1509,30 +1509,47 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 {/* Client Info */}
                 <div className="flex-1 min-w-0">
                   <h1 className="text-lg sm:text-2xl font-bold truncate">{client.full_name}</h1>
-                  <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-muted-foreground mt-1 sm:mt-2">
+                  <div className="flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-1.5 text-sm sm:text-[15px] text-muted-foreground mt-1.5 sm:mt-2.5">
                     <span
-                      className="flex items-center gap-1.5 font-mono ltr-nums"
+                      className="flex items-center gap-2"
                       title="رقم الهوية"
                     >
-                      <IdCard className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      {client.id_number}
+                      <IdCard className="h-[18px] w-[18px] sm:h-5 sm:w-5 shrink-0 text-muted-foreground/70" />
+                      <span className="font-mono ltr-nums font-semibold tracking-wide text-foreground/85">
+                        {client.id_number}
+                      </span>
                     </span>
                     {client.phone_number && (
-                      <ClickablePhone phone={client.phone_number} />
+                      <ClickablePhone
+                        phone={client.phone_number}
+                        className="text-sm sm:text-[15px] gap-2"
+                        iconClassName="h-[18px] w-[18px] sm:h-5 sm:w-5"
+                      />
                     )}
                     {client.phone_number_2 && (
-                      <ClickablePhone phone={client.phone_number_2} className="text-muted-foreground/70" />
+                      <ClickablePhone
+                        phone={client.phone_number_2}
+                        className="text-sm sm:text-[15px] gap-2 text-muted-foreground/70"
+                        iconClassName="h-[18px] w-[18px] sm:h-5 sm:w-5"
+                      />
                     )}
                     {client.file_number && (
-                      <span className="flex items-center gap-1.5">
-                        <FileText className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                        ملف: {client.file_number}
+                      <span className="flex items-center gap-2" title="رقم الملف">
+                        <FileText className="h-[18px] w-[18px] sm:h-5 sm:w-5 shrink-0 text-muted-foreground/70" />
+                        <span>
+                          ملف:{' '}
+                          <span className="font-mono ltr-nums font-semibold text-foreground/85">
+                            {client.file_number}
+                          </span>
+                        </span>
                       </span>
                     )}
                     {client.birth_date && (
-                      <span className="flex items-center gap-1.5">
-                        <Calendar className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                        {formatDate(client.birth_date)}
+                      <span className="flex items-center gap-2" title="تاريخ الميلاد">
+                        <Calendar className="h-[18px] w-[18px] sm:h-5 sm:w-5 shrink-0 text-muted-foreground/70" />
+                        <span className="font-mono ltr-nums font-semibold text-foreground/85">
+                          {formatDate(client.birth_date)}
+                        </span>
                       </span>
                     )}
                   </div>

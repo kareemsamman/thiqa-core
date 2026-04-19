@@ -6,6 +6,7 @@ import { toast } from "sonner";
 interface ClickablePhoneProps {
   phone: string | null | undefined;
   className?: string;
+  iconClassName?: string;
   showIcon?: boolean;
 }
 
@@ -16,6 +17,7 @@ function isMobile() {
 export function ClickablePhone({
   phone,
   className,
+  iconClassName,
   showIcon = true,
 }: ClickablePhoneProps) {
   const [copied, setCopied] = useState(false);
@@ -54,10 +56,12 @@ export function ClickablePhone({
     >
       {showIcon && (
         copied
-          ? <Check className="h-3 w-3 text-green-600" />
-          : <Phone className="h-3 w-3 group-hover:text-primary transition-colors" />
+          ? <Check className={cn("h-3 w-3 text-green-600 shrink-0", iconClassName)} />
+          : <Phone className={cn("h-3 w-3 shrink-0 group-hover:text-primary transition-colors", iconClassName)} />
       )}
-      <bdi className="group-hover:underline">{phone}</bdi>
+      <bdi className="font-mono ltr-nums font-semibold tracking-wide text-foreground/85 group-hover:underline group-hover:text-primary transition-colors">
+        {phone}
+      </bdi>
     </button>
   );
 }
