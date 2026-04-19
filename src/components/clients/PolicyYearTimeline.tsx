@@ -1209,36 +1209,30 @@ function PolicyPackageCard({
                 <Zap className="h-3 w-3" />
                 باقة
               </Badge>
-              <button
-                type="button"
-                onClick={pulsePolicyRow(pkg.mainPolicy.id)}
-                className="focus:outline-none"
-                title="اضغط لإبراز هذه المعاملة في القائمة"
-              >
-                <Badge className={cn("border text-xs font-semibold cursor-pointer", policyTypeColors[pkg.mainPolicy.policy_type_parent])}>
-                  {getDisplayLabel(pkg.mainPolicy)}
-                </Badge>
-              </button>
-              {pkg.addons.map((addon) => (
+              <PolicyTypeChip
+                policy={pkg.mainPolicy}
+                index={1}
+                onPulse={pulsePolicyRow(pkg.mainPolicy.id)}
+              />
+              {pkg.addons.map((addon, idx) => (
                 <span key={addon.id} className="flex items-center gap-1">
                   <span className="text-muted-foreground text-xs">+</span>
-                  <button
-                    type="button"
-                    onClick={pulsePolicyRow(addon.id)}
-                    className="focus:outline-none"
-                    title="اضغط لإبراز هذه المعاملة في القائمة"
-                  >
-                    <Badge className={cn("border text-xs cursor-pointer", policyTypeColors[addon.policy_type_parent])}>
-                      {getDisplayLabel(addon)}
-                    </Badge>
-                  </button>
+                  <PolicyTypeChip
+                    policy={addon}
+                    index={idx + 2}
+                    onPulse={pulsePolicyRow(addon.id)}
+                    bold={false}
+                  />
                 </span>
               ))}
             </div>
           ) : (
-            <Badge className={cn("border text-xs font-semibold", policyTypeColors[policy.policy_type_parent])}>
-              {getTypeLabel()}
-            </Badge>
+            <PolicyTypeChip
+              policy={policy}
+              index={1}
+              onPulse={pulsePolicyRow(policy.id)}
+              asButton={false}
+            />
           )}
 
           {/* Transfer FROM indicator — for policies created via transfer.
@@ -1838,6 +1832,58 @@ function PolicyPackageCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+// Single type chip used in the card header. Renders the type badge
+// with the row index (#N) and the issued policy_number (when present)
+// stamped onto its leading edge so staff can identify which row each
+// chip refers to without scrolling to the body table.
+function PolicyTypeChip({
+  policy,
+  index,
+  onPulse,
+  bold = true,
+  asButton = true,
+}: {
+  policy: PolicyRecord;
+  index: number;
+  onPulse: (e: React.MouseEvent) => void;
+  bold?: boolean;
+  asButton?: boolean;
+}) {
+  const label = getDisplayLabel(policy);
+  const color = policyTypeColors[policy.policy_type_parent];
+  const badgeContent = (
+    <Badge
+      className={cn(
+        "border text-xs cursor-pointer gap-1.5 ltr-nums",
+        bold && "font-semibold",
+        color,
+      )}
+    >
+      <span className="font-mono text-[10px] opacity-70">#{index}</span>
+      {policy.policy_number && (
+        <span className="font-mono text-[10px] font-semibold tracking-tight">
+          {policy.policy_number}
+        </span>
+      )}
+      <span>{label}</span>
+    </Badge>
+  );
+  if (!asButton) return badgeContent;
+  const tooltip = policy.policy_number
+    ? `المعاملة #${index} — رقم ${policy.policy_number} (اضغط لإبراز الصف)`
+    : `المعاملة #${index} (اضغط لإبراز الصف)`;
+  return (
+    <button
+      type="button"
+      onClick={onPulse}
+      className="focus:outline-none"
+      title={tooltip}
+    >
+      {badgeContent}
+    </button>
   );
 }
 
