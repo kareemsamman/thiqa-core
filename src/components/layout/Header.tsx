@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NotificationsDropdown } from "./NotificationsDropdown";
 import { BottomToolbarInlineSearch } from "./BottomToolbarInlineSearch";
+import { HeaderDraftsButton } from "./HeaderDraftsButton";
 import { navigationGroups } from "./Sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -159,6 +160,8 @@ export function Header({ title, subtitle }: HeaderProps) {
             <Plus className="h-4 w-4" />
             <span>وثيقة جديدة</span>
           </Button>
+
+          <HeaderDraftsButton />
 
           <NotificationsDropdown
             className={cn(ICON_BUTTON_CLASS, "md:h-11 md:w-11")}
