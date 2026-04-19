@@ -92,13 +92,17 @@ html {
 
   html {
     direction: rtl;
-    overflow-x: hidden;
+    /* `overflow-x: clip` suppresses horizontal scroll WITHOUT creating
+       a scroll container, unlike `hidden`. Using `hidden` on html/body
+       silently breaks `position: sticky` in every descendant — which is
+       exactly why the main header wasn't sticking before. */
+    overflow-x: clip;
   }
 
   body {
     @apply bg-background text-foreground antialiased;
     font-family: "Cairo", sans-serif;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   /* RTL: Radix ScrollArea viewport must inherit RTL */
