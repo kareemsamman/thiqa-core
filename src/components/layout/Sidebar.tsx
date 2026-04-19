@@ -3,44 +3,47 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search } from "lucide-react";
 import {
-  LayoutDashboard,
+  Icon,
+  // group / item icons (used inside `navigationGroups`)
+  SquaresFour,
   Users,
   FileText,
-  Building2,
-  UserCog,
+  Buildings,
+  UserGear,
   Bell,
-  BarChart3,
-  Settings,
-  ChevronLeft,
-  LogOut,
+  ChartBar,
   Wallet,
   CreditCard,
-  Loader2,
   Image,
-  Menu,
-  MessageSquare,
-  FileSignature,
-  Upload,
-  DollarSign,
-  History,
-  Activity,
+  ChatCircle,
+  Signature,
+  CurrencyDollar,
+  ClockCounterClockwise,
+  Pulse,
   Truck,
   Shield,
   Megaphone,
-  AlertTriangle,
-  ListTodo,
-  Contact,
-  FileWarning,
-  Mail,
-  LucideIcon,
-  UserCircle,
-  PanelLeftClose,
-  PanelLeftOpen,
+  Warning,
+  ListChecks,
+  AddressBook,
+  FileX,
+  Envelope,
+  // chrome icons (used directly in JSX)
+  CaretLeft,
+  Question,
+  CircleNotch,
+  SignOut,
+  List,
+  SidebarSimple,
   Plus,
   Minus,
-} from "lucide-react";
+  Gear,
+  UserCircle,
+  MagnifyingGlass,
+  Palette,
+  Crown,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
@@ -60,7 +63,6 @@ import { SidebarAccidentsBadge } from "./SidebarAccidentsBadge";
 import { SidebarRenewalsBadge } from "./SidebarRenewalsBadge";
 import { SidebarSearch } from "./SidebarSearch";
 import { ProfileEditDrawer } from "./ProfileEditDrawer";
-import { Palette, Link2, Crown, HelpCircle } from "lucide-react";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import thiqaLogo from "@/assets/thiqa-logo-full.svg";
@@ -70,7 +72,7 @@ import { useSidebarState } from "@/hooks/useSidebarState";
 interface NavItem {
   name: string;
   href: string;
-  icon: LucideIcon;
+  icon: Icon;
   adminOnly?: boolean;
   superAdminOnly?: boolean;
   thiqaSuperAdminOnly?: boolean;
@@ -80,7 +82,7 @@ interface NavItem {
 
 interface NavGroup {
   name: string;
-  icon: LucideIcon;
+  icon: Icon;
   items: NavItem[];
   adminOnly?: boolean;
   defaultOpen?: boolean;
@@ -95,14 +97,14 @@ interface NavGroup {
 export const navigationGroups: NavGroup[] = [
   {
     name: "الرئيسية",
-    icon: LayoutDashboard,
+    icon: SquaresFour,
     defaultOpen: true,
     items: [
-      { name: "لوحة التحكم", href: "/dashboard", icon: LayoutDashboard },
-      { name: "المهام", href: "/tasks", icon: ListTodo, badge: 'tasks' },
-      { name: "سجل النشاط", href: "/activity", icon: Activity },
+      { name: "لوحة التحكم", href: "/dashboard", icon: SquaresFour },
+      { name: "المهام", href: "/tasks", icon: ListChecks, badge: 'tasks' },
+      { name: "سجل النشاط", href: "/activity", icon: Pulse },
       { name: "التنبيهات", href: "/notifications", icon: Bell, badge: 'notifications' },
-      { name: "تقارير الوثائق والتجديدات", href: "/reports/policies", icon: BarChart3, badge: 'renewals' },
+      { name: "تقارير الوثائق والتجديدات", href: "/reports/policies", icon: ChartBar, badge: 'renewals' },
     ],
   },
   {
@@ -111,41 +113,41 @@ export const navigationGroups: NavGroup[] = [
     items: [
       { name: "العملاء", href: "/clients", icon: Users },
       { name: "الوسطاء", href: "/brokers", icon: Wallet, adminOnly: true, featureKey: 'broker_wallet' },
-      { name: "الشركات", href: "/companies", icon: Building2, adminOnly: true },
-      { name: "بلاغات الحوادث", href: "/accidents", icon: AlertTriangle, badge: 'accidents', featureKey: 'accident_reports' },
+      { name: "الشركات", href: "/companies", icon: Buildings, adminOnly: true },
+      { name: "بلاغات الحوادث", href: "/accidents", icon: Warning, badge: 'accidents', featureKey: 'accident_reports' },
     ],
   },
   {
     name: "المالية",
     icon: Wallet,
     items: [
-      { name: "متابعة الديون", href: "/debt-tracking", icon: DollarSign, badge: 'debt' },
+      { name: "متابعة الديون", href: "/debt-tracking", icon: CurrencyDollar, badge: 'debt' },
       { name: "الشيكات", href: "/cheques", icon: CreditCard, featureKey: 'cheques' },
       { name: "الإيصالات", href: "/receipts", icon: FileText, featureKey: 'receipts' },
-      { name: "المحاسبة", href: "/accounting", icon: DollarSign, adminOnly: true, featureKey: 'accounting' },
+      { name: "المحاسبة", href: "/accounting", icon: CurrencyDollar, adminOnly: true, featureKey: 'accounting' },
     ],
   },
   {
     name: "أخرى",
     icon: Image,
     items: [
-      { name: "جهات الاتصال", href: "/contacts", icon: Contact },
-      { name: "المطالبات", href: "/admin/claims", icon: FileWarning, badge: 'claims', featureKey: 'repair_claims' },
+      { name: "جهات الاتصال", href: "/contacts", icon: AddressBook },
+      { name: "المطالبات", href: "/admin/claims", icon: FileX, badge: 'claims', featureKey: 'repair_claims' },
       { name: "الوسائط", href: "/media", icon: Image },
       { name: "ملفات", href: "/form-templates", icon: FileText },
-      { name: "المراسلات", href: "/admin/correspondence", icon: Mail, featureKey: 'correspondence' },
+      { name: "المراسلات", href: "/admin/correspondence", icon: Envelope, featureKey: 'correspondence' },
       { name: "SMS تسويقية", href: "/admin/marketing-sms", icon: Megaphone, featureKey: 'marketing_sms' },
-      { name: "سجل الرسائل", href: "/sms-history", icon: History, featureKey: 'sms' },
-      { name: "توقيعات العملاء", href: "/admin/customer-signatures", icon: FileSignature },
+      { name: "سجل الرسائل", href: "/sms-history", icon: ClockCounterClockwise, featureKey: 'sms' },
+      { name: "توقيعات العملاء", href: "/admin/customer-signatures", icon: Signature },
     ],
   },
   {
     name: "الإعدادات",
-    icon: Settings,
+    icon: Gear,
     adminOnly: true,
     items: [
-      { name: "المستخدمون", href: "/admin/users", icon: UserCog },
-      { name: "الفروع", href: "/admin/branches", icon: Building2 },
+      { name: "المستخدمون", href: "/admin/users", icon: UserGear },
+      { name: "الفروع", href: "/admin/branches", icon: Buildings },
       { name: "خدمات الطريق", href: "/admin/road-services", icon: Truck, featureKey: 'road_services' },
       { name: "إعفاء رسوم الحادث", href: "/admin/accident-fee-services", icon: Shield, featureKey: 'accident_fees' },
       { name: "العلامة التجارية", href: "/admin/branding", icon: Palette },
@@ -155,12 +157,12 @@ export const navigationGroups: NavGroup[] = [
     name: "إدارة ثقة",
     icon: Crown,
     items: [
-      { name: "لوحة التحكم", href: "/thiqa", icon: LayoutDashboard, thiqaSuperAdminOnly: true },
-      { name: "الوكلاء", href: "/thiqa/agents", icon: Building2, thiqaSuperAdminOnly: true },
+      { name: "لوحة التحكم", href: "/thiqa", icon: SquaresFour, thiqaSuperAdminOnly: true },
+      { name: "الوكلاء", href: "/thiqa/agents", icon: Buildings, thiqaSuperAdminOnly: true },
       { name: "سجل المدفوعات", href: "/thiqa/payments", icon: CreditCard, thiqaSuperAdminOnly: true },
       { name: "إعلانات النظام", href: "/thiqa/announcements", icon: Megaphone, thiqaSuperAdminOnly: true },
-      { name: "إعدادات المنصة", href: "/thiqa/settings", icon: Settings, thiqaSuperAdminOnly: true },
-      { name: "تحليلات الموقع", href: "/thiqa/analytics", icon: BarChart3, thiqaSuperAdminOnly: true },
+      { name: "إعدادات المنصة", href: "/thiqa/settings", icon: Gear, thiqaSuperAdminOnly: true },
+      { name: "تحليلات الموقع", href: "/thiqa/analytics", icon: ChartBar, thiqaSuperAdminOnly: true },
     ],
   },
 ];
@@ -419,7 +421,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 className="inline-flex items-center justify-center h-8 w-8 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
                 aria-label="تصغير القائمة"
               >
-                <PanelLeftClose className="h-5 w-5" strokeWidth={2} />
+                <SidebarSimple className="h-5 w-5" weight="regular" />
               </button>
             )}
           </>
@@ -465,7 +467,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                           : "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
                       )}
                     >
-                      <item.icon className="h-5 w-5" strokeWidth={2} />
+                      <item.icon className="h-5 w-5" weight="regular" />
                     </NavLink>
                   );
                 })}
@@ -497,7 +499,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
               >
                 <GroupIcon
                   className="h-[18px] w-[18px] shrink-0 text-black"
-                  strokeWidth={isActiveGroup ? 2.5 : 2}
+                  weight={isActiveGroup ? "bold" : "regular"}
                 />
                 <span
                   className={cn(
@@ -507,13 +509,11 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 >
                   {group.name}
                 </span>
-                {/* + when closed (light grey), − when open (black).
-                    Lucide icons used as real SVG elements, not text
-                    glyphs. */}
+                {/* + when closed (light grey), − when open (black). */}
                 {isOpen ? (
-                  <Minus className="h-[14px] w-[14px] shrink-0 text-black" strokeWidth={2.5} />
+                  <Minus className="h-[14px] w-[14px] shrink-0 text-black" weight="bold" />
                 ) : (
-                  <Plus className="h-[14px] w-[14px] shrink-0 text-[#a7a6a9]" strokeWidth={2.5} />
+                  <Plus className="h-[14px] w-[14px] shrink-0 text-[#a7a6a9]" weight="bold" />
                 )}
               </CollapsibleTrigger>
               <CollapsibleContent>
@@ -560,16 +560,15 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                           />
                         )}
                         {/* Black dot centred ON the line. The line is
-                            1px wide at inset-inline-start:17px (i.e.
-                            occupies 17→18px), so its centre is 17.5px.
-                            7px dot → start edge at 17.5 - 3.5 = 14px
-                            puts the dot's centre exactly on the line's
-                            centre. z-20 to punch through bg + line. */}
+                            1px wide at inset-inline-start:17px (centre
+                            17.5px). 8px dot → start edge at 17.5 - 4
+                            = 13.5px puts the dot's centre exactly on
+                            the line. z-30 to sit above the bg pill. */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
-                            className="absolute top-1/2 h-[7px] w-[7px] rounded-full bg-black z-20"
-                            style={{ insetInlineStart: '14px', transform: 'translateY(-50%)' }}
+                            className="absolute top-1/2 h-[8px] w-[8px] rounded-full bg-black z-30"
+                            style={{ insetInlineStart: '13.5px', transform: 'translateY(-50%)' }}
                           />
                         )}
                         <span
@@ -600,7 +599,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             className="w-full justify-center h-10 px-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
             aria-label="توسيع القائمة"
           >
-            <PanelLeftOpen className="h-5 w-5" strokeWidth={2} />
+            <SidebarSimple className="h-5 w-5" weight="regular" />
           </Button>
         </div>
       )}
@@ -701,7 +700,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         onClick={() => { setUserMenuOpen(false); setProfileOpen(true); }}
                         className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[0.2rem] text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                       >
-                        <UserCircle className="h-4 w-4 text-slate-500" />
+                        <UserCircle className="h-4 w-4 text-slate-500" weight="regular" />
                         <span className="flex-1 text-right">الملف الشخصي</span>
                       </button>
 
@@ -711,7 +710,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                           onClick={() => { setUserMenuOpen(false); navigate('/subscription'); }}
                           className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[0.2rem] text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                         >
-                          <Settings className="h-4 w-4 text-slate-500" />
+                          <Gear className="h-4 w-4 text-slate-500" weight="regular" />
                           <span className="flex-1 text-right">الإعدادات</span>
                         </button>
                       )}
@@ -722,7 +721,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                           onClick={triggerOnboarding}
                           className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[0.2rem] text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                         >
-                          <HelpCircle className="h-4 w-4 text-slate-500" />
+                          <Question className="h-4 w-4 text-slate-500" weight="regular" />
                           <span className="flex-1 text-right">دليل البداية</span>
                         </button>
                       )}
@@ -736,9 +735,9 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[0.2rem] text-[13px] text-red-600 hover:bg-red-50 transition-colors disabled:opacity-60"
                       >
                         {signingOut ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <CircleNotch className="h-4 w-4 animate-spin" weight="bold" />
                         ) : (
-                          <LogOut className="h-4 w-4" />
+                          <SignOut className="h-4 w-4" weight="regular" />
                         )}
                         <span className="flex-1 text-right">تسجيل الخروج</span>
                       </button>
@@ -778,9 +777,9 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                       </p>
                     </div>
                     {userMenuOpen ? (
-                      <Minus className="h-4 w-4 shrink-0 text-slate-700" strokeWidth={2.5} />
+                      <Minus className="h-4 w-4 shrink-0 text-slate-700" weight="bold" />
                     ) : (
-                      <Plus className="h-4 w-4 shrink-0 text-[#a7a6a9]" strokeWidth={2.5} />
+                      <Plus className="h-4 w-4 shrink-0 text-[#a7a6a9]" weight="bold" />
                     )}
                   </button>
                 </CollapsibleTrigger>
@@ -822,12 +821,12 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                   <p className="text-xs text-muted-foreground" dir="ltr">{profile?.email}</p>
                 </div>
                 <DropdownMenuItem onClick={() => setProfileOpen(true)} className="gap-2 cursor-pointer">
-                  <UserCircle className="h-4 w-4" />
+                  <UserCircle className="h-4 w-4" weight="regular" />
                   <span>الملف الشخصي</span>
                 </DropdownMenuItem>
                 {!isThiqaSuperAdmin && (
                   <DropdownMenuItem onClick={() => navigate('/subscription')} className="gap-2 cursor-pointer">
-                    <Settings className="h-4 w-4" />
+                    <Gear className="h-4 w-4" weight="regular" />
                     <span>الإعدادات</span>
                   </DropdownMenuItem>
                 )}
@@ -837,7 +836,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                   disabled={signingOut}
                   className="gap-2 cursor-pointer text-destructive focus:text-destructive"
                 >
-                  {signingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                  {signingOut ? <CircleNotch className="h-4 w-4 animate-spin" weight="bold" /> : <SignOut className="h-4 w-4" weight="regular" />}
                   <span>تسجيل الخروج</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -905,7 +904,7 @@ function MobileTopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
             onClick={onOpenMenu}
             aria-label="فتح القائمة"
           >
-            <Menu className="h-5 w-5" />
+            <List className="h-5 w-5" weight="regular" />
           </Button>
         </div>
       </div>
@@ -1031,13 +1030,13 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
             {branchName}
           </p>
         </div>
-        <ChevronLeft className="h-4 w-4 text-muted-foreground shrink-0" />
+        <CaretLeft className="h-4 w-4 text-muted-foreground shrink-0" weight="regular" />
       </button>
 
       {/* Search */}
       <div className="p-3 border-b">
         <div className="relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" weight="regular" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -1104,7 +1103,7 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
         {!query && !isThiqaSuperAdmin && (
           <div className="mb-3">
             <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-              <UserCircle className="h-3 w-3" />
+              <UserCircle className="h-3 w-3" weight="regular" />
               <span>الحساب والمساعدة</span>
             </div>
             <div className="space-y-0.5">
@@ -1117,7 +1116,7 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
                 className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/60 text-foreground text-right"
               >
                 <div className="h-9 w-9 rounded-lg bg-muted text-muted-foreground flex items-center justify-center shrink-0">
-                  <Settings className="h-4 w-4" />
+                  <Gear className="h-4 w-4" weight="regular" />
                 </div>
                 <span className="flex-1 truncate">الإعدادات</span>
               </button>
@@ -1139,7 +1138,7 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
                   className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/60 text-foreground text-right"
                 >
                   <div className="h-9 w-9 rounded-lg bg-muted text-muted-foreground flex items-center justify-center shrink-0">
-                    <HelpCircle className="h-4 w-4" />
+                    <Question className="h-4 w-4" weight="regular" />
                   </div>
                   <span className="flex-1 truncate">دليل البداية</span>
                 </button>
@@ -1159,9 +1158,9 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
           className="w-full gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20"
         >
           {signingOut ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <CircleNotch className="h-4 w-4 animate-spin" weight="bold" />
           ) : (
-            <LogOut className="h-4 w-4" />
+            <SignOut className="h-4 w-4" weight="regular" />
           )}
           تسجيل الخروج
         </Button>
