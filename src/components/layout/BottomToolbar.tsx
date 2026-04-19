@@ -70,10 +70,13 @@ export function BottomToolbar() {
 
   return (
     <>
-      {/* Sticky bottom toolbar with glassy style */}
-      <div 
+      {/* Sticky bottom toolbar — mobile-only. On desktop everything
+          this toolbar holds (new-policy button, search, notifications)
+          already lives in the unified header, so we hide it at md+ to
+          avoid the duplicate. */}
+      <div
         ref={toolbarRef}
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50"
+        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 md:hidden"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
