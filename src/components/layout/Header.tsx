@@ -81,9 +81,15 @@ export function Header({ title, subtitle }: HeaderProps) {
         </div>
 
         {/* Center: sibling tabs, absolutely pinned so neither the
-            growing cluster nor a longer title nudges them. */}
-        <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <div className="flex items-center gap-2">
+            growing cluster nor a longer title nudges them. Locked to a
+            fixed 629px lane — if the group has more tabs than fit, the
+            lane scrolls internally instead of pushing anything around. */}
+        <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[629px] overflow-x-auto scrollbar-none">
+          <div className="flex items-center gap-2 min-w-full">
+            {/* flex-1 spacers center the tabs when they fit; collapse
+                to 0 and disappear when the tabs overflow so the scroll
+                starts at the first tab instead of mid-list. */}
+            <div className="flex-1" aria-hidden="true" />
             {siblingTabs.map((tab) => {
               const active = isTabActive(tab.href);
               return (
@@ -92,7 +98,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                   type="button"
                   onClick={() => navigate(tab.href)}
                   className={cn(
-                    "h-11 px-5 rounded-full text-[15px] font-medium whitespace-nowrap transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                    "h-11 px-5 rounded-full text-[15px] font-medium whitespace-nowrap transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background flex-shrink-0",
                     active
                       ? "bg-foreground text-background shadow-md hover:bg-foreground/90"
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary",
@@ -102,6 +108,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                 </button>
               );
             })}
+            <div className="flex-1" aria-hidden="true" />
           </div>
         </nav>
 
@@ -110,6 +117,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             header's left edge while it expands. */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <BottomToolbarInlineSearch
+            collapsible
             direction="down"
             dropdownMatchWidth
             inputClassName="h-11 w-[240px] bg-secondary/70 border-transparent"

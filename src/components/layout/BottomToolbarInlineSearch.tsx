@@ -47,6 +47,12 @@ interface BottomToolbarInlineSearchProps {
   // typically a larger `w-[...]` so the input grows to fit results.
   // When omitted, width is static.
   expandedInputClassName?: string;
+  // When true the desktop variant starts as an icon-only button and
+  // expands into the input on click. Collapses back when the user
+  // clicks outside with an empty query. Mobile path unchanged.
+  collapsible?: boolean;
+  // Classes for the collapsed icon button (size, bg, rounded, etc.).
+  collapsedIconClassName?: string;
 }
 
 export function BottomToolbarInlineSearch({
@@ -55,6 +61,8 @@ export function BottomToolbarInlineSearch({
   dropdownMatchWidth = false,
   inputClassName,
   expandedInputClassName,
+  collapsible = false,
+  collapsedIconClassName,
 }: BottomToolbarInlineSearchProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,6 +74,9 @@ export function BottomToolbarInlineSearch({
   const [policyResults, setPolicyResults] = useState<PolicyResult[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // When collapsible: start as the icon-only button, expand on click.
+  // When not collapsible: always rendered as the input.
+  const [isExpanded, setIsExpanded] = useState(!collapsible);
 
   // Inline policy preview — opened when the user clicks a policy or
   // receipt result, so search-by-document-number lands on the drawer
@@ -285,16 +296,28 @@ export function BottomToolbarInlineSearch({
     setMobileOpen(false);
   }, [clearSearch]);
 
-  // Close dropdown on click outside
+  // Close dropdown — and collapse back to the icon — on click outside.
+  // Collapse only when the query is empty so a mid-typing click doesn't
+  // throw away the user's work.
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        closeDropdown();
+        setShowDropdown(false);
+        if (collapsible && !query.trim()) {
+          setIsExpanded(false);
+        }
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [closeDropdown]);
+  }, [collapsible, query]);
+
+  // Autofocus the input right after we transition from icon → input.
+  useEffect(() => {
+    if (!collapsible || !isExpanded) return;
+    const t = setTimeout(() => inputRef.current?.focus(), 10);
+    return () => clearTimeout(t);
+  }, [collapsible, isExpanded]);
 
   const handleSelect = (clientId: string, matchedCarId?: string) => {
     clearSearch();
@@ -515,7 +538,40 @@ export function BottomToolbarInlineSearch({
     );
   }
 
-  // ─── Desktop: inline input + upward dropdown ────────────────────────
+  // ─── Desktop: collapsed icon → inline input on click ────────────────
+  if (collapsible && !isExpanded) {
+    return (
+      <>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsExpanded(true)}
+          className={cn(
+            "h-11 w-11 rounded-full bg-secondary/70 hover:bg-secondary text-foreground",
+            collapsedIconClassName,
+            className,
+          )}
+          aria-label="بحث"
+          title="بحث"
+        >
+          <Search className="h-[18px] w-[18px] text-foreground" />
+        </Button>
+
+        <PolicyDetailsDrawer
+          policyId={previewPolicyId}
+          open={previewOpen}
+          onOpenChange={(o) => {
+            setPreviewOpen(o);
+            if (!o) setPreviewPolicyId(null);
+          }}
+          onViewRelatedPolicy={(id) => setPreviewPolicyId(id)}
+        />
+      </>
+    );
+  }
+
+  // ─── Desktop: inline input + dropdown ──────────────────────────────
   return (
     <>
     <div ref={containerRef} className={cn("relative flex items-center", className)}>
@@ -527,6 +583,13 @@ export function BottomToolbarInlineSearch({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={handleFocus}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              clearSearch();
+              if (collapsible) setIsExpanded(false);
+            }
+          }}
           placeholder="بحث..."
           className={cn(
             "h-9 w-[140px] sm:w-[200px] rounded-full pr-9 pl-8",

@@ -127,6 +127,17 @@ html {
     direction: rtl;
   }
 
+  /* Hide horizontal/vertical scrollbars without losing scroll behavior —
+     used on the header tab strip so an overflowing tab list scrolls
+     inside its fixed-width lane without exposing the chrome bar. */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Glass effect - light */
   .glass {
     background: hsl(var(--glass-bg));
