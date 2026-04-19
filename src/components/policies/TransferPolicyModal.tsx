@@ -36,6 +36,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { useAuth } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
+import { CAR_TYPES } from "@/components/policies/wizard/types";
+import { cn } from "@/lib/utils";
 
 interface TransferPolicyModalProps {
   open: boolean;
@@ -130,6 +132,12 @@ export function TransferPolicyModal({
   const [newCarModel, setNewCarModel] = useState("");
   const [newCarYear, setNewCarYear] = useState("");
   const [newCarManufacturer, setNewCarManufacturer] = useState("");
+  const [newCarColor, setNewCarColor] = useState("");
+  const [newCarType, setNewCarType] = useState("car");
+  const [newCarValue, setNewCarValue] = useState("");
+  const [newCarLicenseExpiry, setNewCarLicenseExpiry] = useState("");
+  const [fetchingCarData, setFetchingCarData] = useState(false);
+  const [carDataFetched, setCarDataFetched] = useState(false);
   const [savingNewCar, setSavingNewCar] = useState(false);
 
   // Fetch client's cars and related policies
@@ -210,6 +218,50 @@ export function TransferPolicyModal({
     }
   };
 
+  // Pull license-plate data from the same fetch-vehicle edge function
+  // the policy wizard uses, so the staff doesn't have to retype the
+  // manufacturer / model / year / color when adding a transfer target.
+  const fetchCarDataFromPlate = async (plate?: string) => {
+    const numberToFetch = plate || newCarNumber;
+    if (!numberToFetch || numberToFetch.length < 7) return;
+    setFetchingCarData(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-vehicle", {
+        body: { car_number: numberToFetch },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) return;
+      const v = (data as any).data || data;
+      setNewCarManufacturer(v.manufacturer_name || "");
+      setNewCarModel(v.model || "");
+      setNewCarYear(v.year ? String(v.year) : "");
+      setNewCarColor(v.color || "");
+      setNewCarLicenseExpiry(v.license_expiry || "");
+      setNewCarType(v.car_type || "car");
+      setCarDataFetched(true);
+      toast({ title: "تم جلب البيانات تلقائياً" });
+    } catch {
+      // Silent fail — user can fill in manually.
+    } finally {
+      setFetchingCarData(false);
+    }
+  };
+
+  const handleCarNumberBlur = () => {
+    if (newCarNumber.length >= 7 && !carDataFetched && !fetchingCarData) {
+      fetchCarDataFromPlate(newCarNumber);
+    }
+  };
+
+  const handleCarNumberKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (newCarNumber.length >= 7 && !fetchingCarData) {
+        fetchCarDataFromPlate(newCarNumber);
+      }
+    }
+  };
+
   const handleAddNewCar = async () => {
     if (!newCarNumber || !newCarModel || !newCarYear) {
       toast({ title: "خطأ", description: "رقم السيارة والموديل والسنة مطلوبة", variant: "destructive" });
@@ -231,6 +283,10 @@ export function TransferPolicyModal({
           model: newCarModel,
           year: parseInt(newCarYear),
           manufacturer_name: newCarManufacturer || null,
+          color: newCarColor || null,
+          car_type: (newCarType || "car") as any,
+          car_value: newCarValue ? parseFloat(newCarValue) : null,
+          license_expiry: newCarLicenseExpiry || null,
           branch_id: branchId,
           created_by_admin_id: user?.id,
         })
@@ -243,12 +299,17 @@ export function TransferPolicyModal({
       setCars(prev => [data, ...prev]);
       setSelectedCarId(data.id);
       setShowNewCarForm(false);
-      
+
       // Reset form
       setNewCarNumber("");
       setNewCarModel("");
       setNewCarYear("");
       setNewCarManufacturer("");
+      setNewCarColor("");
+      setNewCarType("car");
+      setNewCarValue("");
+      setNewCarLicenseExpiry("");
+      setCarDataFetched(false);
 
       toast({ title: "تم", description: "تم إضافة السيارة بنجاح" });
     } catch (error: any) {
@@ -647,32 +708,42 @@ export function TransferPolicyModal({
                   {showNewCarForm ? "إلغاء الإضافة" : "إضافة سيارة جديدة"}
                 </Button>
 
-                {/* New Car Form */}
+                {/* New Car Form — mirrors the policy wizard's Step2Car
+                    fields and auto-fetch behavior so transferring to a
+                    brand-new car is the same flow staff already know. */}
                 {showNewCarForm && (
                   <Card className="p-3 space-y-3 mt-2 border-primary/30 bg-primary/5">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs">رقم السيارة *</Label>
+                    {/* Car number — auto-fetches the rest on blur / Enter */}
+                    <div className="space-y-1">
+                      <Label className="text-xs">رقم السيارة *</Label>
+                      <div className="relative">
                         <Input
                           value={newCarNumber}
-                          onChange={(e) => setNewCarNumber(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                          onChange={(e) => {
+                            setNewCarNumber(e.target.value.replace(/\D/g, "").slice(0, 8));
+                            if (carDataFetched) setCarDataFetched(false);
+                          }}
+                          onBlur={handleCarNumberBlur}
+                          onKeyDown={handleCarNumberKeyDown}
                           placeholder="12345678"
                           maxLength={8}
                           inputMode="numeric"
                           dir="ltr"
                         />
+                        {fetchingCarData && (
+                          <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          </div>
+                        )}
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">سنة الصنع *</Label>
-                        <Input
-                          type="number"
-                          value={newCarYear}
-                          onChange={(e) => setNewCarYear(e.target.value)}
-                          placeholder="2024"
-                          dir="ltr"
-                        />
-                      </div>
+                      {carDataFetched && (
+                        <div className="flex items-center gap-1 text-[11px] text-primary">
+                          <CheckCircle2 className="h-3 w-3" />
+                          تم جلب بيانات السيارة
+                        </div>
+                      )}
                     </div>
+
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <Label className="text-xs">الشركة المصنعة</Label>
@@ -690,9 +761,54 @@ export function TransferPolicyModal({
                           placeholder="كورولا"
                         />
                       </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">سنة الصنع *</Label>
+                        <Input
+                          type="number"
+                          value={newCarYear}
+                          onChange={(e) => setNewCarYear(e.target.value)}
+                          placeholder="2024"
+                          dir="ltr"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">اللون</Label>
+                        <Input
+                          value={newCarColor}
+                          onChange={(e) => setNewCarColor(e.target.value)}
+                          placeholder="أبيض"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">نوع السيارة *</Label>
+                        <Select value={newCarType} onValueChange={setNewCarType}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="اختر النوع" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CAR_TYPES.map((type) => (
+                              <SelectItem key={type.value} value={type.value}>
+                                {type.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">قيمة السيارة (₪)</Label>
+                        <Input
+                          type="number"
+                          value={newCarValue}
+                          onChange={(e) => setNewCarValue(e.target.value)}
+                          placeholder="أدخل قيمة السيارة"
+                          className="ltr-nums"
+                          dir="ltr"
+                        />
+                      </div>
                     </div>
-                    <Button 
-                      size="sm" 
+
+                    <Button
+                      size="sm"
                       onClick={handleAddNewCar}
                       disabled={savingNewCar}
                       className="w-full"
