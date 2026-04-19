@@ -1702,9 +1702,12 @@ export function PolicyWizard({
 
   // Helper: minimize the wizard and optionally navigate. The wizard stays
   // mounted via GlobalPolicyWizardHost so the draft survives navigation.
-  const minimizeAndNavigate = (path?: string) => {
+  // Accepts an optional dock origin so the draft tile animates from the
+  // clicked button toward the header drafts chip — same FLIP flight as
+  // the window minimize button.
+  const minimizeAndNavigate = (path?: string, origin?: { x: number; y: number }) => {
     captureScroll();
-    onMinimize?.();
+    onMinimize?.(origin);
     if (path) navigate(path);
   };
 

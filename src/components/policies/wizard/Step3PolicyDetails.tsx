@@ -102,7 +102,7 @@ interface Step3Props {
   /** Minimize the wizard and optionally navigate away. Used by the
    *  "manage companies" links so an agent can jump to the companies page
    *  without losing their draft. */
-  onMinimizeAndNavigate?: (path?: string) => void;
+  onMinimizeAndNavigate?: (path?: string, origin?: { x: number; y: number }) => void;
 }
 
 export function Step3PolicyDetails({

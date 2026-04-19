@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, Route, Shield, FileCheck, Loader2, Check, AlertCircle, Car, Calendar, ExternalLink, Settings } from "lucide-react";
+import { Package, Route, Shield, FileCheck, Loader2, Check, AlertCircle, Car, Calendar, ExternalLink, Settings, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
@@ -110,7 +110,7 @@ interface PackageBuilderSectionProps {
   ageBand?: 'UNDER_24' | 'UP_24' | 'ANY';
   /** Minimize the wizard and optionally navigate away — used by the
    *  "manage companies" links on the addon company selectors. */
-  onMinimizeAndNavigate?: (path?: string) => void;
+  onMinimizeAndNavigate?: (path?: string, origin?: { x: number; y: number }) => void;
 }
 
 export function PackageBuilderSection({
@@ -680,12 +680,19 @@ export function PackageBuilderSection({
                   {onMinimizeAndNavigate && (
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); onMinimizeAndNavigate("/admin/road-services"); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        onMinimizeAndNavigate("/admin/road-services", {
+                          x: rect.left + rect.width / 2,
+                          y: rect.top + rect.height / 2,
+                        });
+                      }}
                       className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 hover:underline font-medium"
-                      title="إدارة خدمات الطريق"
+                      title="إضافة خدمة طريق جديدة"
                     >
-                      <Settings className="h-2.5 w-2.5" />
-                      إدارة
+                      <Plus className="h-2.5 w-2.5" />
+                      إضافة
                       <ExternalLink className="h-2.5 w-2.5" />
                     </button>
                   )}
@@ -842,12 +849,19 @@ export function PackageBuilderSection({
                   {onMinimizeAndNavigate && (
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); onMinimizeAndNavigate("/admin/accident-fee-services"); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        onMinimizeAndNavigate("/admin/accident-fee-services", {
+                          x: rect.left + rect.width / 2,
+                          y: rect.top + rect.height / 2,
+                        });
+                      }}
                       className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 hover:underline font-medium"
-                      title="إدارة إعفاءات رسوم حادث"
+                      title="إضافة إعفاء رسوم حادث"
                     >
-                      <Settings className="h-2.5 w-2.5" />
-                      إدارة
+                      <Plus className="h-2.5 w-2.5" />
+                      إضافة
                       <ExternalLink className="h-2.5 w-2.5" />
                     </button>
                   )}
