@@ -934,30 +934,28 @@ export function Step3PolicyDetails({
         </div>
       )}
 
-      {/* Issue Date - before start/end dates, for all types */}
-      <div>
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <Label className="mb-0">تاريخ الإصدار</Label>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" className="text-muted-foreground hover:text-foreground">
-                <Info className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p className="text-xs">التاريخ الذي تحسبه الشركة (افتراضياً = تاريخ البداية)</p>
-            </TooltipContent>
-          </Tooltip>
+      {/* Dates row: issue + start + end share a row on desktop, stack on mobile */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        <div>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Label className="mb-0">تاريخ الإصدار</Label>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" className="text-muted-foreground hover:text-foreground">
+                  <Info className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="text-xs">التاريخ الذي تحسبه الشركة (افتراضياً = تاريخ البداية)</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          <ArabicDatePicker
+            value={policy.issue_date}
+            onChange={(date) => setPolicy({ ...policy, issue_date: date })}
+            placeholder="تاريخ الإصدار (افتراضي = تاريخ البداية)"
+          />
         </div>
-        <ArabicDatePicker
-          value={policy.issue_date}
-          onChange={(date) => setPolicy({ ...policy, issue_date: date })}
-          placeholder="تاريخ الإصدار (افتراضي = تاريخ البداية)"
-        />
-      </div>
-
-      {/* Dates - Before Package Section to clarify these are for main policy */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <Label>تاريخ البداية *</Label>
           <ArabicDatePicker
