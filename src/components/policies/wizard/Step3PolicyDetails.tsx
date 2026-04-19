@@ -658,46 +658,106 @@ export function Step3PolicyDetails({
         </Card>
       )}
 
-      {/* FULL mode: Policy Type Selection */}
+      {/* Policy Type + (subtype) + Company: one row so top-of-form essentials live together */}
       {!isLightMode && (
-        <div>
-          <Label>نوع الوثيقة *</Label>
-          <Select 
-            value={policy.policy_type_parent} 
-            onValueChange={(v) => setPolicy({ ...policy, policy_type_parent: v, policy_type_child: "", company_id: "" })}
-          >
-            <SelectTrigger className={cn(errors.policy_type_parent ? "border-destructive" : "")}>
-              <SelectValue placeholder="اختر نوع الوثيقة" />
-            </SelectTrigger>
-            <SelectContent>
-              {CAR_POLICY_TYPES.map((type) => (
-                <SelectItem key={type.value} value={type.value}>
-                  {type.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FieldError error={errors.policy_type_parent} />
-        </div>
-      )}
+        <div
+          className={cn(
+            "grid gap-3",
+            policy.policy_type_parent === 'THIRD_FULL'
+              ? "md:grid-cols-3"
+              : "md:grid-cols-2",
+          )}
+        >
+          {/* Policy Type */}
+          <div>
+            <Label>نوع الوثيقة *</Label>
+            <Select
+              value={policy.policy_type_parent}
+              onValueChange={(v) => setPolicy({ ...policy, policy_type_parent: v, policy_type_child: "", company_id: "" })}
+            >
+              <SelectTrigger className={cn(errors.policy_type_parent ? "border-destructive" : "")}>
+                <SelectValue placeholder="اختر نوع الوثيقة" />
+              </SelectTrigger>
+              <SelectContent>
+                {CAR_POLICY_TYPES.map((type) => (
+                  <SelectItem key={type.value} value={type.value}>
+                    {type.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldError error={errors.policy_type_parent} />
+          </div>
 
-      {/* THIRD/FULL child type */}
-      {policy.policy_type_parent === 'THIRD_FULL' && (
-        <div>
-          <Label>النوع الفرعي *</Label>
-          <Select 
-            value={policy.policy_type_child} 
-            onValueChange={(v) => setPolicy({ ...policy, policy_type_child: v })}
-          >
-            <SelectTrigger className={cn(errors.policy_type_child ? "border-destructive" : "")}>
-              <SelectValue placeholder="اختر النوع الفرعي" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="THIRD">ثالث</SelectItem>
-              <SelectItem value="FULL">شامل</SelectItem>
-            </SelectContent>
-          </Select>
-          <FieldError error={errors.policy_type_child} />
+          {/* THIRD/FULL child type */}
+          {policy.policy_type_parent === 'THIRD_FULL' && (
+            <div>
+              <Label>النوع الفرعي *</Label>
+              <Select
+                value={policy.policy_type_child}
+                onValueChange={(v) => setPolicy({ ...policy, policy_type_child: v })}
+              >
+                <SelectTrigger className={cn(errors.policy_type_child ? "border-destructive" : "")}>
+                  <SelectValue placeholder="اختر النوع الفرعي" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="THIRD">ثالث</SelectItem>
+                  <SelectItem value="FULL">شامل</SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldError error={errors.policy_type_child} />
+            </div>
+          )}
+
+          {/* Company */}
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <Label className="mb-0">شركة التأمين *</Label>
+              {onMinimizeAndNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onMinimizeAndNavigate("/companies")}
+                  className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 hover:underline font-medium transition-colors"
+                  title="إدارة شركات التأمين"
+                >
+                  <Settings className="h-3 w-3" />
+                  إدارة الشركات
+                  <ExternalLink className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            <Select
+              value={policy.company_id}
+              onValueChange={handleCompanyChange}
+              disabled={!policy.policy_type_parent}
+            >
+              <SelectTrigger className={cn(
+                errors.company_id ? "border-destructive" : "",
+                !policy.policy_type_parent && "opacity-50"
+              )}>
+                <SelectValue placeholder={policy.policy_type_parent ? "اختر الشركة" : "اختر نوع الوثيقة أولاً"} />
+              </SelectTrigger>
+              <SelectContent>
+                {loadingCompanies ? (
+                  <div className="p-2 text-center text-sm text-muted-foreground">جاري التحميل...</div>
+                ) : companies.length === 0 ? (
+                  <SelectEmptyHint
+                    label="شركات تأمين لهذا النوع"
+                    adminPath="/companies"
+                    onNavigate={onMinimizeAndNavigate}
+                  />
+                ) : (
+                  companies.map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name_ar || c.name}
+                      {c.broker_id && <span className="text-muted-foreground text-xs mr-2">(وسيط)</span>}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+            <FieldError error={errors.company_id} />
+          </div>
         </div>
       )}
 
@@ -781,58 +841,6 @@ export function Step3PolicyDetails({
             </SelectContent>
           </Select>
           <FieldError error={errors.accident_fee_service_id} />
-        </div>
-      )}
-
-      {/* Company Selection */}
-      {!isLightMode && (
-        <div>
-          <div className="flex items-center justify-between gap-2 mb-1.5">
-            <Label className="mb-0">شركة التأمين *</Label>
-            {onMinimizeAndNavigate && (
-              <button
-                type="button"
-                onClick={() => onMinimizeAndNavigate("/companies")}
-                className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 hover:underline font-medium transition-colors"
-                title="إدارة شركات التأمين"
-              >
-                <Settings className="h-3 w-3" />
-                إدارة الشركات
-                <ExternalLink className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-          <Select
-            value={policy.company_id}
-            onValueChange={handleCompanyChange}
-            disabled={!policy.policy_type_parent}
-          >
-            <SelectTrigger className={cn(
-              errors.company_id ? "border-destructive" : "",
-              !policy.policy_type_parent && "opacity-50"
-            )}>
-              <SelectValue placeholder={policy.policy_type_parent ? "اختر الشركة" : "اختر نوع الوثيقة أولاً"} />
-            </SelectTrigger>
-            <SelectContent>
-              {loadingCompanies ? (
-                <div className="p-2 text-center text-sm text-muted-foreground">جاري التحميل...</div>
-              ) : companies.length === 0 ? (
-                <SelectEmptyHint
-                  label="شركات تأمين لهذا النوع"
-                  adminPath="/companies"
-                  onNavigate={onMinimizeAndNavigate}
-                />
-              ) : (
-                companies.map(c => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name_ar || c.name}
-                    {c.broker_id && <span className="text-muted-foreground text-xs mr-2">(وسيط)</span>}
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
-          <FieldError error={errors.company_id} />
         </div>
       )}
 
