@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -303,6 +304,11 @@ export default function FormTemplates() {
 
   return (
     <MainLayout>
+      <Header
+        title="ملفات"
+        subtitle="قوالب النماذج والملفات"
+      />
+
       <div className="p-4 md:p-6 space-y-4" dir="rtl">
         {/* Breadcrumbs */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -331,14 +337,14 @@ export default function FormTemplates() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center gap-3">
-          <Button onClick={() => setNewFolderOpen(true)}>
-            <FolderPlus className="h-4 w-4 ml-2" />
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => setNewFolderOpen(true)} className="gap-2">
+            <FolderPlus className="h-4 w-4" />
             مجلد جديد
           </Button>
           {currentFolderId && (
-            <Button variant="outline" onClick={() => setUploadOpen(true)}>
-              <Upload className="h-4 w-4 ml-2" />
+            <Button size="sm" variant="outline" onClick={() => setUploadOpen(true)} className="gap-2">
+              <Upload className="h-4 w-4" />
               رفع ملف
             </Button>
           )}

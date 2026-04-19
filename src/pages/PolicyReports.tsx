@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { Header } from '@/components/layout/Header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -939,15 +940,12 @@ export default function PolicyReports() {
         <title>تقارير الوثائق | ثقة للتأمين</title>
       </Helmet>
 
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">تقارير الوثائق</h1>
-            <p className="text-muted-foreground">متابعة الوثائق المنشأة والتجديدات</p>
-          </div>
-        </div>
+      <Header
+        title="تقارير الوثائق والتجديدات"
+        subtitle="متابعة الوثائق المنشأة والتجديدات"
+      />
 
+      <div className="p-6 space-y-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="created" className="gap-2">

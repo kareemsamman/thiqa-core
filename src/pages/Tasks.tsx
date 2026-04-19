@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -98,23 +99,16 @@ export default function Tasks() {
 
   return (
     <MainLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
-              <ListTodo className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">المهام اليومية</h1>
-              <p className="text-sm text-muted-foreground">
-                إدارة وتتبع المهام اليومية
-              </p>
-            </div>
-          </div>
+      <Header
+        title="المهام"
+        subtitle="إدارة وتتبع المهام اليومية"
+      />
 
-          <Button onClick={() => setDrawerOpen(true)}>
-            <Plus className="h-4 w-4 ml-2" />
+      <div className="p-6 space-y-6">
+        {/* Toolbar */}
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => setDrawerOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
             مهمة جديدة
           </Button>
         </div>

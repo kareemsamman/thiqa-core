@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { Header } from "@/components/layout/Header";
 import { useAuth } from "@/hooks/useAuth";
 import { useBranches } from "@/hooks/useBranches";
 import { supabase } from "@/integrations/supabase/client";
@@ -436,20 +437,22 @@ export default function AdminUsers() {
 
   return (
     <MainLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">المستخدمون</h1>
-            <p className="text-muted-foreground">إدارة المستخدمين والصلاحيات</p>
-          </div>
+      <Header
+        title="المستخدمون"
+        subtitle="إدارة المستخدمين والصلاحيات"
+      />
+
+      <div className="p-6 space-y-6">
+        {/* Toolbar */}
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={fetchUsers}
             disabled={loading}
+            className="gap-2"
           >
-            <RefreshCw className={`h-4 w-4 ml-2 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             تحديث
           </Button>
         </div>

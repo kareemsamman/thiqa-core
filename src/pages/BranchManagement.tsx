@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { Header } from "@/components/layout/Header";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -184,16 +185,15 @@ export default function BranchManagement() {
 
   return (
     <MainLayout>
+      <Header
+        title="الفروع"
+        subtitle="إضافة وتعديل فروع الوكالة"
+      />
+
       <div className="p-4 md:p-6 space-y-6" dir="rtl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Building2 className="h-6 w-6 text-primary" />
-              إدارة الفروع
-            </h1>
-            <p className="text-muted-foreground text-sm mt-1">إضافة وتعديل فروع الوكالة</p>
-          </div>
-          <Button onClick={openNew} className="gap-2">
+        {/* Toolbar */}
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={openNew} className="gap-2">
             <Plus className="h-4 w-4" />
             فرع جديد
           </Button>

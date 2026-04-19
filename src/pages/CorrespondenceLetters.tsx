@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,7 +39,6 @@ import {
   Send,
   Printer,
   MoreHorizontal,
-  Mail,
   Loader2,
   ExternalLink,
 } from 'lucide-react';
@@ -206,21 +206,21 @@ export default function CorrespondenceLetters() {
 
   return (
     <MainLayout>
-      <div className="container mx-auto py-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Mail className="h-6 w-6" />
-            الترويسات
-          </h1>
-          <Button onClick={handleCreate}>
-            <Plus className="h-4 w-4 ml-2" />
-            رسالة جديدة
-          </Button>
-        </div>
+      <Header
+        title="المراسلات"
+        subtitle="إدارة المراسلات الرسمية"
+      />
 
+      <div className="container mx-auto py-6 space-y-6">
         <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={handleCreate} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  رسالة جديدة
+                </Button>
+              </div>
               <div className="relative flex-1">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input

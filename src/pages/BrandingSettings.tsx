@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -184,14 +185,12 @@ export default function BrandingSettings() {
 
   return (
     <MainLayout>
-      <div className="max-w-2xl space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">إعدادات العلامة التجارية</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            تخصيص شعار الموقع، العنوان، الوصف، ونص صفحة التوقيع
-          </p>
-        </div>
+      <Header
+        title="العلامة التجارية"
+        subtitle="تخصيص شعار الموقع، العنوان، الوصف، ونص صفحة التوقيع"
+      />
 
+      <div className="p-6 max-w-2xl space-y-6">
         <Tabs defaultValue="branding">
           <TabsList>
             <TabsTrigger value="branding" className="gap-2">

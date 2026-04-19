@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +27,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Search,
-  AlertTriangle,
   FileText,
   Building2,
   Calendar,
@@ -222,26 +222,18 @@ export default function AccidentReports() {
 
   return (
     <MainLayout>
-      <div className="space-y-6" dir="rtl">
-        {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <AlertTriangle className="h-6 w-6 text-orange-500" />
-              بلاغات الحوادث
-            </h1>
-            <p className="text-muted-foreground text-sm">
-              إدارة ومتابعة بلاغات الحوادث المرتبطة بالوثائق
-            </p>
-          </div>
-          <Button onClick={() => setWizardOpen(true)}>
-            <Plus className="h-4 w-4 ml-2" />
+      <Header
+        title="بلاغات الحوادث"
+        subtitle="إدارة ومتابعة بلاغات الحوادث المرتبطة بالوثائق"
+      />
+
+      <div className="p-6 space-y-6" dir="rtl">
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button size="sm" onClick={() => setWizardOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
             بلاغ جديد
           </Button>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap gap-3">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input

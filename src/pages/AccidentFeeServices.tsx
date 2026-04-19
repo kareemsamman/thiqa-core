@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -119,28 +120,27 @@ export default function AccidentFeeServices() {
 
   return (
     <MainLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">خدمات إعفاء رسوم الحادث</h1>
-            <p className="text-muted-foreground">إدارة كتالوج خدمات إعفاء رسوم الحادث</p>
-          </div>
-          <Button onClick={handleAdd} className="gap-2">
+      <Header
+        title="إعفاء رسوم الحادث"
+        subtitle="إدارة كتالوج خدمات إعفاء رسوم الحادث"
+      />
+
+      <div className="p-6 space-y-6">
+        {/* Toolbar */}
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={handleAdd} className="gap-2">
             <Plus className="h-4 w-4" />
             إضافة خدمة
           </Button>
-        </div>
-
-        {/* Search */}
-        <div className="relative max-w-md">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="بحث عن خدمة..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pr-10"
-          />
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="بحث عن خدمة..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pr-10"
+            />
+          </div>
         </div>
 
         {/* Table */}

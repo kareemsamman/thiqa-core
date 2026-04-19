@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -480,17 +481,12 @@ export default function ActivityLog() {
 
   return (
     <MainLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">سجل النشاط</h1>
-            <p className="text-sm text-muted-foreground">
-              تتبع جميع النشاطات والعمليات في النظام
-            </p>
-          </div>
-        </div>
+      <Header
+        title="سجل النشاط"
+        subtitle="تتبع جميع النشاطات والعمليات في النظام"
+      />
 
+      <div className="p-6 space-y-6">
         {/* Filters */}
         <Card>
           <CardContent className="pt-6">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { Header } from '@/components/layout/Header';
 import { FileUploader } from '@/components/media/FileUploader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -340,18 +341,17 @@ export default function Media() {
         <title>الوسائط | ثقة للتأمين</title>
       </Helmet>
 
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">الوسائط</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {totalCount} ملف • إدارة جميع الملفات والصور
-            </p>
-          </div>
+      <Header
+        title="الوسائط"
+        subtitle="إدارة الصور والملفات"
+      />
+
+      <div className="p-6 space-y-6">
+        {/* Filters Bar */}
+        <div className="flex flex-wrap gap-3 items-center p-4 bg-card border border-border rounded-xl">
           <Dialog open={uploaderOpen} onOpenChange={setUploaderOpen}>
             <DialogTrigger asChild>
-              <Button size="lg" className="gap-2">
+              <Button size="sm" className="gap-2">
                 <Upload className="h-4 w-4" />
                 رفع ملفات
               </Button>
@@ -363,10 +363,7 @@ export default function Media() {
               <FileUploader onUploadComplete={handleUploadComplete} />
             </DialogContent>
           </Dialog>
-        </div>
 
-        {/* Filters Bar */}
-        <div className="flex flex-wrap gap-3 items-center p-4 bg-card border border-border rounded-xl">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input

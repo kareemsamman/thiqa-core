@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -450,11 +451,12 @@ export default function MarketingSms() {
 
   return (
     <MainLayout>
-      <div className="container mx-auto py-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">رسائل SMS التسويقية</h1>
-        </div>
+      <Header
+        title="SMS تسويقية"
+        subtitle="الحملات التسويقية بالرسائل القصيرة"
+      />
 
+      <div className="container mx-auto py-6 space-y-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-2 max-w-md">
             <TabsTrigger value="compose" className="flex items-center gap-2">

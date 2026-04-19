@@ -146,39 +146,37 @@ export default function Companies() {
   return (
     <MainLayout>
       <Header
-        title="شركات التأمين"
+        title="الشركات"
         subtitle="إدارة شركات التأمين وقواعد التسعير"
       />
 
       <div className="p-6 space-y-6">
         {/* Actions Bar */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-between">
-          <div className="flex flex-1 gap-4 max-w-2xl">
-            <div className="relative flex-1">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="بحث عن شركة..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pr-10"
-              />
-            </div>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="جميع الأنواع" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">جميع الأنواع</SelectItem>
-                {POLICY_TYPES.map(type => (
-                  <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button onClick={handleAddCompany}>
-            <Plus className="h-4 w-4 ml-2" />
+        <div className="flex items-center gap-2 max-w-2xl">
+          <Button size="sm" onClick={handleAddCompany} className="gap-2">
+            <Plus className="h-4 w-4" />
             إضافة شركة
           </Button>
+          <div className="relative flex-1">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="بحث عن شركة..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pr-10"
+            />
+          </div>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="جميع الأنواع" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">جميع الأنواع</SelectItem>
+              {POLICY_TYPES.map(type => (
+                <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Companies Table */}

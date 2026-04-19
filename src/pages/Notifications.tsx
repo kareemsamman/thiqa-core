@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -192,38 +193,33 @@ export default function Notifications() {
 
   return (
     <MainLayout>
-      <div className="space-y-6">
+      <Header
+        title="التنبيهات"
+        subtitle="جميع التنبيهات والإشعارات"
+      />
+
+      <div className="p-6 space-y-6">
         {/* New since last visit banner */}
         {showBanner && newSinceLastSeen > 0 && (
-          <NewSinceLastVisitBanner 
-            count={newSinceLastSeen} 
-            onDismiss={() => setShowBanner(false)} 
+          <NewSinceLastVisitBanner
+            count={newSinceLastSeen}
+            onDismiss={() => setShowBanner(false)}
           />
         )}
 
-        {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">الإشعارات</h1>
-            <p className="text-muted-foreground">
-              {unreadCount > 0 ? (
-                <><span className="ltr-nums">{unreadCount}</span> إشعار غير مقروء</>
-              ) : (
-                'جميع الإشعارات مقروءة'
-              )}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+        {/* Search and Filters */}
+        <Card className="p-4">
+          <div className="flex flex-wrap gap-3 items-center">
             {unreadCount > 0 && (
-              <Button variant="outline" size="sm" onClick={markAllAsRead} className="gap-2">
+              <Button size="sm" onClick={markAllAsRead} className="gap-2">
                 <CheckCheck className="h-4 w-4" />
                 قراءة الكل
               </Button>
             )}
             {notifications.length > 0 && (
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setDeleteAllOpen(true)}
                 className="gap-2 text-destructive hover:text-destructive"
               >
@@ -231,12 +227,7 @@ export default function Notifications() {
                 حذف الكل
               </Button>
             )}
-          </div>
-        </div>
 
-        {/* Search and Filters */}
-        <Card className="p-4">
-          <div className="flex flex-wrap gap-3 items-center">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -246,7 +237,7 @@ export default function Notifications() {
                 className="pr-10"
               />
             </div>
-            
+
             <Select value={typeFilter} onValueChange={setTypeFilter}>
               <SelectTrigger className="w-[140px]">
                 <Filter className="h-4 w-4 ml-2 text-muted-foreground" />
@@ -261,7 +252,7 @@ export default function Notifications() {
                 ))}
               </SelectContent>
             </Select>
-            
+
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[140px]">
                 <SelectValue placeholder="الحالة" />
@@ -272,10 +263,10 @@ export default function Notifications() {
                 <SelectItem value="read">مقروء</SelectItem>
               </SelectContent>
             </Select>
-            
+
             {(searchQuery || typeFilter !== 'all' || statusFilter !== 'all') && (
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="sm"
                 onClick={() => {
                   setSearchQuery('');
