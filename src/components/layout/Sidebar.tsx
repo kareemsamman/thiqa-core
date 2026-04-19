@@ -14,7 +14,6 @@ import {
   BarChart3,
   Settings,
   ChevronLeft,
-  ChevronDown,
   LogOut,
   Wallet,
   CreditCard,
@@ -40,6 +39,8 @@ import {
   MoreVertical,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -475,27 +476,38 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 >
                   {group.name}
                 </span>
-                <ChevronDown
-                  className={cn(
-                    "h-[14px] w-[14px] shrink-0 text-black transition-transform duration-200",
-                    isOpen ? "rotate-180" : "rotate-0",
-                  )}
-                  strokeWidth={2.25}
-                />
+                {/* + when closed (light grey), − when open (black).
+                    Lucide icons used as real SVG elements, not text
+                    glyphs. */}
+                {isOpen ? (
+                  <Minus className="h-[14px] w-[14px] shrink-0 text-black" strokeWidth={2.5} />
+                ) : (
+                  <Plus className="h-[14px] w-[14px] shrink-0 text-[#a7a6a9]" strokeWidth={2.5} />
+                )}
               </CollapsibleTrigger>
               <CollapsibleContent>
-                {/* Submenu — text-only items (no leaf icons), matching
-                    the Untitled UI reference. The wrapper carries the
-                    vertical guide line at its right:0; each NavLink
-                    spans the wrapper's full width and owns its own
-                    pr-6 (so the active pill background extends all
-                    the way to the line and the dot sits cleanly
-                    inside it, instead of leaving a 20px gap between
-                    the pill and the dot). */}
-                <div className="relative mt-1 mr-[14px] py-1 space-y-0.5">
+                {/* Submenu — text-only items, matching the Untitled UI
+                    reference. Layout uses inline-direction logical CSS
+                    so it works correctly under RTL: the guide line
+                    sits at the wrapper's inline-end (visual left in
+                    RTL, where the small space sits between the line
+                    and the panel edge); the active item's pill bg is
+                    rendered as an absolute child of NavLink and is
+                    deliberately stretched 4px past the line so the
+                    dot (centred on the line) ends up fully embedded
+                    inside the pill — no gap between pill and dot. */}
+                <div
+                  className="relative mt-1 py-1 space-y-0.5"
+                  style={{ marginInlineStart: '14px' }}
+                >
+                  {/* Vertical guide line at the inline-end side. z-10
+                      so it stays visible passing THROUGH the active
+                      pill (the user wants the line + dot ON the
+                      selected bg). */}
                   <span
                     aria-hidden="true"
-                    className="pointer-events-none absolute right-0 top-1.5 bottom-1.5 w-px bg-[#878b8b]/55"
+                    className="pointer-events-none absolute top-1.5 bottom-1.5 w-px bg-[#e9e9e9] z-10"
+                    style={{ insetInlineEnd: 0 }}
                   />
                   {group.items.map((item) => {
                     const isActiveRoute = location.pathname === item.href;
@@ -506,27 +518,39 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         ref={isActiveRoute ? activeNavLinkRef : undefined}
                         onClick={handleNavClick}
                         className={cn(
-                          "relative flex items-center justify-start rounded-md pl-3 pr-6 py-2 text-[13.5px] font-normal transition-colors duration-150",
+                          "relative flex items-center py-2 text-[13.5px] font-normal transition-colors duration-150 rounded-md",
                           isActiveRoute
-                            ? "bg-slate-100 text-black"
-                            : "text-[#878b8b] hover:bg-slate-50 hover:text-black",
+                            ? "text-black"
+                            : "text-[#878b8b] hover:text-black hover:bg-slate-50",
                         )}
                       >
-                        {/* Active marker — 7px black dot, centre on
-                            the guide line. NavLink now reaches the
-                            line, so right:0 + translate-x-1/2 puts
-                            the dot's centre exactly at NavLink's
-                            right edge = wrapper's right edge = the
-                            line. Half the dot sits inside the active
-                            pill bg, half pokes past the line — same
-                            visual as the Untitled UI reference. */}
+                        {/* Active pill bg — absolute, stretched past
+                            the line so the dot is fully inside it.
+                            Inline-end:-4px reaches 4px past the line
+                            (which sits at wrapper's inline-end). */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
-                            className="absolute top-1/2 right-0 -translate-y-1/2 translate-x-1/2 h-[7px] w-[7px] rounded-full bg-black z-10"
+                            className="absolute inset-y-0 rounded-md bg-[#f3f5f7] pointer-events-none"
+                            style={{ insetInlineStart: 0, insetInlineEnd: '-4px' }}
                           />
                         )}
-                        <span className="text-right">{item.name}</span>
+                        {/* Black dot centred on the line — z-20 so it
+                            punches through both bg and the line
+                            cleanly. */}
+                        {isActiveRoute && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute top-1/2 h-[7px] w-[7px] rounded-full bg-black z-20"
+                            style={{ insetInlineEnd: '-3.5px', transform: 'translateY(-50%)' }}
+                          />
+                        )}
+                        <span
+                          className="relative z-10 flex-1 text-right"
+                          style={{ paddingInlineEnd: '20px', paddingInlineStart: '12px' }}
+                        >
+                          {item.name}
+                        </span>
                       </NavLink>
                     );
                   })}
