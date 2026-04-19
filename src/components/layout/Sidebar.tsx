@@ -355,7 +355,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
   return (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="flex h-20 items-center justify-between border-b border-white/[0.08] px-4">
+      <div className="flex h-20 items-center justify-between border-b border-black/[0.06] px-4">
         {!collapsed && (
           <div className="flex items-center gap-2">
             {isThiqaSuperAdmin ? (
@@ -363,7 +363,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             ) : siteSettings?.logo_url ? (
               <>
                 <img src={siteSettings.logo_url} alt="Logo" className="h-9 w-9 rounded-lg object-contain" />
-                <span className="text-base font-semibold text-sidebar-foreground">
+                <span className="text-base font-semibold text-slate-900">
                   {siteSettings?.site_title || ''}
                 </span>
               </>
@@ -393,7 +393,8 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
           const GroupIcon = group.icon;
           
           if (collapsed) {
-            // When collapsed, show only icons without groups
+            // When collapsed, show only icons without groups. Light
+            // theme to match the expanded sidebar.
             return (
               <div key={group.name} className="space-y-1">
                 {group.items.map((item) => {
@@ -406,14 +407,13 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                       onClick={handleNavClick}
                       title={item.name}
                       className={cn(
-                        "flex items-center justify-center rounded-lg p-2.5 transition-all duration-200 relative",
+                        "flex items-center justify-center rounded-lg p-2.5 transition-colors duration-150 relative",
                         isActiveRoute
-                          ? "glass-dark bg-[hsl(var(--sidebar-active))]/10 text-[hsl(var(--sidebar-active))]"
-                          : "text-sidebar-foreground hover:bg-[hsl(var(--sidebar-glass-bg))] hover:text-sidebar-accent-foreground"
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
                       )}
                     >
-                      <item.icon className={cn("h-5 w-5", isActiveRoute && "text-[hsl(var(--sidebar-active))]")} />
-                      {renderBadge(item)}
+                      <item.icon className="h-5 w-5" strokeWidth={2} />
                     </NavLink>
                   );
                 })}
@@ -421,10 +421,13 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             );
           }
 
-          // Desktop group: cleaner Untitled-UI-style trigger (no card
-          // chrome), and the open submenu uses a thin RTL right-edge
-          // guide line. The active leaf gets a small filled dot that
-          // sits on the guide line, plus a softer pill background.
+          // Desktop group: light Untitled-UI-style trigger. Active
+          // group (the one whose route is open) gets a soft slate
+          // background. Open submenu has a thin right-edge guide line
+          // (RTL "start" side); the active leaf has a black dot
+          // centered ON the line, plus a slate-100 pill background.
+          // Counting badges are intentionally omitted from the desktop
+          // nav for a cleaner look.
           const isActiveGroup = isGroupActive(group);
           return (
             <Collapsible
@@ -437,17 +440,16 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 className={cn(
                   "group flex items-center w-full px-3 py-2.5 rounded-lg gap-3 transition-colors duration-150",
                   isActiveGroup
-                    ? "text-white"
-                    : "text-white/85 hover:text-white",
-                  "hover:bg-white/[0.05]",
+                    ? "bg-slate-100 text-slate-900"
+                    : "text-slate-700 hover:bg-slate-50 hover:text-slate-900",
                 )}
               >
                 <GroupIcon
                   className={cn(
                     "h-[18px] w-[18px] shrink-0 transition-colors",
-                    isActiveGroup ? "text-white" : "text-white/70 group-hover:text-white",
+                    isActiveGroup ? "text-slate-900" : "text-slate-500 group-hover:text-slate-900",
                   )}
-                  strokeWidth={2.25}
+                  strokeWidth={2}
                 />
                 <span className="flex-1 text-right text-[14px] font-semibold tracking-[0.01em] whitespace-nowrap">
                   {group.name}
@@ -456,7 +458,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                   className={cn(
                     "h-[14px] w-[14px] shrink-0 transition-transform duration-200",
                     isOpen ? "rotate-180" : "rotate-0",
-                    isActiveGroup ? "text-white/80" : "text-white/45 group-hover:text-white/80",
+                    isActiveGroup ? "text-slate-700" : "text-slate-400 group-hover:text-slate-700",
                   )}
                   strokeWidth={2.25}
                 />
@@ -465,7 +467,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 {/* Submenu container — thin vertical guide on the
                     right (RTL "start" edge) connecting all child
                     items, like the Untitled UI reference. */}
-                <div className="relative mt-1 mr-[18px] pr-4 pl-1 py-0.5 space-y-0.5 border-r border-white/[0.08]">
+                <div className="relative mt-1 mr-[18px] pr-4 pl-1 py-0.5 space-y-0.5 border-r border-slate-200">
                   {group.items.map((item) => {
                     const isActiveRoute = location.pathname === item.href;
                     return (
@@ -477,31 +479,31 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         className={cn(
                           "relative flex items-center gap-3 rounded-md px-3 py-2 text-[13.5px] font-medium transition-colors duration-150",
                           isActiveRoute
-                            ? "bg-white/[0.07] text-white"
-                            : "text-white/65 hover:text-white hover:bg-white/[0.035]",
+                            ? "bg-slate-100 text-slate-900"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
                         )}
                       >
-                        {/* Active marker — a filled dot that sits ON
-                            the guide line (right: -5px lines up with
-                            the 1px border at -1px + the 4px radius). */}
+                        {/* Active marker — a black dot centred ON the
+                            1px guide line. The line sits at right:-1px
+                            of this NavLink's parent (the dashed div).
+                            Centering an 8px dot on that line means
+                            offsetting it so its centre lands on the
+                            line: right: -1 - 4 = -5px. No halo —
+                            the dot is meant to *sit on* the line. */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
-                            className="absolute top-1/2 -translate-y-1/2 -right-[5px] h-2 w-2 rounded-full bg-white shadow-[0_0_0_3px_hsl(var(--sidebar-background))]"
+                            className="absolute top-1/2 -translate-y-1/2 -right-[4.5px] h-[9px] w-[9px] rounded-full bg-slate-900"
                           />
                         )}
                         <item.icon
                           className={cn(
                             "h-[16px] w-[16px] flex-shrink-0 transition-colors",
-                            isActiveRoute ? "text-white" : "text-white/55 group-hover:text-white",
+                            isActiveRoute ? "text-slate-900" : "text-slate-500 group-hover:text-slate-900",
                           )}
                           strokeWidth={2}
                         />
                         <span className="flex-1 text-right">{item.name}</span>
-                        {item.badge === 'renewals' && (
-                          <span className="text-[11px] text-white/35">| التجديدات</span>
-                        )}
-                        {renderBadge(item)}
                       </NavLink>
                     );
                   })}
@@ -520,7 +522,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             size="sm"
             onClick={() => onCollapse(!collapsed)}
             className={cn(
-              "w-full justify-center h-10 text-white/70 hover:text-white hover:bg-white/[0.08]",
+              "w-full justify-center h-10 text-slate-600 hover:text-slate-900 hover:bg-slate-100",
               collapsed && "px-2"
             )}
           >
@@ -537,12 +539,12 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
       )}
 
       {/* User section */}
-      <div className="border-t border-sidebar-border p-3">
+      <div className="border-t border-black/[0.06] p-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               className={cn(
-                "flex w-full items-center gap-3 rounded-lg p-2 transition-colors hover:bg-sidebar-accent",
+                "flex w-full items-center gap-3 rounded-lg p-2 transition-colors hover:bg-slate-100",
                 collapsed && "justify-center"
               )}
             >
@@ -560,14 +562,14 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
               {!collapsed && (
                 <>
                   <div className="flex-1 min-w-0 text-right">
-                    <p className="truncate text-sm font-medium text-sidebar-foreground">
+                    <p className="truncate text-sm font-medium text-slate-900">
                       {userName}
                     </p>
-                    <p className="truncate text-xs text-muted-foreground">
+                    <p className="truncate text-xs text-slate-500">
                       {userRole}{userBranch ? ` • ${userBranch}` : ''}
                     </p>
                   </div>
-                  <MoreVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <MoreVertical className="h-4 w-4 text-slate-400 flex-shrink-0" />
                 </>
               )}
             </button>
@@ -1012,7 +1014,7 @@ export function Sidebar() {
       {/* Desktop sidebar - floating with margin */}
       <aside
         className={cn(
-          "fixed right-2 top-2 bottom-2 z-40 rounded-2xl border border-white/[0.08] bg-[#122143] transition-all duration-300 shadow-lg hidden md:block overflow-hidden",
+          "fixed right-2 top-2 bottom-2 z-40 rounded-2xl border border-black/[0.06] bg-white transition-all duration-300 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)] hidden md:block overflow-hidden",
           collapsed ? "w-16" : "w-64"
         )}
       >
