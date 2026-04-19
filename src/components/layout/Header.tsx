@@ -82,14 +82,13 @@ export function Header({ title, subtitle }: HeaderProps) {
 
         {/* Center: sibling tabs, absolutely pinned so neither the
             growing cluster nor a longer title nudges them. Locked to a
-            fixed 629px lane — if the group has more tabs than fit, the
-            lane scrolls internally instead of pushing anything around. */}
-        <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[629px] overflow-x-auto scrollbar-none">
-          <div className="flex items-center gap-2 min-w-full">
-            {/* flex-1 spacers center the tabs when they fit; collapse
-                to 0 and disappear when the tabs overflow so the scroll
-                starts at the first tab instead of mid-list. */}
-            <div className="flex-1" aria-hidden="true" />
+            fixed 629px lane — when a group has more tabs than fit, the
+            lane scrolls internally with a visible thin scrollbar. */}
+        <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[629px] overflow-x-auto overflow-y-hidden scroll-smooth">
+          {/* `w-max` sizes the row to exactly its natural content width
+              so it CAN exceed the 629px lane and trigger the parent's
+              scroll; `mx-auto` centers it when it's narrower. */}
+          <div className="flex items-center gap-2 w-max mx-auto pb-1">
             {siblingTabs.map((tab) => {
               const active = isTabActive(tab.href);
               return (
@@ -108,7 +107,6 @@ export function Header({ title, subtitle }: HeaderProps) {
                 </button>
               );
             })}
-            <div className="flex-1" aria-hidden="true" />
           </div>
         </nav>
 
