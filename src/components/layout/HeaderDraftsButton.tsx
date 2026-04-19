@@ -93,6 +93,7 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
           size="icon"
           className={cn(
             "relative h-11 w-11 rounded-full bg-secondary/70 hover:bg-secondary text-foreground",
+            "data-[state=open]:bg-background data-[state=open]:text-foreground data-[state=open]:shadow-[0_-2px_8px_rgba(0,0,0,0.06)] data-[state=open]:ring-1 data-[state=open]:ring-border",
             className,
           )}
           aria-label={`${minimizedInstances.length} مسودات`}
@@ -110,8 +111,8 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
       <PopoverContent
         side="bottom"
         align="end"
-        sideOffset={12}
-        className="w-80 p-2 flex flex-col gap-1.5"
+        sideOffset={4}
+        className="w-64 p-2 flex flex-col gap-1.5"
         dir="rtl"
       >
         <p className="px-2 pt-1 pb-0.5 text-[11px] font-semibold text-muted-foreground">
