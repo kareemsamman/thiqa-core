@@ -52,6 +52,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -865,61 +866,190 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             );
           })()
         ) : (
-          // Collapsed mode — keep the small dropdown so the icon-only
-          // rail stays usable.
-          <div className="p-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-center gap-3 rounded-lg p-2 transition-colors hover:bg-slate-100"
-                >
-                  {profile?.avatar_url ? (
-                    <img
-                      src={profile.avatar_url}
-                      alt={userName}
-                      className="h-9 w-9 rounded-full object-cover ring-2 ring-white flex-shrink-0"
-                    />
-                  ) : (
-                    <div
-                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full shadow-[0_4px_12px_-4px_rgba(69,94,187,0.45)]"
-                      style={{
-                        background:
-                          "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%), rgba(255, 255, 255, 0.02)",
-                      }}
+          // Collapsed mode profile — Popover (click-trigger) styled
+          // exactly like the group hover flyouts: full-height panel,
+          // merged with the rail (no right border / right rounding),
+          // h-20 header so the divider lines line up across both
+          // panels. Same content as the expanded inline menu —
+          // profile card with trial info + the four action rows.
+          (() => {
+            const trial = (() => {
+              if (isThiqaSuperAdmin || !agent) return null;
+              const isTrial = agent.subscription_status === 'trial' || (agent.monthly_price === 0 && agent.subscription_status === 'active');
+              const endDate = agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null;
+              const days = endDate ? Math.max(0, Math.floor((endDate.getTime() - Date.now()) / 86400000)) : null;
+              const trialProgress = isTrial && days !== null ? Math.min(100, ((35 - days) / 35) * 100) : 0;
+              return { isTrial, days, trialProgress };
+            })();
+
+            const triggerOnboardingCollapsed = () => {
+              setUserMenuOpen(false);
+              if (location.pathname === '/dashboard') {
+                window.dispatchEvent(new Event('show-onboarding'));
+                return;
+              }
+              navigate('/dashboard');
+              setTimeout(() => {
+                window.dispatchEvent(new Event('show-onboarding'));
+              }, 150);
+            };
+
+            return (
+              <div className="p-3">
+                <Popover open={userMenuOpen} onOpenChange={setUserMenuOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-center rounded-lg p-2 transition-colors hover:bg-slate-100"
                     >
-                      <span className="text-sm font-bold text-white">{userInitial}</span>
+                      {profile?.avatar_url ? (
+                        <img
+                          src={profile.avatar_url}
+                          alt={userName}
+                          className="h-9 w-9 rounded-full object-cover ring-2 ring-white flex-shrink-0"
+                        />
+                      ) : (
+                        <div
+                          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full shadow-[0_4px_12px_-4px_rgba(69,94,187,0.45)]"
+                          style={{
+                            background:
+                              "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%), rgba(255, 255, 255, 0.02)",
+                          }}
+                        >
+                          <span className="text-sm font-bold text-white">{userInitial}</span>
+                        </div>
+                      )}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    side="left"
+                    sideOffset={0}
+                    align="end"
+                    alignOffset={-8}
+                    collisionPadding={8}
+                    className={cn(
+                      "p-0 [direction:rtl] rounded-l-2xl rounded-r-none border-y border-l border-r-0 border-black/[0.06] bg-white",
+                      "shadow-[-8px_8px_30px_-12px_rgba(15,23,42,0.18)]",
+                      "w-[260px] flex flex-col",
+                    )}
+                    style={{ height: 'calc(100vh - 16px)' }}
+                  >
+                    {/* Header — h-20 + border-b mirrors the rail's
+                        logo header so the dividers align. */}
+                    <div className="px-4 h-20 flex items-center border-b border-black/[0.06] flex-shrink-0">
+                      <span className="text-[15px] font-bold text-black flex items-center gap-2">
+                        <UserCircle className="h-[18px] w-[18px] text-black" weight="bold" />
+                        حسابك
+                      </span>
                     </div>
-                  )}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" side="top" sideOffset={8} className="w-56 [direction:rtl]">
-                <div className="px-3 py-2 border-b">
-                  <p className="text-sm font-medium">{userName}</p>
-                  <p className="text-xs text-muted-foreground" dir="ltr">{profile?.email}</p>
-                </div>
-                <DropdownMenuItem onClick={() => setProfileOpen(true)} className="gap-2 cursor-pointer">
-                  <UserCircle className="h-4 w-4" weight="regular" />
-                  <span>الملف الشخصي</span>
-                </DropdownMenuItem>
-                {!isThiqaSuperAdmin && (
-                  <DropdownMenuItem onClick={() => navigate('/subscription')} className="gap-2 cursor-pointer">
-                    <Gear className="h-4 w-4" weight="regular" />
-                    <span>الإعدادات</span>
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={handleSignOut}
-                  disabled={signingOut}
-                  className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-                >
-                  {signingOut ? <CircleNotch className="h-4 w-4 animate-spin" weight="bold" /> : <SignOut className="h-4 w-4" weight="regular" />}
-                  <span>تسجيل الخروج</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+
+                    <div className="flex-1 overflow-y-auto p-3">
+                      {/* Profile info card */}
+                      <div className="rounded-xl bg-slate-50 border border-slate-200/70 p-3">
+                        <p className="truncate text-[13px] font-semibold text-slate-900 text-right">
+                          {userName}
+                        </p>
+                        <p className="truncate text-[11.5px] text-slate-500 text-right mt-0.5" dir="ltr">
+                          {profile?.email}
+                        </p>
+                        {trial && agent && (
+                          <div className="mt-2 space-y-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded",
+                                  trial.isTrial ? "text-white" :
+                                  agent.subscription_status === 'active' ? 'bg-green-100 text-green-700' :
+                                  agent.subscription_status === 'paused' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-red-100 text-red-700',
+                                )}
+                                style={trial.isTrial ? {
+                                  background: "linear-gradient(rgb(69, 94, 187) 0%, rgb(138, 150, 203) 100%), rgba(255, 255, 255, 0.02)",
+                                } : undefined}
+                              >
+                                {trial.isTrial ? 'تجربة مجانية' : agent.plan === 'pro' ? 'Pro' : 'Basic'}
+                              </span>
+                              {trial.days !== null && (
+                                <span className={cn("text-[10px] font-medium",
+                                  trial.days <= 0 ? "text-destructive" : trial.days <= 7 ? "text-yellow-600" : "text-slate-500"
+                                )}>
+                                  {trial.days <= 0 ? 'منتهي' : `${trial.days} يوم متبقي`}
+                                </span>
+                              )}
+                            </div>
+                            {trial.isTrial && trial.days !== null && (
+                              <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all"
+                                  style={{
+                                    width: `${trial.trialProgress}%`,
+                                    background: trial.days <= 7
+                                      ? undefined
+                                      : "linear-gradient(rgb(69, 94, 187) 0%, rgb(138, 150, 203) 100%), rgba(255, 255, 255, 0.02)",
+                                    ...(trial.days <= 7 ? { backgroundColor: 'hsl(var(--destructive))' } : null),
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action rows */}
+                      <div className="mt-1.5 space-y-0.5">
+                        <button
+                          type="button"
+                          onClick={() => { setUserMenuOpen(false); setProfileOpen(true); }}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[0.2rem] text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                        >
+                          <UserCircle className="h-4 w-4 text-slate-500" weight="regular" />
+                          <span className="flex-1 text-right">الملف الشخصي</span>
+                        </button>
+
+                        {!isThiqaSuperAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => { setUserMenuOpen(false); navigate('/subscription'); }}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[0.2rem] text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                          >
+                            <Gear className="h-4 w-4 text-slate-500" weight="regular" />
+                            <span className="flex-1 text-right">الإعدادات</span>
+                          </button>
+                        )}
+
+                        {isAdmin && !isThiqaSuperAdmin && (
+                          <button
+                            type="button"
+                            onClick={triggerOnboardingCollapsed}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[0.2rem] text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                          >
+                            <Question className="h-4 w-4 text-slate-500" weight="regular" />
+                            <span className="flex-1 text-right">دليل البداية</span>
+                          </button>
+                        )}
+
+                        <div className="my-1 h-px bg-slate-200/80" />
+
+                        <button
+                          type="button"
+                          onClick={handleSignOut}
+                          disabled={signingOut}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[0.2rem] text-[13px] text-red-600 hover:bg-red-50 transition-colors disabled:opacity-60"
+                        >
+                          {signingOut ? (
+                            <CircleNotch className="h-4 w-4 animate-spin" weight="bold" />
+                          ) : (
+                            <SignOut className="h-4 w-4" weight="regular" />
+                          )}
+                          <span className="flex-1 text-right">تسجيل الخروج</span>
+                        </button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            );
+          })()
         )}
       </div>
 
