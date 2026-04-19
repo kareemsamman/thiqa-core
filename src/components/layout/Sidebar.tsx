@@ -7,7 +7,6 @@ import { Search } from "lucide-react";
 import {
   LayoutDashboard,
   Users,
-  Car,
   FileText,
   Building2,
   UserCog,
@@ -86,7 +85,12 @@ interface NavGroup {
   defaultOpen?: boolean;
 }
 
-// Navigation structure with groups - exported for NavigationSearch
+// Navigation structure with groups - exported for NavigationSearch.
+//
+// Routes intentionally hidden from the agent sidebar (still reachable
+// by direct URL): /cars, /policies, /reports/company-settlement,
+// /reports/financial, /admin/insurance-categories. Per the agent's
+// updated nav spec — drop these from the menu, keep the routes.
 export const navigationGroups: NavGroup[] = [
   {
     name: "الرئيسية",
@@ -97,6 +101,7 @@ export const navigationGroups: NavGroup[] = [
       { name: "المهام", href: "/tasks", icon: ListTodo, badge: 'tasks' },
       { name: "سجل النشاط", href: "/activity", icon: Activity },
       { name: "التنبيهات", href: "/notifications", icon: Bell, badge: 'notifications' },
+      { name: "تقارير الوثائق والتجديدات", href: "/reports/policies", icon: BarChart3, badge: 'renewals' },
     ],
   },
   {
@@ -104,46 +109,33 @@ export const navigationGroups: NavGroup[] = [
     icon: Users,
     items: [
       { name: "العملاء", href: "/clients", icon: Users },
-      { name: "السيارات", href: "/cars", icon: Car },
-      { name: "الوثائق", href: "/policies", icon: FileText },
-      { name: "جهات الاتصال", href: "/contacts", icon: Contact },
+      { name: "الوسطاء", href: "/brokers", icon: Wallet, adminOnly: true, featureKey: 'broker_wallet' },
+      { name: "الشركات", href: "/companies", icon: Building2, adminOnly: true },
+      { name: "بلاغات الحوادث", href: "/accidents", icon: AlertTriangle, badge: 'accidents', featureKey: 'accident_reports' },
     ],
   },
   {
     name: "المالية",
     icon: Wallet,
     items: [
-      { name: "الشيكات", href: "/cheques", icon: CreditCard, featureKey: 'cheques' },
       { name: "متابعة الديون", href: "/debt-tracking", icon: DollarSign, badge: 'debt' },
-      { name: "شركات التأمين", href: "/companies", icon: Building2, adminOnly: true },
-      { name: "الوسطاء", href: "/brokers", icon: Wallet, adminOnly: true, featureKey: 'broker_wallet' },
+      { name: "الشيكات", href: "/cheques", icon: CreditCard, featureKey: 'cheques' },
       { name: "الإيصالات", href: "/receipts", icon: FileText, featureKey: 'receipts' },
-    ],
-  },
-  {
-    name: "التقارير",
-    icon: BarChart3,
-    items: [
-      { name: "تقارير الوثائق", href: "/reports/policies", icon: BarChart3, badge: 'renewals' },
-      { name: "تقرير الشركات", href: "/reports/company-settlement", icon: BarChart3, adminOnly: true, featureKey: 'company_settlement' },
-      { name: "التقارير المالية", href: "/reports/financial", icon: Wallet, adminOnly: true, featureKey: 'financial_reports' },
       { name: "المحاسبة", href: "/accounting", icon: DollarSign, adminOnly: true, featureKey: 'accounting' },
-    ],
-  },
-  {
-    name: "بلاغات وحوادث",
-    icon: AlertTriangle,
-    items: [
-      { name: "بلاغات الحوادث", href: "/accidents", icon: AlertTriangle, badge: 'accidents', featureKey: 'accident_reports' },
-      { name: "المطالبات", href: "/admin/claims", icon: FileWarning, badge: 'claims', featureKey: 'repair_claims' },
     ],
   },
   {
     name: "أخرى",
     icon: Image,
     items: [
+      { name: "جهات الاتصال", href: "/contacts", icon: Contact },
+      { name: "المطالبات", href: "/admin/claims", icon: FileWarning, badge: 'claims', featureKey: 'repair_claims' },
       { name: "الوسائط", href: "/media", icon: Image },
-      { name: "نماذج", href: "/form-templates", icon: FileText },
+      { name: "ملفات", href: "/form-templates", icon: FileText },
+      { name: "المراسلات", href: "/admin/correspondence", icon: Mail, featureKey: 'correspondence' },
+      { name: "SMS تسويقية", href: "/admin/marketing-sms", icon: Megaphone, featureKey: 'marketing_sms' },
+      { name: "سجل الرسائل", href: "/sms-history", icon: History, featureKey: 'sms' },
+      { name: "توقيعات العملاء", href: "/admin/customer-signatures", icon: FileSignature },
     ],
   },
   {
@@ -153,13 +145,8 @@ export const navigationGroups: NavGroup[] = [
     items: [
       { name: "المستخدمون", href: "/admin/users", icon: UserCog },
       { name: "الفروع", href: "/admin/branches", icon: Building2 },
-      { name: "الترويسات", href: "/admin/correspondence", icon: Mail, featureKey: 'correspondence' },
-      { name: "SMS تسويقية", href: "/admin/marketing-sms", icon: Megaphone, featureKey: 'marketing_sms' },
-      { name: "أنواع التأمين", href: "/admin/insurance-categories", icon: FileText },
       { name: "خدمات الطريق", href: "/admin/road-services", icon: Truck, featureKey: 'road_services' },
       { name: "إعفاء رسوم الحادث", href: "/admin/accident-fee-services", icon: Shield, featureKey: 'accident_fees' },
-      { name: "توقيعات العملاء", href: "/admin/customer-signatures", icon: FileSignature },
-      { name: "سجل الرسائل", href: "/sms-history", icon: History, featureKey: 'sms' },
       { name: "العلامة التجارية", href: "/admin/branding", icon: Palette },
     ],
   },
