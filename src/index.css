@@ -105,6 +105,30 @@ html {
     overflow-x: clip;
   }
 
+  /* Radix Select (and any other primitive that wraps children in
+     react-remove-scroll) injects a runtime <style> that sets
+     `overflow: hidden !important` on `html.with-scroll-bars-hidden` and
+     `body[data-scroll-locked]` while the dropdown is open. That flip
+     destroys the scrolling ancestor every `position: sticky` descendant
+     was anchored to, so the page header disappears for as long as the
+     dropdown is open. We override those two rules with higher specificity
+     (doubled class / attribute selector) so the lock-in body styling
+     becomes a no-op — the visual regression from an unlocked background
+     during a tiny dropdown is far less bad than the top header vanishing.
+     Dialogs still render with their own overlay so background scroll
+     during a modal is harmless. */
+  html.with-scroll-bars-hidden.with-scroll-bars-hidden {
+    overflow: visible !important;
+    overflow-x: clip !important;
+    padding-right: 0 !important;
+  }
+  body[data-scroll-locked][data-scroll-locked] {
+    overflow: visible !important;
+    overflow-x: clip !important;
+    padding-right: 0 !important;
+    overscroll-behavior: auto !important;
+  }
+
   /* RTL: Radix ScrollArea viewport must inherit RTL */
   [dir="rtl"] [data-radix-scroll-area-viewport] {
     direction: rtl;
