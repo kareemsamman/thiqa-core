@@ -13,7 +13,6 @@ import {
   Bell,
   BarChart3,
   Settings,
-  ChevronRight,
   ChevronLeft,
   ChevronDown,
   LogOut,
@@ -39,6 +38,8 @@ import {
   LucideIcon,
   UserCircle,
   MoreVertical,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -354,31 +355,50 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Logo */}
+      {/* Logo header.
+          Expanded: brand mark + name on the right (RTL start), collapse
+          button on the left (RTL end).
+          Collapsed: brand mark centred; the expand button moves to the
+          row below so the small column doesn't get crowded. */}
       <div className="flex h-20 items-center justify-between border-b border-black/[0.06] px-4">
         {!collapsed && (
-          <div className="flex items-center gap-2">
-            {isThiqaSuperAdmin ? (
-              <img src={thiqaLogo} alt="Thiqa" className="rounded-lg object-contain" />
-            ) : siteSettings?.logo_url ? (
-              <>
-                <img src={siteSettings.logo_url} alt="Logo" className="h-9 w-9 rounded-lg object-contain" />
-                <span className="text-base font-semibold text-slate-900">
-                  {siteSettings?.site_title || ''}
-                </span>
-              </>
-            ) : (
-              <img src={thiqaLogoIcon} alt="ثقة" className="h-9 w-9 rounded-lg object-contain" />
+          <>
+            <div className="flex items-center gap-2">
+              {isThiqaSuperAdmin ? (
+                <img src={thiqaLogo} alt="Thiqa" className="rounded-lg object-contain" />
+              ) : siteSettings?.logo_url ? (
+                <>
+                  <img src={siteSettings.logo_url} alt="Logo" className="h-9 w-9 rounded-full object-cover" />
+                  <span className="text-base font-semibold text-slate-900">
+                    {siteSettings?.site_title || 'Thiqa'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <img src="https://thiqacrm.b-cdn.net/fav.png" alt="Thiqa" className="h-9 w-9 rounded-full object-cover" />
+                  <span className="text-base font-semibold text-slate-900">Thiqa</span>
+                </>
+              )}
+            </div>
+            {onCollapse && (
+              <button
+                type="button"
+                onClick={() => onCollapse(true)}
+                className="inline-flex items-center justify-center h-8 w-8 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                aria-label="تصغير القائمة"
+              >
+                <PanelLeftClose className="h-5 w-5" strokeWidth={2} />
+              </button>
             )}
-          </div>
+          </>
         )}
         {collapsed && (
           isThiqaSuperAdmin ? (
             <img src={thiqaLogoIcon} alt="Thiqa" className="mx-auto h-8 w-8 object-contain" />
           ) : siteSettings?.logo_url ? (
-            <img src={siteSettings.logo_url} alt="Logo" className="mx-auto h-9 w-9 rounded-lg object-contain" />
+            <img src={siteSettings.logo_url} alt="Logo" className="mx-auto h-9 w-9 rounded-full object-cover" />
           ) : (
-            <img src={thiqaLogoIcon} alt="ثقة" className="mx-auto h-8 w-8 object-contain" />
+            <img src="https://thiqacrm.b-cdn.net/fav.png" alt="Thiqa" className="mx-auto h-9 w-9 rounded-full object-cover" />
           )
         )}
       </div>
@@ -514,26 +534,19 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
         })}
       </nav>
 
-      {/* Collapse toggle - only on desktop */}
-      {onCollapse && (
-        <div className="px-3 pb-2">
+      {/* Expand button — only shows when the sidebar is collapsed.
+          When the sidebar is expanded the toggle lives next to the
+          logo (top header), so we don't render anything here. */}
+      {onCollapse && collapsed && (
+        <div className="px-2 pb-2">
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onCollapse(!collapsed)}
-            className={cn(
-              "w-full justify-center h-10 text-slate-600 hover:text-slate-900 hover:bg-slate-100",
-              collapsed && "px-2"
-            )}
+            onClick={() => onCollapse(false)}
+            className="w-full justify-center h-10 px-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+            aria-label="توسيع القائمة"
           >
-            {collapsed ? (
-              <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
-            ) : (
-              <>
-                <ChevronRight className="h-5 w-5" strokeWidth={2.25} />
-                <span className="mr-2 text-sm font-medium">تصغير</span>
-              </>
-            )}
+            <PanelLeftOpen className="h-5 w-5" strokeWidth={2} />
           </Button>
         </div>
       )}
