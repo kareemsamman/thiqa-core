@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Layers, X, FileText, Maximize2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -110,11 +111,16 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
       </PopoverTrigger>
       <PopoverContent
         side="bottom"
-        align="end"
-        sideOffset={4}
+        align="center"
+        sideOffset={6}
         className="w-64 p-2 flex flex-col gap-1.5"
         dir="rtl"
       >
+        <PopoverPrimitive.Arrow
+          width={12}
+          height={6}
+          className="fill-popover drop-shadow-[0_-1px_0_hsl(var(--border))]"
+        />
         <p className="px-2 pt-1 pb-0.5 text-[11px] font-semibold text-muted-foreground">
           المسودات المصغرة
         </p>
