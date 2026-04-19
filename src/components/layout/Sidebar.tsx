@@ -545,10 +545,10 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         onClick={handleNavClick}
                         style={{ ['--i' as any]: idx }}
                         className={cn(
-                          "nav-leaf relative flex items-center py-2 text-[13.5px] font-normal transition-colors duration-150 rounded-[0.2rem]",
+                          "nav-leaf relative flex items-center py-2 text-[13.5px] transition-colors duration-150 rounded-[0.2rem]",
                           isActiveRoute
-                            ? "text-black"
-                            : "text-[#878b8b] hover:text-black hover:bg-slate-50",
+                            ? "text-black font-bold"
+                            : "text-[#656565] font-normal hover:text-black hover:bg-slate-50",
                         )}
                       >
                         {/* Active pill bg — full NavLink width so the
@@ -559,15 +559,17 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                             className="absolute inset-y-0 inset-x-0 rounded-[0.2rem] bg-[#f3f5f7] pointer-events-none"
                           />
                         )}
-                        {/* Black dot centred on the line at 17px from
-                            inline-start. 7px dot → start edge at
-                            17 - 3.5 = 13.5px so the centre lands ON
-                            the line. z-20 to punch through bg + line. */}
+                        {/* Black dot centred ON the line. The line is
+                            1px wide at inset-inline-start:17px (i.e.
+                            occupies 17→18px), so its centre is 17.5px.
+                            7px dot → start edge at 17.5 - 3.5 = 14px
+                            puts the dot's centre exactly on the line's
+                            centre. z-20 to punch through bg + line. */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
                             className="absolute top-1/2 h-[7px] w-[7px] rounded-full bg-black z-20"
-                            style={{ insetInlineStart: '13.5px', transform: 'translateY(-50%)' }}
+                            style={{ insetInlineStart: '14px', transform: 'translateY(-50%)' }}
                           />
                         )}
                         <span
@@ -697,7 +699,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                       <button
                         type="button"
                         onClick={() => { setUserMenuOpen(false); setProfileOpen(true); }}
-                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[0.2rem] text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                       >
                         <UserCircle className="h-4 w-4 text-slate-500" />
                         <span className="flex-1 text-right">الملف الشخصي</span>
@@ -707,7 +709,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         <button
                           type="button"
                           onClick={() => { setUserMenuOpen(false); navigate('/subscription'); }}
-                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[0.2rem] text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                         >
                           <Settings className="h-4 w-4 text-slate-500" />
                           <span className="flex-1 text-right">الإعدادات</span>
@@ -718,7 +720,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         <button
                           type="button"
                           onClick={triggerOnboarding}
-                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[0.2rem] text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                         >
                           <HelpCircle className="h-4 w-4 text-slate-500" />
                           <span className="flex-1 text-right">دليل البداية</span>
@@ -731,7 +733,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         type="button"
                         onClick={handleSignOut}
                         disabled={signingOut}
-                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] text-red-600 hover:bg-red-50 transition-colors disabled:opacity-60"
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[0.2rem] text-[13px] text-red-600 hover:bg-red-50 transition-colors disabled:opacity-60"
                       >
                         {signingOut ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
