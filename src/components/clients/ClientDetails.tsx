@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { Header } from '@/components/layout/Header';
 import { useRecentClient } from '@/hooks/useRecentClient';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1379,6 +1380,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         <Helmet>
           <title>{client.full_name} | ثقة للتأمين</title>
         </Helmet>
+        <Header title={client.full_name} subtitle="العملاء" />
         <div className="max-w-6xl mx-auto space-y-6">
           {/* Header Skeleton */}
           <Card className="overflow-hidden">
@@ -1452,6 +1454,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       <Helmet>
         <title>{client.full_name} | ثقة للتأمين</title>
       </Helmet>
+
+      <Header
+        title={client.full_name}
+        subtitle="العملاء"
+      />
 
       <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6">
         {/* Professional Header Card */}
