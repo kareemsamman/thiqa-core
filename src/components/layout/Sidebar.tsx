@@ -334,8 +334,20 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
     onNavigate?.();
   };
 
+  // Accordion behaviour: opening a group closes every other group;
+  // closing the active one is a no-op for the others. Means there's
+  // always at most ONE expanded group in the nav at a time.
   const toggleGroup = (groupName: string) => {
-    setOpenGroups(prev => ({ ...prev, [groupName]: !prev[groupName] }));
+    setOpenGroups((prev) => {
+      const wasOpen = !!prev[groupName];
+      if (wasOpen) {
+        return { ...prev, [groupName]: false };
+      }
+      const next: Record<string, boolean> = {};
+      Object.keys(prev).forEach((k) => { next[k] = false; });
+      next[groupName] = true;
+      return next;
+    });
   };
 
   const userName = profile?.full_name || profile?.email?.split('@')[0] || 'مستخدم';
@@ -356,6 +368,25 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Per-item entrance animation. When the parent CollapsibleContent
+          flips data-state="open", each sub-item runs the nav-leaf-in
+          keyframe with a stagger driven by the `--i` index variable on
+          the row. Uses an animation (not a transition) so it doesn't
+          fight Tailwind's `transition-colors` for hover. */}
+      <style>{`
+        @keyframes nav-leaf-in {
+          0%   { opacity: 0; transform: translateY(-6px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        .nav-leaf {
+          opacity: 0;
+        }
+        [data-state="open"] > .nav-leaves .nav-leaf,
+        [data-state="open"] .nav-leaves .nav-leaf {
+          animation: nav-leaf-in 220ms ease-out forwards;
+          animation-delay: calc(var(--i, 0) * 35ms + 60ms);
+        }
+      `}</style>
       {/* Logo header.
           Expanded: brand mark + name on the right (RTL start), collapse
           button on the left (RTL end).
@@ -495,7 +526,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                     dot (centred on the line) ends up fully embedded
                     inside the pill. */}
                 <div
-                  className="relative mt-1 py-1 space-y-0.5"
+                  className="nav-leaves relative mt-1 py-1 space-y-0.5"
                   style={{ marginInlineEnd: '14px' }}
                 >
                   {/* Vertical guide line, inset 17px from the start
@@ -507,7 +538,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                     className="pointer-events-none absolute top-1.5 bottom-1.5 w-px bg-[#e9e9e9] z-10"
                     style={{ insetInlineStart: '17px' }}
                   />
-                  {group.items.map((item) => {
+                  {group.items.map((item, idx) => {
                     const isActiveRoute = location.pathname === item.href;
                     return (
                       <NavLink
@@ -515,8 +546,9 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         to={item.href}
                         ref={isActiveRoute ? activeNavLinkRef : undefined}
                         onClick={handleNavClick}
+                        style={{ ['--i' as any]: idx }}
                         className={cn(
-                          "relative flex items-center py-2 text-[13.5px] font-normal transition-colors duration-150 rounded-md",
+                          "nav-leaf relative flex items-center py-2 text-[13.5px] font-normal transition-colors duration-150 rounded-md",
                           isActiveRoute
                             ? "text-black"
                             : "text-[#878b8b] hover:text-black hover:bg-slate-50",
