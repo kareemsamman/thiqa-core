@@ -296,17 +296,25 @@ export default function FinancialReports() {
 
   return (
     <MainLayout>
-      <Header 
-        title="التقارير المالية" 
+      <Header
+        title="التقارير المالية"
         subtitle="محفظة Thiqa الموحدة"
-        action={{
-          label: isFetching ? "جاري التحديث..." : "",
-          icon: <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />,
-          onClick: handleSync,
-        }}
       />
 
       <div className="p-6 space-y-6">
+        {/* Toolbar */}
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            size="sm"
+            onClick={handleSync}
+            disabled={isFetching}
+            className="gap-2"
+          >
+            <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+            {isFetching ? "جاري التحديث..." : "تحديث"}
+          </Button>
+        </div>
+
         {/* Main Agent Wallet Card - Full Width */}
         <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
           <CardContent className="py-6">

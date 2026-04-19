@@ -662,11 +662,6 @@ export default function Accounting() {
       <Header
         title="دفتر الحسابات الموحد"
         subtitle="عرض شامل لجميع الحركات المالية"
-        action={{
-          label: refreshing ? "جاري التحديث..." : "",
-          icon: <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />,
-          onClick: handleRefresh,
-        }}
       />
 
       <div className="p-4 md:p-6 space-y-5">
@@ -747,6 +742,17 @@ export default function Accounting() {
                   مسح التواريخ
                 </Button>
               )}
+
+              {/* Refresh */}
+              <Button
+                size="sm"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="gap-2"
+              >
+                <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+                {refreshing ? "جاري التحديث..." : "تحديث"}
+              </Button>
             </div>
           </CardContent>
         </Card>

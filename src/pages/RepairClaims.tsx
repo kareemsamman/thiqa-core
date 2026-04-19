@@ -200,11 +200,6 @@ export default function RepairClaims() {
       <Header
         title="المطالبات"
         subtitle="تتبع تصليحات السيارات والملفات"
-        action={{
-          label: "إضافة مطالبة",
-          icon: <Plus className="h-4 w-4" />,
-          onClick: () => handleOpenDrawer(),
-        }}
       />
 
       <div className="p-6 space-y-6">
@@ -222,6 +217,14 @@ export default function RepairClaims() {
           </div>
           
           <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => handleOpenDrawer()}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              إضافة مطالبة
+            </Button>
             <Button
               variant={statusFilter === "all" ? "default" : "outline"}
               size="sm"

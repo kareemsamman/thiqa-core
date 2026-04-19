@@ -22,6 +22,7 @@ import {
   Phone,
   Users,
   Building2,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizeArabic } from "@/lib/arabicNormalize";
@@ -267,13 +268,6 @@ export default function Clients() {
       <Header
         title="العملاء"
         subtitle="إدارة قاعدة بيانات العملاء"
-        action={{
-          label: "إضافة عميل",
-          onClick: () => {
-            setSelectedClient(null);
-            setDrawerOpen(true);
-          },
-        }}
       />
 
       <div className="p-6 pb-32 space-y-4">
@@ -292,9 +286,20 @@ export default function Clients() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <ClientFilters 
-              filters={filters} 
-              onFiltersChange={(f) => { setFilters(f); setCurrentPage(1); }} 
+            <Button
+              size="sm"
+              onClick={() => {
+                setSelectedClient(null);
+                setDrawerOpen(true);
+              }}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              إضافة عميل
+            </Button>
+            <ClientFilters
+              filters={filters}
+              onFiltersChange={(f) => { setFilters(f); setCurrentPage(1); }}
             />
           </div>
         </div>

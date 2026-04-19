@@ -9,6 +9,7 @@ import {
   ChevronRight,
   RefreshCw,
   X,
+  Plus,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -393,10 +394,6 @@ export default function Policies() {
       <Header
         title="الوثائق"
         subtitle="إدارة وثائق التأمين"
-        action={{
-          label: "وثيقة جديدة",
-          onClick: () => openWizard(),
-        }}
       />
 
       <div className="p-6 space-y-4">
@@ -416,9 +413,17 @@ export default function Policies() {
             />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <PolicyFilters 
-              filters={filters} 
-              onFiltersChange={(f) => { setFilters(f); setCurrentPage(1); }} 
+            <Button
+              size="sm"
+              onClick={() => openWizard()}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              وثيقة جديدة
+            </Button>
+            <PolicyFilters
+              filters={filters}
+              onFiltersChange={(f) => { setFilters(f); setCurrentPage(1); }}
             />
             {/* Recalculate button - Admin only */}
             {isAdmin && (

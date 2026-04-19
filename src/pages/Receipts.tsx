@@ -821,14 +821,21 @@ export default function Receipts() {
         <Header
           title="إدارة الإيصالات"
           subtitle="عرض وإدارة إيصالات الدفع ورسوم الحوادث"
-          action={{
-            label: "إضافة إيصال",
-            onClick: handleOpenDialog,
-            icon: <Plus className="h-4 w-4" />,
-          }}
         />
 
         <div className="p-3 md:p-6 space-y-4">
+          {/* Toolbar */}
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={handleOpenDialog}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              إضافة إيصال
+            </Button>
+          </div>
+
           {/* Filters */}
           <div>
             <Card className="mt-4">

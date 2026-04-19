@@ -204,11 +204,6 @@ export default function BusinessContacts() {
       <Header
         title="جهات الاتصال"
         subtitle="دليل الهاتف للمخمنين والكراجات وشركات التأمين"
-        action={{
-          label: "إضافة جهة",
-          onClick: handleAddNew,
-          icon: <Plus className="h-4 w-4 ml-1" />,
-        }}
       />
 
       <div className="p-6 space-y-6">
@@ -238,6 +233,14 @@ export default function BusinessContacts() {
               ))}
             </SelectContent>
           </Select>
+          <Button
+            size="sm"
+            onClick={handleAddNew}
+            className="gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            إضافة جهة
+          </Button>
         </div>
 
         {/* Contacts Grid */}

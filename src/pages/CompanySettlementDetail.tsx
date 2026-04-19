@@ -756,10 +756,6 @@ export default function CompanySettlementDetail() {
       <Header
         title={`تفاصيل تسوية ${company?.name_ar || company?.name || 'الشركة'}`}
         subtitle="عرض جميع الوثائق وتفاصيل الحسابات"
-        action={{
-          label: 'العودة للتقرير',
-          onClick: () => navigate('/reports/company-settlement'),
-        }}
       />
 
       <div className="p-6 space-y-6 print:p-0">
