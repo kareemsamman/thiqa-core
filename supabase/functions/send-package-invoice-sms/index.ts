@@ -754,9 +754,12 @@ function buildPackageInvoiceHtml(
       ? `<span class="cancelled-tag">ملغاة</span>`
       : '';
 
+    const policyNumberCell = p.policy_number && String(p.policy_number).trim()
+      ? `<span class="policy-number">${escapeHtml(String(p.policy_number))}</span>`
+      : `<span class="policy-number-empty">—</span>`;
     return `
       <tr class="${isCancelled ? 'cancelled-row' : ''}">
-        <td class="num">${i + 1}</td>
+        <td class="num tabular">${policyNumberCell}</td>
         <td>
           <div class="item-title">${policyType} ${cancelledTag}</div>
           <div class="item-meta">${companyName}</div>
@@ -1090,6 +1093,10 @@ function buildPackageInvoiceHtml(
       font-variant-numeric: tabular-nums;
       font-weight: 700;
       color: #1a1a1a;
+    }
+    .items tbody td.num .policy-number-empty {
+      color: #b0b0b0;
+      font-weight: 400;
     }
     .items tbody td.period {
       direction: ltr;
@@ -1657,7 +1664,7 @@ function buildPackageInvoiceHtml(
     <table class="items">
       <thead>
         <tr>
-          <th style="width: 40px;">#</th>
+          <th style="width: 110px;">رقم البوليصة</th>
           <th>الوصف</th>
           <th style="width: 180px;">المدة</th>
           <th style="width: 120px;">المبلغ</th>
