@@ -551,19 +551,24 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                             : "text-[#656565] font-normal hover:text-black hover:bg-slate-50",
                         )}
                       >
-                        {/* Active pill bg — full NavLink width so the
-                            line + dot sit visibly inside it. */}
+                        {/* Active pill bg — STOPS 24px before the
+                            inline-start edge so the line + dot
+                            column stays visible to the right of the
+                            pill (matches the Untitled UI reference,
+                            where the active row's pill ends BEFORE
+                            the marker column). */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
-                            className="absolute inset-y-0 inset-x-0 rounded-[0.2rem] bg-[#f3f5f7] pointer-events-none"
+                            className="absolute inset-y-0 rounded-[0.2rem] bg-[#f3f5f7] pointer-events-none"
+                            style={{ insetInlineEnd: 0, insetInlineStart: '24px' }}
                           />
                         )}
                         {/* Black dot centred ON the line. The line is
                             1px wide at inset-inline-start:17px (centre
                             17.5px). 8px dot → start edge at 17.5 - 4
                             = 13.5px puts the dot's centre exactly on
-                            the line. z-30 to sit above the bg pill. */}
+                            the line. z-30 so it sits above the line. */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
