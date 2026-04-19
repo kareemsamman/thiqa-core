@@ -1,4 +1,4 @@
-import { useMemo, ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Plus, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,8 +34,21 @@ export function Header({ title, subtitle }: HeaderProps) {
   const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
   const { openWizard } = usePolicyWizardController();
   const { recentClient } = useRecentClient();
+  const activeTabRef = useRef<HTMLButtonElement | null>(null);
 
   const isOnClientProfilePage = /^\/clients\/[^/]+/.test(location.pathname);
+
+  // When the active tab changes, scroll the 629px lane so the active
+  // tab is centered (or at least visible). Without this the lane keeps
+  // whatever scroll position it had before — clicking a tab at the
+  // far end and landing on its page used to leave that (now-active)
+  // tab off-screen.
+  useLayoutEffect(() => {
+    activeTabRef.current?.scrollIntoView({
+      block: "nearest",
+      inline: "center",
+    });
+  }, [location.pathname]);
 
   const siblingTabs = useMemo(() => {
     const matchesPath = (href: string) =>
@@ -94,6 +107,7 @@ export function Header({ title, subtitle }: HeaderProps) {
               return (
                 <button
                   key={tab.href}
+                  ref={active ? activeTabRef : undefined}
                   type="button"
                   onClick={() => navigate(tab.href)}
                   className={cn(
@@ -123,7 +137,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             // base width silently loses at md+ screens and the input
             // never actually grows.
             inputClassName="h-11 w-[280px] sm:w-[280px] bg-secondary/70 border-transparent"
-            expandedInputClassName="w-[520px] sm:w-[520px]"
+            expandedInputClassName="w-[320px] sm:w-[320px]"
           />
 
           <Button
