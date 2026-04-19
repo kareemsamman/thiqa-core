@@ -312,9 +312,12 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
     }))
     .filter(group => group.items.length > 0);
 
-  // Check if any item in a group is active
+  // Check if any item in a group is active. Matches nested routes too
+  // so e.g. /clients/abc still activates the "العملاء" group + item.
+  const matchesPath = (href: string) =>
+    location.pathname === href || location.pathname.startsWith(href + "/");
   const isGroupActive = (group: NavGroup) => {
-    return group.items.some(item => location.pathname === item.href);
+    return group.items.some(item => matchesPath(item.href));
   };
 
   // Open ONLY the group that contains the currently active route; keep
@@ -514,7 +517,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                   {/* Items list */}
                   <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
                     {group.items.map((item) => {
-                      const isActive = location.pathname === item.href;
+                      const isActive = matchesPath(item.href);
                       return (
                         <NavLink
                           key={item.name}
@@ -596,7 +599,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                     inside the pill. */}
                 <div className="nav-leaves relative mt-1 py-1 space-y-0.5">
                   {group.items.map((item, idx) => {
-                    const isActiveRoute = location.pathname === item.href;
+                    const isActiveRoute = matchesPath(item.href);
                     return (
                       <NavLink
                         key={item.name}

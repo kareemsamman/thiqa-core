@@ -83,7 +83,7 @@ export function Header({ title, subtitle }: HeaderProps) {
   return (
     <>
       {/* Desktop header */}
-      <header className="hidden md:flex sticky top-0 z-30 h-20 items-center gap-4 bg-background px-6 mb-6">
+      <header className="hidden md:flex sticky top-0 z-30 h-20 items-center gap-4 bg-white/75 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/60 border-b border-border/50 px-6 mb-6 shadow-[0_1px_0_0_hsl(var(--border)/0.3)]">
         {/* Right: title + subtitle */}
         <div className="min-w-0 flex-shrink-0">
           <h1 className="text-xl font-semibold text-foreground truncate">{title}</h1>
