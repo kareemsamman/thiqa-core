@@ -106,7 +106,7 @@ export const navigationGroups: NavGroup[] = [
     ],
   },
   {
-    name: "العملاء والشركاء",
+    name: "العملاء والشركات",
     icon: Users,
     items: [
       { name: "العملاء", href: "/clients", icon: Users },
