@@ -80,7 +80,7 @@ export function ThaqibPanel({ open, onClose }: ThaqibPanelProps) {
       dir="rtl"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b" style={{ background: '#122143' }}>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-black">
         <div className="flex items-center gap-2">
           {view === "history" ? (
             <button
@@ -205,7 +205,7 @@ export function ThaqibPanel({ open, onClose }: ThaqibPanelProps) {
       <div className="flex-1 overflow-y-auto px-3 py-3">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center px-6">
-            <div className="h-14 w-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#122143' }}>
+            <div className="h-14 w-14 rounded-2xl flex items-center justify-center mb-4 bg-black ring-1 ring-white/10">
               <Bot className="h-7 w-7 text-white" />
             </div>
             <h4 className="font-bold text-base mb-1">مرحباً! أنا ثاقب 👋</h4>
