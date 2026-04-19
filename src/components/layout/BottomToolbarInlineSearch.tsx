@@ -31,9 +31,26 @@ interface PolicyResult {
 
 interface BottomToolbarInlineSearchProps {
   className?: string;
+  // Which way the results dropdown opens. Bottom toolbar points up
+  // because the input sits at the bottom of the viewport; the main
+  // header points down so the dropdown hangs below the input.
+  direction?: "up" | "down";
+  // When true the dropdown takes the same width as the input wrapper
+  // instead of the default fixed ~400px. Used in the header where the
+  // design asks for a dropdown that visually "extends" the input.
+  dropdownMatchWidth?: boolean;
+  // Override the input size/shape. Callers that need the input to
+  // match a larger cluster (e.g. the main header) pass a custom height
+  // + width here.
+  inputClassName?: string;
 }
 
-export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSearchProps) {
+export function BottomToolbarInlineSearch({
+  className,
+  direction = "up",
+  dropdownMatchWidth = false,
+  inputClassName,
+}: BottomToolbarInlineSearchProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
@@ -504,7 +521,8 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
           placeholder="بحث..."
           className={cn(
             "h-9 w-[140px] sm:w-[200px] rounded-full pr-9 pl-8",
-            "bg-background/70 border-border/50"
+            "bg-background/70 border-border/50",
+            inputClassName,
           )}
         />
         {query && (
@@ -521,13 +539,21 @@ export function BottomToolbarInlineSearch({ className }: BottomToolbarInlineSear
         )}
       </div>
 
-      {/* Dropdown results - positioned above */}
+      {/* Dropdown results — position + width follow the direction /
+          matchWidth props so the same component serves the bottom
+          toolbar (wide, upward) and the header (matched, downward,
+          seamlessly attached to the input). */}
       {showDropdown && (
         <div
           className={cn(
-            "absolute bottom-full mb-3 left-1/2 -translate-x-1/2",
-            "w-[min(92vw,400px)] max-h-[360px] overflow-y-auto",
-            "rounded-lg border border-border bg-popover p-2 shadow-lg"
+            "absolute z-40 max-h-[360px] overflow-y-auto",
+            "rounded-lg border border-border bg-popover p-2 shadow-lg",
+            direction === "up"
+              ? "bottom-full mb-3 animate-in fade-in-0 slide-in-from-bottom-1 duration-150"
+              : "top-full mt-1 animate-in fade-in-0 slide-in-from-top-1 duration-150",
+            dropdownMatchWidth
+              ? "left-0 right-0"
+              : "left-1/2 -translate-x-1/2 w-[min(92vw,400px)]",
           )}
         >
           {renderResults()}

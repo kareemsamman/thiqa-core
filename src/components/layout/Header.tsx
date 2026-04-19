@@ -1,10 +1,10 @@
-import { useState, useMemo, useRef, useEffect, ReactNode } from "react";
+import { useMemo, ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Search, Plus, X, FileText } from "lucide-react";
+import { Plus, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { NotificationsDropdown } from "./NotificationsDropdown";
+import { BottomToolbarInlineSearch } from "./BottomToolbarInlineSearch";
 import { navigationGroups } from "./Sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -23,21 +23,17 @@ interface HeaderProps {
 
 const ICON_BUTTON_CLASS =
   "h-11 w-11 rounded-full bg-secondary/70 hover:bg-secondary transition-colors text-foreground";
-const ICON_CLASS = "h-[18px] w-[18px] text-foreground";
 
 // `action` is kept in the prop signature so existing callers don't break,
 // but the header no longer renders it — per-page primary actions now live
-// in the page body next to filters. Safe to drop from callers over time.
+// in the page body next to filters.
 export function Header({ title, subtitle }: HeaderProps) {
-  const [searchExpanded, setSearchExpanded] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
   const { isAdmin, isSuperAdmin } = useAuth();
   const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
   const { openWizard } = usePolicyWizardController();
   const { recentClient } = useRecentClient();
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const isOnClientProfilePage = /^\/clients\/[^/]+/.test(location.pathname);
 
@@ -62,30 +58,20 @@ export function Header({ title, subtitle }: HeaderProps) {
   const isTabActive = (href: string) =>
     location.pathname === href || location.pathname.startsWith(href + "/");
 
-  useEffect(() => {
-    if (searchExpanded) {
-      const t = window.setTimeout(() => searchInputRef.current?.focus(), 10);
-      return () => window.clearTimeout(t);
-    }
-  }, [searchExpanded]);
-
   const openNewPolicy = () => {
     openWizard({
       clientId: isOnClientProfilePage ? recentClient?.id : undefined,
     });
   };
 
-  const collapseSearch = () => {
-    setSearchExpanded(false);
-    setSearchQuery("");
-  };
-
   return (
     <>
-      {/* Desktop header */}
-      <header className="hidden md:flex sticky top-0 z-30 h-20 items-center gap-4 bg-white/75 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/60 border-b border-border/50 px-6 mb-6 shadow-[0_1px_0_0_hsl(var(--border)/0.3)]">
+      {/* Desktop header — grid with fixed slots (title | tabs | cluster).
+          Each slot owns its column, so changing title/subtitle length
+          never shifts the tabs or the action cluster. */}
+      <header className="hidden md:grid grid-cols-[1fr_auto_1fr] sticky top-0 z-30 h-20 items-center gap-6 bg-background px-6 mb-6">
         {/* Right: title + subtitle */}
-        <div className="min-w-0 flex-shrink-0">
+        <div className="min-w-0 justify-self-start">
           <h1 className="text-xl font-semibold text-foreground truncate">{title}</h1>
           {subtitle && (
             <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
@@ -93,7 +79,7 @@ export function Header({ title, subtitle }: HeaderProps) {
         </div>
 
         {/* Center: sibling tabs (from active nav group) */}
-        <nav className="flex-1 flex items-center justify-center min-w-0 overflow-x-auto scrollbar-none">
+        <nav className="justify-self-center">
           <div className="flex items-center gap-2">
             {siblingTabs.map((tab) => {
               const active = isTabActive(tab.href);
@@ -116,44 +102,15 @@ export function Header({ title, subtitle }: HeaderProps) {
           </div>
         </nav>
 
-        {/* Left: search, new-policy button, bell */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {searchExpanded ? (
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground pointer-events-none" />
-              <Input
-                ref={searchInputRef}
-                placeholder="بحث..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onBlur={() => {
-                  if (!searchQuery) collapseSearch();
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") collapseSearch();
-                }}
-                className="h-11 w-[220px] rounded-full pr-9 pl-9 bg-secondary/70 border-transparent focus-visible:bg-background"
-              />
-              <button
-                type="button"
-                onClick={collapseSearch}
-                className="absolute left-2 top-1/2 -translate-y-1/2 h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-background"
-                aria-label="إغلاق البحث"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              className={ICON_BUTTON_CLASS}
-              onClick={() => setSearchExpanded(true)}
-              aria-label="بحث"
-            >
-              <Search className={ICON_CLASS} />
-            </Button>
-          )}
+        {/* Left: cluster — fixed order, same inline-search component as
+            the bottom toolbar so typing shows the real dropdown of
+            clients / policies / receipts. */}
+        <div className="flex items-center gap-2 justify-self-end">
+          <BottomToolbarInlineSearch
+            direction="down"
+            dropdownMatchWidth
+            inputClassName="h-11 w-[220px] bg-secondary/70 border-transparent"
+          />
 
           <Button
             onClick={openNewPolicy}
@@ -173,23 +130,14 @@ export function Header({ title, subtitle }: HeaderProps) {
 
       {/* Mobile header - title row + tabs strip */}
       <div className="md:hidden mb-4">
-        <div className="flex items-center justify-between px-1 pb-2">
+        <div className="flex items-center justify-between gap-2 px-1 pb-2">
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold text-foreground truncate">{title}</h1>
             {subtitle && (
               <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
             )}
           </div>
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-full bg-secondary/70 hover:bg-secondary text-foreground"
-              onClick={() => setSearchExpanded(true)}
-              aria-label="بحث"
-            >
-              <Search className="h-4 w-4 text-foreground" />
-            </Button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             <Button
               onClick={openNewPolicy}
               size="sm"
