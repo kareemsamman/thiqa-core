@@ -406,7 +406,7 @@ async function sendPaymentReceiptSms(supabase: any, payment: any) {
     }
     
     if (policyNumber) {
-      message += `\nرقم الوثيقة: ${policyNumber}`
+      message += `\nرقم المعاملة: ${policyNumber}`
     }
     
     if (confirmationCode) {

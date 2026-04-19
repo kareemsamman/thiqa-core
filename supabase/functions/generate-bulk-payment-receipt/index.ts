@@ -530,7 +530,7 @@ function buildBulkReceiptHtml(
         <div class="subtitle">${payments.length} ${payments.length === 1 ? 'سند قبض' : 'سندات قبض'}</div>
         <div class="meta-rows">
           <div class="row">
-            <div class="label">رقم الوثيقة</div>
+            <div class="label">رقم المعاملة</div>
             <div class="val">${escapeHtml(primaryDocumentNumber)}</div>
           </div>
           <div class="row">

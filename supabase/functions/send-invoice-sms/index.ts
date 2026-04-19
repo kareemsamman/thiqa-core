@@ -313,7 +313,7 @@ serve(async (req) => {
     // Build SMS message with ALL files included
     // Default template now includes all files
     let smsMessage = agentSmsRow?.invoice_sms_template ||
-      "مرحباً {{client_name}}، تم إصدار وثيقة التأمين\n\n{{all_policy_urls}}\n\nفاتورة شركة التأمين: {{ab_invoice_url}}";
+      "مرحباً {{client_name}}، تم إصدار معاملة التأمين\n\n{{all_policy_urls}}\n\nفاتورة شركة التأمين: {{ab_invoice_url}}";
 
     // If no policy files, provide a simplified message
     const policyUrlsOrMessage = allPolicyUrlsText || '';
@@ -915,7 +915,7 @@ function buildAbInvoiceHtml(
         <span>${formatDate(new Date().toISOString())}</span>
       </div>
       <div>
-        <strong>رقم الوثيقة</strong>
+        <strong>رقم المعاملة</strong>
         <span>${policy.policy_number || policy.id.slice(0, 8)}</span>
       </div>
       <div>

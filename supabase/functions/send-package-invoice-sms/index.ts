@@ -403,7 +403,7 @@ serve(async (req) => {
     if (!uploadResponse.ok) {
       console.error('[send-package-invoice-sms] Bunny upload failed');
       return new Response(
-        JSON.stringify({ error: 'فشل في رفع الوثيقة' }),
+        JSON.stringify({ error: 'فشل في رفع المعاملة' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -432,7 +432,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: "تم توليد الوثيقة",
+          message: "تم توليد المعاملة",
           policy_count: policy_ids.length,
           file_count: policyFileUrls.length,
           package_invoice_url: packageInvoiceUrl,
@@ -443,7 +443,7 @@ serve(async (req) => {
     }
 
     // Build SMS message with ALL files included
-    let smsMessage = `مرحباً ${client.full_name}، تم إصدار وثيقة التأمين`;
+    let smsMessage = `مرحباً ${client.full_name}، تم إصدار معاملة التأمين`;
 
     // Include a price summary so the customer sees what they owe, including
     // office commission (the ELZAMI markup) rolled into the grand total.
@@ -465,7 +465,7 @@ serve(async (req) => {
     }
 
     // Always add invoice URL
-    smsMessage += `\n\nوثيقة التأمين: ${packageInvoiceUrl}`;
+    smsMessage += `\n\nمعاملة التأمين: ${packageInvoiceUrl}`;
 
     smsMessage = appendSmsFooter(smsMessage, branding);
 
@@ -776,11 +776,11 @@ function buildPackageInvoiceHtml(
   const brokerNoticeHtml = brokerPolicyForNotice
     ? `
     <div class="broker-banner">
-      <div class="broker-title">ملاحظة: وثيقة مرتبطة بوسيط</div>
+      <div class="broker-title">ملاحظة: معاملة مرتبطة بوسيط</div>
       <div class="broker-body">${
         brokerPolicyForNotice.broker_direction === 'to_broker'
-          ? `صُدرت هذه الوثيقة للوسيط <strong>${escapeHtml(brokerPolicyForNotice.broker.name)}</strong> — المبلغ المستحق يُتابع في حساب الوسيط، وليس على العميل.`
-          : `تمت هذه الوثيقة عبر الوسيط <strong>${escapeHtml(brokerPolicyForNotice.broker.name)}</strong> — المبلغ المستحق يُتابع في حساب الوسيط، وليس على العميل.`
+          ? `صُدرت هذه المعاملة للوسيط <strong>${escapeHtml(brokerPolicyForNotice.broker.name)}</strong> — المبلغ المستحق يُتابع في حساب الوسيط، وليس على العميل.`
+          : `تمت هذه المعاملة عبر الوسيط <strong>${escapeHtml(brokerPolicyForNotice.broker.name)}</strong> — المبلغ المستحق يُتابع في حساب الوسيط، وليس على العميل.`
       }</div>
     </div>
     `
@@ -793,7 +793,7 @@ function buildPackageInvoiceHtml(
     ? `
     <div class="cancellation-banner">
       <div class="cancellation-main">
-        <div class="cancellation-title">⊘ هذه الوثيقة ملغاة</div>
+        <div class="cancellation-title">⊘ هذه المعاملة ملغاة</div>
         ${cancellationInfo.date ? `<div class="cancellation-meta"><strong>تاريخ الإلغاء:</strong> ${formatDate(cancellationInfo.date)}</div>` : ''}
         ${cancellationInfo.note ? `<div class="cancellation-meta"><strong>السبب:</strong> ${escapeHtml(cancellationInfo.note)}</div>` : ''}
       </div>
@@ -912,7 +912,7 @@ function buildPackageInvoiceHtml(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>وثيقة - ${client.full_name || 'عميل'}</title>
+  <title>معاملة - ${client.full_name || 'عميل'}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
 
@@ -1601,11 +1601,11 @@ function buildPackageInvoiceHtml(
         ${effectiveAddress ? `<div class="address">${effectiveAddress}</div>` : ''}
       </div>
       <div class="invoice-meta">
-        <div class="doc-title">وثيقة</div>
+        <div class="doc-title">معاملة</div>
         ${invoiceSubtitle ? `<div class="subtitle">${invoiceSubtitle}</div>` : ''}
         <div class="meta-rows">
           <div class="row">
-            <div class="label">رقم الوثيقة</div>
+            <div class="label">رقم المعاملة</div>
             <div class="val">${primaryDocumentNumber}</div>
           </div>
           <div class="row">
@@ -1737,7 +1737,7 @@ function buildPackageInvoiceHtml(
     function shareInvoice() {
       var url = window.location.href;
       if (navigator.share) {
-        navigator.share({ title: 'وثيقة', url: url }).catch(function(){});
+        navigator.share({ title: 'معاملة', url: url }).catch(function(){});
       } else {
         window.open('https://wa.me/?text=' + encodeURIComponent(url), '_blank');
       }
