@@ -106,7 +106,7 @@ export const navigationGroups: NavGroup[] = [
     ],
   },
   {
-    name: "إدارة العملاء",
+    name: "السجلات",
     icon: Users,
     items: [
       { name: "العملاء", href: "/clients", icon: Users },
@@ -505,7 +505,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         ref={isActiveRoute ? activeNavLinkRef : undefined}
                         onClick={handleNavClick}
                         className={cn(
-                          "relative flex items-center justify-end rounded-md px-3 py-2 text-[13.5px] font-normal transition-colors duration-150",
+                          "relative flex items-center justify-start rounded-md px-3 py-2 text-[13.5px] font-normal transition-colors duration-150",
                           isActiveRoute
                             ? "bg-slate-100 text-black"
                             : "text-[#878b8b] hover:bg-slate-50 hover:text-black",
