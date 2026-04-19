@@ -38,13 +38,25 @@ export function Header({ title, subtitle }: HeaderProps) {
 
   const isOnClientProfilePage = /^\/clients\/[^/]+/.test(location.pathname);
 
-  // When the active tab changes, scroll the 629px lane so the active
-  // tab is centered (or at least visible). Without this the lane keeps
-  // whatever scroll position it had before — clicking a tab at the
-  // far end and landing on its page used to leave that (now-active)
-  // tab off-screen.
+  // When the active tab changes, make sure it's visible in the 629px
+  // lane. Skip entirely when the tab is already within the lane's
+  // viewport — otherwise snap it into the center *instantly* (no
+  // scroll-smooth), so navigating doesn't produce a visible
+  // scroll-right-then-left jitter.
   useLayoutEffect(() => {
-    activeTabRef.current?.scrollIntoView({
+    const tab = activeTabRef.current;
+    if (!tab) return;
+    const lane = tab.closest("nav");
+    if (!lane) return;
+
+    const laneRect = lane.getBoundingClientRect();
+    const tabRect = tab.getBoundingClientRect();
+    const fullyVisible =
+      tabRect.left >= laneRect.left && tabRect.right <= laneRect.right;
+    if (fullyVisible) return;
+
+    tab.scrollIntoView({
+      behavior: "instant" as ScrollBehavior,
       block: "nearest",
       inline: "center",
     });
@@ -97,7 +109,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             growing cluster nor a longer title nudges them. Locked to a
             fixed 629px lane — when a group has more tabs than fit, the
             lane scrolls internally with a visible thin scrollbar. */}
-        <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[629px] overflow-x-auto overflow-y-hidden scroll-smooth">
+        <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[629px] overflow-x-auto overflow-y-hidden">
           {/* `w-max` sizes the row to exactly its natural content width
               so it CAN exceed the 629px lane and trigger the parent's
               scroll; `mx-auto` centers it when it's narrower. */}
