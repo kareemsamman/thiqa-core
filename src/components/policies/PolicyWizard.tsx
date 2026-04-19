@@ -1672,9 +1672,37 @@ export function PolicyWizard({
     performClose();
   }, [saving, isDirty, performClose]);
 
+  // Scroll position persistence: when the wizard minimizes (via the
+  // minimize button, or a management-link navigation), capture the
+  // scrollable step-content div's scrollTop. On restore, put it back so
+  // the user lands where they left off. We stash it on a ref so it
+  // survives React re-renders without triggering one.
+  const stepScrollRef = useRef<HTMLDivElement | null>(null);
+  const savedScrollTopRef = useRef<number>(0);
+
+  const captureScroll = () => {
+    if (stepScrollRef.current) {
+      savedScrollTopRef.current = stepScrollRef.current.scrollTop;
+    }
+  };
+
+  useEffect(() => {
+    // When the wizard comes back from collapsed state, restore the saved
+    // scroll offset on the next paint so the DOM has mounted the step
+    // content and content height is known.
+    if (!isCollapsed && stepScrollRef.current && savedScrollTopRef.current > 0) {
+      const el = stepScrollRef.current;
+      const target = savedScrollTopRef.current;
+      requestAnimationFrame(() => {
+        el.scrollTop = target;
+      });
+    }
+  }, [isCollapsed]);
+
   // Helper: minimize the wizard and optionally navigate. The wizard stays
   // mounted via GlobalPolicyWizardHost so the draft survives navigation.
   const minimizeAndNavigate = (path?: string) => {
+    captureScroll();
     onMinimize?.();
     if (path) navigate(path);
   };
@@ -1715,6 +1743,7 @@ export function PolicyWizard({
                 // Capture the button's on-screen rect so the toolbar chip can
                 // animate from the exact click point.
                 const rect = e.currentTarget.getBoundingClientRect();
+                captureScroll();
                 onMinimize?.({
                   x: rect.left + rect.width / 2,
                   y: rect.top + rect.height / 2,
@@ -1759,7 +1788,7 @@ export function PolicyWizard({
           </div>
 
           {/* Step Content */}
-          <div className="flex-1 overflow-y-auto px-1 min-h-0">
+          <div ref={stepScrollRef} className="flex-1 overflow-y-auto px-1 min-h-0">
             {currentStep === 1 && (
               <Step1BranchTypeClient
                 isAdmin={isAdmin}
