@@ -498,14 +498,14 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                   className="relative mt-1 py-1 space-y-0.5"
                   style={{ marginInlineEnd: '14px' }}
                 >
-                  {/* Vertical guide line at the inline-START side
-                      (visual right in RTL — same column as the parent
-                      group icon). z-10 so it stays visible passing
+                  {/* Vertical guide line, inset 17px from the start
+                      edge so it sits directly UNDER the parent group
+                      icon column. z-10 so it stays visible passing
                       THROUGH the active pill. */}
                   <span
                     aria-hidden="true"
                     className="pointer-events-none absolute top-1.5 bottom-1.5 w-px bg-[#e9e9e9] z-10"
-                    style={{ insetInlineStart: 0 }}
+                    style={{ insetInlineStart: '17px' }}
                   />
                   {group.items.map((item) => {
                     const isActiveRoute = location.pathname === item.href;
@@ -522,29 +522,28 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                             : "text-[#878b8b] hover:text-black hover:bg-slate-50",
                         )}
                       >
-                        {/* Active pill bg — absolute, stretched 4px
-                            past the line in the START direction so
-                            the dot is fully inside the pill. */}
+                        {/* Active pill bg — full NavLink width so the
+                            line + dot sit visibly inside it. */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
-                            className="absolute inset-y-0 rounded-md bg-[#f3f5f7] pointer-events-none"
-                            style={{ insetInlineEnd: 0, insetInlineStart: '-4px' }}
+                            className="absolute inset-y-0 inset-x-0 rounded-md bg-[#f3f5f7] pointer-events-none"
                           />
                         )}
-                        {/* Black dot centred on the line (start side).
-                            z-20 so it punches through both bg and the
-                            line cleanly. */}
+                        {/* Black dot centred on the line at 17px from
+                            inline-start. 7px dot → start edge at
+                            17 - 3.5 = 13.5px so the centre lands ON
+                            the line. z-20 to punch through bg + line. */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
                             className="absolute top-1/2 h-[7px] w-[7px] rounded-full bg-black z-20"
-                            style={{ insetInlineStart: '-3.5px', transform: 'translateY(-50%)' }}
+                            style={{ insetInlineStart: '13.5px', transform: 'translateY(-50%)' }}
                           />
                         )}
                         <span
                           className="relative z-10 flex-1 text-right"
-                          style={{ paddingInlineStart: '20px', paddingInlineEnd: '12px' }}
+                          style={{ paddingInline: '33px 12px' }}
                         >
                           {item.name}
                         </span>
