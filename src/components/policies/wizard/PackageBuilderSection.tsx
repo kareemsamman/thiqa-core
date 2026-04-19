@@ -675,7 +675,21 @@ export function PackageBuilderSection({
           >
             <div className="space-y-2.5">
               <div>
-                <Label className="text-xs mb-1 block">نوع الخدمة</Label>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <Label className="text-xs mb-0">نوع الخدمة</Label>
+                  {onMinimizeAndNavigate && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onMinimizeAndNavigate("/admin/road-services"); }}
+                      className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 hover:underline font-medium"
+                      title="إدارة خدمات الطريق"
+                    >
+                      <Settings className="h-2.5 w-2.5" />
+                      إدارة
+                      <ExternalLink className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
                 <Select
                   value={roadServiceAddon.road_service_id || ""}
                   onValueChange={(v) => updateAddon('road_service', { road_service_id: v })}
@@ -823,7 +837,21 @@ export function PackageBuilderSection({
           >
             <div className="space-y-2.5">
               <div>
-                <Label className="text-xs mb-1 block">نوع الخدمة</Label>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <Label className="text-xs mb-0">نوع الخدمة</Label>
+                  {onMinimizeAndNavigate && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onMinimizeAndNavigate("/admin/accident-fee-services"); }}
+                      className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 hover:underline font-medium"
+                      title="إدارة إعفاءات رسوم حادث"
+                    >
+                      <Settings className="h-2.5 w-2.5" />
+                      إدارة
+                      <ExternalLink className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
                 <Select
                   value={accidentFeeAddon.accident_fee_service_id || ""}
                   onValueChange={(v) => updateAddon('accident_fee_exemption', { accident_fee_service_id: v })}
