@@ -393,11 +393,11 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                 <TooltipTrigger asChild>
                   <Button onClick={() => setWizardOpen(true)}>
                     <Plus className="h-4 w-4 ml-2" />
-                    إضافة وثيقة
+                    إضافة معاملة
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top" align="end" className="max-w-xs text-right">
-                  إنشاء وثيقة تأمين جديدة مرتبطة بهذا الوسيط
+                  إنشاء معاملة تأمين جديدة مرتبطة بهذا الوسيط
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -447,7 +447,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                   <FileText className="h-5 w-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">عدد الوثائق</p>
+                  <p className="text-sm text-muted-foreground">عدد المعاملات</p>
                   <p className="text-xl font-bold text-blue-600 ltr-nums">{policies.length}</p>
                 </div>
               </div>
@@ -501,7 +501,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
           <TabsList className="print:hidden">
             <TabsTrigger value="policies" className="gap-2">
               <FileText className="h-4 w-4" />
-              الوثائق ({policies.length})
+              المعاملات ({policies.length})
             </TabsTrigger>
           </TabsList>
 
@@ -509,7 +509,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
             <Card className="print:border print:shadow-none">
               <CardHeader>
                 <CardTitle className="text-base">
-                  وثائق الوسيط ({policies.length} وثيقة)
+                  معاملات الوسيط ({policies.length} معاملة)
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -521,7 +521,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                   </div>
                 ) : policies.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">
-                    لا توجد وثائق تحت هذا الوسيط
+                    لا توجد معاملات تحت هذا الوسيط
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -643,7 +643,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground mb-1">
-                    {stats.toBrokerCount} {stats.toBrokerCount === 1 ? "وثيقة" : "وثائق"} — يدفع لي الوسيط
+                    {stats.toBrokerCount} {stats.toBrokerCount === 1 ? "معاملة" : "معاملات"} — يدفع لي الوسيط
                   </div>
                   <div className="text-xl font-bold text-green-700 dark:text-green-400 ltr-nums">
                     {formatCurrency(stats.toBrokerTotal)}
@@ -658,7 +658,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground mb-1">
-                    {stats.fromBrokerCount} {stats.fromBrokerCount === 1 ? "وثيقة" : "وثائق"} — أدفع للوسيط
+                    {stats.fromBrokerCount} {stats.fromBrokerCount === 1 ? "معاملة" : "معاملات"} — أدفع للوسيط
                   </div>
                   <div className="text-xl font-bold text-orange-700 dark:text-orange-400 ltr-nums">
                     {formatCurrency(stats.fromBrokerTotal)}

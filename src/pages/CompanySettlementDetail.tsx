@@ -586,7 +586,7 @@ export default function CompanySettlementDetail() {
 
   const exportToCSV = () => {
     const headers = [
-      'رقم الوثيقة', 'اسم العميل', 'رقم السيارة', 'الشركة المصنعة', 'تصنيف السيارة',
+      'رقم المعاملة', 'اسم العميل', 'رقم السيارة', 'الشركة المصنعة', 'تصنيف السيارة',
       'نوع التأمين', 'قيمة السيارة', 'تاريخ البداية', 'تاريخ النهاية',
       'سعر التأمين', 'المستحق للشركة', 'الربح', 'أنشئ بواسطة', 'تاريخ الإنشاء',
     ];
@@ -721,7 +721,7 @@ export default function CompanySettlementDetail() {
     setRecalculating(false);
     await fetchCompanyAndPolicies();
 
-    toast.success(`تم إعادة احتساب ${successCount} وثيقة${failCount > 0 ? ` (${failCount} فشل)` : ''}`);
+    toast.success(`تم إعادة احتساب ${successCount} معاملة${failCount > 0 ? ` (${failCount} فشل)` : ''}`);
   };
 
   const getFilterDescription = () => {
@@ -755,7 +755,7 @@ export default function CompanySettlementDetail() {
     <MainLayout>
       <Header
         title={`تفاصيل تسوية ${company?.name_ar || company?.name || 'الشركة'}`}
-        subtitle="عرض جميع الوثائق وتفاصيل الحسابات"
+        subtitle="عرض جميع المعاملات وتفاصيل الحسابات"
       />
 
       <div className="p-6 space-y-6 print:p-0">
@@ -933,7 +933,7 @@ export default function CompanySettlementDetail() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">عدد الوثائق</p>
+                  <p className="text-sm font-medium text-muted-foreground">عدد المعاملات</p>
                   <p className="text-2xl font-bold">{summary.totalPolicies.toLocaleString('en-US')}</p>
                 </div>
                 <div className="rounded-xl bg-primary/10 p-3 print:hidden">
@@ -990,7 +990,7 @@ export default function CompanySettlementDetail() {
         <Card>
           <CardHeader className="print:pb-2">
             <div className="flex items-center justify-between flex-wrap gap-3">
-              <CardTitle>الوثائق ({filteredPolicies.length})</CardTitle>
+              <CardTitle>المعاملات ({filteredPolicies.length})</CardTitle>
               <div className="flex items-center gap-2 flex-1 max-w-md print:hidden">
                 <Button size="sm" variant="outline" onClick={() => { setEditingSupplement(null); setShowSupplementForm(true); }}>
                   <Plus className="h-4 w-4 ml-1" />
@@ -1050,7 +1050,7 @@ export default function CompanySettlementDetail() {
                   ) : filteredPolicies.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={15} className="text-center py-8 text-muted-foreground">
-                        لا توجد وثائق للفترة المحددة
+                        لا توجد معاملات للفترة المحددة
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -1464,7 +1464,7 @@ export default function CompanySettlementDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>إعادة احتساب الأرباح</AlertDialogTitle>
             <AlertDialogDescription>
-              سيتم إعادة احتساب الأرباح لـ {filteredPolicies.filter(p => !p.cancelled && !p.transferred).length} وثيقة حسب قواعد التسعير الحالية.
+              سيتم إعادة احتساب الأرباح لـ {filteredPolicies.filter(p => !p.cancelled && !p.transferred).length} معاملة حسب قواعد التسعير الحالية.
               هل تريد المتابعة؟
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -252,14 +252,14 @@ async function fetchActivities(branchId: string | null, startDate: string, endDa
       if ((p.clients as any)?.deleted_at) continue;
       const clientName = (p.clients as any)?.full_name || "عميل";
       const fileNumber = (p.clients as any)?.file_number || "";
-      const policyLabel = POLICY_TYPE_LABELS[p.policy_type_parent] || p.policy_type_parent || "وثيقة";
+      const policyLabel = POLICY_TYPE_LABELS[p.policy_type_parent] || p.policy_type_parent || "معاملة";
       const companyName = (p.insurance_companies as any)?.name_ar || (p.insurance_companies as any)?.name || "";
       const carNumber = (p.cars as any)?.car_number || "";
 
       results.push({
         id: `policy-${p.id}`,
         type: "policy",
-        action: "وثيقة جديدة",
+        action: "معاملة جديدة",
         created_at: p.created_at,
         createdBy: (p.created_by_profile as any)?.full_name || undefined,
         details: {
@@ -630,7 +630,7 @@ export function RecentActivity() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">الكل</SelectItem>
-                <SelectItem value="policy">الوثائق</SelectItem>
+                <SelectItem value="policy">المعاملات</SelectItem>
                 <SelectItem value="payment">الدفعات</SelectItem>
                 <SelectItem value="client">العملاء</SelectItem>
                 <SelectItem value="car">السيارات</SelectItem>
@@ -809,7 +809,7 @@ function GroupedActivityCard({
       {/* Policies - changed → to + */}
       {hasPolicies && !compact && (
         <div className="bg-primary/5 rounded-lg p-2 space-y-1">
-          <span className="text-xs font-medium text-primary">الوثائق ({group.policies.length})</span>
+          <span className="text-xs font-medium text-primary">المعاملات ({group.policies.length})</span>
           {group.policies.map((policy) => (
             <div key={policy.id} className="flex flex-col gap-0.5">
               <div className="flex items-center justify-between text-xs">

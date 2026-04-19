@@ -471,7 +471,7 @@ export function ClientDrawer({ open, onOpenChange, client, onSaved }: ClientDraw
                     </Select>
                     {isEditing && (
                       <p className="text-xs text-muted-foreground">
-                        تغيير الفرع سينقل جميع وثائق وسيارات العميل للفرع الجديد
+                        تغيير الفرع سينقل جميع معاملات وسيارات العميل للفرع الجديد
                       </p>
                     )}
                     <FormMessage />

@@ -308,7 +308,7 @@ export function PolicyTableView({
       <Card className="text-center py-12">
         <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
         <p className="text-muted-foreground">
-          {searchQuery.trim() ? 'لا توجد نتائج للبحث' : 'لا توجد وثائق تأمين'}
+          {searchQuery.trim() ? 'لا توجد نتائج للبحث' : 'لا توجد معاملات تأمين'}
         </p>
       </Card>
     );

@@ -287,7 +287,7 @@ export default function XServiceSettings() {
       }
 
       const totalFixed = (fixed1Data?.length || 0) + (fixed2Data?.length || 0);
-      toast({ title: `✅ تم إصلاح ${totalFixed} وثيقة` });
+      toast({ title: `✅ تم إصلاح ${totalFixed} معاملة` });
       fetchEligibleCount();
     } catch (err: any) {
       toast({ title: "خطأ", description: err.message, variant: "destructive" });
@@ -366,7 +366,7 @@ export default function XServiceSettings() {
         <Card>
           <CardHeader>
             <CardTitle>إعدادات الاتصال</CardTitle>
-            <CardDescription>ربط الوكالة مع نظام X-Service لمزامنة الوثائق تلقائياً</CardDescription>
+            <CardDescription>ربط الوكالة مع نظام X-Service لمزامنة المعاملات تلقائياً</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -454,17 +454,17 @@ export default function XServiceSettings() {
               مزامنة جماعية
             </CardTitle>
             <CardDescription>
-              إرسال جميع وثائق خدمات الطريق وإعفاء الحوادث الموجودة إلى X-Service
+              إرسال جميع معاملات خدمات الطريق وإعفاء الحوادث الموجودة إلى X-Service
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <div className="text-sm text-muted-foreground space-y-1">
-              <p>عدد الوثائق المؤهلة للمزامنة: <strong>{eligibleCount !== null ? eligibleCount : "..."}</strong></p>
+              <p>عدد المعاملات المؤهلة للمزامنة: <strong>{eligibleCount !== null ? eligibleCount : "..."}</strong></p>
               {alreadySyncedCount > 0 && (
-                <p className="text-xs">✅ تمت مزامنة {alreadySyncedCount} وثيقة مسبقاً</p>
+                <p className="text-xs">✅ تمت مزامنة {alreadySyncedCount} معاملة مسبقاً</p>
               )}
               {missingServiceCount > 0 && (
-                <p className="text-xs text-orange-600">⚠️ {missingServiceCount} وثيقة بدون معرّف خدمة (لن تتم مزامنتها حتى يتم إصلاحها)</p>
+                <p className="text-xs text-orange-600">⚠️ {missingServiceCount} معاملة بدون معرّف خدمة (لن تتم مزامنتها حتى يتم إصلاحها)</p>
               )}
             </div>
             {missingServiceCount > 0 && (
@@ -475,7 +475,7 @@ export default function XServiceSettings() {
                 className="border-orange-300 text-orange-700 hover:bg-orange-50"
               >
                 {fixingLegacy ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <RefreshCw className="h-4 w-4 ml-2" />}
-                إصلاح الوثائق القديمة ({missingServiceCount})
+                إصلاح المعاملات القديمة ({missingServiceCount})
               </Button>
             )}
             {bulkSyncing && (
@@ -560,7 +560,7 @@ export default function XServiceSettings() {
           onConfirm={handleClearData}
           loading={clearing}
           title="مسح بيانات X-Service"
-          description="سيتم حذف جميع الوثائق والسيارات والعملاء المرتبطين بهذا الوكيل في X-Service، وسيتم مسح سجل المزامنة المحلي بالكامل حتى يمكن إعادة المزامنة من الصفر. هل أنت متأكد؟"
+          description="سيتم حذف جميع المعاملات والسيارات والعملاء المرتبطين بهذا الوكيل في X-Service، وسيتم مسح سجل المزامنة المحلي بالكامل حتى يمكن إعادة المزامنة من الصفر. هل أنت متأكد؟"
         />
       </div>
     </MainLayout>

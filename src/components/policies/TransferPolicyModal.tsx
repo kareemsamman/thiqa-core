@@ -200,7 +200,7 @@ export function TransferPolicyModal({
         .single();
 
       // Use a generic transfer template
-      let template = `مرحباً ${clientName}، تم تحويل وثيقة التأمين رقم ${policyNumber || "غير محدد"} إلى مركبة جديدة. للاستفسار يرجى التواصل معنا.`;
+      let template = `مرحباً ${clientName}، تم تحويل معاملة التأمين رقم ${policyNumber || "غير محدد"} إلى مركبة جديدة. للاستفسار يرجى التواصل معنا.`;
       setSmsMessage(template);
     } catch (error) {
       console.error("Error loading SMS template:", error);
@@ -292,7 +292,7 @@ export function TransferPolicyModal({
 
       if (fetchError) throw fetchError;
       if (!originalPolicies || originalPolicies.length === 0) {
-        throw new Error("لم يتم العثور على الوثائق");
+        throw new Error("لم يتم العثور على المعاملات");
       }
 
       // Generate new group_id if transferring package
@@ -442,7 +442,7 @@ export function TransferPolicyModal({
             policy_id: newPolicyIds[0],
             transaction_type: "transfer_refund_owed",
             amount: parseFloat(adjustmentAmount),
-            description: `مرتجع تحويل وثيقة ${policyNumber || ""} - مستحق للعميل`,
+            description: `مرتجع تحويل معاملة ${policyNumber || ""} - مستحق للعميل`,
             notes: adjustmentNote || null,
             created_by_admin_id: user?.id,
             branch_id: branchId,
@@ -470,7 +470,7 @@ export function TransferPolicyModal({
             const smsMsg = await extractFunctionErrorMessage(smsError);
             toast({
               title: "تحذير",
-              description: smsMsg || "تم تحويل الوثيقة لكن فشل إرسال الرسالة"
+              description: smsMsg || "تم تحويل المعاملة لكن فشل إرسال الرسالة"
             });
           } else {
             toast({ title: "تم", description: "تم إرسال رسالة التحويل للعميل" });
@@ -488,8 +488,8 @@ export function TransferPolicyModal({
       toast({ 
         title: "تم التحويل بنجاح", 
         description: transferCount > 1 
-          ? `تم تحويل ${transferCount} وثائق - الوثائق القديمة انتهت بتاريخ التحويل ووثائق جديدة تم إنشاؤها للسيارة الجديدة`
-          : "تم تحويل الوثيقة - الوثيقة القديمة انتهت بتاريخ التحويل ووثيقة جديدة تم إنشاؤها للسيارة الجديدة"
+          ? `تم تحويل ${transferCount} معاملات - المعاملات القديمة انتهت بتاريخ التحويل ومعاملات جديدة تم إنشاؤها للسيارة الجديدة`
+          : "تم تحويل المعاملة - المعاملة القديمة انتهت بتاريخ التحويل ومعاملة جديدة تم إنشاؤها للسيارة الجديدة"
       });
       onTransferred();
       onOpenChange(false);
@@ -500,7 +500,7 @@ export function TransferPolicyModal({
       console.error("Error transferring policy:", error);
       toast({ 
         title: "خطأ", 
-        description: error.message || "فشل في تحويل الوثيقة", 
+        description: error.message || "فشل في تحويل المعاملة",
         variant: "destructive" 
       });
     } finally {
@@ -536,7 +536,7 @@ export function TransferPolicyModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-primary">
             <ArrowLeftRight className="h-5 w-5" />
-            تحويل الوثيقة
+            تحويل المعاملة
           </DialogTitle>
         </DialogHeader>
 
@@ -556,12 +556,12 @@ export function TransferPolicyModal({
               <div className="flex items-center gap-2">
                 <Package className="h-5 w-5 text-primary" />
                 <Label className="font-semibold text-primary">
-                  هذه الوثيقة جزء من حزمة
+                  هذه المعاملة جزء من حزمة
                 </Label>
               </div>
               
               <div className="text-sm text-muted-foreground">
-                تم العثور على {relatedPolicies.length} وثائق إضافية مرتبطة:
+                تم العثور على {relatedPolicies.length} معاملات إضافية مرتبطة:
               </div>
               
               <div className="space-y-2">
@@ -607,7 +607,7 @@ export function TransferPolicyModal({
           {loadingRelated && (
             <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              جاري البحث عن وثائق مرتبطة...
+              جاري البحث عن معاملات مرتبطة...
             </div>
           )}
 
@@ -815,7 +815,7 @@ export function TransferPolicyModal({
           {/* Warning */}
           <div className="flex items-center gap-2 p-3 bg-amber-500/10 text-amber-700 rounded-lg text-sm">
             <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>سيتم تحديث السيارة في الوثيقة وتسجيل التحويل</span>
+            <span>سيتم تحديث السيارة في المعاملة وتسجيل التحويل</span>
           </div>
         </div>
 

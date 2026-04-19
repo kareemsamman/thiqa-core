@@ -1023,7 +1023,7 @@ export function DebtPaymentModal({
             {/* Debt Items List */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">الوثائق</Label>
+                <Label className="text-base font-semibold">المعاملات</Label>
                 <Badge variant="secondary" className="text-xs">
                   {filteredItems.length} عناصر
                 </Badge>

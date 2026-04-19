@@ -216,7 +216,7 @@ export function PolicyCardsView({
     return (
       <Card className="text-center py-12">
         <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
-        <p className="text-muted-foreground">لا توجد وثائق تأمين</p>
+        <p className="text-muted-foreground">لا توجد معاملات تأمين</p>
       </Card>
     );
   }

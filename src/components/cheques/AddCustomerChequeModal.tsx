@@ -201,7 +201,7 @@ export function AddCustomerChequeModal({
 
       if (policiesError) throw policiesError;
       if (!policiesData || policiesData.length === 0) {
-        toast.error('لا يوجد وثائق نشطة لهذا العميل');
+        toast.error('لا يوجد معاملات نشطة لهذا العميل');
         setSaving(false);
         return;
       }
@@ -271,7 +271,7 @@ export function AddCustomerChequeModal({
       if (payablePolicies.length === 0) {
         const fallback = policiesData.find(p => p.policy_type_parent !== 'ELZAMI');
         if (!fallback) {
-          toast.error('لا يوجد وثائق غير إلزامي لهذا العميل');
+          toast.error('لا يوجد معاملات غير إلزامي لهذا العميل');
           setSaving(false);
           return;
         }
@@ -337,7 +337,7 @@ export function AddCustomerChequeModal({
       }
 
       if (allInserts.length === 0) {
-        toast.error('لا يمكن توزيع الشيكات على الوثائق');
+        toast.error('لا يمكن توزيع الشيكات على المعاملات');
         setSaving(false);
         return;
       }
@@ -583,7 +583,7 @@ export function AddCustomerChequeModal({
                   <span className="text-xl font-bold ltr-nums">{formatCurrency(totalAmount)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  سيتم توزيع المبلغ على وثائق العميل غير المدفوعة وخصمه من رصيده
+                  سيتم توزيع المبلغ على معاملات العميل غير المدفوعة وخصمه من رصيده
                 </p>
               </Card>
             )}
@@ -593,7 +593,7 @@ export function AddCustomerChequeModal({
               <Card className="p-3 border-amber-500/50 bg-amber-500/10">
                 <div className="flex items-center gap-2 text-amber-600">
                   <AlertTriangle className="h-4 w-4" />
-                  <span className="text-sm">تبقى {formatCurrency(excessWarning)} بدون توزيع (تجاوز إجمالي الوثائق)</span>
+                  <span className="text-sm">تبقى {formatCurrency(excessWarning)} بدون توزيع (تجاوز إجمالي المعاملات)</span>
                 </div>
               </Card>
             )}

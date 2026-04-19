@@ -464,7 +464,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     if (isLightMode) {
       return [
         { id: 1, key: "branch_type_client", title: "النوع والعميل", icon: Building2, isUnlocked: true, isValid: step1Valid && !!selectedCategory },
-        { id: 2, key: "policy", title: "الوثيقة", icon: FileText, isUnlocked: step1Valid && !!selectedCategory, isValid: step3Valid },
+        { id: 2, key: "policy", title: "المعاملة", icon: FileText, isUnlocked: step1Valid && !!selectedCategory, isValid: step3Valid },
         { id: 3, key: "payments", title: "الدفعات", icon: CreditCard, isUnlocked: step1Valid && step3Valid, isValid: step4Valid },
       ];
     }
@@ -472,7 +472,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     return [
       { id: 1, key: "branch_type_client", title: "النوع والعميل", icon: Building2, isUnlocked: true, isValid: step1Valid && !!selectedCategory },
       { id: 2, key: "car", title: "السيارة", icon: Car, isUnlocked: step1Valid && !!selectedCategory, isValid: step2Valid },
-      { id: 3, key: "policy", title: "الوثيقة", icon: FileText, isUnlocked: step1Valid && step2Valid, isValid: step3Valid },
+      { id: 3, key: "policy", title: "المعاملة", icon: FileText, isUnlocked: step1Valid && step2Valid, isValid: step3Valid },
       { id: 4, key: "payments", title: "الدفعات", icon: CreditCard, isUnlocked: step1Valid && step2Valid && step3Valid, isValid: step4Valid },
     ];
   }, [
@@ -693,7 +693,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
       case "branch_type_client":
         if (isAdmin) {
           if (branches.length === 0) {
-            newErrors.branch = "يجب إضافة فرع قبل إنشاء وثيقة";
+            newErrors.branch = "يجب إضافة فرع قبل إنشاء معاملة";
           } else if (!selectedBranchId) {
             newErrors.branch = "الرجاء اختيار الفرع";
           }

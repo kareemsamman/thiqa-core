@@ -501,7 +501,7 @@ export function PolicyTreeView({
     return (
       <Card className="text-center py-12">
         <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
-        <p className="text-muted-foreground">لا توجد وثائق تأمين</p>
+        <p className="text-muted-foreground">لا توجد معاملات تأمين</p>
       </Card>
     );
   }
@@ -742,7 +742,7 @@ function UnifiedPolicyCard({
               >
                 <div className="w-5" />
                 <FileText className="h-4 w-4 text-primary shrink-0" />
-                <Badge variant="outline" className="text-xs bg-primary/5">الوثيقة الأساسية</Badge>
+                <Badge variant="outline" className="text-xs bg-primary/5">المعاملة الأساسية</Badge>
                 <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">
                   <div>
                     <Badge className={cn("border text-xs", policyTypeColors[policy.policy_type_parent])}>
@@ -1042,7 +1042,7 @@ function PolicyCardHeader({
                       onTransfer(policy.id);
                     }}>
                       <ArrowRightLeft className="h-4 w-4 ml-2" />
-                      تحويل الوثيقة
+                      تحويل المعاملة
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
@@ -1067,7 +1067,7 @@ function PolicyCardHeader({
                       }}
                     >
                       <XCircle className="h-4 w-4 ml-2" />
-                      إلغاء الوثيقة
+                      إلغاء المعاملة
                     </DropdownMenuItem>
                   )}
                 </>
@@ -1089,7 +1089,7 @@ function PolicyCardHeader({
         <div className="flex items-center gap-2">
           <Hash className="h-4 w-4 text-muted-foreground shrink-0" />
           <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">رقم الوثيقة</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">رقم المعاملة</p>
             <p className="font-mono font-medium ltr-nums">{policy.policy_number || '-'}</p>
           </div>
         </div>

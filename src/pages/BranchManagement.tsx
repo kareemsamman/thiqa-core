@@ -243,7 +243,7 @@ export default function BranchManagement() {
                       <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
                         <span className="flex items-center gap-1"><Users className="h-3 w-3" />{branch.user_count || 0} مستخدم</span>
                         <span>{branch.client_count || 0} عميل</span>
-                        <span>{branch.policy_count || 0} وثيقة</span>
+                        <span>{branch.policy_count || 0} معاملة</span>
                       </div>
                     </div>
                   </div>

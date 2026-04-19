@@ -162,7 +162,7 @@ export function ClientsTable() {
                 <TableHead className="text-muted-foreground font-medium">رقم الهوية</TableHead>
                 <TableHead className="text-muted-foreground font-medium">رقم الملف</TableHead>
                 <TableHead className="text-muted-foreground font-medium">الهاتف</TableHead>
-                <TableHead className="text-muted-foreground font-medium text-center">الوثائق</TableHead>
+                <TableHead className="text-muted-foreground font-medium text-center">المعاملات</TableHead>
                 <TableHead className="text-muted-foreground font-medium">المستحق</TableHead>
                 <TableHead className="text-muted-foreground font-medium">المدفوع</TableHead>
                 <TableHead className="text-muted-foreground font-medium">الحالة</TableHead>

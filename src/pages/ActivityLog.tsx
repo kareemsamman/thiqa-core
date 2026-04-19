@@ -76,7 +76,7 @@ const PAYMENT_TYPE_COLORS: Record<string, string> = {
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  policy: "وثيقة",
+  policy: "معاملة",
   payment: "دفعة",
   client: "عميل",
   car: "سيارة",
@@ -177,7 +177,7 @@ export default function ActivityLog() {
           if ((p.clients as any)?.deleted_at) continue;
           const clientName = (p.clients as any)?.full_name || "عميل";
           const fileNumber = (p.clients as any)?.file_number || "";
-          const policyLabel = POLICY_TYPE_LABELS[p.policy_type_parent] || p.policy_type_parent || "وثيقة";
+          const policyLabel = POLICY_TYPE_LABELS[p.policy_type_parent] || p.policy_type_parent || "معاملة";
           const companyName = (p.insurance_companies as any)?.name_ar || (p.insurance_companies as any)?.name || "";
           const carNumber = (p.cars as any)?.car_number || "";
 
@@ -185,7 +185,7 @@ export default function ActivityLog() {
           results.push({
             id: `policy-${p.id}`,
             type: "policy",
-            action: "وثيقة جديدة",
+            action: "معاملة جديدة",
             created_at: p.created_at,
             createdBy: (p.created_by_profile as any)?.full_name || undefined,
             details: {
@@ -206,7 +206,7 @@ export default function ActivityLog() {
             results.push({
               id: `cancel-${p.id}`,
               type: "cancel",
-              action: "وثيقة ملغاة",
+              action: "معاملة ملغاة",
               created_at: (p.cancellation_date as any) || p.created_at,
               details: {
                 policy_type: policyLabel,
@@ -247,12 +247,12 @@ export default function ActivityLog() {
           if (t.policy?.clients?.deleted_at) continue;
           const clientName = t.policy?.clients?.full_name || "عميل";
           const fileNumber = t.policy?.clients?.file_number || "";
-          const policyLabel = POLICY_TYPE_LABELS[t.policy?.policy_type_parent] || t.policy?.policy_type_parent || "وثيقة";
+          const policyLabel = POLICY_TYPE_LABELS[t.policy?.policy_type_parent] || t.policy?.policy_type_parent || "معاملة";
           const companyName = t.policy?.insurance_companies?.name_ar || t.policy?.insurance_companies?.name || "";
           results.push({
             id: `transfer-${t.id}`,
             type: "transfer",
-            action: "تحويل وثيقة",
+            action: "تحويل معاملة",
             created_at: t.transfer_date || t.created_at,
             createdBy: t.created_by_profile?.full_name || undefined,
             details: {
@@ -397,7 +397,7 @@ export default function ActivityLog() {
           results.push({
             id: `delete-${n.id}`,
             type: "delete",
-            action: n.title || "حذف وثيقة",
+            action: n.title || "حذف معاملة",
             created_at: n.created_at,
             createdBy: meta.deleted_by || undefined,
             details: {
@@ -532,7 +532,7 @@ export default function ActivityLog() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="policy">الوثائق</SelectItem>
+                  <SelectItem value="policy">المعاملات</SelectItem>
                   <SelectItem value="cancel">الإلغاءات</SelectItem>
                   <SelectItem value="transfer">التحويلات</SelectItem>
                   <SelectItem value="payment">الدفعات</SelectItem>

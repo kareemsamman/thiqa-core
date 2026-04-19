@@ -346,7 +346,7 @@ export default function DatabaseMigration() {
                 <div className="flex items-center gap-2">
                   <Database className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <div className="text-xs text-muted-foreground">عدد الوثائق</div>
+                    <div className="text-xs text-muted-foreground">عدد المعاملات</div>
                     <div className="font-bold text-lg">{connectionStatus.policiesCount.toLocaleString()}</div>
                   </div>
                 </div>

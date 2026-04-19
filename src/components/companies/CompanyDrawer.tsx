@@ -196,7 +196,7 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
       if (count && count > 0) {
         toast({
           title: 'لا يمكن الحذف',
-          description: `لا يمكن حذف الشركة لأن هناك ${count} وثيقة تأمين مرتبطة بها. يرجى حذف الوثائق أولاً أو نقلها لشركة أخرى.`,
+          description: `لا يمكن حذف الشركة لأن هناك ${count} معاملة تأمين مرتبطة بها. يرجى حذف المعاملات أولاً أو نقلها لشركة أخرى.`,
           variant: 'destructive',
         });
         setDeleteDialogOpen(false);
@@ -322,7 +322,7 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
                   className="ltr-input"
                 />
                 <p className="text-xs text-muted-foreground">
-                  هذا المبلغ يُدفع للشركة عند كل وثيقة إلزامي. الربح = سعر التأمين - هذا المبلغ
+                  هذا المبلغ يُدفع للشركة عند كل معاملة إلزامي. الربح = سعر التأمين - هذا المبلغ
                 </p>
               </div>
             )}
@@ -346,7 +346,7 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                إذا كانت الشركة مرتبطة بوسيط، سيتم اختيار الوسيط تلقائياً عند إنشاء وثيقة
+                إذا كانت الشركة مرتبطة بوسيط، سيتم اختيار الوسيط تلقائياً عند إنشاء معاملة
               </p>
             </div>
 

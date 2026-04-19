@@ -109,7 +109,7 @@ export const navigationGroups: NavGroup[] = [
       { name: "المهام", href: "/tasks", icon: ListChecks, badge: 'tasks' },
       { name: "سجل النشاط", href: "/activity", icon: Pulse },
       { name: "التنبيهات", href: "/notifications", icon: Bell, badge: 'notifications' },
-      { name: "تقارير الوثائق والتجديدات", href: "/reports/policies", icon: ChartBar, badge: 'renewals' },
+      { name: "تقارير المعاملات والتجديدات", href: "/reports/policies", icon: ChartBar, badge: 'renewals' },
     ],
   },
   {

@@ -283,7 +283,7 @@ export function PolicyFilters({ onFiltersChange, filters }: PolicyFiltersProps) 
 
           {/* Policy Type */}
           <div className="space-y-1.5">
-            <Label className="text-right block text-sm">نوع الوثيقة</Label>
+            <Label className="text-right block text-sm">نوع المعاملة</Label>
             <Select value={localFilters.policyType} onValueChange={v => setLocalFilters(f => ({ ...f, policyType: v }))}>
               <SelectTrigger className="h-9 text-right">
                 <SelectValue placeholder="الكل" />

@@ -1048,7 +1048,7 @@ function AiAssistantSettingsTab() {
           <Textarea
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
-            placeholder="مثال: عند سؤال العميل عن وثيقة، اعرض تاريخ الانتهاء دائمًا. لا تعرض أرقام الهواتف. كن مختصرًا جدًا..."
+            placeholder="مثال: عند سؤال العميل عن معاملة، اعرض تاريخ الانتهاء دائمًا. لا تعرض أرقام الهواتف. كن مختصرًا جدًا..."
             className="min-h-[200px] mt-2 text-right"
             dir="rtl"
           />

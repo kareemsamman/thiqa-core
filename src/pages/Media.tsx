@@ -76,7 +76,7 @@ const getEntityLabel = (type: string | null) => {
   const labels: Record<string, string> = {
     client: 'عميل',
     car: 'سيارة',
-    policy: 'وثيقة',
+    policy: 'معاملة',
     cheque: 'شيك',
   };
   return type ? labels[type] || type : '-';
@@ -397,7 +397,7 @@ export default function Media() {
               <SelectItem value="all">الكل</SelectItem>
               <SelectItem value="client">عميل</SelectItem>
               <SelectItem value="car">سيارة</SelectItem>
-              <SelectItem value="policy">وثيقة</SelectItem>
+              <SelectItem value="policy">معاملة</SelectItem>
               <SelectItem value="cheque">شيك</SelectItem>
             </SelectContent>
           </Select>

@@ -620,7 +620,7 @@ export default function BrokerWallet() {
                 <FileText className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">عدد الوثائق</p>
+                <p className="text-xs text-muted-foreground">عدد المعاملات</p>
                 <p className="text-lg font-bold text-blue-600">{policyCount}</p>
               </div>
             </div>

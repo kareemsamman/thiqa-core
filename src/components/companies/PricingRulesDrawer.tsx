@@ -304,7 +304,7 @@ export function PricingRulesDrawer({ open, onClose, company }: PricingRulesDrawe
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-right">نوع الوثيقة</TableHead>
+                    <TableHead className="text-right">نوع المعاملة</TableHead>
                     <TableHead className="text-right">نوع القاعدة</TableHead>
                     <TableHead className="text-right">نوع السيارة</TableHead>
                     <TableHead className="text-right">الفئة العمرية</TableHead>
@@ -394,13 +394,13 @@ export function PricingRulesDrawer({ open, onClose, company }: PricingRulesDrawe
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>نوع الوثيقة *</Label>
+              <Label>نوع المعاملة *</Label>
               <Select
                 value={formData.policy_type_parent}
                 onValueChange={(v) => setFormData({ ...formData, policy_type_parent: v as Enums<'policy_type_parent'> })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="اختر نوع الوثيقة" />
+                  <SelectValue placeholder="اختر نوع المعاملة" />
                 </SelectTrigger>
                 <SelectContent align="end">
                   {Object.entries(POLICY_TYPE_LABELS).map(([value, label]) => (

@@ -135,7 +135,7 @@ export function BottomToolbar() {
             size="sm"
           >
             <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">وثيقة جديدة</span>
+            <span className="hidden sm:inline">معاملة جديدة</span>
             <FileText className="h-4 w-4 sm:hidden" />
           </Button>
 

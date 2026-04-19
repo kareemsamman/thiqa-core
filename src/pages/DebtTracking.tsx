@@ -507,7 +507,7 @@ export default function DebtTracking() {
 
 عليك تسديد المبلغ: ${client.total_remaining.toLocaleString('en-US')} شيكل
 
-الوثائق:
+المعاملات:
 ${policyDetails}
 
 يرجى التواصل معنا للتسوية.`;
@@ -723,7 +723,7 @@ ${policyDetails}
                           clientName={client.client_name}
                           branchId={profile?.branch_id}
                         />
-                        <Badge variant="outline">{client.policies_count} وثيقة</Badge>
+                        <Badge variant="outline">{client.policies_count} معاملة</Badge>
                         <div className="text-left min-w-[100px]">
                           <p className="font-bold text-lg text-destructive">
                             {formatCurrency(client.total_remaining)}
@@ -783,8 +783,8 @@ ${policyDetails}
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead className="text-right">نوع الوثيقة</TableHead>
-                                <TableHead className="text-right">رقم الوثيقة</TableHead>
+                                <TableHead className="text-right">نوع المعاملة</TableHead>
+                                <TableHead className="text-right">رقم المعاملة</TableHead>
                                 <TableHead className="text-right">رقم السيارة</TableHead>
                                 <TableHead className="text-right">السعر</TableHead>
                                 <TableHead className="text-right">المدفوع</TableHead>

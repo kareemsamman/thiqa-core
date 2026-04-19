@@ -1000,7 +1000,7 @@ export default function Cheques() {
                 }}
               >
                 <ExternalLink className="h-4 w-4 ml-2" />
-                عرض الوثيقة
+                عرض المعاملة
               </DropdownMenuItem>
               {cheque.cheque_status !== 'cashed' &&
                 cheque.cheque_status !== 'returned' &&

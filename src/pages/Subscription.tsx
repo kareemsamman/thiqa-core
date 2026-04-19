@@ -1255,7 +1255,7 @@ export default function Subscription() {
           onOpenChange={setDeleteDialog}
           onConfirm={handleDeleteAccount}
           title="حذف الحساب بالكامل"
-          description="سيتم حذف حسابك وجميع البيانات المرتبطة به (عملاء، وثائق، مدفوعات، ملفات) بشكل نهائي ولا يمكن التراجع. هل أنت متأكد؟"
+          description="سيتم حذف حسابك وجميع البيانات المرتبطة به (عملاء، معاملات، مدفوعات، ملفات) بشكل نهائي ولا يمكن التراجع. هل أنت متأكد؟"
           loading={deletingAccount}
         />
       </div>

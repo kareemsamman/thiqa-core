@@ -227,7 +227,7 @@ const { data, error } = await supabase
       {invoices.length === 0 ? (
         <Card className="p-6 text-center">
           <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-          <p className="text-muted-foreground mb-3">لا توجد فواتير لهذه الوثيقة</p>
+          <p className="text-muted-foreground mb-3">لا توجد فواتير لهذه المعاملة</p>
           <Button size="sm" onClick={() => setShowGenerateDialog(true)}>
             <Plus className="h-4 w-4 ml-1" />
             إنشاء فاتورة

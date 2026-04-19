@@ -286,7 +286,7 @@ export default function CompanySettlement() {
   };
 
   const exportToCSV = () => {
-    const headers = ['الشركة', 'عدد الوثائق', 'إجمالي المحصل', 'المستحق للشركة'];
+    const headers = ['الشركة', 'عدد المعاملات', 'إجمالي المحصل', 'المستحق للشركة'];
     const rows = data.map(item => [
       item.company_name_ar || item.company_name,
       item.policy_count,
@@ -409,7 +409,7 @@ export default function CompanySettlement() {
           <TabsList>
             <TabsTrigger value="with-company" className="gap-2">
               <Building2 className="h-4 w-4" />
-              الوثائق مع شركات ({summary.totalPolicies.toLocaleString('en-US')})
+              المعاملات مع شركات ({summary.totalPolicies.toLocaleString('en-US')})
             </TabsTrigger>
             <TabsTrigger value="no-company" className="gap-2">
               <AlertTriangle className="h-4 w-4" />
@@ -485,7 +485,7 @@ export default function CompanySettlement() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>نوع الوثيقة</Label>
+                    <Label>نوع المعاملة</Label>
                     <MultiSelectFilter
                       options={Object.entries(POLICY_TYPE_LABELS).map(([value, label]) => ({
                         value,
@@ -571,7 +571,7 @@ export default function CompanySettlement() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">عدد الوثائق</p>
+                      <p className="text-sm font-medium text-muted-foreground">عدد المعاملات</p>
                       <p className="text-2xl font-bold">{summary.totalPolicies.toLocaleString('en-US')}</p>
                     </div>
                     <div className="rounded-xl bg-primary/10 p-3">
@@ -639,7 +639,7 @@ export default function CompanySettlement() {
                     <TableHeader>
                         <TableRow>
                           <TableHead className="text-right">الشركة</TableHead>
-                          <TableHead className="text-right">عدد الوثائق</TableHead>
+                          <TableHead className="text-right">عدد المعاملات</TableHead>
                           <TableHead className="text-right">إجمالي المحصل</TableHead>
                           <TableHead className="text-right">المستحق للشركة</TableHead>
                         </TableRow>
@@ -708,9 +708,9 @@ export default function CompanySettlement() {
             <div className="flex items-center gap-3 p-4 rounded-lg bg-warning/10 border border-warning/30">
               <AlertTriangle className="h-5 w-5 text-warning" />
               <div>
-                <p className="font-medium">وثائق بدون شركة تأمين</p>
+                <p className="font-medium">معاملات بدون شركة تأمين</p>
                 <p className="text-sm text-muted-foreground">
-                  هذه الوثائق لم يتم تحديد شركة التأمين لها. يجب تحديث كل وثيقة وإضافة الشركة المناسبة.
+                  هذه المعاملات لم يتم تحديد شركة التأمين لها. يجب تحديث كل معاملة وإضافة الشركة المناسبة.
                 </p>
               </div>
             </div>
@@ -720,7 +720,7 @@ export default function CompanySettlement() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5 text-warning" />
-                  وثائق بدون شركة ({policiesWithoutCompany.length})
+                  معاملات بدون شركة ({policiesWithoutCompany.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -749,7 +749,7 @@ export default function CompanySettlement() {
                       ) : policiesWithoutCompany.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                            لا توجد وثائق بدون شركة 🎉
+                            لا توجد معاملات بدون شركة 🎉
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -810,7 +810,7 @@ export default function CompanySettlement() {
           {/* Summary for print */}
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div className="border p-4 text-center">
-              <p className="text-sm text-muted-foreground">عدد الوثائق</p>
+              <p className="text-sm text-muted-foreground">عدد المعاملات</p>
               <p className="text-xl font-bold">{summary.totalPolicies.toLocaleString('en-US')}</p>
             </div>
             <div className="border p-4 text-center">
@@ -828,7 +828,7 @@ export default function CompanySettlement() {
             <thead>
               <tr>
                 <th className="border p-2 text-right bg-muted">الشركة</th>
-                <th className="border p-2 text-right bg-muted">عدد الوثائق</th>
+                <th className="border p-2 text-right bg-muted">عدد المعاملات</th>
                 <th className="border p-2 text-right bg-muted">إجمالي المحصل</th>
                 <th className="border p-2 text-right bg-muted">المستحق للشركة</th>
               </tr>

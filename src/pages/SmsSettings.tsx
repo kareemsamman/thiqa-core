@@ -493,7 +493,7 @@ export default function SmsSettings() {
                     <div className="space-y-0.5">
                       <Label className="font-medium">تفعيل التذكيرات التلقائية</Label>
                       <p className="text-sm text-muted-foreground">
-                        إرسال تذكيرات تلقائية قبل انتهاء الوثيقة (شهر وأسبوع)
+                        إرسال تذكيرات تلقائية قبل انتهاء المعاملة (شهر وأسبوع)
                       </p>
                     </div>
                     <Switch
@@ -522,14 +522,14 @@ export default function SmsSettings() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="invoice_sms_template">نص رسالة الوثائق والفواتير</Label>
+                    <Label htmlFor="invoice_sms_template">نص رسالة المعاملات والفواتير</Label>
                     <Textarea
                       id="invoice_sms_template"
                       value={settings.invoice_sms_template || ""}
                       onChange={(e) =>
                         setSettings((prev) => ({ ...prev, invoice_sms_template: e.target.value }))
                       }
-                      placeholder="مرحباً {{client_name}}، وثيقة التأمين جاهزة. البوليصة: {{policy_url}} فاتورة AB: {{ab_invoice_url}}"
+                      placeholder="مرحباً {{client_name}}، معاملة التأمين جاهزة. البوليصة: {{policy_url}} فاتورة AB: {{ab_invoice_url}}"
                       className="min-h-[100px]"
                     />
                     <p className="text-xs text-muted-foreground">
@@ -545,7 +545,7 @@ export default function SmsSettings() {
                       onChange={(e) =>
                         setSettings((prev) => ({ ...prev, reminder_1month_template: e.target.value }))
                       }
-                      placeholder="مرحباً {{client_name}}، تنتهي وثيقة التأمين رقم {{policy_number}} خلال شهر. المبلغ المتبقي: {{remaining_amount}} شيكل."
+                      placeholder="مرحباً {{client_name}}، تنتهي معاملة التأمين رقم {{policy_number}} خلال شهر. المبلغ المتبقي: {{remaining_amount}} شيكل."
                       className="min-h-[100px]"
                     />
                     <p className="text-xs text-muted-foreground">
@@ -561,7 +561,7 @@ export default function SmsSettings() {
                       onChange={(e) =>
                         setSettings((prev) => ({ ...prev, reminder_1week_template: e.target.value }))
                       }
-                      placeholder="مرحباً {{client_name}}، تنتهي وثيقة التأمين رقم {{policy_number}} خلال أسبوع. المبلغ المتبقي: {{remaining_amount}} شيكل."
+                      placeholder="مرحباً {{client_name}}، تنتهي معاملة التأمين رقم {{policy_number}} خلال أسبوع. المبلغ المتبقي: {{remaining_amount}} شيكل."
                       className="min-h-[100px]"
                     />
                     <p className="text-xs text-muted-foreground">
@@ -577,7 +577,7 @@ export default function SmsSettings() {
                       onChange={(e) =>
                         setSettings((prev) => ({ ...prev, payment_request_template: e.target.value }))
                       }
-                      placeholder="مرحباً {{client_name}}، لديك مبلغ متبقي {{remaining_amount}} شيكل على وثيقة التأمين رقم {{policy_number}}."
+                      placeholder="مرحباً {{client_name}}، لديك مبلغ متبقي {{remaining_amount}} شيكل على معاملة التأمين رقم {{policy_number}}."
                       className="min-h-[100px]"
                     />
                     <p className="text-xs text-muted-foreground">

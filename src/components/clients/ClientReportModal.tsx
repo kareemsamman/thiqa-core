@@ -1162,7 +1162,7 @@ export function ClientReportModal({
               <div className="rounded-lg border border-border/60 overflow-hidden bg-muted/20">
                 <div className="grid grid-cols-[2rem_1fr_auto_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
                   <span className="text-center">#</span>
-                  <span>الوثيقة</span>
+                  <span>المعاملة</span>
                   <span className="ltr-nums">الفترة</span>
                   <span className="text-left min-w-[70px]">السعر</span>
                 </div>
@@ -1372,7 +1372,7 @@ export function ClientReportModal({
 
             {/* Stats row */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-5">
-              <HeaderStat label="وثائق سارية" value={`${activePoliciesCount}/${policies.length}`} />
+              <HeaderStat label="معاملات سارية" value={`${activePoliciesCount}/${policies.length}`} />
               <HeaderStat label="السيارات" value={cars.length} />
               <HeaderStat label="الدفعات" value={paymentGroups.length} />
               <HeaderStat label="بلاغات حوادث" value={accidents.length} />
@@ -1389,7 +1389,7 @@ export function ClientReportModal({
               {[
                 { id: 'sec-info', label: 'معلومات العميل', icon: User },
                 { id: 'sec-money', label: 'الملخص المالي', icon: Wallet },
-                { id: 'sec-policies', label: 'السيارات والوثائق', icon: Car },
+                { id: 'sec-policies', label: 'السيارات والمعاملات', icon: Car },
                 { id: 'sec-payments', label: 'سجل الدفعات', icon: CreditCard },
                 { id: 'sec-accidents', label: 'بلاغات الحوادث', icon: ShieldAlert },
                 { id: 'sec-refunds', label: 'المرتجعات', icon: Banknote },
@@ -1469,7 +1469,7 @@ export function ClientReportModal({
           </Section>
 
           {/* Policies by car */}
-          <Section id="sec-policies" icon={Car} title="السيارات والوثائق" count={policies.length}>
+          <Section id="sec-policies" icon={Car} title="السيارات والمعاملات" count={policies.length}>
             <div className="space-y-4">
               {cars.map(car => {
                 const items = itemsByCar.byCar[car.id] || [];
@@ -1507,7 +1507,7 @@ export function ClientReportModal({
                     </div>
                     <div className="p-3 sm:p-4 space-y-3">
                       {items.length === 0 ? (
-                        <p className="text-center text-sm text-muted-foreground py-2">لا توجد وثائق</p>
+                        <p className="text-center text-sm text-muted-foreground py-2">لا توجد معاملات</p>
                       ) : (
                         items.map(renderPolicyCard)
                       )}
@@ -1519,14 +1519,14 @@ export function ClientReportModal({
               {itemsByCar.noCar.length > 0 && (
                 <div className="rounded-xl border overflow-hidden">
                   <div className="bg-muted/40 p-3 sm:p-4">
-                    <p className="font-semibold text-base">وثائق أخرى (بدون سيارة)</p>
+                    <p className="font-semibold text-base">معاملات أخرى (بدون سيارة)</p>
                   </div>
                   <div className="p-3 sm:p-4 space-y-3">{itemsByCar.noCar.map(renderPolicyCard)}</div>
                 </div>
               )}
 
               {policies.length === 0 && (
-                <p className="text-center text-sm text-muted-foreground py-8">لا توجد وثائق لهذا العميل</p>
+                <p className="text-center text-sm text-muted-foreground py-8">لا توجد معاملات لهذا العميل</p>
               )}
             </div>
           </Section>

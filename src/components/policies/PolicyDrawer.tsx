@@ -197,12 +197,12 @@ export function PolicyDrawer({ open, onOpenChange, onSaved }: PolicyDrawerProps)
 
       if (error) throw error;
 
-      toast.success('تمت إضافة الوثيقة بنجاح');
+      toast.success('تمت إضافة المعاملة بنجاح');
       form.reset();
       onSaved();
     } catch (error: any) {
       console.error('Save error:', error);
-      toast.error('فشل حفظ الوثيقة');
+      toast.error('فشل حفظ المعاملة');
     } finally {
       setSaving(false);
     }
@@ -214,7 +214,7 @@ export function PolicyDrawer({ open, onOpenChange, onSaved }: PolicyDrawerProps)
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>إضافة وثيقة تأمين جديدة</SheetTitle>
+          <SheetTitle>إضافة معاملة تأمين جديدة</SheetTitle>
         </SheetHeader>
 
         {loadingData ? (

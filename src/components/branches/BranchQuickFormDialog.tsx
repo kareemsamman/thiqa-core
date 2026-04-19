@@ -294,7 +294,7 @@ export function BranchQuickFormDialog({
         }}
         onConfirm={handleDelete}
         title="حذف الفرع"
-        description="هل أنت متأكد من حذف هذا الفرع؟ لا يمكن حذفه إذا كان مرتبطاً بمستخدمين أو وثائق."
+        description="هل أنت متأكد من حذف هذا الفرع؟ لا يمكن حذفه إذا كان مرتبطاً بمستخدمين أو معاملات."
         loading={deleting}
       />
     </>

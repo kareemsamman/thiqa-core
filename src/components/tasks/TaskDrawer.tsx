@@ -145,7 +145,7 @@ export function TaskDrawer({
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="مثال: مراجعة وثيقة العميل"
+              placeholder="مثال: مراجعة معاملة العميل"
               required
             />
           </div>

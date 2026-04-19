@@ -808,7 +808,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     
     // Check if car has policies
     if (carPolicyCounts[deleteCarId] > 0) {
-      toast.error('لا يمكن حذف السيارة لوجود وثائق مرتبطة بها');
+      toast.error('لا يمكن حذف السيارة لوجود معاملات مرتبطة بها');
       setDeleteCarDialogOpen(false);
       setDeleteCarId(null);
       return;
@@ -940,7 +940,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       });
 
       if (response.error) {
-        let msg = response.error.message || 'فشل في حذف الوثيقة';
+        let msg = response.error.message || 'فشل في حذف المعاملة';
         try {
           const ctx: any = (response.error as any).context;
           if (ctx?.body) {
@@ -965,8 +965,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
               user_id: user?.id,
               agent_id: pol.agent_id,
               type: 'policy_deleted',
-              title: 'حذف وثيقة',
-              message: `تم حذف وثيقة ${pol.policy_number || pol.id.slice(0, 8)} (${companyName}) بواسطة ${userName}`,
+              title: 'حذف معاملة',
+              message: `تم حذف معاملة ${pol.policy_number || pol.id.slice(0, 8)} (${companyName}) بواسطة ${userName}`,
               entity_type: 'policy',
               entity_id: pol.id,
               metadata: {
@@ -981,7 +981,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           }
         }
 
-        toast.success(`تم حذف ${result.deletedCount} وثيقة نهائياً`);
+        toast.success(`تم حذف ${result.deletedCount} معاملة نهائياً`);
         setDeletePolicyDialogOpen(false);
         setDeletePolicyIds([]);
         // Refresh all data
@@ -990,11 +990,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         fetchPaymentSummary();
         fetchWalletBalance();
       } else {
-        throw new Error(result.error || 'فشل في حذف الوثيقة');
+        throw new Error(result.error || 'فشل في حذف المعاملة');
       }
     } catch (error: any) {
       console.error('Delete policy error:', error);
-      toast.error(error.message || 'فشل في حذف الوثيقة');
+      toast.error(error.message || 'فشل في حذف المعاملة');
     } finally {
       setDeletingPolicy(false);
     }
@@ -1014,7 +1014,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         .single();
       
       if (error || !policy) {
-        toast.error('فشل في جلب بيانات الوثيقة');
+        toast.error('فشل في جلب بيانات المعاملة');
         return;
       }
       
@@ -1041,7 +1041,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       setPolicyWizardOpen(true);
     } catch (error) {
       console.error('Error fetching policy for renewal:', error);
-      toast.error('فشل في جلب بيانات الوثيقة');
+      toast.error('فشل في جلب بيانات المعاملة');
     }
   };
 
@@ -1387,7 +1387,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           <title>{client.full_name} | ثقة للتأمين</title>
         </Helmet>
         <Header title={client.full_name} subtitle="العملاء" />
-        <div className={`${sidebarCollapsed ? "max-w-[96rem]" : "max-w-6xl"} mx-auto space-y-6`}>
+        <div className={`${sidebarCollapsed ? "max-w-[96rem]" : "max-w-[88rem]"} mx-auto space-y-6`}>
           {/* Header Skeleton */}
           <Card className="overflow-hidden">
             <div className="bg-gradient-to-l from-primary/10 via-primary/5 to-transparent p-6">
@@ -1466,7 +1466,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         subtitle="العملاء"
       />
 
-      <div className={`${sidebarCollapsed ? "max-w-[96rem]" : "max-w-6xl"} mx-auto space-y-4 sm:space-y-6`}>
+      <div className={`${sidebarCollapsed ? "max-w-[96rem]" : "max-w-[88rem]"} mx-auto space-y-4 sm:space-y-6`}>
         {/* Professional Header Card */}
         <Card className="overflow-hidden">
           <div className="bg-gradient-to-l from-primary/10 via-primary/5 to-transparent p-4 sm:p-6">
@@ -1611,7 +1611,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
               <p className="text-sm sm:text-lg font-bold text-blue-600">{cars.length}</p>
             </div>
             <div className="p-3 sm:p-4 text-center">
-              <p className="text-[10px] sm:text-xs text-muted-foreground mb-1">الوثائق</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mb-1">المعاملات</p>
               <p className="text-sm sm:text-lg font-bold text-purple-600">{dedupedPolicyCount}</p>
               <button
                 type="button"
@@ -1735,7 +1735,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             </TabsTrigger>
             <TabsTrigger value="policies" className="gap-1.5 shrink-0 whitespace-nowrap">
               <FileText className="h-4 w-4" />
-              الوثائق ({dedupedPolicyCount})
+              المعاملات ({dedupedPolicyCount})
             </TabsTrigger>
             <TabsTrigger value="payments" className="gap-1.5 shrink-0 whitespace-nowrap">
               <CreditCard className="h-4 w-4" />
@@ -1831,18 +1831,18 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             {/* Header with Add Button */}
             <div ref={policiesHeaderRef} className="flex flex-wrap items-center justify-between gap-3 scroll-mt-20">
               <div>
-                <h3 className="font-semibold text-lg">وثائق التأمين</h3>
+                <h3 className="font-semibold text-lg">معاملات التأمين</h3>
                 <button
                   type="button"
                   onClick={handleRevealDocs}
                   className="text-sm text-muted-foreground hover:text-purple-600 underline underline-offset-2 transition-colors"
                 >
-                  {dedupedPolicyCount} وثيقة مسجلة
+                  {dedupedPolicyCount} معاملة مسجلة
                 </button>
               </div>
               <Button onClick={() => setPolicyWizardOpen(true)}>
                 <Plus className="h-4 w-4 ml-2" />
-                إضافة وثيقة جديدة
+                إضافة معاملة جديدة
               </Button>
             </div>
             
@@ -1874,7 +1874,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 <div className="relative flex-1 min-w-[200px]">
                   <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="بحث برقم الوثيقة، الشركة..."
+                    placeholder="بحث برقم المعاملة، الشركة..."
                     value={policySearch}
                     onChange={(e) => setPolicySearch(e.target.value)}
                     className="pr-10"
@@ -1918,7 +1918,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
               <Card className="text-center py-12">
                 <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
                 <p className="text-muted-foreground">
-                  {policies.length > 0 ? 'لا توجد وثائق تطابق معايير البحث' : 'لا توجد وثائق تأمين'}
+                  {policies.length > 0 ? 'لا توجد معاملات تطابق معايير البحث' : 'لا توجد معاملات تأمين'}
                 </p>
                 {policyCarFilter !== 'all' && (
                   <Button 
@@ -2024,7 +2024,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                     setEditPolicyOpen(true);
                   } catch (e: any) {
                     console.error('Error loading policy for edit:', e);
-                    toast.error(e.message || 'فشل في تحميل الوثيقة');
+                    toast.error(e.message || 'فشل في تحميل المعاملة');
                   }
                 }}
                 onEditPackage={(groupId) => {
@@ -2275,7 +2275,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                       <TableHead className="text-right">اللون</TableHead>
                       <TableHead className="text-right">القيمة</TableHead>
                       <TableHead className="text-right">النوع</TableHead>
-                      <TableHead className="text-right">الوثائق</TableHead>
+                      <TableHead className="text-right">المعاملات</TableHead>
                       <TableHead className="text-right w-[60px]">إجراءات</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -2303,7 +2303,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                           </TableCell>
                           <TableCell>
                             {policyCount > 0 ? (
-                              <Badge variant="secondary">{policyCount} وثيقة</Badge>
+                              <Badge variant="secondary">{policyCount} معاملة</Badge>
                             ) : (
                               <span className="text-muted-foreground text-xs">لا يوجد</span>
                             )}
@@ -2338,7 +2338,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                 >
                                   <Trash2 className="h-4 w-4 ml-2" />
                                   حذف
-                                  {!canDelete && <span className="text-xs mr-2">(مرتبطة بوثائق)</span>}
+                                  {!canDelete && <span className="text-xs mr-2">(مرتبطة بمعاملات)</span>}
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -2708,8 +2708,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           if (!open) setDeletePolicyIds([]);
         }}
         onConfirm={handleDeletePolicy}
-        title="حذف الوثيقة نهائياً"
-        description={`هل أنت متأكد من حذف ${deletePolicyIds.length > 1 ? `${deletePolicyIds.length} وثائق` : 'هذه الوثيقة'} نهائياً؟ سيتم حذف جميع البيانات المرتبطة (الدفعات، القيود المحاسبية، الملفات). هذا الإجراء لا يمكن التراجع عنه!`}
+        title="حذف المعاملة نهائياً"
+        description={`هل أنت متأكد من حذف ${deletePolicyIds.length > 1 ? `${deletePolicyIds.length} معاملات` : 'هذه المعاملة'} نهائياً؟ سيتم حذف جميع البيانات المرتبطة (الدفعات، القيود المحاسبية، الملفات). هذا الإجراء لا يمكن التراجع عنه!`}
         loading={deletingPolicy}
       />
 

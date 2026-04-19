@@ -243,7 +243,7 @@ export default function AccidentReportForm() {
 
     if (error) {
       console.error("Error fetching policy:", error);
-      toast({ title: "خطأ", description: "فشل في تحميل بيانات الوثيقة", variant: "destructive" });
+      toast({ title: "خطأ", description: "فشل في تحميل بيانات المعاملة", variant: "destructive" });
       return null;
     }
     return data as Policy;
@@ -474,7 +474,7 @@ export default function AccidentReportForm() {
     return (
       <MainLayout>
         <div className="p-6 text-center">
-          <p className="text-muted-foreground">لم يتم العثور على الوثيقة</p>
+          <p className="text-muted-foreground">لم يتم العثور على المعاملة</p>
           <Button variant="outline" className="mt-4" onClick={() => navigate("/accidents")}>
             <ArrowRight className="h-4 w-4 ml-2" />
             العودة للقائمة
@@ -597,7 +597,7 @@ export default function AccidentReportForm() {
                       {policy.insurance_companies.name_ar || policy.insurance_companies.name}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      وثيقة: {policy.policy_number || "-"}
+                      معاملة: {policy.policy_number || "-"}
                     </p>
                   </div>
                 </div>

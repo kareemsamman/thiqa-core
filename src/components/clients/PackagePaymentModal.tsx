@@ -561,7 +561,7 @@ export function PackagePaymentModal({
             bank_code: paymentLine.paymentType === 'cheque' ? (paymentLine.bankCode || null) : null,
             branch_code: paymentLine.paymentType === 'cheque' ? (paymentLine.branchCode || null) : null,
             refused: false,
-            notes: paymentLine.notes || `دفعة من باقة (${policies.length} وثائق)`,
+            notes: paymentLine.notes || `دفعة من باقة (${policies.length} معاملات)`,
             branch_id: branchId,
             batch_id: batchId,
           })
@@ -938,7 +938,7 @@ export function PackagePaymentModal({
           policyId={firstPolicyId}
           amount={activeVisaPayment.amount}
           paymentDate={activeVisaPayment.paymentDate}
-          notes={activeVisaPayment.notes || `دفعة من باقة (${policies.length} وثائق)`}
+          notes={activeVisaPayment.notes || `دفعة من باقة (${policies.length} معاملات)`}
           onSuccess={handleTranzilaSuccess}
           onFailure={() => setTranzilaModalOpen(false)}
         />

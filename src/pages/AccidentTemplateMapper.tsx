@@ -56,11 +56,11 @@ const loadPdfJs = (): Promise<any> => {
 // All canonical fields from accident_reports - comprehensive list based on insurance forms
 const CANONICAL_FIELDS = [
   // Policy & Insurance
-  { id: "policy_number", label: "رقم الوثيقة", group: "الوثيقة", sample: "POL-2024-12345" },
-  { id: "policy_type", label: "نوع الوثيقة", group: "الوثيقة", sample: "شامل" },
-  { id: "policy_start_date", label: "تاريخ بداية التأمين", group: "الوثيقة", sample: "2024-01-01" },
-  { id: "policy_end_date", label: "تاريخ نهاية التأمين", group: "الوثيقة", sample: "2025-01-01" },
-  { id: "company_name", label: "اسم شركة التأمين", group: "الوثيقة", sample: "ترست للتأمين" },
+  { id: "policy_number", label: "رقم المعاملة", group: "المعاملة", sample: "POL-2024-12345" },
+  { id: "policy_type", label: "نوع المعاملة", group: "المعاملة", sample: "شامل" },
+  { id: "policy_start_date", label: "تاريخ بداية التأمين", group: "المعاملة", sample: "2024-01-01" },
+  { id: "policy_end_date", label: "تاريخ نهاية التأمين", group: "المعاملة", sample: "2025-01-01" },
+  { id: "company_name", label: "اسم شركة التأمين", group: "المعاملة", sample: "ترست للتأمين" },
   
   // Owner (Client) Info
   { id: "owner_name", label: "اسم صاحب السيارة", group: "المالك", sample: "أحمد محمد علي" },
@@ -121,7 +121,7 @@ const CANONICAL_FIELDS = [
   { id: "third_party_1_car_number", label: "رقم سيارة الطرف الثالث 1", group: "الطرف الثالث", sample: "98-765-43" },
   { id: "third_party_1_car_type", label: "نوع سيارة الطرف الثالث 1", group: "الطرف الثالث", sample: "هيونداي توسان 2020" },
   { id: "third_party_1_insurance", label: "شركة تأمين الطرف الثالث 1", group: "الطرف الثالث", sample: "شركة التأمين الوطنية" },
-  { id: "third_party_1_policy", label: "رقم وثيقة الطرف الثالث 1", group: "الطرف الثالث", sample: "POL-999888" },
+  { id: "third_party_1_policy", label: "رقم معاملة الطرف الثالث 1", group: "الطرف الثالث", sample: "POL-999888" },
   { id: "third_party_1_damages", label: "أضرار سيارة الطرف الثالث 1", group: "الطرف الثالث", sample: "خدوش في الباب الخلفي" },
   
   // Second Third Party (optional)

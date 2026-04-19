@@ -73,8 +73,8 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
   },
   {
     id: "policies",
-    title: "الوثائق",
-    description: "أنشئ أول وثيقة تأمين",
+    title: "المعاملات",
+    description: "أنشئ أول معاملة تأمين",
     icon: <FileText className="h-5 w-5" />,
     targetRoute: "/policies",
     emoji: "📄",

@@ -293,7 +293,7 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month, onActionC
             مساعد التجديد — {month}
           </DialogTitle>
           <DialogDescription>
-            متابعة عملاء الوثائق المنتهية خلال هذا الشهر
+            متابعة عملاء المعاملات المنتهية خلال هذا الشهر
           </DialogDescription>
         </DialogHeader>
 
@@ -338,7 +338,7 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month, onActionC
                 <User className="h-5 w-5 text-muted-foreground" />
                 <span className="font-semibold text-lg">{currentClient.clientName}</span>
                 <Badge variant="outline" className="text-xs">
-                  {currentClient.policies.length} {currentClient.policies.length === 1 ? 'وثيقة' : 'وثائق'}
+                  {currentClient.policies.length} {currentClient.policies.length === 1 ? 'معاملة' : 'معاملات'}
                 </Badge>
               </div>
               {currentClient.clientPhone && (
@@ -385,7 +385,7 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month, onActionC
             {currentClient.policies.length > 1 && (
               <div className="flex justify-between items-center px-2 text-sm">
                 <span className="text-muted-foreground">
-                  إجمالي ({currentClient.policies.length} وثائق)
+                  إجمالي ({currentClient.policies.length} معاملات)
                 </span>
                 <span className="font-bold">
                   {currentClient.policies

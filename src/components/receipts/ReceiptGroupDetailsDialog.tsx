@@ -138,7 +138,7 @@ export function ReceiptGroupDetailsDialog({
                     {combinedMethodLabel} · ₪{group.total.toLocaleString("en-US")} ·{" "}
                     {group.receipts.length}{" "}
                     {group.receipts.length === 1 ? "سند" : "سندات"}
-                    {documentNumberLabel && <> · وثيقة {documentNumberLabel}</>}
+                    {documentNumberLabel && <> · معاملة {documentNumberLabel}</>}
                   </p>
                 </div>
               </div>

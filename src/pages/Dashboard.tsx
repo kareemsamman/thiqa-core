@@ -320,7 +320,7 @@ export default function Dashboard() {
                   <p className="text-xs text-muted-foreground ltr-nums">
                     {productionLoading
                       ? ''
-                      : `وثيقة · ₪${productionTotals.total_amount.toLocaleString('en-US')}`}
+                      : `معاملة · ₪${productionTotals.total_amount.toLocaleString('en-US')}`}
                   </p>
                 </div>
                 <div className="rounded-xl bg-primary/10 p-3">

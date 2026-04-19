@@ -72,7 +72,7 @@ const DYNAMIC_FIELDS = [
   { key: 'total_amount', labelAr: 'المبلغ الإجمالي', labelHe: 'סכום כולל' },
   { key: 'payment_method', labelAr: 'طريقة الدفع', labelHe: 'אמצעי תשלום' },
   { key: 'admin_name', labelAr: 'اسم الموظف', labelHe: 'שם העובד' },
-  { key: 'policy_number', labelAr: 'رقم الوثيقة', labelHe: 'מספר פוליסה' },
+  { key: 'policy_number', labelAr: 'رقم المعاملة', labelHe: 'מספר פוליסה' },
 ];
 
 export function InvoiceVisualBuilder({ 

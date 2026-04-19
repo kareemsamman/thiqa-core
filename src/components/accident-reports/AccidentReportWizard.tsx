@@ -139,7 +139,7 @@ export function AccidentReportWizard({
       setPolicies(data || []);
     } catch (error) {
       console.error('Error fetching policies:', error);
-      toast.error('فشل في تحميل الوثائق');
+      toast.error('فشل في تحميل المعاملات');
     } finally {
       setLoadingPolicies(false);
     }
@@ -182,7 +182,7 @@ export function AccidentReportWizard({
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-orange-500" />
               <SheetTitle className="text-right">
-                {step === 'client' ? 'اختر العميل' : 'اختر الوثيقة'}
+                {step === 'client' ? 'اختر العميل' : 'اختر المعاملة'}
               </SheetTitle>
             </div>
           </div>

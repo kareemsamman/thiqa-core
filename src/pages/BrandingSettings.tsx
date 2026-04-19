@@ -309,7 +309,7 @@ export default function BrandingSettings() {
                     id="invoice-privacy"
                     value={invoicePrivacyText}
                     onChange={(e) => setInvoicePrivacyText(e.target.value)}
-                    placeholder="مثال: جميع المبالغ المدفوعة غير قابلة للاسترداد بعد إصدار الوثيقة..."
+                    placeholder="مثال: جميع المبالغ المدفوعة غير قابلة للاسترداد بعد إصدار المعاملة..."
                     rows={6}
                   />
                   <p className="text-xs text-muted-foreground">

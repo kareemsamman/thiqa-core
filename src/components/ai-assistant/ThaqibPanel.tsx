@@ -210,11 +210,11 @@ export function ThaqibPanel({ open, onClose }: ThaqibPanelProps) {
             </div>
             <h4 className="font-bold text-base mb-1">مرحباً! أنا ثاقب 👋</h4>
             <p className="text-sm text-muted-foreground mb-4">
-              مساعدك الذكي في نظام ثقة. يمكنني مساعدتك بالاستعلام عن العملاء والوثائق والمدفوعات.
+              مساعدك الذكي في نظام ثقة. يمكنني مساعدتك بالاستعلام عن العملاء والمعاملات والمدفوعات.
             </p>
             <div className="grid grid-cols-1 gap-2 w-full">
               {[
-                "كم وثيقة تنتهي هذا الشهر؟",
+                "كم معاملة تنتهي هذا الشهر؟",
                 "أعطني معلومات العملاء",
                 "ملخص المدفوعات اليوم",
               ].map((q, i) => (

@@ -169,7 +169,7 @@ export default function InsuranceCategories() {
 
   const handleDelete = async (category: InsuranceCategory) => {
     if (category.policy_count && category.policy_count > 0) {
-      toast({ title: "لا يمكن الحذف", description: `يوجد ${category.policy_count} وثيقة مرتبطة بهذا النوع`, variant: "destructive" });
+      toast({ title: "لا يمكن الحذف", description: `يوجد ${category.policy_count} معاملة مرتبطة بهذا النوع`, variant: "destructive" });
       return;
     }
 
@@ -291,7 +291,7 @@ export default function InsuranceCategories() {
                   <TableHead className="text-right">الاسم</TableHead>
                   <TableHead className="text-right">المعرف</TableHead>
                   <TableHead className="text-right">النوع</TableHead>
-                  <TableHead className="text-right">الوثائق</TableHead>
+                  <TableHead className="text-right">المعاملات</TableHead>
                   <TableHead className="text-right">الحالة</TableHead>
                   <TableHead className="text-right">افتراضي</TableHead>
                   <TableHead className="text-right">إجراءات</TableHead>

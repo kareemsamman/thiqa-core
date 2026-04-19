@@ -525,7 +525,7 @@ export function SinglePolicyPaymentModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
-            دفع للوثيقة
+            دفع للمعاملة
           </DialogTitle>
         </DialogHeader>
 
@@ -536,7 +536,7 @@ export function SinglePolicyPaymentModal({
         ) : remaining <= 0 ? (
           <div className="flex flex-col items-center justify-center py-8 gap-3">
             <CheckCircle className="h-12 w-12 text-success" />
-            <p className="text-lg font-medium">هذه الوثيقة مدفوعة بالكامل</p>
+            <p className="text-lg font-medium">هذه المعاملة مدفوعة بالكامل</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -862,7 +862,7 @@ export function SinglePolicyPaymentModal({
           policyId={policyId}
           amount={activeVisaPayment.amount}
           paymentDate={activeVisaPayment.paymentDate}
-          notes={activeVisaPayment.notes || `دفعة للوثيقة`}
+          notes={activeVisaPayment.notes || `دفعة للمعاملة`}
           onSuccess={handleTranzilaSuccess}
           onFailure={() => {
             setTranzilaModalOpen(false);

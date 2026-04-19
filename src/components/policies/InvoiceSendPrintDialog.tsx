@@ -50,7 +50,7 @@ export function InvoiceSendPrintDialog({
         return;
       }
 
-      toast.success(isPackage ? "تم إرسال الوثائق للعميل" : "تم إرسال الوثيقة للعميل");
+      toast.success(isPackage ? "تم إرسال المعاملات للعميل" : "تم إرسال المعاملة للعميل");
       onOpenChange(false);
     } catch (err: any) {
       toast.error(err?.message || "فشل في الإرسال");
@@ -70,7 +70,7 @@ export function InvoiceSendPrintDialog({
       });
 
       if (error) {
-        await toastFunctionError(error, "فشل في تحميل الوثيقة");
+        await toastFunctionError(error, "فشل في تحميل المعاملة");
         return;
       }
       if (data?.error) {
@@ -82,13 +82,13 @@ export function InvoiceSendPrintDialog({
       const invoiceUrl = data?.ab_invoice_url || data?.package_invoice_url || data?.invoice_url;
       if (invoiceUrl) {
         window.open(invoiceUrl, "_blank");
-        toast.success("تم فتح الوثيقة في نافذة جديدة");
+        toast.success("تم فتح المعاملة في نافذة جديدة");
       } else {
-        toast.error("لم يتم إنشاء رابط الوثيقة");
+        toast.error("لم يتم إنشاء رابط المعاملة");
       }
       onOpenChange(false);
     } catch (err: any) {
-      toast.error(err.message || "فشل في تحميل الوثيقة");
+      toast.error(err.message || "فشل في تحميل المعاملة");
     } finally {
       setSendingType(null);
     }
@@ -104,7 +104,7 @@ export function InvoiceSendPrintDialog({
             <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-primary/10">
               <FileText className="h-5 w-5 text-primary" />
             </div>
-            <span>إرسال / طباعة الوثيقة</span>
+            <span>إرسال / طباعة المعاملة</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -125,7 +125,7 @@ export function InvoiceSendPrintDialog({
             <div className="flex-1">
               <div className="font-semibold text-base">إرسال SMS للعميل</div>
               <div className="text-sm text-muted-foreground">
-                سيتم إرسال رابط الوثيقة للرقم {clientPhone || "المسجل"}
+                سيتم إرسال رابط المعاملة للرقم {clientPhone || "المسجل"}
               </div>
             </div>
           </button>
@@ -144,9 +144,9 @@ export function InvoiceSendPrintDialog({
               )}
             </div>
             <div className="flex-1">
-              <div className="font-semibold text-base">طباعة الوثيقة</div>
+              <div className="font-semibold text-base">طباعة المعاملة</div>
               <div className="text-sm text-muted-foreground">
-                فتح الوثيقة في نافذة جديدة للطباعة
+                فتح المعاملة في نافذة جديدة للطباعة
               </div>
             </div>
           </button>

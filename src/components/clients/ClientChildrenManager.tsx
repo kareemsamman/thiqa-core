@@ -316,7 +316,7 @@ export function ClientChildrenManager({
                           </Button>
                           {onRemoveExisting && (
                             isChildLinked(child.id) ? (
-                              <span className="text-xs text-muted-foreground" title="مرتبط بوثيقة">
+                              <span className="text-xs text-muted-foreground" title="مرتبط بمعاملة">
                                 <AlertCircle className="h-4 w-4 text-amber-500" />
                               </span>
                             ) : (

@@ -329,7 +329,7 @@ export function PackagePolicyEditModal({
       console.error("Error fetching package policies:", error);
       toast({
         title: "خطأ",
-        description: "فشل في تحميل الوثائق",
+        description: "فشل في تحميل المعاملات",
         variant: "destructive",
       });
     } finally {
@@ -653,7 +653,7 @@ export function PackagePolicyEditModal({
         if (error) throw error;
       }
 
-      toast({ title: "تم الحفظ", description: "تم تحديث جميع وثائق الباقة بنجاح" });
+      toast({ title: "تم الحفظ", description: "تم تحديث جميع معاملات الباقة بنجاح" });
       onOpenChange(false);
       onSaved?.();
     } catch (error) {
@@ -700,7 +700,7 @@ export function PackagePolicyEditModal({
           </div>
         ) : policies.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            لا توجد وثائق في هذه الباقة
+            لا توجد معاملات في هذه الباقة
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col">

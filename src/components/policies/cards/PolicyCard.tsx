@@ -81,7 +81,7 @@ export function PolicyCard({
         {isPackage && !isExpanded && (
           <div className="flex items-center justify-center mt-2 text-muted-foreground">
             <ChevronDown className="h-4 w-4" />
-            <span className="text-xs mr-1">عرض التفاصيل ({allPolicies.length} وثائق)</span>
+            <span className="text-xs mr-1">عرض التفاصيل ({allPolicies.length} معاملات)</span>
           </div>
         )}
       </div>

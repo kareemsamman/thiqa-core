@@ -198,8 +198,8 @@ export function PolicySelectionCards({
     return (
       <div className="text-center py-12 text-muted-foreground">
         <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p>لا توجد وثائق مؤهلة لإنشاء بلاغ حادث</p>
-        <p className="text-sm mt-2">يجب أن تكون الوثيقة من نوع ثالث/شامل أو خدمات طريق أو إعفاء رسوم</p>
+        <p>لا توجد معاملات مؤهلة لإنشاء بلاغ حادث</p>
+        <p className="text-sm mt-2">يجب أن تكون المعاملة من نوع ثالث/شامل أو خدمات طريق أو إعفاء رسوم</p>
       </div>
     );
   }
@@ -278,11 +278,11 @@ export function PolicySelectionCards({
             {isExpanded && group.policies.length > 1 && (
               <div className="mt-4 pt-4 border-t space-y-2" onClick={e => e.stopPropagation()}>
                 <p className="text-sm font-medium text-muted-foreground mb-2">
-                  اختر الوثيقة لإنشاء البلاغ:
+                  اختر المعاملة لإنشاء البلاغ:
                 </p>
                 <Select onValueChange={handleSubPolicySelect}>
                   <SelectTrigger>
-                    <SelectValue placeholder="اختر نوع الوثيقة..." />
+                    <SelectValue placeholder="اختر نوع المعاملة..." />
                   </SelectTrigger>
                   <SelectContent>
                     {group.policies.map(policy => (

@@ -97,14 +97,14 @@ export function PolicySuccessDialog({
         result.data?.invoice_url;
       if (invoiceUrl) {
         window.open(invoiceUrl, "_blank");
-        toast.success("تم فتح الوثيقة");
+        toast.success("تم فتح المعاملة");
       } else {
-        setErrorMessage("لم يتم العثور على رابط الوثيقة");
-        toast.error("لم يتم العثور على رابط الوثيقة");
+        setErrorMessage("لم يتم العثور على رابط المعاملة");
+        toast.error("لم يتم العثور على رابط المعاملة");
       }
     } catch (error) {
       console.error("Print invoice error:", error);
-      const errorMsg = error instanceof Error ? error.message : "فشل في تحميل الوثيقة";
+      const errorMsg = error instanceof Error ? error.message : "فشل في تحميل المعاملة";
       setErrorMessage(errorMsg);
       toast.error(errorMsg);
     } finally {
@@ -130,7 +130,7 @@ export function PolicySuccessDialog({
         return;
       }
       setSmsSent(true);
-      toast.success("تم إرسال الوثيقة عبر SMS");
+      toast.success("تم إرسال المعاملة عبر SMS");
     } catch (error) {
       console.error("Send SMS error:", error);
       const errorMsg = error instanceof Error ? error.message : "فشل في إرسال SMS";
@@ -165,7 +165,7 @@ export function PolicySuccessDialog({
               </div>
               <div className="flex-1 min-w-0">
                 <DialogTitle className="text-lg font-bold text-white text-right">
-                  تم إنشاء الوثيقة بنجاح
+                  تم إنشاء المعاملة بنجاح
                 </DialogTitle>
                 <p className="text-xs text-white/70 mt-0.5">
                   يمكنك طباعتها أو إرسالها للعميل عبر SMS
@@ -202,9 +202,9 @@ export function PolicySuccessDialog({
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-base">طباعة الوثيقة</div>
+              <div className="font-semibold text-base">طباعة المعاملة</div>
               <div className="text-sm text-muted-foreground">
-                فتح الوثيقة في نافذة جديدة للطباعة
+                فتح المعاملة في نافذة جديدة للطباعة
               </div>
             </div>
           </button>
@@ -238,11 +238,11 @@ export function PolicySuccessDialog({
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-base">
-                {smsSent ? "تم إرسال الوثيقة" : "إرسال الوثيقة عبر SMS"}
+                {smsSent ? "تم إرسال المعاملة" : "إرسال المعاملة عبر SMS"}
               </div>
               <div className="text-sm text-muted-foreground">
                 {clientPhone
-                  ? `سيتم إرسال رابط الوثيقة للرقم ${clientPhone}`
+                  ? `سيتم إرسال رابط المعاملة للرقم ${clientPhone}`
                   : "لا يوجد رقم هاتف للعميل"}
               </div>
             </div>

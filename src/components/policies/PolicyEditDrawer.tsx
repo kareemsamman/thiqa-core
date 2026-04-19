@@ -328,12 +328,12 @@ export function PolicyEditDrawer({ open, onOpenChange, policy, onSaved }: Policy
         
         if (syncError) {
           console.error('Error syncing package dates:', syncError);
-          toast({ title: "تنبيه", description: "تم حفظ الوثيقة لكن فشل تحديث باقي الباكيج", variant: "default" });
+          toast({ title: "تنبيه", description: "تم حفظ المعاملة لكن فشل تحديث باقي الباكيج", variant: "default" });
         }
       }
 
 
-      toast({ title: "تم الحفظ", description: "تم تحديث الوثيقة بنجاح" });
+      toast({ title: "تم الحفظ", description: "تم تحديث المعاملة بنجاح" });
       setPendingSave(null);
       onOpenChange(false);
       onSaved?.();
@@ -360,7 +360,7 @@ export function PolicyEditDrawer({ open, onOpenChange, policy, onSaved }: Policy
         dir="rtl"
       >
         <DialogHeader className="p-4 border-b bg-muted/30 text-right">
-          <DialogTitle className="text-lg font-bold text-right">تعديل الوثيقة</DialogTitle>
+          <DialogTitle className="text-lg font-bold text-right">تعديل المعاملة</DialogTitle>
           <p className="text-sm text-muted-foreground text-right">
             {policy.clients?.full_name || ''} - {policy.cars?.car_number || ''}
           </p>
@@ -371,7 +371,7 @@ export function PolicyEditDrawer({ open, onOpenChange, policy, onSaved }: Policy
             {/* Policy Type Row */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-right block text-sm">نوع الوثيقة</Label>
+                <Label className="text-right block text-sm">نوع المعاملة</Label>
                 <Select
                   value={formData.policy_type_parent}
                   onValueChange={(v) => {
@@ -598,9 +598,9 @@ export function PolicyEditDrawer({ open, onOpenChange, policy, onSaved }: Policy
           <AlertDialogHeader>
             <AlertDialogTitle>تحديث تواريخ الباكيج</AlertDialogTitle>
             <AlertDialogDescription>
-              هذه الوثيقة جزء من باكيج يحتوي على {packagePolicies.length} وثائق أخرى.
+              هذه المعاملة جزء من باكيج يحتوي على {packagePolicies.length} معاملات أخرى.
               <br />
-              هل تريد تحديث تواريخ جميع وثائق الباكيج؟
+              هل تريد تحديث تواريخ جميع معاملات الباكيج؟
               <div className="mt-2 text-xs text-muted-foreground">
                 {packagePolicies.map(p => (
                   <div key={p.id}>• {POLICY_TYPES.find(t => t.value === p.policy_type_parent)?.label || p.policy_type_parent}</div>
@@ -610,7 +610,7 @@ export function PolicyEditDrawer({ open, onOpenChange, policy, onSaved }: Policy
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
             <AlertDialogCancel onClick={() => handlePackageSyncConfirm(false)}>
-              هذه الوثيقة فقط
+              هذه المعاملة فقط
             </AlertDialogCancel>
             <AlertDialogAction onClick={() => handlePackageSyncConfirm(true)}>
               تحديث الكل

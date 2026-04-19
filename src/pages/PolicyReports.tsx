@@ -605,7 +605,7 @@ export default function PolicyReports() {
       setExpandedClientId(clientId);
     } catch (error) {
       console.error('Error fetching client policies:', error);
-      toast.error('فشل في تحميل الوثائق');
+      toast.error('فشل في تحميل المعاملات');
     } finally {
       setLoadingClientPolicies(null);
     }
@@ -742,7 +742,7 @@ export default function PolicyReports() {
         if (error) throw error;
       }
       
-      toast.success(`تم تحديث الحالة لـ ${policyIds.length} وثيقة`);
+      toast.success(`تم تحديث الحالة لـ ${policyIds.length} معاملة`);
       setUpdateStatusOpen(false);
       setSelectedRenewalClient(null);
       setNewStatus('');
@@ -846,7 +846,7 @@ export default function PolicyReports() {
         }, { onConflict: 'policy_id' });
       }
 
-      toast.success(`تم إرسال التذكير لـ ${policyIds.length} وثيقة`);
+      toast.success(`تم إرسال التذكير لـ ${policyIds.length} معاملة`);
       // Clear cached policies
       setClientPolicies({});
       setExpandedClientId(null);
@@ -876,7 +876,7 @@ export default function PolicyReports() {
       if (error) throw error;
       
       if (!policies?.length) {
-        toast.error('لم يتم العثور على الوثائق');
+        toast.error('لم يتم العثور على المعاملات');
         return;
       }
       
@@ -937,12 +937,12 @@ export default function PolicyReports() {
   return (
     <MainLayout>
       <Helmet>
-        <title>تقارير الوثائق | ثقة للتأمين</title>
+        <title>تقارير المعاملات | ثقة للتأمين</title>
       </Helmet>
 
       <Header
-        title="تقارير الوثائق والتجديدات"
-        subtitle="متابعة الوثائق المنشأة والتجديدات"
+        title="تقارير المعاملات والتجديدات"
+        subtitle="متابعة المعاملات المنشأة والتجديدات"
       />
 
       <div className="p-6 space-y-6">
@@ -950,7 +950,7 @@ export default function PolicyReports() {
           <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="created" className="gap-2">
               <FileText className="h-4 w-4" />
-              الوثائق المنشأة
+              المعاملات المنشأة
             </TabsTrigger>
             <TabsTrigger value="renewals" className="gap-2">
               <RefreshCw className="h-4 w-4" />
@@ -1083,7 +1083,7 @@ export default function PolicyReports() {
               ) : createdPolicies.length === 0 ? (
                 <div className="text-center py-12">
                   <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
-                  <p className="text-muted-foreground">لا توجد وثائق</p>
+                  <p className="text-muted-foreground">لا توجد معاملات</p>
                 </div>
               ) : (
                 <>
@@ -1283,7 +1283,7 @@ export default function PolicyReports() {
                   {/* Pagination */}
                   <div className="flex items-center justify-between p-4 border-t">
                     <p className="text-sm text-muted-foreground">
-                      إجمالي: {createdTotalRows} وثيقة/باقة
+                      إجمالي: {createdTotalRows} معاملة/باقة
                     </p>
                     <div className="flex items-center gap-2">
                       <Button
@@ -1408,7 +1408,7 @@ export default function PolicyReports() {
                     <p className="text-2xl font-bold text-purple-600">{renewalsSummary.total_packages || 0}</p>
                   </Card>
                   <Card className="p-4 text-center">
-                    <p className="text-xs text-muted-foreground">وثائق مفردة</p>
+                    <p className="text-xs text-muted-foreground">معاملات مفردة</p>
                     <p className="text-2xl font-bold text-slate-600">{renewalsSummary.total_single || 0}</p>
                   </Card>
                 </div>
@@ -1534,7 +1534,7 @@ export default function PolicyReports() {
               ) : renewalClients.length === 0 ? (
                 <div className="text-center py-12">
                   <Calendar className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
-                  <p className="text-muted-foreground">لا يوجد عملاء لديهم وثائق منتهية في هذه الفترة</p>
+                  <p className="text-muted-foreground">لا يوجد عملاء لديهم معاملات منتهية في هذه الفترة</p>
                 </div>
               ) : (
                 <>
@@ -1544,7 +1544,7 @@ export default function PolicyReports() {
                         <TableHead className="w-10"></TableHead>
                         <TableHead className="text-right">العميل</TableHead>
                         <TableHead className="text-right">الهاتف</TableHead>
-                        <TableHead className="text-right">الوثائق</TableHead>
+                        <TableHead className="text-right">المعاملات</TableHead>
                         <TableHead className="text-right">السيارات</TableHead>
                         <TableHead className="text-right">الأنواع</TableHead>
                         <TableHead className="text-right">أقرب انتهاء</TableHead>
@@ -1597,7 +1597,7 @@ export default function PolicyReports() {
                             </TableCell>
                             <TableCell>
                               <Badge variant="outline" className="font-bold">
-                                {client.policies_count} وثيقة
+                                {client.policies_count} معاملة
                               </Badge>
                             </TableCell>
                             <TableCell>
@@ -1651,7 +1651,7 @@ export default function PolicyReports() {
                                     setUpdateStatusOpen(true);
                                   }}>
                                     <MessageSquare className="h-4 w-4 ml-2" />
-                                    تحديث الحالة ({client.policies_count} وثيقة)
+                                    تحديث الحالة ({client.policies_count} معاملة)
                                   </DropdownMenuItem>
                                   {client.client_phone && (
                                     <>
@@ -1664,7 +1664,7 @@ export default function PolicyReports() {
                                         ) : (
                                           <Send className="h-4 w-4 ml-2" />
                                         )}
-                                        إرسال تذكير SMS ({client.policies_count} وثيقة)
+                                        إرسال تذكير SMS ({client.policies_count} معاملة)
                                       </DropdownMenuItem>
                                       <DropdownMenuItem asChild>
                                         <a href={`tel:${client.client_phone}`}>
@@ -1684,7 +1684,7 @@ export default function PolicyReports() {
                                     ) : (
                                       <RefreshCw className="h-4 w-4 ml-2" />
                                     )}
-                                    تجديد ({client.policies_count} وثيقة)
+                                    تجديد ({client.policies_count} معاملة)
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
@@ -1698,9 +1698,9 @@ export default function PolicyReports() {
                                 <div className="px-6 py-4 border-t border-dashed">
                                   <div className="flex items-center gap-2 mb-3">
                                     <FileText className="h-4 w-4 text-primary" />
-                                    <span className="font-medium text-sm">الوثائق المنتهية</span>
+                                    <span className="font-medium text-sm">المعاملات المنتهية</span>
                                     <Badge variant="outline" className="text-xs">
-                                      {clientPolicies[client.client_id].length} وثيقة
+                                      {clientPolicies[client.client_id].length} معاملة
                                     </Badge>
                                   </div>
                                   
@@ -1998,10 +1998,10 @@ export default function PolicyReports() {
                         <TableHead className="w-10"></TableHead>
                         <TableHead className="text-right">العميل</TableHead>
                         <TableHead className="text-right">الهاتف</TableHead>
-                        <TableHead className="text-right">الوثائق القديمة</TableHead>
+                        <TableHead className="text-right">المعاملات القديمة</TableHead>
                         <TableHead className="text-right">انتهت بتاريخ</TableHead>
                         <TableHead className="text-right">السعر القديم</TableHead>
-                        <TableHead className="text-right">الوثائق الجديدة</TableHead>
+                        <TableHead className="text-right">المعاملات الجديدة</TableHead>
                         <TableHead className="text-right">بدأت بتاريخ</TableHead>
                         <TableHead className="text-right">السعر الجديد</TableHead>
                         <TableHead className="text-right">التجديد بواسطة</TableHead>
@@ -2053,7 +2053,7 @@ export default function PolicyReports() {
                             </TableCell>
                             <TableCell>
                               <Badge variant="outline" className="font-bold">
-                                {client.policies_count} وثيقة
+                                {client.policies_count} معاملة
                               </Badge>
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {client.policy_types?.map(type => (
@@ -2067,7 +2067,7 @@ export default function PolicyReports() {
                             <TableCell className="font-bold text-muted-foreground">₪{client.total_insurance_price.toLocaleString()}</TableCell>
                             <TableCell>
                               <Badge variant="default" className="font-bold bg-green-600">
-                                {client.new_policies_count} وثيقة
+                                {client.new_policies_count} معاملة
                               </Badge>
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {client.new_policy_types?.map(type => (
@@ -2105,9 +2105,9 @@ export default function PolicyReports() {
                                     <div>
                                       <div className="flex items-center gap-2 mb-3">
                                         <XCircle className="h-4 w-4 text-muted-foreground" />
-                                        <span className="font-medium text-sm">الوثائق المنتهية</span>
+                                        <span className="font-medium text-sm">المعاملات المنتهية</span>
                                         <Badge variant="outline" className="text-xs">
-                                          {client.policies_count} وثيقة
+                                          {client.policies_count} معاملة
                                         </Badge>
                                       </div>
                                       <div className="space-y-2">
@@ -2126,9 +2126,9 @@ export default function PolicyReports() {
                                     <div>
                                       <div className="flex items-center gap-2 mb-3">
                                         <CheckCircle className="h-4 w-4 text-green-600" />
-                                        <span className="font-medium text-sm text-green-600">الوثائق الجديدة</span>
+                                        <span className="font-medium text-sm text-green-600">المعاملات الجديدة</span>
                                         <Badge variant="default" className="text-xs bg-green-600">
-                                          {client.new_policies_count} وثيقة
+                                          {client.new_policies_count} معاملة
                                         </Badge>
                                       </div>
                                       <div className="space-y-2">
@@ -2195,9 +2195,9 @@ export default function PolicyReports() {
           <div className="space-y-4">
             <div>
               <p className="text-sm text-muted-foreground mb-2">العميل: {selectedRenewalClient?.client_name}</p>
-              <p className="text-sm text-muted-foreground">عدد الوثائق: {selectedRenewalClient?.policies_count} وثيقة</p>
+              <p className="text-sm text-muted-foreground">عدد المعاملات: {selectedRenewalClient?.policies_count} معاملة</p>
               <p className="text-xs text-muted-foreground mt-1">
-                سيتم تطبيق الحالة على جميع وثائق هذا العميل
+                سيتم تطبيق الحالة على جميع معاملات هذا العميل
               </p>
             </div>
             <Select value={newStatus} onValueChange={setNewStatus}>
@@ -2239,7 +2239,7 @@ export default function PolicyReports() {
         onSaved={() => {
           setWizardOpen(false);
           setRenewalData(null);
-          toast.success('تم تجديد الوثيقة بنجاح');
+          toast.success('تم تجديد المعاملة بنجاح');
           // Refresh data - client will move to "Renewed" automatically via DB trigger
           setClientPolicies({});
           setExpandedClientId(null);

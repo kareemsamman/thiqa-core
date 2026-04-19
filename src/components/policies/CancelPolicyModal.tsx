@@ -85,7 +85,7 @@ export function CancelPolicyModal({
           .single();
 
         let template = settings?.cancellation_sms_template || 
-          "مرحباً {{client_name}}، تم إلغاء وثيقة التأمين رقم {{policy_number}}. {{refund_message}}للاستفسار يرجى التواصل معنا.";
+          "مرحباً {{client_name}}، تم إلغاء معاملة التأمين رقم {{policy_number}}. {{refund_message}}للاستفسار يرجى التواصل معنا.";
         
         // Replace placeholders
         const refundMsg = hasRefund && refundAmount 
@@ -126,7 +126,7 @@ export function CancelPolicyModal({
 
   const handleCancel = async () => {
     if (effectivePolicyIds.length === 0) {
-      toast({ title: "خطأ", description: "لا توجد وثائق للإلغاء", variant: "destructive" });
+      toast({ title: "خطأ", description: "لا توجد معاملات للإلغاء", variant: "destructive" });
       return;
     }
 
@@ -176,7 +176,7 @@ export function CancelPolicyModal({
             amount: parseFloat(refundAmount),
             description: isPackage
               ? `مرتجع إلغاء باقة ${policyNumber || ""}`
-              : `مرتجع إلغاء وثيقة ${policyNumber || ""}`,
+              : `مرتجع إلغاء معاملة ${policyNumber || ""}`,
             notes: cancellationNote || null,
             created_by_admin_id: user?.id || null,
             branch_id: branchId,
@@ -204,7 +204,7 @@ export function CancelPolicyModal({
             const smsMsg = await extractFunctionErrorMessage(smsError);
             toast({
               title: "تحذير",
-              description: smsMsg || "تم إلغاء الوثيقة لكن فشل إرسال الرسالة"
+              description: smsMsg || "تم إلغاء المعاملة لكن فشل إرسال الرسالة"
             });
           } else if (smsData?.success) {
             toast({ title: "تم", description: "تم إرسال رسالة الإلغاء للعميل" });
@@ -219,7 +219,7 @@ export function CancelPolicyModal({
       }
 
 
-      toast({ title: "تم", description: "تم إلغاء الوثيقة بنجاح" });
+      toast({ title: "تم", description: "تم إلغاء المعاملة بنجاح" });
       onCancelled();
       onOpenChange(false);
       
@@ -234,7 +234,7 @@ export function CancelPolicyModal({
       console.error("Error cancelling policy:", error);
       toast({ 
         title: "خطأ", 
-        description: error.message || "فشل في إلغاء الوثيقة", 
+        description: error.message || "فشل في إلغاء المعاملة",
         variant: "destructive" 
       });
     } finally {
@@ -248,7 +248,7 @@ export function CancelPolicyModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <XCircle className="h-5 w-5" />
-            {isPackage ? "إلغاء الباقة" : "إلغاء الوثيقة"}
+            {isPackage ? "إلغاء الباقة" : "إلغاء المعاملة"}
           </DialogTitle>
         </DialogHeader>
 
@@ -258,8 +258,8 @@ export function CancelPolicyModal({
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span>
               {isPackage
-                ? `سيتم تسجيل ${effectivePolicyIds.length} وثائق الباقة كملغاة دفعة واحدة`
-                : "سيتم تسجيل الوثيقة كملغاة ولن تظهر في التقارير النشطة"}
+                ? `سيتم تسجيل ${effectivePolicyIds.length} معاملات الباقة كملغاة دفعة واحدة`
+                : "سيتم تسجيل المعاملة كملغاة ولن تظهر في التقارير النشطة"}
             </span>
           </div>
 

@@ -306,7 +306,7 @@ export function RefundsTab({ clientId, branchId, onRefundAdded }: RefundsTabProp
                       <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">
-                          وثيقة {refund.policy.policy_number}
+                          معاملة {refund.policy.policy_number}
                         </span>
                       </div>
                     ) : (

@@ -67,7 +67,7 @@ const NOTIFICATION_COLORS: Record<string, string> = {
 const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   signature: 'توقيع',
   payment: 'دفعة',
-  policy: 'وثيقة',
+  policy: 'معاملة',
   client: 'عميل',
   expiring: 'تنبيه انتهاء',
   reminder: 'تذكير',

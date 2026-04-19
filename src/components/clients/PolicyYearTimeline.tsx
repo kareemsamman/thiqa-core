@@ -743,7 +743,7 @@ export function PolicyYearTimeline({
         body: { policy_ids: policyIds, skip_sms: true },
       });
       if (error) {
-        await toastFunctionError(error, 'فشل في تحميل الوثيقة');
+        await toastFunctionError(error, 'فشل في تحميل المعاملة');
         return false;
       }
       if (data?.error) {
@@ -755,10 +755,10 @@ export function PolicyYearTimeline({
         window.open(invoiceUrl, '_blank');
         return true;
       }
-      toast.error('لم يتم إنشاء رابط الوثيقة');
+      toast.error('لم يتم إنشاء رابط المعاملة');
       return false;
     } catch (err: any) {
-      toast.error(err?.message || 'فشل في تحميل الوثيقة');
+      toast.error(err?.message || 'فشل في تحميل المعاملة');
       return false;
     }
   };
@@ -776,7 +776,7 @@ export function PolicyYearTimeline({
         toast.error(data.error);
         return false;
       }
-      toast.success(isPackage ? 'تم إرسال الوثائق للعميل' : 'تم إرسال الوثيقة للعميل');
+      toast.success(isPackage ? 'تم إرسال المعاملات للعميل' : 'تم إرسال المعاملة للعميل');
       return true;
     } catch (err: any) {
       toast.error(err?.message || 'فشل في الإرسال');
@@ -831,7 +831,7 @@ export function PolicyYearTimeline({
     return (
       <Card className="text-center py-12">
         <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
-        <p className="text-muted-foreground">لا توجد وثائق تأمين</p>
+        <p className="text-muted-foreground">لا توجد معاملات تأمين</p>
       </Card>
     );
   }
@@ -890,7 +890,7 @@ export function PolicyYearTimeline({
                 )}
                 
                 <Badge variant="outline" className="ltr-nums">
-                  {totalCount} وثيقة
+                  {totalCount} معاملة
                 </Badge>
               </div>
             </CollapsibleTrigger>
@@ -1100,8 +1100,8 @@ function PolicyPackageCard({
   const hasBroker = !!brokerCardPolicy;
   const brokerNoteText = brokerCardPolicy
     ? (brokerCardPolicy.broker_direction === 'to_broker'
-        ? `صُدرت هذه الوثيقة للوسيط ${brokerCardPolicy.broker?.name ?? ''} — المبلغ يُتابع في حساب الوسيط`
-        : `تمت هذه الوثيقة عبر الوسيط ${brokerCardPolicy.broker?.name ?? ''} — المبلغ يُتابع في حساب الوسيط`)
+        ? `صُدرت هذه المعاملة للوسيط ${brokerCardPolicy.broker?.name ?? ''} — المبلغ يُتابع في حساب الوسيط`
+        : `تمت هذه المعاملة عبر الوسيط ${brokerCardPolicy.broker?.name ?? ''} — المبلغ يُتابع في حساب الوسيط`)
     : '';
   const [invoiceBusy, setInvoiceBusy] = useState<'print' | 'sms' | null>(null);
 
@@ -1177,11 +1177,11 @@ function PolicyPackageCard({
                 e.stopPropagation();
                 navigator.clipboard
                   .writeText(policy.policy_number!)
-                  .then(() => toast.success(`تم نسخ رقم الوثيقة: ${policy.policy_number}`))
-                  .catch(() => toast.error('فشل نسخ رقم الوثيقة'));
+                  .then(() => toast.success(`تم نسخ رقم المعاملة: ${policy.policy_number}`))
+                  .catch(() => toast.error('فشل نسخ رقم المعاملة'));
               }}
               className="focus:outline-none"
-              title="اضغط لنسخ رقم الوثيقة"
+              title="اضغط لنسخ رقم المعاملة"
             >
               <Badge
                 variant="outline"
@@ -1240,7 +1240,7 @@ function PolicyPackageCard({
                 type="button"
                 onClick={pulsePolicyRow(pkg.mainPolicy.id)}
                 className="focus:outline-none"
-                title="اضغط لإبراز هذه الوثيقة في القائمة"
+                title="اضغط لإبراز هذه المعاملة في القائمة"
               >
                 <Badge className={cn("border text-xs font-semibold cursor-pointer", policyTypeColors[pkg.mainPolicy.policy_type_parent])}>
                   {getDisplayLabel(pkg.mainPolicy)}
@@ -1253,7 +1253,7 @@ function PolicyPackageCard({
                     type="button"
                     onClick={pulsePolicyRow(addon.id)}
                     className="focus:outline-none"
-                    title="اضغط لإبراز هذه الوثيقة في القائمة"
+                    title="اضغط لإبراز هذه المعاملة في القائمة"
                   >
                     <Badge className={cn("border text-xs cursor-pointer", policyTypeColors[addon.policy_type_parent])}>
                       {getDisplayLabel(addon)}
@@ -1365,7 +1365,7 @@ function PolicyPackageCard({
                       setInvoiceBusy(null);
                     }
                   }}
-                  aria-label="طباعة الوثيقة"
+                  aria-label="طباعة المعاملة"
                 >
                   {invoiceBusy === 'print' ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1384,9 +1384,9 @@ function PolicyPackageCard({
                     <Printer className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold">طباعة الوثيقة</p>
+                    <p className="text-sm font-semibold">طباعة المعاملة</p>
                     <p className="text-xs text-muted-foreground leading-tight mt-0.5">
-                      فتح الوثيقة في نافذة جديدة للطباعة
+                      فتح المعاملة في نافذة جديدة للطباعة
                     </p>
                   </div>
                 </div>
@@ -1439,7 +1439,7 @@ function PolicyPackageCard({
                     <p className="text-sm font-semibold">إرسال SMS للعميل</p>
                     {clientPhone ? (
                       <p className="text-xs text-muted-foreground leading-tight mt-0.5">
-                        سيتم إرسال رابط الوثيقة للرقم{' '}
+                        سيتم إرسال رابط المعاملة للرقم{' '}
                         <span className="font-mono font-semibold text-foreground ltr-nums">
                           {clientPhone}
                         </span>
@@ -1481,7 +1481,7 @@ function PolicyPackageCard({
                     {!isPkg && onEditPolicy && (
                       <DropdownMenuItem onClick={() => onEditPolicy(policy.id)}>
                         <Pencil className="h-4 w-4 ml-2" />
-                        تعديل الوثيقة
+                        تعديل المعاملة
                       </DropdownMenuItem>
                     )}
                   </>
@@ -1499,7 +1499,7 @@ function PolicyPackageCard({
                     {!isPkg && onTransfer && (
                       <DropdownMenuItem onClick={() => onTransfer(policy.id)}>
                         <ArrowRightLeft className="h-4 w-4 ml-2" />
-                        تحويل الوثيقة
+                        تحويل المعاملة
                       </DropdownMenuItem>
                     )}
                   </>
@@ -1522,7 +1522,7 @@ function PolicyPackageCard({
                     {!isPkg && onRenewPolicy && (
                       <DropdownMenuItem onClick={() => onRenewPolicy(policy.id)}>
                         <RefreshCw className="h-4 w-4 ml-2" />
-                        تجديد الوثيقة
+                        تجديد المعاملة
                       </DropdownMenuItem>
                     )}
                   </>
@@ -1546,7 +1546,7 @@ function PolicyPackageCard({
                         onClick={() => onCancel(policy.id)}
                       >
                         <XCircle className="h-4 w-4 ml-2" />
-                        إلغاء الوثيقة
+                        إلغاء المعاملة
                       </DropdownMenuItem>
                     )}
                   </>
@@ -1567,7 +1567,7 @@ function PolicyPackageCard({
                       }}
                     >
                       <Trash2 className="h-4 w-4 ml-2" />
-                      {isPkg ? 'حذف الباقة نهائياً' : 'حذف الوثيقة نهائياً'}
+                      {isPkg ? 'حذف الباقة نهائياً' : 'حذف المعاملة نهائياً'}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -1652,7 +1652,7 @@ function PolicyPackageCard({
               {/* Table header */}
               <div className="grid grid-cols-[2rem_1fr_auto_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
                 <span className="text-center">#</span>
-                <span>الوثيقة</span>
+                <span>المعاملة</span>
                 <span className="ltr-nums">الفترة</span>
                 <span className="text-left min-w-[70px]">السعر</span>
               </div>
@@ -1767,12 +1767,12 @@ function PolicyPackageCard({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">ملاحظات الوثيقة</span>
+                <span className="text-xs text-muted-foreground">ملاحظات المعاملة</span>
               </div>
               <Textarea
                 value={editedNotesValue || ''}
                 onChange={(e) => onNotesValueChange?.(e.target.value)}
-                placeholder="أدخل ملاحظات الوثيقة..."
+                placeholder="أدخل ملاحظات المعاملة..."
                 className="min-h-[60px] text-sm resize-none"
                 autoFocus
                 onKeyDown={(e) => {

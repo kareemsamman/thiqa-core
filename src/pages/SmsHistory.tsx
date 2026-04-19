@@ -219,7 +219,7 @@ export default function SmsHistory() {
                       <TableHead className="text-right">العميل</TableHead>
                       <TableHead className="text-right">الهاتف</TableHead>
                       <TableHead className="text-right">النوع</TableHead>
-                      <TableHead className="text-right">الوثيقة</TableHead>
+                      <TableHead className="text-right">المعاملة</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
                       <TableHead className="text-right">تاريخ الإرسال</TableHead>
                       <TableHead className="text-right max-w-xs">الرسالة</TableHead>
@@ -280,7 +280,7 @@ export default function SmsHistory() {
                                       openPolicyPreview(log.policy_id);
                                     }}
                                     className="flex flex-col items-start gap-0.5 hover:text-primary transition-colors"
-                                    title="عرض الوثيقة"
+                                    title="عرض المعاملة"
                                   >
                                     <span className="font-mono ltr-nums font-semibold">{docLabel}</span>
                                     {carLabel && (
@@ -345,7 +345,7 @@ export default function SmsHistory() {
                                       </div>
                                       {docLabel && (
                                         <div>
-                                          <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">رقم الوثيقة</p>
+                                          <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">رقم المعاملة</p>
                                           <p className="font-mono ltr-nums font-semibold">{docLabel}</p>
                                         </div>
                                       )}
@@ -396,7 +396,7 @@ export default function SmsHistory() {
                                           className="gap-2"
                                         >
                                           <FileText className="h-4 w-4" />
-                                          عرض الوثيقة
+                                          عرض المعاملة
                                         </Button>
                                       </div>
                                     )}

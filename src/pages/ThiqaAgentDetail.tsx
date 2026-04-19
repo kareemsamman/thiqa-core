@@ -157,7 +157,7 @@ const ALL_FEATURES = [
   { key: 'visa_payment', label: 'دفع بالفيزا', description: 'السماح بالدفع عبر بطاقة ائتمان (فيزا)' },
   { key: 'receipts', label: 'الإيصالات', description: 'نظام إدارة الإيصالات وطباعتها' },
   { key: 'accounting', label: 'المحاسبة', description: 'دفتر محاسبة موحد' },
-  { key: 'renewal_reports', label: 'تقارير التجديد', description: 'متابعة تجديد الوثائق' },
+  { key: 'renewal_reports', label: 'تقارير التجديد', description: 'متابعة تجديد المعاملات' },
   { key: 'ai_assistant', label: 'المساعد الذكي (ثاقب)', description: 'مساعد AI للاستعلام عن بيانات النظام' },
   { key: 'ippbx', label: 'Click2Call / PBX', description: 'الاتصال عبر المقسم' },
 ];
@@ -784,7 +784,7 @@ export default function ThiqaAgentDetail() {
   const TABLE_LABELS: Record<string, string> = {
     branches: "الفروع", insurance_companies: "شركات التأمين", insurance_categories: "فئات التأمين",
     pricing_rules: "قواعد التسعير", brokers: "الوسطاء", clients: "العملاء", cars: "السيارات",
-    car_accidents: "حوادث السيارات", policies: "الوثائق", policy_payments: "المدفوعات",
+    car_accidents: "حوادث السيارات", policies: "المعاملات", policy_payments: "المدفوعات",
     outside_cheques: "الشيكات", media_files: "الوسائط", invoice_templates: "قوالب الفواتير",
     invoices: "الفواتير", customer_signatures: "التوقيعات", sms_settings: "إعدادات SMS",
     payment_settings: "إعدادات الدفع", site_settings: "إعدادات الموقع", notifications: "الإشعارات",
@@ -1680,7 +1680,7 @@ export default function ThiqaAgentDetail() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />إحصائيات الوكيل</CardTitle>
-                <CardDescription>عدد العملاء والسيارات والوثائق المسجلة</CardDescription>
+                <CardDescription>عدد العملاء والسيارات والمعاملات المسجلة</CardDescription>
               </CardHeader>
               <CardContent>
                 {statsLoading ? (
@@ -1702,7 +1702,7 @@ export default function ThiqaAgentDetail() {
                     <Card className="border-2 text-center p-6">
                       <Shield className="h-8 w-8 mx-auto mb-2 text-primary" />
                       <p className="text-3xl font-bold">{agentStats.policies.toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground mt-1">وثائق تأمين</p>
+                      <p className="text-sm text-muted-foreground mt-1">معاملات تأمين</p>
                     </Card>
                   </div>
                 ) : (

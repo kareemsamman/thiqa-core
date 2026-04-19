@@ -1154,7 +1154,7 @@ export default function Receipts() {
               </colgroup>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right whitespace-nowrap">رقم الوثيقة</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">رقم المعاملة</TableHead>
                   <TableHead className="text-right whitespace-nowrap">رقم سند القبض</TableHead>
                   <TableHead className="text-right whitespace-nowrap">المبلغ</TableHead>
                   <TableHead className="text-right whitespace-nowrap">التاريخ</TableHead>
@@ -1194,7 +1194,7 @@ export default function Receipts() {
                               <Badge
                                 variant="outline"
                                 className="text-[9px] px-1.5 py-0 h-4 font-sans bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-300"
-                                title="هذه الوثائق ضمن باقة واحدة"
+                                title="هذه المعاملات ضمن باقة واحدة"
                               >
                                 📦 باقة
                               </Badge>

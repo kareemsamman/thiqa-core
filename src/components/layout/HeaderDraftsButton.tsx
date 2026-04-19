@@ -180,8 +180,8 @@ function DraftRow({
 }) {
   const summary = instance.draftSummary;
   const title = summary
-    ? `استئناف: ${summary.clientName || "وثيقة جديدة"} — ${summary.stepTitle}`
-    : "استئناف وثيقة جديدة";
+    ? `استئناف: ${summary.clientName || "معاملة جديدة"} — ${summary.stepTitle}`
+    : "استئناف معاملة جديدة";
   const stamp = formatMinimizedAt(instance.minimizedAt);
 
   // The newest minimized draft gets a distinct blue gradient so the user
@@ -220,7 +220,7 @@ function DraftRow({
         </span>
         <span className="flex flex-col items-start min-w-0 leading-tight flex-1">
           <span className="text-xs font-semibold truncate w-full">
-            {summary?.clientName || "مسودة وثيقة"}
+            {summary?.clientName || "مسودة معاملة"}
           </span>
           <span className="text-[10px] opacity-70 truncate w-full">
             {summary

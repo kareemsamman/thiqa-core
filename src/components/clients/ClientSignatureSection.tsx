@@ -76,7 +76,7 @@ export function ClientSignatureSection({
       "At least one policy file must be uploaded before sending invoices": "يجب رفع ملف بوليصة واحد على الأقل قبل الإرسال",
       "Client phone number is required": "رقم هاتف العميل مطلوب",
       "SMS service is not enabled": "خدمة الرسائل غير مفعلة",
-      "Policy not found": "الوثيقة غير موجودة",
+      "Policy not found": "المعاملة غير موجودة",
       "Client not found": "العميل غير موجود",
       "Client already has a signature": "العميل لديه توقيع مسبق",
       "Failed to fetch SMS settings": "فشل في جلب إعدادات الرسائل",

@@ -331,7 +331,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
 
       toast({ 
         title: "تم الإرسال", 
-        description: "تم إرسال ملفات الوثيقة للعميل بنجاح" 
+        description: "تم إرسال ملفات المعاملة للعميل بنجاح"
       });
     } catch (error: any) {
       console.error("Error sending policy SMS:", error);
@@ -554,7 +554,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
 
     } catch (error) {
       console.error("Error fetching policy details:", error);
-      toast({ title: "خطأ", description: "فشل في تحميل تفاصيل الوثيقة", variant: "destructive" });
+      toast({ title: "خطأ", description: "فشل في تحميل تفاصيل المعاملة", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -778,7 +778,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                           {hasPackage && (
                             <Badge className="bg-white/20 border-white/30 text-white font-medium">
                               <Layers className="h-3 w-3 ml-1" />
-                              {relatedPolicies.length + 1} وثائق
+                              {relatedPolicies.length + 1} معاملات
                             </Badge>
                           )}
                         </div>
@@ -885,7 +885,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                   )}
                 >
                   <Shield className="h-4 w-4 inline-block ml-1.5" />
-                  معلومات الوثيقة
+                  معلومات المعاملة
                 </button>
                 <button
                   onClick={() => setActiveSection('payments')}
@@ -1063,7 +1063,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                               <span className="text-sm font-medium text-amber-900">
                                 {hasPackage ? 'إجمالي عمولة الباقة' : 'عمولة للمكتب'}
                               </span>
-                              <p className="text-xs text-amber-700/80">من الوثائق الإلزامية</p>
+                              <p className="text-xs text-amber-700/80">من المعاملات الإلزامية</p>
                             </div>
                           </div>
                           <p className="text-3xl font-bold ltr-nums text-amber-900">
@@ -1111,7 +1111,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                                   ? 'عمولة (خسارة)' 
                                   : hasPackage 
                                     ? 'إجمالي ربح الباقة' 
-                                    : 'الربح من الوثيقة'}
+                                    : 'الربح من المعاملة'}
                               </span>
                               {(policy.cancelled || isTransferred) && (
                                 <p className="text-xs text-slate-400">ملغاة/محوّلة</p>
@@ -1182,7 +1182,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-red-900 text-base">
-                              {policy.cancelled ? "وثيقة ملغاة" : "يوجد وثائق ملغاة في الباقة"}
+                              {policy.cancelled ? "معاملة ملغاة" : "يوجد معاملات ملغاة في الباقة"}
                             </p>
                             {policy.cancellation_date && (
                               <p className="text-xs text-red-600 ltr-nums">
@@ -1214,8 +1214,8 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                             <ArrowLeftRight className="h-5 w-5 text-amber-600" />
                           </div>
                           <div className="flex-1">
-                            <p className="font-semibold text-amber-800">وثيقة محوّلة</p>
-                            <p className="text-xs text-amber-600">الدفعات والملفات تم نقلها للوثيقة الجديدة</p>
+                            <p className="font-semibold text-amber-800">معاملة محوّلة</p>
+                            <p className="text-xs text-amber-600">الدفعات والملفات تم نقلها للمعاملة الجديدة</p>
                           </div>
                           {policy.transferred_car_number && (
                             <Badge className="bg-amber-100 text-amber-700 border-amber-300">
@@ -1547,7 +1547,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
               </ScrollArea>
             </div>
           ) : (
-            <div className="p-8 text-center text-muted-foreground">لم يتم العثور على الوثيقة</div>
+            <div className="p-8 text-center text-muted-foreground">لم يتم العثور على المعاملة</div>
           )}
         </DialogContent>
       </Dialog>

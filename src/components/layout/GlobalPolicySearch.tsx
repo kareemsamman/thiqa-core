@@ -263,7 +263,7 @@ export function GlobalPolicySearch({ open, onOpenChange }: GlobalPolicySearchPro
                       </div>
                     </div>
                     <Badge variant="secondary" className="shrink-0 text-xs">
-                      {result.policies_count} وثيقة
+                      {result.policies_count} معاملة
                     </Badge>
                   </div>
                 </button>

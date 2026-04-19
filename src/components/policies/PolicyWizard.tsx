@@ -407,7 +407,7 @@ export function PolicyWizard({
         setResetWarning({
           open: true,
           title: 'تغيير نوع التأمين',
-          description: 'سيؤدي تغيير نوع التأمين إلى إعادة تعيين بيانات السيارة والوثيقة والدفعات. هل تريد المتابعة؟',
+          description: 'سيؤدي تغيير نوع التأمين إلى إعادة تعيين بيانات السيارة والمعاملة والدفعات. هل تريد المتابعة؟',
           onConfirm: () => {
             setSelectedCategory(category);
             resetCarData();
@@ -696,7 +696,7 @@ export function PolicyWizard({
       console.error('Error creating temp policy:', error);
       toast({
         title: "خطأ",
-        description: "فشل في إنشاء الوثيقة المؤقتة",
+        description: "فشل في إنشاء المعاملة المؤقتة",
         variant: "destructive",
       });
       return null;
@@ -752,7 +752,7 @@ export function PolicyWizard({
     if (hasUnpaidVisa) {
       toast({
         title: "دفعات فيزا غير مكتملة",
-        description: "يجب الدفع بالفيزا قبل حفظ الوثيقة",
+        description: "يجب الدفع بالفيزا قبل حفظ المعاملة",
         variant: "destructive",
       });
       return;
@@ -1033,7 +1033,7 @@ export function PolicyWizard({
             .single();
           
           if (tempPolicyError || !tempPolicy) {
-            throw new Error('لم يتم العثور على الوثيقة المؤقتة');
+            throw new Error('لم يتم العثور على المعاملة المؤقتة');
           }
 
           const tempClientId = tempPolicy.client_id;
@@ -1529,7 +1529,7 @@ export function PolicyWizard({
               error: linkError,
             });
             // Show specific RLS or constraint errors
-            throw new Error(`فشل ربط السائقين بالوثيقة: ${linkError.message}`);
+            throw new Error(`فشل ربط السائقين بالمعاملة: ${linkError.message}`);
           }
         }
       }
@@ -1773,7 +1773,7 @@ export function PolicyWizard({
           </div>
           <DialogHeader className="flex-shrink-0 pb-2 sm:pb-4 border-b">
             <DialogTitle className="text-base sm:text-xl font-bold flex items-center gap-2 min-w-0 pl-20">
-              <span className="truncate">إضافة وثيقة جديدة</span>
+              <span className="truncate">إضافة معاملة جديدة</span>
               {selectedCategory && (
                 <span className="text-xs sm:text-sm font-normal text-muted-foreground truncate">
                   ({selectedCategory.name_ar || selectedCategory.name})
@@ -1995,7 +1995,7 @@ export function PolicyWizard({
                     ) : (
                       <>
                         <Save className="h-4 w-4 ml-1 sm:ml-2" />
-                        حفظ الوثيقة
+                        حفظ المعاملة
                       </>
                     )}
                   </Button>
@@ -2019,14 +2019,14 @@ export function PolicyWizard({
       <AlertDialog open={closeConfirmOpen} onOpenChange={setCloseConfirmOpen}>
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>تجاهل الوثيقة؟</AlertDialogTitle>
+            <AlertDialogTitle>تجاهل المعاملة؟</AlertDialogTitle>
             <AlertDialogDescription>
-              ستفقد جميع البيانات التي أدخلتها في هذه الوثيقة. يمكنك بدلاً من
+              ستفقد جميع البيانات التي أدخلتها في هذه المعاملة. يمكنك بدلاً من
               ذلك تصغير النافذة للعودة إليها لاحقاً.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:gap-3">
-            <AlertDialogCancel className="mt-0">البقاء في الوثيقة</AlertDialogCancel>
+            <AlertDialogCancel className="mt-0">البقاء في المعاملة</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 setCloseConfirmOpen(false);

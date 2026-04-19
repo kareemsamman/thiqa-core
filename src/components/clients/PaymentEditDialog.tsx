@@ -391,7 +391,7 @@ export function PaymentEditDialog({
           {isLocked && (
             <div className="bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2.5 rounded-lg text-xs flex items-start gap-2">
               <Lock className="h-4 w-4 mt-0.5 shrink-0" />
-              <span>هذه دفعة لوثيقة إلزامية — المبلغ والطريقة والتاريخ ثابتين، يمكنك فقط وضعها كراجعة.</span>
+              <span>هذه دفعة لمعاملة إلزامية — المبلغ والطريقة والتاريخ ثابتين، يمكنك فقط وضعها كراجعة.</span>
             </div>
           )}
 

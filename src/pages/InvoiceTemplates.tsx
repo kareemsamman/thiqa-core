@@ -423,7 +423,7 @@ export default function InvoiceTemplates() {
                   <Label className="text-sm">معاينة مع:</Label>
                   <Select value={selectedPreviewPolicy} onValueChange={setSelectedPreviewPolicy}>
                     <SelectTrigger className="w-48 h-8">
-                      <SelectValue placeholder="اختر وثيقة للمعاينة" />
+                      <SelectValue placeholder="اختر معاملة للمعاينة" />
                     </SelectTrigger>
                     <SelectContent>
                       {policies.map(p => (
@@ -534,7 +534,7 @@ export default function InvoiceTemplates() {
                         <p>{"{{total_amount}}"} - المبلغ</p>
                         <p>{"{{payment_method}}"} - طريقة الدفع</p>
                         <p>{"{{admin_name}}"} - اسم الموظف</p>
-                        <p>{"{{policy_number}}"} - رقم الوثيقة</p>
+                        <p>{"{{policy_number}}"} - رقم المعاملة</p>
                       </div>
                     </div>
                   </div>

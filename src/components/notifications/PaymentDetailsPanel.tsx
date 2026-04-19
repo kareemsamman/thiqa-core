@@ -173,7 +173,7 @@ export function PaymentDetailsPanel({ metadata, className }: PaymentDetailsPanel
                   onClick={() => handleNavigate(`/policies?id=${details.policy_id}`)}
                 >
                   <FileText className="h-3 w-3" />
-                  فتح الوثيقة
+                  فتح المعاملة
                   <ExternalLink className="h-2.5 w-2.5 opacity-50" />
                 </Button>
               )}

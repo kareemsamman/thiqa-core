@@ -224,7 +224,7 @@ export default function AccidentReports() {
     <MainLayout>
       <Header
         title="بلاغات الحوادث"
-        subtitle="إدارة ومتابعة بلاغات الحوادث المرتبطة بالوثائق"
+        subtitle="إدارة ومتابعة بلاغات الحوادث المرتبطة بالمعاملات"
       />
 
       <div className="p-6 space-y-6" dir="rtl">
@@ -237,7 +237,7 @@ export default function AccidentReports() {
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="بحث بالعميل، رقم السيارة، رقم الوثيقة..."
+              placeholder="بحث بالعميل، رقم السيارة، رقم المعاملة..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -282,7 +282,7 @@ export default function AccidentReports() {
                 <TableHead className="text-right">تاريخ الحادث</TableHead>
                 <TableHead className="text-right">العميل</TableHead>
                 <TableHead className="text-right">رقم السيارة</TableHead>
-                <TableHead className="text-right">رقم الوثيقة</TableHead>
+                <TableHead className="text-right">رقم المعاملة</TableHead>
                 <TableHead className="text-right">الشركة</TableHead>
                 <TableHead className="text-right">الحالة</TableHead>
                 <TableHead className="text-right">أنشئ بواسطة</TableHead>

@@ -403,7 +403,7 @@ export function CategoryQuickFormDialog({
         }}
         onConfirm={handleDelete}
         title="حذف نوع التأمين"
-        description="هل أنت متأكد من حذف هذا النوع؟ لا يمكن حذفه إذا كان مرتبطاً بوثائق."
+        description="هل أنت متأكد من حذف هذا النوع؟ لا يمكن حذفه إذا كان مرتبطاً بمعاملات."
         loading={deleting}
       />
     </>

@@ -283,7 +283,7 @@ export function Step1BranchTypeClient({
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm">لا توجد فروع بعد</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    أضف فرعك الأول لتتمكن من إنشاء الوثائق
+                    أضف فرعك الأول لتتمكن من إنشاء المعاملات
                   </p>
                 </div>
                 <Button type="button" size="sm" className="gap-2 shrink-0" onClick={openBranchCreate}>

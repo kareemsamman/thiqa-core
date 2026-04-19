@@ -158,7 +158,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             className="h-11 px-4 rounded-full gap-2 shadow-md hover:shadow-lg hover:shadow-primary/20 active:scale-[0.98] text-[15px]"
           >
             <Plus className="h-4 w-4" />
-            <span>وثيقة جديدة</span>
+            <span>معاملة جديدة</span>
           </Button>
 
           <HeaderDraftsButton />
@@ -188,7 +188,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             >
               <Plus className="h-4 w-4 sm:hidden" />
               <FileText className="h-4 w-4 hidden sm:inline" />
-              <span className="hidden sm:inline">وثيقة جديدة</span>
+              <span className="hidden sm:inline">معاملة جديدة</span>
             </Button>
           </div>
         </div>

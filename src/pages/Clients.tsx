@@ -191,7 +191,7 @@ export default function Clients() {
       if (count && count > 0) {
         toast({ 
           title: "لا يمكن الحذف", 
-          description: `العميل لديه ${count} وثيقة مرتبطة`, 
+          description: `العميل لديه ${count} معاملة مرتبطة`,
           variant: "destructive" 
         });
         setDeleteLoading(false);

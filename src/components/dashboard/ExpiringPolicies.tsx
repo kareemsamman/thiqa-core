@@ -82,7 +82,7 @@ export function ExpiringPolicies() {
       <CardHeader className="flex flex-row items-center justify-between pb-4">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-warning" />
-          <CardTitle className="text-base">وثائق تنتهي قريباً</CardTitle>
+          <CardTitle className="text-base">معاملات تنتهي قريباً</CardTitle>
           {!loading && policies.length > 0 && (
             <Badge variant="destructive" className="mr-2">{policies.length}</Badge>
           )}
@@ -111,7 +111,7 @@ export function ExpiringPolicies() {
         ) : policies.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <AlertTriangle className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p>لا توجد وثائق تنتهي خلال 30 يوم</p>
+            <p>لا توجد معاملات تنتهي خلال 30 يوم</p>
           </div>
         ) : (
           policies.map((policy) => {

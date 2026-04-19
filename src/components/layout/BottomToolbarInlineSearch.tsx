@@ -233,7 +233,7 @@ export function BottomToolbarInlineSearch({
         policyMap.set(id, {
           kind: "policy",
           policyId: id,
-          label: docNum || polNum || "وثيقة",
+          label: docNum || polNum || "معاملة",
           subLabel: [clientName, carNumber].filter(Boolean).join(" · ") || null,
           clientName,
           carNumber,
@@ -365,7 +365,7 @@ export function BottomToolbarInlineSearch({
         {policyResults.length > 0 && (
           <div className="space-y-0.5">
             <div className="px-2 pt-1 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-              الوثائق والسندات
+              المعاملات والسندات
             </div>
             {policyResults.map((p) => (
               <button

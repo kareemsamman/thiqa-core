@@ -33,7 +33,7 @@ export function PaymentSummaryBar({
     )}>
       <div className="grid grid-cols-3 gap-4 text-center">
         <div>
-          <span className="text-xs text-muted-foreground block mb-1">إجمالي الوثيقة</span>
+          <span className="text-xs text-muted-foreground block mb-1">إجمالي المعاملة</span>
           <p className="font-bold text-lg">₪{totalPrice.toLocaleString()}</p>
           {officeCommission > 0 && (
             <p className="text-[11px] text-muted-foreground mt-0.5">

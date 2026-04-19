@@ -663,13 +663,13 @@ export function Step3PolicyDetails({
         <div className="grid gap-3 md:grid-cols-3">
           {/* Policy Type */}
           <div>
-            <Label>نوع الوثيقة *</Label>
+            <Label>نوع المعاملة *</Label>
             <Select
               value={policy.policy_type_parent}
               onValueChange={(v) => setPolicy({ ...policy, policy_type_parent: v, policy_type_child: "", company_id: "" })}
             >
               <SelectTrigger className={cn(errors.policy_type_parent ? "border-destructive" : "")}>
-                <SelectValue placeholder="اختر نوع الوثيقة" />
+                <SelectValue placeholder="اختر نوع المعاملة" />
               </SelectTrigger>
               <SelectContent>
                 {CAR_POLICY_TYPES.map((type) => (
@@ -730,7 +730,7 @@ export function Step3PolicyDetails({
                 errors.company_id ? "border-destructive" : "",
                 !policy.policy_type_parent && "opacity-50"
               )}>
-                <SelectValue placeholder={policy.policy_type_parent ? "اختر الشركة" : "اختر نوع الوثيقة أولاً"} />
+                <SelectValue placeholder={policy.policy_type_parent ? "اختر الشركة" : "اختر نوع المعاملة أولاً"} />
               </SelectTrigger>
               <SelectContent>
                 {loadingCompanies ? (
@@ -1007,7 +1007,7 @@ export function Step3PolicyDetails({
                   </p>
                   {!canEnablePackage && (
                     <p className="text-xs text-amber-600 mt-1">
-                      يرجى إكمال بيانات الوثيقة الأساسية أولاً (النوع، الشركة{policy.policy_type_parent === 'THIRD_FULL' ? '، النوع الفرعي' : ''})
+                      يرجى إكمال بيانات المعاملة الأساسية أولاً (النوع، الشركة{policy.policy_type_parent === 'THIRD_FULL' ? '، النوع الفرعي' : ''})
                     </p>
                   )}
                 </div>

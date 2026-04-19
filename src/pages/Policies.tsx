@@ -189,7 +189,7 @@ export default function Policies() {
       setTotalCount(count || 0);
     } catch (error) {
       console.error('Error fetching policies:', error);
-      toast({ title: "خطأ", description: "فشل في تحميل الوثائق", variant: "destructive" });
+      toast({ title: "خطأ", description: "فشل في تحميل المعاملات", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -215,7 +215,7 @@ export default function Policies() {
     setTotalCount(prev => prev - 1);
     setDeleteDialogOpen(false);
     setDeletingPolicy(null);
-    toast({ title: "تم الحذف", description: "تم حذف الوثيقة بنجاح" });
+    toast({ title: "تم الحذف", description: "تم حذف المعاملة بنجاح" });
     
     // Background: Do the actual delete
     try {
@@ -237,7 +237,7 @@ export default function Policies() {
 
   const handleCancelRecalculation = () => {
     cancelRecalcRef.current = true;
-    toast({ title: "جاري الإلغاء", description: "سيتم إيقاف إعادة الحساب بعد الوثيقة الحالية" });
+    toast({ title: "جاري الإلغاء", description: "سيتم إيقاف إعادة الحساب بعد المعاملة الحالية" });
   };
 
   const handleRecalculateAll = async () => {
@@ -253,7 +253,7 @@ export default function Policies() {
 
       if (countError) throw countError;
       if (!totalCount || totalCount === 0) {
-        toast({ title: "لا توجد وثائق", description: "لا توجد وثائق لإعادة حسابها" });
+        toast({ title: "لا توجد معاملات", description: "لا توجد معاملات لإعادة حسابها" });
         return;
       }
 
@@ -285,7 +285,7 @@ export default function Policies() {
         if (cancelRecalcRef.current) {
           toast({ 
             title: "تم الإلغاء", 
-            description: `تم تحديث ${successCount} وثيقة قبل الإلغاء` 
+            description: `تم تحديث ${successCount} معاملة قبل الإلغاء`
           });
           break;
         }
@@ -311,7 +311,7 @@ export default function Policies() {
       if (!cancelRecalcRef.current) {
         toast({
           title: "تم إعادة الحساب",
-          description: `تم تحديث ${successCount} وثيقة${errorCount > 0 ? `، فشل ${errorCount}` : ''}`,
+          description: `تم تحديث ${successCount} معاملة${errorCount > 0 ? `، فشل ${errorCount}` : ''}`,
         });
       }
 
@@ -392,8 +392,8 @@ export default function Policies() {
   return (
     <MainLayout>
       <Header
-        title="الوثائق"
-        subtitle="إدارة وثائق التأمين"
+        title="المعاملات"
+        subtitle="إدارة معاملات التأمين"
       />
 
       <div className="p-6 space-y-4">
@@ -403,7 +403,7 @@ export default function Policies() {
           <div className="relative flex-1 max-w-md">
             <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="بحث في الوثائق..."
+              placeholder="بحث في المعاملات..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -419,7 +419,7 @@ export default function Policies() {
               className="gap-2"
             >
               <Plus className="h-4 w-4" />
-              وثيقة جديدة
+              معاملة جديدة
             </Button>
             <PolicyFilters
               filters={filters}
@@ -480,7 +480,7 @@ export default function Policies() {
         {/* Pagination */}
         <div className="flex items-center justify-between px-4 py-3 bg-card rounded-lg border">
           <p className="text-sm text-muted-foreground">
-            عرض {policies.length} من {totalCount} وثيقة
+            عرض {policies.length} من {totalCount} معاملة
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -542,8 +542,8 @@ export default function Policies() {
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleDelete}
-        title="حذف الوثيقة"
-        description="هل أنت متأكد من حذف هذه الوثيقة؟ سيتم حذف كل الدفعات والملفات التابعة لها."
+        title="حذف المعاملة"
+        description="هل أنت متأكد من حذف هذه المعاملة؟ سيتم حذف كل الدفعات والملفات التابعة لها."
       />
     </MainLayout>
   );

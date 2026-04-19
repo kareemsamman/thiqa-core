@@ -185,11 +185,11 @@ export function AccidentThirdPartyForm({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>رقم وثيقة التأمين</Label>
+                  <Label>رقم معاملة التأمين</Label>
                   <Input
                     value={thirdParty.insurance_policy_number || ""}
                     onChange={(e) => onChange({ insurance_policy_number: e.target.value || null })}
-                    placeholder="رقم الوثيقة"
+                    placeholder="رقم المعاملة"
                   />
                 </div>
               </div>
