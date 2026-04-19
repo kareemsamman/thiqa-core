@@ -109,7 +109,7 @@ export function Header({ title, subtitle }: HeaderProps) {
           <BottomToolbarInlineSearch
             direction="down"
             dropdownMatchWidth
-            inputClassName="h-11 w-[220px] bg-secondary/70 border-transparent"
+            inputClassName="h-11 w-[280px] bg-secondary/70 border-transparent"
           />
 
           <Button

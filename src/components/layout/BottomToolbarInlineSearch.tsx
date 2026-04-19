@@ -264,7 +264,11 @@ export function BottomToolbarInlineSearch({
       return;
     }
 
+    // Show the dropdown immediately (with the loading skeleton) so the
+    // user sees "I'm searching" the moment they type enough characters,
+    // instead of waiting 250ms + network for the first paint.
     setLoading(true);
+    setShowDropdown(true);
     const t = setTimeout(() => runSearch(term), 250);
     return () => clearTimeout(t);
   }, [query, runSearch]);
@@ -317,22 +321,22 @@ export function BottomToolbarInlineSearch({
   const renderResults = () => {
     const hasAny = results.length > 0 || policyResults.length > 0;
     return loading ? (
-      <div className="space-y-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-md border border-border/60 p-2">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="mt-2 h-3 w-56" />
+      <div className="space-y-1 p-1">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="rounded-lg p-2.5">
+            <Skeleton className="h-3.5 w-32" />
+            <Skeleton className="mt-2 h-3 w-48" />
           </div>
         ))}
       </div>
     ) : hasAny ? (
-      <div className="space-y-3">
+      <div className="space-y-2">
         {/* Policy / receipt results — surfaced on top so searching
             "35/2026" or a receipt number lands on the drawer straight
             away. */}
         {policyResults.length > 0 && (
-          <div className="space-y-1">
-            <div className="px-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+          <div className="space-y-0.5">
+            <div className="px-2 pt-1 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
               الوثائق والسندات
             </div>
             {policyResults.map((p) => {
@@ -342,8 +346,8 @@ export function BottomToolbarInlineSearch({
                   key={`${p.kind}:${p.policyId}:${p.label}`}
                   type="button"
                   className={cn(
-                    "w-full text-right rounded-md border border-border/60 p-2 transition-colors",
-                    "hover:bg-accent/40 focus:bg-accent/40 focus:outline-none",
+                    "w-full text-right rounded-lg px-2.5 py-2 transition-colors",
+                    "hover:bg-muted/60 focus:bg-muted/60 focus:outline-none",
                   )}
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -377,9 +381,9 @@ export function BottomToolbarInlineSearch({
         )}
 
         {results.length > 0 && (
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {policyResults.length > 0 && (
-              <div className="px-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              <div className="px-2 pt-1 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                 العملاء
               </div>
             )}
@@ -388,8 +392,8 @@ export function BottomToolbarInlineSearch({
             key={r.id}
             type="button"
             className={cn(
-              "w-full text-right rounded-md border border-border/60 p-2 transition-colors",
-              "hover:bg-accent/40 focus:bg-accent/40 focus:outline-none"
+              "w-full text-right rounded-lg px-2.5 py-2 transition-colors",
+              "hover:bg-muted/60 focus:bg-muted/60 focus:outline-none"
             )}
             onMouseDown={(e) => {
               // Use mouseDown to prevent input blur before navigation
@@ -546,11 +550,11 @@ export function BottomToolbarInlineSearch({
       {showDropdown && (
         <div
           className={cn(
-            "absolute z-40 max-h-[360px] overflow-y-auto",
-            "rounded-lg border border-border bg-popover p-2 shadow-lg",
+            "absolute z-40 max-h-[380px] overflow-y-auto",
+            "rounded-2xl border border-border/50 bg-popover p-1.5 shadow-xl shadow-black/5",
             direction === "up"
-              ? "bottom-full mb-3 animate-in fade-in-0 slide-in-from-bottom-1 duration-150"
-              : "top-full mt-1 animate-in fade-in-0 slide-in-from-top-1 duration-150",
+              ? "bottom-full mb-2 animate-in fade-in-0 slide-in-from-bottom-1 duration-150"
+              : "top-full mt-1.5 animate-in fade-in-0 slide-in-from-top-1 duration-150",
             dropdownMatchWidth
               ? "left-0 right-0"
               : "left-1/2 -translate-x-1/2 w-[min(92vw,400px)]",
