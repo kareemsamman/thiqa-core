@@ -1969,7 +1969,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 }}
                 onTransferPolicy={(policyId) => {
                   setSelectedPolicyId(policyId);
-                  setPolicyDetailsOpen(true);
+                  setTransferOpen(true);
                 }}
                 onCancelPolicy={(policyId) => {
                   const p = policies.find((x) => x.id === policyId);
