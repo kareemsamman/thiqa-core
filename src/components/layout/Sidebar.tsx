@@ -490,9 +490,9 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             >
               <CollapsibleTrigger
                 className={cn(
-                  "group flex items-center w-full px-3 py-2.5 rounded-lg gap-3 text-black transition-colors duration-150",
+                  "group flex items-center w-full px-3 py-2.5 rounded-[0.2rem] gap-3 text-black transition-colors duration-150",
                   "hover:bg-slate-50",
-                  isActiveGroup && "bg-slate-100",
+                  isActiveGroup && "bg-[#f3f5f7]",
                 )}
               >
                 <GroupIcon
@@ -525,10 +525,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                     4px past the line in the start direction so the
                     dot (centred on the line) ends up fully embedded
                     inside the pill. */}
-                <div
-                  className="nav-leaves relative mt-1 py-1 space-y-0.5"
-                  style={{ marginInlineEnd: '14px' }}
-                >
+                <div className="nav-leaves relative mt-1 py-1 space-y-0.5">
                   {/* Vertical guide line, inset 17px from the start
                       edge so it sits directly UNDER the parent group
                       icon column. z-10 so it stays visible passing
@@ -548,7 +545,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         onClick={handleNavClick}
                         style={{ ['--i' as any]: idx }}
                         className={cn(
-                          "nav-leaf relative flex items-center py-2 text-[13.5px] font-normal transition-colors duration-150 rounded-md",
+                          "nav-leaf relative flex items-center py-2 text-[13.5px] font-normal transition-colors duration-150 rounded-[0.2rem]",
                           isActiveRoute
                             ? "text-black"
                             : "text-[#878b8b] hover:text-black hover:bg-slate-50",
@@ -559,7 +556,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
-                            className="absolute inset-y-0 inset-x-0 rounded-md bg-[#f3f5f7] pointer-events-none"
+                            className="absolute inset-y-0 inset-x-0 rounded-[0.2rem] bg-[#f3f5f7] pointer-events-none"
                           />
                         )}
                         {/* Black dot centred on the line at 17px from
