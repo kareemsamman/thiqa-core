@@ -45,7 +45,7 @@ import {
   FileText,
   Plus,
   Calendar,
-  Hash,
+  IdCard,
   Banknote,
   Users,
   Save,
@@ -1510,8 +1510,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 <div className="flex-1 min-w-0">
                   <h1 className="text-lg sm:text-2xl font-bold truncate">{client.full_name}</h1>
                   <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-muted-foreground mt-1 sm:mt-2">
-                    <span className="flex items-center gap-1.5 font-mono">
-                      <Hash className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                    <span
+                      className="flex items-center gap-1.5 font-mono ltr-nums"
+                      title="رقم الهوية"
+                    >
+                      <IdCard className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       {client.id_number}
                     </span>
                     {client.phone_number && (
