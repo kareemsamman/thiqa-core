@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Layers, X, FileText, Maximize2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
     minimizedInstances[minimizedInstances.length - 1]?.id ?? null;
 
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
 
   // FLIP: when a new draft arrives (lastMinimizedId changes), play the
   // same minimize→dock flight the bottom toolbar had, but aimed at this
@@ -84,7 +85,7 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
   if (minimizedInstances.length === 0) return null;
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           ref={buttonRef}
@@ -120,7 +121,10 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
           <DraftRow
             key={instance.id}
             instance={instance}
-            onRestore={restoreInstance}
+            onRestore={(id) => {
+              setOpen(false);
+              restoreInstance(id);
+            }}
             onClose={closeInstance}
           />
         ))}
