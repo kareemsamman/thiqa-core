@@ -4628,6 +4628,7 @@ export type Database = {
           id: string
           new_policy_id: string | null
           note: string | null
+          office_note: string | null
           policy_id: string
           to_car_id: string
           transfer_date: string
@@ -4644,6 +4645,7 @@ export type Database = {
           id?: string
           new_policy_id?: string | null
           note?: string | null
+          office_note?: string | null
           policy_id: string
           to_car_id: string
           transfer_date?: string
@@ -4660,6 +4662,7 @@ export type Database = {
           id?: string
           new_policy_id?: string | null
           note?: string | null
+          office_note?: string | null
           policy_id?: string
           to_car_id?: string
           transfer_date?: string

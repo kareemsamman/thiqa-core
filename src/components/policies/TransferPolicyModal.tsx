@@ -113,6 +113,7 @@ export function TransferPolicyModal({
   // Transfer details
   const [transferDate, setTransferDate] = useState(new Date().toISOString().split("T")[0]);
   const [note, setNote] = useState("");
+  const [officeNote, setOfficeNote] = useState("");
   
   // Money adjustment
   const [adjustmentType, setAdjustmentType] = useState<AdjustmentType>("none");
@@ -397,9 +398,10 @@ export function TransferPolicyModal({
             to_car_id: selectedCarId,
             transfer_date: transferDate,
             note: note || null,
+            office_note: officeNote.trim() || null,
             adjustment_type: originalPolicy.id === policyId ? adjustmentType : "none",
-            adjustment_amount: originalPolicy.id === policyId && adjustmentType !== "none" 
-              ? parseFloat(adjustmentAmount) 
+            adjustment_amount: originalPolicy.id === policyId && adjustmentType !== "none"
+              ? parseFloat(adjustmentAmount)
               : null,
             created_by_admin_id: user?.id,
             branch_id: branchId,
@@ -512,6 +514,7 @@ export function TransferPolicyModal({
     setSelectedCarId("");
     setTransferDate(new Date().toISOString().split("T")[0]);
     setNote("");
+    setOfficeNote("");
     setAdjustmentType("none");
     setAdjustmentAmount("");
     setAdjustmentNote("");
@@ -723,6 +726,23 @@ export function TransferPolicyModal({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="اكتب ملاحظات التحويل هنا..."
+              rows={2}
+            />
+          </div>
+
+          {/* Internal office note — never appears on the customer invoice
+              or SMS, only on the audit trail inside the app. */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <span>ملاحظات للمكتب</span>
+              <span className="text-[10px] font-normal text-muted-foreground">
+                (لن تظهر على الفاتورة)
+              </span>
+            </Label>
+            <Textarea
+              value={officeNote}
+              onChange={(e) => setOfficeNote(e.target.value)}
+              placeholder="ملاحظات داخلية للمكتب فقط..."
               rows={2}
             />
           </div>
