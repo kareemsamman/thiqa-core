@@ -308,24 +308,18 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
     return group.items.some(item => location.pathname === item.href);
   };
 
-  // Initialize open states - all groups open by default
+  // Open ONLY the group that contains the currently active route; keep
+  // every other group collapsed. Re-runs on route change so navigating
+  // from a tasks page to a clients page closes "الرئيسية" and opens
+  // "إدارة العملاء". Manual toggles via the chevron are still preserved
+  // until the next route change.
   useEffect(() => {
-    const initialState: Record<string, boolean> = {};
-    filteredGroups.forEach(group => {
-      initialState[group.name] = true; // All groups open by default
+    const next: Record<string, boolean> = {};
+    filteredGroups.forEach((group) => {
+      next[group.name] = isGroupActive(group);
     });
-    setOpenGroups(initialState);
-  }, []);
-
-  // Update open state when route changes — also re-runs once the filtered
-  // groups list grows (auth profile finishing loading) so the group
-  // containing the active item gets opened on the very first paint.
-  useEffect(() => {
-    filteredGroups.forEach(group => {
-      if (isGroupActive(group)) {
-        setOpenGroups(prev => ({ ...prev, [group.name]: true }));
-      }
-    });
+    setOpenGroups(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, filteredGroups.length]);
 
   const handleSignOut = async () => {
@@ -427,58 +421,91 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             );
           }
 
+          // Desktop group: cleaner Untitled-UI-style trigger (no card
+          // chrome), and the open submenu uses a thin RTL right-edge
+          // guide line. The active leaf gets a small filled dot that
+          // sits on the guide line, plus a softer pill background.
+          const isActiveGroup = isGroupActive(group);
           return (
             <Collapsible
               key={group.name}
               open={isOpen}
               onOpenChange={() => toggleGroup(group.name)}
-              className="mb-1"
+              className="mb-0.5"
             >
               <CollapsibleTrigger
                 className={cn(
-                  "group flex items-center w-full px-3 py-2.5 rounded-md transition-all duration-200 gap-2.5",
-                  "bg-white/[0.08] border border-white/10 shadow-sm",
-                  "hover:bg-white/[0.14] hover:border-white/20",
+                  "group flex items-center w-full px-3 py-2.5 rounded-lg gap-3 transition-colors duration-150",
+                  isActiveGroup
+                    ? "text-white"
+                    : "text-white/85 hover:text-white",
+                  "hover:bg-white/[0.05]",
                 )}
               >
-                <GroupIcon className="h-[18px] w-[18px] text-white shrink-0" strokeWidth={2.5} />
-                <span className="text-[15px] font-extrabold tracking-[0.06em] text-white whitespace-nowrap">
+                <GroupIcon
+                  className={cn(
+                    "h-[18px] w-[18px] shrink-0 transition-colors",
+                    isActiveGroup ? "text-white" : "text-white/70 group-hover:text-white",
+                  )}
+                  strokeWidth={2.25}
+                />
+                <span className="flex-1 text-right text-[14px] font-semibold tracking-[0.01em] whitespace-nowrap">
                   {group.name}
                 </span>
-                <div className="flex-1 h-px bg-gradient-to-l from-white/25 to-transparent" />
                 <ChevronDown
                   className={cn(
-                    "h-[16px] w-[16px] text-white shrink-0 transition-transform duration-300",
-                    isOpen && "rotate-180",
+                    "h-[14px] w-[14px] shrink-0 transition-transform duration-200",
+                    isOpen ? "rotate-180" : "rotate-0",
+                    isActiveGroup ? "text-white/80" : "text-white/45 group-hover:text-white/80",
                   )}
-                  strokeWidth={2.75}
+                  strokeWidth={2.25}
                 />
               </CollapsibleTrigger>
-              <CollapsibleContent className="mt-1 mr-2 space-y-0.5">
-                {group.items.map((item) => {
-                  const isActiveRoute = location.pathname === item.href;
-                  return (
-                    <NavLink
-                      key={item.name}
-                      to={item.href}
-                      ref={isActiveRoute ? activeNavLinkRef : undefined}
-                      onClick={handleNavClick}
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium transition-all duration-200 relative group",
-                        isActiveRoute
-                          ? "glass-dark bg-[hsl(var(--sidebar-active))]/10 text-[hsl(var(--sidebar-active))] border-r-2 border-[hsl(var(--sidebar-active))]"
-                          : "text-slate-300 hover:bg-white/[0.06] hover:text-white"
-                      )}
-                    >
-                      <item.icon className={cn("h-[18px] w-[18px] flex-shrink-0 transition-colors", isActiveRoute ? "text-[hsl(var(--sidebar-active))]" : "text-slate-400 group-hover:text-white")} />
-                      <span>{item.name}</span>
-                      {item.badge === 'renewals' && (
-                        <span className="text-xs text-sidebar-foreground/40">| التجديدات</span>
-                      )}
-                      {renderBadge(item)}
-                    </NavLink>
-                  );
-                })}
+              <CollapsibleContent>
+                {/* Submenu container — thin vertical guide on the
+                    right (RTL "start" edge) connecting all child
+                    items, like the Untitled UI reference. */}
+                <div className="relative mt-1 mr-[18px] pr-4 pl-1 py-0.5 space-y-0.5 border-r border-white/[0.08]">
+                  {group.items.map((item) => {
+                    const isActiveRoute = location.pathname === item.href;
+                    return (
+                      <NavLink
+                        key={item.name}
+                        to={item.href}
+                        ref={isActiveRoute ? activeNavLinkRef : undefined}
+                        onClick={handleNavClick}
+                        className={cn(
+                          "relative flex items-center gap-3 rounded-md px-3 py-2 text-[13.5px] font-medium transition-colors duration-150",
+                          isActiveRoute
+                            ? "bg-white/[0.07] text-white"
+                            : "text-white/65 hover:text-white hover:bg-white/[0.035]",
+                        )}
+                      >
+                        {/* Active marker — a filled dot that sits ON
+                            the guide line (right: -5px lines up with
+                            the 1px border at -1px + the 4px radius). */}
+                        {isActiveRoute && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute top-1/2 -translate-y-1/2 -right-[5px] h-2 w-2 rounded-full bg-white shadow-[0_0_0_3px_hsl(var(--sidebar-background))]"
+                          />
+                        )}
+                        <item.icon
+                          className={cn(
+                            "h-[16px] w-[16px] flex-shrink-0 transition-colors",
+                            isActiveRoute ? "text-white" : "text-white/55 group-hover:text-white",
+                          )}
+                          strokeWidth={2}
+                        />
+                        <span className="flex-1 text-right">{item.name}</span>
+                        {item.badge === 'renewals' && (
+                          <span className="text-[11px] text-white/35">| التجديدات</span>
+                        )}
+                        {renderBadge(item)}
+                      </NavLink>
+                    );
+                  })}
+                </div>
               </CollapsibleContent>
             </Collapsible>
           );
