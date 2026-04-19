@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Search, X, User, Car, Phone, FileText, Receipt } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -116,7 +116,7 @@ export function BottomToolbarInlineSearch({
           .select("id, full_name, id_number, phone_number")
           .is("deleted_at", null)
           .or(
-            `full_name_normalized.ilike.%${normalizeArabic(searchTerm)}%,phone_number.ilike.%${searchTerm}%,id_number.ilike.%${searchTerm}%,file_number.ilike.%${searchTerm}%`,
+            `full_name_normalized.ilike.%${normalizeArabic(searchTerm)}%,phone_number.ilike.%${searchTerm}%,phone_number_2.ilike.%${searchTerm}%,id_number.ilike.%${searchTerm}%,file_number.ilike.%${searchTerm}%`,
           )
           .limit(10),
         supabase
@@ -367,44 +367,36 @@ export function BottomToolbarInlineSearch({
             <div className="px-2 pt-1 pb-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
               الوثائق والسندات
             </div>
-            {policyResults.map((p) => {
-              const Icon = p.kind === "receipt" ? Receipt : FileText;
-              return (
-                <button
-                  key={`${p.kind}:${p.policyId}:${p.label}`}
-                  type="button"
-                  className={cn(
-                    "w-full text-right rounded-lg px-2.5 py-2 transition-colors",
-                    "hover:bg-muted/60 focus:bg-muted/60 focus:outline-none",
+            {policyResults.map((p) => (
+              <button
+                key={`${p.kind}:${p.policyId}:${p.label}`}
+                type="button"
+                className={cn(
+                  "w-full text-right rounded-lg px-3 py-2 transition-colors",
+                  "hover:bg-muted/60 focus:bg-muted/60 focus:outline-none",
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSelectPolicy(p.policyId);
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-mono ltr-nums font-medium text-sm text-foreground truncate">
+                    {p.label}
+                  </span>
+                  {p.kind === "receipt" && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                      سند
+                    </span>
                   )}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    handleSelectPolicy(p.policyId);
-                  }}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-primary" />
-                        <span className="font-mono ltr-nums font-semibold truncate">
-                          {p.label}
-                        </span>
-                        {p.kind === "receipt" && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
-                            سند
-                          </span>
-                        )}
-                      </div>
-                      {p.subLabel && (
-                        <div className="mt-1 text-xs text-muted-foreground truncate">
-                          {p.subLabel}
-                        </div>
-                      )}
-                    </div>
+                </div>
+                {p.clientName && (
+                  <div className="text-xs text-muted-foreground truncate mt-0.5">
+                    {p.clientName}
                   </div>
-                </button>
-              );
-            })}
+                )}
+              </button>
+            ))}
           </div>
         )}
 
@@ -416,44 +408,27 @@ export function BottomToolbarInlineSearch({
               </div>
             )}
             {results.map((r) => (
-          <button
-            key={r.id}
-            type="button"
-            className={cn(
-              "w-full text-right rounded-lg px-2.5 py-2 transition-colors",
-              "hover:bg-muted/60 focus:bg-muted/60 focus:outline-none"
-            )}
-            onMouseDown={(e) => {
-              // Use mouseDown to prevent input blur before navigation
-              e.preventDefault();
-              handleSelect(r.id, r.matchedCarId);
-            }}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium truncate">{r.full_name}</span>
+              <button
+                key={r.id}
+                type="button"
+                className={cn(
+                  "w-full text-right rounded-lg px-3 py-2 transition-colors",
+                  "hover:bg-muted/60 focus:bg-muted/60 focus:outline-none",
+                )}
+                onMouseDown={(e) => {
+                  // Use mouseDown to prevent input blur before navigation
+                  e.preventDefault();
+                  handleSelect(r.id, r.matchedCarId);
+                }}
+              >
+                <div className="font-medium text-sm text-foreground truncate">
+                  {r.full_name}
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  {r.phone_number && (
-                    <span className="flex items-center gap-1">
-                      <Phone className="h-3.5 w-3.5" />
-                      <bdi className="ltr-nums">{r.phone_number}</bdi>
-                    </span>
-                  )}
-                  {r.cars.length > 0 && (
-                    <span className="flex items-center gap-1">
-                      <Car className="h-3.5 w-3.5" />
-                      <bdi className="ltr-nums">{r.cars.join(", ")}</bdi>
-                    </span>
-                  )}
+                <div className="text-xs text-muted-foreground ltr-nums mt-0.5">
+                  {r.id_number}
                 </div>
-              </div>
-              <span className="text-xs text-muted-foreground ltr-nums">{r.id_number}</span>
-            </div>
-          </button>
-        ))}
+              </button>
+            ))}
           </div>
         )}
       </div>
@@ -549,6 +524,7 @@ export function BottomToolbarInlineSearch({
           onClick={() => setIsExpanded(true)}
           className={cn(
             "h-11 w-11 rounded-full bg-secondary/70 hover:bg-secondary text-foreground",
+            "animate-in fade-in zoom-in-95 duration-200 ease-out",
             collapsedIconClassName,
             className,
           )}
@@ -575,8 +551,15 @@ export function BottomToolbarInlineSearch({
   return (
     <>
     <div ref={containerRef} className={cn("relative flex items-center", className)}>
-      {/* Always visible search input */}
-      <div className="relative">
+      {/* Input wrapper — `animate-in` only when we arrived here from the
+          collapsed icon, so the input glides/scales in rather than
+          snapping into place. */}
+      <div
+        className={cn(
+          "relative",
+          collapsible && "animate-in fade-in zoom-in-95 duration-200 ease-out",
+        )}
+      >
         <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
         <Input
           ref={inputRef}
@@ -594,20 +577,29 @@ export function BottomToolbarInlineSearch({
           className={cn(
             "h-9 w-[140px] sm:w-[200px] rounded-full pr-9 pl-8",
             "bg-background/70 border-border/50",
-            "transition-[width,border-radius,background-color,border-color] duration-200",
+            // Kill the shadcn default focus ring + hover color swap —
+            // the search input owns its own hover/focus treatment via
+            // the glass bg below.
+            "focus:ring-0 focus:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0",
+            "hover:border-border/50 hover:bg-background/70",
+            "transition-[width,border-radius,background-color,border-color] duration-300 ease-out",
             inputClassName,
             // When the dropdown is open the input morphs into the top
-            // half of a single connected shape: flat bottom, no bottom
-            // border, white bg so it matches the dropdown color, and
-            // (optionally) a wider size from the caller.
+            // half of a single glass pill: flat bottom, no bottom
+            // border, frosted bg that matches the dropdown, plus the
+            // caller's wider size if provided.
             showDropdown && direction === "down" && [
               "rounded-b-none rounded-t-3xl",
-              "border-b-transparent bg-popover",
+              "border-b-transparent border-black/[0.06]",
+              "bg-white/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70",
+              "hover:bg-white/80",
               expandedInputClassName,
             ],
             showDropdown && direction === "up" && [
               "rounded-t-none rounded-b-3xl",
-              "border-t-transparent bg-popover",
+              "border-t-transparent border-black/[0.06]",
+              "bg-white/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70",
+              "hover:bg-white/80",
               expandedInputClassName,
             ],
           )}
@@ -633,15 +625,18 @@ export function BottomToolbarInlineSearch({
       {showDropdown && (
         <div
           className={cn(
-            "absolute z-40 max-h-[380px] overflow-y-auto",
-            "border border-border/50 bg-popover p-2 shadow-xl shadow-black/5",
+            "absolute z-40 max-h-[380px] overflow-y-auto p-2",
+            // Glass surface — matches the input's open state exactly so
+            // they read as one continuous shape. supports-[] fallback
+            // keeps it white-opaque where backdrop-filter isn't
+            // available.
+            "border border-black/[0.06] bg-white/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70",
+            "shadow-2xl shadow-black/5",
             // Connect seamlessly to the input: no top/bottom gap, no
-            // border where it meets the input, and matching corner
-            // radius on the far side so the whole control reads as one
-            // shape instead of "input + floating card".
+            // seam border, matching corner radius on the far side.
             direction === "up"
-              ? "bottom-full mt-0 rounded-t-3xl rounded-b-none border-b-0 animate-in fade-in-0 slide-in-from-bottom-1 duration-150"
-              : "top-full mt-0 rounded-b-3xl rounded-t-none border-t-0 animate-in fade-in-0 slide-in-from-top-1 duration-150",
+              ? "bottom-full mt-0 rounded-t-3xl rounded-b-none border-b-0 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-1 duration-200 ease-out"
+              : "top-full mt-0 rounded-b-3xl rounded-t-none border-t-0 animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 duration-200 ease-out",
             dropdownMatchWidth
               ? "left-0 right-0"
               : "left-1/2 -translate-x-1/2 w-[min(92vw,400px)]",
