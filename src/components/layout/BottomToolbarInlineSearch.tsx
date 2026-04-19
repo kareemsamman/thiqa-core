@@ -43,6 +43,10 @@ interface BottomToolbarInlineSearchProps {
   // match a larger cluster (e.g. the main header) pass a custom height
   // + width here.
   inputClassName?: string;
+  // Classes applied to the input ONLY while the dropdown is open —
+  // typically a larger `w-[...]` so the input grows to fit results.
+  // When omitted, width is static.
+  expandedInputClassName?: string;
 }
 
 export function BottomToolbarInlineSearch({
@@ -50,6 +54,7 @@ export function BottomToolbarInlineSearch({
   direction = "up",
   dropdownMatchWidth = false,
   inputClassName,
+  expandedInputClassName,
 }: BottomToolbarInlineSearchProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -309,9 +314,9 @@ export function BottomToolbarInlineSearch({
   }, [mobileOpen]);
 
   const handleFocus = () => {
-    if (query.trim().length >= 2 && (results.length > 0 || policyResults.length > 0)) {
-      setShowDropdown(true);
-    }
+    // Open the dropdown on focus so the user gets the "type to search"
+    // hint (or previously-fetched results) as soon as they click in.
+    setShowDropdown(true);
   };
 
   if (!canShow) return null;
@@ -526,7 +531,22 @@ export function BottomToolbarInlineSearch({
           className={cn(
             "h-9 w-[140px] sm:w-[200px] rounded-full pr-9 pl-8",
             "bg-background/70 border-border/50",
+            "transition-[width,border-radius,background-color,border-color] duration-200",
             inputClassName,
+            // When the dropdown is open the input morphs into the top
+            // half of a single connected shape: flat bottom, no bottom
+            // border, white bg so it matches the dropdown color, and
+            // (optionally) a wider size from the caller.
+            showDropdown && direction === "down" && [
+              "rounded-b-none rounded-t-3xl",
+              "border-b-transparent bg-popover",
+              expandedInputClassName,
+            ],
+            showDropdown && direction === "up" && [
+              "rounded-t-none rounded-b-3xl",
+              "border-t-transparent bg-popover",
+              expandedInputClassName,
+            ],
           )}
         />
         {query && (
@@ -551,10 +571,14 @@ export function BottomToolbarInlineSearch({
         <div
           className={cn(
             "absolute z-40 max-h-[380px] overflow-y-auto",
-            "rounded-2xl border border-border/50 bg-popover p-1.5 shadow-xl shadow-black/5",
+            "border border-border/50 bg-popover p-2 shadow-xl shadow-black/5",
+            // Connect seamlessly to the input: no top/bottom gap, no
+            // border where it meets the input, and matching corner
+            // radius on the far side so the whole control reads as one
+            // shape instead of "input + floating card".
             direction === "up"
-              ? "bottom-full mb-2 animate-in fade-in-0 slide-in-from-bottom-1 duration-150"
-              : "top-full mt-1.5 animate-in fade-in-0 slide-in-from-top-1 duration-150",
+              ? "bottom-full mt-0 rounded-t-3xl rounded-b-none border-b-0 animate-in fade-in-0 slide-in-from-bottom-1 duration-150"
+              : "top-full mt-0 rounded-b-3xl rounded-t-none border-t-0 animate-in fade-in-0 slide-in-from-top-1 duration-150",
             dropdownMatchWidth
               ? "left-0 right-0"
               : "left-1/2 -translate-x-1/2 w-[min(92vw,400px)]",

@@ -66,20 +66,23 @@ export function Header({ title, subtitle }: HeaderProps) {
 
   return (
     <>
-      {/* Desktop header — grid with fixed slots (title | tabs | cluster).
-          Each slot owns its column, so changing title/subtitle length
-          never shifts the tabs or the action cluster. */}
-      <header className="hidden md:grid grid-cols-[1fr_auto_1fr] sticky top-0 z-30 h-20 items-center gap-6 bg-background px-6 mb-6">
+      {/* Desktop header — tabs sit in an absolutely-centered nav so they
+          stay pinned to the visual center no matter how long the title
+          gets or how wide the search grows on focus. Title lives on the
+          right, cluster on the left, both anchored to their respective
+          ends by flex justify-between. */}
+      <header className="hidden md:flex relative items-center justify-between sticky top-0 z-30 h-20 bg-background px-6 mb-6">
         {/* Right: title + subtitle */}
-        <div className="min-w-0 justify-self-start">
+        <div className="min-w-0 flex-shrink overflow-hidden max-w-[28%]">
           <h1 className="text-xl font-semibold text-foreground truncate">{title}</h1>
           {subtitle && (
             <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
           )}
         </div>
 
-        {/* Center: sibling tabs (from active nav group) */}
-        <nav className="justify-self-center">
+        {/* Center: sibling tabs, absolutely pinned so neither the
+            growing cluster nor a longer title nudges them. */}
+        <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
           <div className="flex items-center gap-2">
             {siblingTabs.map((tab) => {
               const active = isTabActive(tab.href);
@@ -102,14 +105,15 @@ export function Header({ title, subtitle }: HeaderProps) {
           </div>
         </nav>
 
-        {/* Left: cluster — fixed order, same inline-search component as
-            the bottom toolbar so typing shows the real dropdown of
-            clients / policies / receipts. */}
-        <div className="flex items-center gap-2 justify-self-end">
+        {/* Left: cluster — search grows on focus via expandedInputClassName,
+            and flex justify-between keeps the cluster anchored to the
+            header's left edge while it expands. */}
+        <div className="flex items-center gap-2 flex-shrink-0">
           <BottomToolbarInlineSearch
             direction="down"
             dropdownMatchWidth
-            inputClassName="h-11 w-[280px] bg-secondary/70 border-transparent"
+            inputClassName="h-11 w-[240px] bg-secondary/70 border-transparent"
+            expandedInputClassName="w-[400px]"
           />
 
           <Button
