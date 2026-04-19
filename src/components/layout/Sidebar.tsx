@@ -415,13 +415,6 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             <div className="flex items-center gap-2">
               {isThiqaSuperAdmin ? (
                 <img src={thiqaLogo} alt="Thiqa" className="rounded-lg object-contain" />
-              ) : siteSettings?.logo_url ? (
-                <>
-                  <img src={siteSettings.logo_url} alt="Logo" className="h-9 w-9 rounded-full object-cover" />
-                  <span className="text-base font-semibold text-slate-900">
-                    {siteSettings?.site_title || 'Thiqa'}
-                  </span>
-                </>
               ) : (
                 <>
                   <img src={thiqaLogoIcon} alt="Thiqa" className="h-9 w-9 rounded-lg object-contain" />
@@ -442,13 +435,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
           </>
         )}
         {collapsed && (
-          isThiqaSuperAdmin ? (
-            <img src={thiqaLogoIcon} alt="Thiqa" className="mx-auto h-8 w-8 object-contain" />
-          ) : siteSettings?.logo_url ? (
-            <img src={siteSettings.logo_url} alt="Logo" className="mx-auto h-9 w-9 rounded-full object-cover" />
-          ) : (
-            <img src={thiqaLogoIcon} alt="Thiqa" className="mx-auto h-8 w-8 object-contain" />
-          )
+          <img src={thiqaLogoIcon} alt="Thiqa" className="mx-auto h-8 w-8 object-contain" />
         )}
       </div>
 
@@ -1082,16 +1069,8 @@ function MobileTopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
         dir="rtl"
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          {isThiqaSuperAdmin ? (
-            <img src={thiqaLogoIcon} alt="Thiqa" className="h-7 w-7 object-contain shrink-0" />
-          ) : siteSettings?.logo_url ? (
-            <img src={siteSettings.logo_url} alt="Logo" className="h-7 w-7 rounded object-contain shrink-0" />
-          ) : (
-            <img src={thiqaLogoIcon} alt="ثقة" className="h-7 w-7 object-contain shrink-0" />
-          )}
-          <span className="text-white/90 text-sm font-semibold truncate">
-            {siteSettings?.site_title || 'Thiqa'}
-          </span>
+          <img src={thiqaLogoIcon} alt="Thiqa" className="h-7 w-7 object-contain shrink-0" />
+          <span className="text-white/90 text-sm font-semibold truncate">Thiqa</span>
         </div>
 
         <div className="flex items-center gap-1">
@@ -1207,16 +1186,12 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
         <div className="h-11 w-11 rounded-full bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0 p-1.5">
           {isThiqaSuperAdmin ? (
             <img src={thiqaLogo} alt="Thiqa" className="max-h-full max-w-full object-contain" />
-          ) : siteSettings?.logo_url ? (
-            <img src={siteSettings.logo_url} alt="Logo" className="max-h-full max-w-full object-contain" />
           ) : (
-            <img src={thiqaLogoIcon} alt="ثقة" className="max-h-full max-w-full object-contain" />
+            <img src={thiqaLogoIcon} alt="Thiqa" className="max-h-full max-w-full object-contain" />
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm truncate">
-            {siteSettings?.site_title || 'Thiqa'}
-          </p>
+          <p className="font-semibold text-sm truncate">Thiqa</p>
           <p className="text-[11px] text-muted-foreground">نظام إدارة التأمين</p>
         </div>
       </div>
