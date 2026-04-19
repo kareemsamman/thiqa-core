@@ -571,7 +571,13 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                   className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/20 flex-shrink-0"
                 />
               ) : (
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[hsl(var(--sidebar-active))] shadow-md">
+                <div
+                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full shadow-[0_4px_12px_-4px_rgba(69,94,187,0.45)]"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%), rgba(255, 255, 255, 0.02)",
+                  }}
+                >
                   <span className="text-sm font-bold text-white">{userInitial}</span>
                 </div>
               )}
@@ -590,7 +596,13 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
               )}
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" side="top" className="w-64 [direction:rtl]">
+          <DropdownMenuContent
+            align="end"
+            side="top"
+            sideOffset={8}
+            alignOffset={-12}
+            className="w-64 [direction:rtl]"
+          >
             <div className="px-3 py-2 border-b">
               <p className="text-sm font-medium">{userName}</p>
               <p className="text-xs text-muted-foreground">{profile?.email}</p>
