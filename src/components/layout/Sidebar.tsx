@@ -624,13 +624,18 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                       {trial && agent && (
                         <div className="mt-2 space-y-1.5">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={cn(
-                              "inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded",
-                              trial.isTrial ? 'bg-blue-100 text-blue-700' :
-                              agent.subscription_status === 'active' ? 'bg-green-100 text-green-700' :
-                              agent.subscription_status === 'paused' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-red-100 text-red-700'
-                            )}>
+                            <span
+                              className={cn(
+                                "inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded",
+                                trial.isTrial ? "text-white" :
+                                agent.subscription_status === 'active' ? 'bg-green-100 text-green-700' :
+                                agent.subscription_status === 'paused' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-red-100 text-red-700',
+                              )}
+                              style={trial.isTrial ? {
+                                background: "linear-gradient(rgb(69, 94, 187) 0%, rgb(138, 150, 203) 100%), rgba(255, 255, 255, 0.02)",
+                              } : undefined}
+                            >
                               {trial.isTrial ? 'تجربة مجانية' : agent.plan === 'pro' ? 'Pro' : 'Basic'}
                             </span>
                             {trial.days !== null && (
@@ -644,8 +649,14 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                           {trial.isTrial && trial.days !== null && (
                             <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
                               <div
-                                className={cn("h-full rounded-full transition-all", trial.days <= 7 ? "bg-destructive" : "bg-blue-500")}
-                                style={{ width: `${trial.trialProgress}%` }}
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${trial.trialProgress}%`,
+                                  background: trial.days <= 7
+                                    ? undefined
+                                    : "linear-gradient(rgb(69, 94, 187) 0%, rgb(138, 150, 203) 100%), rgba(255, 255, 255, 0.02)",
+                                  ...(trial.days <= 7 ? { backgroundColor: 'hsl(var(--destructive))' } : null),
+                                }}
                               />
                             </div>
                           )}
