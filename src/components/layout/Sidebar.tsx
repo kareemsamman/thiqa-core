@@ -36,7 +36,6 @@ import {
   Mail,
   LucideIcon,
   UserCircle,
-  MoreVertical,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -217,6 +216,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
 }) {
   const [signingOut, setSigningOut] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const lastScrolledPathRef = useRef<string | null>(null);
   const lastScrollTimersRef = useRef<number[]>([]);
@@ -578,140 +578,234 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
         </div>
       )}
 
-      {/* User section */}
-      <div className="border-t border-black/[0.06] p-3">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className={cn(
-                "flex w-full items-center gap-3 rounded-lg p-2 transition-colors hover:bg-slate-100",
-                collapsed && "justify-center"
-              )}
-            >
-              {profile?.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={userName}
-                  className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/20 flex-shrink-0"
-                />
-              ) : (
-                <div
-                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full shadow-[0_4px_12px_-4px_rgba(69,94,187,0.45)]"
-                  style={{
-                    background:
-                      "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%), rgba(255, 255, 255, 0.02)",
-                  }}
-                >
-                  <span className="text-sm font-bold text-white">{userInitial}</span>
-                </div>
-              )}
-              {!collapsed && (
-                <>
-                  <div className="flex-1 min-w-0 text-right">
-                    <p className="truncate text-sm font-medium text-slate-900">
-                      {userName}
-                    </p>
-                    <p className="truncate text-xs text-slate-500">
-                      {userRole}{userBranch ? ` • ${userBranch}` : ''}
-                    </p>
-                  </div>
-                  <MoreVertical className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                </>
-              )}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            side="top"
-            sideOffset={8}
-            alignOffset={-12}
-            className="w-64 [direction:rtl]"
-          >
-            <div className="px-3 py-2 border-b">
-              <p className="text-sm font-medium">{userName}</p>
-              <p className="text-xs text-muted-foreground">{profile?.email}</p>
-              {!isThiqaSuperAdmin && agent && (() => {
-                const isTrial = agent.subscription_status === 'trial' || (agent.monthly_price === 0 && agent.subscription_status === 'active');
-                const endDate = agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null;
-                const days = endDate ? Math.max(0, Math.floor((endDate.getTime() - Date.now()) / 86400000)) : null;
-                const trialProgress = isTrial && days !== null ? Math.min(100, ((35 - days) / 35) * 100) : 0;
+      {/* User section.
+          Expanded sidebar: an inline Collapsible that opens UPWARD
+          (CollapsibleContent rendered ABOVE the trigger). Replaces
+          the old floating DropdownMenu — feels native to the
+          sidebar instead of an overlay. The triggering avatar row
+          stays anchored at the bottom.
+          Collapsed sidebar: small DropdownMenu fallback since the
+          narrow column has no room to expand inline. */}
+      <div className="border-t border-black/[0.06]">
+        {!collapsed ? (
+          (() => {
+            const trial = (() => {
+              if (isThiqaSuperAdmin || !agent) return null;
+              const isTrial = agent.subscription_status === 'trial' || (agent.monthly_price === 0 && agent.subscription_status === 'active');
+              const endDate = agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null;
+              const days = endDate ? Math.max(0, Math.floor((endDate.getTime() - Date.now()) / 86400000)) : null;
+              const trialProgress = isTrial && days !== null ? Math.min(100, ((35 - days) / 35) * 100) : 0;
+              return { isTrial, days, trialProgress };
+            })();
 
-                return (
-                  <div className="mt-1.5 space-y-1.5">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={cn(
-                        "inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded",
-                        isTrial ? 'bg-blue-100 text-blue-700' :
-                        agent.subscription_status === 'active' ? 'bg-green-100 text-green-700' :
-                        agent.subscription_status === 'paused' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-red-100 text-red-700'
-                      )}>
-                        {isTrial ? 'تجربة مجانية' : agent.plan === 'pro' ? 'Pro' : 'Basic'}
-                      </span>
-                      {days !== null && (
-                        <span className={cn("text-[10px] font-medium",
-                          days <= 0 ? "text-destructive" : days <= 7 ? "text-yellow-600" : "text-muted-foreground"
-                        )}>
-                          {days <= 0 ? 'منتهي' : `${days} يوم متبقي`}
-                        </span>
+            const triggerOnboarding = () => {
+              setUserMenuOpen(false);
+              if (location.pathname === '/dashboard') {
+                window.dispatchEvent(new Event('show-onboarding'));
+                return;
+              }
+              navigate('/dashboard');
+              setTimeout(() => {
+                window.dispatchEvent(new Event('show-onboarding'));
+              }, 150);
+            };
+
+            return (
+              <Collapsible open={userMenuOpen} onOpenChange={setUserMenuOpen}>
+                {/* Expanded content sits ABOVE the trigger because of
+                    DOM order — Radix animates height regardless. */}
+                <CollapsibleContent className="overflow-hidden data-[state=open]:animate-accordion-down data-[state=closed]:animate-accordion-up">
+                  <div className="px-3 pt-3">
+                    {/* Profile info card — soft slate panel */}
+                    <div className="rounded-xl bg-slate-50 border border-slate-200/70 p-3">
+                      <p className="truncate text-[13px] font-semibold text-slate-900 text-right">
+                        {userName}
+                      </p>
+                      <p className="truncate text-[11.5px] text-slate-500 text-right mt-0.5" dir="ltr">
+                        {profile?.email}
+                      </p>
+                      {trial && agent && (
+                        <div className="mt-2 space-y-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={cn(
+                              "inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded",
+                              trial.isTrial ? 'bg-blue-100 text-blue-700' :
+                              agent.subscription_status === 'active' ? 'bg-green-100 text-green-700' :
+                              agent.subscription_status === 'paused' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-red-100 text-red-700'
+                            )}>
+                              {trial.isTrial ? 'تجربة مجانية' : agent.plan === 'pro' ? 'Pro' : 'Basic'}
+                            </span>
+                            {trial.days !== null && (
+                              <span className={cn("text-[10px] font-medium",
+                                trial.days <= 0 ? "text-destructive" : trial.days <= 7 ? "text-yellow-600" : "text-slate-500"
+                              )}>
+                                {trial.days <= 0 ? 'منتهي' : `${trial.days} يوم متبقي`}
+                              </span>
+                            )}
+                          </div>
+                          {trial.isTrial && trial.days !== null && (
+                            <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full transition-all", trial.days <= 7 ? "bg-destructive" : "bg-blue-500")}
+                                style={{ width: `${trial.trialProgress}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
-                    {isTrial && days !== null && (
-                      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                        <div
-                          className={cn("h-full rounded-full transition-all", days <= 7 ? "bg-destructive" : "bg-blue-500")}
-                          style={{ width: `${trialProgress}%` }}
-                        />
+
+                    {/* Action items */}
+                    <div className="mt-1.5 space-y-0.5">
+                      <button
+                        type="button"
+                        onClick={() => { setUserMenuOpen(false); setProfileOpen(true); }}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                      >
+                        <UserCircle className="h-4 w-4 text-slate-500" />
+                        <span className="flex-1 text-right">الملف الشخصي</span>
+                      </button>
+
+                      {!isThiqaSuperAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => { setUserMenuOpen(false); navigate('/subscription'); }}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                        >
+                          <Settings className="h-4 w-4 text-slate-500" />
+                          <span className="flex-1 text-right">الإعدادات</span>
+                        </button>
+                      )}
+
+                      {isAdmin && !isThiqaSuperAdmin && (
+                        <button
+                          type="button"
+                          onClick={triggerOnboarding}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                        >
+                          <HelpCircle className="h-4 w-4 text-slate-500" />
+                          <span className="flex-1 text-right">دليل البداية</span>
+                        </button>
+                      )}
+
+                      <div className="my-1 h-px bg-slate-200/80" />
+
+                      <button
+                        type="button"
+                        onClick={handleSignOut}
+                        disabled={signingOut}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] text-red-600 hover:bg-red-50 transition-colors disabled:opacity-60"
+                      >
+                        {signingOut ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <LogOut className="h-4 w-4" />
+                        )}
+                        <span className="flex-1 text-right">تسجيل الخروج</span>
+                      </button>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+
+                {/* Trigger row — anchored at the bottom */}
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-3 p-3 transition-colors hover:bg-slate-50"
+                  >
+                    {profile?.avatar_url ? (
+                      <img
+                        src={profile.avatar_url}
+                        alt={userName}
+                        className="h-9 w-9 rounded-full object-cover ring-2 ring-white flex-shrink-0"
+                      />
+                    ) : (
+                      <div
+                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full shadow-[0_4px_12px_-4px_rgba(69,94,187,0.45)]"
+                        style={{
+                          background:
+                            "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%), rgba(255, 255, 255, 0.02)",
+                        }}
+                      >
+                        <span className="text-sm font-bold text-white">{userInitial}</span>
                       </div>
                     )}
-                  </div>
-                );
-              })()}
-            </div>
-            <DropdownMenuItem onClick={() => setProfileOpen(true)} className="gap-2 cursor-pointer">
-              <UserCircle className="h-4 w-4" />
-              <span>الملف الشخصي</span>
-            </DropdownMenuItem>
-            {!isThiqaSuperAdmin && (
-              <DropdownMenuItem onClick={() => navigate('/subscription')} className="gap-2 cursor-pointer">
-                <Settings className="h-4 w-4" />
-                <span>الإعدادات</span>
-              </DropdownMenuItem>
-            )}
-            {isAdmin && !isThiqaSuperAdmin && (
-              <DropdownMenuItem
-                onClick={() => {
-                  if (location.pathname === '/dashboard') {
-                    window.dispatchEvent(new Event('show-onboarding'));
-                    return;
-                  }
-
-                  navigate('/dashboard');
-                  setTimeout(() => {
-                    window.dispatchEvent(new Event('show-onboarding'));
-                  }, 150);
-                }}
-                className="gap-2 cursor-pointer"
-              >
-                <HelpCircle className="h-4 w-4" />
-                <span>دليل البداية</span>
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={handleSignOut}
-              disabled={signingOut}
-              className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-            >
-              {signingOut ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <LogOut className="h-4 w-4" />
-              )}
-              <span>تسجيل الخروج</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+                    <div className="flex-1 min-w-0 text-right">
+                      <p className="truncate text-sm font-medium text-slate-900">
+                        {userName}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">
+                        {userRole}{userBranch ? ` • ${userBranch}` : ''}
+                      </p>
+                    </div>
+                    {userMenuOpen ? (
+                      <Minus className="h-4 w-4 shrink-0 text-slate-700" strokeWidth={2.5} />
+                    ) : (
+                      <Plus className="h-4 w-4 shrink-0 text-[#a7a6a9]" strokeWidth={2.5} />
+                    )}
+                  </button>
+                </CollapsibleTrigger>
+              </Collapsible>
+            );
+          })()
+        ) : (
+          // Collapsed mode — keep the small dropdown so the icon-only
+          // rail stays usable.
+          <div className="p-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-center gap-3 rounded-lg p-2 transition-colors hover:bg-slate-100"
+                >
+                  {profile?.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt={userName}
+                      className="h-9 w-9 rounded-full object-cover ring-2 ring-white flex-shrink-0"
+                    />
+                  ) : (
+                    <div
+                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full shadow-[0_4px_12px_-4px_rgba(69,94,187,0.45)]"
+                      style={{
+                        background:
+                          "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%), rgba(255, 255, 255, 0.02)",
+                      }}
+                    >
+                      <span className="text-sm font-bold text-white">{userInitial}</span>
+                    </div>
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" side="top" sideOffset={8} className="w-56 [direction:rtl]">
+                <div className="px-3 py-2 border-b">
+                  <p className="text-sm font-medium">{userName}</p>
+                  <p className="text-xs text-muted-foreground" dir="ltr">{profile?.email}</p>
+                </div>
+                <DropdownMenuItem onClick={() => setProfileOpen(true)} className="gap-2 cursor-pointer">
+                  <UserCircle className="h-4 w-4" />
+                  <span>الملف الشخصي</span>
+                </DropdownMenuItem>
+                {!isThiqaSuperAdmin && (
+                  <DropdownMenuItem onClick={() => navigate('/subscription')} className="gap-2 cursor-pointer">
+                    <Settings className="h-4 w-4" />
+                    <span>الإعدادات</span>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                >
+                  {signingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                  <span>تسجيل الخروج</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </div>
 
       {/* Profile Edit Drawer */}
