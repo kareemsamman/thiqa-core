@@ -938,6 +938,7 @@ export function PolicyYearTimeline({
                         onCancelEditNotes={() => setEditingNotesId(null)}
                         onNotesValueChange={setEditedNotesValue}
                         onSaveNotes={(policyId) => handleNotesUpdate(policyId, editedNotesValue)}
+                        onPoliciesUpdate={onPoliciesUpdate}
                       />
                   );
                 })}
@@ -1048,6 +1049,7 @@ function PolicyPackageCard({
   onCancelEditNotes,
   onNotesValueChange,
   onSaveNotes,
+  onPoliciesUpdate,
 }: {
   pkg: PolicyPackage;
   paymentStatus: { totalPaid: number; remaining: number; isPaid: boolean };
@@ -1079,6 +1081,7 @@ function PolicyPackageCard({
   onCancelEditNotes?: () => void;
   onNotesValueChange?: (value: string) => void;
   onSaveNotes?: (policyId: string) => void;
+  onPoliciesUpdate?: () => void;
 }) {
   const policy = pkg.mainPolicy || pkg.addons[0];
   if (!policy) return null;
@@ -1193,37 +1196,9 @@ function PolicyPackageCard({
               </Badge>
             </button>
           )}
-          {/* Status Badge */}
-          {isActive && (
-            <button
-              type="button"
-              onClick={handleStatusClick}
-              className="focus:outline-none"
-              title="اضغط لإبراز فترة السريان"
-            >
-              <Badge variant="success" className="gap-1 font-bold cursor-pointer">
-                <CheckCircle className="h-3.5 w-3.5" />
-                سارية
-              </Badge>
-            </button>
-          )}
-          {pkg.status === 'ended' && (
-            <Badge variant="secondary" className="gap-1">
-              منتهية
-            </Badge>
-          )}
-          {isTransferred && (
-            <Badge variant="warning" className="gap-1">
-              <ArrowRightLeft className="h-3 w-3" />
-              محولة {wasTransferredTo && <span className="font-mono ltr-nums">← {wasTransferredTo}</span>}
-            </Badge>
-          )}
-          {isCancelled && (
-            <Badge variant="destructive" className="gap-1">
-              <XCircle className="h-3 w-3" />
-              ملغاة
-            </Badge>
-          )}
+          {/* Status badges (سارية / منتهية / محولة / ملغاة) moved after
+              flex-1 so they sit with the action cluster on the left. Kept
+              here as no-op markers to preserve surrounding logic. */}
 
           {/* Transfer FROM indicator - for policies created via transfer */}
           {wasTransferredFrom && !isTransferred && (
@@ -1322,15 +1297,48 @@ function PolicyPackageCard({
             );
           })()}
 
-          {/* Payment Status — amounts moved to the summary strip below the grid */}
+          {/* Payment status badge also moved to the left cluster below. */}
+
+          <div className="flex-1" />
+
+          {/* Left cluster — status badges first, then quick actions. In
+              RTL flex this visually lands to the left of the spacer. */}
+          {isActive && (
+            <button
+              type="button"
+              onClick={handleStatusClick}
+              className="focus:outline-none"
+              title="اضغط لإبراز فترة السريان"
+            >
+              <Badge variant="success" className="gap-1 font-bold cursor-pointer">
+                <CheckCircle className="h-3.5 w-3.5" />
+                سارية
+              </Badge>
+            </button>
+          )}
+          {pkg.status === 'ended' && (
+            <Badge variant="secondary" className="gap-1">
+              منتهية
+            </Badge>
+          )}
+          {isTransferred && (
+            <Badge variant="warning" className="gap-1">
+              <ArrowRightLeft className="h-3 w-3" />
+              محولة {wasTransferredTo && <span className="font-mono ltr-nums">← {wasTransferredTo}</span>}
+            </Badge>
+          )}
+          {isCancelled && (
+            <Badge variant="destructive" className="gap-1">
+              <XCircle className="h-3 w-3" />
+              ملغاة
+            </Badge>
+          )}
           {paymentStatus.isPaid && (
             <Badge variant="outline" className="gap-1 text-success border-success/30 bg-success/5">
               <CheckCircle className="h-3 w-3" />
               مدفوع
             </Badge>
           )}
-
-          <div className="flex-1" />
 
           {/* Quick Actions */}
           <div className="flex items-center gap-1">
@@ -1576,9 +1584,10 @@ function PolicyPackageCard({
           </div>
         </div>
 
-        {/* Main Content: Key Info Grid */}
-        <div 
-          className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm cursor-pointer"
+        {/* Main Content: Key Info Grid — period column removed since the
+            date range is already visible inside the مكونات rows below. */}
+        <div
+          className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm cursor-pointer"
           onClick={() => onPolicyClick(policy.id)}
         >
           {/* Company */}
@@ -1593,25 +1602,12 @@ function PolicyPackageCard({
           </div>
 
           {/* Car */}
-          <div className="flex items-start gap-2">
+          <div ref={periodRef} className="flex items-start gap-2">
             <Car className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
             <div className="min-w-0">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">السيارة</p>
               <p className={cn("font-mono font-medium ltr-nums", !isActive && "text-muted-foreground")}>
                 {policy.car?.car_number || '-'}
-              </p>
-            </div>
-          </div>
-
-          {/* Coverage Period */}
-          <div ref={periodRef} className="flex items-start gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">الفترة</p>
-              <p className={cn("font-medium text-xs", !isActive && "text-muted-foreground")}>
-                <span className="ltr-nums">{formatDate(policy.start_date)}</span>
-                <span className="mx-1 text-muted-foreground">←</span>
-                <span className="ltr-nums">{formatDate(policy.end_date)}</span>
               </p>
             </div>
           </div>
@@ -1650,17 +1646,16 @@ function PolicyPackageCard({
             </div>
             <div className="rounded-lg border border-border/60 overflow-hidden bg-muted/20">
               {/* Table header */}
-              <div className="grid grid-cols-[2rem_1fr_auto_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
-                <span className="text-center">#</span>
+              <div className="grid grid-cols-[minmax(80px,auto)_1fr_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
+                <span>رقم المعاملة</span>
                 <span>المعاملة</span>
-                <span className="ltr-nums">الفترة</span>
                 <span className="text-left min-w-[70px]">السعر</span>
               </div>
               {/* Main policy */}
               <PackageComponentRow
                 policy={pkg.mainPolicy}
                 isActive={isActive}
-                index={getDocNumber?.(pkg.mainPolicy.id)}
+                onPoliciesUpdate={onPoliciesUpdate}
               />
               {/* Addons */}
               {pkg.addons.map((addon) => (
@@ -1668,7 +1663,7 @@ function PolicyPackageCard({
                   key={addon.id}
                   policy={addon}
                   isActive={isActive}
-                  index={getDocNumber?.(addon.id)}
+                  onPoliciesUpdate={onPoliciesUpdate}
                 />
               ))}
               {/* Totals footer row */}
@@ -1712,11 +1707,27 @@ function PolicyPackageCard({
           </div>
         )}
 
-        {/* Standalone policy totals — same framed footer for single-policy cards
-            (which don't render مكونات الباقة) so every card surfaces the same
-            paid/remaining summary in the same place. */}
+        {/* Standalone policy — single-row "المعاملة" section so staff can
+            still edit the policy number inline and the paid/remaining
+            totals live in the same framed footer the package cards use. */}
         {!isPkg && isActive && (
           <div className="mt-3 pt-3 border-t border-border/50">
+            <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" />
+              المعاملة
+            </div>
+            <div className="rounded-lg border border-border/60 overflow-hidden bg-muted/20 mb-2">
+              <div className="grid grid-cols-[minmax(80px,auto)_1fr_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
+                <span>رقم المعاملة</span>
+                <span>المعاملة</span>
+                <span className="text-left min-w-[70px]">السعر</span>
+              </div>
+              <PackageComponentRow
+                policy={policy}
+                isActive={isActive}
+                onPoliciesUpdate={onPoliciesUpdate}
+              />
+            </div>
             <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
               <button
                 type="button"
@@ -1837,11 +1848,11 @@ function PolicyPackageCard({
 function PackageComponentRow({
   policy,
   isActive,
-  index,
+  onPoliciesUpdate,
 }: {
   policy: PolicyRecord;
   isActive: boolean;
-  index?: number;
+  onPoliciesUpdate?: () => void;
 }) {
   const typeLabel = getDisplayLabel(policy);
   const typeColor = policyTypeColors[policy.policy_type_parent];
@@ -1858,21 +1869,18 @@ function PackageComponentRow({
     <div
       data-policy-row-id={policy.id}
       className={cn(
-        "grid grid-cols-[2rem_1fr_auto_auto] items-center gap-3 px-3 py-2 text-xs border-b border-border/60 last:border-b-0 transition-colors hover:bg-muted/30",
+        "grid grid-cols-[minmax(80px,auto)_1fr_auto] items-center gap-3 px-3 py-2 text-xs border-b border-border/60 last:border-b-0 transition-colors hover:bg-muted/30",
         !isActive && "opacity-70"
       )}
     >
-      {/* # column */}
-      {index !== undefined ? (
-        <span
-          data-doc-number
-          className="text-[10px] font-bold text-muted-foreground ltr-nums text-center"
-        >
-          #{index}
-        </span>
-      ) : (
-        <span />
-      )}
+      {/* Policy-number column (inline-editable). Replaces the old
+          sequential `#N` indicator — staff wanted the actual issued
+          policy number right here. */}
+      <PolicyNumberInlineEdit
+        policyId={policy.id}
+        policyNumber={policy.policy_number ?? null}
+        onSaved={onPoliciesUpdate}
+      />
 
       {/* Policy column: type badge + service subtype + company */}
       <div className="flex items-center gap-2 min-w-0">
@@ -1901,14 +1909,6 @@ function PackageComponentRow({
         )}
       </div>
 
-      {/* Period column */}
-      <span className={cn(
-        "ltr-nums text-[11px] shrink-0",
-        isActive ? "text-muted-foreground" : "text-muted-foreground/70"
-      )}>
-        {formatDate(policy.end_date)} ← {formatDate(policy.start_date)}
-      </span>
-
       {/* Price column */}
       <div className="flex flex-col items-end min-w-[70px]">
         <span className={cn(
@@ -1924,5 +1924,108 @@ function PackageComponentRow({
         )}
       </div>
     </div>
+  );
+}
+
+// Inline editor for a policy's issued number. Shows the number as a
+// clickable chip; clicking swaps to a compact input that commits on
+// Enter/blur and rolls back on Escape. When no number exists yet, a
+// pale "+ رقم" affordance invites the user to add one.
+function PolicyNumberInlineEdit({
+  policyId,
+  policyNumber,
+  onSaved,
+}: {
+  policyId: string;
+  policyNumber: string | null;
+  onSaved?: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(policyNumber ?? "");
+  const [saving, setSaving] = useState(false);
+
+  // Sync back if the server data changes under us (e.g. after a parent
+  // refresh) while we're NOT actively editing.
+  useEffect(() => {
+    if (!editing) setValue(policyNumber ?? "");
+  }, [policyNumber, editing]);
+
+  const beginEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setValue(policyNumber ?? "");
+    setEditing(true);
+  };
+
+  const commit = async () => {
+    const next = value.trim();
+    const prev = policyNumber ?? "";
+    if (next === prev) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from("policies")
+      .update({ policy_number: next || null })
+      .eq("id", policyId);
+    setSaving(false);
+    setEditing(false);
+    if (error) {
+      toast.error("فشل حفظ رقم المعاملة");
+      setValue(prev);
+      return;
+    }
+    toast.success(next ? "تم حفظ رقم المعاملة" : "تم مسح رقم المعاملة");
+    onSaved?.();
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        disabled={saving}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            (e.currentTarget as HTMLInputElement).blur();
+          } else if (e.key === "Escape") {
+            setValue(policyNumber ?? "");
+            setEditing(false);
+          }
+        }}
+        placeholder="36/2026"
+        className="w-[90px] h-6 rounded border border-primary/40 bg-background px-1.5 text-[11px] font-mono ltr-nums focus:outline-none focus:ring-1 focus:ring-primary"
+      />
+    );
+  }
+
+  if (policyNumber) {
+    return (
+      <button
+        type="button"
+        onClick={beginEdit}
+        title="اضغط لتعديل رقم المعاملة"
+        className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold ltr-nums text-foreground bg-background border border-border/60 rounded px-1.5 h-6 hover:border-primary/40 transition-colors"
+      >
+        <Hash className="h-2.5 w-2.5 text-muted-foreground" />
+        {policyNumber}
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={beginEdit}
+      title="إضافة رقم المعاملة"
+      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary border border-dashed border-border/60 hover:border-primary/40 rounded px-1.5 h-6 transition-colors"
+    >
+      <Pencil className="h-2.5 w-2.5" />
+      رقم
+    </button>
   );
 }
