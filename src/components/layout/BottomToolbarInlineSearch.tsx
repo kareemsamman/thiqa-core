@@ -560,7 +560,9 @@ export function BottomToolbarInlineSearch({
           collapsible && "animate-in fade-in zoom-in-95 duration-200 ease-out",
         )}
       >
-        <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        {/* z-10 so the backdrop-blur on the input (which creates a
+            stacking context) doesn't swallow the icon. */}
+        <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/80 pointer-events-none z-10" />
         <Input
           ref={inputRef}
           value={query}

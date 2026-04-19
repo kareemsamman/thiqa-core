@@ -118,8 +118,12 @@ export function Header({ title, subtitle }: HeaderProps) {
             collapsible
             direction="down"
             dropdownMatchWidth
-            inputClassName="h-11 w-[240px] bg-secondary/70 border-transparent"
-            expandedInputClassName="w-[400px]"
+            // Include the sm: variant so tailwind-merge fully replaces
+            // the component's default `sm:w-[200px]` — otherwise the
+            // base width silently loses at md+ screens and the input
+            // never actually grows.
+            inputClassName="h-11 w-[280px] sm:w-[280px] bg-secondary/70 border-transparent"
+            expandedInputClassName="w-[520px] sm:w-[520px]"
           />
 
           <Button
