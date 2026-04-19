@@ -458,16 +458,17 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
           const GroupIcon = group.icon;
           
           if (collapsed) {
-            // Collapsed mode: ONE icon button per group (not per item).
-            // Hovering opens a HoverCard panel that lists the group's
-            // items, just like the Untitled UI reference. Clicking
-            // the button navigates to the first item in the group so
-            // touch users / keyboard users still have a working path.
+            // Collapsed mode: ONE button per group. Hovering opens a
+            // FULL-HEIGHT flyout panel positioned to the visual LEFT
+            // of the rail (mirrors the Untitled UI reference where
+            // hovering a group icon expands the panel). Clicking the
+            // button navigates to the group's first item so touch /
+            // keyboard users still have a working path.
             const isActiveGroup = isGroupActive(group);
             const GroupIcon = group.icon;
             const firstItem = group.items[0];
             return (
-              <HoverCard key={group.name} openDelay={120} closeDelay={120}>
+              <HoverCard key={group.name} openDelay={100} closeDelay={150}>
                 <HoverCardTrigger asChild>
                   <NavLink
                     to={firstItem.href}
@@ -475,25 +476,37 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                     onClick={handleNavClick}
                     title={group.name}
                     className={cn(
-                      "flex items-center justify-center rounded-[0.2rem] p-2.5 transition-colors duration-150 relative mx-2",
+                      "flex items-center justify-center rounded-[0.4rem] h-11 w-11 mx-auto transition-colors duration-150 relative",
                       isActiveGroup
                         ? "bg-slate-900 text-white"
                         : "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
                     )}
                   >
-                    <GroupIcon className="h-5 w-5" weight={isActiveGroup ? "bold" : "regular"} />
+                    <GroupIcon className="h-[22px] w-[22px]" weight={isActiveGroup ? "bold" : "regular"} />
                   </NavLink>
                 </HoverCardTrigger>
                 <HoverCardContent
                   side="left"
-                  sideOffset={12}
+                  sideOffset={10}
                   align="start"
-                  className="w-60 p-2 [direction:rtl] rounded-xl"
+                  alignOffset={-8}
+                  collisionPadding={8}
+                  className={cn(
+                    "p-0 [direction:rtl] rounded-2xl border border-black/[0.06] bg-white",
+                    "shadow-[0_8px_30px_-12px_rgba(15,23,42,0.18)]",
+                    "w-[240px] flex flex-col",
+                  )}
+                  style={{ height: 'calc(100vh - 16px)' }}
                 >
-                  <p className="px-2 pt-1 pb-2 text-[12px] font-bold text-slate-900">
-                    {group.name}
-                  </p>
-                  <div className="flex flex-col">
+                  {/* Header — group name */}
+                  <div className="px-4 h-16 flex items-center border-b border-black/[0.06] flex-shrink-0">
+                    <span className="text-[15px] font-bold text-black flex items-center gap-2">
+                      <GroupIcon className="h-[18px] w-[18px] text-black" weight="bold" />
+                      {group.name}
+                    </span>
+                  </div>
+                  {/* Items list */}
+                  <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
                     {group.items.map((item) => {
                       const isActive = location.pathname === item.href;
                       return (
@@ -502,13 +515,19 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                           to={item.href}
                           onClick={handleNavClick}
                           className={cn(
-                            "flex items-center gap-2.5 px-2 py-2 text-[13px] rounded-[0.2rem] transition-colors",
+                            "flex items-center gap-3 px-3 py-2 text-[13.5px] rounded-[0.2rem] transition-colors",
                             isActive
                               ? "bg-[#f3f5f7] text-black font-bold"
                               : "text-[#656565] font-normal hover:bg-slate-50 hover:text-black",
                           )}
                         >
-                          <item.icon className={cn("h-4 w-4 flex-shrink-0", isActive ? "text-black" : "text-slate-500")} weight={isActive ? "bold" : "regular"} />
+                          <item.icon
+                            className={cn(
+                              "h-[16px] w-[16px] flex-shrink-0",
+                              isActive ? "text-black" : "text-slate-500",
+                            )}
+                            weight={isActive ? "bold" : "regular"}
+                          />
                           <span className="flex-1 text-right">{item.name}</span>
                         </NavLink>
                       );
