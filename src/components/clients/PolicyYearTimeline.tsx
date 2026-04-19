@@ -1199,17 +1199,16 @@ function PolicyPackageCard({
               flex-1 so they sit with the action cluster on the left. Kept
               here as no-op markers to preserve surrounding logic. */}
 
-          {/* Transfer FROM indicator - for policies created via transfer */}
-          {wasTransferredFrom && !isTransferred && (
-            <Badge variant="outline" className="gap-1 text-xs bg-blue-500/10 border-blue-500/30 text-blue-600">
-              <ArrowRightLeft className="h-3 w-3" />
-              محول من <span className="font-mono ltr-nums">{wasTransferredFrom}</span>
-            </Badge>
-          )}
-
-          {/* Policy Type - show as separate badges for packages */}
+          {/* Policy Type — for packages: 'باقة' badge first (rightmost in
+              RTL), then the main + addon type chips. For singles: the single
+              type chip. The transfer-from / broker badges are rendered AFTER
+              the types so they appear to the LEFT of them in RTL. */}
           {isPkg && pkg.mainPolicy ? (
             <div className="flex flex-wrap items-center gap-1">
+              <Badge variant="outline" className="gap-1 text-xs bg-primary/5 border-primary/20 text-primary">
+                <Zap className="h-3 w-3" />
+                باقة
+              </Badge>
               <button
                 type="button"
                 onClick={pulsePolicyRow(pkg.mainPolicy.id)}
@@ -1235,14 +1234,20 @@ function PolicyPackageCard({
                   </button>
                 </span>
               ))}
-              <Badge variant="outline" className="gap-1 text-xs bg-primary/5 border-primary/20 text-primary mr-1">
-                <Zap className="h-3 w-3" />
-                باقة
-              </Badge>
             </div>
           ) : (
             <Badge className={cn("border text-xs font-semibold", policyTypeColors[policy.policy_type_parent])}>
               {getTypeLabel()}
+            </Badge>
+          )}
+
+          {/* Transfer FROM indicator — for policies created via transfer.
+              Sits after the type cluster so it lands to the LEFT of the
+              types in RTL, alongside the broker badge below. */}
+          {wasTransferredFrom && !isTransferred && (
+            <Badge variant="outline" className="gap-1 text-xs bg-blue-500/10 border-blue-500/30 text-blue-600">
+              <ArrowRightLeft className="h-3 w-3" />
+              محول من <span className="font-mono ltr-nums">{wasTransferredFrom}</span>
             </Badge>
           )}
 
