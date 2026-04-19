@@ -111,15 +111,15 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
       </PopoverTrigger>
       <PopoverContent
         side="bottom"
-        align="center"
-        sideOffset={6}
+        align="end"
+        sideOffset={8}
         className="w-64 p-2 flex flex-col gap-1.5"
         dir="rtl"
       >
         <PopoverPrimitive.Arrow
-          width={12}
-          height={6}
-          className="fill-popover drop-shadow-[0_-1px_0_hsl(var(--border))]"
+          width={14}
+          height={7}
+          className="fill-popover drop-shadow-sm"
         />
         <p className="px-2 pt-1 pb-0.5 text-[11px] font-semibold text-muted-foreground">
           المسودات المصغرة
