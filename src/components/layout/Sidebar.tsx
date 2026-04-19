@@ -106,7 +106,7 @@ export const navigationGroups: NavGroup[] = [
     ],
   },
   {
-    name: "السجلات",
+    name: "العملاء والشركاء",
     icon: Users,
     items: [
       { name: "العملاء", href: "/clients", icon: Users },
@@ -511,19 +511,18 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                             : "text-[#878b8b] hover:bg-slate-50 hover:text-black",
                         )}
                       >
-                        {/* Active marker — 10px black dot centred ON
-                            the guide line. Math: dot's right edge is
-                            +5px past NavLink's right; the line sits
-                            another 20px (pr-5) to the right of
-                            NavLink's right edge. Offset -25px puts
-                            dot's right edge AT the line, then
-                            translateX(50%) shifts dot half its width
-                            right so the dot's centre lands ON the
-                            line. */}
+                        {/* Active marker — 7px black dot centred ON
+                            the guide line. The wrapper has pr-5 so
+                            the line sits 20px to the right of each
+                            NavLink's right edge. right:-20 +
+                            translate-x-1/2 always lands the dot's
+                            centre exactly at +20 regardless of dot
+                            size, so changing the dot size does not
+                            require recomputing the offset. */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
-                            className="absolute top-1/2 -right-[20px] -translate-y-1/2 translate-x-1/2 h-[10px] w-[10px] rounded-full bg-black"
+                            className="absolute top-1/2 -right-[20px] -translate-y-1/2 translate-x-1/2 h-[7px] w-[7px] rounded-full bg-black"
                           />
                         )}
                         <span className="text-right">{item.name}</span>
