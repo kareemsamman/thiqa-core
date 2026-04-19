@@ -485,13 +485,14 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 {/* Submenu — text-only items (no leaf icons), matching
-                    the Untitled UI reference. A separate absolute
-                    `<span>` renders the vertical guide line so the
-                    dot's offset math is decoupled from padding/border:
-                    line is at right:0 of this wrapper, the active
-                    dot's centre is also at right:0 → dot sits ON the
-                    line. */}
-                <div className="relative mt-1 mr-[14px] pr-5 pl-1 py-1 space-y-0.5">
+                    the Untitled UI reference. The wrapper carries the
+                    vertical guide line at its right:0; each NavLink
+                    spans the wrapper's full width and owns its own
+                    pr-6 (so the active pill background extends all
+                    the way to the line and the dot sits cleanly
+                    inside it, instead of leaving a 20px gap between
+                    the pill and the dot). */}
+                <div className="relative mt-1 mr-[14px] py-1 space-y-0.5">
                   <span
                     aria-hidden="true"
                     className="pointer-events-none absolute right-0 top-1.5 bottom-1.5 w-px bg-[#878b8b]/55"
@@ -505,24 +506,24 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         ref={isActiveRoute ? activeNavLinkRef : undefined}
                         onClick={handleNavClick}
                         className={cn(
-                          "relative flex items-center justify-start rounded-md px-3 py-2 text-[13.5px] font-normal transition-colors duration-150",
+                          "relative flex items-center justify-start rounded-md pl-3 pr-6 py-2 text-[13.5px] font-normal transition-colors duration-150",
                           isActiveRoute
                             ? "bg-slate-100 text-black"
                             : "text-[#878b8b] hover:bg-slate-50 hover:text-black",
                         )}
                       >
-                        {/* Active marker — 7px black dot centred ON
-                            the guide line. The wrapper has pr-5 so
-                            the line sits 20px to the right of each
-                            NavLink's right edge. right:-20 +
-                            translate-x-1/2 always lands the dot's
-                            centre exactly at +20 regardless of dot
-                            size, so changing the dot size does not
-                            require recomputing the offset. */}
+                        {/* Active marker — 7px black dot, centre on
+                            the guide line. NavLink now reaches the
+                            line, so right:0 + translate-x-1/2 puts
+                            the dot's centre exactly at NavLink's
+                            right edge = wrapper's right edge = the
+                            line. Half the dot sits inside the active
+                            pill bg, half pokes past the line — same
+                            visual as the Untitled UI reference. */}
                         {isActiveRoute && (
                           <span
                             aria-hidden="true"
-                            className="absolute top-1/2 -right-[20px] -translate-y-1/2 translate-x-1/2 h-[7px] w-[7px] rounded-full bg-black"
+                            className="absolute top-1/2 right-0 -translate-y-1/2 translate-x-1/2 h-[7px] w-[7px] rounded-full bg-black z-10"
                           />
                         )}
                         <span className="text-right">{item.name}</span>
