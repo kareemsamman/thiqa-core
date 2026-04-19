@@ -593,26 +593,27 @@ export function BottomToolbarInlineSearch({
             showDropdown && direction === "down" && [
               "rounded-b-none rounded-t-3xl",
               "border-b-transparent border-black/[0.06]",
-              "bg-white/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70",
-              "hover:bg-white/80",
+              "bg-white hover:bg-white",
               expandedInputClassName,
             ],
             showDropdown && direction === "up" && [
               "rounded-t-none rounded-b-3xl",
               "border-t-transparent border-black/[0.06]",
-              "bg-white/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70",
-              "hover:bg-white/80",
+              "bg-white hover:bg-white",
               expandedInputClassName,
             ],
           )}
         />
-        {query && (
+        {(query || collapsible) && (
           <Button
             variant="ghost"
             size="icon"
             className="absolute left-1 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full"
-            onClick={clearSearch}
-            aria-label="مسح"
+            onClick={() => {
+              clearSearch();
+              if (collapsible) setIsExpanded(false);
+            }}
+            aria-label={collapsible ? "إغلاق البحث" : "مسح"}
             tabIndex={-1}
           >
             <X className="h-4 w-4" />
@@ -628,11 +629,9 @@ export function BottomToolbarInlineSearch({
         <div
           className={cn(
             "absolute z-40 max-h-[380px] overflow-y-auto p-2",
-            // Glass surface — matches the input's open state exactly so
-            // they read as one continuous shape. supports-[] fallback
-            // keeps it white-opaque where backdrop-filter isn't
-            // available.
-            "border border-black/[0.06] bg-white/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70",
+            // Solid white surface — matches the input's open state so
+            // they read as one continuous shape.
+            "border border-black/[0.06] bg-white",
             "shadow-2xl shadow-black/5",
             // Connect seamlessly to the input: no top/bottom gap, no
             // seam border, matching corner radius on the far side.
