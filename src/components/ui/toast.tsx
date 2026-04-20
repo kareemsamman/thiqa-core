@@ -33,13 +33,16 @@ ToastViewport.displayName = ToastPrimitives.Viewport.displayName;
 // right on swipe/close.
 const toastVariants = cva(
   cn(
-    "glass-toast group pointer-events-auto relative flex items-center gap-3 overflow-hidden",
-    "w-full py-2.5 ps-3 pe-10 rounded-2xl border",
-    "bg-white/75 dark:bg-slate-900/80",
+    "glass-toast group pointer-events-auto relative flex items-center gap-5 overflow-hidden",
+    "w-full py-3 ps-4 pe-11 rounded-2xl border",
+    // Mirrors sonner.tsx — higher opacity and stronger edge/shadow so
+    // the toast is clearly visible in the bottom-right corner on top
+    // of busy pages.
+    "bg-white/95 dark:bg-slate-900/90",
     "backdrop-blur-2xl backdrop-saturate-150",
-    "border-white/60 dark:border-white/10",
-    "ring-1 ring-black/5 dark:ring-white/10",
-    "shadow-[0_20px_60px_-20px_rgba(15,23,42,0.28)] dark:shadow-[0_20px_60px_-20px_rgba(0,0,0,0.75)]",
+    "border-black/10 dark:border-white/10",
+    "ring-1 ring-black/10 dark:ring-white/10",
+    "shadow-[0_24px_70px_-18px_rgba(15,23,42,0.45)] dark:shadow-[0_24px_70px_-18px_rgba(0,0,0,0.85)]",
     "transition-all",
     "data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none",
     "data-[state=open]:animate-in data-[state=closed]:animate-out",

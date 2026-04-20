@@ -21,6 +21,7 @@ import { AdminRoute } from "@/components/auth/AdminRoute";
 import { SiteHelmet } from "@/components/layout/SiteHelmet";
 import { AgentProvider } from "@/hooks/useAgentContext";
 import { ThiqaAdminRoute } from "@/components/auth/ThiqaAdminRoute";
+import { toast } from "sonner";
 
 // All pages are code-split. Each route's bundle is only downloaded when
 // the user navigates to it. The Suspense fallback is intentionally null
@@ -239,6 +240,50 @@ const PUBLIC_WIDGET_PATHS = new Set([
   "/privacy",
 ]);
 
+// Dev-only toast tester. Shows a column of 5 pills in the bottom-left
+// corner in `vite dev` only. Safe to delete once the new toast design
+// is verified — gated on import.meta.env.DEV so it never ships.
+function DevToastTester() {
+  if (!import.meta.env.DEV) return null;
+  return (
+    <div className="fixed bottom-4 left-4 z-[90] flex flex-col gap-1.5">
+      <button
+        onClick={() => toast.success("تم الحفظ", { description: "تم حفظ التغييرات بنجاح" })}
+        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-white text-xs font-semibold shadow-lg"
+      >
+        Success
+      </button>
+      <button
+        onClick={() => toast.error("فشل", { description: "تعذر تنفيذ العملية" })}
+        className="rounded-lg bg-rose-600 px-3 py-1.5 text-white text-xs font-semibold shadow-lg"
+      >
+        Error
+      </button>
+      <button
+        onClick={() => toast.warning("تنبيه", { description: "يرجى المراجعة" })}
+        className="rounded-lg bg-amber-600 px-3 py-1.5 text-white text-xs font-semibold shadow-lg"
+      >
+        Warning
+      </button>
+      <button
+        onClick={() => toast.info("معلومة", { description: "تم تحديث البيانات" })}
+        className="rounded-lg bg-sky-600 px-3 py-1.5 text-white text-xs font-semibold shadow-lg"
+      >
+        Info
+      </button>
+      <button
+        onClick={() => {
+          const id = toast.loading("جاري المعالجة...");
+          setTimeout(() => toast.dismiss(id), 2500);
+        }}
+        className="rounded-lg bg-slate-700 px-3 py-1.5 text-white text-xs font-semibold shadow-lg"
+      >
+        Loading
+      </button>
+    </div>
+  );
+}
+
 function PublicWidgets() {
   const location = useLocation();
   if (!PUBLIC_WIDGET_PATHS.has(location.pathname)) return null;
@@ -268,6 +313,7 @@ const App = () => (
             <GlobalPolicyWizardHost />
             <ThaqibWidget />
             <PublicWidgets />
+            <DevToastTester />
             <RoutePrefetcher />
             <Suspense fallback={null}>
             <Routes>

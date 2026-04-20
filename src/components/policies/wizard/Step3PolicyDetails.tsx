@@ -1126,20 +1126,29 @@ export function Step3PolicyDetails({
         );
       })()}
 
-      {/* ELZAMI Commission Display - Always shown as cost (red) */}
-      {policy.policy_type_parent === 'ELZAMI' && policy.company_id && (
-        <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm font-medium text-red-700 dark:text-red-300">العمولة</Label>
-            <span className="text-lg font-bold text-red-600">
-              ₪{(companies.find(c => c.id === policy.company_id)?.elzami_commission || 0).toLocaleString()}
-            </span>
+      {/* ELZAMI Commission Display - Always shown as cost (red).
+          The agency owes this commission to the insurance company when
+          selling compulsory coverage, so it is framed as a deduction
+          from the agency's running balance with that company. */}
+      {policy.policy_type_parent === 'ELZAMI' && policy.company_id && (() => {
+        const selectedCompany = companies.find(c => c.id === policy.company_id);
+        const companyName = selectedCompany?.name_ar || selectedCompany?.name || 'الشركة';
+        const amount = selectedCompany?.elzami_commission || 0;
+        if (amount <= 0) return null;
+        return (
+          <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium text-red-700 dark:text-red-300">العمولة</Label>
+              <span className="text-lg font-bold text-red-600">
+                ₪{amount.toLocaleString()}
+              </span>
+            </div>
+            <p className="text-xs text-red-500 dark:text-red-400 mt-1">
+              هذا المبلغ سيُخصم من رصيدك مع {companyName}
+            </p>
           </div>
-          <p className="text-xs text-red-500 dark:text-red-400 mt-1">
-            هذا المبلغ سيُخصم من رصيد AB
-          </p>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Pricing Breakdown Card - AFTER extras */}
       {(pricing.basePrice > 0 || packageMode) && (
