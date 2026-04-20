@@ -1578,6 +1578,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                 onOpenChange={setCancelOpen}
                 policyIds={cancelIds}
                 policyNumber={policy.policy_number}
+                documentNumber={(policy as any).document_number || null}
                 clientId={policy.clients.id}
                 clientName={policy.clients.full_name}
                 clientPhone={policy.clients.phone_number}

@@ -366,6 +366,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [cancelPolicyIds, setCancelPolicyIds] = useState<string[]>([]);
   const [cancelInsurancePrice, setCancelInsurancePrice] = useState(0);
   const [cancelPolicyNumber, setCancelPolicyNumber] = useState<string | null>(null);
+  const [cancelDocumentNumber, setCancelDocumentNumber] = useState<string | null>(null);
 
   // Edit policy/package modals — opened directly from the dropdown so
   // the user skips the "open drawer, find edit button" dance. Single
@@ -2017,6 +2018,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   setCancelPolicyIds([policyId]);
                   setCancelInsurancePrice(Number(p.insurance_price) || 0);
                   setCancelPolicyNumber(p.policy_number);
+                  setCancelDocumentNumber((p as any).document_number ?? null);
                   setCancelModalOpen(true);
                 }}
                 onTransferPackage={(policyIds) => {
@@ -2051,6 +2053,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   setCancelPolicyIds(policyIds);
                   setCancelInsurancePrice(totalPrice);
                   setCancelPolicyNumber(primary.policy_number);
+                  setCancelDocumentNumber((primary as any).document_number ?? null);
                   setCancelModalOpen(true);
                 }}
                 onDeletePolicy={isAdmin ? (policyIds) => {
@@ -2701,10 +2704,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             setCancelPolicyIds([]);
             setCancelInsurancePrice(0);
             setCancelPolicyNumber(null);
+            setCancelDocumentNumber(null);
           }
         }}
         policyIds={cancelPolicyIds}
         policyNumber={cancelPolicyNumber}
+        documentNumber={cancelDocumentNumber}
         clientId={client.id}
         clientName={client.full_name}
         clientPhone={client.phone_number}
@@ -2715,6 +2720,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           setCancelPolicyIds([]);
           setCancelInsurancePrice(0);
           setCancelPolicyNumber(null);
+          setCancelDocumentNumber(null);
           await Promise.all([
             fetchPolicies(),
             fetchPaymentSummary(),

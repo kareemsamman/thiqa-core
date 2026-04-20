@@ -29,6 +29,12 @@ interface CancelPolicyModalProps {
   policyId?: string;
   policyIds?: string[];
   policyNumber: string | null;
+  // Internal document_number is always present (DB trigger assigns it) —
+  // prefer it over the external insurance-company policy_number, which
+  // is frequently empty (especially on packages) and otherwise renders
+  // as "رقم غير محدد" in the cancellation SMS. Same rule as
+  // TransferPolicyModal.
+  documentNumber?: string | null;
   clientId: string;
   clientName: string;
   clientPhone: string | null;
@@ -43,6 +49,7 @@ export function CancelPolicyModal({
   policyId,
   policyIds,
   policyNumber,
+  documentNumber,
   clientId,
   clientName,
   clientPhone,
@@ -92,9 +99,10 @@ export function CancelPolicyModal({
           ? `يوجد لك مرتجع بقيمة ₪${parseFloat(refundAmount).toLocaleString("en-US")}. ` 
           : "";
         
+        const displayNumber = (documentNumber || policyNumber || "").trim();
         template = template
           .replace(/\{\{client_name\}\}/g, clientName)
-          .replace(/\{\{policy_number\}\}/g, policyNumber || "غير محدد")
+          .replace(/\{\{policy_number\}\}/g, displayNumber || "غير محدد")
           .replace(/\{\{refund_message\}\}/g, refundMsg);
         
         setSmsMessage(template);
