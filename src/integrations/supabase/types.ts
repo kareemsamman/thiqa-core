@@ -6366,6 +6366,15 @@ export type Database = {
       is_active_user: { Args: { _user_id: string }; Returns: boolean }
       is_agent_active: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
+      list_pbx_extensions_safe: {
+        Args: never
+        Returns: {
+          extension_name: string
+          extension_number: string
+          id: string
+          is_default: boolean
+        }[]
+      }
       log_usage_with_credit: {
         Args: {
           p_agent_id: string
