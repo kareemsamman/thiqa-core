@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,82 +18,87 @@ import { useSessionTracker } from "@/hooks/useSessionTracker";
 import { SidebarStateProvider } from "@/hooks/useSidebarState";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AdminRoute } from "@/components/auth/AdminRoute";
-import Index from "./pages/Index";
-import Login from "./pages/Login";
-import NoAccess from "./pages/NoAccess";
-import Clients from "./pages/Clients";
-import Cars from "./pages/Cars";
-import Policies from "./pages/Policies";
-import Companies from "./pages/Companies";
-import Brokers from "./pages/Brokers";
-import BrokerWallet from "./pages/BrokerWallet";
-import Cheques from "./pages/Cheques";
-import Media from "./pages/Media";
-import AdminUsers from "./pages/AdminUsers";
-import BranchManagement from "./pages/BranchManagement";
-import SmsOnboarding from "./pages/SmsOnboarding";
-import Receipts from "./pages/Receipts";
-import Accounting from "./pages/Accounting";
-import CompanySettlement from "./pages/CompanySettlement";
-import CompanySettlementDetail from "./pages/CompanySettlementDetail";
-
-import InvoiceTemplates from "./pages/InvoiceTemplates";
-import InsuranceCategories from "./pages/InsuranceCategories";
-import RoadServices from "./pages/RoadServices";
-import AccidentFeeServices from "./pages/AccidentFeeServices";
-import PaymentSettings from "./pages/PaymentSettings";
-import SmsSettings from "./pages/SmsSettings";
-import CustomerSignatures from "./pages/CustomerSignatures";
-import PaymentSuccess from "./pages/PaymentSuccess";
-import PaymentFail from "./pages/PaymentFail";
-import SignaturePage from "./pages/SignaturePage";
-import Notifications from "./pages/Notifications";
-import WordPressImport from "./pages/WordPressImport";
-import DatabaseMigration from "./pages/DatabaseMigration";
-import NotFound from "./pages/NotFound";
-import SmsHistory from "./pages/SmsHistory";
-import DebtTracking from "./pages/DebtTracking";
-import AuthSettings from "./pages/AuthSettings";
-import FinancialReports from "./pages/FinancialReports";
-import CompanyWallet from "./pages/CompanyWallet";
-import ElzamiCostsReport from "./pages/ElzamiCostsReport";
-import PolicyReports from "./pages/PolicyReports";
-import MarketingSms from "./pages/MarketingSms";
-import AccidentReports from "./pages/AccidentReports";
-import AccidentReportForm from "./pages/AccidentReportForm";
-import AccidentTemplateMapper from "./pages/AccidentTemplateMapper";
-import AnnouncementSettings from "./pages/AnnouncementSettings";
-import Tasks from "./pages/Tasks";
-import BusinessContacts from "./pages/BusinessContacts";
-import RepairClaims from "./pages/RepairClaims";
-import RepairClaimDetail from "./pages/RepairClaimDetail";
-import CorrespondenceLetters from "./pages/CorrespondenceLetters";
-import Leads from "./pages/Leads";
-import FormTemplates from "./pages/FormTemplates";
-import FormTemplateEditor from "./pages/FormTemplateEditor";
-import ActivityLog from "./pages/ActivityLog";
-import BrandingSettings from "./pages/BrandingSettings";
-// XService removed — not available in Thiqa platform
+import { LoadingScreen } from "@/components/shared/LoadingScreen";
 import { SiteHelmet } from "@/components/layout/SiteHelmet";
 import { AgentProvider } from "@/hooks/useAgentContext";
 import { ThiqaAdminRoute } from "@/components/auth/ThiqaAdminRoute";
-import SubscriptionExpired from "./pages/SubscriptionExpired";
-import Subscription from "./pages/Subscription";
-import ThiqaAgents from "./pages/ThiqaAgents";
-import ThiqaAgentDetail from "./pages/ThiqaAgentDetail";
-import ThiqaCreateAgent from "./pages/ThiqaCreateAgent";
-import ThiqaPayments from "./pages/ThiqaPayments";
-import ThiqaDashboard from "./pages/ThiqaDashboard";
-import ThiqaSettings from "./pages/ThiqaSettings";
-import ThiqaLandingCMS from "./pages/ThiqaLandingCMS";
-import ThiqaAnalytics from "./pages/ThiqaAnalytics";
-import Landing from "./pages/Landing";
-import VerifyEmail from "./pages/VerifyEmail";
-import Pricing from "./pages/Pricing";
-import ResetPassword from "./pages/ResetPassword";
-import ForgotPassword from "./pages/ForgotPassword";
-import Privacy from "./pages/Privacy";
-import TermsOfUse from "./pages/TermsOfUse";
+
+// All pages are code-split. Each route's bundle is only downloaded when
+// the user navigates to it, and Suspense falls back to the Thiqa
+// LoadingScreen while the chunk is in flight. This keeps the initial JS
+// payload small — only providers, router, auth context, and the route
+// guards ship in the critical bundle.
+const Index = lazy(() => import("./pages/Index"));
+const Login = lazy(() => import("./pages/Login"));
+const NoAccess = lazy(() => import("./pages/NoAccess"));
+const Clients = lazy(() => import("./pages/Clients"));
+const Cars = lazy(() => import("./pages/Cars"));
+const Policies = lazy(() => import("./pages/Policies"));
+const Companies = lazy(() => import("./pages/Companies"));
+const Brokers = lazy(() => import("./pages/Brokers"));
+const BrokerWallet = lazy(() => import("./pages/BrokerWallet"));
+const Cheques = lazy(() => import("./pages/Cheques"));
+const Media = lazy(() => import("./pages/Media"));
+const AdminUsers = lazy(() => import("./pages/AdminUsers"));
+const BranchManagement = lazy(() => import("./pages/BranchManagement"));
+const SmsOnboarding = lazy(() => import("./pages/SmsOnboarding"));
+const Receipts = lazy(() => import("./pages/Receipts"));
+const Accounting = lazy(() => import("./pages/Accounting"));
+const CompanySettlement = lazy(() => import("./pages/CompanySettlement"));
+const CompanySettlementDetail = lazy(() => import("./pages/CompanySettlementDetail"));
+const InvoiceTemplates = lazy(() => import("./pages/InvoiceTemplates"));
+const InsuranceCategories = lazy(() => import("./pages/InsuranceCategories"));
+const RoadServices = lazy(() => import("./pages/RoadServices"));
+const AccidentFeeServices = lazy(() => import("./pages/AccidentFeeServices"));
+const PaymentSettings = lazy(() => import("./pages/PaymentSettings"));
+const SmsSettings = lazy(() => import("./pages/SmsSettings"));
+const CustomerSignatures = lazy(() => import("./pages/CustomerSignatures"));
+const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
+const PaymentFail = lazy(() => import("./pages/PaymentFail"));
+const SignaturePage = lazy(() => import("./pages/SignaturePage"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const WordPressImport = lazy(() => import("./pages/WordPressImport"));
+const DatabaseMigration = lazy(() => import("./pages/DatabaseMigration"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const SmsHistory = lazy(() => import("./pages/SmsHistory"));
+const DebtTracking = lazy(() => import("./pages/DebtTracking"));
+const AuthSettings = lazy(() => import("./pages/AuthSettings"));
+const FinancialReports = lazy(() => import("./pages/FinancialReports"));
+const CompanyWallet = lazy(() => import("./pages/CompanyWallet"));
+const ElzamiCostsReport = lazy(() => import("./pages/ElzamiCostsReport"));
+const PolicyReports = lazy(() => import("./pages/PolicyReports"));
+const MarketingSms = lazy(() => import("./pages/MarketingSms"));
+const AccidentReports = lazy(() => import("./pages/AccidentReports"));
+const AccidentReportForm = lazy(() => import("./pages/AccidentReportForm"));
+const AccidentTemplateMapper = lazy(() => import("./pages/AccidentTemplateMapper"));
+const AnnouncementSettings = lazy(() => import("./pages/AnnouncementSettings"));
+const Tasks = lazy(() => import("./pages/Tasks"));
+const BusinessContacts = lazy(() => import("./pages/BusinessContacts"));
+const RepairClaims = lazy(() => import("./pages/RepairClaims"));
+const RepairClaimDetail = lazy(() => import("./pages/RepairClaimDetail"));
+const CorrespondenceLetters = lazy(() => import("./pages/CorrespondenceLetters"));
+const Leads = lazy(() => import("./pages/Leads"));
+const FormTemplates = lazy(() => import("./pages/FormTemplates"));
+const FormTemplateEditor = lazy(() => import("./pages/FormTemplateEditor"));
+const ActivityLog = lazy(() => import("./pages/ActivityLog"));
+const BrandingSettings = lazy(() => import("./pages/BrandingSettings"));
+const SubscriptionExpired = lazy(() => import("./pages/SubscriptionExpired"));
+const Subscription = lazy(() => import("./pages/Subscription"));
+const ThiqaAgents = lazy(() => import("./pages/ThiqaAgents"));
+const ThiqaAgentDetail = lazy(() => import("./pages/ThiqaAgentDetail"));
+const ThiqaCreateAgent = lazy(() => import("./pages/ThiqaCreateAgent"));
+const ThiqaPayments = lazy(() => import("./pages/ThiqaPayments"));
+const ThiqaDashboard = lazy(() => import("./pages/ThiqaDashboard"));
+const ThiqaSettings = lazy(() => import("./pages/ThiqaSettings"));
+const ThiqaLandingCMS = lazy(() => import("./pages/ThiqaLandingCMS"));
+const ThiqaAnalytics = lazy(() => import("./pages/ThiqaAnalytics"));
+const Landing = lazy(() => import("./pages/Landing"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
+const Pricing = lazy(() => import("./pages/Pricing"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const TermsOfUse = lazy(() => import("./pages/TermsOfUse"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -151,6 +157,7 @@ const App = () => (
             <GlobalPolicyWizardHost />
             <ThaqibWidget />
             <PublicWidgets />
+            <Suspense fallback={<LoadingScreen />}>
             <Routes>
               <Route path="/landing" element={<Landing />} />
               <Route path="/pricing" element={<Pricing />} />
@@ -457,6 +464,7 @@ const App = () => (
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </Suspense>
             </PolicyWizardControllerProvider>
             </RecentClientProvider>
             </SidebarStateProvider>

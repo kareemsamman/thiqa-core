@@ -25,7 +25,11 @@ export function LoadingScreen({
     <div
       className={cn(
         "flex items-center justify-center bg-background",
-        !inline && "min-h-screen",
+        // Full-screen variant is a fixed overlay so it covers every
+        // floating element on the page — including the Thaqib AI
+        // widget (z-50 button, z-[55] panel) and any sidebar/header
+        // chrome. z-[100] buys us headroom above those layers.
+        !inline && "fixed inset-0 z-[100] min-h-screen",
         className,
       )}
       role="status"
