@@ -519,6 +519,16 @@ export function TransferPolicyModal({
             adjustment_amount: originalPolicy.id === policyId && adjustmentType !== "none"
               ? parseFloat(adjustmentAmount)
               : null,
+            // The modal asks "سبب الفرق..." for both customer_pays and
+            // refund adjustments. Persist it on the target row only; it
+            // is internal (office-facing) and never rides on the
+            // invoice. Previously it was stored only on the refund path
+            // via customer_wallet_transactions.notes and quietly
+            // dropped on the customer_pays path.
+            adjustment_note:
+              originalPolicy.id === policyId && adjustmentType !== "none"
+                ? (adjustmentNote.trim() || null)
+                : null,
             created_by_admin_id: user?.id,
             branch_id: branchId,
           });

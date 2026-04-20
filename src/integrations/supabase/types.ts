@@ -4618,6 +4618,7 @@ export type Database = {
       policy_transfers: {
         Row: {
           adjustment_amount: number | null
+          adjustment_note: string | null
           adjustment_type: string | null
           agent_id: string | null
           branch_id: string | null
@@ -4635,6 +4636,7 @@ export type Database = {
         }
         Insert: {
           adjustment_amount?: number | null
+          adjustment_note?: string | null
           adjustment_type?: string | null
           agent_id?: string | null
           branch_id?: string | null
@@ -4652,6 +4654,7 @@ export type Database = {
         }
         Update: {
           adjustment_amount?: number | null
+          adjustment_note?: string | null
           adjustment_type?: string | null
           agent_id?: string | null
           branch_id?: string | null

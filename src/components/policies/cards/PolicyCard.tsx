@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -5,6 +6,7 @@ import { PolicyRecord, PolicyGroup, PaymentStatus, getPolicyStatus } from './typ
 import { PolicyCardHeader } from './PolicyCardHeader';
 import { PolicyCardInfo } from './PolicyCardInfo';
 import { PackageBreakdown } from './PackageBreakdown';
+import { supabase } from '@/integrations/supabase/client';
 
 interface PolicyCardProps {
   group: PolicyGroup;
@@ -33,7 +35,43 @@ export function PolicyCard({
   const isPackage = group.addons.length > 0;
   const allPolicies = [mainPolicy, ...group.addons];
   const status = getPolicyStatus(mainPolicy);
-  const notes = mainPolicy.notes;
+  // policies.notes is reused as the office-only note on transferred
+  // packages (see TransferPolicyModal), so we keep it as the office
+  // note here and pull the two other transfer-specific notes
+  // (customer + financial adjustment) from policy_transfers below.
+  const officeNote = mainPolicy.notes;
+  const transferredPolicyIds = allPolicies
+    .filter(p => (p as any).transferred_from_policy_id)
+    .map(p => p.id);
+  const [customerNote, setCustomerNote] = useState<string | null>(null);
+  const [adjustmentNote, setAdjustmentNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (transferredPolicyIds.length === 0) {
+      setCustomerNote(null);
+      setAdjustmentNote(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('policy_transfers')
+        .select('note, adjustment_note')
+        .in('new_policy_id', transferredPolicyIds);
+      if (cancelled) return;
+      const firstCustomerNote = (data || [])
+        .map((r: any) => r?.note)
+        .find((n: string | null | undefined) => typeof n === 'string' && n.trim().length > 0) || null;
+      const firstAdjustmentNote = (data || [])
+        .map((r: any) => r?.adjustment_note)
+        .find((n: string | null | undefined) => typeof n === 'string' && n.trim().length > 0) || null;
+      setCustomerNote(firstCustomerNote);
+      setAdjustmentNote(firstAdjustmentNote);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [transferredPolicyIds.join('|')]);
+  const hasAnyNote = !!(officeNote || customerNote || adjustmentNote);
 
   const handleCardClick = () => {
     if (isPackage) {
@@ -97,10 +135,31 @@ export function PolicyCard({
         />
       )}
 
-      {/* Notes Footer */}
-      {notes && (
-        <div className="border-t px-4 py-2 text-xs text-muted-foreground bg-muted/5">
-          <span className="line-clamp-1">📝 {notes}</span>
+      {/* Notes Footer — up to three labeled lines. Each is internal-
+          only (office note + adjustment note) except for the customer
+          note, which is the one the customer sees on the printed
+          invoice. We still show it here so staff can see everything
+          in one place. Each line is skipped when its value is empty. */}
+      {hasAnyNote && (
+        <div className="border-t px-4 py-2 text-xs text-muted-foreground bg-muted/5 space-y-1">
+          {officeNote && (
+            <div className="flex gap-1.5">
+              <span className="font-semibold text-foreground/80 shrink-0">ملاحظات المكتب:</span>
+              <span className="line-clamp-2">{officeNote}</span>
+            </div>
+          )}
+          {customerNote && (
+            <div className="flex gap-1.5">
+              <span className="font-semibold text-foreground/80 shrink-0">ملاحظات الزبون:</span>
+              <span className="line-clamp-2">{customerNote}</span>
+            </div>
+          )}
+          {adjustmentNote && (
+            <div className="flex gap-1.5">
+              <span className="font-semibold text-foreground/80 shrink-0">ملاحظة التعديل المالي:</span>
+              <span className="line-clamp-2">{adjustmentNote}</span>
+            </div>
+          )}
         </div>
       )}
     </Card>
