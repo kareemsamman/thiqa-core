@@ -1,11 +1,14 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { resolveSmsSettings } from "../_shared/sms-settings.ts"
-import { getAgentBranding } from "../_shared/agent-branding.ts"
-import { appendSmsFooter } from "../_shared/sms-footer.ts"
-
-// This edge function handles payment result pages for Tranzila
-// It returns simple HTML that posts a message to the parent window
-// Also captures card details, installments, and sends SMS receipt
+// This edge function returns the payment result HTML page for Tranzila
+// after the customer is redirected back from the payment gateway.
+//
+// SECURITY: This page does NOT write payment status to the database.
+// All payment state changes are handled exclusively by the
+// `tranzila-webhook` edge function, which is called server-to-server by
+// Tranzila. The redirect-based query parameters here can be forged by an
+// attacker, so they are only used to render UI feedback and to forward a
+// `postMessage` to the parent window. The parent then re-queries the
+// authoritative payment status via `tranzila-status` (which reads only
+// from the database).
 
 // Map Tranzila response codes to Hebrew error messages
 function getErrorMessage(code: string, reason: string): string {
@@ -111,73 +114,10 @@ Deno.serve(async (req) => {
   // URL-encode for safe embedding in JavaScript
   const errorMessageEncoded = encodeURIComponent(errorMessage)
 
-  // Also update payment in database if we have the info
-  let updatedPayment: any = null
-  if (myid || paymentId) {
-    try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-      if (myid) {
-        // Find payment by tranzila_index
-        const { data: payment } = await supabase
-          .from('policy_payments')
-          .select('id, tranzila_response_code, policy_id')
-          .eq('tranzila_index', myid)
-          .single()
-
-        if (payment && !payment.tranzila_response_code) {
-          // Update payment status with card details
-          if (finalStatus === 'success') {
-            const { data: updated } = await supabase
-              .from('policy_payments')
-              .update({
-                refused: false,
-                tranzila_response_code: responseCode || '000',
-                tranzila_approval_code: confirmationCode,
-                tranzila_transaction_id: tranzilaIndex,
-                card_last_four: cardLastFour || null,
-                card_expiry: expdate || null,
-                installments_count: npay ? parseInt(npay, 10) : 1,
-              })
-              .eq('id', payment.id)
-              .select(`
-                *,
-                policy:policies!policy_id (
-                  id,
-                  policy_number,
-                  agent_id,
-                  client:clients!client_id (
-                    id,
-                    full_name,
-                    phone_number
-                  )
-                )
-              `)
-              .single()
-            
-            updatedPayment = updated
-            
-            // Send SMS receipt if payment was successful
-            if (updated?.policy?.client?.phone_number) {
-              await sendPaymentReceiptSms(supabase, updated)
-            }
-          } else if (finalStatus === 'failed') {
-            await supabase
-              .from('policy_payments')
-              .update({
-                refused: true,
-                tranzila_response_code: responseCode || 'FAILED',
-              })
-              .eq('id', payment.id)
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Error updating payment:', e)
-    }
-  }
+  // NOTE: No DB writes happen here. Payment status is committed only by
+  // the server-to-server `tranzila-webhook` function. Tranzila also
+  // triggers the SMS receipt server-side once the webhook confirms a
+  // successful charge.
 
   const isSuccess = finalStatus === 'success'
   const displaySum = sum || ''
