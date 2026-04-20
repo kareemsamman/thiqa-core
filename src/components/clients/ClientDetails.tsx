@@ -942,14 +942,23 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
       if (response.error) {
         let msg = response.error.message || 'فشل في حذف المعاملة';
+        // error.context is a Response in supabase-js v2; the body can be a
+        // stream that hasn't been read yet. Try the sync string path first
+        // (older versions expose it already), then fall back to .text().
+        const ctx: any = (response.error as any).context;
         try {
-          const ctx: any = (response.error as any).context;
-          if (ctx?.body) {
+          if (typeof ctx?.body === 'string') {
             const parsed = JSON.parse(ctx.body);
             msg = parsed?.details || parsed?.error || msg;
+          } else if (ctx && typeof ctx.text === 'function') {
+            const bodyText = await ctx.clone().text();
+            if (bodyText) {
+              const parsed = JSON.parse(bodyText);
+              msg = parsed?.details || parsed?.error || msg;
+            }
           }
         } catch {
-          // ignore
+          // ignore — keep msg
         }
         throw new Error(msg);
       }

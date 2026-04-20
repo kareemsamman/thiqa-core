@@ -308,11 +308,36 @@ serve(async (req) => {
       .from('policy_transfers')
       .delete()
       .or(`policy_id.in.(${allPolicyIds.join(',')}),new_policy_id.in.(${allPolicyIds.join(',')})`);
-    
+
     if (transfersError) {
       console.error('Error deleting policy transfers:', transfersError);
     } else {
       console.log('Deleted policy transfers');
+    }
+
+    // 9b. Release back-pointers from any OTHER policy that still points to
+    // a policy in allPolicyIds via policies.transferred_from_policy_id.
+    // That column has a self-referencing FK with the default ON DELETE
+    // RESTRICT, so PostgreSQL would refuse to delete a source policy while
+    // its derived policy still holds the reference. We NULL it out so the
+    // derived policy survives (it's a valid standalone policy on the new
+    // car); it just loses its transfer lineage — which is fine since the
+    // policy_transfers audit row was just deleted too.
+    const { error: unlinkError } = await supabase
+      .from('policies')
+      .update({ transferred_from_policy_id: null })
+      .in('transferred_from_policy_id', allPolicyIds);
+    if (unlinkError) {
+      console.error('Error releasing transferred_from_policy_id back-pointers:', unlinkError);
+      return new Response(JSON.stringify({
+        error: 'Failed to release transfer back-pointers',
+        details: unlinkError.message,
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } else {
+      console.log('Released transferred_from_policy_id back-pointers');
     }
 
     // 10. Finally, delete the policies themselves
