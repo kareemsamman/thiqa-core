@@ -155,8 +155,7 @@ export function PolicySuccessDialog({
       <DialogContent className="max-w-md w-[95vw] p-0 overflow-hidden" dir="rtl">
         {/* Dark navy header — matches the package drawer / client report shell */}
         <div
-          className="text-white p-5"
-          style={{ background: "linear-gradient(135deg, #122143 0%, #1a3260 100%)" }}
+          className="text-white p-5 hero-gradient"
         >
           <DialogHeader>
             <div className="flex items-center gap-3">

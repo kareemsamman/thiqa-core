@@ -121,8 +121,7 @@ export function ReceiptGroupDetailsDialog({
         {/* Header — mirrors PaymentGroupDetailsDialog styling so the two
             popups feel like one family. */}
         <div
-          className="sticky top-0 z-10 text-white p-4 rounded-t-lg"
-          style={{ background: "linear-gradient(135deg, #122143 0%, #1a3260 100%)" }}
+          className="sticky top-0 z-10 text-white p-4 rounded-t-lg hero-gradient"
         >
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">

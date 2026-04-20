@@ -225,8 +225,7 @@ export function PaymentGroupDetailsDialog({
       <DialogContent className="max-w-4xl w-[95vw] max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-0" dir="rtl">
         {/* Header */}
         <div
-          className="sticky top-0 z-10 text-white px-3 sm:px-5 py-3 sm:py-4 rounded-t-lg"
-          style={{ background: "linear-gradient(135deg, #122143 0%, #1a3260 100%)" }}
+          className="sticky top-0 z-10 text-white px-3 sm:px-5 py-3 sm:py-4 rounded-t-lg hero-gradient"
         >
           <DialogHeader>
             <div className="flex items-start justify-between gap-2 sm:gap-4">

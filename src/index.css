@@ -224,6 +224,17 @@ html {
 }
 
 @layer utilities {
+  /* Shared "hero header" background for the dark banners at the top of
+     client/payment/policy drawers and dialogs. Previously hard-coded as
+     linear-gradient(135deg, #122143 0%, #1a3260 100%) in ~10 call
+     sites; now one token so a brand-color tweak is a single-line edit.
+     The `rgba(255,255,255,0.02)` base keeps the overlay layer so
+     downstream opacity/blend tweaks still work. */
+  .hero-gradient {
+    background: linear-gradient(rgb(69, 94, 187) 0%, rgb(138, 150, 203) 100%),
+      rgba(255, 255, 255, 0.02);
+  }
+
   /* LTR numeric content — `unicode-bidi: isolate` + `direction: ltr`
      is enough to keep digits in their natural order inside RTL flow.
      No display override, so tds / ps / spans keep their own box. */

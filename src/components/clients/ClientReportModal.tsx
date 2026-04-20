@@ -1422,8 +1422,7 @@ export function ClientReportModal({
       >
         {/* Hero header */}
         <div
-          className="relative overflow-hidden shrink-0"
-          style={{ background: 'linear-gradient(135deg, #122143 0%, #1a3260 100%)' }}
+          className="relative overflow-hidden shrink-0 hero-gradient"
         >
           <div className="absolute inset-0 opacity-10 pointer-events-none">
             <div className="absolute top-0 left-0 w-32 h-32 bg-white rounded-full -translate-x-1/2 -translate-y-1/2" />

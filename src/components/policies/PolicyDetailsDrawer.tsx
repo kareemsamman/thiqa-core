@@ -726,8 +726,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
           ) : policy ? (
             <div className="flex flex-col h-full max-h-[95vh]">
               {/* Hero Header */}
-              <div className="relative overflow-hidden"
-                style={{ background: 'linear-gradient(135deg, #122143 0%, #1a3260 100%)' }}
+              <div className="relative overflow-hidden hero-gradient"
               >
                 {/* Background Pattern */}
                 <div className="absolute inset-0 opacity-10">

@@ -38,7 +38,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     <div className="min-h-screen bg-background" dir="rtl">
       {/* Impersonation banner */}
       {isImpersonating && impersonatedAgent && (
-        <div className="fixed top-0 inset-x-0 z-[60] bg-[#122143] text-white h-10 flex items-center justify-between px-4 shadow-md" dir="rtl">
+        <div className="fixed top-0 inset-x-0 z-[60] hero-gradient text-white h-10 flex items-center justify-between px-4 shadow-md" dir="rtl">
           <div className="flex items-center gap-2 text-sm">
             <Building2 className="h-4 w-4" />
             <span>أنت تتصفح نظام الوكيل:</span>

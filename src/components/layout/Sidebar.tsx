@@ -1064,7 +1064,7 @@ function MobileTopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
   return (
     <>
       <div
-        className="fixed top-0 inset-x-0 z-50 md:hidden h-14 bg-[#122143] flex items-center justify-between px-3 shadow-lg"
+        className="fixed top-0 inset-x-0 z-50 md:hidden h-14 hero-gradient flex items-center justify-between px-3 shadow-lg"
         dir="rtl"
       >
         <div className="flex items-center gap-2.5 min-w-0">

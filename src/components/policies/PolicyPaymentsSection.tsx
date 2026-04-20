@@ -982,8 +982,7 @@ export function PolicyPaymentsSection({
       <Dialog open={addDialogOpen} onOpenChange={(open) => { setAddDialogOpen(open); if (!open) resetAddForm(); }}>
         <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
           <div
-            className="sticky top-0 z-10 text-white px-5 py-4 rounded-t-lg"
-            style={{ background: "linear-gradient(135deg, #122143 0%, #1a3260 100%)" }}
+            className="sticky top-0 z-10 text-white px-5 py-4 rounded-t-lg hero-gradient"
           >
             <DialogHeader>
               <div className="flex items-center gap-3">
@@ -1290,8 +1289,7 @@ export function PolicyPaymentsSection({
         <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto p-0" dir="rtl">
           {/* Header */}
           <div
-            className="sticky top-0 z-10 text-white px-5 py-4 rounded-t-lg"
-            style={{ background: "linear-gradient(135deg, #122143 0%, #1a3260 100%)" }}
+            className="sticky top-0 z-10 text-white px-5 py-4 rounded-t-lg hero-gradient"
           >
             <DialogHeader>
               <div className="flex items-center gap-3">
