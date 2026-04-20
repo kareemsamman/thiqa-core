@@ -2744,9 +2744,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           setCancelInsurancePrice(0);
           setCancelPolicyNumber(null);
           setCancelDocumentNumber(null);
+          // Wallet balance feeds the "مرتجع للعميل" card and the
+          // client-header net-remaining math. Without refreshing it
+          // here, a refund booked as part of the cancellation only
+          // showed up after a full page reload.
           await Promise.all([
             fetchPolicies(),
             fetchPaymentSummary(),
+            fetchWalletBalance(),
+            fetchPayments(),
           ]);
         }}
       />
