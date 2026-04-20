@@ -1,7 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-const SUPER_ADMIN_EMAIL = 'morshed500@gmail.com';
 const SESSION_KEY = 'admin_session_active';
 
 interface UseAdminSessionGuardProps {
@@ -26,9 +25,11 @@ export function useAdminSessionGuard({
 }: UseAdminSessionGuardProps) {
   
   const shouldEnforceSessionTimeout = useCallback(() => {
-    // Only enforce for admins who are NOT super admin
-    return isAuthenticated && isAdmin && !isSuperAdmin && userEmail !== SUPER_ADMIN_EMAIL;
-  }, [isAuthenticated, isAdmin, isSuperAdmin, userEmail]);
+    // Only enforce for admins who are NOT super admin.
+    // Super admin status is sourced from the server (thiqa_super_admins table)
+    // via useAuth — never from a hardcoded email in client code.
+    return isAuthenticated && isAdmin && !isSuperAdmin;
+  }, [isAuthenticated, isAdmin, isSuperAdmin]);
 
   useEffect(() => {
     // Only run for non-super admins
