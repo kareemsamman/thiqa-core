@@ -2210,32 +2210,27 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                           </div>
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          <div className="flex flex-wrap gap-1">
-                            {(() => {
-                              const chips = group.packagePolicies
-                                .filter(p => p.document_number)
-                                .map(p => ({ id: p.id, doc: p.document_number as string }));
-                              if (chips.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
-                              const seen = new Set<string>();
-                              return chips
-                                .filter(c => {
-                                  if (seen.has(c.doc)) return false;
-                                  seen.add(c.doc);
-                                  return true;
-                                })
-                                .map(c => (
-                                  <button
-                                    key={c.id}
-                                    type="button"
-                                    onClick={() => scrollToPolicyCard(c.id)}
-                                    className="inline-flex items-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-medium px-2 py-0.5 ltr-nums transition-colors"
-                                    title="عرض في المعاملات"
-                                  >
-                                    #{c.doc}
-                                  </button>
-                                ));
-                            })()}
-                          </div>
+                          {(() => {
+                            // A package is one معاملة — show the single
+                            // document number the card displays (first
+                            // stamped policy in the group) instead of
+                            // listing every sub-policy's number. Click
+                            // still jumps to the owning card.
+                            const primary = group.packagePolicies.find(p => p.document_number);
+                            if (!primary?.document_number) {
+                              return <span className="text-muted-foreground text-xs">—</span>;
+                            }
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => scrollToPolicyCard(primary.id)}
+                                className="inline-flex items-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-medium px-2 py-0.5 ltr-nums transition-colors"
+                                title="عرض في المعاملات"
+                              >
+                                #{primary.document_number}
+                              </button>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           {group.refused ? (
