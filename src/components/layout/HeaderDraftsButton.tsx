@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Layers, X, FileText, Maximize2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -9,6 +9,7 @@ import {
   usePolicyWizardController,
   type WizardInstance,
 } from "@/hooks/usePolicyWizardController";
+import { useShortcutAction } from "@/hooks/useShortcutAction";
 
 interface HeaderDraftsButtonProps {
   className?: string;
@@ -39,6 +40,15 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
 
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
+
+  // Shortcut opens the popover. If there are no minimized drafts the
+  // button isn't rendered at all (see early return below) — that's the
+  // same UX as the mouse path, so the shortcut is simply a no-op in
+  // that state instead of opening an empty popover.
+  useShortcutAction('open_drafts', useCallback(() => {
+    if (minimizedInstances.length === 0) return;
+    setOpen(true);
+  }, [minimizedInstances.length]));
 
   // FLIP: when a new draft arrives (lastMinimizedId changes), play the
   // same minimize→dock flight the bottom toolbar had, but aimed at this

@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { normalizeArabic } from "@/lib/arabicNormalize";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
+import { useShortcutAction } from "@/hooks/useShortcutAction";
 
 interface ClientResult {
   id: string;
@@ -101,6 +102,22 @@ export function BottomToolbarInlineSearch({
     setPolicyResults([]);
     setShowDropdown(false);
   }, []);
+
+  // Global "expand + focus" shortcut. Mobile uses the dialog variant —
+  // same binding opens it there so the shortcut works from any screen
+  // width. We only subscribe on the instance that's actually rendered
+  // for the current viewport; the Header mounts the desktop one and
+  // BottomToolbar mounts the mobile one, so only one handler fires.
+  useShortcutAction('global_search', useCallback(() => {
+    if (!canShow) return;
+    if (isMobile) {
+      setMobileOpen(true);
+      setTimeout(() => mobileInputRef.current?.focus(), 50);
+      return;
+    }
+    setIsExpanded(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, [canShow, isMobile]));
 
   const runSearch = useCallback(async (term: string) => {
     const requestId = Date.now();

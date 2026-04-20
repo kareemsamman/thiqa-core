@@ -7,12 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Upload, Trash2, Image, Save, PenTool, Palette, Receipt } from "lucide-react";
+import { Loader2, Upload, Trash2, Image, Save, PenTool, Palette, Receipt, Keyboard } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSiteSettings, useUpdateSiteSettings } from "@/hooks/useSiteSettings";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createSafeHtml } from "@/lib/sanitize";
+import { ShortcutsTabContent } from "@/components/admin/ShortcutsTabContent";
 
 function ImageUploadField({
   label,
@@ -205,6 +206,10 @@ export default function BrandingSettings() {
             <TabsTrigger value="signature" className="gap-2">
               <PenTool className="h-4 w-4" />
               صفحة التوقيع
+            </TabsTrigger>
+            <TabsTrigger value="shortcuts" className="gap-2">
+              <Keyboard className="h-4 w-4" />
+              اختصارات
             </TabsTrigger>
           </TabsList>
 
@@ -421,6 +426,10 @@ export default function BrandingSettings() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="shortcuts">
+            <ShortcutsTabContent />
           </TabsContent>
         </Tabs>
 

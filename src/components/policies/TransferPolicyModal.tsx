@@ -942,7 +942,7 @@ export function TransferPolicyModal({
               </div>
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="customer_pays" id="adj-customer-pays" />
-                <Label htmlFor="adj-customer-pays" className="cursor-pointer">العميل يدفع لنا (مستحق علينا)</Label>
+                <Label htmlFor="adj-customer-pays" className="cursor-pointer">العميل يدفع لنا</Label>
               </div>
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="refund" id="adj-refund" />

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
@@ -101,6 +101,7 @@ import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
 import { ChequeImageGallery } from '@/components/shared/ChequeImageGallery';
 import { useBranches } from '@/hooks/useBranches';
 import { useAuth } from '@/hooks/useAuth';
+import { useShortcutAction } from '@/hooks/useShortcutAction';
 import type { RenewalData } from '@/components/policies/wizard/types';
 
 interface Client {
@@ -363,6 +364,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [policyWizardOpen, setPolicyWizardOpen] = useState(false);
   const [clientDrawerOpen, setClientDrawerOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
+
+  // "Edit client" shortcut: this component is the single place that
+  // owns the edit drawer for a specific client, so the handler can
+  // call the setter directly. It's scoped to whichever profile is
+  // currently mounted, which is exactly the intent.
+  useShortcutAction(
+    'edit_client',
+    useCallback(() => setClientDrawerOpen(true), []),
+  );
   const [transferOpen, setTransferOpen] = useState(false);
   const [debtPaymentModalOpen, setDebtPaymentModalOpen] = useState(false);
   // Cancel policy/package modal — opened directly from the dropdown on

@@ -7,6 +7,7 @@ import { TaskPopupReminder } from "@/components/tasks/TaskPopupReminder";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { useSidebarState } from "@/hooks/useSidebarState";
+import { useGlobalShortcutListener } from "@/hooks/useGlobalShortcutListener";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Building2 } from "lucide-react";
 
@@ -18,6 +19,10 @@ export function MainLayout({ children }: MainLayoutProps) {
   const { isThiqaSuperAdmin, isImpersonating, impersonatedAgent, stopImpersonation } = useAgentContext();
   const { collapsed } = useSidebarState();
   const navigate = useNavigate();
+  // Agent-configured keyboard shortcuts fire from here so every
+  // authenticated surface inherits them (rebinds propagate immediately
+  // because the hook reads from the shared react-query cache).
+  useGlobalShortcutListener();
 
   const handleExitImpersonation = () => {
     stopImpersonation();

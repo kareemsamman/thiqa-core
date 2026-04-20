@@ -33,6 +33,7 @@ import { ClientDetails } from "@/components/clients/ClientDetails";
 import { ClientFilters, ClientFilterValues } from "@/components/clients/ClientFilters";
 import { RowActionsMenu } from "@/components/shared/RowActionsMenu";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { useShortcutAction } from "@/hooks/useShortcutAction";
 
 interface Client {
   id: string;
@@ -82,6 +83,17 @@ export default function Clients() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [viewingClient, setViewingClient] = useState<Client | null>(null);
+
+  // Shortcut: open the "new client" drawer from anywhere in the
+  // authenticated app. No-op while viewing a single client, since the
+  // ClientDetails surface owns its own edit drawer for that flow — this
+  // handler shouldn't steal focus into the list drawer while the user
+  // is mid-edit on a profile.
+  useShortcutAction('new_client', useCallback(() => {
+    if (viewingClient) return;
+    setSelectedClient(null);
+    setDrawerOpen(true);
+  }, [viewingClient]));
   const [initialCarFilter, setInitialCarFilter] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingClient, setDeletingClient] = useState<Client | null>(null);

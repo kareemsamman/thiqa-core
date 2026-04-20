@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, ReactNode } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Plus, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
 import { useRecentClient } from "@/hooks/useRecentClient";
+import { useShortcutAction } from "@/hooks/useShortcutAction";
 
 interface HeaderProps {
   title: string;
@@ -84,11 +85,17 @@ export function Header({ title, subtitle }: HeaderProps) {
   const isTabActive = (href: string) =>
     location.pathname === href || location.pathname.startsWith(href + "/");
 
-  const openNewPolicy = () => {
+  const openNewPolicy = useCallback(() => {
     openWizard({
       clientId: isOnClientProfilePage ? recentClient?.id : undefined,
     });
-  };
+  }, [openWizard, isOnClientProfilePage, recentClient?.id]);
+
+  // Expose the header's "new policy" button to the global shortcut bus.
+  // The listener in MainLayout routes the bound combo here; subscribing
+  // inside Header means the shortcut only works while the authenticated
+  // shell is mounted (i.e. we won't steal keys on /login).
+  useShortcutAction('new_policy', openNewPolicy);
 
   return (
     <>
