@@ -2583,6 +2583,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             onOpenChange={setTransferOpen}
             policyId={selectedPolicyId}
             policyNumber={selectedPolicy?.policy_number || null}
+            documentNumber={(selectedPolicy as any)?.document_number || null}
             policyType={selectedPolicy?.policy_type_parent || ''}
             groupId={selectedPolicy?.group_id || null}
             clientId={client.id}

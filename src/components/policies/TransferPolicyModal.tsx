@@ -43,7 +43,14 @@ interface TransferPolicyModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   policyId: string;
+  /** External insurance-company policy number (رقم البوليصة). Often
+   *  empty until the company issues one, so prefer documentNumber for
+   *  customer-facing copy. */
   policyNumber: string | null;
+  /** Internal transaction/receipt number (e.g. 47/2026). Always set
+   *  by the DB trigger so it's the reliable number to show the
+   *  customer in SMS / invoices when the policy_number is blank. */
+  documentNumber?: string | null;
   policyType: string;
   groupId: string | null;
   clientId: string;
@@ -89,6 +96,7 @@ export function TransferPolicyModal({
   onOpenChange,
   policyId,
   policyNumber,
+  documentNumber,
   policyType,
   groupId,
   clientId,
@@ -208,8 +216,13 @@ export function TransferPolicyModal({
         .select("*")
         .single();
 
-      // Use a generic transfer template
-      let template = `مرحباً ${clientName}، تم تحويل معاملة التأمين رقم ${policyNumber || "غير محدد"} إلى مركبة جديدة. للاستفسار يرجى التواصل معنا.`;
+      // Prefer the internal document_number (always present — DB trigger
+      // assigns it) over the external insurance-company policy_number
+      // (frequently empty at transfer time). Falling back to the bare
+      // sentence when neither exists is still better than 'رقم غير محدد'.
+      const displayNumber = (documentNumber || policyNumber || "").trim();
+      const numberPart = displayNumber ? ` رقم ${displayNumber}` : "";
+      let template = `مرحباً ${clientName}، تم تحويل معاملة التأمين${numberPart} إلى مركبة جديدة. للاستفسار يرجى التواصل معنا.`;
       setSmsMessage(template);
     } catch (error) {
       console.error("Error loading SMS template:", error);
