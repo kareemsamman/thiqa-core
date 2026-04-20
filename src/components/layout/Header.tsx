@@ -172,7 +172,7 @@ export function Header({ title, subtitle }: HeaderProps) {
 
           <Button
             onClick={openNewPolicy}
-            className="h-11 px-4 rounded-full gap-2 shadow-md hover:shadow-lg hover:shadow-primary/20 active:scale-[0.98] text-[15px]"
+            className="h-11 px-4 rounded-full gap-2 shadow-md hover:shadow-lg hover:shadow-foreground/20 active:scale-[0.98] text-[15px] bg-foreground text-background hover:bg-foreground/90"
           >
             <Plus className="h-4 w-4" />
             <span>معاملة جديدة</span>
@@ -220,7 +220,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             <Button
               onClick={openNewPolicy}
               size="sm"
-              className="h-9 px-3 rounded-full gap-2"
+              className="h-9 px-3 rounded-full gap-2 bg-foreground text-background hover:bg-foreground/90"
             >
               <Plus className="h-4 w-4 sm:hidden" />
               <FileText className="h-4 w-4 hidden sm:inline" />
