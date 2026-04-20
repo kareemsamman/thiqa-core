@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -18,16 +18,18 @@ import { useSessionTracker } from "@/hooks/useSessionTracker";
 import { SidebarStateProvider } from "@/hooks/useSidebarState";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AdminRoute } from "@/components/auth/AdminRoute";
-import { LoadingScreen } from "@/components/shared/LoadingScreen";
 import { SiteHelmet } from "@/components/layout/SiteHelmet";
 import { AgentProvider } from "@/hooks/useAgentContext";
 import { ThiqaAdminRoute } from "@/components/auth/ThiqaAdminRoute";
 
 // All pages are code-split. Each route's bundle is only downloaded when
-// the user navigates to it, and Suspense falls back to the Thiqa
-// LoadingScreen while the chunk is in flight. This keeps the initial JS
-// payload small — only providers, router, auth context, and the route
-// guards ship in the critical bundle.
+// the user navigates to it. The Suspense fallback is intentionally null
+// (not the Thiqa loading screen) — the router keeps the previous page
+// rendered while the new chunk loads, so a null fallback means "no
+// visible spinner mid-navigation." RoutePrefetcher below then warms
+// every chunk in the background once the app is idle, so by the time
+// the user actually clicks a nav link the target page is already
+// cached.
 const Index = lazy(() => import("./pages/Index"));
 const Login = lazy(() => import("./pages/Login"));
 const NoAccess = lazy(() => import("./pages/NoAccess"));
@@ -100,6 +102,115 @@ const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const TermsOfUse = lazy(() => import("./pages/TermsOfUse"));
 
+// Prefetch every route chunk in the background after the app mounts,
+// so clicking a sidebar link never waits on a network download. We schedule
+// the work on requestIdleCallback (setTimeout fallback for Safari) and
+// fire the imports in small staggered batches so we never compete with
+// the current page's data fetches for bandwidth.
+const ROUTE_PREFETCHERS: Array<() => Promise<unknown>> = [
+  () => import("./pages/Index"),
+  () => import("./pages/Login"),
+  () => import("./pages/NoAccess"),
+  () => import("./pages/Clients"),
+  () => import("./pages/Cars"),
+  () => import("./pages/Policies"),
+  () => import("./pages/Companies"),
+  () => import("./pages/Brokers"),
+  () => import("./pages/BrokerWallet"),
+  () => import("./pages/Cheques"),
+  () => import("./pages/Media"),
+  () => import("./pages/AdminUsers"),
+  () => import("./pages/BranchManagement"),
+  () => import("./pages/SmsOnboarding"),
+  () => import("./pages/Receipts"),
+  () => import("./pages/Accounting"),
+  () => import("./pages/CompanySettlement"),
+  () => import("./pages/CompanySettlementDetail"),
+  () => import("./pages/InvoiceTemplates"),
+  () => import("./pages/InsuranceCategories"),
+  () => import("./pages/RoadServices"),
+  () => import("./pages/AccidentFeeServices"),
+  () => import("./pages/PaymentSettings"),
+  () => import("./pages/SmsSettings"),
+  () => import("./pages/CustomerSignatures"),
+  () => import("./pages/Notifications"),
+  () => import("./pages/WordPressImport"),
+  () => import("./pages/DatabaseMigration"),
+  () => import("./pages/NotFound"),
+  () => import("./pages/SmsHistory"),
+  () => import("./pages/DebtTracking"),
+  () => import("./pages/AuthSettings"),
+  () => import("./pages/FinancialReports"),
+  () => import("./pages/CompanyWallet"),
+  () => import("./pages/ElzamiCostsReport"),
+  () => import("./pages/PolicyReports"),
+  () => import("./pages/MarketingSms"),
+  () => import("./pages/AccidentReports"),
+  () => import("./pages/AccidentReportForm"),
+  () => import("./pages/AccidentTemplateMapper"),
+  () => import("./pages/AnnouncementSettings"),
+  () => import("./pages/Tasks"),
+  () => import("./pages/BusinessContacts"),
+  () => import("./pages/RepairClaims"),
+  () => import("./pages/RepairClaimDetail"),
+  () => import("./pages/CorrespondenceLetters"),
+  () => import("./pages/Leads"),
+  () => import("./pages/FormTemplates"),
+  () => import("./pages/FormTemplateEditor"),
+  () => import("./pages/ActivityLog"),
+  () => import("./pages/BrandingSettings"),
+  () => import("./pages/SubscriptionExpired"),
+  () => import("./pages/Subscription"),
+  () => import("./pages/ThiqaAgents"),
+  () => import("./pages/ThiqaAgentDetail"),
+  () => import("./pages/ThiqaCreateAgent"),
+  () => import("./pages/ThiqaPayments"),
+  () => import("./pages/ThiqaDashboard"),
+  () => import("./pages/ThiqaSettings"),
+  () => import("./pages/ThiqaLandingCMS"),
+  () => import("./pages/ThiqaAnalytics"),
+  () => import("./pages/Landing"),
+  () => import("./pages/VerifyEmail"),
+  () => import("./pages/Pricing"),
+  () => import("./pages/ResetPassword"),
+  () => import("./pages/ForgotPassword"),
+  () => import("./pages/Privacy"),
+  () => import("./pages/TermsOfUse"),
+];
+
+function RoutePrefetcher() {
+  useEffect(() => {
+    let cancelled = false;
+    let i = 0;
+    const pump = () => {
+      if (cancelled) return;
+      // Fire 4 chunk imports in parallel per pump, then yield back to
+      // the browser before requesting more work. Browser dedupes the
+      // import promise, so calling import() for the page the user is
+      // currently on is essentially free.
+      const batch = ROUTE_PREFETCHERS.slice(i, i + 4);
+      i += 4;
+      Promise.all(batch.map(fn => fn().catch(() => undefined))).then(() => {
+        if (cancelled || i >= ROUTE_PREFETCHERS.length) return;
+        schedule();
+      });
+    };
+    const schedule = () => {
+      const ric = (window as any).requestIdleCallback;
+      if (typeof ric === "function") {
+        ric(pump, { timeout: 2000 });
+      } else {
+        setTimeout(pump, 300);
+      }
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return null;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -157,7 +268,8 @@ const App = () => (
             <GlobalPolicyWizardHost />
             <ThaqibWidget />
             <PublicWidgets />
-            <Suspense fallback={<LoadingScreen />}>
+            <RoutePrefetcher />
+            <Suspense fallback={null}>
             <Routes>
               <Route path="/landing" element={<Landing />} />
               <Route path="/pricing" element={<Pricing />} />
