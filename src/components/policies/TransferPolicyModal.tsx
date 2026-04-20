@@ -433,7 +433,13 @@ export function TransferPolicyModal({
           transferred_car_number: currentCar?.car_number || null,
           transferred_from_policy_id: originalPolicy.id,
           group_id: newGroupId,
-          notes: `تحويل من سيارة ${currentCar?.car_number || "غير محدد"} - ${originalPolicy.notes || ""}`.trim(),
+          // Only the internal office note rides on policies.notes so the client
+          // policy card's "ملاحظات" row stays for the office. The transfer
+          // source is already surfaced by the "محول من X" badge and the
+          // customer-facing transfer note + source line are rendered on the
+          // printed invoice/policy from policy_transfers (see
+          // send-package-invoice-sms).
+          notes: officeNote.trim() || null,
           created_by_admin_id: user?.id,
         };
 

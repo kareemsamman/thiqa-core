@@ -375,8 +375,25 @@ serve(async (req) => {
       console.log(`[send-package-invoice-sms] Package has ${cancelledPolicies.length} cancelled, refund total: ${cancellationInfo.refundAmount}`);
     }
 
+    // Transfer audit rows for any policy in this package that was created
+    // via "تحويل". The customer-facing note (policy_transfers.note) is
+    // rendered on the printed invoice next to the matching policy row; the
+    // office_note column is intentionally NOT queried — it stays internal
+    // and is only shown on the client policy card's "ملاحظات" row via
+    // policies.notes.
+    const { data: transferRows } = await supabase
+      .from("policy_transfers")
+      .select("new_policy_id, note")
+      .in("new_policy_id", policy_ids);
+    const transferNoteByNewPolicyId: Record<string, string> = {};
+    (transferRows || []).forEach((row: any) => {
+      if (row?.new_policy_id && row?.note) {
+        transferNoteByNewPolicyId[row.new_policy_id] = row.note;
+      }
+    });
+
     // Generate Package Invoice HTML with files and policy children
-    const packageInvoiceHtml = buildPackageInvoiceHtml(policies, paymentsByPolicy, totalPrice, totalPaid, totalRemaining, insuranceFiles || [], policyChildren || [], companySettings, branding, cancellationInfo);
+    const packageInvoiceHtml = buildPackageInvoiceHtml(policies, paymentsByPolicy, totalPrice, totalPaid, totalRemaining, insuranceFiles || [], policyChildren || [], companySettings, branding, cancellationInfo, transferNoteByNewPolicyId);
     
     const now = new Date();
     const year = now.getFullYear();
@@ -608,7 +625,8 @@ function buildPackageInvoiceHtml(
   policyChildren: any[] = [],
   companySettings: { company_email?: string; company_phones?: string[]; company_whatsapp?: string; company_location?: string },
   branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' },
-  cancellationInfo: { isCancelled: boolean; date: string; note: string; refundAmount: number } = { isCancelled: false, date: '', note: '', refundAmount: 0 }
+  cancellationInfo: { isCancelled: boolean; date: string; note: string; refundAmount: number } = { isCancelled: false, date: '', note: '', refundAmount: 0 },
+  transferNoteByNewPolicyId: Record<string, string> = {}
 ): string {
   const client = policies[0]?.client || {};
   const today = new Date();
@@ -755,6 +773,21 @@ function buildPackageInvoiceHtml(
       ? `<span class="cancelled-tag">ملغاة</span>`
       : '';
 
+    // Transfer block — when this policy was created via تحويل, spell it
+    // out on the printed document: which car it came from, plus the
+    // customer-facing note from policy_transfers (if any). Office notes
+    // are intentionally excluded here — they only live on the card.
+    const transferFromCarNumber = p.transferred_car_number
+      ? String(p.transferred_car_number).trim()
+      : '';
+    const transferCustomerNote = transferNoteByNewPolicyId[p.id] || '';
+    const transferSourceLine = transferFromCarNumber
+      ? `<div class="item-transfer">محول من سيارة ${escapeHtml(transferFromCarNumber)}</div>`
+      : '';
+    const transferNoteLine = transferCustomerNote
+      ? `<div class="item-transfer-note">ملاحظة: ${escapeHtml(transferCustomerNote)}</div>`
+      : '';
+
     const policyNumberCell = p.policy_number && String(p.policy_number).trim()
       ? `<span class="policy-number">${escapeHtml(String(p.policy_number))}</span>`
       : `<span class="policy-number-empty">—</span>`;
@@ -765,6 +798,8 @@ function buildPackageInvoiceHtml(
           <div class="item-title">${policyType} ${cancelledTag}</div>
           <div class="item-meta">${companyName}</div>
           ${commissionLine}
+          ${transferSourceLine}
+          ${transferNoteLine}
         </td>
         <td class="period">${periodText}</td>
         <td class="num">₪${lineTotal.toLocaleString('en-US')}</td>
@@ -1116,6 +1151,19 @@ function buildPackageInvoiceHtml(
       margin-top: 3px;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
+    }
+    .items tbody .item-transfer {
+      color: #1a1a1a;
+      font-size: 11.5px;
+      margin-top: 4px;
+      font-weight: 700;
+    }
+    .items tbody .item-transfer-note {
+      color: #1a1a1a;
+      font-size: 11px;
+      margin-top: 2px;
+      font-weight: 500;
+      white-space: pre-wrap;
     }
 
     /* ── Extra drivers table ── */
