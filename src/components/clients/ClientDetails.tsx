@@ -96,6 +96,7 @@ import { AccidentReportWizard } from '@/components/accident-reports/AccidentRepo
 import { ClientAccidentsTab } from '@/components/clients/ClientAccidentsTab';
 import { useClientAccidentInfo } from '@/hooks/useClientAccidentInfo';
 import { cn } from '@/lib/utils';
+import { pickPackageDocumentNumber } from '@/lib/packageDocumentNumber';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
 import { ChequeImageGallery } from '@/components/shared/ChequeImageGallery';
 import { useBranches } from '@/hooks/useBranches';
@@ -2211,23 +2212,27 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           {(() => {
-                            // A package is one معاملة — show the single
-                            // document number the card displays (first
-                            // stamped policy in the group) instead of
-                            // listing every sub-policy's number. Click
-                            // still jumps to the owning card.
-                            const primary = group.packagePolicies.find(p => p.document_number);
-                            if (!primary?.document_number) {
+                            // A package is one معاملة — show the same
+                            // doc number the card picks (THIRD_FULL >
+                            // ELZAMI > addons, smallest tiebreak) so
+                            // card / log / invoice all agree. Click
+                            // jumps to the owning policy card; we
+                            // resolve the id back by matching the
+                            // chosen doc against group.packagePolicies.
+                            const docNumber = pickPackageDocumentNumber(group.packagePolicies);
+                            if (!docNumber) {
                               return <span className="text-muted-foreground text-xs">—</span>;
                             }
+                            const owner = group.packagePolicies.find(p => p.document_number === docNumber)
+                              || group.packagePolicies[0];
                             return (
                               <button
                                 type="button"
-                                onClick={() => scrollToPolicyCard(primary.id)}
+                                onClick={() => scrollToPolicyCard(owner.id)}
                                 className="inline-flex items-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-medium px-2 py-0.5 ltr-nums transition-colors"
                                 title="عرض في المعاملات"
                               >
-                                #{primary.document_number}
+                                #{docNumber}
                               </button>
                             );
                           })()}

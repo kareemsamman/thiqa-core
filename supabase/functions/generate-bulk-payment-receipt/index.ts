@@ -153,9 +153,23 @@ function buildBulkReceiptHtml(
   branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' } as AgentBranding,
 ): string {
   const today = new Date();
-  const primaryDocumentNumber = payments
-    .map((p: any) => p.policy?.document_number)
-    .find((n: string | null) => typeof n === 'string' && n.length > 0) || '—';
+  // Pick the package's representative document_number the same way the
+  // card / payments log / printed invoice do: THIRD_FULL > ELZAMI >
+  // addons, smallest doc number breaks ties. Without this the bulk
+  // receipt header landed on whichever policy the payment rows were
+  // ordered by, which disagreed with the invoice for the same معاملة.
+  const documentPriority: Record<string, number> = { THIRD_FULL: 0, ELZAMI: 1 };
+  const stampedForDoc = payments
+    .map((p: any) => p.policy)
+    .filter((pol: any) =>
+      pol && typeof pol.document_number === 'string' && pol.document_number.trim().length > 0,
+    )
+    .map((pol: any) => ({
+      doc: String(pol.document_number).trim(),
+      rank: documentPriority[pol.policy_type_parent ?? ''] ?? 99,
+    }))
+    .sort((a, b) => a.rank !== b.rank ? a.rank - b.rank : a.doc.localeCompare(b.doc, 'en', { numeric: true }));
+  const primaryDocumentNumber = stampedForDoc[0]?.doc || '—';
 
   // Sum office_commission once per unique policy. Multiple payment rows
   // may reference the same policy — we don't want to count its

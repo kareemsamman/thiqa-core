@@ -647,13 +647,21 @@ function buildPackageInvoiceHtml(
 ): string {
   const client = policies[0]?.client || {};
   const today = new Date();
-  // Primary document number (رقم الوثيقة). Pick the first policy that has a
-  // document_number assigned by the DB trigger; fall back to the legacy
-  // date-based string if none of them do (shouldn't happen after the
-  // backfill migration runs, but keeps old data renderable).
-  const primaryDocumentNumber = policies
-    .map((p: any) => p.document_number)
-    .find((n: string | null) => typeof n === 'string' && n.length > 0)
+  // Primary document number (رقم الوثيقة). A package is one معاملة so
+  // we pick a single بوليصة whose number represents the whole
+  // printout. Rule (mirrors the card + payments log so all three
+  // surfaces agree): THIRD_FULL > ELZAMI > addons, smallest doc
+  // number breaks ties. Fallback to the legacy date-based string
+  // only if no policy in the package carries a stamp.
+  const documentPriority: Record<string, number> = { THIRD_FULL: 0, ELZAMI: 1 };
+  const stampedForDoc = policies
+    .filter((p: any) => typeof p.document_number === 'string' && p.document_number.trim().length > 0)
+    .map((p: any) => ({
+      doc: String(p.document_number).trim(),
+      rank: documentPriority[p.policy_type_parent ?? ''] ?? 99,
+    }))
+    .sort((a, b) => a.rank !== b.rank ? a.rank - b.rank : a.doc.localeCompare(b.doc, 'en', { numeric: true }));
+  const primaryDocumentNumber = stampedForDoc[0]?.doc
     || `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-${(policies[0]?.id || '').slice(0, 6).toUpperCase()}`;
 
   // Brand block: always the bundled Thiqa SVG. The agent's uploaded

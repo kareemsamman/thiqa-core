@@ -45,6 +45,7 @@ import { PaymentEditDialog } from './PaymentEditDialog';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { pickPackageDocumentNumber } from '@/lib/packageDocumentNumber';
 import { toast } from 'sonner';
 import { toastFunctionError } from '@/lib/functionError';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
@@ -1267,20 +1268,16 @@ function PolicyPackageCard({
               type chip. The transfer-from / broker badges are rendered AFTER
               the types so they appear to the LEFT of them in RTL. */}
           {(() => {
-            // رقم المعاملة chip — pulls from policies.document_number,
-            // which is the human-readable 'NN/YYYY' identifier the DB
-            // trigger stamps on every بوليصة. Read-only on the card
-            // (the value is system-assigned, not staff-entered).
+            // رقم المعاملة chip — one per معاملة. The value comes from
+            // pickPackageDocumentNumber so the card, the payments log
+            // and the printed invoice/report all land on the same
+            // بوليصة's document_number (THIRD_FULL > ELZAMI > addons).
             const policiesInCard: PolicyRecord[] = isPkg && pkg.mainPolicy
               ? [pkg.mainPolicy, ...pkg.addons]
               : [policy];
-            const stamped = policiesInCard.find(p => p.document_number && p.document_number.trim());
-            if (!stamped?.document_number) return null;
-            return (
-              <CardLevelPolicyNumberChip
-                value={stamped.document_number}
-              />
-            );
+            const docNumber = pickPackageDocumentNumber(policiesInCard);
+            if (!docNumber) return null;
+            return <CardLevelPolicyNumberChip value={docNumber} />;
           })()}
 
           {isPkg && pkg.mainPolicy ? (
