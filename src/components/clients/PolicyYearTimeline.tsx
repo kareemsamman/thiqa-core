@@ -275,6 +275,47 @@ export function PolicyYearTimeline({
   const [editedNotesValue, setEditedNotesValue] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
 
+  // Transfer adjustment map — keyed by new_policy_id, value is the
+  // customer-pays adjustment amount carried on policy_transfers. Used
+  // below so the package breakdown can split the policy's
+  // office_commission into the original office portion (stays in the
+  // policy row) and the transfer portion (rendered as its own row
+  // after all policy components). Only queried when any visible
+  // policy has transferred_from_policy_id set, so non-transfer clients
+  // don't pay a round-trip cost.
+  const [transferAdjustments, setTransferAdjustments] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const transferredIds = policies
+      .filter(p => p.transferred_from_policy_id)
+      .map(p => p.id);
+    if (transferredIds.length === 0) {
+      setTransferAdjustments({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('policy_transfers')
+        .select('new_policy_id, adjustment_amount, adjustment_type')
+        .in('new_policy_id', transferredIds);
+      if (cancelled) return;
+      const map: Record<string, number> = {};
+      (data || []).forEach((row: any) => {
+        if (
+          row?.new_policy_id &&
+          row?.adjustment_type === 'customer_pays' &&
+          Number(row?.adjustment_amount) > 0
+        ) {
+          map[row.new_policy_id] = Number(row.adjustment_amount);
+        }
+      });
+      setTransferAdjustments(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [policies.map(p => p.id).join('|')]);
+
   // Handle notes update
   const handleNotesUpdate = async (policyId: string, notes: string) => {
     setSavingNotes(true);
@@ -1630,15 +1671,34 @@ function PolicyPackageCard({
                 ₪{pkg.totalPrice.toLocaleString('en-US')}
               </span>
               {(() => {
-                const totalCommission = (isPkg
+                const rowPolicies = (isPkg
                   ? [pkg.mainPolicy, ...pkg.addons].filter(Boolean) as PolicyRecord[]
                   : [policy]
-                ).reduce((sum, p) => sum + (p.office_commission || 0), 0);
-                return totalCommission > 0 ? (
-                  <span className="text-[9px] text-amber-700 font-semibold ltr-nums mt-0.5">
-                    منها ₪{totalCommission.toLocaleString('en-US')} عمولة مكتب
-                  </span>
-                ) : null;
+                );
+                const totalCommission = rowPolicies.reduce(
+                  (sum, p) => sum + (p.office_commission || 0),
+                  0,
+                );
+                const totalTransferPortion = rowPolicies.reduce(
+                  (sum, p) => sum + (transferAdjustments[p.id] || 0),
+                  0,
+                );
+                const officeOnly = Math.max(0, totalCommission - totalTransferPortion);
+                if (totalCommission <= 0) return null;
+                return (
+                  <>
+                    {officeOnly > 0 && (
+                      <span className="text-[9px] text-amber-700 font-semibold ltr-nums mt-0.5">
+                        منها ₪{officeOnly.toLocaleString('en-US')} عمولة مكتب
+                      </span>
+                    )}
+                    {totalTransferPortion > 0 && (
+                      <span className="text-[9px] text-sky-700 font-semibold ltr-nums">
+                        منها ₪{totalTransferPortion.toLocaleString('en-US')} عمولة تحويل
+                      </span>
+                    )}
+                  </>
+                );
               })()}
             </div>
           </div>
@@ -1663,6 +1723,7 @@ function PolicyPackageCard({
                 policy={pkg.mainPolicy}
                 isActive={isActive}
                 onPoliciesUpdate={onPoliciesUpdate}
+                transferPortion={transferAdjustments[pkg.mainPolicy.id] || 0}
               />
               {/* Addons */}
               {pkg.addons.map((addon) => (
@@ -1671,8 +1732,43 @@ function PolicyPackageCard({
                   policy={addon}
                   isActive={isActive}
                   onPoliciesUpdate={onPoliciesUpdate}
+                  transferPortion={transferAdjustments[addon.id] || 0}
                 />
               ))}
+              {/* Standalone 'عمولة تحويل' rows — one per policy with a
+                  customer-pays transfer adjustment. Rendered after all
+                  policy rows and before the totals button so the
+                  breakdown reads: components → transfer fees → totals. */}
+              {[pkg.mainPolicy, ...pkg.addons].map((p) => {
+                if (!p) return null;
+                const portion = transferAdjustments[p.id] || 0;
+                if (portion <= 0) return null;
+                return (
+                  <div
+                    key={`${p.id}-transfer-fee`}
+                    className={cn(
+                      "grid grid-cols-[minmax(80px,auto)_1fr_auto] items-center gap-3 px-3 py-2 text-xs border-b border-border/60 last:border-b-0 transition-colors",
+                      "bg-sky-50/60 hover:bg-sky-50 dark:bg-sky-500/5 dark:hover:bg-sky-500/10",
+                      !isActive && "opacity-70",
+                    )}
+                  >
+                    <span className="text-[10px] text-muted-foreground">—</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge className="text-[10px] px-1.5 py-0 h-5 font-medium border shrink-0 bg-sky-100 text-sky-800 border-sky-200 hover:bg-sky-100">
+                        عمولة تحويل
+                      </Badge>
+                      <span className="truncate text-sm font-medium text-sky-900 dark:text-sky-100">
+                        {getDisplayLabel(p)} — {p.company?.name_ar || p.company?.name || ''}
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-end min-w-[70px]">
+                      <span className="font-semibold ltr-nums text-sky-900 dark:text-sky-100">
+                        ₪{portion.toLocaleString('en-US')}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
               {/* Totals footer row */}
               <button
                 type="button"
@@ -1897,14 +1993,21 @@ function PackageComponentRow({
   policy,
   isActive,
   onPoliciesUpdate,
+  transferPortion = 0,
 }: {
   policy: PolicyRecord;
   isActive: boolean;
   onPoliciesUpdate?: () => void;
+  /** Slice of office_commission that came from a customer-pays
+   *  transfer adjustment. Subtracted from the inline "+ X عمولة"
+   *  line here so it can be rendered as its own standalone row
+   *  below the policy list. */
+  transferPortion?: number;
 }) {
   const typeLabel = getDisplayLabel(policy);
   const typeColor = policyTypeColors[policy.policy_type_parent];
-  const commission = policy.office_commission || 0;
+  const totalCommission = policy.office_commission || 0;
+  const commission = Math.max(0, totalCommission - transferPortion);
 
   // Get company/service name based on policy type
   const getProviderName = () => {
