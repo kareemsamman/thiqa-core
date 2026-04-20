@@ -12,7 +12,8 @@ export type ShortcutActionKey =
   | 'new_client'
   | 'edit_client'
   | 'nav_clients'
-  | 'nav_policies';
+  | 'nav_policies'
+  | 'show_shortcuts';
 
 export interface ShortcutAction {
   key: ShortcutActionKey;
@@ -76,6 +77,16 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
     description: 'الانتقال إلى صفحة المعاملات',
     defaultCombo: 'alt+2',
     category: 'navigation',
+  },
+  {
+    key: 'show_shortcuts',
+    label: 'عرض قائمة الاختصارات',
+    description: 'فتح لوحة تذكيرية تعرض جميع اختصارات لوحة المفاتيح المخصصة',
+    // F1 is dedicated to "help" across most apps, doesn't clash with
+    // Alt/Ctrl combos, and is layout-independent (no '/' or '?' issues
+    // on Arabic keyboards).
+    defaultCombo: 'f1',
+    category: 'actions',
   },
 ];
 

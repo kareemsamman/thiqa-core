@@ -1,11 +1,12 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, ReactNode } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, FileText } from "lucide-react";
+import { Plus, FileText, Keyboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NotificationsDropdown } from "./NotificationsDropdown";
 import { BottomToolbarInlineSearch } from "./BottomToolbarInlineSearch";
 import { HeaderDraftsButton } from "./HeaderDraftsButton";
+import { ShortcutsCheatsheetDialog } from "./ShortcutsCheatsheetDialog";
 import { navigationGroups } from "./Sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -97,6 +98,15 @@ export function Header({ title, subtitle }: HeaderProps) {
   // shell is mounted (i.e. we won't steal keys on /login).
   useShortcutAction('new_policy', openNewPolicy);
 
+  // Shortcuts cheatsheet — F1 (default) or the header keyboard button
+  // pops a panel listing every configured shortcut so staff don't have
+  // to memorize or dig into settings to recall them.
+  const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
+  useShortcutAction(
+    'show_shortcuts',
+    useCallback(() => setCheatsheetOpen((v) => !v), []),
+  );
+
   return (
     <>
       {/* Desktop header — tabs sit in an absolutely-centered nav so they
@@ -170,6 +180,20 @@ export function Header({ title, subtitle }: HeaderProps) {
 
           <HeaderDraftsButton />
 
+          {/* Keyboard cheatsheet button — sits in the header cluster so
+              staff can always find their shortcuts from one click, no
+              matter which page they're on. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(ICON_BUTTON_CLASS, "md:h-11 md:w-11")}
+            onClick={() => setCheatsheetOpen(true)}
+            aria-label="اختصارات لوحة المفاتيح"
+            title="اختصارات لوحة المفاتيح"
+          >
+            <Keyboard className="md:h-[18px] md:w-[18px] text-foreground" />
+          </Button>
+
           <NotificationsDropdown
             className={cn(ICON_BUTTON_CLASS, "md:h-11 md:w-11")}
             iconClassName="md:h-[18px] md:w-[18px] text-foreground"
@@ -177,6 +201,11 @@ export function Header({ title, subtitle }: HeaderProps) {
           />
         </div>
       </header>
+
+      <ShortcutsCheatsheetDialog
+        open={cheatsheetOpen}
+        onOpenChange={setCheatsheetOpen}
+      />
 
       {/* Mobile header - title row + tabs strip */}
       <div className="md:hidden mb-4">
