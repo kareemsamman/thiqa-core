@@ -652,28 +652,28 @@ ${policyDetails}
 
               <div className="flex gap-2">
                 <Button
-                  variant={filterDays === null ? "default" : "outline"}
+                  variant={filterDays === null ? "gradient" : "outline"}
                   size="sm"
                   onClick={() => setFilterDays(null)}
                 >
                   الكل
                 </Button>
                 <Button
-                  variant={filterDays === 7 ? "default" : "outline"}
+                  variant={filterDays === 7 ? "gradient" : "outline"}
                   size="sm"
                   onClick={() => setFilterDays(7)}
                 >
                   أسبوع
                 </Button>
                 <Button
-                  variant={filterDays === 30 ? "default" : "outline"}
+                  variant={filterDays === 30 ? "gradient" : "outline"}
                   size="sm"
                   onClick={() => setFilterDays(30)}
                 >
                   شهر
                 </Button>
                 <Button
-                  variant={filterDays === 0 ? "default" : "outline"}
+                  variant={filterDays === 0 ? "gradient" : "outline"}
                   size="sm"
                   onClick={() => setFilterDays(0)}
                   className="text-destructive"
@@ -687,8 +687,8 @@ ${policyDetails}
                 تحديث
               </Button>
 
-              <Button 
-                variant="default"
+              <Button
+                variant="gradient"
                 onClick={() => setBulkSmsDialogOpen(true)}
                 disabled={summary.totalClients === 0}
               >
@@ -767,7 +767,7 @@ ${policyDetails}
                           </p>
                         </div>
                         <Button
-                          variant="default"
+                          variant="gradient"
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();

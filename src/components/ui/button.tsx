@@ -27,6 +27,12 @@ const buttonVariants = cva(
           "bg-primary text-primary-foreground shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 hover:bg-primary/90 active:scale-[0.98]",
         success:
           "bg-success text-success-foreground shadow-md hover:bg-success/90 hover:shadow-lg hover:shadow-success/20 active:scale-[0.98]",
+        // Blue linear gradient for in-body primary actions on the
+        // customer / debt flows (tokens picked by staff). Same shape
+        // as `default` (shadow, hover lift, active scale) but the
+        // background is the rgb(69,94,187) → rgb(138,150,203) gradient.
+        gradient:
+          "text-white shadow-md hover:shadow-lg hover:shadow-[rgb(69,94,187)]/25 active:scale-[0.98] bg-[linear-gradient(rgb(69,94,187)_0%,rgb(138,150,203)_100%)] hover:brightness-105",
       },
       size: {
         default: "h-10 px-4 py-2",

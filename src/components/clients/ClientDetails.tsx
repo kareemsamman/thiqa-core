@@ -1616,7 +1616,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
               <div className="flex flex-wrap gap-2 shrink-0">
                 {(paymentSummary.total_remaining - walletBalance.total_refunds) > 0 && (
                   <Button
-                    variant="default"
+                    variant="gradient"
                     size="sm"
                     className="gap-1.5 flex-1 sm:flex-none sm:size-default"
                     onClick={() => setDebtPaymentModalOpen(true)}
@@ -1644,6 +1644,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   <span>تقرير</span>
                 </Button>
                 <Button
+                  variant="gradient"
                   size="sm"
                   className="gap-1.5 flex-1 sm:flex-none sm:size-default"
                   onClick={() => setClientDrawerOpen(true)}
@@ -1899,7 +1900,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   {dedupedPolicyCount} معاملة مسجلة
                 </button>
               </div>
-              <Button onClick={() => setPolicyWizardOpen(true)}>
+              <Button variant="gradient" onClick={() => setPolicyWizardOpen(true)}>
                 <Plus className="h-4 w-4 ml-2" />
                 إضافة معاملة جديدة
               </Button>
