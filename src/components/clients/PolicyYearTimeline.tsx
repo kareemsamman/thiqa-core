@@ -947,6 +947,7 @@ export function PolicyYearTimeline({
                       <PolicyPackageCard
                         key={pkgIndex}
                         pkg={pkg}
+                        transferAdjustments={transferAdjustments}
                         paymentStatus={getPackagePaymentStatus(pkg)}
                         accidentCount={accidentCount}
                         childrenCount={childrenCount}
@@ -1061,6 +1062,7 @@ export function PolicyYearTimeline({
 // Simplified Policy Card Component
 function PolicyPackageCard({
   pkg,
+  transferAdjustments,
   paymentStatus,
   accidentCount = 0,
   childrenCount = 0,
@@ -1093,6 +1095,11 @@ function PolicyPackageCard({
   onPoliciesUpdate,
 }: {
   pkg: PolicyPackage;
+  /** new_policy_id → customer-pays transfer adjustment amount, so the
+   *  breakdown can surface a standalone 'عمولة تحويل' row per affected
+   *  policy instead of piling the fee onto the component's commission.
+   *  Populated by the parent PolicyYearTimeline from policy_transfers. */
+  transferAdjustments: Record<string, number>;
   paymentStatus: { totalPaid: number; remaining: number; isPaid: boolean };
   accidentCount?: number;
   childrenCount?: number;
