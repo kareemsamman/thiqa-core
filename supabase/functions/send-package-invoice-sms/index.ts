@@ -380,20 +380,36 @@ serve(async (req) => {
     // rendered on the printed invoice next to the matching policy row; the
     // office_note column is intentionally NOT queried — it stays internal
     // and is only shown on the client policy card's "ملاحظات" row via
-    // policies.notes.
+    // policies.notes. adjustment_amount + adjustment_note are pulled so
+    // the invoice can surface "عمولة التحويل" as a standalone item row
+    // (separate from the policy's own office_commission) with the
+    // financial-adjustment reason beneath it.
     const { data: transferRows } = await supabase
       .from("policy_transfers")
-      .select("new_policy_id, note")
+      .select("new_policy_id, note, adjustment_amount, adjustment_type, adjustment_note")
       .in("new_policy_id", policy_ids);
     const transferNoteByNewPolicyId: Record<string, string> = {};
+    const transferAdjustmentByNewPolicyId: Record<string, { amount: number; adjustmentNote: string | null }> = {};
     (transferRows || []).forEach((row: any) => {
       if (row?.new_policy_id && row?.note) {
         transferNoteByNewPolicyId[row.new_policy_id] = row.note;
       }
+      if (
+        row?.new_policy_id &&
+        row?.adjustment_type === 'customer_pays' &&
+        Number(row?.adjustment_amount) > 0
+      ) {
+        transferAdjustmentByNewPolicyId[row.new_policy_id] = {
+          amount: Number(row.adjustment_amount),
+          adjustmentNote: typeof row.adjustment_note === 'string' && row.adjustment_note.trim()
+            ? row.adjustment_note.trim()
+            : null,
+        };
+      }
     });
 
     // Generate Package Invoice HTML with files and policy children
-    const packageInvoiceHtml = buildPackageInvoiceHtml(policies, paymentsByPolicy, totalPrice, totalPaid, totalRemaining, insuranceFiles || [], policyChildren || [], companySettings, branding, cancellationInfo, transferNoteByNewPolicyId);
+    const packageInvoiceHtml = buildPackageInvoiceHtml(policies, paymentsByPolicy, totalPrice, totalPaid, totalRemaining, insuranceFiles || [], policyChildren || [], companySettings, branding, cancellationInfo, transferNoteByNewPolicyId, transferAdjustmentByNewPolicyId);
     
     const now = new Date();
     const year = now.getFullYear();
@@ -626,7 +642,8 @@ function buildPackageInvoiceHtml(
   companySettings: { company_email?: string; company_phones?: string[]; company_whatsapp?: string; company_location?: string },
   branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' },
   cancellationInfo: { isCancelled: boolean; date: string; note: string; refundAmount: number } = { isCancelled: false, date: '', note: '', refundAmount: 0 },
-  transferNoteByNewPolicyId: Record<string, string> = {}
+  transferNoteByNewPolicyId: Record<string, string> = {},
+  transferAdjustmentByNewPolicyId: Record<string, { amount: number; adjustmentNote: string | null }> = {}
 ): string {
   const client = policies[0]?.client || {};
   const today = new Date();
@@ -764,9 +781,14 @@ function buildPackageInvoiceHtml(
       ? `${formatDate(p.start_date)} → ${formatDate(p.end_date)}`
       : '-';
     const commission = p.office_commission || 0;
-    const lineTotal = (p.insurance_price || 0) + commission;
-    const commissionLine = commission > 0
-      ? `<div class="item-commission">عمولة المكتب: ₪${commission.toLocaleString('en-US')}</div>`
+    // Pull the transfer portion out of this policy's commission so the
+    // printed row matches the in-app breakdown — the transfer fee then
+    // appears as its own "عمولة التحويل" row after all policy rows.
+    const transferPortion = transferAdjustmentByNewPolicyId[p.id]?.amount || 0;
+    const officePortion = Math.max(0, commission - transferPortion);
+    const lineTotal = (p.insurance_price || 0) + officePortion;
+    const commissionLine = officePortion > 0
+      ? `<div class="item-commission">عمولة المكتب: ₪${officePortion.toLocaleString('en-US')}</div>`
       : '';
     const isCancelled = !!p.cancelled;
     const cancelledTag = isCancelled
@@ -806,6 +828,37 @@ function buildPackageInvoiceHtml(
       </tr>
     `;
   }).join('');
+
+  // Standalone "عمولة التحويل" row(s) — the transfer fee is a
+  // transfer-level charge, not tied to a specific بوليصة. We aggregate
+  // it across all affected policies in the package into a single item
+  // row so the printed invoice reads as: [policy rows..., عمولة التحويل]
+  // → الإجمالي. The financial-adjustment reason (adjustment_note) rides
+  // underneath when present. If adjustment_note differs across rows,
+  // we join the distinct reasons with " • ".
+  const transferAdjustmentEntries = policies
+    .map((p: any) => transferAdjustmentByNewPolicyId[p.id])
+    .filter((a): a is { amount: number; adjustmentNote: string | null } => !!a && a.amount > 0);
+  const totalTransferFee = transferAdjustmentEntries.reduce((s, a) => s + a.amount, 0);
+  const distinctAdjustmentNotes = Array.from(new Set(
+    transferAdjustmentEntries.map(a => a.adjustmentNote).filter((n): n is string => !!n)
+  ));
+  const transferFeeRow = totalTransferFee > 0
+    ? `
+      <tr class="transfer-fee-row">
+        <td class="num tabular">—</td>
+        <td>
+          <div class="item-title">عمولة التحويل</div>
+          ${distinctAdjustmentNotes.length > 0
+            ? `<div class="item-transfer-note">ملاحظة التعديل المالي: ${escapeHtml(distinctAdjustmentNotes.join(' • '))}</div>`
+            : ''}
+        </td>
+        <td class="period">—</td>
+        <td class="num">₪${totalTransferFee.toLocaleString('en-US')}</td>
+      </tr>
+    `
+    : '';
+  const policyRowsWithTransferFee = policyRows + transferFeeRow;
 
   // Broker notice — when any policy in this package was made through or
   // for a broker, the money is tracked on the broker's account, not the
@@ -1720,7 +1773,7 @@ function buildPackageInvoiceHtml(
         </tr>
       </thead>
       <tbody>
-        ${policyRows}
+        ${policyRowsWithTransferFee}
       </tbody>
     </table>
 

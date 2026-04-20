@@ -9,13 +9,20 @@ interface PackageBreakdownProps {
   onPolicyClick: (policyId: string) => void;
 }
 
+interface TransferAdjustment {
+  amount: number;
+  customerNote: string | null;
+  officeNote: string | null;
+  adjustmentNote: string | null;
+}
+
 export function PackageBreakdown({ policies, onPolicyClick }: PackageBreakdownProps) {
   // Fetch per-policy transfer adjustment so we can split the "عمولة"
-  // line into "عمولة مكتب" (original) and "عمولة تحويل" (transfer fee)
+  // line into "عمولة مكتب" (original) and "عمولة التحويل" (transfer fee)
   // whenever a policy in this package was created by a customer-pays
-  // transfer. Transfer adjustments live on policy_transfers, not on
-  // policies itself, so they need their own lookup.
-  const [transferAdjustments, setTransferAdjustments] = useState<Record<string, number>>({});
+  // transfer. The three transfer notes ride along so the standalone
+  // "عمولة التحويل" row can surface them underneath.
+  const [transferAdjustments, setTransferAdjustments] = useState<Record<string, TransferAdjustment>>({});
   useEffect(() => {
     const transferredIds = policies
       .filter(p => (p as any).transferred_from_policy_id)
@@ -28,17 +35,22 @@ export function PackageBreakdown({ policies, onPolicyClick }: PackageBreakdownPr
     (async () => {
       const { data } = await supabase
         .from('policy_transfers')
-        .select('new_policy_id, adjustment_amount, adjustment_type')
+        .select('new_policy_id, adjustment_amount, adjustment_type, note, office_note, adjustment_note')
         .in('new_policy_id', transferredIds);
       if (cancelled) return;
-      const map: Record<string, number> = {};
+      const map: Record<string, TransferAdjustment> = {};
       (data || []).forEach((row: any) => {
         if (
           row?.new_policy_id &&
           row?.adjustment_type === 'customer_pays' &&
           Number(row?.adjustment_amount) > 0
         ) {
-          map[row.new_policy_id] = Number(row.adjustment_amount);
+          map[row.new_policy_id] = {
+            amount: Number(row.adjustment_amount),
+            customerNote: typeof row.note === 'string' && row.note.trim() ? row.note.trim() : null,
+            officeNote: typeof row.office_note === 'string' && row.office_note.trim() ? row.office_note.trim() : null,
+            adjustmentNote: typeof row.adjustment_note === 'string' && row.adjustment_note.trim() ? row.adjustment_note.trim() : null,
+          };
         }
       });
       setTransferAdjustments(map);
@@ -53,13 +65,25 @@ export function PackageBreakdown({ policies, onPolicyClick }: PackageBreakdownPr
     0,
   );
   const totalOfficeCommission = policies.reduce(
-    (sum, p) => sum + Math.max(0, (p.office_commission || 0) - (transferAdjustments[p.id] || 0)),
+    (sum, p) => sum + Math.max(0, (p.office_commission || 0) - (transferAdjustments[p.id]?.amount || 0)),
     0,
   );
   const totalTransferCommission = policies.reduce(
-    (sum, p) => sum + (transferAdjustments[p.id] || 0),
+    (sum, p) => sum + (transferAdjustments[p.id]?.amount || 0),
     0,
   );
+  const affectedAdjustments = policies
+    .map(p => transferAdjustments[p.id])
+    .filter((a): a is TransferAdjustment => !!a && a.amount > 0);
+  const dedupe = (vals: (string | null)[]) =>
+    Array.from(new Set(vals.filter((v): v is string => !!v)));
+  const transferCustomerNotes = dedupe(affectedAdjustments.map(a => a.customerNote));
+  const transferOfficeNotes = dedupe(affectedAdjustments.map(a => a.officeNote));
+  const transferAdjustmentNotes = dedupe(affectedAdjustments.map(a => a.adjustmentNote));
+  const hasAnyTransferNote =
+    transferCustomerNotes.length +
+    transferOfficeNotes.length +
+    transferAdjustmentNotes.length > 0;
 
   return (
     <div className="border-t bg-muted/10 mt-3">
@@ -80,7 +104,7 @@ export function PackageBreakdown({ policies, onPolicyClick }: PackageBreakdownPr
           <tbody>
             {policies.map((policy) => {
               const totalCommission = policy.office_commission || 0;
-              const transferPortion = transferAdjustments[policy.id] || 0;
+              const transferPortion = transferAdjustments[policy.id]?.amount || 0;
               // Strip the transfer portion out of this row — it shows
               // up as its own standalone line below the policy rows,
               // so the policy row only surfaces the original office
@@ -116,36 +140,50 @@ export function PackageBreakdown({ policies, onPolicyClick }: PackageBreakdownPr
                 </tr>
               );
             })}
-            {/* Standalone 'عمولة تحويل' rows — one per transferred
-                policy that has a customer-pays adjustment. Rendered
-                after all policy rows so the breakdown reads:
-                [component, component, ..., transfer fee, ...] →
-                الإجمالي. Clicking jumps to the target policy so the
-                user can still drill into the transfer details. */}
-            {policies.map((policy) => {
-              const transferPortion = transferAdjustments[policy.id] || 0;
-              if (transferPortion <= 0) return null;
-              return (
-                <tr
-                  key={`${policy.id}-transfer-fee`}
-                  className="border-t bg-sky-50/40 hover:bg-sky-50/70 cursor-pointer transition-colors"
-                  onClick={() => onPolicyClick(policy.id)}
-                >
-                  <td className="p-2 font-semibold text-sky-800">
-                    {formatCurrency(transferPortion)}
-                  </td>
-                  <td className="p-2 text-xs text-muted-foreground" />
-                  <td className="p-2">
-                    <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100 border-sky-200">
-                      عمولة تحويل
-                    </Badge>
-                  </td>
-                  <td className="p-2 text-muted-foreground text-xs">
-                    {policy.insurance_companies?.name_ar || policy.insurance_companies?.name || '—'}
-                  </td>
-                </tr>
-              );
-            })}
+            {/* Standalone 'عمولة التحويل' row — aggregated across the
+                package (the fee is a transfer-level charge, not tied
+                to a specific بوليصة). The three transfer notes appear
+                in a footer row underneath so the breakdown reads:
+                [component, ..., transfer fee, transfer notes] →
+                الإجمالي. */}
+            {totalTransferCommission > 0 && (
+              <tr className="border-t bg-sky-50/40">
+                <td className="p-2 font-semibold text-sky-800">
+                  {formatCurrency(totalTransferCommission)}
+                </td>
+                <td className="p-2 text-xs text-muted-foreground" />
+                <td className="p-2">
+                  <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100 border-sky-200">
+                    عمولة التحويل
+                  </Badge>
+                </td>
+                <td className="p-2 text-muted-foreground text-xs" />
+              </tr>
+            )}
+            {hasAnyTransferNote && (
+              <tr className="bg-sky-50/20">
+                <td colSpan={4} className="px-3 pb-2 pt-1 text-[11px] text-muted-foreground space-y-0.5">
+                  {transferCustomerNotes.map((n, i) => (
+                    <div key={`c-${i}`} className="flex gap-1.5">
+                      <span className="font-semibold text-foreground/80 shrink-0">ملاحظة التحويل:</span>
+                      <span className="line-clamp-2">{n}</span>
+                    </div>
+                  ))}
+                  {transferOfficeNotes.map((n, i) => (
+                    <div key={`o-${i}`} className="flex gap-1.5">
+                      <span className="font-semibold text-foreground/80 shrink-0">ملاحظات المكتب:</span>
+                      <span className="line-clamp-2">{n}</span>
+                    </div>
+                  ))}
+                  {transferAdjustmentNotes.map((n, i) => (
+                    <div key={`a-${i}`} className="flex gap-1.5">
+                      <span className="font-semibold text-foreground/80 shrink-0">ملاحظة التعديل المالي:</span>
+                      <span className="line-clamp-2">{n}</span>
+                    </div>
+                  ))}
+                </td>
+              </tr>
+            )}
           </tbody>
           <tfoot>
             <tr className="border-t bg-muted/30 font-bold">

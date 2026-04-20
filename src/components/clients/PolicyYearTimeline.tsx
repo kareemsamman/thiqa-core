@@ -79,6 +79,13 @@ interface PolicyRecord {
   created_at?: string;
 }
 
+interface TransferAdjustment {
+  amount: number;
+  customerNote: string | null;
+  officeNote: string | null;
+  adjustmentNote: string | null;
+}
+
 interface PolicyYearTimelineProps {
   policies: PolicyRecord[];
   /** Used in the SMS hover card on every policy row so staff can see
@@ -283,7 +290,7 @@ export function PolicyYearTimeline({
   // after all policy components). Only queried when any visible
   // policy has transferred_from_policy_id set, so non-transfer clients
   // don't pay a round-trip cost.
-  const [transferAdjustments, setTransferAdjustments] = useState<Record<string, number>>({});
+  const [transferAdjustments, setTransferAdjustments] = useState<Record<string, TransferAdjustment>>({});
   useEffect(() => {
     const transferredIds = policies
       .filter(p => p.transferred_from_policy_id)
@@ -296,17 +303,22 @@ export function PolicyYearTimeline({
     (async () => {
       const { data } = await supabase
         .from('policy_transfers')
-        .select('new_policy_id, adjustment_amount, adjustment_type')
+        .select('new_policy_id, adjustment_amount, adjustment_type, note, office_note, adjustment_note')
         .in('new_policy_id', transferredIds);
       if (cancelled) return;
-      const map: Record<string, number> = {};
+      const map: Record<string, TransferAdjustment> = {};
       (data || []).forEach((row: any) => {
         if (
           row?.new_policy_id &&
           row?.adjustment_type === 'customer_pays' &&
           Number(row?.adjustment_amount) > 0
         ) {
-          map[row.new_policy_id] = Number(row.adjustment_amount);
+          map[row.new_policy_id] = {
+            amount: Number(row.adjustment_amount),
+            customerNote: typeof row.note === 'string' && row.note.trim() ? row.note.trim() : null,
+            officeNote: typeof row.office_note === 'string' && row.office_note.trim() ? row.office_note.trim() : null,
+            adjustmentNote: typeof row.adjustment_note === 'string' && row.adjustment_note.trim() ? row.adjustment_note.trim() : null,
+          };
         }
       });
       setTransferAdjustments(map);
@@ -1095,11 +1107,12 @@ function PolicyPackageCard({
   onPoliciesUpdate,
 }: {
   pkg: PolicyPackage;
-  /** new_policy_id → customer-pays transfer adjustment amount, so the
-   *  breakdown can surface a standalone 'عمولة تحويل' row per affected
-   *  policy instead of piling the fee onto the component's commission.
-   *  Populated by the parent PolicyYearTimeline from policy_transfers. */
-  transferAdjustments: Record<string, number>;
+  /** new_policy_id → customer-pays transfer adjustment (amount + the
+   *  three transfer notes), so the breakdown can surface a standalone
+   *  'عمولة التحويل' row and attach the transfer reason + office note
+   *  + financial-adjustment note underneath it. Populated by the parent
+   *  PolicyYearTimeline from policy_transfers. */
+  transferAdjustments: Record<string, TransferAdjustment>;
   paymentStatus: { totalPaid: number; remaining: number; isPaid: boolean };
   accidentCount?: number;
   childrenCount?: number;
@@ -1687,7 +1700,7 @@ function PolicyPackageCard({
                   0,
                 );
                 const totalTransferPortion = rowPolicies.reduce(
-                  (sum, p) => sum + (transferAdjustments[p.id] || 0),
+                  (sum, p) => sum + (transferAdjustments[p.id]?.amount || 0),
                   0,
                 );
                 const officeOnly = Math.max(0, totalCommission - totalTransferPortion);
@@ -1730,7 +1743,7 @@ function PolicyPackageCard({
                 policy={pkg.mainPolicy}
                 isActive={isActive}
                 onPoliciesUpdate={onPoliciesUpdate}
-                transferPortion={transferAdjustments[pkg.mainPolicy.id] || 0}
+                transferPortion={transferAdjustments[pkg.mainPolicy.id]?.amount || 0}
               />
               {/* Addons */}
               {pkg.addons.map((addon) => (
@@ -1739,43 +1752,76 @@ function PolicyPackageCard({
                   policy={addon}
                   isActive={isActive}
                   onPoliciesUpdate={onPoliciesUpdate}
-                  transferPortion={transferAdjustments[addon.id] || 0}
+                  transferPortion={transferAdjustments[addon.id]?.amount || 0}
                 />
               ))}
-              {/* Standalone 'عمولة تحويل' rows — one per policy with a
-                  customer-pays transfer adjustment. Rendered after all
-                  policy rows and before the totals button so the
-                  breakdown reads: components → transfer fees → totals. */}
-              {[pkg.mainPolicy, ...pkg.addons].map((p) => {
-                if (!p) return null;
-                const portion = transferAdjustments[p.id] || 0;
-                if (portion <= 0) return null;
+              {/* Standalone 'عمولة التحويل' row — aggregated across the
+                  whole package. The fee is a transfer-level charge, not
+                  tied to any one بوليصة, so we collapse all affected
+                  policies into a single row (sum of amounts) with the
+                  three transfer notes (customer / office / financial
+                  adjustment) rendered underneath — deduped in case the
+                  same note was persisted on multiple transfer rows. */}
+              {(() => {
+                const affected = [pkg.mainPolicy, ...pkg.addons]
+                  .filter((p): p is PolicyRecord => !!p)
+                  .map(p => transferAdjustments[p.id])
+                  .filter((a): a is TransferAdjustment => !!a && a.amount > 0);
+                if (affected.length === 0) return null;
+                const totalPortion = affected.reduce((s, a) => s + a.amount, 0);
+                const dedupe = (vals: (string | null)[]) =>
+                  Array.from(new Set(vals.filter((v): v is string => !!v)));
+                const customerNotes = dedupe(affected.map(a => a.customerNote));
+                const officeNotes = dedupe(affected.map(a => a.officeNote));
+                const adjustmentNotes = dedupe(affected.map(a => a.adjustmentNote));
+                const hasAnyNote = customerNotes.length + officeNotes.length + adjustmentNotes.length > 0;
                 return (
                   <div
-                    key={`${p.id}-transfer-fee`}
+                    key="transfer-fee-aggregate"
                     className={cn(
-                      "grid grid-cols-[minmax(80px,auto)_1fr_auto] items-center gap-3 px-3 py-2 text-xs border-b border-border/60 last:border-b-0 transition-colors",
+                      "border-b border-border/60 last:border-b-0 transition-colors",
                       "bg-sky-50/60 hover:bg-sky-50 dark:bg-sky-500/5 dark:hover:bg-sky-500/10",
                       !isActive && "opacity-70",
                     )}
                   >
-                    <span className="text-[10px] text-muted-foreground">—</span>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Badge className="text-[10px] px-1.5 py-0 h-5 font-medium border shrink-0 bg-sky-100 text-sky-800 border-sky-200 hover:bg-sky-100">
-                        عمولة تحويل
-                      </Badge>
-                      <span className="truncate text-sm font-medium text-sky-900 dark:text-sky-100">
-                        {getDisplayLabel(p)} — {p.company?.name_ar || p.company?.name || ''}
-                      </span>
+                    <div className="grid grid-cols-[minmax(80px,auto)_1fr_auto] items-center gap-3 px-3 py-2 text-xs">
+                      <span className="text-[10px] text-muted-foreground">—</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge className="text-[10px] px-1.5 py-0 h-5 font-medium border shrink-0 bg-sky-100 text-sky-800 border-sky-200 hover:bg-sky-100">
+                          عمولة التحويل
+                        </Badge>
+                      </div>
+                      <div className="flex flex-col items-end min-w-[70px]">
+                        <span className="font-semibold ltr-nums text-sky-900 dark:text-sky-100">
+                          ₪{totalPortion.toLocaleString('en-US')}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end min-w-[70px]">
-                      <span className="font-semibold ltr-nums text-sky-900 dark:text-sky-100">
-                        ₪{portion.toLocaleString('en-US')}
-                      </span>
-                    </div>
+                    {hasAnyNote && (
+                      <div className="px-3 pb-2 pr-6 text-[11px] text-muted-foreground space-y-0.5">
+                        {customerNotes.map((n, i) => (
+                          <div key={`c-${i}`} className="flex gap-1.5">
+                            <span className="font-semibold text-foreground/80 shrink-0">ملاحظة التحويل:</span>
+                            <span className="line-clamp-2">{n}</span>
+                          </div>
+                        ))}
+                        {officeNotes.map((n, i) => (
+                          <div key={`o-${i}`} className="flex gap-1.5">
+                            <span className="font-semibold text-foreground/80 shrink-0">ملاحظات المكتب:</span>
+                            <span className="line-clamp-2">{n}</span>
+                          </div>
+                        ))}
+                        {adjustmentNotes.map((n, i) => (
+                          <div key={`a-${i}`} className="flex gap-1.5">
+                            <span className="font-semibold text-foreground/80 shrink-0">ملاحظة التعديل المالي:</span>
+                            <span className="line-clamp-2">{n}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
-              })}
+              })()}
               {/* Totals footer row */}
               <button
                 type="button"

@@ -249,7 +249,7 @@ serve(async (req) => {
       .select(`
         id, policy_number, policy_type_parent, policy_type_child, start_date, end_date,
         insurance_price, office_commission, cancelled, transferred, group_id, notes,
-        broker_id, broker_direction,
+        broker_id, broker_direction, transferred_from_policy_id,
         company:insurance_companies(name, name_ar),
         car:cars(id, car_number),
         broker:brokers(id, name)
@@ -260,6 +260,37 @@ serve(async (req) => {
     if (policiesError) throw new Error(`policies query: ${policiesError.message}`);
 
     const policyIds = (policies || []).map((p: any) => p.id);
+
+    // Transfer audit rows for any policy in this report that was created
+    // via "تحويل" with a customer-pays adjustment. Used to split the
+    // office_commission line ("منها X عمولة مكتب") from the transfer
+    // fee, which is rendered as its own "عمولة التحويل" row after the
+    // relevant policy/package rows, with the financial-adjustment note
+    // (adjustment_note) riding beneath it.
+    const transferredNewPolicyIds = (policies || [])
+      .filter((p: any) => p.transferred_from_policy_id)
+      .map((p: any) => p.id);
+    const transferAdjustmentByNewPolicyId: Record<string, { amount: number; adjustmentNote: string | null }> = {};
+    if (transferredNewPolicyIds.length > 0) {
+      const { data: transferRows } = await supabase
+        .from("policy_transfers")
+        .select("new_policy_id, adjustment_amount, adjustment_type, adjustment_note")
+        .in("new_policy_id", transferredNewPolicyIds);
+      (transferRows || []).forEach((row: any) => {
+        if (
+          row?.new_policy_id &&
+          row?.adjustment_type === 'customer_pays' &&
+          Number(row?.adjustment_amount) > 0
+        ) {
+          transferAdjustmentByNewPolicyId[row.new_policy_id] = {
+            amount: Number(row.adjustment_amount),
+            adjustmentNote: typeof row.adjustment_note === 'string' && row.adjustment_note.trim()
+              ? row.adjustment_note.trim()
+              : null,
+          };
+        }
+      });
+    }
 
     // Fetch related records in parallel
     currentStep = "fetch related records (files/drivers/payments/accidents/refunds/branch/sms)";
@@ -407,6 +438,7 @@ serve(async (req) => {
       branchName,
       branding,
       companySettings,
+      transferAdjustmentByNewPolicyId,
     });
 
     // Upload to Bunny CDN
@@ -530,6 +562,7 @@ interface GenerateReportArgs {
     company_whatsapp: string;
     company_location: string;
   };
+  transferAdjustmentByNewPolicyId: Record<string, { amount: number; adjustmentNote: string | null }>;
 }
 
 function generateReportHtml(args: GenerateReportArgs): string {
@@ -550,6 +583,7 @@ function generateReportHtml(args: GenerateReportArgs): string {
     branchName,
     branding,
     companySettings,
+    transferAdjustmentByNewPolicyId,
   } = args;
 
   const today = new Date();
@@ -676,10 +710,36 @@ function generateReportHtml(args: GenerateReportArgs): string {
     }
   }
 
-  const lineTotalFor = (p: any) => (p.insurance_price || 0) + (p.office_commission || 0);
+  // Transfer portion gets pulled out into its own "عمولة التحويل" row,
+  // so the policy line-total shown in the report excludes it — the same
+  // split the in-app breakdown uses.
+  const transferPortionFor = (p: any) => transferAdjustmentByNewPolicyId[p.id]?.amount || 0;
+  const officeCommissionFor = (p: any) => Math.max(0, (p.office_commission || 0) - transferPortionFor(p));
+  const lineTotalFor = (p: any) => (p.insurance_price || 0) + officeCommissionFor(p);
   const periodFor = (p: any) => (p.start_date && p.end_date)
     ? `${formatDate(p.start_date)} → ${formatDate(p.end_date)}`
     : '-';
+
+  // Shared renderer for the standalone "عمولة التحويل" row. Used after
+  // single policies AND after package blocks so each transfer shows its
+  // fee (and financial-adjustment note) right under the relevant rows.
+  const renderTransferFeeRow = (amount: number, adjustmentNote: string | null, indexLabel: string): string => {
+    if (amount <= 0) return '';
+    const noteLine = adjustmentNote
+      ? `<div class="item-transfer-note">ملاحظة التعديل المالي: ${escapeHtml(adjustmentNote)}</div>`
+      : '';
+    return `
+      <tr class="transfer-fee-row">
+        <td class="num">${indexLabel}</td>
+        <td>
+          <div class="item-title">عمولة التحويل</div>
+          ${noteLine}
+        </td>
+        <td class="period">—</td>
+        <td class="num">₪${amount.toLocaleString('en-US')}</td>
+      </tr>
+    `;
+  };
 
   // Build a "<label>: <name>" tag for a policy that's linked to a broker.
   const brokerLineFor = (p: any): string => {
@@ -703,9 +763,9 @@ function generateReportHtml(args: GenerateReportArgs): string {
     const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
     const companyName = getCompanyName(p);
     const carNumber = getCarNumber(p);
-    const commission = p.office_commission || 0;
-    const commissionLine = commission > 0
-      ? `<div class="item-commission">عمولة المكتب: ₪${commission.toLocaleString('en-US')}</div>`
+    const officePortion = officeCommissionFor(p);
+    const commissionLine = officePortion > 0
+      ? `<div class="item-commission">عمولة المكتب: ₪${officePortion.toLocaleString('en-US')}</div>`
       : '';
     const cancelledTag = p.cancelled ? `<span class="cancelled-tag">ملغاة</span>` : '';
     const transferredTag = p.transferred && !p.cancelled
@@ -741,12 +801,16 @@ function generateReportHtml(args: GenerateReportArgs): string {
 
   // Package rendering: a header row that spans the description/period
   // columns (باقة chip + combined member types + car), then one indented
-  // component row per policy underneath.
+  // component row per policy underneath, and finally — if any member
+  // carries a customer-pays transfer adjustment — a single aggregated
+  // "عمولة التحويل" row so the fee is called out separately from any
+  // member's office_commission.
   const renderPackageBlock = (pkg: PackageItem, index: number): string => {
     const members = pkg.policies;
     const first = members[0];
     const carNumber = getCarNumber(first);
-    const total = members.reduce((s, p) => s + lineTotalFor(p), 0);
+    const packageTransferFee = members.reduce((s, p) => s + transferPortionFor(p), 0);
+    const total = members.reduce((s, p) => s + lineTotalFor(p), 0) + packageTransferFee;
     const allCancelled = members.every(p => p.cancelled);
 
     const combinedTypeLabel = members
@@ -771,13 +835,29 @@ function generateReportHtml(args: GenerateReportArgs): string {
       .map((m, j) => renderPolicyRow(m, `${index}.${j + 1}`, 'component'))
       .join('');
 
-    return headerRow + componentRows;
+    const distinctAdjustmentNotes = Array.from(new Set(
+      members
+        .map(m => transferAdjustmentByNewPolicyId[m.id]?.adjustmentNote)
+        .filter((n): n is string => !!n)
+    ));
+    const transferFeeRow = renderTransferFeeRow(
+      packageTransferFee,
+      distinctAdjustmentNotes.length > 0 ? distinctAdjustmentNotes.join(' • ') : null,
+      `${index}.${members.length + 1}`,
+    );
+
+    return headerRow + componentRows + transferFeeRow;
   };
 
   const policyRowsHtml = policyItems.length > 0
     ? policyItems.map((item, i) => {
         if (item.kind === 'single') {
-          return renderPolicyRow(item.policy, String(i + 1), 'single');
+          const policyRow = renderPolicyRow(item.policy, String(i + 1), 'single');
+          const adj = transferAdjustmentByNewPolicyId[item.policy.id];
+          const transferFeeRow = adj
+            ? renderTransferFeeRow(adj.amount, adj.adjustmentNote, `${i + 1}.1`)
+            : '';
+          return policyRow + transferFeeRow;
         }
         return renderPackageBlock(item, i + 1);
       }).join('')
