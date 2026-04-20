@@ -275,28 +275,50 @@ export function TransferPolicyModal({
 
     setSavingNewCar(true);
     try {
-      const { data, error } = await supabase
+      // Dedupe: if the client already owns a (non-deleted) car with this
+      // exact car_number, reuse it instead of inserting a second row. Before
+      // this check, typing the same plate twice (or typing an existing plate
+      // into the "new car" form instead of picking it from the dropdown)
+      // produced two cars rows with identical car_numbers on the client —
+      // the agent-scoped unique index doesn't catch it when client scope is
+      // what the user actually cares about.
+      const { data: existingCar, error: existingCarError } = await supabase
         .from("cars")
-        .insert({
-          client_id: clientId,
-          car_number: newCarNumber,
-          model: newCarModel,
-          year: parseInt(newCarYear),
-          manufacturer_name: newCarManufacturer || null,
-          color: newCarColor || null,
-          car_type: (newCarType || "car") as any,
-          car_value: newCarValue ? parseFloat(newCarValue) : null,
-          license_expiry: newCarLicenseExpiry || null,
-          branch_id: branchId,
-          created_by_admin_id: user?.id,
-        })
         .select("id, car_number, model, year, manufacturer_name")
-        .single();
+        .eq("client_id", clientId)
+        .eq("car_number", newCarNumber)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (existingCarError) throw existingCarError;
 
-      if (error) throw error;
+      let data: { id: string; car_number: string; model: string | null; year: number | null; manufacturer_name: string | null };
+      if (existingCar) {
+        data = existingCar as any;
+        toast({ title: "تنبيه", description: "هذه السيارة موجودة مسبقاً — تم اختيارها بدل إضافة نسخة جديدة." });
+      } else {
+        const { data: inserted, error } = await supabase
+          .from("cars")
+          .insert({
+            client_id: clientId,
+            car_number: newCarNumber,
+            model: newCarModel,
+            year: parseInt(newCarYear),
+            manufacturer_name: newCarManufacturer || null,
+            color: newCarColor || null,
+            car_type: (newCarType || "car") as any,
+            car_value: newCarValue ? parseFloat(newCarValue) : null,
+            license_expiry: newCarLicenseExpiry || null,
+            branch_id: branchId,
+            created_by_admin_id: user?.id,
+          })
+          .select("id, car_number, model, year, manufacturer_name")
+          .single();
+        if (error) throw error;
+        data = inserted;
+      }
 
-      // Add to cars list and select it
-      setCars(prev => [data, ...prev]);
+      // Add to cars list (if not already there) and select it
+      setCars(prev => prev.some(c => c.id === data.id) ? prev : [data, ...prev]);
       setSelectedCarId(data.id);
       setShowNewCarForm(false);
 
@@ -311,7 +333,9 @@ export function TransferPolicyModal({
       setNewCarLicenseExpiry("");
       setCarDataFetched(false);
 
-      toast({ title: "تم", description: "تم إضافة السيارة بنجاح" });
+      if (!existingCar) {
+        toast({ title: "تم", description: "تم إضافة السيارة بنجاح" });
+      }
     } catch (error: any) {
       console.error("Error adding car:", error);
       toast({ title: "خطأ", description: error.message || "فشل في إضافة السيارة", variant: "destructive" });

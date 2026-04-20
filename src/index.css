@@ -4,6 +4,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Global breathing room at the bottom of every page so the last row of
+   content (cards, tables, forms) never butts up against the viewport
+   edge or the bottom browser chrome on mobile. */
+#root {
+  margin-bottom: 5rem;
+}
+
 /* Smooth anchor scroll for same-page navigation (e.g. nav info-center
    items scrolling to #features, #demo, etc). */
 html {
