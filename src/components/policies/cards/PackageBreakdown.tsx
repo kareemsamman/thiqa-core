@@ -81,6 +81,10 @@ export function PackageBreakdown({ policies, onPolicyClick }: PackageBreakdownPr
             {policies.map((policy) => {
               const totalCommission = policy.office_commission || 0;
               const transferPortion = transferAdjustments[policy.id] || 0;
+              // Strip the transfer portion out of this row — it shows
+              // up as its own standalone line below the policy rows,
+              // so the policy row only surfaces the original office
+              // commission (if any).
               const officePortion = Math.max(0, totalCommission - transferPortion);
               return (
                 <tr
@@ -96,11 +100,6 @@ export function PackageBreakdown({ policies, onPolicyClick }: PackageBreakdownPr
                           + {formatCurrency(officePortion)} عمولة مكتب
                         </span>
                       )}
-                      {transferPortion > 0 && (
-                        <span className="text-[10px] text-sky-700 font-semibold ltr-nums">
-                          + {formatCurrency(transferPortion)} عمولة تحويل
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td className="p-2 text-xs text-muted-foreground">
@@ -113,6 +112,36 @@ export function PackageBreakdown({ policies, onPolicyClick }: PackageBreakdownPr
                   </td>
                   <td className="p-2 text-muted-foreground">
                     {policy.insurance_companies?.name_ar || policy.insurance_companies?.name || '-'}
+                  </td>
+                </tr>
+              );
+            })}
+            {/* Standalone 'عمولة تحويل' rows — one per transferred
+                policy that has a customer-pays adjustment. Rendered
+                after all policy rows so the breakdown reads:
+                [component, component, ..., transfer fee, ...] →
+                الإجمالي. Clicking jumps to the target policy so the
+                user can still drill into the transfer details. */}
+            {policies.map((policy) => {
+              const transferPortion = transferAdjustments[policy.id] || 0;
+              if (transferPortion <= 0) return null;
+              return (
+                <tr
+                  key={`${policy.id}-transfer-fee`}
+                  className="border-t bg-sky-50/40 hover:bg-sky-50/70 cursor-pointer transition-colors"
+                  onClick={() => onPolicyClick(policy.id)}
+                >
+                  <td className="p-2 font-semibold text-sky-800">
+                    {formatCurrency(transferPortion)}
+                  </td>
+                  <td className="p-2 text-xs text-muted-foreground" />
+                  <td className="p-2">
+                    <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100 border-sky-200">
+                      عمولة تحويل
+                    </Badge>
+                  </td>
+                  <td className="p-2 text-muted-foreground text-xs">
+                    {policy.insurance_companies?.name_ar || policy.insurance_companies?.name || '—'}
                   </td>
                 </tr>
               );
