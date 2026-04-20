@@ -31,6 +31,9 @@ import { Loader2, Save, CheckCircle } from 'lucide-react';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+// Canonical car-type list lives with the policy wizard; reuse it so the
+// drawer and the new-policy flow don't drift apart.
+import { CAR_TYPES } from '@/components/policies/wizard/types';
 
 const carSchema = z.object({
   car_number: z.string().min(1, 'رقم السيارة مطلوب'),
@@ -80,15 +83,6 @@ interface CarDrawerProps {
   car?: CarRecord | null;
   onSaved: () => void;
 }
-
-const CAR_TYPES = [
-  { value: 'car', label: 'خصوصي' },
-  { value: 'cargo', label: 'تجاري' },
-  { value: 'taxi', label: 'مونيت' },
-  { value: 'small', label: 'اوتوبس زعير' },
-  { value: 'tjeradown4', label: 'تجارة أقل من 4 طن' },
-  { value: 'tjeraup4', label: 'تجارة أكثر من 4 طن' },
-];
 
 export function CarDrawer({ open, onOpenChange, clientId, car, onSaved }: CarDrawerProps) {
   const [saving, setSaving] = useState(false);
