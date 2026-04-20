@@ -18,7 +18,7 @@ interface ExpiringPolicy {
   client: { full_name: string } | null;
   car: { car_number: string } | null;
   company: { name: string; name_ar: string | null } | null;
-  renewal_tracking: { renewal_status: string | null }[] | null;
+  renewal_tracking: { renewal_status: string | null }[] | { renewal_status: string | null } | null;
 }
 
 const renewalStatusLabels: Record<string, { label: string; color: string }> = {
@@ -64,12 +64,13 @@ export function ExpiringPolicies() {
       if (error) throw error;
 
       // Filter out renewed policies - they shouldn't appear in expiring list
-      const filteredPolicies = (data || []).filter(policy => {
-        const renewalStatus = policy.renewal_tracking?.[0]?.renewal_status;
+      const filteredPolicies = (data || []).filter((policy: any) => {
+        const rt = policy.renewal_tracking;
+        const renewalStatus = Array.isArray(rt) ? rt[0]?.renewal_status : rt?.renewal_status;
         return renewalStatus !== 'renewed';
       });
 
-      setPolicies(filteredPolicies);
+      setPolicies(filteredPolicies as any);
     } catch (error) {
       console.error("Error fetching expiring policies:", error);
     } finally {
@@ -115,7 +116,8 @@ export function ExpiringPolicies() {
           </div>
         ) : (
           policies.map((policy) => {
-            const renewalStatus = policy.renewal_tracking?.[0]?.renewal_status;
+            const rt: any = policy.renewal_tracking;
+            const renewalStatus = Array.isArray(rt) ? rt[0]?.renewal_status : rt?.renewal_status;
             const statusInfo = renewalStatus ? renewalStatusLabels[renewalStatus] : null;
             
             return (
