@@ -242,14 +242,18 @@ serve(async (req) => {
     if (carsError) throw new Error(`cars query: ${carsError.message}`);
 
     // Fetch policies (including office_commission + notes + broker link so
-    // we can surface "من الوسيط / إلى الوسيط" on the items table)
+    // we can surface "من الوسيط / إلى الوسيط" on the items table). We also
+    // pull document_number (for the # رقم المعاملة chip), created_at (the
+    // "جديدة" <24h badge), and both transferred_* car numbers so the
+    // print can show "محول من X" / "محول إلى X" tags like the in-app card.
     currentStep = "fetch policies";
     const { data: policies, error: policiesError } = await supabase
       .from("policies")
       .select(`
-        id, policy_number, policy_type_parent, policy_type_child, start_date, end_date,
-        insurance_price, office_commission, cancelled, transferred, group_id, notes,
+        id, policy_number, document_number, policy_type_parent, policy_type_child, start_date, end_date,
+        insurance_price, office_commission, cancelled, transferred, group_id, notes, created_at,
         broker_id, broker_direction, transferred_from_policy_id,
+        transferred_car_number, transferred_to_car_number,
         company:insurance_companies(name, name_ar),
         car:cars(id, car_number),
         broker:brokers(id, name)
@@ -270,11 +274,21 @@ serve(async (req) => {
     const transferredNewPolicyIds = (policies || [])
       .filter((p: any) => p.transferred_from_policy_id)
       .map((p: any) => p.id);
-    const transferAdjustmentByNewPolicyId: Record<string, { amount: number; adjustmentNote: string | null }> = {};
+    const transferAdjustmentByNewPolicyId: Record<string, {
+      amount: number;
+      customerNote: string | null;
+      officeNote: string | null;
+      adjustmentNote: string | null;
+    }> = {};
     if (transferredNewPolicyIds.length > 0) {
+      // Pull note + office_note in addition to adjustment_note so the
+      // printed report surfaces the same three transfer notes the in-app
+      // PackageBreakdown shows. Without note/office_note, the PDF
+      // silently dropped the customer-facing transfer reason and the
+      // office's internal note.
       const { data: transferRows } = await supabase
         .from("policy_transfers")
-        .select("new_policy_id, adjustment_amount, adjustment_type, adjustment_note")
+        .select("new_policy_id, adjustment_amount, adjustment_type, note, office_note, adjustment_note")
         .in("new_policy_id", transferredNewPolicyIds);
       (transferRows || []).forEach((row: any) => {
         if (
@@ -284,6 +298,12 @@ serve(async (req) => {
         ) {
           transferAdjustmentByNewPolicyId[row.new_policy_id] = {
             amount: Number(row.adjustment_amount),
+            customerNote: typeof row.note === 'string' && row.note.trim()
+              ? row.note.trim()
+              : null,
+            officeNote: typeof row.office_note === 'string' && row.office_note.trim()
+              ? row.office_note.trim()
+              : null,
             adjustmentNote: typeof row.adjustment_note === 'string' && row.adjustment_note.trim()
               ? row.adjustment_note.trim()
               : null,
@@ -391,8 +411,17 @@ serve(async (req) => {
     );
     const activePolicyIdSet = new Set(activePolicies.map((p: any) => p.id));
     let totalInsurance = 0;
+    // Split office_commission across active rows the same way the card's
+    // PackageBreakdown does: the transfer-fee portion is carved out into
+    // its own bucket so the totals block can surface two "منها" lines.
+    let totalOfficeCommission = 0;
+    let totalTransferCommission = 0;
     for (const p of activePolicies) {
-      totalInsurance += (p.insurance_price || 0) + ((p as any).office_commission || 0);
+      const baseCommission = (p as any).office_commission || 0;
+      totalInsurance += (p.insurance_price || 0) + baseCommission;
+      const transferPortion = transferAdjustmentByNewPolicyId[p.id]?.amount || 0;
+      totalTransferCommission += transferPortion;
+      totalOfficeCommission += Math.max(0, baseCommission - transferPortion);
     }
     const totalPaid = allPayments
       .filter((p: any) => activePolicyIdSet.has(p.policy_id))
@@ -431,6 +460,8 @@ serve(async (req) => {
       accidents,
       refunds,
       totalInsurance,
+      totalOfficeCommission,
+      totalTransferCommission,
       totalPaid,
       grossRemaining,
       netRemaining,
@@ -550,6 +581,8 @@ interface GenerateReportArgs {
   accidents: any[];
   refunds: any[];
   totalInsurance: number;
+  totalOfficeCommission: number;
+  totalTransferCommission: number;
   totalPaid: number;
   grossRemaining: number;
   netRemaining: number;
@@ -562,7 +595,12 @@ interface GenerateReportArgs {
     company_whatsapp: string;
     company_location: string;
   };
-  transferAdjustmentByNewPolicyId: Record<string, { amount: number; adjustmentNote: string | null }>;
+  transferAdjustmentByNewPolicyId: Record<string, {
+    amount: number;
+    customerNote: string | null;
+    officeNote: string | null;
+    adjustmentNote: string | null;
+  }>;
 }
 
 function generateReportHtml(args: GenerateReportArgs): string {
@@ -576,6 +614,8 @@ function generateReportHtml(args: GenerateReportArgs): string {
     accidents,
     refunds,
     totalInsurance,
+    totalOfficeCommission,
+    totalTransferCommission,
     totalPaid,
     grossRemaining,
     netRemaining,
@@ -722,18 +762,31 @@ function generateReportHtml(args: GenerateReportArgs): string {
 
   // Shared renderer for the standalone "عمولة التحويل" row. Used after
   // single policies AND after package blocks so each transfer shows its
-  // fee (and financial-adjustment note) right under the relevant rows.
-  const renderTransferFeeRow = (amount: number, adjustmentNote: string | null, indexLabel: string): string => {
+  // fee (and all three transfer notes) right under the relevant rows.
+  // Notes mirror the in-app PackageBreakdown: ملاحظة التحويل (customer-
+  // facing), ملاحظات المكتب (internal), ملاحظة التعديل المالي.
+  const renderTransferFeeRow = (
+    amount: number,
+    notes: { customer?: string[]; office?: string[]; adjustment?: string[] },
+    indexLabel: string,
+  ): string => {
     if (amount <= 0) return '';
-    const noteLine = adjustmentNote
-      ? `<div class="item-transfer-note">ملاحظة التعديل المالي: ${escapeHtml(adjustmentNote)}</div>`
-      : '';
+    const noteLines: string[] = [];
+    (notes.customer || []).forEach((n) => {
+      if (n) noteLines.push(`<div class="item-transfer-note"><b>ملاحظة التحويل:</b> ${escapeHtml(n)}</div>`);
+    });
+    (notes.office || []).forEach((n) => {
+      if (n) noteLines.push(`<div class="item-transfer-note"><b>ملاحظات المكتب:</b> ${escapeHtml(n)}</div>`);
+    });
+    (notes.adjustment || []).forEach((n) => {
+      if (n) noteLines.push(`<div class="item-transfer-note"><b>ملاحظة التعديل المالي:</b> ${escapeHtml(n)}</div>`);
+    });
     return `
       <tr class="transfer-fee-row">
         <td class="num">${indexLabel}</td>
         <td>
           <div class="item-title">عمولة التحويل</div>
-          ${noteLine}
+          ${noteLines.join('')}
         </td>
         <td class="period">—</td>
         <td class="num">₪${amount.toLocaleString('en-US')}</td>
@@ -769,7 +822,17 @@ function generateReportHtml(args: GenerateReportArgs): string {
       : '';
     const cancelledTag = p.cancelled ? `<span class="cancelled-tag">ملغاة</span>` : '';
     const transferredTag = p.transferred && !p.cancelled
-      ? `<span class="cancelled-tag">محولة</span>`
+      ? `<span class="cancelled-tag">محولة${p.transferred_to_car_number ? ` ← ${escapeHtml(String(p.transferred_to_car_number))}` : ''}</span>`
+      : '';
+    const transferredFromTag = p.transferred_car_number && !p.transferred
+      ? `<span class="cancelled-tag">محول من ${escapeHtml(String(p.transferred_car_number))}</span>`
+      : '';
+    const isNew = p.created_at
+      ? (Date.now() - new Date(p.created_at).getTime()) < 24 * 60 * 60 * 1000
+      : false;
+    const newTag = isNew ? `<span class="cancelled-tag">جديدة</span>` : '';
+    const docNumberChip = p.document_number
+      ? `<span class="doc-number-chip">#${escapeHtml(String(p.document_number))}</span>`
       : '';
     const notesLine = p.notes
       ? `<div class="item-meta">${escapeHtml(p.notes)}</div>`
@@ -786,7 +849,7 @@ function generateReportHtml(args: GenerateReportArgs): string {
       <tr class="${rowClass}">
         <td class="num">${index}</td>
         <td>
-          <div class="item-title">${typeLabel} ${cancelledTag} ${transferredTag}</div>
+          <div class="item-title">${docNumberChip} ${typeLabel} ${cancelledTag} ${transferredTag} ${transferredFromTag} ${newTag}</div>
           <div class="item-meta">${companyName}</div>
           ${carLine}
           ${commissionLine}
@@ -817,11 +880,33 @@ function generateReportHtml(args: GenerateReportArgs): string {
       .map(m => getPolicyTypeLabel(m.policy_type_parent, m.policy_type_child))
       .join(' + ');
 
+    // Primary document number for the package header — THIRD_FULL wins,
+    // then ELZAMI, then smallest doc by numeric order (mirrors
+    // pickPackageDocumentNumber in src/lib). The card chip and the
+    // payments log already share this choice in the app; the PDF should
+    // land on the same number so all three surfaces agree.
+    const MAIN_RANK: Record<string, number> = { THIRD_FULL: 0, ELZAMI: 1 };
+    const stamped = members
+      .filter(m => typeof m.document_number === 'string' && m.document_number.trim())
+      .map(m => ({
+        doc: String(m.document_number).trim(),
+        rank: MAIN_RANK[m.policy_type_parent as string] ?? 99,
+      }))
+      .sort((a, b) => {
+        if (a.rank !== b.rank) return a.rank - b.rank;
+        return a.doc.localeCompare(b.doc, 'en', { numeric: true });
+      });
+    const packageDocNumber = stamped[0]?.doc || null;
+    const docNumberChip = packageDocNumber
+      ? `<span class="doc-number-chip">#${escapeHtml(packageDocNumber)}</span>`
+      : '';
+
     const headerRow = `
       <tr class="package-header ${allCancelled ? 'cancelled-row' : ''}">
         <td class="num">${index}</td>
         <td colspan="2">
           <div class="package-title">
+            ${docNumberChip}
             <span class="package-badge">باقة</span>
             <span class="package-types">${escapeHtml(combinedTypeLabel)}</span>
             ${carNumber && carNumber !== '-' ? `<span class="package-car">السيارة: <span class="tabular">${escapeHtml(carNumber)}</span></span>` : ''}
@@ -835,6 +920,16 @@ function generateReportHtml(args: GenerateReportArgs): string {
       .map((m, j) => renderPolicyRow(m, `${index}.${j + 1}`, 'component'))
       .join('');
 
+    const distinctCustomerNotes = Array.from(new Set(
+      members
+        .map(m => transferAdjustmentByNewPolicyId[m.id]?.customerNote)
+        .filter((n): n is string => !!n)
+    ));
+    const distinctOfficeNotes = Array.from(new Set(
+      members
+        .map(m => transferAdjustmentByNewPolicyId[m.id]?.officeNote)
+        .filter((n): n is string => !!n)
+    ));
     const distinctAdjustmentNotes = Array.from(new Set(
       members
         .map(m => transferAdjustmentByNewPolicyId[m.id]?.adjustmentNote)
@@ -842,7 +937,11 @@ function generateReportHtml(args: GenerateReportArgs): string {
     ));
     const transferFeeRow = renderTransferFeeRow(
       packageTransferFee,
-      distinctAdjustmentNotes.length > 0 ? distinctAdjustmentNotes.join(' • ') : null,
+      {
+        customer: distinctCustomerNotes,
+        office: distinctOfficeNotes,
+        adjustment: distinctAdjustmentNotes,
+      },
       `${index}.${members.length + 1}`,
     );
 
@@ -855,7 +954,15 @@ function generateReportHtml(args: GenerateReportArgs): string {
           const policyRow = renderPolicyRow(item.policy, String(i + 1), 'single');
           const adj = transferAdjustmentByNewPolicyId[item.policy.id];
           const transferFeeRow = adj
-            ? renderTransferFeeRow(adj.amount, adj.adjustmentNote, `${i + 1}.1`)
+            ? renderTransferFeeRow(
+                adj.amount,
+                {
+                  customer: adj.customerNote ? [adj.customerNote] : [],
+                  office: adj.officeNote ? [adj.officeNote] : [],
+                  adjustment: adj.adjustmentNote ? [adj.adjustmentNote] : [],
+                },
+                `${i + 1}.1`,
+              )
             : '';
           return policyRow + transferFeeRow;
         }
@@ -1429,6 +1536,15 @@ function generateReportHtml(args: GenerateReportArgs): string {
       color: #1a1a1a;
       font-variant-numeric: tabular-nums;
     }
+    .totals-breakdown {
+      font-size: 10px;
+      font-weight: 600;
+      color: #78350f;
+      margin-top: 2px;
+      line-height: 1.5;
+      direction: ltr;
+      text-align: left;
+    }
     .totals tr.total td {
       font-weight: 800;
       background: #1a1a1a;
@@ -1442,7 +1558,8 @@ function generateReportHtml(args: GenerateReportArgs): string {
 
     /* ── Cancelled row ── */
     .cancelled-row td { color: #9ca3af; text-decoration: line-through; }
-    .cancelled-row td .cancelled-tag { text-decoration: none; }
+    .cancelled-row td .cancelled-tag,
+    .cancelled-row td .doc-number-chip { text-decoration: none; }
     .cancelled-tag {
       display: inline-block;
       background: #fee2e2;
@@ -1455,6 +1572,35 @@ function generateReportHtml(args: GenerateReportArgs): string {
       letter-spacing: 0.3px;
       vertical-align: middle;
     }
+    /* رقم المعاملة chip — inline, monospace, sits alongside the type
+       label in the item-title. Matches the CardLevelPolicyNumberChip in
+       the in-app PolicyYearTimeline. */
+    .doc-number-chip {
+      display: inline-block;
+      background: #eef2ff;
+      color: #1e3a8a;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      margin-left: 6px;
+      border: 1px solid #c7d2fe;
+      letter-spacing: 0.2px;
+      font-variant-numeric: tabular-nums;
+      direction: ltr;
+      vertical-align: middle;
+    }
+    /* Transfer-fee row + notes underneath — tinted so the fee and its
+       notes read as a cluster distinct from the insurance rows. */
+    .transfer-fee-row td { background: #f0f9ff; }
+    .transfer-fee-row .item-title { color: #075985; }
+    .item-transfer-note {
+      color: #1a1a1a;
+      font-size: 11px;
+      margin-top: 3px;
+      font-weight: 500;
+      line-height: 1.55;
+    }
+    .item-transfer-note b { font-weight: 700; }
 
     /* ── Files ── */
     .files-section { margin-bottom: 22px; }
@@ -1727,7 +1873,15 @@ function generateReportHtml(args: GenerateReportArgs): string {
       <table class="totals">
         <tr>
           <td class="label">إجمالي التأمينات</td>
-          <td class="val">₪${totalInsurance.toLocaleString('en-US')}</td>
+          <td class="val">
+            ₪${totalInsurance.toLocaleString('en-US')}
+            ${(totalOfficeCommission > 0 || totalTransferCommission > 0) ? `
+              <div class="totals-breakdown">
+                ${totalOfficeCommission > 0 ? `<div>منها ₪${totalOfficeCommission.toLocaleString('en-US')} عمولة مكتب</div>` : ''}
+                ${totalTransferCommission > 0 ? `<div>منها ₪${totalTransferCommission.toLocaleString('en-US')} عمولة تحويل</div>` : ''}
+              </div>
+            ` : ''}
+          </td>
         </tr>
         <tr>
           <td class="label">المدفوع</td>

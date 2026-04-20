@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
 import { getBankName } from '@/lib/banks';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
+import { pickPackageDocumentNumber } from '@/lib/packageDocumentNumber';
 
 // ---------- Types ----------
 
@@ -99,6 +100,18 @@ interface RefundRow {
   car: { car_number: string } | null;
 }
 
+// Customer-pays transfer fee + the three transfer notes that ride along.
+// Keyed by new_policy_id (the post-transfer policy that received the fee)
+// so we can strip the fee out of that row's office_commission and render
+// it on its own 'عمولة التحويل' line — same split the in-app
+// PackageBreakdown uses.
+interface TransferAdjustment {
+  amount: number;
+  customerNote: string | null;
+  officeNote: string | null;
+  adjustmentNote: string | null;
+}
+
 interface ClientReportModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -135,6 +148,7 @@ interface ClientReportModalProps {
   policies: Array<{
     id: string;
     policy_number: string | null;
+    document_number?: string | null;
     policy_type_parent: string;
     policy_type_child: string | null;
     start_date: string;
@@ -152,6 +166,7 @@ interface ClientReportModalProps {
     broker?: { id: string; name: string } | null;
     transferred_car_number?: string | null;
     transferred_to_car_number?: string | null;
+    transferred_from_policy_id?: string | null;
     company: { name: string; name_ar: string | null } | null;
     car: { id: string; car_number: string } | null;
   }>;
@@ -427,6 +442,7 @@ export function ClientReportModal({
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [accidents, setAccidents] = useState<AccidentRow[]>([]);
   const [refunds, setRefunds] = useState<RefundRow[]>([]);
+  const [transferAdjustments, setTransferAdjustments] = useState<Record<string, TransferAdjustment>>({});
   const [loadingDetails, setLoadingDetails] = useState(false);
 
   // File gallery
@@ -449,8 +465,17 @@ export function ClientReportModal({
     setLoadingDetails(true);
     try {
       const policyIds = policies.map(p => p.id);
+      // Transfer-fee policies: pull the customer-pays rows from
+      // policy_transfers so each new_policy_id that carries a transfer
+      // fee can split its commission into (office) + (transfer) — same
+      // join PackageBreakdown does in-app. Without this the report
+      // rendered the transfer fee as part of "عمولة مكتب" and hid the
+      // transfer notes entirely.
+      const transferredIds = policies
+        .filter(p => p.transferred_from_policy_id)
+        .map(p => p.id);
 
-      const [filesRes, driversRes, paymentsRes, accidentsRes, refundsRes] = await Promise.all([
+      const [filesRes, driversRes, paymentsRes, accidentsRes, refundsRes, transfersRes] = await Promise.all([
         policyIds.length
           ? supabase
               .from('media_files')
@@ -493,6 +518,12 @@ export function ClientReportModal({
           .eq('client_id', client.id)
           .in('transaction_type', ['refund', 'transfer_refund_owed', 'manual_refund'])
           .order('refund_date', { ascending: false, nullsFirst: false }),
+        transferredIds.length
+          ? supabase
+              .from('policy_transfers')
+              .select('new_policy_id, adjustment_amount, adjustment_type, note, office_note, adjustment_note')
+              .in('new_policy_id', transferredIds)
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       // Files per policy
@@ -528,6 +559,23 @@ export function ClientReportModal({
       setPayments((paymentsRes.data || []) as PaymentRow[]);
       setAccidents((accidentsRes.data || []) as unknown as AccidentRow[]);
       setRefunds((refundsRes.data || []) as unknown as RefundRow[]);
+
+      const transfersMap: Record<string, TransferAdjustment> = {};
+      (transfersRes.data || []).forEach((row: any) => {
+        if (
+          row?.new_policy_id &&
+          row?.adjustment_type === 'customer_pays' &&
+          Number(row?.adjustment_amount) > 0
+        ) {
+          transfersMap[row.new_policy_id] = {
+            amount: Number(row.adjustment_amount),
+            customerNote: typeof row.note === 'string' && row.note.trim() ? row.note.trim() : null,
+            officeNote: typeof row.office_note === 'string' && row.office_note.trim() ? row.office_note.trim() : null,
+            adjustmentNote: typeof row.adjustment_note === 'string' && row.adjustment_note.trim() ? row.adjustment_note.trim() : null,
+          };
+        }
+      });
+      setTransferAdjustments(transfersMap);
     } catch (error) {
       console.error('Error loading report details:', error);
       toast.error('فشل في تحميل بيانات التقرير');
@@ -816,7 +864,12 @@ export function ClientReportModal({
   ) => {
     const typeLabel = getTypeDisplayLabel(policy);
     const typeColor = policyTypeColors[policy.policy_type_parent] || policyTypeColors.OTHER;
-    const commission = policy.office_commission || 0;
+    const totalCommission = policy.office_commission || 0;
+    // Strip the customer-pays transfer fee out of this row's commission
+    // so it doesn't double-count with the standalone 'عمولة التحويل' row
+    // rendered below the component rows (matches PackageBreakdown).
+    const transferPortion = transferAdjustments[policy.id]?.amount || 0;
+    const commission = Math.max(0, totalCommission - transferPortion);
     const providerName = policy.company?.name_ar || policy.company?.name || '-';
     const files = policyFiles[policy.id] || [];
 
@@ -889,7 +942,7 @@ export function ClientReportModal({
           </span>
           {commission > 0 && (
             <span className="text-[9px] text-amber-700 font-semibold ltr-nums">
-              + ₪{commission.toLocaleString('en-US')} عمولة
+              + ₪{commission.toLocaleString('en-US')} عمولة مكتب
             </span>
           )}
         </div>
@@ -921,11 +974,38 @@ export function ClientReportModal({
     const totalPaid = allPolicies.reduce((s, p) => s + (paidByPolicy[p.id] || 0), 0);
     const totalRemaining = Math.max(0, totalPrice - totalPaid);
     const hasUnpaid = totalRemaining > 0;
+    // "مدفوع" badge only for active cards where the customer has
+    // actually paid something AND nothing is left. Matches the card
+    // in PolicyYearTimeline which gates paidBadge the same way.
+    const isFullyPaid = isActive && totalPaid > 0 && totalRemaining === 0;
 
-    const totalCommission = allPolicies.reduce(
-      (s, p) => s + (p.office_commission || 0),
+    // Split office_commission into (real office) vs (transfer fee) so the
+    // totals footer shows two separate "منها" lines — same split as
+    // PackageBreakdown.tsx and the card tfoot.
+    const totalOfficeCommission = allPolicies.reduce(
+      (s, p) => s + Math.max(0, (p.office_commission || 0) - (transferAdjustments[p.id]?.amount || 0)),
       0
     );
+    const totalTransferCommission = allPolicies.reduce(
+      (s, p) => s + (transferAdjustments[p.id]?.amount || 0),
+      0
+    );
+
+    // Customer-facing + office transfer notes come from policy_transfers
+    // and ride under the transfer-fee row (matches PackageBreakdown).
+    const affectedTransferAdjustments = allPolicies
+      .map((p) => transferAdjustments[p.id])
+      .filter((a): a is TransferAdjustment => !!a && a.amount > 0);
+    const dedupe = (vals: (string | null)[]) =>
+      Array.from(new Set(vals.filter((v): v is string => !!v)));
+    const transferCustomerNotes = dedupe(affectedTransferAdjustments.map((a) => a.customerNote));
+    const transferOfficeNotes = dedupe(affectedTransferAdjustments.map((a) => a.officeNote));
+    const hasAnyTransferNote = transferCustomerNotes.length + transferOfficeNotes.length > 0;
+
+    // رقم المعاملة chip — same pick the in-app card uses (THIRD_FULL >
+    // ELZAMI > addons) so the report surfaces the identical document
+    // number the staff and customer see everywhere else.
+    const cardDocNumber = pickPackageDocumentNumber(allPolicies);
 
     // Broker chip — if any policy in the card is tied to a broker, surface
     // a single "من/إلى الوسيط: <name>" chip on the header row.
@@ -961,10 +1041,29 @@ export function ClientReportModal({
         <div className="p-4">
           {/* Top row: status + type chips + package/new/broker badges */}
           <div className="flex items-center gap-2 flex-wrap mb-3">
+            {cardDocNumber && (
+              <Badge
+                variant="outline"
+                className="gap-1 text-xs bg-primary/5 border-primary/20 text-primary font-mono ltr-nums"
+                title="رقم المعاملة"
+              >
+                # {cardDocNumber}
+              </Badge>
+            )}
             {isActive && (
               <Badge variant="success" className="gap-1 font-bold">
                 <CheckCircle className="h-3.5 w-3.5" />
                 سارية
+              </Badge>
+            )}
+            {isFullyPaid && (
+              <Badge
+                variant="outline"
+                className="gap-1 text-xs bg-green-500/10 border-green-500/30 text-green-700"
+                title="مدفوع بالكامل"
+              >
+                <CheckCircle className="h-3 w-3" />
+                مدفوع
               </Badge>
             )}
             {status === 'ended' && (
@@ -1143,9 +1242,14 @@ export function ClientReportModal({
                 >
                   ₪{totalPrice.toLocaleString('en-US')}
                 </span>
-                {totalCommission > 0 && (
+                {totalOfficeCommission > 0 && (
                   <span className="text-[9px] text-amber-700 font-semibold ltr-nums mt-0.5">
-                    منها ₪{totalCommission.toLocaleString('en-US')} عمولة مكتب
+                    منها ₪{totalOfficeCommission.toLocaleString('en-US')} عمولة مكتب
+                  </span>
+                )}
+                {totalTransferCommission > 0 && (
+                  <span className="text-[9px] text-sky-700 font-semibold ltr-nums">
+                    منها ₪{totalTransferCommission.toLocaleString('en-US')} عمولة تحويل
                   </span>
                 )}
               </div>
@@ -1168,6 +1272,52 @@ export function ClientReportModal({
                 </div>
                 {renderComponentRow(mainPolicy, 1, isActive)}
                 {addons.map((addon, i) => renderComponentRow(addon, i + 2, isActive))}
+                {/* Standalone 'عمولة التحويل' row (aggregated across the
+                    package — the fee is a transfer-level charge, not tied
+                    to a specific بوليصة) + transfer notes underneath,
+                    mirroring PackageBreakdown. */}
+                {totalTransferCommission > 0 && (
+                  <div
+                    className={cn(
+                      'grid grid-cols-[2rem_1fr_auto_auto] items-center gap-3 px-3 py-2 text-xs border-b border-border/60 last:border-b-0 bg-sky-50/40',
+                      !isActive && 'opacity-70'
+                    )}
+                  >
+                    <span className="text-[10px] font-bold text-muted-foreground ltr-nums text-center">-</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge className="text-[10px] px-1.5 py-0 h-5 font-medium border shrink-0 bg-sky-100 text-sky-800 border-sky-200">
+                        عمولة التحويل
+                      </Badge>
+                    </div>
+                    <span className="ltr-nums text-[11px] shrink-0 text-muted-foreground" />
+                    <div className="flex flex-col items-end min-w-[70px]">
+                      <span className="font-semibold text-sky-800 ltr-nums">
+                        ₪{totalTransferCommission.toLocaleString('en-US')}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {hasAnyTransferNote && (
+                  <div
+                    className={cn(
+                      'px-3 pb-2 pt-1.5 text-[11px] text-muted-foreground space-y-0.5 bg-sky-50/20 border-b border-border/60 last:border-b-0',
+                      !isActive && 'opacity-70'
+                    )}
+                  >
+                    {transferCustomerNotes.map((n, i) => (
+                      <div key={`c-${i}`} className="flex gap-1.5">
+                        <span className="font-semibold text-foreground/80 shrink-0">ملاحظة التحويل:</span>
+                        <span className="whitespace-pre-wrap break-words">{n}</span>
+                      </div>
+                    ))}
+                    {transferOfficeNotes.map((n, i) => (
+                      <div key={`o-${i}`} className="flex gap-1.5">
+                        <span className="font-semibold text-foreground/80 shrink-0">ملاحظات المكتب:</span>
+                        <span className="whitespace-pre-wrap break-words">{n}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-start justify-end gap-6 px-3 py-2 border-t border-border/60 bg-muted/30 text-right">
                   <div className="flex flex-col text-xs items-end text-left">
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
