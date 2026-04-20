@@ -817,18 +817,33 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     
     setDeletingCar(true);
     try {
+      // policy_groups.car_id has a FK to cars(id) with the default
+      // ON DELETE RESTRICT. After a policy/package is deleted the group
+      // row can linger (delete-policy removes policies + policy_transfers
+      // but not policy_groups), so a car with no *active* policies may
+      // still be referenced by an orphan group and the raw DELETE is
+      // rejected by Postgres. We release those back-pointers first so
+      // the car can be removed; the group rows survive without a car
+      // linkage, which is fine since they'll either be garbage-collected
+      // later or reused if a new transfer targets the same bundle.
+      const { error: groupUnlinkError } = await supabase
+        .from('policy_groups')
+        .update({ car_id: null })
+        .eq('car_id', deleteCarId);
+      if (groupUnlinkError) throw groupUnlinkError;
+
       const { error } = await supabase
         .from('cars')
         .delete()
         .eq('id', deleteCarId);
-      
+
       if (error) throw error;
       toast.success('تم حذف السيارة بنجاح');
       fetchCars();
       fetchCarPolicyCounts();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting car:', error);
-      toast.error('فشل حذف السيارة');
+      toast.error('فشل حذف السيارة', { description: error?.message });
     } finally {
       setDeletingCar(false);
       setDeleteCarDialogOpen(false);
