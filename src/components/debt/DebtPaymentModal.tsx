@@ -47,6 +47,10 @@ interface DebtItem {
   includesElzami: boolean;
   // For payment distribution - policies that can receive payments (non-ELZAMI with remaining > 0)
   payablePolicies: PolicyComponent[];
+  // Aggregate transfer fee across the package. Already included in
+  // fullPrice via office_commission — surfaced separately so the
+  // breakdown can call it out.
+  transferFee: number;
 }
 
 interface PaymentLine {
@@ -332,7 +336,7 @@ export function DebtPaymentModal({
     try {
       const { data: policiesData, error: policiesError } = await supabase
         .from('policies')
-        .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, branch_id, group_id, broker_id, broker:brokers(id, name), car:cars(car_number)')
+        .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, branch_id, group_id, broker_id, transferred_from_policy_id, broker:brokers(id, name), car:cars(car_number)')
         .eq('client_id', clientId)
         .eq('cancelled', false)
         .eq('transferred', false)
@@ -354,6 +358,30 @@ export function DebtPaymentModal({
         (paymentsData || []).forEach(p => {
           if (!p.refused) {
             paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + p.amount;
+          }
+        });
+      }
+
+      // Transfer adjustments — customer_pays fee amounts live on
+      // policy_transfers but are already folded into the target
+      // policy's office_commission. Pulling them out lets us surface
+      // the fee in the debt breakdown without double-counting.
+      const transferredNewPolicyIds = (policiesData || [])
+        .filter((p: any) => p.transferred_from_policy_id)
+        .map((p: any) => p.id);
+      const transferAmountByPolicy: Record<string, number> = {};
+      if (transferredNewPolicyIds.length > 0) {
+        const { data: transferRows } = await supabase
+          .from('policy_transfers')
+          .select('new_policy_id, adjustment_amount, adjustment_type')
+          .in('new_policy_id', transferredNewPolicyIds);
+        (transferRows || []).forEach((row: any) => {
+          if (
+            row?.new_policy_id &&
+            row?.adjustment_type === 'customer_pays' &&
+            Number(row?.adjustment_amount) > 0
+          ) {
+            transferAmountByPolicy[row.new_policy_id] = Number(row.adjustment_amount);
           }
         });
       }
@@ -451,6 +479,10 @@ export function DebtPaymentModal({
         // Using payablePolicies.length > 0 instead of remainingTotal > 0 ensures
         // packages where only ELZAMI is unpaid don't appear as client debt
         if (payablePolicies.length > 0) {
+          const transferFee = nonBrokerPolicies.reduce(
+            (s: number, p: any) => s + (transferAmountByPolicy[p.id] || 0),
+            0,
+          );
           items.push({
             itemKey,
             isPackage,
@@ -461,6 +493,7 @@ export function DebtPaymentModal({
             carNumber: (nonBrokerPolicies[0]?.car as any)?.car_number || null,
             includesElzami: nonBrokerPolicies.some(p => p.policy_type_parent === 'ELZAMI'),
             payablePolicies,
+            transferFee,
           });
         }
       });
@@ -1054,13 +1087,25 @@ export function DebtPaymentModal({
                           )}
                           {/* Show package components */}
                           {item.isPackage && (
-                            <div className="flex flex-wrap gap-1 mt-0.5">
+                            <div className="flex flex-wrap gap-1 mt-0.5 items-center">
                               {item.policies.map((comp, idx) => (
                                 <span key={idx} className="text-[11px] sm:text-xs text-muted-foreground">
                                   {getPolicyTypeLabel(comp.policyType, comp.policyTypeChild)}
                                   {idx < item.policies.length - 1 ? ' + ' : ''}
                                 </span>
                               ))}
+                              {item.transferFee > 0 && (
+                                <Badge className="text-[10px] px-1.5 py-0 h-4 bg-sky-100 text-sky-800 hover:bg-sky-100 border-sky-200">
+                                  + عمولة تحويل ₪{item.transferFee.toLocaleString('en-US')}
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                          {!item.isPackage && item.transferFee > 0 && (
+                            <div className="mt-0.5">
+                              <Badge className="text-[10px] px-1.5 py-0 h-4 bg-sky-100 text-sky-800 hover:bg-sky-100 border-sky-200">
+                                + عمولة تحويل ₪{item.transferFee.toLocaleString('en-US')}
+                              </Badge>
                             </div>
                           )}
                         </div>

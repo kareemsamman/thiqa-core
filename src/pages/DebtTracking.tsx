@@ -54,6 +54,10 @@ interface PolicyDebt {
   policy_type_child: string | null;
   car_number: string | null;
   group_id: string | null;
+  /** Customer-pays transfer fee folded into office_commission for this
+   *  policy. Surfaced separately so the row can show a "+ عمولة تحويل"
+   *  badge without double-counting — it's already inside the totals. */
+  transfer_fee: number;
 }
 
 // Aggregated row for the debt table. One per package (group_id) or one per
@@ -66,6 +70,7 @@ interface DebtRow {
   typeLabel: string;
   hasCommission: boolean;
   commissionTotal: number;
+  transferFee: number;
   price: number;
   paid: number;
   remaining: number;
@@ -146,6 +151,7 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
             (commission > 0 ? ' + عمولة مكتب' : ''),
         hasCommission: commission > 0,
         commissionTotal: commission,
+        transferFee: p.transfer_fee || 0,
         price,
         paid: Math.min(effectivePaid, price),
         remaining,
@@ -202,12 +208,17 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
       }
     }
 
+    const packageTransferFee = items.reduce(
+      (sum, p) => sum + (p.transfer_fee || 0),
+      0,
+    );
     rows.push({
       key,
       isPackage: true,
       typeLabel: combined || 'باقة',
       hasCommission,
       commissionTotal: elzamiCommission,
+      transferFee: packageTransferFee,
       price: packagePrice,
       paid: packagePaid,
       remaining: packageRemaining,
@@ -340,6 +351,31 @@ export default function DebtTracking() {
         expired: 0,
       });
 
+      // Customer-pays transfer-fee lookup for every policy in the
+      // debt view — the RPC doesn't expose it, so we enrich after the
+      // fact. This is additive-only for display (adds a "+ عمولة
+      // تحويل" badge) — the fee is already inside office_commission
+      // so paid/remaining math is unchanged.
+      const debtPolicyIds = ((policiesRes.data as any[]) || [])
+        .map((r: any) => r.policy_id)
+        .filter(Boolean);
+      const transferFeeByPolicy: Record<string, number> = {};
+      if (debtPolicyIds.length > 0) {
+        const { data: transferRows } = await supabase
+          .from("policy_transfers")
+          .select("new_policy_id, adjustment_amount, adjustment_type")
+          .in("new_policy_id", debtPolicyIds);
+        (transferRows || []).forEach((row: any) => {
+          if (
+            row?.new_policy_id &&
+            row?.adjustment_type === 'customer_pays' &&
+            Number(row?.adjustment_amount) > 0
+          ) {
+            transferFeeByPolicy[row.new_policy_id] = Number(row.adjustment_amount);
+          }
+        });
+      }
+
       const policiesByClient = new Map<string, PolicyDebt[]>();
       for (const row of (policiesRes.data as any[]) || []) {
         const policy: PolicyDebt = {
@@ -358,6 +394,7 @@ export default function DebtTracking() {
           policy_type_child: row.policy_type_child,
           car_number: row.car_number,
           group_id: row.group_id,
+          transfer_fee: transferFeeByPolicy[row.policy_id] || 0,
         };
         const list = policiesByClient.get(row.client_id) || [];
         list.push(policy);
@@ -806,6 +843,11 @@ ${policyDetails}
                                       {row.hasCommission && row.commissionTotal > 0 && (
                                         <Badge className="text-[10px] bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-100">
                                           + {formatCurrency(row.commissionTotal)} عمولة
+                                        </Badge>
+                                      )}
+                                      {row.transferFee > 0 && (
+                                        <Badge className="text-[10px] bg-sky-100 text-sky-800 border-sky-200 hover:bg-sky-100">
+                                          + {formatCurrency(row.transferFee)} عمولة تحويل
                                         </Badge>
                                       )}
                                     </div>

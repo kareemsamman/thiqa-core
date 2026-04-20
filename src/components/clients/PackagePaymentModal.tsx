@@ -52,6 +52,10 @@ interface PolicyPaymentInfo {
   price: number;
   paid: number;
   remaining: number;
+  /** Synthetic line for the aggregated "عمولة التحويل" row. The real
+   *  policies.office_commission has this amount subtracted out, and it
+   *  shows up as a separate entry in the breakdown. */
+  isTransferFee?: boolean;
 }
 
 interface PackagePaymentModalProps {
@@ -261,7 +265,7 @@ export function PackagePaymentModal({
       // Fetch policies
       const { data: policiesData, error: policiesError } = await supabase
         .from('policies')
-        .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, client_id')
+        .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, client_id, transferred_from_policy_id')
         .in('id', policyIds);
 
       if (policiesError) throw policiesError;
@@ -281,6 +285,30 @@ export function PackagePaymentModal({
 
       if (paymentsError) throw paymentsError;
 
+      // Transfer adjustments — the transfer fee is already baked into the
+      // target policy's office_commission, so we pull it out here and
+      // display it as its own synthetic "عمولة التحويل" line. Only the
+      // customer_pays side counts (refunds are tracked separately).
+      const transferredIds = (policiesData || [])
+        .filter((p: any) => p.transferred_from_policy_id)
+        .map((p: any) => p.id);
+      const transferAmountByPolicy: Record<string, number> = {};
+      if (transferredIds.length > 0) {
+        const { data: transferRows } = await supabase
+          .from('policy_transfers')
+          .select('new_policy_id, adjustment_amount, adjustment_type')
+          .in('new_policy_id', transferredIds);
+        (transferRows || []).forEach((row: any) => {
+          if (
+            row?.new_policy_id &&
+            row?.adjustment_type === 'customer_pays' &&
+            Number(row?.adjustment_amount) > 0
+          ) {
+            transferAmountByPolicy[row.new_policy_id] = Number(row.adjustment_amount);
+          }
+        });
+      }
+
       // Calculate per-policy info
       const policyPayments: Record<string, number> = {};
       (paymentsData || []).forEach(p => {
@@ -289,17 +317,43 @@ export function PackagePaymentModal({
         }
       });
 
-      const policyInfo = (policiesData || []).map(p => {
-        const effectivePrice = p.insurance_price + ((p as any).office_commission || 0);
+      // Split rule: payments allocated to a transferred policy fill its
+      // own base price FIRST (insurance + remaining office commission),
+      // and only the overflow is credited against the transfer-fee
+      // bucket. That keeps the per-policy row paying down its own debt
+      // before the synthetic "عمولة التحويل" line shows any paid.
+      let totalTransferPortion = 0;
+      let totalTransferPaid = 0;
+      const policyInfo: PolicyPaymentInfo[] = (policiesData || []).map((p: any) => {
+        const transferPortion = transferAmountByPolicy[p.id] || 0;
+        const fullPrice = (p.insurance_price || 0) + (p.office_commission || 0);
+        const basePrice = Math.max(0, fullPrice - transferPortion);
+        const paidToPolicy = policyPayments[p.id] || 0;
+        const basePaid = Math.min(paidToPolicy, basePrice);
+        const transferPaid = Math.max(0, paidToPolicy - basePrice);
+        totalTransferPortion += transferPortion;
+        totalTransferPaid += transferPaid;
         return {
           policyId: p.id,
           policyType: p.policy_type_parent,
           policyTypeChild: p.policy_type_child || null,
-          price: effectivePrice,
-          paid: policyPayments[p.id] || 0,
-          remaining: effectivePrice - (policyPayments[p.id] || 0),
+          price: basePrice,
+          paid: basePaid,
+          remaining: Math.max(0, basePrice - basePaid),
         };
       });
+
+      if (totalTransferPortion > 0) {
+        policyInfo.push({
+          policyId: '__transfer_fee__',
+          policyType: 'TRANSFER_FEE',
+          policyTypeChild: null,
+          price: totalTransferPortion,
+          paid: totalTransferPaid,
+          remaining: Math.max(0, totalTransferPortion - totalTransferPaid),
+          isTransferFee: true,
+        });
+      }
 
       setPolicies(policyInfo);
 
@@ -501,6 +555,10 @@ export function PackagePaymentModal({
     if (amount <= 0 || totalRemaining <= 0) return splits;
 
     policies.forEach(policy => {
+      // Skip the synthetic "عمولة التحويل" line — it has no policy_id
+      // to allocate payments against; the paid column on that row is
+      // derived from overflow into the transferred policy's bucket.
+      if (policy.isTransferFee) return;
       if (policy.remaining > 0) {
         const proportion = policy.remaining / totalRemaining;
         const policyPayment = Math.min(amount * proportion, policy.remaining);
@@ -535,8 +593,9 @@ export function PackagePaymentModal({
 
     setSaving(true);
     try {
-      // Use primary policy (first one) for all payments — trigger validates across the whole group
-      const primaryPolicyId = policies[0]?.policyId;
+      // Use primary policy (first real one) for all payments — the
+      // synthetic "عمولة التحويل" line has no policy_id to attach to.
+      const primaryPolicyId = policies.find(p => !p.isTransferFee)?.policyId;
       if (!primaryPolicyId) throw new Error('No policy found');
 
       // Generate a batch_id to group all payments in this batch
@@ -561,7 +620,7 @@ export function PackagePaymentModal({
             bank_code: paymentLine.paymentType === 'cheque' ? (paymentLine.bankCode || null) : null,
             branch_code: paymentLine.paymentType === 'cheque' ? (paymentLine.branchCode || null) : null,
             refused: false,
-            notes: paymentLine.notes || `دفعة من باقة (${policies.length} معاملات)`,
+            notes: paymentLine.notes || `دفعة من باقة (${policies.filter(p => !p.isTransferFee).length} معاملات)`,
             branch_id: branchId,
             batch_id: batchId,
           })
@@ -591,8 +650,9 @@ export function PackagePaymentModal({
     }
   };
 
-  // Get first policy for Tranzila
-  const firstPolicyId = policies.find(p => p.remaining > 0)?.policyId;
+  // Get first real policy for Tranzila (skip the synthetic transfer-fee line)
+  const firstPolicyId = policies.find(p => p.remaining > 0 && !p.isTransferFee)?.policyId
+    || policies.find(p => !p.isTransferFee)?.policyId;
   const activeVisaPayment = activeVisaPaymentIndex !== null ? paymentLines[activeVisaPaymentIndex] : null;
 
   return (
@@ -653,9 +713,15 @@ export function PackagePaymentModal({
             <div className="border rounded-lg divide-y max-h-32 overflow-auto">
               {policies.map(policy => (
                 <div key={policy.policyId} className="flex items-center justify-between p-2 text-sm">
-                  <Badge variant="outline" className="text-xs">
-                    {getInsuranceTypeLabel(policy.policyType as any, policy.policyTypeChild as any)}
-                  </Badge>
+                  {policy.isTransferFee ? (
+                    <Badge className="text-xs bg-sky-100 text-sky-800 hover:bg-sky-100 border-sky-200">
+                      عمولة التحويل
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs">
+                      {getInsuranceTypeLabel(policy.policyType as any, policy.policyTypeChild as any)}
+                    </Badge>
+                  )}
                   <div className="flex items-center gap-3">
                     <span className="text-muted-foreground">₪{policy.price.toLocaleString()}</span>
                     <span className={cn(
@@ -938,7 +1004,7 @@ export function PackagePaymentModal({
           policyId={firstPolicyId}
           amount={activeVisaPayment.amount}
           paymentDate={activeVisaPayment.paymentDate}
-          notes={activeVisaPayment.notes || `دفعة من باقة (${policies.length} معاملات)`}
+          notes={activeVisaPayment.notes || `دفعة من باقة (${policies.filter(p => !p.isTransferFee).length} معاملات)`}
           onSuccess={handleTranzilaSuccess}
           onFailure={() => setTranzilaModalOpen(false)}
         />

@@ -212,6 +212,7 @@ interface PaymentRecord {
     policy_type_child?: string | null;
     insurance_price: number;
     group_id?: string | null;
+    document_number?: string | null;
   } | null;
 }
 
@@ -236,7 +237,7 @@ interface GroupedPayment {
   // attached to the main policy_id on the DB side, so without this we'd
   // only ever see one policy type per row. When the row is a standalone
   // payment (no group_id) this falls back to just the attached policy.
-  packagePolicies: { id: string; policy_type_parent: string; policy_type_child: string | null }[];
+  packagePolicies: { id: string; policy_type_parent: string; policy_type_child: string | null; document_number: string | null }[];
 }
 
 interface ClientDetailsProps {
@@ -298,6 +299,30 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [cars, setCars] = useState<CarRecord[]>([]);
   const [policies, setPolicies] = useState<PolicyRecord[]>([]);
   const policiesHeaderRef = useRef<HTMLDivElement>(null);
+  // Controlled tabs so a click in the payments log can jump to المعاملات
+  // and scroll the target card into view. Default matches the previous
+  // defaultValue.
+  const [activeTab, setActiveTab] = useState<string>('policies');
+
+  // Jump from the payments log to the المعاملات tab and scroll the card
+  // owning this policy into view. Policy cards in PolicyYearTimeline tag
+  // themselves with `data-policy-ids="<id> <id> ..."` so a single package
+  // card is reachable from any of its member policies via the `~=` word
+  // selector.
+  const scrollToPolicyCard = (policyId: string) => {
+    setActiveTab('policies');
+    window.setTimeout(() => {
+      const card = document.querySelector<HTMLElement>(
+        `[data-policy-ids~="${policyId}"]`
+      );
+      if (!card) return;
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.classList.remove('highlight-pulse');
+      void card.offsetWidth;
+      card.classList.add('highlight-pulse');
+      window.setTimeout(() => card.classList.remove('highlight-pulse'), 3100);
+    }, 250);
+  };
 
   // Scroll to the policies section and run a 3-second attention pulse on
   // every #N document-number chip so the user can see which concrete rows
@@ -699,7 +724,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // package into one row.
       const { data: policiesData } = await supabase
         .from('policies')
-        .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, group_id')
+        .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, group_id, document_number')
         .eq('client_id', client.id)
         .is('deleted_at', null);
 
@@ -1285,6 +1310,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         id: p.id,
         policy_type_parent: p.policy_type_parent,
         policy_type_child: (p as any).policy_type_child ?? null,
+        document_number: (p as any).document_number ?? null,
       });
       packagePoliciesByGroup.set(p.group_id, arr);
     }
@@ -1341,6 +1367,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   id: payment.policy.id,
                   policy_type_parent: payment.policy.policy_type_parent,
                   policy_type_child: payment.policy.policy_type_child ?? null,
+                  document_number: payment.policy.document_number ?? null,
                 }]
               : []),
         });
@@ -1772,7 +1799,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         )}
 
         {/* Tabs — horizontal scroll on mobile, wrap on desktop */}
-        <Tabs defaultValue="policies" className="w-full" dir="rtl">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" dir="rtl">
           <TabsList className="w-full justify-start bg-muted/50 p-1 h-auto flex-nowrap overflow-x-auto sm:flex-wrap">
             <TabsTrigger value="overview" className="gap-1.5 shrink-0 whitespace-nowrap">
               <User className="h-4 w-4" />
@@ -2132,6 +2159,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                       <TableHead className="text-right">التاريخ</TableHead>
                       <TableHead className="text-right">طريقة الدفع</TableHead>
                       <TableHead className="text-right">نوع التأمين</TableHead>
+                      <TableHead className="text-right">رقم المعاملة</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
                       <TableHead className="text-right">ملفات</TableHead>
                       <TableHead className="text-right w-[60px]">إجراءات</TableHead>
@@ -2190,6 +2218,34 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                   {t.label}
                                 </Badge>
                               ));
+                            })()}
+                          </div>
+                        </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex flex-wrap gap-1">
+                            {(() => {
+                              const chips = group.packagePolicies
+                                .filter(p => p.document_number)
+                                .map(p => ({ id: p.id, doc: p.document_number as string }));
+                              if (chips.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+                              const seen = new Set<string>();
+                              return chips
+                                .filter(c => {
+                                  if (seen.has(c.doc)) return false;
+                                  seen.add(c.doc);
+                                  return true;
+                                })
+                                .map(c => (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => scrollToPolicyCard(c.id)}
+                                    className="inline-flex items-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-medium px-2 py-0.5 ltr-nums transition-colors"
+                                    title="عرض في المعاملات"
+                                  >
+                                    #{c.doc}
+                                  </button>
+                                ));
                             })()}
                           </div>
                         </TableCell>

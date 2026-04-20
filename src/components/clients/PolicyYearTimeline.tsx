@@ -1216,6 +1216,7 @@ function PolicyPackageCard({
   return (
     <Card
       ref={cardRef}
+      data-policy-ids={pkg.allPolicyIds.join(' ')}
       className={cn(
         "overflow-hidden transition-all duration-200",
         // Active: Highlight and strong border
