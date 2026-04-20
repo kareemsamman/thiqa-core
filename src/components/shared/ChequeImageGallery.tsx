@@ -81,7 +81,7 @@ export function ChequeImageGallery({ primaryImageUrl, paymentId, batchPaymentIds
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileImage className="h-5 w-5 text-primary" />
-              صور الشيك
+              المرفقات
               {images.length > 1 && (
                 <span className="text-sm font-normal text-muted-foreground">
                   ({currentIndex + 1} / {images.length})
@@ -99,7 +99,7 @@ export function ChequeImageGallery({ primaryImageUrl, paymentId, batchPaymentIds
               <div className="rounded-lg overflow-hidden border bg-muted/30">
                 <img
                   src={images[currentIndex]}
-                  alt={`صورة الشيك ${currentIndex + 1}`}
+                  alt={`مرفق ${currentIndex + 1}`}
                   className="w-full max-h-[60vh] object-contain"
                 />
               </div>
@@ -146,7 +146,7 @@ export function ChequeImageGallery({ primaryImageUrl, paymentId, batchPaymentIds
               )}
             </div>
           ) : (
-            <p className="text-center text-muted-foreground py-8">لا توجد صور</p>
+            <p className="text-center text-muted-foreground py-8">لا توجد مرفقات</p>
           )}
         </DialogContent>
       </Dialog>
