@@ -872,11 +872,16 @@ export function DebtPaymentModal({
                     body: formData,
                   });
 
-                  if (!uploadError && uploadResult?.url) {
+                  // upload-media returns { file: { cdn_url } } — the
+                  // previous code only checked .url, so every upload
+                  // silently dropped and the payment row landed in the
+                  // history with no attached files.
+                  const cdnUrl = uploadResult?.file?.cdn_url || uploadResult?.url;
+                  if (!uploadError && cdnUrl) {
                     await supabase.from('payment_images').insert({
                       payment_id: firstPaymentId,
-                      image_url: uploadResult.url,
-                      image_type: imgIndex === 0 ? 'front' : 'back',
+                      image_url: cdnUrl,
+                      image_type: imgIndex === 0 ? 'front' : imgIndex === 1 ? 'back' : 'receipt',
                       sort_order: imgIndex,
                     });
                   }
@@ -1383,7 +1388,7 @@ export function DebtPaymentModal({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="gap-3">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             إلغاء
           </Button>
