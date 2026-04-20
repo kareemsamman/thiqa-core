@@ -201,6 +201,11 @@ interface PaymentRecord {
   bank_code?: string | null;
   branch_code?: string | null;
   cheque_image_url: string | null;
+  // True when the payment has at least one row in `payment_images`.
+  // cheque_image_url only covers scanned cheques, so uploaded receipts
+  // (the "add a file" flow) would otherwise stay invisible in the outer
+  // payments-log row even though the details dialog can see them.
+  has_images?: boolean;
   card_last_four: string | null;
   refused: boolean | null;
   notes: string | null;
@@ -746,9 +751,26 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
       if (error) throw error;
 
+      // Probe `payment_images` for the same payment IDs so the outer row
+      // can decide whether to render the gallery trigger without relying
+      // on the legacy cheque_image_url alone (which misses every uploaded
+      // receipt attached via the debt-payment / edit flows).
+      const paymentIds = (paymentsData || []).map(p => p.id);
+      const paymentsWithImages = new Set<string>();
+      if (paymentIds.length > 0) {
+        const { data: imageRows } = await supabase
+          .from('payment_images')
+          .select('payment_id')
+          .in('payment_id', paymentIds);
+        for (const row of imageRows || []) {
+          paymentsWithImages.add(row.payment_id);
+        }
+      }
+
       // Map payments with policy info
       const paymentsWithPolicy = (paymentsData || []).map(payment => ({
         ...payment,
+        has_images: paymentsWithImages.has(payment.id),
         policy: policiesData.find(p => p.id === payment.policy_id) || null,
       }));
 
@@ -2252,6 +2274,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                             primaryImageUrl={group.cheque_image_url}
                             paymentId={group.payments[0]?.id || group.id}
                             batchPaymentIds={group.payments.map(p => p.id)}
+                            hasBatchImages={group.payments.some(p => p.has_images)}
                           />
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>

@@ -16,9 +16,17 @@ interface ChequeImageGalleryProps {
   paymentId: string;
   /** If batched, all payment IDs in the batch */
   batchPaymentIds?: string[];
+  /**
+   * True when at least one payment in the batch has a row in
+   * `payment_images` (scanned cheque OR uploaded receipt). The legacy
+   * cheque_image_url only covers scanned cheques, so relying on it
+   * alone hid uploaded attachments from the payments-log row even
+   * though the details dialog could see them.
+   */
+  hasBatchImages?: boolean;
 }
 
-export function ChequeImageGallery({ primaryImageUrl, paymentId, batchPaymentIds }: ChequeImageGalleryProps) {
+export function ChequeImageGallery({ primaryImageUrl, paymentId, batchPaymentIds, hasBatchImages }: ChequeImageGalleryProps) {
   const [open, setOpen] = useState(false);
   const [images, setImages] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -54,7 +62,7 @@ export function ChequeImageGallery({ primaryImageUrl, paymentId, batchPaymentIds
     fetchImages();
   }, [open, paymentId, primaryImageUrl, batchPaymentIds]);
 
-  if (!primaryImageUrl) {
+  if (!primaryImageUrl && !hasBatchImages) {
     return <span className="text-muted-foreground">-</span>;
   }
 
