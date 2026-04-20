@@ -199,7 +199,7 @@ serve(async (req) => {
       .from("policies")
       .select(`
         *,
-        client:clients(full_name, phone_number, id_number, signature_url),
+        client:clients(full_name, phone_number, phone_number_2, id_number, signature_url),
         car:cars(car_number, manufacturer_name, model, year, car_type, color),
         company:insurance_companies(name, name_ar),
         broker:brokers(name),
@@ -1685,8 +1685,8 @@ function buildPackageInvoiceHtml(
           <div class="value tabular">${client.id_number || '-'}</div>
         </div>
         <div class="cell">
-          <div class="label">رقم الهاتف</div>
-          <div class="value tabular">${client.phone_number || '-'}</div>
+          <div class="label">${[client.phone_number, client.phone_number_2].filter(Boolean).length > 1 ? 'أرقام الهاتف' : 'رقم الهاتف'}</div>
+          <div class="value tabular">${[client.phone_number, client.phone_number_2].filter(Boolean).join(' / ') || '-'}</div>
         </div>
         <div class="cell">
           <div class="label">${uniqueCarNumbers.length > 1 ? 'أرقام السيارات' : 'رقم السيارة'}</div>

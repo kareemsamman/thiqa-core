@@ -1585,8 +1585,8 @@ function generateReportHtml(args: GenerateReportArgs): string {
           <div class="value tabular">${client.id_number || '-'}</div>
         </div>
         <div class="cell">
-          <div class="label">رقم الهاتف</div>
-          <div class="value tabular">${client.phone_number || '-'}</div>
+          <div class="label">${[client.phone_number, client.phone_number_2].filter(Boolean).length > 1 ? 'أرقام الهاتف' : 'رقم الهاتف'}</div>
+          <div class="value tabular">${[client.phone_number, client.phone_number_2].filter(Boolean).join(' / ') || '-'}</div>
         </div>
         <div class="cell">
           <div class="label">رقم الملف</div>

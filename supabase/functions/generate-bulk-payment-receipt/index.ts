@@ -554,8 +554,8 @@ function buildBulkReceiptHtml(
           <div class="value">${escapeHtml(client?.id_number || '-')}</div>
         </div>
         <div class="cell">
-          <div class="label">رقم الهاتف</div>
-          <div class="value">${escapeHtml(client?.phone_number || '-')}</div>
+          <div class="label">${[client?.phone_number, client?.phone_number_2].filter(Boolean).length > 1 ? 'أرقام الهاتف' : 'رقم الهاتف'}</div>
+          <div class="value">${escapeHtml([client?.phone_number, client?.phone_number_2].filter(Boolean).join(' / ') || '-')}</div>
         </div>
       </div>
     </div>
@@ -710,7 +710,7 @@ serve(async (req) => {
           policy_type_child,
           document_number,
           office_commission,
-          client:clients(id, full_name, id_number, phone_number),
+          client:clients(id, full_name, id_number, phone_number, phone_number_2),
           car:cars(car_number, manufacturer_name, model, year)
         )
       `)

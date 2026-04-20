@@ -405,8 +405,8 @@ function buildComprehensiveInvoiceHtml(
           <span class="info-value">${client.id_number || '-'}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">رقم الهاتف:</span>
-          <span class="info-value">${client.phone_number || '-'}</span>
+          <span class="info-label">${[client.phone_number, client.phone_number_2].filter(Boolean).length > 1 ? 'أرقام الهاتف:' : 'رقم الهاتف:'}</span>
+          <span class="info-value">${[client.phone_number, client.phone_number_2].filter(Boolean).join(' / ') || '-'}</span>
         </div>
         <div class="info-item">
           <span class="info-label">رقم الملف:</span>
@@ -562,7 +562,7 @@ serve(async (req) => {
     // Get client info
     const { data: client, error: clientError } = await supabase
       .from("clients")
-      .select("id, full_name, id_number, phone_number, file_number")
+      .select("id, full_name, id_number, phone_number, phone_number_2, file_number")
       .eq("id", client_id)
       .single();
 
