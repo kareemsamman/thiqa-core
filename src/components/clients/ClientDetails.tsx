@@ -2044,10 +2044,19 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   setCancelModalOpen(true);
                 }}
                 onTransferPackage={(policyIds) => {
-                  if (policyIds.length > 0) {
-                    setSelectedPolicyId(policyIds[0]);
-                    setTransferOpen(true);
-                  }
+                  if (policyIds.length === 0) return;
+                  // Pick the same "primary" policy the card chip shows
+                  // (THIRD_FULL > ELZAMI > addons) so the رقم المعاملة
+                  // in the dialog/SMS matches the number the staff just
+                  // clicked. Falling back to policyIds[0] hit whichever
+                  // row happened to be first in the group (often ELZAMI),
+                  // which has its own doc number one off from the card.
+                  const pkgPolicies = policies.filter((p) => policyIds.includes(p.id));
+                  const primaryDoc = pickPackageDocumentNumber(pkgPolicies);
+                  const primary = (primaryDoc && pkgPolicies.find(p => p.document_number === primaryDoc))
+                    || pkgPolicies[0];
+                  setSelectedPolicyId(primary?.id ?? policyIds[0]);
+                  setTransferOpen(true);
                 }}
                 onCancelPackage={(policyIds) => {
                   if (policyIds.length === 0) return;
@@ -2070,8 +2079,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                       (sum, p) => sum + (Number(p.insurance_price) || 0),
                       0,
                     );
-                  // Use the first policy's number for labels/SMS.
-                  const primary = packagePolicies[0];
+                  // Use the same "primary" policy the card chip shows
+                  // (THIRD_FULL > ELZAMI > addons) for labels/SMS, so
+                  // رقم المعاملة in the dialog matches the card header.
+                  // Plain packagePolicies[0] picked up whichever sibling
+                  // was first in the filter output and surfaced a
+                  // document_number off-by-one from what the user saw.
+                  const primaryDoc = pickPackageDocumentNumber(packagePolicies);
+                  const primary = (primaryDoc && packagePolicies.find(p => p.document_number === primaryDoc))
+                    || packagePolicies[0];
                   setCancelPolicyIds(policyIds);
                   setCancelInsurancePrice(totalPrice);
                   setCancelPolicyNumber(primary.policy_number);
