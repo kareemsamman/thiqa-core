@@ -714,7 +714,7 @@ export default function AdminUsers() {
                           <Select
                             value={user.branch_id || 'all'}
                             onValueChange={(value) => handleChangeBranch(user.id, value === 'all' ? null : value)}
-                            disabled={actionLoading === user.id || user.email === 'morshed500@gmail.com'}
+                            disabled={actionLoading === user.id || isProtectedSuperAdmin(user)}
                           >
                             <SelectTrigger className="w-32">
                               <SelectValue placeholder="اختر الفرع" />
