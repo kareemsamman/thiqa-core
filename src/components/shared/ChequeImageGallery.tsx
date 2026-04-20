@@ -1,13 +1,7 @@
-import { useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, FileImage, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { FileImage } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { FilePreviewGallery } from '@/components/policies/FilePreviewGallery';
 
 interface ChequeImageGalleryProps {
   /** The primary cheque_image_url from the payment */
@@ -26,130 +20,93 @@ interface ChequeImageGalleryProps {
   hasBatchImages?: boolean;
 }
 
+interface MediaFile {
+  id: string;
+  original_name: string;
+  cdn_url: string;
+  mime_type: string;
+  size: number;
+  created_at: string;
+  entity_type: string | null;
+}
+
+// Wrap a URL into the MediaFile shape FilePreviewGallery expects. Same
+// helper PaymentGroupDetailsDialog uses internally — duplicated here so
+// the outer payments-log row can open the full-featured viewer (zoom,
+// download, pagination, filename) instead of the old plain-img dialog.
+const toMediaFile = (
+  id: string,
+  url: string,
+): MediaFile => {
+  const isPdf = url.toLowerCase().endsWith('.pdf');
+  const tail = url.split('/').pop() || (isPdf ? 'ملف.pdf' : 'صورة');
+  return {
+    id,
+    original_name: tail,
+    cdn_url: url,
+    mime_type: isPdf ? 'application/pdf' : 'image/jpeg',
+    size: 0,
+    created_at: new Date().toISOString(),
+    entity_type: null,
+  };
+};
+
 export function ChequeImageGallery({ primaryImageUrl, paymentId, batchPaymentIds, hasBatchImages }: ChequeImageGalleryProps) {
-  const [open, setOpen] = useState(false);
-  const [images, setImages] = useState<string[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    
-    const fetchImages = async () => {
-      setLoading(true);
-      try {
-        const ids = batchPaymentIds?.length ? batchPaymentIds : [paymentId];
-        const { data } = await supabase
-          .from('payment_images')
-          .select('image_url, sort_order')
-          .in('payment_id', ids)
-          .order('sort_order');
-
-        const allUrls = new Set<string>();
-        if (primaryImageUrl) allUrls.add(primaryImageUrl);
-        (data || []).forEach(row => allUrls.add(row.image_url));
-        
-        setImages(Array.from(allUrls));
-        setCurrentIndex(0);
-      } catch (err) {
-        console.error('Error fetching payment images:', err);
-        if (primaryImageUrl) setImages([primaryImageUrl]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchImages();
-  }, [open, paymentId, primaryImageUrl, batchPaymentIds]);
+  const [files, setFiles] = useState<MediaFile[]>([]);
+  const [currentFile, setCurrentFile] = useState<MediaFile | null>(null);
 
   if (!primaryImageUrl && !hasBatchImages) {
     return <span className="text-muted-foreground">-</span>;
   }
 
+  const handleOpen = async () => {
+    const ids = batchPaymentIds?.length ? batchPaymentIds : [paymentId];
+    const collected: MediaFile[] = [];
+    const seenUrls = new Set<string>();
+
+    try {
+      const { data } = await supabase
+        .from('payment_images')
+        .select('id, image_url, sort_order')
+        .in('payment_id', ids)
+        .order('sort_order');
+
+      for (const row of data || []) {
+        if (seenUrls.has(row.image_url)) continue;
+        seenUrls.add(row.image_url);
+        collected.push(toMediaFile(row.id, row.image_url));
+      }
+    } catch (err) {
+      console.error('Error fetching payment images:', err);
+    }
+
+    // cheque_image_url is the legacy scanned-cheque field; include it
+    // when it isn't already covered by a payment_images row.
+    if (primaryImageUrl && !seenUrls.has(primaryImageUrl)) {
+      collected.push(toMediaFile(`primary-${paymentId}`, primaryImageUrl));
+    }
+
+    if (collected.length === 0) return;
+    setFiles(collected);
+    setCurrentFile(collected[0]);
+  };
+
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={handleOpen}
         className="flex items-center gap-1 text-primary hover:underline cursor-pointer"
       >
         <FileImage className="h-4 w-4" />
         <span className="text-xs">عرض</span>
       </button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileImage className="h-5 w-5 text-primary" />
-              المرفقات
-              {images.length > 1 && (
-                <span className="text-sm font-normal text-muted-foreground">
-                  ({currentIndex + 1} / {images.length})
-                </span>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : images.length > 0 ? (
-            <div className="relative">
-              <div className="rounded-lg overflow-hidden border bg-muted/30">
-                <img
-                  src={images[currentIndex]}
-                  alt={`مرفق ${currentIndex + 1}`}
-                  className="w-full max-h-[60vh] object-contain"
-                />
-              </div>
-
-              {images.length > 1 && (
-                <div className="flex items-center justify-center gap-4 mt-3">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setCurrentIndex(i => Math.max(0, i - 1))}
-                    disabled={currentIndex === 0}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    {currentIndex + 1} / {images.length}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setCurrentIndex(i => Math.min(images.length - 1, i + 1))}
-                    disabled={currentIndex === images.length - 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-
-              {/* Thumbnails strip */}
-              {images.length > 1 && (
-                <div className="flex gap-2 mt-3 overflow-x-auto pb-2">
-                  {images.map((url, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setCurrentIndex(idx)}
-                      className={`shrink-0 w-16 h-12 rounded border overflow-hidden ${
-                        idx === currentIndex ? 'ring-2 ring-primary' : 'opacity-60 hover:opacity-100'
-                      }`}
-                    >
-                      <img src={url} alt="" className="w-full h-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-center text-muted-foreground py-8">لا توجد مرفقات</p>
-          )}
-        </DialogContent>
-      </Dialog>
+      <FilePreviewGallery
+        file={currentFile}
+        allFiles={files}
+        onClose={() => setCurrentFile(null)}
+        onNavigate={setCurrentFile}
+      />
     </>
   );
 }
