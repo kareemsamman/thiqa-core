@@ -735,7 +735,7 @@ export default function AdminUsers() {
                             onValueChange={(value: 'admin' | 'worker') => 
                               handleChangeRole(user.id, value)
                             }
-                            disabled={actionLoading === user.id || user.email === 'morshed500@gmail.com'}
+                            disabled={actionLoading === user.id || isProtectedSuperAdmin(user)}
                           >
                             <SelectTrigger className="w-32">
                               <SelectValue />
@@ -747,7 +747,7 @@ export default function AdminUsers() {
                           </Select>
                         </TableCell>
                         <TableCell>
-                          {user.email !== 'morshed500@gmail.com' && (
+                          {!isProtectedSuperAdmin(user) && (
                             <Button
                               size="sm"
                               variant="destructive"
@@ -769,7 +769,7 @@ export default function AdminUsers() {
                               )}
                             </Button>
                           )}
-                          {user.email === 'morshed500@gmail.com' && (
+                          {isProtectedSuperAdmin(user) && (
                             <Badge variant="outline" className="bg-primary/10 text-primary">
                               <Shield className="h-3 w-3 ml-1" />
                               مدير النظام
