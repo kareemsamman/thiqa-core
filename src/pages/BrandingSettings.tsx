@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSiteSettings, useUpdateSiteSettings } from "@/hooks/useSiteSettings";
 import { Skeleton } from "@/components/ui/skeleton";
+import { createSafeHtml } from "@/lib/sanitize";
 
 function ImageUploadField({
   label,
@@ -413,8 +414,8 @@ export default function BrandingSettings() {
                         <img src={logoUrl} alt="Logo" className="h-10 mx-auto mb-2 object-contain" />
                       )}
                       <div className="text-center font-bold text-lg mb-2" style={{ color: sigColor }}>{title || 'اسم الشركة'}</div>
-                      <div className="bg-muted/30 rounded-lg p-3 text-xs" dir="rtl" dangerouslySetInnerHTML={{ __html: sigHeader + sigBody }} />
-                      <div className="text-center text-xs text-muted-foreground mt-3 pt-2 border-t" dangerouslySetInnerHTML={{ __html: sigFooter }} />
+                      <div className="bg-muted/30 rounded-lg p-3 text-xs" dir="rtl" dangerouslySetInnerHTML={createSafeHtml((sigHeader || '') + (sigBody || ''))} />
+                      <div className="text-center text-xs text-muted-foreground mt-3 pt-2 border-t" dangerouslySetInnerHTML={createSafeHtml(sigFooter)} />
                     </div>
                   </div>
                 </div>

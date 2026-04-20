@@ -86,7 +86,11 @@ interface LoginAttempt {
 }
 
 export default function AdminUsers() {
-  const { isAdmin, loading: authLoading } = useAuth();
+  const { isAdmin, isSuperAdmin, profile, loading: authLoading } = useAuth();
+  // A user is "the protected super admin" if the server marks them so via thiqa_super_admins.
+  // Use a helper to identify rows that should be UI-locked, without leaking any email literal.
+  const isProtectedSuperAdmin = (u: { id?: string }) =>
+    !!isSuperAdmin && !!profile?.id && !!u.id && u.id === profile.id;
   const { branches, getBranchName } = useBranches();
   const { agentId } = useAgentContext();
   const { toast } = useToast();
