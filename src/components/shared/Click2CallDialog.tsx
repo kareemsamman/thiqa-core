@@ -54,11 +54,9 @@ export function Click2CallDialog({
   const fetchExtensions = async () => {
     setLoadingExtensions(true);
     try {
-      const { data, error } = await supabase
-        .from("pbx_extensions")
-        .select("id, extension_number, extension_name, is_default")
-        .order("is_default", { ascending: false })
-        .order("extension_number", { ascending: true });
+      // Use SECURITY DEFINER RPC to fetch only safe (non-sensitive) columns.
+      // The pbx_extensions table itself is admin-only since it stores plaintext passwords.
+      const { data, error } = await (supabase as any).rpc("list_pbx_extensions_safe");
 
       if (error) throw error;
 

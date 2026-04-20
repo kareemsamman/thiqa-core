@@ -2,6 +2,26 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
 
+/**
+ * Server-side HTML sanitizer for admin-controlled template content rendered to
+ * end customers. Prevents stored XSS by stripping script/iframe/object/embed
+ * tags, on* event handler attributes, and javascript:/data: URLs.
+ * Allows common formatting tags so branded templates still render.
+ */
+function sanitizeTemplateHtml(input: string | null | undefined): string {
+  if (!input) return "";
+  let html = String(input);
+  // Remove dangerous tags and their content
+  html = html.replace(/<\s*(script|style|iframe|object|embed|link|meta|form|input|button|textarea|select)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "");
+  // Remove self-closing/void dangerous tags
+  html = html.replace(/<\s*(script|style|iframe|object|embed|link|meta|form|input|button|textarea|select)\b[^>]*\/?>/gi, "");
+  // Strip on* event handler attributes (onclick, onerror, onload, etc.)
+  html = html.replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+  // Neutralize javascript: and data: URLs in href/src
+  html = html.replace(/(href|src|xlink:href)\s*=\s*("|')\s*(javascript|data|vbscript)\s*:[^"']*\2/gi, '$1=$2#$2');
+  return html;
+}
+
 // HTML response headers - important to set correctly for browsers to render HTML
 const htmlHeaders = {
   "Content-Type": "text/html; charset=utf-8",
@@ -616,8 +636,8 @@ function buildSignaturePageHtml(
     <div class="content">
       <!-- Admin-configured template content -->
       <div class="template-content">
-        <div class="template-header">${template.header_html}</div>
-        <div class="template-body">${template.body_html}</div>
+        <div class="template-header">${sanitizeTemplateHtml(template.header_html)}</div>
+        <div class="template-body">${sanitizeTemplateHtml(template.body_html)}</div>
       </div>
       
       <div class="signature-section">
@@ -652,7 +672,7 @@ function buildSignaturePageHtml(
       ${expiryText ? `<p class="expiry">ينتهي هذا الرابط في: ${expiryText}</p>` : ''}
     </div>
     
-    <div class="footer">${template.footer_html}</div>
+    <div class="footer">${sanitizeTemplateHtml(template.footer_html)}</div>
   </div>
 
   <div class="success-overlay" id="successOverlay">
