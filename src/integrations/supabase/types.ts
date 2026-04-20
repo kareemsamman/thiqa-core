@@ -4609,7 +4609,7 @@ export type Database = {
           {
             foreignKeyName: "policy_renewal_tracking_policy_id_fkey"
             columns: ["policy_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "policies"
             referencedColumns: ["id"]
           },
