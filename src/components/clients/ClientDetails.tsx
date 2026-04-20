@@ -2332,7 +2332,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           {/* Cars Tab */}
           <TabsContent value="cars" className="mt-6 space-y-4">
             <div className="flex justify-end">
-              <Button onClick={() => setCarDrawerOpen(true)}>
+              <Button variant="gradient" onClick={() => setCarDrawerOpen(true)}>
                 <Plus className="h-4 w-4 ml-2" />
                 إضافة سيارة
               </Button>

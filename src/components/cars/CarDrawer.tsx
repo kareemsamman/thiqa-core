@@ -211,7 +211,7 @@ export function CarDrawer({ open, onOpenChange, clientId, car, onSaved }: CarDra
       form.setValue('car_type', vehicleData.car_type || 'car');
       
       setFetchedFromGov(true);
-      toast.success('تم جلب بيانات السيارة بنجاح');
+      toast.success('تم جلب البيانات تلقائياً');
 
     } catch (error: any) {
       // Silent fail - user can manually enter data
@@ -226,6 +226,18 @@ export function CarDrawer({ open, onOpenChange, clientId, car, onSaved }: CarDra
     if (carNumber && carNumber.length >= 7 && !fetchedFromGov && !fetching && !isEditMode) {
       fetchVehicleData();
     }
+  };
+
+  // Reset the "fetched" flag whenever the plate changes so a new blur/Enter
+  // triggers a fresh fetch. Without this, the first successful fetch latched
+  // the flag on and subsequent edits were silently ignored.
+  const handleCarNumberChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    fieldOnChange: (value: string) => void,
+  ) => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+    fieldOnChange(digits);
+    if (fetchedFromGov) setFetchedFromGov(false);
   };
 
   // Fetch on Enter key press
@@ -313,10 +325,11 @@ export function CarDrawer({ open, onOpenChange, clientId, car, onSaved }: CarDra
                     <FormLabel className="text-right block">رقم السيارة *</FormLabel>
                     <div className="relative">
                       <FormControl>
-                        <Input 
-                          placeholder="أدخل رقم السيارة (7-8 أرقام)" 
-                          {...field} 
-                          onBlur={(e) => {
+                        <Input
+                          placeholder="أدخل رقم السيارة (7-8 أرقام)"
+                          {...field}
+                          onChange={(e) => handleCarNumberChange(e, field.onChange)}
+                          onBlur={() => {
                             field.onBlur();
                             handleCarNumberBlur();
                           }}
@@ -517,7 +530,7 @@ export function CarDrawer({ open, onOpenChange, clientId, car, onSaved }: CarDra
               >
                 إلغاء
               </Button>
-              <Button type="submit" disabled={saving}>
+              <Button type="submit" variant="gradient" disabled={saving}>
                 {saving ? (
                   <Loader2 className="h-4 w-4 ml-2 animate-spin" />
                 ) : (
