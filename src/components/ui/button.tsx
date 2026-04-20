@@ -9,8 +9,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // Primary button fills with the brand blue rgb(69,94,187).
+        // Decoupled from the --primary HSL token so only buttons take
+        // the blue fill — sidebar active states, badges, focus rings
+        // etc. stay on the existing primary token unaffected.
         default:
-          "bg-primary text-primary-foreground shadow-md hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20 active:scale-[0.98]",
+          "bg-[rgb(69,94,187)] text-white shadow-md hover:brightness-110 hover:shadow-lg hover:shadow-[rgb(69,94,187)]/25 active:scale-[0.98]",
         destructive:
           "bg-destructive text-destructive-foreground shadow-md hover:bg-destructive/90 hover:shadow-lg hover:shadow-destructive/20 active:scale-[0.98]",
         outline:
@@ -24,7 +28,7 @@ const buttonVariants = cva(
         glass:
           "glass hover:bg-secondary/50 text-foreground border-primary/20 hover:border-primary/40 active:scale-[0.98]",
         glow:
-          "bg-primary text-primary-foreground shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 hover:bg-primary/90 active:scale-[0.98]",
+          "bg-[rgb(69,94,187)] text-white shadow-lg shadow-[rgb(69,94,187)]/30 hover:shadow-xl hover:shadow-[rgb(69,94,187)]/40 hover:brightness-110 active:scale-[0.98]",
         success:
           "bg-success text-success-foreground shadow-md hover:bg-success/90 hover:shadow-lg hover:shadow-success/20 active:scale-[0.98]",
         // Solid rgb(69,94,187) for in-body primary actions on the

@@ -831,7 +831,13 @@ function generateReportHtml(args: GenerateReportArgs): string {
       ? (Date.now() - new Date(p.created_at).getTime()) < 24 * 60 * 60 * 1000
       : false;
     const newTag = isNew ? `<span class="cancelled-tag">جديدة</span>` : '';
-    const docNumberChip = p.document_number
+    // Show the per-policy document_number chip only on standalone rows.
+    // Package members would duplicate the number the package HEADER
+    // already prints (pickPackageDocumentNumber picks ONE رقم for the
+    // whole معاملة), so rendering each member's own doc number in the
+    // 1.1 / 1.2 / 1.3 sub-rows makes the report read like three
+    // separate معاملات per package.
+    const docNumberChip = variant === 'single' && p.document_number
       ? `<span class="doc-number-chip">#${escapeHtml(String(p.document_number))}</span>`
       : '';
     const notesLine = p.notes
