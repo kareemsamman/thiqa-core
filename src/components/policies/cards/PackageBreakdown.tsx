@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { PolicyRecord, policyTypeColors, getDisplayLabel } from './types';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 interface PackageBreakdownProps {
   policies: PolicyRecord[];
@@ -8,12 +10,54 @@ interface PackageBreakdownProps {
 }
 
 export function PackageBreakdown({ policies, onPolicyClick }: PackageBreakdownProps) {
+  // Fetch per-policy transfer adjustment so we can split the "عمولة"
+  // line into "عمولة مكتب" (original) and "عمولة تحويل" (transfer fee)
+  // whenever a policy in this package was created by a customer-pays
+  // transfer. Transfer adjustments live on policy_transfers, not on
+  // policies itself, so they need their own lookup.
+  const [transferAdjustments, setTransferAdjustments] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const transferredIds = policies
+      .filter(p => (p as any).transferred_from_policy_id)
+      .map(p => p.id);
+    if (transferredIds.length === 0) {
+      setTransferAdjustments({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('policy_transfers')
+        .select('new_policy_id, adjustment_amount, adjustment_type')
+        .in('new_policy_id', transferredIds);
+      if (cancelled) return;
+      const map: Record<string, number> = {};
+      (data || []).forEach((row: any) => {
+        if (
+          row?.new_policy_id &&
+          row?.adjustment_type === 'customer_pays' &&
+          Number(row?.adjustment_amount) > 0
+        ) {
+          map[row.new_policy_id] = Number(row.adjustment_amount);
+        }
+      });
+      setTransferAdjustments(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [policies]);
+
   const totalPrice = policies.reduce(
     (sum, p) => sum + (p.insurance_price || 0) + (p.office_commission || 0),
     0,
   );
-  const totalCommission = policies.reduce(
-    (sum, p) => sum + (p.office_commission || 0),
+  const totalOfficeCommission = policies.reduce(
+    (sum, p) => sum + Math.max(0, (p.office_commission || 0) - (transferAdjustments[p.id] || 0)),
+    0,
+  );
+  const totalTransferCommission = policies.reduce(
+    (sum, p) => sum + (transferAdjustments[p.id] || 0),
     0,
   );
 
@@ -35,7 +79,9 @@ export function PackageBreakdown({ policies, onPolicyClick }: PackageBreakdownPr
           </thead>
           <tbody>
             {policies.map((policy) => {
-              const commission = policy.office_commission || 0;
+              const totalCommission = policy.office_commission || 0;
+              const transferPortion = transferAdjustments[policy.id] || 0;
+              const officePortion = Math.max(0, totalCommission - transferPortion);
               return (
                 <tr
                   key={policy.id}
@@ -45,9 +91,14 @@ export function PackageBreakdown({ policies, onPolicyClick }: PackageBreakdownPr
                   <td className="p-2 font-semibold">
                     <div className="flex flex-col">
                       <span>{formatCurrency(policy.insurance_price)}</span>
-                      {commission > 0 && (
+                      {officePortion > 0 && (
                         <span className="text-[10px] text-amber-700 font-semibold ltr-nums">
-                          + {formatCurrency(commission)} عمولة مكتب
+                          + {formatCurrency(officePortion)} عمولة مكتب
+                        </span>
+                      )}
+                      {transferPortion > 0 && (
+                        <span className="text-[10px] text-sky-700 font-semibold ltr-nums">
+                          + {formatCurrency(transferPortion)} عمولة تحويل
                         </span>
                       )}
                     </div>
@@ -72,9 +123,14 @@ export function PackageBreakdown({ policies, onPolicyClick }: PackageBreakdownPr
               <td className="p-2">
                 <div className="flex flex-col">
                   <span className="text-primary">{formatCurrency(totalPrice)}</span>
-                  {totalCommission > 0 && (
+                  {totalOfficeCommission > 0 && (
                     <span className="text-[10px] text-amber-700 font-semibold ltr-nums">
-                      منها {formatCurrency(totalCommission)} عمولة مكتب
+                      منها {formatCurrency(totalOfficeCommission)} عمولة مكتب
+                    </span>
+                  )}
+                  {totalTransferCommission > 0 && (
+                    <span className="text-[10px] text-sky-700 font-semibold ltr-nums">
+                      منها {formatCurrency(totalTransferCommission)} عمولة تحويل
                     </span>
                   )}
                 </div>

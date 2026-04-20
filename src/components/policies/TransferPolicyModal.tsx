@@ -422,16 +422,27 @@ export function TransferPolicyModal({
 
         if (updateOriginalError) throw updateOriginalError;
 
-        // 2. Create new policy - keep ORIGINAL insurance_price 
-        // The trigger validates against GROUP total, so all policies must exist first
-        let adjustedInsurancePrice = originalPolicy.insurance_price;
-        let adjustedProfit = originalPolicy.profit;
-        if (originalPolicy.id === policyId && adjustmentType === "customer_pays" && adjustmentAmount) {
-          const adjustAmt = parseFloat(adjustmentAmount);
-          adjustedInsurancePrice += adjustAmt;
-          adjustedProfit = (originalPolicy.profit || 0) + adjustAmt;
-        }
-        
+        // 2. Create new policy - keep the original insurance_price so the
+        // individual component's base price stays clean; the
+        // customer-pays transfer adjustment rides on office_commission
+        // of the target policy only. Previously the adjustment was
+        // piled onto insurance_price, which made the new policy look
+        // like its base price went up (e.g. road-services 250 → 750)
+        // and silently swallowed the original office_commission that
+        // the إلزامي component had. Now we:
+        //   - always copy office_commission from original (was missing)
+        //   - add the transfer adjustment on top of it, target policy only
+        //   - leave insurance_price unchanged so the breakdown table
+        //     renders the real base + a visible '+X عمولة' line
+        const isAdjustmentTarget =
+          originalPolicy.id === policyId &&
+          adjustmentType === "customer_pays" &&
+          !!adjustmentAmount;
+        const adjustAmt = isAdjustmentTarget ? parseFloat(adjustmentAmount) : 0;
+        const originalOfficeCommission = (originalPolicy as any).office_commission || 0;
+        const adjustedOfficeCommission = originalOfficeCommission + adjustAmt;
+        const adjustedProfit = (originalPolicy.profit || 0) + adjustAmt;
+
         const newPolicyData = {
           client_id: originalPolicy.client_id,
           car_id: selectedCarId,
@@ -441,7 +452,8 @@ export function TransferPolicyModal({
           policy_number: originalPolicy.policy_number,
           start_date: transferDate,
           end_date: originalPolicy.end_date,
-          insurance_price: adjustedInsurancePrice,
+          insurance_price: originalPolicy.insurance_price,
+          office_commission: adjustedOfficeCommission,
           is_under_24: originalPolicy.is_under_24,
           profit: adjustedProfit,
           payed_for_company: originalPolicy.payed_for_company,
