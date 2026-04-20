@@ -1,7 +1,12 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-// This edge function handles payment result pages for broker Tranzila payments
-// It returns simple HTML that posts a message to the parent window
+// This edge function returns the payment result HTML page for broker
+// Tranzila settlements after the customer is redirected back from the
+// payment gateway.
+//
+// SECURITY: This page does NOT write settlement status to the database.
+// Redirect query parameters can be forged by an attacker, so they are
+// only used to render UI feedback and forward a `postMessage` to the
+// parent window. Settlement state is only updated by the server-to-server
+// `tranzila-webhook` (or equivalent server-side verification path).
 
 // Map Tranzila response codes to Hebrew error messages
 function getErrorMessage(code: string, reason: string): string {
@@ -107,46 +112,8 @@ Deno.serve(async (req) => {
   // URL-encode for safe embedding in JavaScript
   const errorMessageEncoded = encodeURIComponent(errorMessage)
 
-  // Update settlement in database
-  if (settlementId) {
-    try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-      const { data: settlement } = await supabase
-        .from('broker_settlements')
-        .select('id, status')
-        .eq('id', settlementId)
-        .single()
-
-      if (settlement && settlement.status === 'pending') {
-        if (finalStatus === 'success') {
-          await supabase
-            .from('broker_settlements')
-            .update({
-              status: 'completed',
-              refused: false,
-              tranzila_approval_code: confirmationCode,
-              card_last_four: cardLastFour || null,
-              card_expiry: expdate || null,
-              installments_count: npay ? parseInt(npay, 10) : 1,
-            })
-            .eq('id', settlementId)
-        } else if (finalStatus === 'failed') {
-          await supabase
-            .from('broker_settlements')
-            .update({
-              status: 'failed',
-              refused: true,
-            })
-            .eq('id', settlementId)
-        }
-      }
-    } catch (e) {
-      console.error('Error updating broker settlement:', e)
-    }
-  }
+  // NOTE: No DB writes happen here. Settlement status is committed only
+  // by the server-to-server webhook callback path.
 
   const isSuccess = finalStatus === 'success'
   const displaySum = sum || ''
