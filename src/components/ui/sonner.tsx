@@ -66,7 +66,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           toast: cn(
             "glass-toast relative flex items-center gap-5",
             "w-[min(400px,calc(100vw-2rem))]",
-            "py-3 ps-4 pe-11",
+            "min-h-[64px] py-4 ps-4 pe-11",
             "rounded-2xl border",
             // Higher opacity and stronger ring/shadow so the toast actually
             // registers against the page — the previous bg-white/75 was
@@ -80,7 +80,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
             "shadow-[0_24px_70px_-18px_rgba(15,23,42,0.45)] dark:shadow-[0_24px_70px_-18px_rgba(0,0,0,0.85)]",
           ),
           title:
-            "flex-1 min-w-0 text-[13.5px] font-semibold text-foreground leading-snug break-words [unicode-bidi:plaintext]",
+            "flex-1 min-w-0 text-[14px] font-semibold text-foreground leading-relaxed break-words [unicode-bidi:plaintext]",
           description:
             "text-[12px] text-muted-foreground mt-0.5 leading-relaxed break-words [unicode-bidi:plaintext]",
           icon: "shrink-0",

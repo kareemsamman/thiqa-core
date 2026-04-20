@@ -1261,35 +1261,22 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     return Array.from(types);
   }, [policies]);
 
-  // "الوثائق" count — within a package, non-ELZAMI policies from the same
-  // company collapse into a single document (e.g. ثالث + خدمات طريق from
-  // المشرق = 1 doc). ELZAMI is always its own doc because it's legally
-  // distinct from the rest of the package even when the company matches.
-  // Standalone policies are counted one each.
+  // "المعاملات" count — one per card in the timeline. Packages (all
+  // policies sharing a group_id) collapse to a single معاملة regardless
+  // of how many types they hold; standalone policies count one each.
+  // This matches what the user sees on the المعاملات tab, where each
+  // card IS one معاملة.
   const dedupedPolicyCount = useMemo(() => {
-    const packageGroups = new Map<string, PolicyRecord[]>();
+    const groupIds = new Set<string>();
     let standalone = 0;
     for (const p of policies) {
       if (p.group_id) {
-        const arr = packageGroups.get(p.group_id) || [];
-        arr.push(p);
-        packageGroups.set(p.group_id, arr);
+        groupIds.add(p.group_id);
       } else {
         standalone += 1;
       }
     }
-    let packageTotal = 0;
-    for (const [, groupPolicies] of packageGroups) {
-      const elzami = groupPolicies.filter(p => p.policy_type_parent === 'ELZAMI');
-      const nonElzami = groupPolicies.filter(p => p.policy_type_parent !== 'ELZAMI');
-      packageTotal += elzami.length;
-      const companies = new Set<string>();
-      for (const p of nonElzami) {
-        companies.add(p.company?.name_ar || p.company?.name || `no-company:${p.id}`);
-      }
-      packageTotal += companies.size;
-    }
-    return standalone + packageTotal;
+    return groupIds.size + standalone;
   }, [policies]);
 
   // Group payments by batch_id for unified display

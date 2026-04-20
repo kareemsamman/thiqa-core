@@ -2147,6 +2147,7 @@ function CardLevelPolicyNumberChip({ value }: { value: string }) {
       type="button"
       onClick={handleClick}
       title={`رقم المعاملة: ${value} — اضغط للنسخ`}
+      data-doc-number={value}
       className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-700 font-mono ltr-nums hover:bg-emerald-500/15 hover:border-emerald-500/50 transition-colors"
     >
       <Hash className="h-3 w-3" />

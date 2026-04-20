@@ -19,7 +19,6 @@ import { BankPicker } from '@/components/shared/BankPicker';
 import { useToast } from '@/hooks/use-toast';
 import type { Enums } from "@/integrations/supabase/types";
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
-import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
 
 interface PaymentLine {
   id: string;
@@ -709,31 +708,13 @@ export function PackagePaymentModal({
               </div>
             )}
 
-            {/* Policy List */}
-            <div className="border rounded-lg divide-y max-h-32 overflow-auto">
-              {policies.map(policy => (
-                <div key={policy.policyId} className="flex items-center justify-between p-2 text-sm">
-                  {policy.isTransferFee ? (
-                    <Badge className="text-xs bg-sky-100 text-sky-800 hover:bg-sky-100 border-sky-200">
-                      عمولة التحويل
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs">
-                      {getInsuranceTypeLabel(policy.policyType as any, policy.policyTypeChild as any)}
-                    </Badge>
-                  )}
-                  <div className="flex items-center gap-3">
-                    <span className="text-muted-foreground">₪{policy.price.toLocaleString()}</span>
-                    <span className={cn(
-                      "font-medium",
-                      policy.remaining > 0 ? "text-destructive" : "text-success"
-                    )}>
-                      {policy.remaining > 0 ? `-₪${policy.remaining.toLocaleString()}` : '✓'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {/* Per-policy breakdown removed — the total cards at the top
+                (إجمالي السعر / المدفوع / المتبقي) are all staff need here.
+                Per-policy allocation is arbitrary at payment time (payments
+                all land on the primary policy and waterfall across the
+                package), so splitting rows only invited confusion. The
+                full breakdown still lives on the card's مكونات الباقة
+                panel and in the printed invoice. */}
 
             {/* Payment Lines */}
             <div className="space-y-3">
