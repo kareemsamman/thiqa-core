@@ -35,13 +35,23 @@ import {
   Loader2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useAgentContext } from "@/hooks/useAgentContext";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   DateRangeFilter,
   type DateRangeValue,
   DEFAULT_DATE_RANGE,
   resolveDateRange,
 } from "@/components/admin/DateRangeFilter";
+
+type RoleFilter = "all" | "admin" | "worker";
 
 interface UserSession {
   id: string;
@@ -78,11 +88,33 @@ const isSessionLive = (s: UserSession) => {
 
 export function UserSessionsTab() {
   const { user: currentUser } = useAuth();
+  const { agentId } = useAgentContext();
   const [sessions, setSessions] = useState<UserSession[]>([]);
+  const [rolesByUserId, setRolesByUserId] = useState<Record<string, "admin" | "worker">>({});
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRangeValue>(DEFAULT_DATE_RANGE);
   const [kickingId, setKickingId] = useState<string | null>(null);
   const [kickTarget, setKickTarget] = useState<UserSession | null>(null);
+
+  // Load the agent's user_roles once so we can filter sessions by
+  // role client-side. user_sessions doesn't store the role directly.
+  useEffect(() => {
+    if (!agentId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .eq("agent_id", agentId);
+      const map: Record<string, "admin" | "worker"> = {};
+      (data || []).forEach((r: any) => {
+        if (r.user_id && (r.role === "admin" || r.role === "worker")) {
+          map[r.user_id] = r.role;
+        }
+      });
+      setRolesByUserId(map);
+    })();
+  }, [agentId]);
 
   const confirmKick = async () => {
     if (!kickTarget) return;
@@ -187,10 +219,19 @@ export function UserSessionsTab() {
     return format(new Date(dateString), 'yyyy/MM/dd HH:mm', { locale: ar });
   };
 
+  // Apply role filter client-side: sessions come from user_sessions
+  // which doesn't store the role — we join against the rolesByUserId
+  // map we loaded above. Rows for users with no role entry are
+  // dropped when a specific role is selected.
+  const filteredSessions = sessions.filter((s) => {
+    if (roleFilter === "all") return true;
+    return rolesByUserId[s.user_id] === roleFilter;
+  });
+
   // Calculate total hours for the period. For stale-active rows
   // (crashed/closed tabs), fall back to last_seen_at - started_at so
   // they still contribute to the total hours worked.
-  const totalMinutes = sessions.reduce((acc, s) => {
+  const totalMinutes = filteredSessions.reduce((acc, s) => {
     if (s.duration_minutes !== null) return acc + s.duration_minutes;
     if (s.last_seen_at) {
       return acc + (new Date(s.last_seen_at).getTime() - new Date(s.started_at).getTime()) / 60000;
@@ -199,13 +240,24 @@ export function UserSessionsTab() {
   }, 0);
   const totalHours = Math.floor(totalMinutes / 60);
   const totalMins = Math.round(totalMinutes % 60);
-  const activeSessions = sessions.filter(isSessionLive).length;
+  const activeSessions = filteredSessions.filter(isSessionLive).length;
 
   return (
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-wrap gap-4 items-center">
         <DateRangeFilter value={dateRange} onChange={setDateRange} />
+
+        <Select value={roleFilter} onValueChange={(v: RoleFilter) => setRoleFilter(v)}>
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="الصلاحية" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">كل الصلاحيات</SelectItem>
+            <SelectItem value="admin">المديرون</SelectItem>
+            <SelectItem value="worker">الموظفون</SelectItem>
+          </SelectContent>
+        </Select>
 
         <Button
           variant="outline"
@@ -249,7 +301,7 @@ export function UserSessionsTab() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">إجمالي الجلسات</p>
-              <p className="text-xl font-bold">{sessions.length}</p>
+              <p className="text-xl font-bold">{filteredSessions.length}</p>
             </div>
           </div>
         </div>
@@ -263,10 +315,10 @@ export function UserSessionsTab() {
               <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
-        ) : sessions.length === 0 ? (
+        ) : filteredSessions.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
             <Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>لا توجد جلسات في هذه الفترة</p>
+            <p>لا توجد جلسات مطابقة لهذه الفلاتر</p>
           </div>
         ) : (
           <Table>
@@ -283,7 +335,7 @@ export function UserSessionsTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sessions.map((session) => (
+              {filteredSessions.map((session) => (
                 <TableRow key={session.id}>
                   <TableCell className="font-medium">
                     {session.profile?.full_name || session.profile?.email || 'غير معروف'}
