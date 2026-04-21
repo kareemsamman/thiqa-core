@@ -81,6 +81,7 @@ serve(async (req) => {
         os_name: body.os_name || null,
         device_type: body.device_type || null,
         ip_address,
+        current_path: typeof body.current_path === "string" ? body.current_path : null,
         is_active: true,
       })
       .select("id")

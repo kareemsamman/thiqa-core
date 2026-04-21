@@ -30,8 +30,12 @@ import {
   RefreshCw,
   MapPin,
   Activity,
+  LogOut,
+  Loader2,
 } from "lucide-react";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 interface UserSession {
   id: string;
@@ -40,6 +44,8 @@ interface UserSession {
   ended_at: string | null;
   duration_minutes: number | null;
   last_seen_at: string | null;
+  current_path: string | null;
+  kicked_at: string | null;
   ip_address: string | null;
   browser_name: string | null;
   browser_version: string | null;
@@ -67,11 +73,31 @@ const isSessionLive = (s: UserSession) => {
 type FilterPeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
 
 export function UserSessionsTab() {
+  const { user: currentUser } = useAuth();
   const [sessions, setSessions] = useState<UserSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterPeriod, setFilterPeriod] = useState<FilterPeriod>('today');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [kickingId, setKickingId] = useState<string | null>(null);
+
+  const handleKick = async (session: UserSession) => {
+    if (!confirm(`هل تريد إنهاء جلسة ${session.profile?.full_name || session.profile?.email || 'هذا المستخدم'}؟`)) return;
+    setKickingId(session.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('kick-user-session', {
+        body: { session_id: session.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success('تم إنهاء الجلسة. سيتم تسجيل خروج المستخدم خلال ثوانٍ.');
+      fetchSessions();
+    } catch (err: any) {
+      toast.error(err.message || 'فشل في إنهاء الجلسة');
+    } finally {
+      setKickingId(null);
+    }
+  };
 
   const getDateRange = (period: FilterPeriod) => {
     const now = new Date();
@@ -290,10 +316,12 @@ export function UserSessionsTab() {
                 <TableHead className="text-right">المستخدم</TableHead>
                 <TableHead className="text-right">الوقت</TableHead>
                 <TableHead className="text-right">المدة</TableHead>
+                <TableHead className="text-right">الصفحة الحالية</TableHead>
                 <TableHead className="text-right">المتصفح</TableHead>
                 <TableHead className="text-right">الجهاز</TableHead>
                 <TableHead className="text-right">IP</TableHead>
                 <TableHead className="text-right">الموقع</TableHead>
+                <TableHead className="text-right">إجراءات</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -307,6 +335,15 @@ export function UserSessionsTab() {
                   </TableCell>
                   <TableCell>
                     {formatDuration(session)}
+                  </TableCell>
+                  <TableCell>
+                    {session.current_path ? (
+                      <bdi className="text-muted-foreground text-sm font-mono">
+                        {session.current_path}
+                      </bdi>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
@@ -336,6 +373,30 @@ export function UserSessionsTab() {
                           ? `${session.city}, ${session.country}`
                           : session.city || session.country}
                       </div>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {isSessionLive(session) && session.user_id !== currentUser?.id ? (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={kickingId === session.id}
+                        onClick={() => handleKick(session)}
+                        className="gap-1"
+                      >
+                        {kickingId === session.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <LogOut className="h-3 w-3" />
+                        )}
+                        طرد
+                      </Button>
+                    ) : session.kicked_at ? (
+                      <Badge variant="outline" className="text-destructive border-destructive/30">
+                        تم الطرد
+                      </Badge>
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}
