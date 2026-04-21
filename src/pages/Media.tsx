@@ -375,23 +375,10 @@ export default function Media() {
       />
 
       <div className="p-6 space-y-6">
-        {/* Filters Bar */}
+        {/* Filters Bar — upload action pinned to the far-left end of
+            the row via the last-child position, so it lands at the
+            visual left edge under RTL. */}
         <div className="flex flex-wrap gap-3 items-center p-4 bg-card border border-border rounded-xl">
-          <Dialog open={uploaderOpen} onOpenChange={setUploaderOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="gap-2">
-                <Upload className="h-4 w-4" />
-                رفع ملفات
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="w-fit max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>رفع ملفات جديدة</DialogTitle>
-              </DialogHeader>
-              <FileUploader onUploadComplete={handleUploadComplete} />
-            </DialogContent>
-          </Dialog>
-
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -484,7 +471,7 @@ export default function Media() {
           </div>
 
           {selectedIds.size > 0 && (
-            <div className="flex items-center gap-2 mr-auto bg-destructive/10 px-3 py-1.5 rounded-lg">
+            <div className="flex items-center gap-2 bg-destructive/10 px-3 py-1.5 rounded-lg">
               <span className="text-sm font-medium text-destructive">
                 {selectedIds.size} محدد
               </span>
@@ -501,6 +488,21 @@ export default function Media() {
               </Button>
             </div>
           )}
+
+          <Dialog open={uploaderOpen} onOpenChange={setUploaderOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-2 mr-auto">
+                <Upload className="h-4 w-4" />
+                رفع ملفات
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="w-fit max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>رفع ملفات جديدة</DialogTitle>
+              </DialogHeader>
+              <FileUploader onUploadComplete={handleUploadComplete} />
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Content */}
