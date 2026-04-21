@@ -39,6 +39,7 @@ interface UserSession {
   started_at: string;
   ended_at: string | null;
   duration_minutes: number | null;
+  last_seen_at: string | null;
   ip_address: string | null;
   browser_name: string | null;
   browser_version: string | null;
@@ -52,6 +53,16 @@ interface UserSession {
     email: string;
   };
 }
+
+// A session is "truly active" only when the client has pinged
+// last_seen_at recently. Anything older is a stale tab / crashed
+// browser / force-killed session that never got a clean end.
+const STALE_HEARTBEAT_MS = 90_000;
+const isSessionLive = (s: UserSession) => {
+  if (!s.is_active) return false;
+  const lastSeen = s.last_seen_at || s.started_at;
+  return Date.now() - new Date(lastSeen).getTime() < STALE_HEARTBEAT_MS;
+};
 
 type FilterPeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -112,8 +123,16 @@ export function UserSessionsTab() {
     fetchSessions();
   }, [filterPeriod, startDate, endDate]);
 
-  const formatDuration = (minutes: number | null, isActive: boolean) => {
-    if (isActive) {
+  // Re-render every 30s so the "نشط حالياً" badges flip to ended as
+  // heartbeats go stale, without the admin having to click تحديث.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const formatDuration = (session: UserSession) => {
+    if (isSessionLive(session)) {
       return (
         <Badge variant="outline" className="bg-success/10 text-success border-success/30">
           <Activity className="h-3 w-3 ml-1 animate-pulse" />
@@ -121,11 +140,22 @@ export function UserSessionsTab() {
         </Badge>
       );
     }
+
+    // Stale-active (tab closed without a clean end) — fall back to
+    // last_seen_at - started_at so the duration still reflects real
+    // work time rather than "-".
+    let minutes = session.duration_minutes;
+    if (minutes === null && session.last_seen_at) {
+      minutes = Math.max(
+        0,
+        (new Date(session.last_seen_at).getTime() - new Date(session.started_at).getTime()) / 60000,
+      );
+    }
     if (minutes === null) return '-';
-    
+
     const hours = Math.floor(minutes / 60);
     const mins = Math.round(minutes % 60);
-    
+
     if (hours > 0) {
       return `${hours}س ${mins}د`;
     }
@@ -147,11 +177,19 @@ export function UserSessionsTab() {
     return format(new Date(dateString), 'yyyy/MM/dd HH:mm', { locale: ar });
   };
 
-  // Calculate total hours for the period
-  const totalMinutes = sessions.reduce((acc, s) => acc + (s.duration_minutes || 0), 0);
+  // Calculate total hours for the period. For stale-active rows
+  // (crashed/closed tabs), fall back to last_seen_at - started_at so
+  // they still contribute to the total hours worked.
+  const totalMinutes = sessions.reduce((acc, s) => {
+    if (s.duration_minutes !== null) return acc + s.duration_minutes;
+    if (s.last_seen_at) {
+      return acc + (new Date(s.last_seen_at).getTime() - new Date(s.started_at).getTime()) / 60000;
+    }
+    return acc;
+  }, 0);
   const totalHours = Math.floor(totalMinutes / 60);
   const totalMins = Math.round(totalMinutes % 60);
-  const activeSessions = sessions.filter(s => s.is_active).length;
+  const activeSessions = sessions.filter(isSessionLive).length;
 
   return (
     <div className="space-y-4">
@@ -268,7 +306,7 @@ export function UserSessionsTab() {
                     {formatDateTime(session.started_at)}
                   </TableCell>
                   <TableCell>
-                    {formatDuration(session.duration_minutes, session.is_active)}
+                    {formatDuration(session)}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">

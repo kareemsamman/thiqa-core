@@ -49,10 +49,13 @@ async function getClientIP(): Promise<string | null> {
   }
 }
 
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
 export function useSessionTracker() {
   const { user } = useAuth();
   const sessionIdRef = useRef<string | null>(null);
   const startedRef = useRef(false);
+  const heartbeatRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -60,6 +63,10 @@ export function useSessionTracker() {
       // row instead of being skipped by the startedRef guard.
       startedRef.current = false;
       sessionIdRef.current = null;
+      if (heartbeatRef.current) {
+        window.clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
       return;
     }
     if (startedRef.current) return;
@@ -103,12 +110,34 @@ export function useSessionTracker() {
       }
     };
 
+    // Ping last_seen_at so the UI can tell this tab is still alive.
+    // Admins viewing /admin/users treat any session without a recent
+    // heartbeat as stale and hide the "نشط حالياً" badge.
+    const startHeartbeat = () => {
+      if (heartbeatRef.current) window.clearInterval(heartbeatRef.current);
+      heartbeatRef.current = window.setInterval(async () => {
+        const id = sessionIdRef.current || sessionStorage.getItem('current_session_id');
+        if (!id) return;
+        try {
+          await (supabase.from('user_sessions') as any)
+            .update({ last_seen_at: new Date().toISOString() })
+            .eq('id', id);
+        } catch {
+          // swallow — next tick will retry
+        }
+      }, HEARTBEAT_INTERVAL_MS);
+    };
+
     // Check if there's an orphaned session from previous tab/window
     const orphanedSessionId = sessionStorage.getItem('current_session_id');
     if (orphanedSessionId) {
       sessionIdRef.current = orphanedSessionId;
+      startedRef.current = true;
+      startHeartbeat();
     } else {
-      startSession();
+      startSession().then(() => {
+        if (sessionIdRef.current) startHeartbeat();
+      });
     }
 
     // End session on page close/unload
@@ -143,6 +172,10 @@ export function useSessionTracker() {
     return () => {
       window.removeEventListener('beforeunload', endSession);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (heartbeatRef.current) {
+        window.clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
     };
   }, [user]);
 
