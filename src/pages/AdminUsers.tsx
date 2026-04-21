@@ -35,6 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   UserCheck,
   UserX,
@@ -45,10 +46,10 @@ import {
   XCircle,
   Loader2,
   RefreshCw,
-  Building2,
   History,
   UserPlus,
   Plus,
+  KeyRound,
 } from "lucide-react";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Input } from "@/components/ui/input";
@@ -108,6 +109,7 @@ export default function AdminUsers() {
   } | null>(null);
 
   // Create user form state
+  const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
@@ -115,6 +117,15 @@ export default function AdminUsers() {
   const [newUserRole, setNewUserRole] = useState<"admin" | "worker">("worker");
   const [newUserBranch, setNewUserBranch] = useState("");
   const [creatingUser, setCreatingUser] = useState(false);
+
+  const resetCreateForm = () => {
+    setNewUserName("");
+    setNewUserEmail("");
+    setNewUserPassword("");
+    setNewUserPhone("");
+    setNewUserRole("worker");
+    setNewUserBranch("");
+  };
 
   const handleCreateUser = async () => {
     if (!newUserEmail.trim() || !newUserPassword.trim() || !agentId) return;
@@ -135,12 +146,8 @@ export default function AdminUsers() {
       if (data?.error) throw new Error(data.error);
 
       toast({ title: "تم الإنشاء", description: "تم إنشاء المستخدم بنجاح" });
-      setNewUserName("");
-      setNewUserEmail("");
-      setNewUserPassword("");
-      setNewUserPhone("");
-      setNewUserRole("worker");
-      setNewUserBranch("");
+      resetCreateForm();
+      setCreateSheetOpen(false);
       fetchUsers();
     } catch (err: any) {
       toast({ title: "خطأ", description: err.message || "فشل في إنشاء المستخدم", variant: "destructive" });
@@ -174,6 +181,9 @@ export default function AdminUsers() {
         return;
       }
 
+      // login_attempts is scoped by agent_id (populated via DB trigger),
+      // which captures failed attempts whose user_id stayed null but whose
+      // email matched a profile in this agent.
       const [
         { data: roles, error: rolesError },
         { data: attempts, error: attemptsError },
@@ -185,7 +195,7 @@ export default function AdminUsers() {
         supabase
           .from('login_attempts')
           .select('*')
-          .in('user_id', userIds)
+          .eq('agent_id', agentId)
           .order('created_at', { ascending: false })
           .limit(50),
       ]);
@@ -448,7 +458,11 @@ export default function AdminUsers() {
 
       <div className="p-6 space-y-6">
         {/* Toolbar */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <Button onClick={() => { resetCreateForm(); setCreateSheetOpen(true); }} className="gap-2">
+            <UserPlus className="h-4 w-4" />
+            إنشاء مستخدم
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -509,78 +523,28 @@ export default function AdminUsers() {
           </div>
         </div>
 
-        {/* Create User Form */}
-        <div className="rounded-lg border bg-card p-4 space-y-4">
-          <h3 className="font-semibold flex items-center gap-2">
-            <UserPlus className="h-4 w-4" />
-            إنشاء مستخدم جديد
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label>الاسم الكامل</Label>
-              <Input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="مثال: أحمد محمد" />
-            </div>
-            <div>
-              <Label>البريد الإلكتروني *</Label>
-              <Input value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="user@example.com" dir="ltr" type="email" />
-            </div>
-            <div>
-              <Label>كلمة المرور *</Label>
-              <Input value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} placeholder="6 أحرف على الأقل" dir="ltr" type="password" />
-            </div>
-            <div>
-              <Label>الهاتف</Label>
-              <Input value={newUserPhone} onChange={e => setNewUserPhone(e.target.value)} placeholder="05XXXXXXXX" dir="ltr" />
-            </div>
-            <div>
-              <Label>الصلاحية *</Label>
-              <Select value={newUserRole} onValueChange={(v) => setNewUserRole(v as 'admin' | 'worker')}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">مدير (Admin)</SelectItem>
-                  <SelectItem value="worker">موظف (Worker)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {branches.length > 0 && (
-              <div>
-                <Label>الفرع</Label>
-                <Select value={newUserBranch} onValueChange={setNewUserBranch}>
-                  <SelectTrigger><SelectValue placeholder="بدون فرع" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">بدون فرع</SelectItem>
-                    {branches.map(branch => (
-                      <SelectItem key={branch.id} value={branch.id}>{branch.name_ar || branch.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          <Button onClick={handleCreateUser} disabled={creatingUser || !newUserEmail.trim() || !newUserPassword.trim()}>
-            {creatingUser ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Plus className="h-4 w-4 ml-2" />}
-            إنشاء المستخدم
-          </Button>
-        </div>
-
         {/* Tabs */}
         <Tabs defaultValue="active" className="space-y-4">
-          <TabsList className="grid w-full max-w-xl grid-cols-4">
-            <TabsTrigger value="active" className="gap-2">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto gap-1 p-1">
+            <TabsTrigger value="active" className="gap-2 py-2.5">
               <CheckCircle className="h-4 w-4" />
               نشط ({activeUsers.length})
             </TabsTrigger>
-            <TabsTrigger value="pending" className="gap-2">
+            <TabsTrigger value="pending" className="gap-2 py-2.5">
               <Clock className="h-4 w-4" />
               معلق ({pendingUsers.length})
             </TabsTrigger>
-            <TabsTrigger value="blocked" className="gap-2">
+            <TabsTrigger value="blocked" className="gap-2 py-2.5">
               <XCircle className="h-4 w-4" />
               محظور ({blockedUsers.length})
             </TabsTrigger>
-            <TabsTrigger value="sessions" className="gap-2">
+            <TabsTrigger value="sessions" className="gap-2 py-2.5">
               <History className="h-4 w-4" />
-              سجل الجلسات
+              الجلسات
+            </TabsTrigger>
+            <TabsTrigger value="attempts" className="gap-2 py-2.5">
+              <KeyRound className="h-4 w-4" />
+              محاولات الدخول
             </TabsTrigger>
           </TabsList>
 
@@ -848,57 +812,123 @@ export default function AdminUsers() {
           <TabsContent value="sessions">
             <UserSessionsTab />
           </TabsContent>
-        </Tabs>
 
-        {/* Recent Login Attempts */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">محاولات الدخول الأخيرة</h2>
-          <div className="rounded-lg border bg-card">
-            {loading ? (
-              <div className="p-4">{renderTableSkeleton()}</div>
-            ) : loginAttempts.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                <p>لا توجد محاولات دخول مسجلة</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-right">البريد الإلكتروني</TableHead>
-                    <TableHead className="text-right">الوقت</TableHead>
-                    <TableHead className="text-right">النتيجة</TableHead>
-                    <TableHead className="text-right">عنوان IP</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loginAttempts.slice(0, 10).map((attempt) => (
-                    <TableRow key={attempt.id}>
-                      <TableCell className="text-right">
-                        <bdi>{attempt.email}</bdi>
-                      </TableCell>
-                      <TableCell>{formatDate(attempt.created_at)}</TableCell>
-                      <TableCell>
-                        {attempt.success ? (
-                          <Badge variant="outline" className="bg-success/10 text-success border-success/30">
-                            نجاح
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
-                            فشل
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        <bdi>{attempt.ip_address || '-'}</bdi>
-                      </TableCell>
+          {/* Login Attempts Tab */}
+          <TabsContent value="attempts">
+            <div className="rounded-lg border bg-card">
+              {loading ? (
+                <div className="p-4">{renderTableSkeleton()}</div>
+              ) : loginAttempts.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <KeyRound className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>لا توجد محاولات دخول مسجلة</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-right">البريد الإلكتروني</TableHead>
+                      <TableHead className="text-right">الوقت</TableHead>
+                      <TableHead className="text-right">النتيجة</TableHead>
+                      <TableHead className="text-right">عنوان IP</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-        </div>
+                  </TableHeader>
+                  <TableBody>
+                    {loginAttempts.map((attempt) => (
+                      <TableRow key={attempt.id}>
+                        <TableCell className="text-right">
+                          <bdi>{attempt.email}</bdi>
+                        </TableCell>
+                        <TableCell>{formatDate(attempt.created_at)}</TableCell>
+                        <TableCell>
+                          {attempt.success ? (
+                            <Badge variant="outline" className="bg-success/10 text-success border-success/30">
+                              <CheckCircle className="h-3 w-3 ml-1" />
+                              نجاح
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
+                              <XCircle className="h-3 w-3 ml-1" />
+                              فشل
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          <bdi>{attempt.ip_address || '-'}</bdi>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
+
+      {/* Create User Sheet */}
+      <Sheet open={createSheetOpen} onOpenChange={setCreateSheetOpen}>
+        <SheetContent side="left" className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>إنشاء مستخدم جديد</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-4 mt-6">
+            <div className="space-y-2">
+              <Label>الاسم الكامل</Label>
+              <Input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="مثال: أحمد محمد" />
+            </div>
+            <div className="space-y-2">
+              <Label>البريد الإلكتروني *</Label>
+              <Input value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="user@example.com" dir="ltr" type="email" />
+            </div>
+            <div className="space-y-2">
+              <Label>كلمة المرور *</Label>
+              <Input value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} placeholder="6 أحرف على الأقل" dir="ltr" type="password" />
+            </div>
+            <div className="space-y-2">
+              <Label>الهاتف</Label>
+              <Input value={newUserPhone} onChange={e => setNewUserPhone(e.target.value)} placeholder="05XXXXXXXX" dir="ltr" />
+            </div>
+            <div className="space-y-2">
+              <Label>الصلاحية *</Label>
+              <Select value={newUserRole} onValueChange={(v) => setNewUserRole(v as 'admin' | 'worker')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">مدير (Admin)</SelectItem>
+                  <SelectItem value="worker">موظف (Worker)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {branches.length > 0 && (
+              <div className="space-y-2">
+                <Label>الفرع</Label>
+                <Select value={newUserBranch} onValueChange={setNewUserBranch}>
+                  <SelectTrigger><SelectValue placeholder="بدون فرع" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">بدون فرع</SelectItem>
+                    {branches.map(branch => (
+                      <SelectItem key={branch.id} value={branch.id}>{branch.name_ar || branch.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="flex gap-2 pt-4">
+              <Button
+                onClick={handleCreateUser}
+                disabled={creatingUser || !newUserEmail.trim() || !newUserPassword.trim()}
+                className="flex-1"
+              >
+                {creatingUser ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Plus className="h-4 w-4 ml-2" />}
+                إنشاء المستخدم
+              </Button>
+              <Button variant="outline" onClick={() => setCreateSheetOpen(false)} disabled={creatingUser}>
+                إلغاء
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Confirmation Dialog */}
       <AlertDialog open={confirmDialog?.open} onOpenChange={(open) => !open && setConfirmDialog(null)}>
