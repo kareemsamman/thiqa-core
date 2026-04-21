@@ -376,37 +376,45 @@ export default function CorrespondenceLetters() {
         />
       )}
 
-      {/* Preview Modal */}
+      {/* Preview Modal — wider shell, muted background wrapper so the
+          white letter card pops, and a status chip next to the title so
+          you can tell draft/sent at a glance without scrolling. */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span>معاينة الرسالة</span>
+        <DialogContent className="sm:max-w-5xl max-h-[92vh] overflow-hidden p-0 gap-0">
+          <DialogHeader className="px-6 py-4 border-b bg-background">
+            <DialogTitle className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span>معاينة الرسالة</span>
+                {selectedLetter && getStatusBadge(selectedLetter.status)}
+              </div>
               {selectedLetter && (
                 <Button
-                  variant="outline"
+                  variant="default"
                   size="sm"
                   onClick={() => handleGenerateAndPrint(selectedLetter)}
                   disabled={generatingId === selectedLetter.id}
+                  className="gap-2"
                 >
                   {generatingId === selectedLetter.id ? (
-                    <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Printer className="h-4 w-4 ml-2" />
+                    <Printer className="h-4 w-4" />
                   )}
                   طباعة
                 </Button>
               )}
             </DialogTitle>
           </DialogHeader>
-          {selectedLetter && (
-            <LetterPreview
-              title={selectedLetter.title}
-              recipientName={selectedLetter.recipient_name}
-              bodyHtml={selectedLetter.body_html || ''}
-              createdAt={selectedLetter.created_at}
-            />
-          )}
+          <div className="overflow-y-auto bg-muted/40 p-6 max-h-[calc(92vh-64px)]">
+            {selectedLetter && (
+              <LetterPreview
+                title={selectedLetter.title}
+                recipientName={selectedLetter.recipient_name}
+                bodyHtml={selectedLetter.body_html || ''}
+                createdAt={selectedLetter.created_at}
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
