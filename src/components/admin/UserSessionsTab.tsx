@@ -28,7 +28,6 @@ import {
   Smartphone,
   Tablet,
   RefreshCw,
-  MapPin,
   Activity,
   LogOut,
   Loader2,
@@ -320,7 +319,6 @@ export function UserSessionsTab() {
                 <TableHead className="text-right">المتصفح</TableHead>
                 <TableHead className="text-right">الجهاز</TableHead>
                 <TableHead className="text-right">IP</TableHead>
-                <TableHead className="text-right">الموقع</TableHead>
                 <TableHead className="text-right">إجراءات</TableHead>
               </TableRow>
             </TableHeader>
@@ -366,19 +364,11 @@ export function UserSessionsTab() {
                     </bdi>
                   </TableCell>
                   <TableCell>
-                    {session.city || session.country ? (
-                      <div className="flex items-center gap-1">
-                        <MapPin className="h-3 w-3 text-muted-foreground" />
-                        {session.city && session.country
-                          ? `${session.city}, ${session.country}`
-                          : session.city || session.country}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {isSessionLive(session) && session.user_id !== currentUser?.id ? (
+                    {session.kicked_at ? (
+                      <Badge variant="outline" className="text-destructive border-destructive/30">
+                        تم الطرد
+                      </Badge>
+                    ) : session.is_active && session.user_id !== currentUser?.id ? (
                       <Button
                         size="sm"
                         variant="destructive"
@@ -393,10 +383,6 @@ export function UserSessionsTab() {
                         )}
                         طرد
                       </Button>
-                    ) : session.kicked_at ? (
-                      <Badge variant="outline" className="text-destructive border-destructive/30">
-                        تم الطرد
-                      </Badge>
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}
