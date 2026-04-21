@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAgentContext } from '@/hooks/useAgentContext';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from '@/components/ui/drawer';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -103,27 +103,21 @@ export function AccidentFeeServiceDrawer({ open, onOpenChange, service, onSaved 
   };
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[90vh]" dir="rtl">
-        <div className="mx-auto w-full max-w-2xl flex flex-col max-h-[calc(90vh-1rem)]">
-          <DrawerHeader className="text-right sm:text-right">
-            <DrawerTitle>
-              {service ? 'تعديل خدمة إعفاء رسوم الحادث' : 'إضافة خدمة إعفاء رسوم حادث جديدة'}
-            </DrawerTitle>
-          </DrawerHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
+        <DialogHeader>
+          <DialogTitle className="text-right">
+            {service ? 'تعديل خدمة إعفاء رسوم الحادث' : 'إضافة خدمة إعفاء رسوم حادث جديدة'}
+          </DialogTitle>
+          <DialogDescription className="text-right">
+            {service
+              ? 'عدّل بيانات الخدمة ثم احفظ التغييرات.'
+              : 'أدخل بيانات الخدمة لإضافتها إلى كتالوج إعفاء رسوم الحادث.'}
+          </DialogDescription>
+        </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="px-4 pb-2 space-y-4 overflow-y-auto">
-            <div className="space-y-2">
-              <Label htmlFor="name" className="text-right block">الاسم بالإنجليزية</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Service Name"
-                className="ltr-input"
-              />
-            </div>
-
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name_ar" className="text-right block">الاسم بالعربية *</Label>
               <Input
@@ -136,17 +130,30 @@ export function AccidentFeeServiceDrawer({ open, onOpenChange, service, onSaved 
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description" className="text-right block">الوصف</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="وصف الخدمة..."
-                className="text-right"
-                rows={3}
+              <Label htmlFor="name" className="text-right block">الاسم بالإنجليزية</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Service Name"
+                className="ltr-input"
               />
             </div>
+          </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="description" className="text-right block">الوصف</Label>
+            <Textarea
+              id="description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="وصف الخدمة..."
+              className="text-right resize-none"
+              rows={3}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-4 items-end">
             <div className="space-y-2">
               <Label htmlFor="sort_order" className="text-right block">ترتيب العرض</Label>
               <Input
@@ -155,11 +162,11 @@ export function AccidentFeeServiceDrawer({ open, onOpenChange, service, onSaved 
                 value={formData.sort_order}
                 onChange={(e) => setFormData({ ...formData, sort_order: parseInt(e.target.value) || 0 })}
                 placeholder="0"
-                className="ltr-input w-24"
+                className="ltr-input"
               />
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+            <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 h-10">
               <Label htmlFor="active" className="cursor-pointer">الخدمة فعالة</Label>
               <Switch
                 id="active"
@@ -167,32 +174,30 @@ export function AccidentFeeServiceDrawer({ open, onOpenChange, service, onSaved 
                 onCheckedChange={(checked) => setFormData({ ...formData, active: checked })}
               />
             </div>
-          </form>
+          </div>
+        </form>
 
-          <DrawerFooter>
-            <div className="flex gap-2 w-full">
-              <Button
-                type="submit"
-                className="flex-1"
-                disabled={loading}
-                onClick={handleSubmit}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                    جاري الحفظ...
-                  </>
-                ) : (
-                  'حفظ'
-                )}
-              </Button>
-              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-                إلغاء
-              </Button>
-            </div>
-          </DrawerFooter>
-        </div>
-      </DrawerContent>
-    </Drawer>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+            إلغاء
+          </Button>
+          <Button
+            type="submit"
+            disabled={loading}
+            onClick={handleSubmit}
+            className="gap-2"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                جاري الحفظ...
+              </>
+            ) : (
+              'حفظ'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
