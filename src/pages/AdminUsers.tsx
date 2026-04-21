@@ -181,27 +181,31 @@ export default function AdminUsers() {
         return;
       }
 
+      const { data: roles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, role')
+        .eq('agent_id', agentId);
+
+      if (rolesError) throw rolesError;
+
       // login_attempts is scoped by agent_id (populated via DB trigger),
       // which captures failed attempts whose user_id stayed null but whose
-      // email matched a profile in this agent.
-      const [
-        { data: roles, error: rolesError },
-        { data: attempts, error: attemptsError },
-      ] = await Promise.all([
-        supabase
-          .from('user_roles')
-          .select('user_id, role')
-          .eq('agent_id', agentId),
-        supabase
+      // email matched a profile in this agent. Fetched separately so a
+      // failure here (e.g. migration pending) doesn't block the users
+      // tabs from rendering.
+      let attempts: LoginAttempt[] = [];
+      try {
+        const { data, error } = await supabase
           .from('login_attempts')
           .select('*')
           .eq('agent_id', agentId)
           .order('created_at', { ascending: false })
-          .limit(50),
-      ]);
-
-      if (rolesError) throw rolesError;
-      if (attemptsError) throw attemptsError;
+          .limit(50);
+        if (error) throw error;
+        attempts = (data || []) as LoginAttempt[];
+      } catch (attemptsError) {
+        console.warn('Login attempts unavailable (migration may be pending):', attemptsError);
+      }
 
       const usersWithRoles: UserWithRole[] = (profiles || []).map(profile => {
         const userRole = (roles || []).find(r => r.user_id === profile.id);
@@ -225,7 +229,7 @@ export default function AdminUsers() {
       });
       setSelectedRole(roleSelections);
       setSelectedBranch(branchSelections);
-      setLoginAttempts(attempts || []);
+      setLoginAttempts(attempts);
     } catch (error) {
       console.error('Error fetching users:', error);
       toast({
