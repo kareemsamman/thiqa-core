@@ -489,7 +489,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
             <Card className="print:border print:shadow-none">
               <CardHeader>
                 <CardTitle className="text-base">
-                  معاملات الوسيط ({policies.length} معاملة)
+                  معاملات الوسيط ({tableRows.length} معاملة)
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -606,10 +606,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                                 </div>
                               </TableCell>
                               <TableCell onClick={(e) => e.stopPropagation()} className="print:hidden">
-                                <RowActionsMenu
-                                  onView={onOpen}
-                                  onEdit={row.kind === 'package' ? undefined : onOpen}
-                                />
+                                <RowActionsMenu onView={onOpen} />
                               </TableCell>
                             </TableRow>
                           );
@@ -681,7 +678,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                 <div className="flex items-center gap-2 rounded-full bg-background border px-3 py-1.5">
                   <FileText className="h-4 w-4 text-blue-600" />
                   <span className="text-xs text-muted-foreground">عدد المعاملات</span>
-                  <span className="text-sm font-bold text-blue-600 ltr-nums">{policies.length}</span>
+                  <span className="text-sm font-bold text-blue-600 ltr-nums">{tableRows.length}</span>
                 </div>
               </div>
 
