@@ -57,6 +57,7 @@ interface AccidentReport {
   policies: {
     id: string;
     policy_number: string | null;
+    document_number: string | null;
     policy_type_child: string | null;
   };
   insurance_companies: {
@@ -135,7 +136,7 @@ export default function AccidentReports() {
           created_at,
           clients!inner(id, full_name, file_number),
           cars(id, car_number),
-          policies!inner(id, policy_number, policy_type_child),
+          policies!inner(id, policy_number, document_number, policy_type_child),
           insurance_companies(id, name, name_ar),
           branches(id, name, name_ar),
           profiles:created_by_admin_id(full_name, email)
@@ -228,50 +229,53 @@ export default function AccidentReports() {
       />
 
       <div className="p-6 space-y-6" dir="rtl">
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Filters — search + filters pinned to the right (start of the
+            RTL row), the بلاغ جديد CTA pinned to the very left. */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-1 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="بحث بالعميل، رقم السيارة، رقم المعاملة..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="pr-10"
+              />
+            </div>
+
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="الحالة" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">جميع الحالات</SelectItem>
+                {selectableStatuses.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {statusLabels[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={companyFilter} onValueChange={(v) => { setCompanyFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="شركة التأمين" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">جميع الشركات</SelectItem>
+                {companies.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button size="sm" onClick={() => setWizardOpen(true)} className="gap-2">
             <Plus className="h-4 w-4" />
             بلاغ جديد
           </Button>
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="بحث بالعميل، رقم السيارة، رقم المعاملة..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="pr-10"
-            />
-          </div>
-
-          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="الحالة" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">جميع الحالات</SelectItem>
-              {selectableStatuses.map((value) => (
-                <SelectItem key={value} value={value}>
-                  {statusLabels[value]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={companyFilter} onValueChange={(v) => { setCompanyFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="شركة التأمين" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">جميع الشركات</SelectItem>
-              {companies.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         {/* Table */}
@@ -329,9 +333,9 @@ export default function AccidentReports() {
                       {report.cars?.car_number || "-"}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 ltr-nums">
                         <FileText className="h-4 w-4 text-muted-foreground" />
-                        {report.policies.policy_number || "-"}
+                        {report.policies.document_number || report.policies.policy_number || "-"}
                       </div>
                     </TableCell>
                     <TableCell>

@@ -47,6 +47,7 @@ import { AccidentFilesSection } from "@/components/accident-reports/AccidentFile
 interface Policy {
   id: string;
   policy_number: string | null;
+  document_number: string | null;
   policy_type_parent: string;
   policy_type_child: string | null;
   start_date: string;
@@ -232,7 +233,7 @@ export default function AccidentReportForm() {
     const { data, error } = await supabase
       .from("policies")
       .select(`
-        id, policy_number, policy_type_parent, policy_type_child,
+        id, policy_number, document_number, policy_type_parent, policy_type_child,
         start_date, end_date, cancelled,
         clients!inner(id, full_name, id_number, phone_number),
         cars(id, car_number, manufacturer_name, model, year, color, license_expiry),
@@ -596,8 +597,8 @@ export default function AccidentReportForm() {
                     <p className="font-medium">
                       {policy.insurance_companies.name_ar || policy.insurance_companies.name}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      معاملة: {policy.policy_number || "-"}
+                    <p className="text-xs text-muted-foreground ltr-nums">
+                      معاملة: {policy.document_number || policy.policy_number || "-"}
                     </p>
                   </div>
                 </div>
