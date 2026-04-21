@@ -106,6 +106,56 @@ function ImageUploadField({
   );
 }
 
+// Signature page content is stored in site_settings as HTML so the
+// edge function can render it directly, but the admin UI edits plain
+// text. These helpers convert between the two: stored HTML → what the
+// staff see in the textareas, and plain text → the HTML written back
+// to the DB.
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function htmlToPlain(html: string | null | undefined): string {
+  if (!html) return '';
+  return html
+    .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
+    .replace(/<br\s*\/?\s*>/gi, '\n')
+    .replace(/<\/?(h[1-6]|p|div|span|strong|em|b|i|u)[^>]*>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function titlePlainToHtml(plain: string): string {
+  const safe = plain.trim();
+  return safe ? `<h2>${escapeHtml(safe)}</h2>` : '';
+}
+
+function bodyPlainToHtml(plain: string): string {
+  return plain
+    .split(/\n\s*\n/)
+    .map(p => p.trim())
+    .filter(Boolean)
+    .map(p => `<p>${escapeHtml(p).replace(/\n/g, '<br/>')}</p>`)
+    .join('');
+}
+
+function footerPlainToHtml(plain: string): string {
+  const safe = plain.trim();
+  return safe ? `<p>${escapeHtml(safe)}</p>` : '';
+}
+
 export default function BrandingSettings() {
   const { data: settings, isLoading } = useSiteSettings();
   const updateSettings = useUpdateSiteSettings();
@@ -135,9 +185,9 @@ export default function BrandingSettings() {
     setLogoUrl(settings.logo_url);
     setFaviconUrl(settings.favicon_url);
     setOgImageUrl(settings.og_image_url);
-    setSigHeader(settings.signature_header_html || '<h2>نموذج الموافقة على الخصوصية</h2>');
-    setSigBody(settings.signature_body_html || '<p>مرحباً.</p><p>أقرّ بأنني قرأت وفهمت سياسة الخصوصية، وأوافق على قيام الشركة بجمع واستخدام ومعالجة بياناتي الشخصية للأغراض المتعلقة بخدمات التأمين والتواصل وإتمام الإجراءات اللازمة.</p><p>بالتوقيع أدناه، أؤكد صحة البيانات وأمنح موافقتي على ما ورد أعلاه.</p>');
-    setSigFooter(settings.signature_footer_html || '<p>جميع الحقوق محفوظة</p>');
+    setSigHeader(htmlToPlain(settings.signature_header_html) || 'نموذج الموافقة على الخصوصية');
+    setSigBody(htmlToPlain(settings.signature_body_html) || 'مرحباً.\n\nأقرّ بأنني قرأت وفهمت سياسة الخصوصية، وأوافق على قيام الشركة بجمع واستخدام ومعالجة بياناتي الشخصية للأغراض المتعلقة بخدمات التأمين والتواصل وإتمام الإجراءات اللازمة.\n\nبالتوقيع أدناه، أؤكد صحة البيانات وأمنح موافقتي على ما ورد أعلاه.');
+    setSigFooter(htmlToPlain(settings.signature_footer_html) || 'جميع الحقوق محفوظة');
     setSigColor(settings.signature_primary_color || '#1e3a5f');
     setOwnerName(settings.owner_name || '');
     setTaxNumber(settings.tax_number || '');
@@ -155,9 +205,9 @@ export default function BrandingSettings() {
         logo_url: logoUrl,
         favicon_url: faviconUrl,
         og_image_url: ogImageUrl,
-        signature_header_html: sigHeader,
-        signature_body_html: sigBody,
-        signature_footer_html: sigFooter,
+        signature_header_html: titlePlainToHtml(sigHeader),
+        signature_body_html: bodyPlainToHtml(sigBody),
+        signature_footer_html: footerPlainToHtml(sigFooter),
         signature_primary_color: sigColor,
         owner_name: ownerName.trim() || null,
         tax_number: taxNumber.trim() || null,
@@ -347,43 +397,37 @@ export default function BrandingSettings() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="sig-header">عنوان صفحة التوقيع (HTML)</Label>
-                  <Textarea
+                  <Label htmlFor="sig-header">عنوان صفحة التوقيع</Label>
+                  <Input
                     id="sig-header"
                     value={sigHeader}
                     onChange={(e) => setSigHeader(e.target.value)}
-                    placeholder="<h2>نموذج الموافقة</h2>"
-                    rows={2}
-                    dir="ltr"
-                    className="font-mono text-sm"
+                    placeholder="نموذج الموافقة على الخصوصية"
                   />
                   <p className="text-xs text-muted-foreground">يظهر في أعلى نص الإقرار</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="sig-body">نص الإقرار (HTML)</Label>
+                  <Label htmlFor="sig-body">نص الإقرار</Label>
                   <Textarea
                     id="sig-body"
                     value={sigBody}
                     onChange={(e) => setSigBody(e.target.value)}
-                    placeholder="<p>أقرّ بأنني...</p>"
-                    rows={6}
-                    dir="ltr"
-                    className="font-mono text-sm"
+                    placeholder="اكتب النص الذي يقرأه العميل قبل التوقيع..."
+                    rows={8}
                   />
-                  <p className="text-xs text-muted-foreground">النص القانوني الذي يوقع عليه العميل - يدعم HTML</p>
+                  <p className="text-xs text-muted-foreground">
+                    اكتب النص بشكل عادي. اترك سطراً فارغاً للفصل بين الفقرات.
+                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="sig-footer">نص الفوتر (HTML)</Label>
-                  <Textarea
+                  <Label htmlFor="sig-footer">نص الفوتر</Label>
+                  <Input
                     id="sig-footer"
                     value={sigFooter}
                     onChange={(e) => setSigFooter(e.target.value)}
-                    placeholder="<p>© شركتي - جميع الحقوق محفوظة</p>"
-                    rows={2}
-                    dir="ltr"
-                    className="font-mono text-sm"
+                    placeholder="© شركتي - جميع الحقوق محفوظة"
                   />
                 </div>
 
@@ -419,8 +463,8 @@ export default function BrandingSettings() {
                         <img src={logoUrl} alt="Logo" className="h-10 mx-auto mb-2 object-contain" />
                       )}
                       <div className="text-center font-bold text-lg mb-2" style={{ color: sigColor }}>{title || 'اسم الشركة'}</div>
-                      <div className="bg-muted/30 rounded-lg p-3 text-xs" dir="rtl" dangerouslySetInnerHTML={createSafeHtml((sigHeader || '') + (sigBody || ''))} />
-                      <div className="text-center text-xs text-muted-foreground mt-3 pt-2 border-t" dangerouslySetInnerHTML={createSafeHtml(sigFooter)} />
+                      <div className="bg-muted/30 rounded-lg p-3 text-xs" dir="rtl" dangerouslySetInnerHTML={createSafeHtml(titlePlainToHtml(sigHeader) + bodyPlainToHtml(sigBody))} />
+                      <div className="text-center text-xs text-muted-foreground mt-3 pt-2 border-t" dangerouslySetInnerHTML={createSafeHtml(footerPlainToHtml(sigFooter))} />
                     </div>
                   </div>
                 </div>
