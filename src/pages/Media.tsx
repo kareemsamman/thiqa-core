@@ -22,12 +22,13 @@ import {
 } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
-import { 
-  Search, 
-  Grid3X3, 
-  List, 
-  Trash2, 
-  Copy, 
+import { Badge } from '@/components/ui/badge';
+import {
+  Search,
+  Grid3X3,
+  List,
+  Trash2,
+  Copy,
   Image as ImageIcon,
   FileText,
   Video,
@@ -40,6 +41,12 @@ import {
   Calendar,
   ZoomIn,
 } from 'lucide-react';
+
+// Tailwind utility for the checkbox size + selected emphasis used on
+// this page. The app-wide Checkbox default is h-4 w-4 rounded-sm which
+// looked like a dot at table density — bump it up here only.
+const CHECKBOX_CLS =
+  'h-[18px] w-[18px] rounded-[5px] border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -80,6 +87,27 @@ const getEntityLabel = (type: string | null) => {
     cheque: 'شيك',
   };
   return type ? labels[type] || type : '-';
+};
+
+// Per-entity chip colors so you can scan the "مرتبط بـ" column by
+// category instead of reading every row.
+const ENTITY_CHIP_STYLES: Record<string, string> = {
+  client: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+  car: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+  policy: 'bg-primary/10 text-primary border-primary/20',
+  cheque: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+  form_template: 'bg-violet-500/10 text-violet-600 border-violet-500/20',
+  accident_report: 'bg-rose-500/10 text-rose-600 border-rose-500/20',
+  marketing_sms: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
+  payment: 'bg-teal-500/10 text-teal-600 border-teal-500/20',
+};
+
+// Human labels for entity_type values that getEntityLabel doesn't know.
+const EXTRA_ENTITY_LABELS: Record<string, string> = {
+  form_template: 'نموذج',
+  accident_report: 'تقرير حادث',
+  marketing_sms: 'SMS تسويقية',
+  payment: 'دفعة',
 };
 
 const MONTHS = [
@@ -483,38 +511,50 @@ export default function Media() {
             ))}
           </div>
         ) : files.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <File className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>لا توجد ملفات</p>
+          <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground border border-dashed rounded-xl">
+            <File className="h-10 w-10 opacity-40" />
+            <p className="text-sm">لا توجد ملفات</p>
           </div>
         ) : viewMode === 'table' ? (
-          <div className="border border-border rounded-lg overflow-hidden">
+          <div className="border border-border rounded-xl overflow-hidden bg-card">
             <Table>
-              <TableHeader>
-                <TableRow>
+              <TableHeader className="bg-muted/40">
+                <TableRow className="hover:bg-muted/40 border-b">
                   <TableHead className="w-12">
                     <Checkbox
                       checked={selectedIds.size === files.length && files.length > 0}
                       onCheckedChange={handleSelectAll}
+                      className={CHECKBOX_CLS}
                     />
                   </TableHead>
-                  <TableHead>الملف</TableHead>
-                  <TableHead>النوع</TableHead>
-                  <TableHead>الحجم</TableHead>
-                  <TableHead>مرتبط بـ</TableHead>
-                  <TableHead>التاريخ</TableHead>
-                  <TableHead className="w-24">إجراءات</TableHead>
+                  <TableHead className="text-right font-semibold">الملف</TableHead>
+                  <TableHead className="text-right font-semibold">النوع</TableHead>
+                  <TableHead className="text-right font-semibold">الحجم</TableHead>
+                  <TableHead className="text-right font-semibold">مرتبط بـ</TableHead>
+                  <TableHead className="text-right font-semibold">التاريخ</TableHead>
+                  <TableHead className="w-24 text-right font-semibold">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {files.map((file, index) => {
                   const FileIcon = getFileIcon(file.mime_type);
                   const isImage = file.mime_type.startsWith('image/');
+                  const isSelected = selectedIds.has(file.id);
+                  const entityLabel = file.entity_type
+                    ? EXTRA_ENTITY_LABELS[file.entity_type] || getEntityLabel(file.entity_type)
+                    : null;
+                  const entityStyle = file.entity_type ? ENTITY_CHIP_STYLES[file.entity_type] : '';
                   return (
-                    <TableRow key={file.id}>
+                    <TableRow
+                      key={file.id}
+                      className={cn(
+                        'transition-colors',
+                        isSelected && 'bg-primary/5 hover:bg-primary/10',
+                      )}
+                    >
                       <TableCell>
                         <Checkbox
-                          checked={selectedIds.has(file.id)}
+                          checked={isSelected}
                           onCheckedChange={(checked) => handleSelectOne(file.id, checked as boolean, index, false)}
                           onClick={(e) => {
                             if (e.shiftKey) {
@@ -522,6 +562,7 @@ export default function Media() {
                               handleSelectOne(file.id, true, index, true);
                             }
                           }}
+                          className={CHECKBOX_CLS}
                         />
                       </TableCell>
                       <TableCell>
@@ -530,11 +571,11 @@ export default function Media() {
                             <img
                               src={file.cdn_url}
                               alt={file.original_name}
-                              className="h-10 w-10 object-cover rounded cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                              className="h-10 w-10 object-cover rounded-md cursor-pointer hover:ring-2 hover:ring-primary transition-all border"
                               onClick={() => setLightboxImage(file)}
                             />
                           ) : (
-                            <div className="h-10 w-10 flex items-center justify-center bg-muted rounded">
+                            <div className="h-10 w-10 flex items-center justify-center bg-muted rounded-md border">
                               <FileIcon className="h-5 w-5 text-muted-foreground" />
                             </div>
                           )}
@@ -542,22 +583,31 @@ export default function Media() {
                             href={file.cdn_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-sm hover:underline truncate max-w-[200px]"
+                            className="text-sm hover:underline truncate max-w-[200px] font-medium"
+                            dir="ltr"
                           >
                             {file.original_name}
                           </a>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {file.mime_type.split('/')[1]?.toUpperCase() || file.mime_type}
+                      <TableCell>
+                        <Badge variant="outline" className="font-mono text-[11px] uppercase">
+                          {file.mime_type.split('/')[1]?.toUpperCase() || file.mime_type}
+                        </Badge>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="text-sm text-muted-foreground font-mono ltr-nums">
                         {formatFileSize(file.size)}
                       </TableCell>
-                      <TableCell className="text-sm">
-                        {getEntityLabel(file.entity_type)}
+                      <TableCell>
+                        {entityLabel ? (
+                          <Badge variant="outline" className={cn('text-xs', entityStyle)}>
+                            {entityLabel}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="text-sm text-muted-foreground font-mono ltr-nums">
                         {formatDate(file.created_at)}
                       </TableCell>
                       <TableCell>
@@ -568,6 +618,7 @@ export default function Media() {
                               size="icon"
                               className="h-8 w-8"
                               onClick={() => setLightboxImage(file)}
+                              title="معاينة"
                             >
                               <ZoomIn className="h-4 w-4" />
                             </Button>
@@ -577,6 +628,7 @@ export default function Media() {
                             size="icon"
                             className="h-8 w-8"
                             onClick={() => handleCopyUrl(file.cdn_url)}
+                            title="نسخ الرابط"
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
@@ -611,7 +663,7 @@ export default function Media() {
                           handleSelectOne(file.id, true, index, true);
                         }
                       }}
-                      className="bg-background/80 backdrop-blur"
+                      className={cn(CHECKBOX_CLS, 'bg-background/90 backdrop-blur shadow-sm')}
                     />
                   </div>
                   
