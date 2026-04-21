@@ -57,6 +57,8 @@ import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
 import { UserSessionsTab } from "@/components/admin/UserSessionsTab";
+import { isPasswordValid } from "@/lib/authValidation";
+import { digitsOnly } from "@/lib/validation";
 
 interface UserProfile {
   id: string;
@@ -124,19 +126,45 @@ export default function AdminUsers() {
     setNewUserPassword("");
     setNewUserPhone("");
     setNewUserRole("worker");
-    setNewUserBranch("");
+    setNewUserBranch(branches.length > 0 ? branches[0].id : "");
   };
 
   const handleCreateUser = async () => {
-    if (!newUserEmail.trim() || !newUserPassword.trim() || !agentId) return;
+    if (!agentId) return;
+
+    const email = newUserEmail.trim();
+    const password = newUserPassword;
+    const phoneDigits = digitsOnly(newUserPhone.trim());
+
+    if (!email || !email.includes("@")) {
+      toast({ title: "خطأ", description: "يرجى إدخال بريد إلكتروني صحيح", variant: "destructive" });
+      return;
+    }
+    if (!isPasswordValid(password)) {
+      toast({
+        title: "كلمة مرور ضعيفة",
+        description: "كلمة المرور يجب أن تحتوي على 8 أحرف، حرف كبير، رقم، ورمز",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (phoneDigits && phoneDigits.length !== 10) {
+      toast({ title: "خطأ", description: "رقم الهاتف يجب أن يكون 10 أرقام", variant: "destructive" });
+      return;
+    }
+    if (branches.length > 0 && (!newUserBranch || newUserBranch === "none")) {
+      toast({ title: "خطأ", description: "يرجى اختيار فرع للمستخدم", variant: "destructive" });
+      return;
+    }
+
     setCreatingUser(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-agent-user', {
         body: {
-          email: newUserEmail.trim(),
-          password: newUserPassword,
+          email,
+          password,
           full_name: newUserName.trim() || null,
-          phone: newUserPhone.trim() || null,
+          phone: phoneDigits || null,
           agent_id: agentId,
           role: newUserRole,
           branch_id: newUserBranch && newUserBranch !== 'none' ? newUserBranch : null,
@@ -887,11 +915,29 @@ export default function AdminUsers() {
             </div>
             <div className="space-y-2">
               <Label>كلمة المرور *</Label>
-              <Input value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} placeholder="6 أحرف على الأقل" dir="ltr" type="password" />
+              <Input
+                value={newUserPassword}
+                onChange={e => setNewUserPassword(e.target.value)}
+                placeholder="8 أحرف، حرف كبير، رقم، ورمز"
+                dir="ltr"
+                type="password"
+                autoComplete="new-password"
+              />
+              <p className="text-xs text-muted-foreground">
+                يجب أن تحتوي على 8 أحرف على الأقل، حرف كبير، رقم، ورمز
+              </p>
             </div>
             <div className="space-y-2">
               <Label>الهاتف</Label>
-              <Input value={newUserPhone} onChange={e => setNewUserPhone(e.target.value)} placeholder="05XXXXXXXX" dir="ltr" />
+              <Input
+                value={newUserPhone}
+                onChange={e => setNewUserPhone(digitsOnly(e.target.value).slice(0, 10))}
+                placeholder="0501234567"
+                dir="ltr"
+                inputMode="numeric"
+                maxLength={10}
+              />
+              <p className="text-xs text-muted-foreground">10 أرقام بدون رموز أو مسافات</p>
             </div>
             <div className="space-y-2">
               <Label>الصلاحية *</Label>
@@ -905,11 +951,10 @@ export default function AdminUsers() {
             </div>
             {branches.length > 0 && (
               <div className="space-y-2">
-                <Label>الفرع</Label>
+                <Label>الفرع *</Label>
                 <Select value={newUserBranch} onValueChange={setNewUserBranch}>
-                  <SelectTrigger><SelectValue placeholder="بدون فرع" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="اختر الفرع" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">بدون فرع</SelectItem>
                     {branches.map(branch => (
                       <SelectItem key={branch.id} value={branch.id}>{branch.name_ar || branch.name}</SelectItem>
                     ))}
@@ -920,7 +965,12 @@ export default function AdminUsers() {
             <div className="flex gap-2 pt-4">
               <Button
                 onClick={handleCreateUser}
-                disabled={creatingUser || !newUserEmail.trim() || !newUserPassword.trim()}
+                disabled={
+                  creatingUser ||
+                  !newUserEmail.trim() ||
+                  !isPasswordValid(newUserPassword) ||
+                  (branches.length > 0 && (!newUserBranch || newUserBranch === "none"))
+                }
                 className="flex-1"
               >
                 {creatingUser ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Plus className="h-4 w-4 ml-2" />}
