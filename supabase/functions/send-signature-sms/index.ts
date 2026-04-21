@@ -163,22 +163,36 @@ serve(async (req) => {
       .eq("agent_id", agentId)
       .maybeSingle();
 
-    // Get template content from SMS settings
-    let templateContent: TemplateContent = {
-      logo_url: null,
-      header_html: '<h2>نموذج الموافقة على الخصوصية</h2>',
-      body_html: '<p>مرحباً.</p><p>أقرّ بأنني قرأت وفهمت سياسة الخصوصية، وأوافق على جمع واستخدام ومعالجة بياناتي الشخصية للأغراض المتعلقة بخدمات التأمين والتواصل وإتمام الإجراءات اللازمة.</p><p>بالتوقيع أدناه، أؤكد صحة البيانات وأمنح موافقتي على ما ورد أعلاه.</p>',
-      footer_html: '<p>جميع الحقوق محفوظة</p>',
+    // The customer-facing signature page is baked into a static .html
+    // file uploaded to the CDN, so the content has to be embedded NOW
+    // rather than fetched at view time. Source the signature copy from
+    // the agent's BrandingSettings (site_settings.signature_*_html via
+    // getAgentBranding above) so edits in /branding-settings show up
+    // on the next generated link. The optional invoice template only
+    // fills any field the agent left blank — previously the template
+    // (or hardcoded defaults) won outright, so saving in BrandingSettings
+    // had no effect on the generated HTML.
+    const templateContent: TemplateContent = {
+      logo_url: branding.logoUrl,
+      header_html: branding.signatureHeaderHtml,
+      body_html: branding.signatureBodyHtml.replace(/الشركة/g, branding.companyName),
+      footer_html: branding.signatureFooterHtml.replace(/جميع الحقوق محفوظة/g, `© ${branding.companyName} - جميع الحقوق محفوظة`),
     };
 
     if (agentSmsRow?.invoice_templates) {
       const template = agentSmsRow.invoice_templates as any;
-      templateContent = {
-        logo_url: template.logo_url || null,
-        header_html: template.header_html || templateContent.header_html,
-        body_html: template.body_html || templateContent.body_html,
-        footer_html: template.footer_html || templateContent.footer_html,
-      };
+      if (!templateContent.logo_url && template.logo_url) {
+        templateContent.logo_url = template.logo_url;
+      }
+      if (!templateContent.header_html && template.header_html) {
+        templateContent.header_html = template.header_html;
+      }
+      if (!templateContent.body_html && template.body_html) {
+        templateContent.body_html = template.body_html;
+      }
+      if (!templateContent.footer_html && template.footer_html) {
+        templateContent.footer_html = template.footer_html;
+      }
     }
 
     // Generate secure token
