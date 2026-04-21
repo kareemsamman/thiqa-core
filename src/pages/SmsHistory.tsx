@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
-import { MessageSquare, Search, Filter, CheckCircle, XCircle, Clock, RefreshCw, ChevronDown, ChevronUp, FileText } from "lucide-react";
+import { MessageSquare, Search, Filter, CheckCircle, XCircle, Clock, RefreshCw, ChevronDown, ChevronUp, FileText, Link2, Send, AlertCircle } from "lucide-react";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 
 interface SmsLog {
@@ -43,10 +43,29 @@ const SMS_TYPE_LABELS: Record<string, string> = {
   payment_request: "طلب دفع",
 };
 
+// Per-type accent colors used by the type chip. Keep values as tailwind
+// utility strings so callers can slot them into `className` directly.
+const SMS_TYPE_STYLES: Record<string, string> = {
+  signature: "bg-primary/10 text-primary border-primary/20",
+  invoice: "bg-success/10 text-success border-success/20",
+  reminder_1month: "bg-warning/10 text-warning border-warning/20",
+  reminder_1week: "bg-warning/10 text-warning border-warning/20",
+  manual: "bg-muted text-muted-foreground border-border",
+  payment_request: "bg-destructive/10 text-destructive border-destructive/20",
+};
+
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof CheckCircle; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   sent: { label: "تم الإرسال", icon: CheckCircle, variant: "default" },
   pending: { label: "قيد الانتظار", icon: Clock, variant: "secondary" },
   failed: { label: "فشل", icon: XCircle, variant: "destructive" },
+};
+
+// Most signature SMS carry a long CDN URL ("https://thiqacrm.b-cdn.net/
+// signatures/...") that looks like noise in the message column. Strip the
+// URL from the visible preview and return just the human prose — the
+// expanded row still shows the full body.
+const previewMessage = (message: string): string => {
+  return message.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
 };
 
 export default function SmsHistory() {
@@ -135,11 +154,73 @@ export default function SmsHistory() {
     return format(new Date(dateStr), "dd/MM/yyyy HH:mm", { locale: ar });
   };
 
+  // Summary over the currently loaded page. The filters up top already
+  // scope the query, so these counts reflect what the user is actually
+  // looking at — matches how the table header's total badge behaves.
+  const statusCounts = logs.reduce(
+    (acc, log) => {
+      acc.total += 1;
+      if (log.status === "sent") acc.sent += 1;
+      else if (log.status === "failed") acc.failed += 1;
+      else acc.pending += 1;
+      return acc;
+    },
+    { total: 0, sent: 0, pending: 0, failed: 0 },
+  );
+
   return (
     <MainLayout>
       <Header title="سجل الرسائل النصية" subtitle="عرض جميع الرسائل المرسلة" />
 
       <div className="p-6 space-y-6">
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <MessageSquare className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">المجموع</p>
+                <p className="text-2xl font-bold">{statusCounts.total}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-success/10">
+                <Send className="h-5 w-5 text-success" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">تم الإرسال</p>
+                <p className="text-2xl font-bold text-success">{statusCounts.sent}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-warning/10">
+                <Clock className="h-5 w-5 text-warning" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">قيد الانتظار</p>
+                <p className="text-2xl font-bold text-warning">{statusCounts.pending}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-destructive/10">
+                <AlertCircle className="h-5 w-5 text-destructive" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">فشل</p>
+                <p className="text-2xl font-bold text-destructive">{statusCounts.failed}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Filters */}
         <Card>
           <CardHeader className="pb-3">
@@ -228,8 +309,11 @@ export default function SmsHistory() {
                   <TableBody>
                     {filteredLogs.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                          لا توجد رسائل
+                        <TableCell colSpan={8} className="py-12">
+                          <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                            <MessageSquare className="h-8 w-8 opacity-40" />
+                            <p className="text-sm">لا توجد رسائل</p>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -267,7 +351,10 @@ export default function SmsHistory() {
                                 <bdi>{log.phone_number}</bdi>
                               </TableCell>
                               <TableCell>
-                                <Badge variant="outline">
+                                <Badge
+                                  variant="outline"
+                                  className={SMS_TYPE_STYLES[log.sms_type] || ""}
+                                >
                                   {SMS_TYPE_LABELS[log.sms_type] || log.sms_type}
                                 </Badge>
                               </TableCell>
@@ -306,9 +393,22 @@ export default function SmsHistory() {
                                 {formatDate(log.sent_at || log.created_at)}
                               </TableCell>
                               <TableCell className="max-w-xs">
-                                <p className="text-sm text-muted-foreground line-clamp-2" title={log.message}>
-                                  {log.message}
-                                </p>
+                                <div className="flex items-start gap-2">
+                                  <p className="text-sm text-muted-foreground line-clamp-2 flex-1" title={log.message}>
+                                    {previewMessage(log.message) || (
+                                      <span className="italic">—</span>
+                                    )}
+                                  </p>
+                                  {/https?:\/\//.test(log.message) && (
+                                    <span
+                                      className="inline-flex items-center gap-1 text-[11px] text-primary shrink-0 mt-0.5"
+                                      title="تحتوي على رابط"
+                                    >
+                                      <Link2 className="h-3 w-3" />
+                                      رابط
+                                    </span>
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
                             {isExpanded && (
@@ -329,7 +429,10 @@ export default function SmsHistory() {
                                       <div>
                                         <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">النوع</p>
                                         <p>
-                                          <Badge variant="outline">
+                                          <Badge
+                                            variant="outline"
+                                            className={SMS_TYPE_STYLES[log.sms_type] || ""}
+                                          >
                                             {SMS_TYPE_LABELS[log.sms_type] || log.sms_type}
                                           </Badge>
                                         </p>
