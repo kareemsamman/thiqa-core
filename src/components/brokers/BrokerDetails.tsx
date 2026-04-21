@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +31,8 @@ import {
   Handshake,
   ArrowUpRight,
   ArrowDownLeft,
+  Calendar,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -60,6 +62,7 @@ interface Client {
 
 interface Policy {
   id: string;
+  group_id: string | null;
   policy_type_parent: string;
   policy_type_child: string | null;
   insurance_price: number;
@@ -73,6 +76,14 @@ interface Policy {
   client: { full_name: string } | null;
   car: { car_number: string } | null;
 }
+
+// One row in the broker's policies table. Packages (every policy that
+// shares the same group_id) collapse into a single `package` row whose
+// price is the sum of its components; standalone policies render as
+// `single` rows. Numbering and the totals row use this collapsed shape.
+type TableRow =
+  | { kind: 'single'; policy: Policy }
+  | { kind: 'package'; groupId: string; policies: Policy[]; representative: Policy };
 
 interface BrokerDetailsProps {
   broker: Broker;
@@ -130,7 +141,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
       let query = supabase
         .from("policies")
         .select(`
-          id, policy_type_parent, policy_type_child, insurance_price, broker_buy_price, profit, start_date, end_date, broker_direction,
+          id, group_id, policy_type_parent, policy_type_child, insurance_price, broker_buy_price, profit, start_date, end_date, broker_direction,
           cancelled, transferred,
           clients!policies_client_id_fkey(full_name),
           cars!policies_car_id_fkey(car_number)
@@ -239,6 +250,33 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-GB");
   };
+
+  // For the price column: from_broker policies are valued at what I owe
+  // the broker (broker_buy_price), the rest at what's owed me
+  // (insurance_price). Same rule used for the per-row cell, package
+  // sums, and the totals footer.
+  const policyPrice = (p: Policy) =>
+    Number(p.broker_direction === 'from_broker'
+      ? (p.broker_buy_price || p.insurance_price)
+      : p.insurance_price);
+
+  const tableRows: TableRow[] = useMemo(() => {
+    const grouped = new Map<string, Policy[]>();
+    policies.forEach(p => {
+      const key = p.group_id || `__single__${p.id}`;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(p);
+    });
+    const rows: TableRow[] = [];
+    grouped.forEach((items, key) => {
+      if (!items[0].group_id || items.length === 1) {
+        rows.push({ kind: 'single', policy: items[0] });
+      } else {
+        rows.push({ kind: 'package', groupId: key, policies: items, representative: items[0] });
+      }
+    });
+    return rows;
+  }, [policies]);
 
   const handleExportPdf = async (sendSms = false) => {
     setExporting(true);
@@ -480,75 +518,92 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {policies.map((policy, index) => (
-                          <TableRow 
-                            key={policy.id}
-                            className="cursor-pointer hover:bg-muted/50 print:hover:bg-transparent"
-                            onClick={() => setViewingPolicyId(policy.id)}
-                          >
-                            <TableCell className="font-mono text-sm print:text-xs">
-                              {index + 1}
-                            </TableCell>
-                            <TableCell className="print:text-xs">
-                              <div className="flex flex-wrap items-center gap-1">
-                                {policy.broker_direction === 'from_broker' ? (
-                                  <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 print:bg-orange-50">
-                                    عن طريق {broker.name}
+                        {tableRows.map((row, index) => {
+                          const rep = row.kind === 'package' ? row.representative : row.policy;
+                          const rowPolicies = row.kind === 'package' ? row.policies : [row.policy];
+                          const rowPrice = rowPolicies.reduce((s, p) => s + policyPrice(p), 0);
+                          const allCancelled = rowPolicies.every(p => p.cancelled);
+                          const anyTransferred = rowPolicies.some(p => p.transferred && !p.cancelled);
+                          const onOpen = () => setViewingPolicyId(rep.id);
+
+                          return (
+                            <TableRow
+                              key={row.kind === 'package' ? `pkg-${row.groupId}` : `single-${rep.id}`}
+                              className="cursor-pointer hover:bg-muted/50 print:hover:bg-transparent"
+                              onClick={onOpen}
+                            >
+                              <TableCell className="font-mono text-sm print:text-xs">
+                                {index + 1}
+                              </TableCell>
+                              <TableCell className="print:text-xs">
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {rep.broker_direction === 'from_broker' ? (
+                                    <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 print:bg-orange-50">
+                                      عن طريق {broker.name}
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 print:bg-green-50">
+                                      تم تصديرها عن طريقي
+                                    </Badge>
+                                  )}
+                                  {allCancelled && (
+                                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 print:bg-red-50">
+                                      ملغاة
+                                    </Badge>
+                                  )}
+                                  {anyTransferred && !allCancelled && (
+                                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 print:bg-amber-50">
+                                      محولة
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="font-medium print:text-xs">
+                                {rep.client?.full_name || "-"}
+                              </TableCell>
+                              <TableCell className="font-mono text-sm print:text-xs ltr-nums">
+                                {rep.car?.car_number || "-"}
+                              </TableCell>
+                              <TableCell className="print:text-xs">
+                                {row.kind === 'package' ? (
+                                  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 gap-1 print:bg-purple-50">
+                                    <Package className="h-3 w-3" />
+                                    حزمة · {row.policies.length} معاملات
                                   </Badge>
                                 ) : (
-                                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 print:bg-green-50">
-                                    تم تصديرها عن طريقي
+                                  <Badge variant="outline" className="print:border">
+                                    {getInsuranceTypeLabel(rep.policy_type_parent as any, rep.policy_type_child as any)}
                                   </Badge>
                                 )}
-                                {policy.cancelled && (
-                                  <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 print:bg-red-50">
-                                    ملغاة
-                                  </Badge>
-                                )}
-                                {policy.transferred && !policy.cancelled && (
-                                  <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 print:bg-amber-50">
-                                    محولة
-                                  </Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="font-medium print:text-xs">
-                              {policy.client?.full_name || "-"}
-                            </TableCell>
-                            <TableCell className="font-mono text-sm print:text-xs ltr-nums">
-                              {policy.car?.car_number || "-"}
-                            </TableCell>
-                            <TableCell className="print:text-xs">
-                              <Badge variant="outline" className="print:border">
-                                {getInsuranceTypeLabel(policy.policy_type_parent as any, policy.policy_type_child as any)}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="print:text-xs ltr-nums">
-                              {formatCurrency(policy.broker_direction === 'from_broker' 
-                                ? (policy.broker_buy_price || policy.insurance_price) 
-                                : policy.insurance_price)}
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground print:text-xs">
-                              {formatDate(policy.start_date)} - {formatDate(policy.end_date)}
-                            </TableCell>
-                            <TableCell onClick={(e) => e.stopPropagation()} className="print:hidden">
-                              <RowActionsMenu
-                                onView={() => setViewingPolicyId(policy.id)}
-                                onEdit={() => setViewingPolicyId(policy.id)}
-                              />
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                              </TableCell>
+                              <TableCell className="print:text-xs ltr-nums">
+                                {formatCurrency(rowPrice)}
+                              </TableCell>
+                              <TableCell className="print:text-xs">
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  <div className="flex flex-col text-xs ltr-nums leading-tight">
+                                    <span className="font-medium">{formatDate(rep.start_date)}</span>
+                                    <span className="text-muted-foreground">→ {formatDate(rep.end_date)}</span>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell onClick={(e) => e.stopPropagation()} className="print:hidden">
+                                <RowActionsMenu
+                                  onView={onOpen}
+                                  onEdit={row.kind === 'package' ? undefined : onOpen}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                         {/* Totals Row */}
                         <TableRow className="bg-muted/50 font-bold print:bg-gray-100">
                           <TableCell colSpan={5} className="text-left print:text-xs">
                             المجموع
                           </TableCell>
                           <TableCell className="print:text-xs ltr-nums">
-                            {formatCurrency(policies.reduce((sum, p) => 
-                              sum + Number(p.broker_direction === 'from_broker' 
-                                ? (p.broker_buy_price || p.insurance_price) 
-                                : p.insurance_price), 0))}
+                            {formatCurrency(policies.reduce((sum, p) => sum + policyPrice(p), 0))}
                           </TableCell>
                           <TableCell colSpan={2}></TableCell>
                         </TableRow>
