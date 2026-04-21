@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
+import { getAgentBranding } from "../_shared/agent-branding.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -89,16 +90,19 @@ serve(async (req) => {
       .eq("token", token)
       .maybeSingle();
 
-    // Get client name separately
+    // Get client name and resolve the owning agent so branding + any
+    // signature template can be loaded scoped to that tenant.
     let clientName = "عميل";
+    let clientAgentId: string | null = null;
     if (signatureRecord?.client_id) {
       const { data: clientData } = await supabase
         .from("clients")
-        .select("full_name")
+        .select("full_name, agent_id")
         .eq("id", signatureRecord.client_id)
         .single();
       if (clientData) {
         clientName = clientData.full_name;
+        clientAgentId = clientData.agent_id;
       }
     }
 
@@ -132,22 +136,61 @@ serve(async (req) => {
       );
     }
 
-    // Get signature template if configured
-    const { data: smsSettings } = await supabase
-      .from("sms_settings")
-      .select("default_signature_template_id")
-      .limit(1)
-      .maybeSingle();
+    // Compose the customer-facing signature content. The agent's
+    // BrandingSettings (site_settings.signature_*_html) is the source
+    // of truth — anything the agent edits in the admin UI must show up
+    // here. An invoice_templates row (pointed at by
+    // sms_settings.default_signature_template_id) only fills any
+    // field the agent left blank, so it can't silently override saved
+    // changes. Both lookups are scoped to the client's agent so a
+    // template from another tenant can't leak in.
+    const branding = await getAgentBranding(supabase, clientAgentId);
+    const templateContent: {
+      header_html: string;
+      body_html: string;
+      footer_html: string;
+      logo_url: string | null;
+      direction: string;
+    } = {
+      header_html: branding.signatureHeaderHtml,
+      body_html: branding.signatureBodyHtml.replace(/الشركة/g, branding.companyName),
+      footer_html: branding.signatureFooterHtml.replace(/جميع الحقوق محفوظة/g, `© ${branding.companyName} - جميع الحقوق محفوظة`),
+      logo_url: branding.logoUrl,
+      direction: "rtl",
+    };
 
-    let templateContent = null;
-    if (smsSettings?.default_signature_template_id) {
-      const { data: template } = await supabase
-        .from("invoice_templates")
-        .select("header_html, body_html, footer_html, logo_url, direction")
-        .eq("id", smsSettings.default_signature_template_id)
+    if (clientAgentId) {
+      const { data: smsSettings } = await supabase
+        .from("sms_settings")
+        .select("default_signature_template_id")
+        .eq("agent_id", clientAgentId)
         .maybeSingle();
-      
-      templateContent = template;
+
+      if (smsSettings?.default_signature_template_id) {
+        const { data: template } = await supabase
+          .from("invoice_templates")
+          .select("header_html, body_html, footer_html, logo_url, direction")
+          .eq("id", smsSettings.default_signature_template_id)
+          .maybeSingle();
+
+        if (template) {
+          if (!templateContent.header_html && template.header_html) {
+            templateContent.header_html = template.header_html;
+          }
+          if (!templateContent.body_html && template.body_html) {
+            templateContent.body_html = template.body_html;
+          }
+          if (!templateContent.footer_html && template.footer_html) {
+            templateContent.footer_html = template.footer_html;
+          }
+          if (!templateContent.logo_url && template.logo_url) {
+            templateContent.logo_url = template.logo_url;
+          }
+          if (template.direction) {
+            templateContent.direction = template.direction;
+          }
+        }
+      }
     }
 
     return new Response(
