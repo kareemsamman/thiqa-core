@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -44,8 +44,28 @@ import {
   Trash2,
   Loader2,
   MoreHorizontal,
+  FolderUp,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { format } from "date-fns";
+
+const ALLOWED_UPLOAD_EXT = new Set(['pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif']);
+
+interface TreeFile {
+  type: 'file';
+  parentPath: string;
+  name: string;
+  file: File;
+}
+
+interface TreeFolder {
+  type: 'folder';
+  path: string;
+  parentPath: string;
+  name: string;
+}
+
+type TreeEntry = TreeFile | TreeFolder;
 
 interface FolderRow {
   id: string;
@@ -128,6 +148,18 @@ export default function FormTemplates() {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; type: "folder" | "file" } | null>(null);
   const [saving, setSaving] = useState(false);
   const [duplicating, setDuplicating] = useState<string | null>(null);
+
+  // Page-level drag-and-drop for folders. Preserves the source tree by
+  // recreating each directory as a form_template_folders row under the
+  // current location before uploading the files into it.
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragDepthRef = useRef(0);
+  const [treeUpload, setTreeUpload] = useState<{
+    active: boolean;
+    done: number;
+    total: number;
+    label: string;
+  }>({ active: false, done: 0, total: 0, label: '' });
 
   // Fetch folders and files for current folder
   const fetchContents = useCallback(async () => {
@@ -302,6 +334,239 @@ export default function FormTemplates() {
     setRenameOpen(true);
   };
 
+  // Recursively read a dropped directory entry into a flat list. Each
+  // record carries its parentPath so we can rebuild the hierarchy when
+  // creating folder rows.
+  const collectTree = async (
+    entry: any,
+    parentPath: string,
+  ): Promise<TreeEntry[]> => {
+    if (entry.isFile) {
+      const file = await new Promise<File>((resolve, reject) =>
+        entry.file(resolve, reject),
+      );
+      return [{ type: 'file', parentPath, name: entry.name, file }];
+    }
+    if (!entry.isDirectory) return [];
+
+    const path = parentPath ? `${parentPath}/${entry.name}` : entry.name;
+    const items: TreeEntry[] = [
+      { type: 'folder', path, parentPath, name: entry.name },
+    ];
+    const reader = entry.createReader();
+    while (true) {
+      const batch: any[] = await new Promise((resolve, reject) =>
+        reader.readEntries(resolve, reject),
+      );
+      if (!batch.length) break;
+      for (const child of batch) {
+        const nested = await collectTree(child, path);
+        items.push(...nested);
+      }
+    }
+    return items;
+  };
+
+  const uploadTree = async (entries: TreeEntry[]) => {
+    // Filter files down to the extensions we accept; silently drop
+    // OS junk (.DS_Store, Thumbs.db, .git/…) so the user doesn't see
+    // a wall of errors.
+    const folders = entries.filter(
+      (e): e is TreeFolder => e.type === 'folder',
+    );
+    const files = entries.filter((e): e is TreeFile => {
+      if (e.type !== 'file') return false;
+      const ext = e.name.split('.').pop()?.toLowerCase();
+      return !!ext && ALLOWED_UPLOAD_EXT.has(ext) && e.file.size <= 50 * 1024 * 1024;
+    });
+
+    if (folders.length === 0 && files.length === 0) {
+      toast({
+        title: 'لا توجد ملفات صالحة',
+        description: 'الأنواع المدعومة: PDF والصور',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Map folder path → DB id. '' is the current folder the user is in.
+    const folderIdByPath = new Map<string, string | null>();
+    folderIdByPath.set('', currentFolderId);
+
+    // Create parents before children — depth-sort by path segment count.
+    folders.sort(
+      (a, b) => a.path.split('/').length - b.path.split('/').length,
+    );
+
+    setTreeUpload({
+      active: true,
+      done: 0,
+      total: folders.length + files.length,
+      label: 'جاري إنشاء المجلدات...',
+    });
+
+    try {
+      for (const folder of folders) {
+        const parentId = folderIdByPath.get(folder.parentPath);
+        if (parentId === undefined) {
+          throw new Error(`Parent folder not found for ${folder.path}`);
+        }
+        const { data, error } = await supabase
+          .from('form_template_folders')
+          .insert({
+            name: folder.name,
+            parent_id: parentId,
+            created_by: profile?.id,
+          })
+          .select('id')
+          .single();
+        if (error) throw error;
+        folderIdByPath.set(folder.path, data.id);
+        setTreeUpload((p) => ({ ...p, done: p.done + 1 }));
+      }
+
+      if (files.length === 0) {
+        toast({ title: 'تم إنشاء المجلدات' });
+        return;
+      }
+
+      // A file dropped at the top level has parentPath '' — that maps
+      // to currentFolderId. If currentFolderId is null and the drop
+      // contains loose files at the root, those can't be uploaded (the
+      // table requires folder_id), so flag it.
+      const looseAtRoot = files.some(
+        (f) => f.parentPath === '' && !currentFolderId,
+      );
+      if (looseAtRoot) {
+        throw new Error('لا يمكن رفع الملفات الفردية خارج مجلد. أنشئ مجلداً أولاً أو اسحب المجلد نفسه.');
+      }
+
+      setTreeUpload((p) => ({ ...p, label: 'جاري رفع الملفات...' }));
+
+      const fileRows: Array<{
+        folder_id: string;
+        name: string;
+        file_url: string;
+        file_type: string;
+        mime_type: string | null;
+        overlay_fields: never[];
+        created_by: string | undefined;
+      }> = [];
+
+      for (const item of files) {
+        const folderId = folderIdByPath.get(item.parentPath);
+        if (!folderId) continue;
+
+        const formData = new FormData();
+        formData.append('file', item.file);
+        formData.append('entity_type', 'form_template');
+
+        const response = await supabase.functions.invoke('upload-media', {
+          body: formData,
+        });
+        if (response.error) {
+          console.error(`Failed to upload ${item.name}:`, response.error);
+          setTreeUpload((p) => ({ ...p, done: p.done + 1 }));
+          continue;
+        }
+        const result = response.data?.file;
+        if (!result?.cdn_url) {
+          setTreeUpload((p) => ({ ...p, done: p.done + 1 }));
+          continue;
+        }
+        const isPdf =
+          result.mime_type === 'application/pdf' ||
+          item.name.toLowerCase().endsWith('.pdf');
+        fileRows.push({
+          folder_id: folderId,
+          name: item.name,
+          file_url: result.cdn_url,
+          file_type: isPdf ? 'pdf' : 'image',
+          mime_type: result.mime_type || null,
+          overlay_fields: [],
+          created_by: profile?.id,
+        });
+        setTreeUpload((p) => ({ ...p, done: p.done + 1 }));
+      }
+
+      if (fileRows.length > 0) {
+        const { error: insertErr } = await supabase
+          .from('form_template_files')
+          .insert(fileRows);
+        if (insertErr) throw insertErr;
+      }
+
+      toast({
+        title: 'تم رفع المجلد',
+        description: `${folders.length} مجلد، ${fileRows.length} ملف`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'خطأ',
+        description: err.message || 'فشل رفع المجلد',
+        variant: 'destructive',
+      });
+    } finally {
+      setTreeUpload({ active: false, done: 0, total: 0, label: '' });
+      fetchContents();
+    }
+  };
+
+  const handlePageDragEnter = useCallback((e: React.DragEvent) => {
+    // Only react to drags that carry files (from the OS), not from
+    // in-page drags (row reorder, text selection, etc.).
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDragOver(true);
+  }, []);
+
+  const handlePageDragOver = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+  }, []);
+
+  const handlePageDragLeave = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    dragDepthRef.current -= 1;
+    if (dragDepthRef.current <= 0) {
+      dragDepthRef.current = 0;
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handlePageDrop = useCallback(
+    async (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes('Files')) return;
+      e.preventDefault();
+      dragDepthRef.current = 0;
+      setIsDragOver(false);
+
+      const items = e.dataTransfer.items;
+      if (!items || items.length === 0) return;
+
+      const rootEntries: any[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const entry = (items[i] as any).webkitGetAsEntry?.();
+        if (entry) rootEntries.push(entry);
+      }
+      if (rootEntries.length === 0) return;
+
+      const collected: TreeEntry[] = [];
+      for (const entry of rootEntries) {
+        const sub = await collectTree(entry, '');
+        collected.push(...sub);
+      }
+      await uploadTree(collected);
+    },
+    // uploadTree / collectTree are stable-enough closures for the
+    // current render; wiring them through useCallback would churn the
+    // whole block on every state change without behavioral benefit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentFolderId, profile?.id],
+  );
+
   return (
     <MainLayout>
       <Header
@@ -309,7 +574,51 @@ export default function FormTemplates() {
         subtitle="قوالب النماذج والملفات"
       />
 
-      <div className="p-4 md:p-6 space-y-4" dir="rtl">
+      <div
+        className="p-4 md:p-6 space-y-4 relative"
+        dir="rtl"
+        onDragEnter={handlePageDragEnter}
+        onDragOver={handlePageDragOver}
+        onDragLeave={handlePageDragLeave}
+        onDrop={handlePageDrop}
+      >
+        {/* Drop overlay — shown while the user drags a folder over the
+            page. Covers the whole content area so the drop target is
+            impossible to miss. */}
+        {isDragOver && !treeUpload.active && (
+          <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-primary/10 backdrop-blur-sm">
+            <div className="rounded-2xl border-2 border-dashed border-primary bg-background/95 px-10 py-8 text-center shadow-lg">
+              <FolderUp className="mx-auto h-12 w-12 text-primary mb-3" />
+              <p className="text-lg font-semibold">اسحب وأفلت المجلد هنا</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                سيتم الحفاظ على بنية المجلدات الفرعية
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Progress bar for the tree upload — stays on screen until
+            every folder and file has been processed so the user isn't
+            left guessing. */}
+        {treeUpload.active && (
+          <div className="fixed bottom-6 left-6 z-50 w-80 rounded-lg border bg-card p-4 shadow-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <p className="text-sm font-medium">{treeUpload.label}</p>
+            </div>
+            <Progress
+              value={
+                treeUpload.total > 0
+                  ? (treeUpload.done / treeUpload.total) * 100
+                  : 0
+              }
+              className="h-2"
+            />
+            <p className="text-xs text-muted-foreground mt-1.5">
+              {treeUpload.done} / {treeUpload.total}
+            </p>
+          </div>
+        )}
         {/* Breadcrumbs */}
         <div className="flex items-center gap-2 flex-wrap">
           {breadcrumbs.map((bc, idx) => (
@@ -348,6 +657,10 @@ export default function FormTemplates() {
               رفع ملف
             </Button>
           )}
+          <span className="text-xs text-muted-foreground flex items-center gap-1.5 mr-auto">
+            <FolderUp className="h-3.5 w-3.5" />
+            اسحب مجلداً من جهازك إلى هنا للرفع مع الحفاظ على بنية المجلدات
+          </span>
         </div>
 
         {/* Content Table */}
