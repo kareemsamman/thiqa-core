@@ -14,7 +14,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Settings, Building2, Truck, Shield } from 'lucide-react';
+import { Plus, Search, Settings, Building2, Truck, Shield, MoreHorizontal } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -151,32 +157,35 @@ export default function Companies() {
       />
 
       <div className="p-6 space-y-6">
-        {/* Actions Bar */}
-        <div className="flex items-center gap-2 max-w-2xl">
+        {/* Actions Bar — search + filter pinned to the right (start of the
+            row in RTL), the إضافة شركة CTA pinned to the very left. */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-1 max-w-2xl">
+            <div className="relative flex-1">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="بحث عن شركة..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pr-10"
+              />
+            </div>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="جميع الأنواع" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">جميع الأنواع</SelectItem>
+                {POLICY_TYPES.map(type => (
+                  <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button size="sm" onClick={handleAddCompany} className="gap-2">
             <Plus className="h-4 w-4" />
             إضافة شركة
           </Button>
-          <div className="relative flex-1">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="بحث عن شركة..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pr-10"
-            />
-          </div>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="جميع الأنواع" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">جميع الأنواع</SelectItem>
-              {POLICY_TYPES.map(type => (
-                <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         {/* Companies Table */}
@@ -261,42 +270,32 @@ export default function Companies() {
                       </Badge>
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center gap-1.5 flex-nowrap">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          title="التسعير"
-                          onClick={() => handleManagePricing(company)}
-                        >
-                          <Settings className="h-4 w-4" />
-                          <span className="sr-only">التسعير</span>
-                        </Button>
-                        {company.category_parent?.includes('ROAD_SERVICE') && (
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            title="خدمات الطريق"
-                            onClick={() => handleManageRoadServicePricing(company)}
-                          >
-                            <Truck className="h-4 w-4" />
-                            <span className="sr-only">خدمات الطريق</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">إجراءات</span>
                           </Button>
-                        )}
-                        {company.category_parent?.includes('ROAD_SERVICE') && (
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            title="إعفاء الحادث"
-                            onClick={() => handleManageAccidentFeePricing(company)}
-                          >
-                            <Shield className="h-4 w-4" />
-                            <span className="sr-only">إعفاء الحادث</span>
-                          </Button>
-                        )}
-                      </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-popover border shadow-lg z-50">
+                          <DropdownMenuItem onClick={() => handleManagePricing(company)}>
+                            <Settings className="h-4 w-4 ml-2" />
+                            قواعد التسعير
+                          </DropdownMenuItem>
+                          {company.category_parent?.includes('ROAD_SERVICE') && (
+                            <DropdownMenuItem onClick={() => handleManageRoadServicePricing(company)}>
+                              <Truck className="h-4 w-4 ml-2" />
+                              أسعار خدمات الطريق
+                            </DropdownMenuItem>
+                          )}
+                          {company.category_parent?.includes('ROAD_SERVICE') && (
+                            <DropdownMenuItem onClick={() => handleManageAccidentFeePricing(company)}>
+                              <Shield className="h-4 w-4 ml-2" />
+                              أسعار إعفاء الحادث
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))
