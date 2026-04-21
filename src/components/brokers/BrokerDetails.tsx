@@ -626,7 +626,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                     <div className="text-xs text-muted-foreground mb-1.5">
                       {stats.toBrokerCount} {stats.toBrokerCount === 1 ? "معاملة" : "معاملات"} — يدفع لي الوسيط
                     </div>
-                    <div className="text-2xl font-bold text-green-700 dark:text-green-400 ltr-nums">
+                    <div className="text-2xl font-bold text-green-700 dark:text-green-400 ltr-nums text-right">
                       {formatCurrency(stats.toBrokerTotal)}
                     </div>
                   </div>
@@ -641,7 +641,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                     <div className="text-xs text-muted-foreground mb-1.5">
                       {stats.fromBrokerCount} {stats.fromBrokerCount === 1 ? "معاملة" : "معاملات"} — أدفع للوسيط
                     </div>
-                    <div className="text-2xl font-bold text-orange-700 dark:text-orange-400 ltr-nums">
+                    <div className="text-2xl font-bold text-orange-700 dark:text-orange-400 ltr-nums text-right">
                       {formatCurrency(stats.fromBrokerTotal)}
                     </div>
                   </div>
