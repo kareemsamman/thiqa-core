@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  FileSignature,
+  Users,
   Search,
   CheckCircle2,
   AlertTriangle,
@@ -35,7 +34,9 @@ import {
   Eye,
   User,
   Phone,
+  TrendingUp,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { Navigate } from "react-router-dom";
 
 interface ClientSignature {
@@ -176,171 +177,187 @@ export default function CustomerSignatures() {
       <Header title="توقيعات العملاء" subtitle="إدارة ومتابعة توقيعات العملاء" />
 
       <div className="p-6 space-y-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">إجمالي العملاء</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{clients.length}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-success/30 bg-success/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-success flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4" />
-                وقّعوا
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold text-success">{signedCount}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-amber-500/30 bg-amber-500/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-amber-600 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                لم يوقّعوا
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold text-amber-600">{notSignedCount}</p>
-            </CardContent>
-          </Card>
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Users className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">إجمالي العملاء</p>
+                <p className="text-2xl font-bold">{clients.length}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-success/10">
+                <CheckCircle2 className="h-5 w-5 text-success" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">وقّعوا</p>
+                <p className="text-2xl font-bold text-success">{signedCount}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-500/10">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">لم يوقّعوا</p>
+                <p className="text-2xl font-bold text-amber-600">{notSignedCount}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <TrendingUp className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">نسبة التوقيع</p>
+                <p className="text-2xl font-bold">
+                  {clients.length > 0 ? Math.round((signedCount / clients.length) * 100) : 0}%
+                </p>
+              </div>
+            </div>
+            <Progress
+              value={clients.length > 0 ? (signedCount / clients.length) * 100 : 0}
+              className="h-1.5"
+            />
+          </div>
         </div>
 
-        {/* Filters */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="بحث بالاسم أو رقم الهوية أو الهاتف..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pr-10"
-                />
-              </div>
-              <Select
-                value={filter}
-                onValueChange={(val: "all" | "signed" | "not_signed") => setFilter(val)}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="signed">وقّعوا</SelectItem>
-                  <SelectItem value="not_signed">لم يوقّعوا</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Search + filter */}
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="بحث بالاسم أو رقم الهوية أو الهاتف..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pr-10"
+            />
+          </div>
+          <Select
+            value={filter}
+            onValueChange={(val: "all" | "signed" | "not_signed") => setFilter(val)}
+          >
+            <SelectTrigger className="w-full sm:w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">الكل ({clients.length})</SelectItem>
+              <SelectItem value="signed">وقّعوا ({signedCount})</SelectItem>
+              <SelectItem value="not_signed">لم يوقّعوا ({notSignedCount})</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* Table */}
-        <Card>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="p-6 space-y-4">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-right">العميل</TableHead>
-                    <TableHead className="text-right">رقم الهوية</TableHead>
-                    <TableHead className="text-right">الهاتف</TableHead>
-                    <TableHead className="text-right">حالة التوقيع</TableHead>
-                    <TableHead className="text-right">إجراءات</TableHead>
+        <div className="rounded-lg border bg-card overflow-hidden">
+          {loading ? (
+            <div className="p-6 space-y-3">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : filteredClients.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground">
+              <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p>لا توجد نتائج مطابقة</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-right">العميل</TableHead>
+                  <TableHead className="text-right">رقم الهوية</TableHead>
+                  <TableHead className="text-right">الهاتف</TableHead>
+                  <TableHead className="text-right">حالة التوقيع</TableHead>
+                  <TableHead className="text-right">إجراءات</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredClients.map((client) => (
+                  <TableRow key={client.id} className="hover:bg-muted/50">
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <span className="font-medium">{client.full_name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <bdi className="font-mono text-sm text-muted-foreground">{client.id_number}</bdi>
+                    </TableCell>
+                    <TableCell>
+                      {client.phone_number ? (
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="h-3 w-3 text-muted-foreground" />
+                          <bdi className="font-mono text-sm">{client.phone_number}</bdi>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {client.signature_url ? (
+                        <Badge variant="success" className="gap-1">
+                          <CheckCircle2 className="h-3 w-3" />
+                          تم التوقيع
+                        </Badge>
+                      ) : (
+                        <Badge variant="warning" className="gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          لم يوقّع
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {client.signature_url ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setPreviewUrl(client.signature_url);
+                            setPreviewName(client.full_name);
+                          }}
+                          className="gap-1.5"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          عرض التوقيع
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          disabled={sendingId === client.id || !client.phone_number}
+                          onClick={() =>
+                            handleSendSignatureRequest(client.id, client.phone_number)
+                          }
+                          className="gap-1.5"
+                        >
+                          {sendingId === client.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Send className="h-3.5 w-3.5" />
+                          )}
+                          إرسال الرابط
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredClients.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        لا توجد نتائج
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredClients.map((client) => (
-                      <TableRow key={client.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{client.full_name}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <bdi>{client.id_number}</bdi>
-                        </TableCell>
-                        <TableCell>
-                          {client.phone_number ? (
-                            <div className="flex items-center gap-1">
-                              <Phone className="h-3 w-3 text-muted-foreground" />
-                              <bdi>{client.phone_number}</bdi>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {client.signature_url ? (
-                            <Badge variant="success" className="gap-1">
-                              <CheckCircle2 className="h-3 w-3" />
-                              تم التوقيع
-                            </Badge>
-                          ) : (
-                            <Badge variant="warning" className="gap-1">
-                              <AlertTriangle className="h-3 w-3" />
-                              لم يوقّع
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            {client.signature_url ? (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  setPreviewUrl(client.signature_url);
-                                  setPreviewName(client.full_name);
-                                }}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={sendingId === client.id || !client.phone_number}
-                                onClick={() =>
-                                  handleSendSignatureRequest(client.id, client.phone_number)
-                                }
-                              >
-                                {sendingId === client.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Send className="h-4 w-4" />
-                                )}
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
       </div>
 
       <SignaturePreviewDialog
