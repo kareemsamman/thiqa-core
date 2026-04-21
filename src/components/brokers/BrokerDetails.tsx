@@ -562,125 +562,97 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
         </Tabs>
 
         {/* Summary card — moved to the bottom of the page so the
-            transactions table stays the focus. Bundles policy count,
-            net balance, the to/from-broker breakdown, and the broker's
-            free-text notes into a single panel. */}
+            transactions table stays the focus. The net balance is the
+            hero metric (it's also "إجمالي المبالغ"); a small chip shows
+            the policy count, the to/from rows are supporting context,
+            and notes sit in a quiet footer. */}
         {!loading && (policies.length > 0 || broker.notes) && (
-          <Card className="print:border print:shadow-none">
-            <CardHeader className="pb-3">
+          <Card className="print:border print:shadow-none overflow-hidden">
+            <CardHeader className="pb-3 border-b">
               <CardTitle className="text-base flex items-center gap-2">
                 <Handshake className="h-4 w-4 text-muted-foreground" />
                 ملخص التعامل مع {broker.name}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="rounded-lg border p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30 print:bg-blue-100">
-                      <FileText className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">عدد المعاملات</p>
-                      <p className="text-xl font-bold text-blue-600 ltr-nums">{policies.length}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className={cn(
-                  "rounded-lg border-2 p-4",
-                  netBalance >= 0 ? "border-green-300 dark:border-green-700 print:border-green-300" : "border-red-300 dark:border-red-700 print:border-red-300"
-                )}>
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-lg",
-                      netBalance >= 0 ? "bg-green-100 dark:bg-green-900/30 print:bg-green-100" : "bg-red-100 dark:bg-red-900/30 print:bg-red-100"
-                    )}>
-                      <Wallet className={cn(
-                        "h-5 w-5",
-                        netBalance >= 0 ? "text-green-600" : "text-red-600"
-                      )} />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">إجمالي المبالغ</p>
-                      <p className={cn(
-                        "text-xl font-bold ltr-nums",
-                        netBalance >= 0 ? "text-green-600" : "text-red-600"
-                      )}>
-                        {netBalance < 0 ? "-" : ""}{formatCurrency(Math.abs(netBalance))}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {policies.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-lg border border-green-200 dark:border-green-900/40 bg-green-50/60 dark:bg-green-950/20 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ArrowDownLeft className="h-4 w-4 text-green-700 dark:text-green-400" />
-                    <span className="text-sm font-medium text-green-800 dark:text-green-300">
-                      أنشأتها للوسيط
-                    </span>
-                  </div>
-                  <div className="text-xs text-muted-foreground mb-1">
-                    {stats.toBrokerCount} {stats.toBrokerCount === 1 ? "معاملة" : "معاملات"} — يدفع لي الوسيط
-                  </div>
-                  <div className="text-xl font-bold text-green-700 dark:text-green-400 ltr-nums">
-                    {formatCurrency(stats.toBrokerTotal)}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-orange-200 dark:border-orange-900/40 bg-orange-50/60 dark:bg-orange-950/20 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ArrowUpRight className="h-4 w-4 text-orange-700 dark:text-orange-400" />
-                    <span className="text-sm font-medium text-orange-800 dark:text-orange-300">
-                      أنشأها لي الوسيط
-                    </span>
-                  </div>
-                  <div className="text-xs text-muted-foreground mb-1">
-                    {stats.fromBrokerCount} {stats.fromBrokerCount === 1 ? "معاملة" : "معاملات"} — أدفع للوسيط
-                  </div>
-                  <div className="text-xl font-bold text-orange-700 dark:text-orange-400 ltr-nums">
-                    {formatCurrency(stats.fromBrokerTotal)}
-                  </div>
-                </div>
-
-                <div className={cn(
-                  "rounded-lg border-2 p-4",
-                  policyNetBalance >= 0
-                    ? "border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/30"
-                    : "border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30",
-                )}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wallet className={cn(
-                      "h-4 w-4",
-                      policyNetBalance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400",
-                    )} />
-                    <span className="text-sm font-medium text-foreground">
-                      الصافي (الفرق)
-                    </span>
-                  </div>
-                  <div className="text-xs text-muted-foreground mb-1 ltr-nums">
-                    {formatCurrency(stats.toBrokerTotal)} − {formatCurrency(stats.fromBrokerTotal)}
-                  </div>
+            <CardContent className="p-0">
+              {/* Hero: net balance + count chip */}
+              <div className={cn(
+                "px-6 py-6 flex flex-wrap items-center justify-between gap-4 border-b",
+                netBalance >= 0
+                  ? "bg-green-50/50 dark:bg-green-950/20 print:bg-green-50/50"
+                  : "bg-red-50/50 dark:bg-red-950/20 print:bg-red-50/50",
+              )}>
+                <div className="flex items-center gap-4">
                   <div className={cn(
-                    "text-xl font-bold ltr-nums",
-                    policyNetBalance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400",
+                    "flex h-12 w-12 items-center justify-center rounded-full",
+                    netBalance >= 0
+                      ? "bg-green-100 dark:bg-green-900/40 print:bg-green-100"
+                      : "bg-red-100 dark:bg-red-900/40 print:bg-red-100",
                   )}>
-                    {policyNetBalance < 0 ? "−" : ""}{formatCurrency(Math.abs(policyNetBalance))}
+                    <Wallet className={cn(
+                      "h-6 w-6",
+                      netBalance >= 0 ? "text-green-600" : "text-red-600",
+                    )} />
                   </div>
-                  <div className="text-[11px] text-muted-foreground mt-1.5">
-                    {policyNetBalance >= 0 ? "الوسيط مدين لي" : "أنا مدين للوسيط"}
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">
+                      {netBalance >= 0 ? "الوسيط مدين لي" : "أنا مدين للوسيط"}
+                    </p>
+                    <p className={cn(
+                      "text-3xl font-bold ltr-nums leading-none",
+                      netBalance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400",
+                    )}>
+                      {netBalance < 0 ? "−" : ""}{formatCurrency(Math.abs(netBalance))}
+                    </p>
                   </div>
                 </div>
+                <div className="flex items-center gap-2 rounded-full bg-background border px-3 py-1.5">
+                  <FileText className="h-4 w-4 text-blue-600" />
+                  <span className="text-xs text-muted-foreground">عدد المعاملات</span>
+                  <span className="text-sm font-bold text-blue-600 ltr-nums">{policies.length}</span>
+                </div>
               </div>
+
+              {/* Direction breakdown */}
+              {policies.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x">
+                  <div className="px-6 py-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-md bg-green-100 dark:bg-green-900/30 print:bg-green-100">
+                        <ArrowDownLeft className="h-3.5 w-3.5 text-green-700 dark:text-green-400" />
+                      </div>
+                      <span className="text-sm font-medium">أنشأتها للوسيط</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mb-1.5">
+                      {stats.toBrokerCount} {stats.toBrokerCount === 1 ? "معاملة" : "معاملات"} — يدفع لي الوسيط
+                    </div>
+                    <div className="text-2xl font-bold text-green-700 dark:text-green-400 ltr-nums">
+                      {formatCurrency(stats.toBrokerTotal)}
+                    </div>
+                  </div>
+
+                  <div className="px-6 py-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-md bg-orange-100 dark:bg-orange-900/30 print:bg-orange-100">
+                        <ArrowUpRight className="h-3.5 w-3.5 text-orange-700 dark:text-orange-400" />
+                      </div>
+                      <span className="text-sm font-medium">أنشأها لي الوسيط</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mb-1.5">
+                      {stats.fromBrokerCount} {stats.fromBrokerCount === 1 ? "معاملة" : "معاملات"} — أدفع للوسيط
+                    </div>
+                    <div className="text-2xl font-bold text-orange-700 dark:text-orange-400 ltr-nums">
+                      {formatCurrency(stats.fromBrokerTotal)}
+                    </div>
+                  </div>
+                </div>
               )}
 
+              {/* Notes footer */}
               {broker.notes && (
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <h4 className="text-sm font-medium mb-2">ملاحظات</h4>
-                  <p className="text-muted-foreground whitespace-pre-line">{broker.notes}</p>
+                <div className="px-6 py-4 border-t bg-muted/30">
+                  <p className="text-xs font-medium text-muted-foreground mb-1">ملاحظات</p>
+                  <p className="text-sm whitespace-pre-line">{broker.notes}</p>
                 </div>
               )}
             </CardContent>
