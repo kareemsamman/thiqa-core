@@ -520,7 +520,12 @@ export default function Media() {
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow className="hover:bg-muted/40 border-b">
-                  <TableHead className="w-12">
+                  {/* Shared Table injects [&:has([role=checkbox])]:pr-0
+                      which zeroes the cell's right padding — fine for
+                      LTR (it abuts the next column) but in RTL it kills
+                      the table edge padding. Force pr-4 back on so the
+                      checkbox has breathing room from the right edge. */}
+                  <TableHead className="w-12 !pr-4">
                     <Checkbox
                       checked={selectedIds.size === files.length && files.length > 0}
                       onCheckedChange={handleSelectAll}
@@ -552,7 +557,7 @@ export default function Media() {
                         isSelected && 'bg-primary/5 hover:bg-primary/10',
                       )}
                     >
-                      <TableCell>
+                      <TableCell className="!pr-4">
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={(checked) => handleSelectOne(file.id, checked as boolean, index, false)}
