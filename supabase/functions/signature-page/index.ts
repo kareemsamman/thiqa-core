@@ -119,8 +119,15 @@ serve(async (req) => {
       });
     }
 
-    // Use branding signature fields as defaults, allow template override
-    let templateContent = {
+    // Branding fields edited in /branding-settings are the source of
+    // truth. The optional signature template (invoice_templates row
+    // pointed at by sms_settings.default_signature_template_id) only
+    // fills in any branding field the agent has explicitly left blank
+    // — previously the template won, so saving in the admin UI silently
+    // had no effect for agents that had a template configured. The
+    // sms_settings lookup is also scoped to the client's own agent_id
+    // so a template configured on one tenant can't bleed into another.
+    const templateContent = {
       logo_url: branding.logoUrl as string | null,
       header_html: branding.signatureHeaderHtml,
       body_html: branding.signatureBodyHtml.replace(/الشركة/g, branding.companyName),
@@ -129,26 +136,35 @@ serve(async (req) => {
 
     const primaryColor = branding.signaturePrimaryColor;
 
-    const { data: smsSettings } = await supabase
-      .from("sms_settings")
-      .select("default_signature_template_id")
-      .limit(1)
-      .maybeSingle();
-
-    if (smsSettings?.default_signature_template_id) {
-      const { data: template } = await supabase
-        .from("invoice_templates")
-        .select("header_html, body_html, footer_html, logo_url")
-        .eq("id", smsSettings.default_signature_template_id)
+    if (clientAgentId) {
+      const { data: smsSettings } = await supabase
+        .from("sms_settings")
+        .select("default_signature_template_id")
+        .eq("agent_id", clientAgentId)
         .maybeSingle();
-      
-      if (template) {
-        templateContent = {
-          logo_url: template.logo_url,
-          header_html: template.header_html || templateContent.header_html,
-          body_html: template.body_html || templateContent.body_html,
-          footer_html: template.footer_html || templateContent.footer_html,
-        };
+
+      if (smsSettings?.default_signature_template_id) {
+        const { data: template } = await supabase
+          .from("invoice_templates")
+          .select("header_html, body_html, footer_html, logo_url")
+          .eq("id", smsSettings.default_signature_template_id)
+          .maybeSingle();
+
+        if (template) {
+          // Only fill blanks — agent's branding takes precedence.
+          if (!templateContent.logo_url && template.logo_url) {
+            templateContent.logo_url = template.logo_url;
+          }
+          if (!templateContent.header_html && template.header_html) {
+            templateContent.header_html = template.header_html;
+          }
+          if (!templateContent.body_html && template.body_html) {
+            templateContent.body_html = template.body_html;
+          }
+          if (!templateContent.footer_html && template.footer_html) {
+            templateContent.footer_html = template.footer_html;
+          }
+        }
       }
     }
 
