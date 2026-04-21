@@ -567,7 +567,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           insurance_price, office_commission, profit, cancelled, transferred, group_id,
           transferred_car_number, transferred_to_car_number, transferred_from_policy_id,
           created_at, branch_id, notes,
-          broker_id, broker_direction,
+          broker_id, broker_direction, broker_buy_price,
           company:insurance_companies(name, name_ar),
           car:cars(id, car_number),
           creator:profiles!policies_created_by_admin_id_fkey(full_name, email),

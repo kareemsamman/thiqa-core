@@ -71,6 +71,7 @@ interface PolicyRecord {
   notes: string | null;
   broker_id?: string | null;
   broker_direction?: 'from_broker' | 'to_broker' | null;
+  broker_buy_price?: number | null;
   company: { name: string; name_ar: string | null } | null;
   car: { id: string; car_number: string } | null;
   creator: { full_name: string | null; email: string } | null;
@@ -1713,6 +1714,50 @@ function PolicyPackageCard({
                     {totalTransferPortion > 0 && (
                       <span className="text-[9px] text-sky-700 font-semibold ltr-nums">
                         منها ₪{totalTransferPortion.toLocaleString('en-US')} عمولة تحويل
+                      </span>
+                    )}
+                  </>
+                );
+              })()}
+              {/* Broker buy-price line — when this policy/package was
+                  brought in by a broker (broker_direction = 'from_broker'),
+                  surface what we paid the broker and the resulting profit
+                  so staff can see margin at a glance instead of opening
+                  the broker page. */}
+              {(() => {
+                const rowPolicies = (isPkg
+                  ? [pkg.mainPolicy, ...pkg.addons].filter(Boolean) as PolicyRecord[]
+                  : [policy]
+                );
+                const buyTotal = rowPolicies.reduce(
+                  (sum, p) =>
+                    sum +
+                    (p.broker_direction === 'from_broker'
+                      ? Number(p.broker_buy_price ?? 0)
+                      : 0),
+                  0,
+                );
+                if (buyTotal <= 0) return null;
+                const sellTotal = rowPolicies.reduce(
+                  (sum, p) =>
+                    sum +
+                    (p.broker_direction === 'from_broker'
+                      ? Number(p.insurance_price ?? 0)
+                      : 0),
+                  0,
+                );
+                const profit = sellTotal - buyTotal;
+                return (
+                  <>
+                    <span className="text-[9px] text-orange-700 font-semibold ltr-nums mt-0.5">
+                      شراء من الوسيط ₪{buyTotal.toLocaleString('en-US')}
+                    </span>
+                    {profit !== 0 && (
+                      <span className={cn(
+                        "text-[9px] font-semibold ltr-nums",
+                        profit > 0 ? "text-emerald-700" : "text-red-700",
+                      )}>
+                        {profit > 0 ? "ربح" : "خسارة"} ₪{Math.abs(profit).toLocaleString('en-US')}
                       </span>
                     )}
                   </>
