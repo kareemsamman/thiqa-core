@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Building2, Plus, Pencil, Trash2, Users, Save, Loader2, MapPin, Star } from "lucide-react";
 import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -267,22 +267,24 @@ export default function BranchManagement() {
           </div>
         )}
 
-        {/* Add/Edit Dialog */}
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent dir="rtl" className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>{editBranch ? "تعديل الفرع" : "إضافة فرع جديد"}</DialogTitle>
-            </DialogHeader>
-            <BranchFormFields value={form} onChange={setForm} />
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 ml-2 animate-spin" /> : <Save className="h-4 w-4 ml-2" />}
-                {editBranch ? "حفظ التعديل" : "إضافة الفرع"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Add/Edit Sheet */}
+        <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
+          <SheetContent side="left" className="w-full sm:max-w-md overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>{editBranch ? "تعديل الفرع" : "إضافة فرع جديد"}</SheetTitle>
+            </SheetHeader>
+            <div className="space-y-6 mt-6">
+              <BranchFormFields value={form} onChange={setForm} />
+              <div className="flex gap-2 pt-4">
+                <Button onClick={handleSave} disabled={saving} className="flex-1">
+                  {saving ? <Loader2 className="h-4 w-4 ml-2 animate-spin" /> : <Save className="h-4 w-4 ml-2" />}
+                  {editBranch ? "حفظ التعديل" : "إضافة الفرع"}
+                </Button>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
 
         {/* Delete Confirm */}
         <DeleteConfirmDialog
