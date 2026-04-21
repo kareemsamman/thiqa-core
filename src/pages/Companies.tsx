@@ -14,13 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Settings, Building2, Truck, Shield, MoreHorizontal } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Plus, Search, Settings, Building2, Truck, Shield } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -270,32 +264,39 @@ export default function Companies() {
                       </Badge>
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">إجراءات</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1.5 text-xs"
+                          onClick={() => handleManagePricing(company)}
+                        >
+                          <Settings className="h-3.5 w-3.5" />
+                          قواعد التسعير
+                        </Button>
+                        {company.category_parent?.includes('ROAD_SERVICE') && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-1.5 text-xs"
+                            onClick={() => handleManageRoadServicePricing(company)}
+                          >
+                            <Truck className="h-3.5 w-3.5" />
+                            خدمات الطريق
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-popover border shadow-lg z-50">
-                          <DropdownMenuItem onClick={() => handleManagePricing(company)}>
-                            <Settings className="h-4 w-4 ml-2" />
-                            قواعد التسعير
-                          </DropdownMenuItem>
-                          {company.category_parent?.includes('ROAD_SERVICE') && (
-                            <DropdownMenuItem onClick={() => handleManageRoadServicePricing(company)}>
-                              <Truck className="h-4 w-4 ml-2" />
-                              أسعار خدمات الطريق
-                            </DropdownMenuItem>
-                          )}
-                          {company.category_parent?.includes('ROAD_SERVICE') && (
-                            <DropdownMenuItem onClick={() => handleManageAccidentFeePricing(company)}>
-                              <Shield className="h-4 w-4 ml-2" />
-                              أسعار إعفاء الحادث
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        )}
+                        {company.category_parent?.includes('ROAD_SERVICE') && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-1.5 text-xs"
+                            onClick={() => handleManageAccidentFeePricing(company)}
+                          >
+                            <Shield className="h-3.5 w-3.5" />
+                            إعفاء الحادث
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

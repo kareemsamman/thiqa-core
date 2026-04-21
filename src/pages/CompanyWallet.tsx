@@ -847,7 +847,7 @@ export default function CompanyWallet() {
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {paymentLines.map((payment, index) => (
+                  {paymentLines.map((payment, index) => ({ payment, index })).reverse().map(({ payment, index }) => (
                     <Card key={payment.id} className="p-4 space-y-4">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold">دفعة {index + 1}</span>

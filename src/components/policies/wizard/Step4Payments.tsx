@@ -341,7 +341,7 @@ export function Step4Payments({
           </Card>
         ) : (
           <div className="space-y-3">
-            {payments.map((payment, index) => {
+            {payments.map((payment, index) => ({ payment, index })).reverse().map(({ payment, index }) => {
               const isVisa = payment.payment_type === 'visa';
               const visaPaid = payment.tranzila_paid;
               const visaAmount = payment.amount || 0;

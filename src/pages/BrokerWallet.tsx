@@ -1069,7 +1069,7 @@ export default function BrokerWallet() {
                 </Card>
               ) : (
                 <div className="space-y-3">
-                  {paymentLines.map((payment, index) => {
+                  {paymentLines.map((payment, index) => ({ payment, index })).reverse().map(({ payment, index }) => {
                     const isVisa = payment.payment_type === 'visa';
                     const visaPaid = payment.tranzila_paid;
                     

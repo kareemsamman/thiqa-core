@@ -1174,7 +1174,7 @@ export function DebtPaymentModal({
                 </div>
               </div>
 
-              {paymentLines.map((payment, index) => (
+              {paymentLines.map((payment, index) => ({ payment, index })).reverse().map(({ payment, index }) => (
                 <Card key={payment.id} className={cn(
                   "p-3",
                   payment.tranzilaPaid && "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
