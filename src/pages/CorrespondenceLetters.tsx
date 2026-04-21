@@ -142,7 +142,27 @@ export default function CorrespondenceLetters() {
         body: { letter_id: letter.id },
       });
 
-      if (error) throw error;
+      // supabase.functions.invoke wraps non-2xx responses in a
+      // FunctionsHttpError that says "non-2xx status code" without the
+      // actual body. Pull the body out of error.context so the toast
+      // shows what the function actually reported.
+      if (error) {
+        let realMessage = error.message;
+        const ctx = (error as unknown as { context?: Response }).context;
+        if (ctx && typeof ctx.json === 'function') {
+          try {
+            const body = await ctx.json();
+            if (body?.error) realMessage = body.error;
+          } catch {
+            try {
+              realMessage = await ctx.text();
+            } catch {
+              /* keep wrapper message */
+            }
+          }
+        }
+        throw new Error(realMessage);
+      }
       if (data?.error) throw new Error(data.error);
 
       // Refresh to get updated URL
