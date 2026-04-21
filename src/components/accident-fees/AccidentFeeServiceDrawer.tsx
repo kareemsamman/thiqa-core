@@ -104,92 +104,94 @@ export function AccidentFeeServiceDrawer({ open, onOpenChange, service, onSaved 
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[90vh]">
-        <DrawerHeader>
-          <DrawerTitle>
-            {service ? 'تعديل خدمة إعفاء رسوم الحادث' : 'إضافة خدمة إعفاء رسوم حادث جديدة'}
-          </DrawerTitle>
-        </DrawerHeader>
+      <DrawerContent className="max-h-[90vh]" dir="rtl">
+        <div className="mx-auto w-full max-w-2xl flex flex-col max-h-[calc(90vh-1rem)]">
+          <DrawerHeader className="text-right sm:text-right">
+            <DrawerTitle>
+              {service ? 'تعديل خدمة إعفاء رسوم الحادث' : 'إضافة خدمة إعفاء رسوم حادث جديدة'}
+            </DrawerTitle>
+          </DrawerHeader>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto">
-          <div className="space-y-2">
-            <Label htmlFor="name" className="text-right block">الاسم بالإنجليزية</Label>
-            <Input
-              id="name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="Service Name"
-              className="ltr-input"
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="px-4 pb-2 space-y-4 overflow-y-auto">
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-right block">الاسم بالإنجليزية</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Service Name"
+                className="ltr-input"
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="name_ar" className="text-right block">الاسم بالعربية *</Label>
-            <Input
-              id="name_ar"
-              value={formData.name_ar}
-              onChange={(e) => setFormData({ ...formData, name_ar: e.target.value })}
-              placeholder="اسم الخدمة"
-              className="text-right"
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="name_ar" className="text-right block">الاسم بالعربية *</Label>
+              <Input
+                id="name_ar"
+                value={formData.name_ar}
+                onChange={(e) => setFormData({ ...formData, name_ar: e.target.value })}
+                placeholder="اسم الخدمة"
+                className="text-right"
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="description" className="text-right block">الوصف</Label>
-            <Textarea
-              id="description"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="وصف الخدمة..."
-              className="text-right"
-              rows={3}
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="description" className="text-right block">الوصف</Label>
+              <Textarea
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="وصف الخدمة..."
+                className="text-right"
+                rows={3}
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="sort_order" className="text-right block">ترتيب العرض</Label>
-            <Input
-              id="sort_order"
-              type="number"
-              value={formData.sort_order}
-              onChange={(e) => setFormData({ ...formData, sort_order: parseInt(e.target.value) || 0 })}
-              placeholder="0"
-              className="ltr-input w-24"
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="sort_order" className="text-right block">ترتيب العرض</Label>
+              <Input
+                id="sort_order"
+                type="number"
+                value={formData.sort_order}
+                onChange={(e) => setFormData({ ...formData, sort_order: parseInt(e.target.value) || 0 })}
+                placeholder="0"
+                className="ltr-input w-24"
+              />
+            </div>
 
-          <div className="flex items-center justify-between">
-            <Label htmlFor="active">الخدمة فعالة</Label>
-            <Switch
-              id="active"
-              checked={formData.active}
-              onCheckedChange={(checked) => setFormData({ ...formData, active: checked })}
-            />
-          </div>
-        </form>
+            <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+              <Label htmlFor="active" className="cursor-pointer">الخدمة فعالة</Label>
+              <Switch
+                id="active"
+                checked={formData.active}
+                onCheckedChange={(checked) => setFormData({ ...formData, active: checked })}
+              />
+            </div>
+          </form>
 
-        <DrawerFooter>
-          <div className="flex gap-2 w-full">
-            <Button
-              type="submit"
-              className="flex-1"
-              disabled={loading}
-              onClick={handleSubmit}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                  جاري الحفظ...
-                </>
-              ) : (
-                'حفظ'
-              )}
-            </Button>
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-              إلغاء
-            </Button>
-          </div>
-        </DrawerFooter>
+          <DrawerFooter>
+            <div className="flex gap-2 w-full">
+              <Button
+                type="submit"
+                className="flex-1"
+                disabled={loading}
+                onClick={handleSubmit}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                    جاري الحفظ...
+                  </>
+                ) : (
+                  'حفظ'
+                )}
+              </Button>
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+                إلغاء
+              </Button>
+            </div>
+          </DrawerFooter>
+        </div>
       </DrawerContent>
     </Drawer>
   );

@@ -127,11 +127,7 @@ export default function AccidentFeeServices() {
 
       <div className="p-6 space-y-6">
         {/* Toolbar */}
-        <div className="flex items-center gap-2">
-          <Button size="sm" onClick={handleAdd} className="gap-2">
-            <Plus className="h-4 w-4" />
-            إضافة خدمة
-          </Button>
+        <div className="flex items-center justify-between gap-2">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -141,6 +137,10 @@ export default function AccidentFeeServices() {
               className="pr-10"
             />
           </div>
+          <Button onClick={handleAdd} className="gap-2">
+            <Plus className="h-4 w-4" />
+            إضافة خدمة
+          </Button>
         </div>
 
         {/* Table */}
