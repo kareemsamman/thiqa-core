@@ -108,18 +108,37 @@ export function LetterPreview({ title, recipientName, bodyHtml, createdAt, class
         boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
       }}
     >
-      {/* Letterhead with agent logo + name */}
+      {/* Letterhead with agent logo + name. The logo is wrapped in a
+          fixed-size flex box so a square/tall/wide source image all
+          render at the same visual footprint — the previous
+          max-height/max-width pair alone made the logo look cropped
+          when the source image was large. */}
       <div style={{
-        padding: '36px 48px 28px',
+        padding: '40px 56px 32px',
         borderBottom: `3px double ${accent}`,
         textAlign: 'center',
       }}>
         {logoUrl && (
-          <img
-            src={logoUrl}
-            alt={companyName}
-            style={{ maxHeight: '72px', maxWidth: '220px', objectFit: 'contain', margin: '0 auto 12px', display: 'block' }}
-          />
+          <div style={{
+            width: '100%',
+            height: '96px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '18px',
+          }}>
+            <img
+              src={logoUrl}
+              alt={companyName}
+              style={{
+                maxHeight: '96px',
+                maxWidth: '260px',
+                width: 'auto',
+                height: 'auto',
+                objectFit: 'contain',
+              }}
+            />
+          </div>
         )}
         <h1 style={{
           fontSize: '30px',

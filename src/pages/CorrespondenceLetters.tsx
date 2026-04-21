@@ -154,7 +154,8 @@ export default function CorrespondenceLetters() {
       }
     } catch (error) {
       console.error('Error generating HTML:', error);
-      toast.error('فشل إنشاء الملف');
+      const message = error instanceof Error ? error.message : 'خطأ غير معروف';
+      toast.error(`فشل إنشاء الملف: ${message}`);
     } finally {
       setGeneratingId(null);
     }

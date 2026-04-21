@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
     const accent = branding.signaturePrimaryColor || '#0d9488';
     const ownerName = branding.ownerName || companyName;
     const logoHtml = branding.logoUrl
-      ? `<img src="${branding.logoUrl}" alt="${escapeHtml(companyName)}" class="logo" />`
+      ? `<div class="logo-wrap"><img src="${branding.logoUrl}" alt="${escapeHtml(companyName)}" class="logo" /></div>`
       : '';
 
     const footerPhones: string[] = [];
@@ -179,12 +179,20 @@ Deno.serve(async (req) => {
       border-bottom: 3px double var(--accent);
       text-align: center;
     }
+    .letterhead .logo-wrap {
+      width: 100%;
+      height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 18px;
+    }
     .letterhead .logo {
-      max-height: 80px;
-      max-width: 240px;
+      max-height: 100px;
+      max-width: 280px;
+      width: auto;
+      height: auto;
       object-fit: contain;
-      margin: 0 auto 14px;
-      display: block;
     }
     .letterhead h1 {
       font-size: 32px;
