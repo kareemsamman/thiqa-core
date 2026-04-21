@@ -126,9 +126,10 @@ serve(async (req) => {
     // Check if already signed
     if (signatureRecord.signature_image_url && signatureRecord.signature_image_url !== "") {
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           valid: false,
-          already_signed: true, 
+          already_signed: true,
+          client_name: clientName,
           signed_at: signatureRecord.signed_at,
           message: "Signature already submitted"
         }),

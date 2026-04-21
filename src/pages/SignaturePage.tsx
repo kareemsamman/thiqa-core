@@ -42,6 +42,7 @@ export default function SignaturePage() {
   const [signatureInfo, setSignatureInfo] = useState<SignatureInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [alreadySigned, setAlreadySigned] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -96,7 +97,7 @@ export default function SignaturePage() {
       setSignatureInfo(data);
 
       if (data.already_signed) {
-        setSubmitted(true);
+        setAlreadySigned(true);
       }
     } catch (err) {
       console.error("Error fetching signature info:", err);
@@ -211,6 +212,41 @@ export default function SignaturePage() {
               </div>
               <CardTitle className="text-destructive">رابط غير صالح</CardTitle>
               <CardDescription>{error}</CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  if (alreadySigned) {
+    const signedAtText = signatureInfo?.signed_at
+      ? new Date(signatureInfo.signed_at).toLocaleString("en-GB")
+      : null;
+    return (
+      <>
+        <Helmet>
+          <title>تم التوقيع مسبقاً | ثقة للتأمين</title>
+          <meta name="description" content="لقد قمت بالتوقيع على هذا النموذج مسبقاً." />
+          <link rel="canonical" href={typeof window !== "undefined" ? window.location.href : "/"} />
+        </Helmet>
+        <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center p-4" dir="rtl">
+          <Card className="w-full max-w-md text-center">
+            <CardHeader>
+              <div className="mx-auto w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mb-4">
+                <Check className="h-8 w-8 text-success" />
+              </div>
+              <CardTitle className="text-success">لقد وقّعت مسبقاً</CardTitle>
+              <CardDescription>
+                {signatureInfo?.client_name
+                  ? `شكراً لك ${signatureInfo.client_name}، تم استلام توقيعك مسبقاً ولا حاجة للتوقيع مرة أخرى.`
+                  : "تم استلام توقيعك مسبقاً ولا حاجة للتوقيع مرة أخرى."}
+                {signedAtText && (
+                  <span className="block mt-2 text-xs text-muted-foreground">
+                    تاريخ التوقيع: {signedAtText}
+                  </span>
+                )}
+              </CardDescription>
             </CardHeader>
           </Card>
         </div>

@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -15,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SignaturePreviewDialog } from "@/components/clients/SignaturePreviewDialog";
 import {
   Select,
   SelectContent,
@@ -343,23 +343,12 @@ export default function CustomerSignatures() {
         </Card>
       </div>
 
-      {/* Signature Preview Dialog */}
-      <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
-        <DialogContent className="sm:max-w-md" dir="rtl">
-          <DialogHeader>
-            <DialogTitle>توقيع العميل - {previewName}</DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center justify-center p-4 bg-white rounded-lg border">
-            {previewUrl && (
-              <img
-                src={previewUrl}
-                alt="توقيع العميل"
-                className="max-w-full max-h-48 object-contain"
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <SignaturePreviewDialog
+        open={!!previewUrl}
+        onOpenChange={(open) => !open && setPreviewUrl(null)}
+        clientName={previewName}
+        signatureUrl={previewUrl}
+      />
     </MainLayout>
   );
 }
