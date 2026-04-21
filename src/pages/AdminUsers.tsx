@@ -59,6 +59,12 @@ import { arDZ as ar } from "date-fns/locale";
 import { UserSessionsTab } from "@/components/admin/UserSessionsTab";
 import { isPasswordValid } from "@/lib/authValidation";
 import { digitsOnly } from "@/lib/validation";
+import {
+  DateRangeFilter,
+  type DateRangeValue,
+  DEFAULT_DATE_RANGE,
+  resolveDateRange,
+} from "@/components/admin/DateRangeFilter";
 
 interface UserProfile {
   id: string;
@@ -99,6 +105,8 @@ export default function AdminUsers() {
   const { toast } = useToast();
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([]);
+  const [attemptsLoading, setAttemptsLoading] = useState(false);
+  const [attemptsRange, setAttemptsRange] = useState<DateRangeValue>(DEFAULT_DATE_RANGE);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<Record<string, 'admin' | 'worker'>>({});
@@ -189,7 +197,6 @@ export default function AdminUsers() {
     try {
       if (!agentId) {
         setUsers([]);
-        setLoginAttempts([]);
         return;
       }
 
@@ -205,7 +212,6 @@ export default function AdminUsers() {
 
       if (userIds.length === 0) {
         setUsers([]);
-        setLoginAttempts([]);
         return;
       }
 
@@ -215,25 +221,6 @@ export default function AdminUsers() {
         .eq('agent_id', agentId);
 
       if (rolesError) throw rolesError;
-
-      // login_attempts is scoped by agent_id (populated via DB trigger),
-      // which captures failed attempts whose user_id stayed null but whose
-      // email matched a profile in this agent. Fetched separately so a
-      // failure here (e.g. migration pending) doesn't block the users
-      // tabs from rendering.
-      let attempts: LoginAttempt[] = [];
-      try {
-        const { data, error } = await supabase
-          .from('login_attempts')
-          .select('*')
-          .eq('agent_id', agentId)
-          .order('created_at', { ascending: false })
-          .limit(50);
-        if (error) throw error;
-        attempts = (data || []) as LoginAttempt[];
-      } catch (attemptsError) {
-        console.warn('Login attempts unavailable (migration may be pending):', attemptsError);
-      }
 
       const usersWithRoles: UserWithRole[] = (profiles || []).map(profile => {
         const userRole = (roles || []).find(r => r.user_id === profile.id);
@@ -257,7 +244,6 @@ export default function AdminUsers() {
       });
       setSelectedRole(roleSelections);
       setSelectedBranch(branchSelections);
-      setLoginAttempts(attempts);
     } catch (error) {
       console.error('Error fetching users:', error);
       toast({
@@ -275,6 +261,40 @@ export default function AdminUsers() {
       fetchUsers();
     }
   }, [isAdmin, agentId, branches.length]);
+
+  // login_attempts is scoped by agent_id (populated via DB trigger),
+  // which captures failed attempts whose user_id stayed null but whose
+  // email matched a profile in this agent. Fetched on its own so a
+  // failure here doesn't block the users tabs, and so the date filter
+  // can re-run this query without re-fetching every profile.
+  const fetchLoginAttempts = async () => {
+    if (!agentId) return;
+    setAttemptsLoading(true);
+    try {
+      const { start, end } = resolveDateRange(attemptsRange);
+      const { data, error } = await supabase
+        .from('login_attempts')
+        .select('*')
+        .eq('agent_id', agentId)
+        .gte('created_at', start.toISOString())
+        .lte('created_at', end.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      setLoginAttempts((data || []) as LoginAttempt[]);
+    } catch (error) {
+      console.warn('Login attempts unavailable (migration may be pending):', error);
+      setLoginAttempts([]);
+    } finally {
+      setAttemptsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin && agentId) {
+      fetchLoginAttempts();
+    }
+  }, [isAdmin, agentId, attemptsRange]);
 
   const handleApproveUser = async (userId: string) => {
     setActionLoading(userId);
@@ -846,14 +866,27 @@ export default function AdminUsers() {
           </TabsContent>
 
           {/* Login Attempts Tab */}
-          <TabsContent value="attempts">
+          <TabsContent value="attempts" className="space-y-4">
+            <div className="flex flex-wrap gap-2 items-center justify-between">
+              <DateRangeFilter value={attemptsRange} onChange={setAttemptsRange} />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchLoginAttempts}
+                disabled={attemptsLoading}
+                className="gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${attemptsLoading ? 'animate-spin' : ''}`} />
+                تحديث
+              </Button>
+            </div>
             <div className="rounded-lg border bg-card">
-              {loading ? (
+              {attemptsLoading ? (
                 <div className="p-4">{renderTableSkeleton()}</div>
               ) : loginAttempts.length === 0 ? (
                 <div className="p-8 text-center text-muted-foreground">
                   <KeyRound className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p>لا توجد محاولات دخول مسجلة</p>
+                  <p>لا توجد محاولات دخول في هذه الفترة</p>
                 </div>
               ) : (
                 <Table>

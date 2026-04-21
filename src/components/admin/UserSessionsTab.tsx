@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { format, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
+import { format } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
 import {
   Table,
@@ -10,14 +10,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -42,9 +34,14 @@ import {
   LogOut,
   Loader2,
 } from "lucide-react";
-import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import {
+  DateRangeFilter,
+  type DateRangeValue,
+  DEFAULT_DATE_RANGE,
+  resolveDateRange,
+} from "@/components/admin/DateRangeFilter";
 
 interface UserSession {
   id: string;
@@ -79,15 +76,11 @@ const isSessionLive = (s: UserSession) => {
   return Date.now() - new Date(lastSeen).getTime() < STALE_HEARTBEAT_MS;
 };
 
-type FilterPeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
-
 export function UserSessionsTab() {
   const { user: currentUser } = useAuth();
   const [sessions, setSessions] = useState<UserSession[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterPeriod, setFilterPeriod] = useState<FilterPeriod>('today');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [dateRange, setDateRange] = useState<DateRangeValue>(DEFAULT_DATE_RANGE);
   const [kickingId, setKickingId] = useState<string | null>(null);
   const [kickTarget, setKickTarget] = useState<UserSession | null>(null);
 
@@ -111,31 +104,10 @@ export function UserSessionsTab() {
     }
   };
 
-  const getDateRange = (period: FilterPeriod) => {
-    const now = new Date();
-    switch (period) {
-      case 'today':
-        return { start: startOfDay(now), end: endOfDay(now) };
-      case 'week':
-        return { start: startOfWeek(now, { locale: ar }), end: endOfWeek(now, { locale: ar }) };
-      case 'month':
-        return { start: startOfMonth(now), end: endOfMonth(now) };
-      case 'year':
-        return { start: startOfYear(now), end: endOfYear(now) };
-      case 'custom':
-        return {
-          start: startDate ? new Date(startDate) : subDays(now, 7),
-          end: endDate ? endOfDay(new Date(endDate)) : now,
-        };
-      default:
-        return { start: startOfDay(now), end: endOfDay(now) };
-    }
-  };
-
   const fetchSessions = async () => {
     setLoading(true);
     try {
-      const { start, end } = getDateRange(filterPeriod);
+      const { start, end } = resolveDateRange(dateRange);
 
       const { data, error } = await supabase
         .from('user_sessions')
@@ -159,7 +131,7 @@ export function UserSessionsTab() {
 
   useEffect(() => {
     fetchSessions();
-  }, [filterPeriod, startDate, endDate]);
+  }, [dateRange]);
 
   // Re-render every 30s so the "نشط حالياً" badges flip to ended as
   // heartbeats go stale, without the admin having to click تحديث.
@@ -233,32 +205,7 @@ export function UserSessionsTab() {
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-wrap gap-4 items-center">
-        <Select value={filterPeriod} onValueChange={(v: FilterPeriod) => setFilterPeriod(v)}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="الفترة" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="today">اليوم</SelectItem>
-            <SelectItem value="week">هذا الأسبوع</SelectItem>
-            <SelectItem value="month">هذا الشهر</SelectItem>
-            <SelectItem value="year">هذه السنة</SelectItem>
-            <SelectItem value="custom">تاريخ مخصص</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {filterPeriod === 'custom' && (
-          <div className="flex gap-2 items-center">
-            <ArabicDatePicker
-              value={startDate}
-              onChange={(date) => setStartDate(date)}
-            />
-            <span className="text-muted-foreground">إلى</span>
-            <ArabicDatePicker
-              value={endDate}
-              onChange={(date) => setEndDate(date)}
-            />
-          </div>
-        )}
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
 
         <Button
           variant="outline"
