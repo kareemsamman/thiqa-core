@@ -6,6 +6,9 @@ verify_jwt = false
 [functions.log-login-attempt]
 verify_jwt = false
 
+[functions.start-user-session]
+verify_jwt = false
+
 [functions.check-email-provider]
 verify_jwt = false
 

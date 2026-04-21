@@ -76,33 +76,31 @@ export function useSessionTracker() {
         startedRef.current = true;
         const ua = navigator.userAgent;
         const { browserName, browserVersion, osName, deviceType } = parseUserAgent(ua);
-        
+
         // Fetch IP address
         const ipAddress = await getClientIP();
 
-        const { data, error } = await (supabase
-          .from('user_sessions') as any)
-          .insert({
-            user_id: user.id,
+        // Delegate the insert to an edge function so RLS can't silently
+        // drop the row and any agent_id / constraint failures surface as
+        // real errors instead of being swallowed.
+        const { data, error } = await supabase.functions.invoke('start-user-session', {
+          body: {
             user_agent: ua,
             browser_name: browserName,
             browser_version: browserVersion,
             os_name: osName,
             device_type: deviceType,
             ip_address: ipAddress,
-            is_active: true,
-          })
-          .select('id')
-          .single();
+          },
+        });
 
         if (error) {
           console.error('Failed to start session:', error);
           return;
         }
 
-        if (data) {
+        if (data?.id) {
           sessionIdRef.current = data.id;
-          // Store in sessionStorage for recovery
           sessionStorage.setItem('current_session_id', data.id);
         }
       } catch (err) {
