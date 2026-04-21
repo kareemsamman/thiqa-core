@@ -3,11 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
+import { useSiteSettings } from '@/hooks/useSiteSettings';
+import { useAgentContext } from '@/hooks/useAgentContext';
 
-interface CompanyInfo {
-  company_name?: string;
-  company_phone_links?: Array<{ phone: string; label?: string; link_type?: string }>;
-  company_location?: string;
+interface CompanyPhones {
+  phoneLinks: Array<{ phone: string; label?: string; link_type?: string }>;
+  companyLocation: string;
 }
 
 interface LetterPreviewProps {
@@ -19,45 +20,39 @@ interface LetterPreviewProps {
 }
 
 export function LetterPreview({ title, recipientName, bodyHtml, createdAt, className }: LetterPreviewProps) {
-  const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: siteSettings, isLoading: settingsLoading } = useSiteSettings();
+  const { agent } = useAgentContext();
+  const [phoneInfo, setPhoneInfo] = useState<CompanyPhones>({ phoneLinks: [], companyLocation: '' });
+  const [phoneInfoLoading, setPhoneInfoLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchCompanyInfo() {
+    async function fetchPhones() {
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('sms_settings')
           .select('company_phone_links, company_location')
           .limit(1)
-          .single();
-        
-        if (error) throw error;
-        
-        let phoneLinks = data?.company_phone_links;
+          .maybeSingle();
+
+        let phoneLinks = data?.company_phone_links as unknown;
         if (phoneLinks && typeof phoneLinks === 'string') {
-          try {
-            phoneLinks = JSON.parse(phoneLinks);
-          } catch {
-            phoneLinks = [];
-          }
+          try { phoneLinks = JSON.parse(phoneLinks); } catch { phoneLinks = []; }
         }
-        
-        setCompanyInfo({
-          company_name: 'ثقة للتأمين',
-          company_phone_links: phoneLinks as CompanyInfo['company_phone_links'],
-          company_location: data?.company_location || undefined,
+
+        setPhoneInfo({
+          phoneLinks: Array.isArray(phoneLinks) ? phoneLinks as CompanyPhones['phoneLinks'] : [],
+          companyLocation: data?.company_location || '',
         });
-      } catch (error) {
-        console.error('Error fetching company info:', error);
-        setCompanyInfo({
-          company_name: 'ثقة للتأمين',
-        });
+      } catch {
+        setPhoneInfo({ phoneLinks: [], companyLocation: '' });
       } finally {
-        setLoading(false);
+        setPhoneInfoLoading(false);
       }
     }
-    fetchCompanyInfo();
+    fetchPhones();
   }, []);
+
+  const loading = settingsLoading || phoneInfoLoading;
 
   if (loading) {
     return (
@@ -69,155 +64,135 @@ export function LetterPreview({ title, recipientName, bodyHtml, createdAt, class
     );
   }
 
-  const phoneLinks = Array.isArray(companyInfo?.company_phone_links) 
-    ? companyInfo.company_phone_links 
-    : [];
+  // Prefer the agent's branded site title, then the agent profile name,
+  // then a safe generic fallback. Same for the logo and accent color.
+  const companyName = siteSettings?.site_title?.trim()
+    || agent?.name_ar?.trim()
+    || agent?.name?.trim()
+    || 'وكالة التأمين';
+  const subtitle = siteSettings?.site_description || 'وكالة تأمين معتمدة';
+  const logoUrl = siteSettings?.logo_url || null;
+  const accent = siteSettings?.signature_primary_color || '#0d9488';
+  const ownerName = siteSettings?.owner_name || companyName;
 
-  const formattedDate = createdAt 
+  // Combine the agent's configured phones/address with the legacy
+  // company_phone_links SMS field so the footer still shows something
+  // useful even if the new branding fields haven't been filled in.
+  const footerPhones: string[] = [];
+  if (siteSettings?.invoice_phones?.length) {
+    footerPhones.push(...siteSettings.invoice_phones.filter(Boolean));
+  }
+  for (const p of phoneInfo.phoneLinks) {
+    if (p.phone && !footerPhones.some(existing => existing.includes(p.phone))) {
+      footerPhones.push(p.label ? `${p.label}: ${p.phone}` : p.phone);
+    }
+  }
+  const footerAddress = siteSettings?.invoice_address || phoneInfo.companyLocation || '';
+
+  const formattedDate = createdAt
     ? format(new Date(createdAt), 'dd/MM/yyyy')
     : format(new Date(), 'dd/MM/yyyy');
 
   return (
-    <div 
+    <div
       className={className}
-      style={{ 
+      style={{
         direction: 'rtl',
         fontFamily: 'Arial, Tahoma, sans-serif',
-        maxWidth: '800px',
+        maxWidth: '820px',
         margin: '0 auto',
         backgroundColor: 'white',
         border: '1px solid #e5e7eb',
-        borderRadius: '4px',
+        borderRadius: '6px',
         overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
       }}
     >
-      {/* Elegant Letterhead */}
-      <div style={{ 
-        padding: '32px 40px 24px',
-        borderBottom: '3px double hsl(225, 65%, 50%)',
+      {/* Letterhead with agent logo + name */}
+      <div style={{
+        padding: '36px 48px 28px',
+        borderBottom: `3px double ${accent}`,
+        textAlign: 'center',
       }}>
-        <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-          <h1 style={{ 
-            fontSize: '28px', 
-            fontWeight: 'bold', 
-            margin: 0, 
-            color: 'hsl(225, 65%, 50%)',
-            letterSpacing: '1px',
-          }}>
-            ثقة للتأمين
-          </h1>
-          <p style={{ 
-            fontSize: '13px', 
-            margin: '4px 0 0', 
-            color: '#64748b',
-          }}>
-            وكالة تأمين معتمدة
-          </p>
-        </div>
+        {logoUrl && (
+          <img
+            src={logoUrl}
+            alt={companyName}
+            style={{ maxHeight: '72px', maxWidth: '220px', objectFit: 'contain', margin: '0 auto 12px', display: 'block' }}
+          />
+        )}
+        <h1 style={{
+          fontSize: '30px',
+          fontWeight: 700,
+          margin: 0,
+          color: accent,
+          letterSpacing: '0.5px',
+        }}>
+          {companyName}
+        </h1>
+        <p style={{ fontSize: '14px', margin: '6px 0 0', color: '#64748b' }}>
+          {subtitle}
+        </p>
       </div>
 
-      {/* Letter Meta */}
-      <div style={{ padding: '24px 40px 16px' }}>
-        {/* Date */}
-        <div style={{ 
-          textAlign: 'left',
-          marginBottom: '20px',
-          color: '#374151',
-          fontSize: '14px',
-        }}>
+      {/* Meta */}
+      <div style={{ padding: '28px 48px 16px' }}>
+        <div style={{ textAlign: 'left', marginBottom: '24px', color: '#374151', fontSize: '15px' }}>
           التاريخ: {formattedDate}
         </div>
-
-        {/* Recipient */}
-        <div style={{ marginBottom: '8px', fontSize: '14px' }}>
+        <div style={{ marginBottom: '10px', fontSize: '15px' }}>
           <span style={{ color: '#64748b' }}>إلى: </span>
-          <span style={{ color: '#1e293b', fontWeight: '600' }}>{recipientName || '---'}</span>
+          <span style={{ color: '#0f172a', fontWeight: 600 }}>{recipientName || '---'}</span>
         </div>
-
-        {/* Subject */}
-        <div style={{ marginBottom: '16px', fontSize: '14px' }}>
+        <div style={{ marginBottom: '20px', fontSize: '15px' }}>
           <span style={{ color: '#64748b' }}>الموضوع: </span>
-          <span style={{ color: '#1e293b', fontWeight: '600' }}>{title || 'رسالة رسمية'}</span>
+          <span style={{ color: '#0f172a', fontWeight: 600 }}>{title || 'رسالة رسمية'}</span>
         </div>
-
-        {/* Separator */}
-        <div style={{ 
-          borderBottom: '1px solid #e5e7eb',
-          marginBottom: '20px',
-        }} />
+        <div style={{ borderBottom: '1px solid #e5e7eb', marginBottom: '24px' }} />
       </div>
 
-      {/* Body Content */}
-      <div style={{ padding: '0 40px 32px', minHeight: '200px' }}>
-        <div style={{ 
-          fontSize: '14px',
-          lineHeight: '2',
-          color: '#1e293b',
-        }}>
-          {/* Greeting */}
-          <p style={{ marginBottom: '16px' }}>
+      {/* Body */}
+      <div style={{ padding: '0 48px 40px', minHeight: '240px' }}>
+        <div style={{ fontSize: '16px', lineHeight: 2, color: '#1e293b' }}>
+          <p style={{ marginBottom: '20px' }}>
             {recipientName ? `حضرة السيد/ة ${recipientName} المحترم/ة،` : 'تحية طيبة وبعد،'}
           </p>
-          
-          {/* Main Content */}
-          <div 
+          <div
             style={{ whiteSpace: 'pre-wrap' }}
             dangerouslySetInnerHTML={{ __html: sanitizeHtml(bodyHtml) }}
           />
-          
-          {/* Closing */}
-          <div style={{ marginTop: '32px' }}>
+          <div style={{ marginTop: '40px' }}>
             <p>وتفضلوا بقبول فائق الاحترام والتقدير،</p>
           </div>
         </div>
       </div>
 
-      {/* Signature Area */}
-      <div style={{ 
-        padding: '16px 40px 32px',
-        textAlign: 'left',
-      }}>
+      {/* Signature */}
+      <div style={{ padding: '20px 48px 40px', textAlign: 'left' }}>
         <div style={{ display: 'inline-block', textAlign: 'center' }}>
-          <div style={{ 
-            fontSize: '16px',
-            color: '#0d9488',
-            fontWeight: '600',
-            marginBottom: '8px',
-          }}>
-            ثقة للتأمين
+          <div style={{ fontSize: '17px', color: accent, fontWeight: 600, marginBottom: '10px' }}>
+            {ownerName}
           </div>
-          <div style={{ 
-            width: '120px', 
-            borderTop: '1px solid #94a3b8', 
-            paddingTop: '6px',
-            color: '#64748b',
-            fontSize: '12px',
-          }}>
+          <div style={{ width: '140px', borderTop: '1px solid #94a3b8', paddingTop: '8px', color: '#64748b', fontSize: '13px' }}>
             التوقيع والختم
           </div>
         </div>
       </div>
 
-      {/* Simple Footer */}
-      <div style={{ 
-        borderTop: '3px double #0d9488',
-        padding: '16px 40px',
+      {/* Footer */}
+      <div style={{
+        borderTop: `3px double ${accent}`,
+        padding: '18px 48px',
         textAlign: 'center',
         color: '#64748b',
-        fontSize: '12px',
+        fontSize: '13px',
         backgroundColor: '#f8fafc',
+        lineHeight: 1.8,
       }}>
-        <div>
-          {phoneLinks.map((p, i) => (
-            <span key={i}>
-              {i > 0 && ' | '}
-              {p.label ? `${p.label}: ` : ''}{p.phone}
-            </span>
-          ))}
-          {companyInfo?.company_location && (
-            <span> | {companyInfo.company_location}</span>
-          )}
-        </div>
+        {footerPhones.length > 0 && (
+          <div>{footerPhones.join(' | ')}</div>
+        )}
+        {footerAddress && <div>{footerAddress}</div>}
       </div>
     </div>
   );

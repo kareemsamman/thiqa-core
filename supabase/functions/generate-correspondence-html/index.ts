@@ -1,12 +1,22 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.88.0';
+import { getAgentBranding, resolveAgentId } from '../_shared/agent-branding.ts';
 
 // Version for cache busting - update on each deployment
-const VERSION = 'v2.0.0';
+const VERSION = 'v3.0.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -78,164 +88,178 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch company info from sms_settings
+    // Resolve agent branding (name, logo, accent color, owner, phones,
+    // address) from site_settings. Falls back to defaults when the
+    // agent hasn't filled these in yet.
+    const agentId = await resolveAgentId(supabase, user.id);
+    const branding = await getAgentBranding(supabase, agentId);
+
+    // Merge the agent's configured invoice phones with the legacy
+    // sms_settings.company_phone_links so we don't lose phones that
+    // were only ever set there.
     const { data: smsSettings } = await supabase
       .from('sms_settings')
       .select('company_phone_links, company_location')
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    // Parse phone links
-    let phoneLinks: { phone: string; label?: string }[] = [];
+    let legacyPhoneLinks: { phone: string; label?: string }[] = [];
     if (smsSettings?.company_phone_links) {
       try {
-        phoneLinks = typeof smsSettings.company_phone_links === 'string'
+        legacyPhoneLinks = typeof smsSettings.company_phone_links === 'string'
           ? JSON.parse(smsSettings.company_phone_links)
           : smsSettings.company_phone_links;
       } catch {
-        phoneLinks = [];
+        legacyPhoneLinks = [];
       }
     }
 
-    const companyName = 'ثقة للتأمين';
-    const companyLocation = smsSettings?.company_location || '';
-    
+    const companyName = branding.companyName;
+    const subtitle = branding.siteDescription || 'وكالة تأمين معتمدة';
+    const accent = branding.signaturePrimaryColor || '#0d9488';
+    const ownerName = branding.ownerName || companyName;
+    const logoHtml = branding.logoUrl
+      ? `<img src="${branding.logoUrl}" alt="${escapeHtml(companyName)}" class="logo" />`
+      : '';
+
+    const footerPhones: string[] = [];
+    for (const p of branding.invoicePhones) {
+      if (p && !footerPhones.includes(p)) footerPhones.push(p);
+    }
+    for (const p of legacyPhoneLinks) {
+      if (!p?.phone) continue;
+      const rendered = p.label ? `${p.label}: ${p.phone}` : p.phone;
+      if (!footerPhones.some(existing => existing.includes(p.phone))) {
+        footerPhones.push(rendered);
+      }
+    }
+    const footerAddress = branding.invoiceAddress || smsSettings?.company_location || '';
+
     // Format date
     const letterDate = new Date(letter.created_at).toLocaleDateString('en-GB');
 
-    // Build phone links for footer
-    const phonesFooterHtml = phoneLinks.map((p, i) => {
-      const label = p.label ? `${p.label}: ` : '';
-      const separator = i > 0 ? ' | ' : '';
-      return `${separator}${label}${p.phone}`;
-    }).join('');
+    const phonesFooterHtml = footerPhones.map(p => escapeHtml(p)).join(' &nbsp;|&nbsp; ');
 
-    // Build complete HTML with professional official letter design
+    const footerLine2 = footerAddress ? `<div class="footer-line">${escapeHtml(footerAddress)}</div>` : '';
+
+    // A4-sized letter with the agent's logo, company name, accent color
+    // and footer. Body font bumped to 16px and letterhead to 32px so the
+    // printout is readable — previous 14px/28px was too small.
     const html = `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${letter.title} - ${companyName}</title>
+  <title>${escapeHtml(letter.title)} - ${escapeHtml(companyName)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent: ${accent};
+    }
     body {
-      font-family: Arial, Tahoma, sans-serif;
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
       line-height: 1.8;
       background: #f1f5f9;
-      padding: 20px;
-      min-height: 100vh;
+      padding: 24px;
+      color: #1e293b;
     }
     .container {
-      max-width: 800px;
+      width: 210mm;
+      min-height: 297mm;
       margin: 0 auto;
       background: white;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-      border-radius: 4px;
+      box-shadow: 0 4px 18px rgba(15,23,42,0.08);
+      border-radius: 6px;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
     .letterhead {
-      padding: 32px 40px 24px;
-      border-bottom: 3px double #0d9488;
+      padding: 40px 56px 28px;
+      border-bottom: 3px double var(--accent);
       text-align: center;
+    }
+    .letterhead .logo {
+      max-height: 80px;
+      max-width: 240px;
+      object-fit: contain;
+      margin: 0 auto 14px;
+      display: block;
     }
     .letterhead h1 {
-      font-size: 28px;
-      font-weight: bold;
+      font-size: 32px;
+      font-weight: 700;
       margin: 0;
-      color: #0d9488;
-      letter-spacing: 1px;
+      color: var(--accent);
+      letter-spacing: 0.5px;
     }
-    .letterhead p {
-      font-size: 13px;
-      margin: 4px 0 0;
+    .letterhead .subtitle {
+      font-size: 15px;
+      margin: 8px 0 0;
       color: #64748b;
     }
-    .letter-meta {
-      padding: 24px 40px 16px;
-    }
+    .letter-meta { padding: 32px 56px 12px; }
     .date-line {
       text-align: left;
-      margin-bottom: 20px;
+      margin-bottom: 28px;
       color: #374151;
-      font-size: 14px;
+      font-size: 15px;
     }
-    .meta-row {
-      margin-bottom: 8px;
-      font-size: 14px;
-    }
-    .meta-label {
-      color: #64748b;
-    }
-    .meta-value {
-      color: #1e293b;
-      font-weight: 600;
-    }
+    .meta-row { margin-bottom: 10px; font-size: 16px; }
+    .meta-label { color: #64748b; }
+    .meta-value { color: #0f172a; font-weight: 600; }
     .separator {
       border-bottom: 1px solid #e5e7eb;
-      margin: 16px 0 20px;
+      margin: 20px 0 28px;
     }
     .content {
-      padding: 0 40px 32px;
-      min-height: 200px;
-      font-size: 14px;
+      padding: 0 56px 40px;
+      flex: 1 1 auto;
+      font-size: 16px;
       line-height: 2;
-      color: #1e293b;
     }
-    .content img {
-      max-width: 100%;
-      height: auto;
-      margin: 10px 0;
-    }
-    .greeting {
-      margin-bottom: 16px;
-    }
-    .closing {
-      margin-top: 32px;
-    }
+    .content img { max-width: 100%; height: auto; margin: 12px 0; }
+    .content p { margin-bottom: 12px; }
+    .greeting { margin-bottom: 20px; font-weight: 500; }
+    .closing { margin-top: 40px; }
     .signature-area {
-      padding: 16px 40px 32px;
+      padding: 20px 56px 40px;
       text-align: left;
     }
-    .signature-block {
-      display: inline-block;
-      text-align: center;
-    }
+    .signature-block { display: inline-block; text-align: center; }
     .signature-name {
-      font-size: 16px;
-      color: #0d9488;
+      font-size: 18px;
+      color: var(--accent);
       font-weight: 600;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     .signature-line {
-      width: 120px;
+      width: 150px;
       border-top: 1px solid #94a3b8;
-      padding-top: 6px;
+      padding-top: 8px;
       color: #64748b;
-      font-size: 12px;
+      font-size: 13px;
     }
     .footer {
-      border-top: 3px double #0d9488;
-      padding: 16px 40px;
+      border-top: 3px double var(--accent);
+      padding: 18px 56px;
       text-align: center;
       color: #64748b;
-      font-size: 12px;
+      font-size: 13px;
       background: #f8fafc;
+      line-height: 1.7;
     }
+    .footer .footer-line { display: block; }
     @media print {
-      body { 
-        background: white; 
-        padding: 0; 
+      @page { size: A4; margin: 12mm; }
+      body { background: white; padding: 0; }
+      .container {
+        width: 100%;
+        min-height: auto;
+        box-shadow: none;
+        border-radius: 0;
       }
-      .container { 
-        box-shadow: none; 
-        max-width: 100%;
-      }
-      .letterhead {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-      .footer {
+      .letterhead, .footer {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
       }
@@ -249,53 +273,45 @@ Deno.serve(async (req) => {
 </head>
 <body>
   <div class="container">
-    <!-- Elegant Letterhead -->
     <div class="letterhead">
-      <h1>${companyName}</h1>
-      <p>وكالة تأمين معتمدة</p>
+      ${logoHtml}
+      <h1>${escapeHtml(companyName)}</h1>
+      <p class="subtitle">${escapeHtml(subtitle)}</p>
     </div>
 
-    <!-- Letter Meta -->
     <div class="letter-meta">
-      <div class="date-line">التاريخ: ${letterDate}</div>
-      
+      <div class="date-line">التاريخ: ${escapeHtml(letterDate)}</div>
       <div class="meta-row">
         <span class="meta-label">إلى: </span>
-        <span class="meta-value">${letter.recipient_name || '---'}</span>
+        <span class="meta-value">${escapeHtml(letter.recipient_name || '---')}</span>
       </div>
-      
       <div class="meta-row">
         <span class="meta-label">الموضوع: </span>
-        <span class="meta-value">${letter.title || 'رسالة رسمية'}</span>
+        <span class="meta-value">${escapeHtml(letter.title || 'رسالة رسمية')}</span>
       </div>
-      
       <div class="separator"></div>
     </div>
 
-    <!-- Body Content -->
     <div class="content">
       <p class="greeting">
-        ${letter.recipient_name ? `حضرة السيد/ة ${letter.recipient_name} المحترم/ة،` : 'تحية طيبة وبعد،'}
+        ${letter.recipient_name
+          ? `حضرة السيد/ة ${escapeHtml(letter.recipient_name)} المحترم/ة،`
+          : 'تحية طيبة وبعد،'}
       </p>
-      
       ${letter.body_html || ''}
-      
-      <div class="closing">
-        <p>وتفضلوا بقبول فائق الاحترام والتقدير،</p>
-      </div>
+      <div class="closing"><p>وتفضلوا بقبول فائق الاحترام والتقدير،</p></div>
     </div>
 
-    <!-- Signature Area -->
     <div class="signature-area">
       <div class="signature-block">
-        <div class="signature-name">${companyName}</div>
+        <div class="signature-name">${escapeHtml(ownerName)}</div>
         <div class="signature-line">التوقيع والختم</div>
       </div>
     </div>
 
-    <!-- Simple Footer -->
     <div class="footer">
-      ${phonesFooterHtml}${companyLocation ? ` | ${companyLocation}` : ''}
+      ${phonesFooterHtml ? `<div class="footer-line">${phonesFooterHtml}</div>` : ''}
+      ${footerLine2}
     </div>
   </div>
 </body>

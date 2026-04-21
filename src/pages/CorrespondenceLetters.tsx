@@ -41,6 +41,7 @@ import {
   MoreHorizontal,
   Loader2,
   ExternalLink,
+  FileText,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -214,13 +215,10 @@ export default function CorrespondenceLetters() {
       <div className="container mx-auto py-6 space-y-6">
         <Card>
           <CardHeader>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex items-center gap-2">
-                <Button size="sm" onClick={handleCreate} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  رسالة جديدة
-                </Button>
-              </div>
+            {/* Layout: search stretches on the right, filters in the
+                middle, primary action button pinned to the far left
+                (end of the flex row in RTL). */}
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
               <div className="relative flex-1">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -230,18 +228,23 @@ export default function CorrespondenceLetters() {
                   className="pr-10"
                 />
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-1 rounded-md border bg-muted/40 p-1">
                 {['all', 'draft', 'sent'].map((status) => (
                   <Button
                     key={status}
-                    variant={statusFilter === status ? 'default' : 'outline'}
+                    variant={statusFilter === status ? 'default' : 'ghost'}
                     size="sm"
                     onClick={() => setStatusFilter(status)}
+                    className="h-8"
                   >
                     {status === 'all' ? 'الكل' : status === 'draft' ? 'مسودة' : 'مُرسل'}
                   </Button>
                 ))}
               </div>
+              <Button onClick={handleCreate} className="gap-2 sm:mr-auto">
+                <Plus className="h-4 w-4" />
+                رسالة جديدة
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -252,8 +255,9 @@ export default function CorrespondenceLetters() {
                 ))}
               </div>
             ) : filteredLetters.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                لا توجد رسائل
+              <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
+                <FileText className="h-8 w-8 opacity-40" />
+                <p className="text-sm">لا توجد رسائل</p>
               </div>
             ) : (
               <Table>
