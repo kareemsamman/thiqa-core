@@ -32,6 +32,9 @@ const PUBLIC_PATH_PREFIXES = [
 ];
 
 function isPublicPath(pathname: string): boolean {
+  // Root is the marketing landing page — always public, even for
+  // logged-in visitors who navigated back to it.
+  if (pathname === '/') return true;
   return PUBLIC_PATH_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
