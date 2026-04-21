@@ -203,8 +203,10 @@ export default function RepairClaims() {
       />
 
       <div className="p-6 space-y-6">
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4">
+        {/* Filters — search on the right (start), status chips in the
+            middle, primary "إضافة مطالبة" action pinned to the far-left
+            end of the row. */}
+        <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -215,34 +217,36 @@ export default function RepairClaims() {
               dir="rtl"
             />
           </div>
-          
-          <div className="flex gap-2">
+
+          <div className="flex gap-1 rounded-md border bg-muted/40 p-1">
             <Button
-              size="sm"
-              onClick={() => handleOpenDrawer()}
-              className="gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              إضافة مطالبة
-            </Button>
-            <Button
-              variant={statusFilter === "all" ? "default" : "outline"}
+              variant={statusFilter === "all" ? "default" : "ghost"}
               size="sm"
               onClick={() => setStatusFilter("all")}
+              className="h-8"
             >
               الكل
             </Button>
             {(Object.keys(STATUS_CONFIG) as ClaimStatus[]).map((status) => (
               <Button
                 key={status}
-                variant={statusFilter === status ? "default" : "outline"}
+                variant={statusFilter === status ? "default" : "ghost"}
                 size="sm"
                 onClick={() => setStatusFilter(status)}
+                className="h-8"
               >
                 {STATUS_CONFIG[status].label}
               </Button>
             ))}
           </div>
+
+          <Button
+            onClick={() => handleOpenDrawer()}
+            className="gap-2 sm:mr-auto"
+          >
+            <Plus className="h-4 w-4" />
+            إضافة مطالبة
+          </Button>
         </div>
 
         {/* Claims Grid */}
@@ -253,8 +257,9 @@ export default function RepairClaims() {
             ))}
           </div>
         ) : filteredClaims.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            لا توجد مطالبات
+          <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground border border-dashed rounded-xl">
+            <Wrench className="h-8 w-8 opacity-40" />
+            <p className="text-sm">لا توجد مطالبات</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
