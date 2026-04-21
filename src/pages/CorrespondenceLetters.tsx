@@ -381,19 +381,20 @@ export default function CorrespondenceLetters() {
           you can tell draft/sent at a glance without scrolling. */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="sm:max-w-5xl max-h-[92vh] overflow-hidden p-0 gap-0">
+          {/* Print button sits next to the title on the right so it
+              doesn't collide with the Radix close X that lives
+              absolutely in the top-left corner. */}
           <DialogHeader className="px-6 py-4 border-b bg-background">
-            <DialogTitle className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span>معاينة الرسالة</span>
-                {selectedLetter && getStatusBadge(selectedLetter.status)}
-              </div>
+            <DialogTitle className="flex items-center gap-3 pl-8">
+              <span>معاينة الرسالة</span>
+              {selectedLetter && getStatusBadge(selectedLetter.status)}
               {selectedLetter && (
                 <Button
                   variant="default"
                   size="sm"
                   onClick={() => handleGenerateAndPrint(selectedLetter)}
                   disabled={generatingId === selectedLetter.id}
-                  className="gap-2"
+                  className="gap-2 mr-2"
                 >
                   {generatingId === selectedLetter.id ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
