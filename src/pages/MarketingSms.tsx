@@ -162,7 +162,7 @@ export default function MarketingSms() {
         .from('marketing_sms_campaigns')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(200);
 
       if (error) throw error;
       setCampaigns(data || []);
@@ -658,7 +658,9 @@ export default function MarketingSms() {
                         تحديد الكل ({filteredClients.filter(c => c.phone_number).length})
                       </label>
                     </div>
-                    <Badge variant="secondary">
+                    <Badge
+                      variant={selectedClientIds.size > 0 ? "default" : "secondary"}
+                    >
                       {selectedClientIds.size} محدد
                     </Badge>
                   </div>
@@ -710,10 +712,71 @@ export default function MarketingSms() {
             </div>
           </TabsContent>
 
-          <TabsContent value="history">
+          <TabsContent value="history" className="space-y-6">
+            {/* Roll-up stats across the loaded campaigns page. Gives the
+                admin a single glance at how many campaigns ran and how
+                their delivery looked without opening each one. */}
+            {!isLoadingCampaigns && campaigns.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <History className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">الحملات</p>
+                      <p className="text-2xl font-bold">{campaigns.length}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-blue-500/10">
+                      <Send className="h-5 w-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">أُرسلت</p>
+                      <p className="text-2xl font-bold text-blue-500">
+                        {campaigns.reduce((s, c) => s + (c.sent_count || 0), 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-emerald-500/10">
+                      <CheckCircle className="h-5 w-5 text-emerald-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">وصلت</p>
+                      <p className="text-2xl font-bold text-emerald-500">
+                        {campaigns.reduce((s, c) => s + (c.delivered_count || 0), 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-destructive/10">
+                      <XCircle className="h-5 w-5 text-destructive" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">فشلت</p>
+                      <p className="text-2xl font-bold text-destructive">
+                        {campaigns.reduce((s, c) => s + (c.dlr_failed_count || 0) + (c.failed_count || 0), 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <Card>
               <CardHeader>
-                <CardTitle>سجل الحملات</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <History className="h-5 w-5" />
+                  سجل الحملات
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {isLoadingCampaigns ? (
@@ -723,8 +786,9 @@ export default function MarketingSms() {
                     ))}
                   </div>
                 ) : campaigns.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    لا توجد حملات سابقة
+                  <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
+                    <History className="h-8 w-8 opacity-40" />
+                    <p className="text-sm">لا توجد حملات سابقة</p>
                   </div>
                 ) : (
                   <Table>

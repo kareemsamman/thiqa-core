@@ -74,9 +74,20 @@ Deno.serve(async (req) => {
     const body: RequestBody = await req.json();
     const { campaign_id, batch_offset = 0 } = body;
 
-    // Resolve agent_id
+    // Resolve agent_id. We insert under the service-role key, so
+    // auth.uid() is NULL inside the DB and the auto_set_agent_id trigger
+    // can't populate agent_id on its own — we have to supply it on every
+    // insert or RLS will hide the row from the admin when they look at
+    // /admin/marketing-sms → سجل الحملات. If we can't resolve one, fail
+    // loud instead of silently orphaning the campaign.
     const { data: agentUser } = await supabase.from('agent_users').select('agent_id').eq('user_id', user.id).maybeSingle();
     const agentId = agentUser?.agent_id;
+    if (!agentId) {
+      return new Response(JSON.stringify({ error: 'No agent linked to this user' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Get SMS settings for this agent (with Thiqa platform fallback)
     const smsSettings = await resolveSmsSettings(supabase, agentId);
@@ -142,6 +153,7 @@ Deno.serve(async (req) => {
       const { data: campaign, error: campaignError } = await supabase
         .from('marketing_sms_campaigns')
         .insert({
+          agent_id: agentId,
           title,
           message,
           image_url: imageUrl,
@@ -159,13 +171,17 @@ Deno.serve(async (req) => {
 
       // Insert all recipients at once
       const recipientRecords = recipients.map(r => ({
+        agent_id: agentId,
         campaign_id: campaign.id,
         client_id: r.clientId,
         phone_number: r.phone,
         status: 'pending',
       }));
 
-      await supabase.from('marketing_sms_recipients').insert(recipientRecords);
+      const { error: recipientsError } = await supabase
+        .from('marketing_sms_recipients')
+        .insert(recipientRecords);
+      if (recipientsError) throw recipientsError;
     } else {
       // ── Mode B: Resume / continuation ──
       // Fetch campaign message for logging
@@ -244,14 +260,20 @@ Deno.serve(async (req) => {
 
         if (!isAccepted) batchFailed++;
 
+        // sms_logs.sms_type is an enum — 'marketing' isn't in it, so use
+        // 'manual' (closest existing match). entity_type / entity_id
+        // columns don't exist on sms_logs and an insert that includes
+        // them fails silently, which is why marketing sends never
+        // appeared on /sms-history before.
         await supabase.from('sms_logs').insert({
+          agent_id: agentId,
           phone_number: phone,
           message: campaignMessage.slice(0, 500),
           status: isAccepted ? 'sent' : 'failed',
-          sms_type: 'marketing',
-          entity_type: 'campaign',
-          entity_id: currentCampaignId,
+          sms_type: 'manual',
           client_id: recipient.client_id || null,
+          created_by: user.id,
+          sent_at: new Date().toISOString(),
         });
 
         if (isAccepted) {
