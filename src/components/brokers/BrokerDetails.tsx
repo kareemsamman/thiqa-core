@@ -481,7 +481,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
           <TabsList className="print:hidden">
             <TabsTrigger value="policies" className="gap-2">
               <FileText className="h-4 w-4" />
-              المعاملات ({policies.length})
+              المعاملات ({tableRows.length})
             </TabsTrigger>
           </TabsList>
 

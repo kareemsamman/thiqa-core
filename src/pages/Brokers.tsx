@@ -110,7 +110,7 @@ export default function Brokers() {
           // Get policies for this broker with date filter
           let policyQuery = supabase
             .from('policies')
-            .select('id, insurance_price, broker_direction, broker_buy_price')
+            .select('id, group_id, insurance_price, broker_direction, broker_buy_price')
             .eq('broker_id', broker.id)
             .is('deleted_at', null);
 
@@ -150,10 +150,17 @@ export default function Brokers() {
           // Net balance: what broker owes me (positive) or what I owe broker (negative)
           const netBalance = toBrokerTotal - fromBrokerTotal;
 
+          // Collapse package policies (sharing a group_id) into a
+          // single معاملة so the count here matches the broker page —
+          // a 2-policy package is one transaction, not two.
+          const transactionKeys = new Set(
+            (policies || []).map(p => p.group_id || `single-${p.id}`),
+          );
+
           return {
             ...broker,
             client_count: clientCount || 0,
-            policy_count: policies?.length || 0,
+            policy_count: transactionKeys.size,
             total_collected: totalCollected,
             total_remaining: netBalance, // This is now "لي عليه" (what broker owes me)
           };
