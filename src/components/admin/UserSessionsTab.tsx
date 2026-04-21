@@ -22,6 +22,16 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Clock,
   Globe,
   Monitor,
@@ -79,9 +89,11 @@ export function UserSessionsTab() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [kickingId, setKickingId] = useState<string | null>(null);
+  const [kickTarget, setKickTarget] = useState<UserSession | null>(null);
 
-  const handleKick = async (session: UserSession) => {
-    if (!confirm(`هل تريد إنهاء جلسة ${session.profile?.full_name || session.profile?.email || 'هذا المستخدم'}؟`)) return;
+  const confirmKick = async () => {
+    if (!kickTarget) return;
+    const session = kickTarget;
     setKickingId(session.id);
     try {
       const { data, error } = await supabase.functions.invoke('kick-user-session', {
@@ -95,6 +107,7 @@ export function UserSessionsTab() {
       toast.error(err.message || 'فشل في إنهاء الجلسة');
     } finally {
       setKickingId(null);
+      setKickTarget(null);
     }
   };
 
@@ -373,7 +386,7 @@ export function UserSessionsTab() {
                         size="sm"
                         variant="destructive"
                         disabled={kickingId === session.id}
-                        onClick={() => handleKick(session)}
+                        onClick={() => setKickTarget(session)}
                         className="gap-1"
                       >
                         {kickingId === session.id ? (
@@ -393,6 +406,30 @@ export function UserSessionsTab() {
           </Table>
         )}
       </div>
+
+      <AlertDialog open={!!kickTarget} onOpenChange={(open) => { if (!open) setKickTarget(null); }}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تأكيد إنهاء الجلسة</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل تريد إنهاء جلسة{' '}
+              <strong>{kickTarget?.profile?.full_name || kickTarget?.profile?.email || 'هذا المستخدم'}</strong>؟
+              سيتم تسجيل خروجه من النظام تلقائياً خلال ثوانٍ.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel disabled={!!kickingId}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmKick}
+              disabled={!!kickingId}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {kickingId ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <LogOut className="h-4 w-4 ml-2" />}
+              إنهاء الجلسة
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
