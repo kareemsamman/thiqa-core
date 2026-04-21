@@ -227,7 +227,7 @@ export default function BrandingSettings() {
   if (isLoading) {
     return (
       <MainLayout>
-        <div className="space-y-4 max-w-2xl">
+        <div className="p-6 space-y-4">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-64 w-full" />
         </div>
@@ -242,22 +242,22 @@ export default function BrandingSettings() {
         subtitle="تخصيص شعار الموقع، العنوان، الوصف، ونص صفحة التوقيع"
       />
 
-      <div className="p-6 max-w-2xl space-y-6">
-        <Tabs defaultValue="branding">
-          <TabsList>
-            <TabsTrigger value="branding" className="gap-2">
+      <div className="p-6 space-y-6">
+        <Tabs defaultValue="branding" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto gap-1 p-1">
+            <TabsTrigger value="branding" className="gap-2 py-2.5">
               <Image className="h-4 w-4" />
               العلامة التجارية
             </TabsTrigger>
-            <TabsTrigger value="invoice" className="gap-2">
+            <TabsTrigger value="invoice" className="gap-2 py-2.5">
               <Receipt className="h-4 w-4" />
               إعدادات الفاتورة
             </TabsTrigger>
-            <TabsTrigger value="signature" className="gap-2">
+            <TabsTrigger value="signature" className="gap-2 py-2.5">
               <PenTool className="h-4 w-4" />
               صفحة التوقيع
             </TabsTrigger>
-            <TabsTrigger value="shortcuts" className="gap-2">
+            <TabsTrigger value="shortcuts" className="gap-2 py-2.5">
               <Keyboard className="h-4 w-4" />
               اختصارات
             </TabsTrigger>
