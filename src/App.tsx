@@ -19,6 +19,7 @@ import { SidebarStateProvider } from "@/hooks/useSidebarState";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AdminRoute } from "@/components/auth/AdminRoute";
 import { SiteHelmet } from "@/components/layout/SiteHelmet";
+import { AppChrome } from "@/components/layout/AppChrome";
 import { AgentProvider } from "@/hooks/useAgentContext";
 import { ThiqaAdminRoute } from "@/components/auth/ThiqaAdminRoute";
 
@@ -269,6 +270,7 @@ const App = () => (
             <ThaqibWidget />
             <PublicWidgets />
             <RoutePrefetcher />
+            <AppChrome />
             <Suspense fallback={null}>
             <Routes>
               <Route path="/landing" element={<Landing />} />
