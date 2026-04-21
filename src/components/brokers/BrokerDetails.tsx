@@ -63,6 +63,7 @@ interface Client {
 interface Policy {
   id: string;
   group_id: string | null;
+  document_number: string | null;
   policy_type_parent: string;
   policy_type_child: string | null;
   insurance_price: number;
@@ -141,7 +142,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
       let query = supabase
         .from("policies")
         .select(`
-          id, group_id, policy_type_parent, policy_type_child, insurance_price, broker_buy_price, profit, start_date, end_date, broker_direction,
+          id, group_id, document_number, policy_type_parent, policy_type_child, insurance_price, broker_buy_price, profit, start_date, end_date, broker_direction,
           cancelled, transferred,
           clients!policies_client_id_fkey(full_name),
           cars!policies_car_id_fkey(car_number)
@@ -508,6 +509,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                       <TableHeader>
                         <TableRow>
                           <TableHead className="print:text-xs">#</TableHead>
+                          <TableHead className="print:text-xs">رقم المعاملة</TableHead>
                           <TableHead className="print:text-xs">الجهة</TableHead>
                           <TableHead className="print:text-xs">العميل</TableHead>
                           <TableHead className="print:text-xs">السيارة</TableHead>
@@ -534,6 +536,21 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                             >
                               <TableCell className="font-mono text-sm print:text-xs">
                                 {index + 1}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs print:text-xs ltr-nums">
+                                {(() => {
+                                  const numbers = rowPolicies
+                                    .map(p => p.document_number)
+                                    .filter((n): n is string => Boolean(n));
+                                  if (numbers.length === 0) return <span className="text-muted-foreground">—</span>;
+                                  return (
+                                    <div className="flex flex-col leading-tight">
+                                      {numbers.map((n, i) => (
+                                        <span key={i}>{n}</span>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
                               </TableCell>
                               <TableCell className="print:text-xs">
                                 <div className="flex flex-wrap items-center gap-1">
@@ -599,7 +616,7 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                         })}
                         {/* Totals Row */}
                         <TableRow className="bg-muted/50 font-bold print:bg-gray-100">
-                          <TableCell colSpan={5} className="text-left print:text-xs">
+                          <TableCell colSpan={6} className="text-left print:text-xs">
                             المجموع
                           </TableCell>
                           <TableCell className="print:text-xs ltr-nums">
