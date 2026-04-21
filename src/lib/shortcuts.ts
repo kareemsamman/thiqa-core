@@ -137,6 +137,22 @@ export function eventToCombo(e: KeyboardEvent): string | null {
   let mainKey = rawKey.toLowerCase();
   if (mainKey === ' ') mainKey = 'space';
 
+  // Layout-independence: e.key reflects the active keyboard layout, so
+  // pressing the physical N key in Arabic mode yields "ن" and the lookup
+  // misses any binding stored as "n". Fall back to e.code, which always
+  // names the physical key (KeyN, Digit1, …), whenever e.key didn't
+  // produce a clean ASCII letter/digit. This keeps a binding like
+  // "ctrl+n" firing regardless of the OS-level keyboard layout.
+  if (e.code && !/^[a-z0-9]$/.test(mainKey)) {
+    const letter = /^Key([A-Z])$/.exec(e.code);
+    if (letter) {
+      mainKey = letter[1].toLowerCase();
+    } else {
+      const digit = /^Digit([0-9])$/.exec(e.code);
+      if (digit) mainKey = digit[1];
+    }
+  }
+
   // Re-order modifiers into the canonical order so comparisons work.
   const orderedMods = MOD_ORDER.filter((m) => mods.includes(m));
   return [...orderedMods, mainKey].join('+');
