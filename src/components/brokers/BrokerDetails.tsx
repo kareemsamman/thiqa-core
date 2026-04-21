@@ -437,65 +437,6 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
           </CardContent>
         </Card>
 
-        {/* Stats Cards - 2 cards: policy count + net balance */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:grid-cols-2">
-          {/* عدد الوثائق - Policy count */}
-          <Card className="print:border print:shadow-none">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30 print:bg-blue-100">
-                  <FileText className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">عدد المعاملات</p>
-                  <p className="text-xl font-bold text-blue-600 ltr-nums">{policies.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* إجمالي المبالغ - Net Balance (positive = broker owes me, negative = I owe broker) */}
-          <Card className={cn(
-            "border-2 print:border-2",
-            netBalance >= 0 ? "border-green-300 dark:border-green-700 print:border-green-300" : "border-red-300 dark:border-red-700 print:border-red-300"
-          )}>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  "flex h-10 w-10 items-center justify-center rounded-lg",
-                  netBalance >= 0 ? "bg-green-100 dark:bg-green-900/30 print:bg-green-100" : "bg-red-100 dark:bg-red-900/30 print:bg-red-100"
-                )}>
-                  <Wallet className={cn(
-                    "h-5 w-5",
-                    netBalance >= 0 ? "text-green-600" : "text-red-600"
-                  )} />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">إجمالي المبالغ</p>
-                  <p className={cn(
-                    "text-xl font-bold ltr-nums",
-                    netBalance >= 0 ? "text-green-600" : "text-red-600"
-                  )}>
-                    {netBalance < 0 ? "-" : ""}{formatCurrency(Math.abs(netBalance))}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Notes */}
-        {broker.notes && (
-          <Card className="print:border print:shadow-none">
-            <CardHeader>
-              <CardTitle className="text-base">ملاحظات</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">{broker.notes}</p>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Tabs - Hide tabs on print, show content directly */}
         <Tabs defaultValue="policies" className="space-y-4">
           <TabsList className="print:hidden">
@@ -620,12 +561,11 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
           </TabsContent>
         </Tabs>
 
-        {/* Broker-direction breakdown — which side owes whom on policies
-            alone. "to-broker" rows (exported by me to the broker) are
-            what the broker owes me; "from-broker" rows (brought to me
-            by the broker) are what I owe the broker. Net matches the
-            "إجمالي المبالغ" card at the top, ignoring settlements. */}
-        {!loading && policies.length > 0 && (
+        {/* Summary card — moved to the bottom of the page so the
+            transactions table stays the focus. Bundles policy count,
+            net balance, the to/from-broker breakdown, and the broker's
+            free-text notes into a single panel. */}
+        {!loading && (policies.length > 0 || broker.notes) && (
           <Card className="print:border print:shadow-none">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -633,7 +573,48 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                 ملخص التعامل مع {broker.name}
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-lg border p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30 print:bg-blue-100">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">عدد المعاملات</p>
+                      <p className="text-xl font-bold text-blue-600 ltr-nums">{policies.length}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={cn(
+                  "rounded-lg border-2 p-4",
+                  netBalance >= 0 ? "border-green-300 dark:border-green-700 print:border-green-300" : "border-red-300 dark:border-red-700 print:border-red-300"
+                )}>
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-lg",
+                      netBalance >= 0 ? "bg-green-100 dark:bg-green-900/30 print:bg-green-100" : "bg-red-100 dark:bg-red-900/30 print:bg-red-100"
+                    )}>
+                      <Wallet className={cn(
+                        "h-5 w-5",
+                        netBalance >= 0 ? "text-green-600" : "text-red-600"
+                      )} />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">إجمالي المبالغ</p>
+                      <p className={cn(
+                        "text-xl font-bold ltr-nums",
+                        netBalance >= 0 ? "text-green-600" : "text-red-600"
+                      )}>
+                        {netBalance < 0 ? "-" : ""}{formatCurrency(Math.abs(netBalance))}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {policies.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="rounded-lg border border-green-200 dark:border-green-900/40 bg-green-50/60 dark:bg-green-950/20 p-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -694,6 +675,14 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                   </div>
                 </div>
               </div>
+              )}
+
+              {broker.notes && (
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <h4 className="text-sm font-medium mb-2">ملاحظات</h4>
+                  <p className="text-muted-foreground whitespace-pre-line">{broker.notes}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
