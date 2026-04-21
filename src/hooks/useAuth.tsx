@@ -109,6 +109,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Close the active user_sessions row before auth clears, so the
+    // Sessions tab doesn't keep showing the user as active. Must run
+    // while the JWT is still valid (UPDATE policy keys on auth.uid()).
+    const sessionId = sessionStorage.getItem("current_session_id");
+    if (sessionId) {
+      try {
+        await supabase
+          .from("user_sessions")
+          .update({ ended_at: new Date().toISOString(), is_active: false })
+          .eq("id", sessionId);
+      } catch (e) {
+        console.warn("failed to end user_session on sign out", e);
+      }
+      sessionStorage.removeItem("current_session_id");
+    }
+
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);

@@ -316,6 +316,13 @@ export default function Login() {
     setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+
+      // Log the attempt to login_attempts so it appears in admin/users.
+      // Fire-and-forget: never block the login flow on logging.
+      supabase.functions.invoke("log-login-attempt", {
+        body: { email: email.trim(), success: !error },
+      }).catch((e) => console.warn("login attempt log failed", e));
+
       if (error) {
         const isEmailNotConfirmed =
           (error as any)?.code === "email_not_confirmed" ||

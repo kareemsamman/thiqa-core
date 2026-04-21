@@ -55,7 +55,14 @@ export function useSessionTracker() {
   const startedRef = useRef(false);
 
   useEffect(() => {
-    if (!user || startedRef.current) return;
+    if (!user) {
+      // Signed out — reset so the next sign-in spawns a new session
+      // row instead of being skipped by the startedRef guard.
+      startedRef.current = false;
+      sessionIdRef.current = null;
+      return;
+    }
+    if (startedRef.current) return;
 
     const startSession = async () => {
       try {
