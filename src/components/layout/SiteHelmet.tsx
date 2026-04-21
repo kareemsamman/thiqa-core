@@ -19,7 +19,7 @@ export function SiteHelmet() {
   const { data: settings } = useSiteSettings();
   const location = useLocation();
 
-  const title = settings?.site_title || "Thiqa";
+  const title = settings?.site_title ? `Thiqa | ${settings.site_title}` : "Thiqa";
   const description = settings?.site_description || "Thiqa";
 
   return (
