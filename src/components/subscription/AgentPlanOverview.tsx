@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Check, Crown, Lock, MessageCircle, ShoppingCart, Sparkles, Tag, TrendingUp } from 'lucide-react';
-import { PLAN_PLAN_FEATURE_CATALOG } from '@/lib/planFeatureCatalog';
+import { PLAN_FEATURE_CATALOG } from '@/lib/planFeatureCatalog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { useAgentLimits, ResourceLimit } from '@/hooks/useAgentLimits';
