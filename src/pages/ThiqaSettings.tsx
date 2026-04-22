@@ -627,32 +627,57 @@ interface SubscriptionPlan {
   name_ar: string | null;
   description: string | null;
   monthly_price: number;
-  yearly_price: number;
+  yearly_price: number | null;
   badge: string | null;
   features: PlanFeature[];
   default_features: Record<string, boolean>;
   sort_order: number;
   is_active: boolean;
+  // Per-plan quotas. NULL on plan columns means "unlimited" for
+  // that resource (currently only ultimate.policies_limit uses this).
+  users_limit: number | null;
+  branches_limit: number | null;
+  policies_limit: number | null;
+  sms_limit: number;
+  marketing_sms_limit: number;
+  ai_limit: number;
+  support_sla_hours: number;
 }
 
+// The full catalog of feature keys surfaced as default_features per
+// plan. Matches the keys used by useAgentContext.hasFeature() + the
+// Sidebar gates. Grouped loosely by domain so the edit dialog is
+// readable at a glance.
 const SYSTEM_FEATURES = [
+  // Daily-work features
+  { key: 'tasks', label: 'صفحة المهام + السجل' },
+  { key: 'dashboard', label: 'لوحة التحكم' },
+  { key: 'contacts', label: 'جهات الاتصال' },
+  { key: 'accident_reports', label: 'بلاغات الحوادث' },
+  { key: 'correspondence', label: 'المراسلات' },
+  { key: 'renewals', label: 'تجديدات البوالص' },
+  // Files
+  { key: 'files_upload', label: 'رفع الملفات' },
+  { key: 'files_explorer', label: 'مستكشف الملفات' },
+  { key: 'digital_signatures', label: 'التوقيعات الرقمية' },
+  // Communications
   { key: 'sms', label: 'إرسال SMS' },
+  { key: 'marketing_sms', label: 'SMS تسويقية' },
+  { key: 'ai_assistant', label: 'المساعد الذكي (ثاقب)' },
+  { key: 'ippbx', label: 'Click2Call / PBX' },
+  // Financial / management
+  { key: 'financial_management', label: 'الإدارة المالية' },
   { key: 'financial_reports', label: 'التقارير المالية' },
   { key: 'broker_wallet', label: 'محفظة الوسطاء' },
   { key: 'company_settlement', label: 'تسويات الشركات' },
   { key: 'cheques', label: 'الشيكات' },
-  { key: 'leads', label: 'Whatsapp Leads' },
-  { key: 'accident_reports', label: 'بلاغات الحوادث' },
+  { key: 'debt_tracking', label: 'متابعة الديون' },
   { key: 'repair_claims', label: 'المطالبات' },
-  { key: 'marketing_sms', label: 'SMS تسويقية' },
+  { key: 'accounting', label: 'المحاسبة' },
+  { key: 'receipts', label: 'الإيصالات' },
   { key: 'road_services', label: 'خدمات الطريق' },
   { key: 'accident_fees', label: 'رسوم الحوادث' },
-  { key: 'correspondence', label: 'الترويسات' },
-  { key: 'receipts', label: 'الإيصالات' },
-  { key: 'accounting', label: 'المحاسبة' },
-  { key: 'renewal_reports', label: 'تقارير التجديد' },
-  { key: 'ai_assistant', label: 'المساعد الذكي (ثاقب)' },
-  { key: 'ippbx', label: 'Click2Call / PBX' },
+  { key: 'leads', label: 'Whatsapp Leads' },
 ];
 
 function PlansSettingsTab() {
@@ -691,12 +716,19 @@ function PlansSettingsTab() {
       name_ar: "",
       description: "",
       monthly_price: 0,
-      yearly_price: 0,
+      yearly_price: null,
       badge: null,
       features: [],
       default_features: {},
       sort_order: (plans?.length || 0) + 1,
       is_active: true,
+      users_limit: 1,
+      branches_limit: 1,
+      policies_limit: 10,
+      sms_limit: 0,
+      marketing_sms_limit: 0,
+      ai_limit: 0,
+      support_sla_hours: 96,
     });
     setDialogOpen(true);
   };
@@ -720,6 +752,13 @@ function PlansSettingsTab() {
         default_features: editPlan.default_features as unknown as Json,
         sort_order: editPlan.sort_order,
         is_active: editPlan.is_active,
+        users_limit: editPlan.users_limit,
+        branches_limit: editPlan.branches_limit,
+        policies_limit: editPlan.policies_limit,
+        sms_limit: editPlan.sms_limit,
+        marketing_sms_limit: editPlan.marketing_sms_limit,
+        ai_limit: editPlan.ai_limit,
+        support_sla_hours: editPlan.support_sla_hours,
       };
 
       if (editPlan.id) {
@@ -805,7 +844,7 @@ function PlansSettingsTab() {
                     {!plan.is_active && <span className="text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded">معطل</span>}
                   </div>
                   <div className="text-sm text-muted-foreground mt-1">
-                    ₪{plan.monthly_price}/شهر — ₪{plan.yearly_price}/سنوي — {plan.features.length} ميزة — المفتاح: {plan.plan_key}
+                    ₪{plan.monthly_price}/شهر{plan.yearly_price !== null ? ` — ₪${plan.yearly_price}/سنوي` : ''} — المفتاح: {plan.plan_key}
                   </div>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => openEdit(plan)}>
@@ -890,11 +929,16 @@ function PlansSettingsTab() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>السعر السنوي (₪)</Label>
+                  <Label>السعر السنوي (₪) — اتركه فارغاً إذا لم تُعرض الحزمة بسنوي</Label>
                   <Input
                     type="number"
-                    value={editPlan.yearly_price}
-                    onChange={(e) => setEditPlan({ ...editPlan, yearly_price: Number(e.target.value) })}
+                    value={editPlan.yearly_price ?? ''}
+                    onChange={(e) =>
+                      setEditPlan({
+                        ...editPlan,
+                        yearly_price: e.target.value === '' ? null : Number(e.target.value),
+                      })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -913,6 +957,107 @@ function PlansSettingsTab() {
                   onCheckedChange={(v) => setEditPlan({ ...editPlan, is_active: v })}
                 />
                 <Label>فعالة</Label>
+              </div>
+
+              <Separator />
+
+              {/* Plan quotas — enforced by enforce_*_limit triggers.
+                  Empty cell on users/branches/policies means
+                  "unlimited" (stored as NULL); SMS/MKT/AI limits are
+                  always integers (0 = not included). */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">حدود الحزمة</Label>
+                <p className="text-xs text-muted-foreground">
+                  اترك الخانة فارغة (للمستخدمين/الفروع/المعاملات) ليعني "غير محدود".
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>المستخدمين</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={editPlan.users_limit ?? ''}
+                      onChange={(e) =>
+                        setEditPlan({
+                          ...editPlan,
+                          users_limit: e.target.value === '' ? null : Number(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>الفروع</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={editPlan.branches_limit ?? ''}
+                      onChange={(e) =>
+                        setEditPlan({
+                          ...editPlan,
+                          branches_limit: e.target.value === '' ? null : Number(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>المعاملات / شهر</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={editPlan.policies_limit ?? ''}
+                      onChange={(e) =>
+                        setEditPlan({
+                          ...editPlan,
+                          policies_limit: e.target.value === '' ? null : Number(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>SMS / شهر</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={editPlan.sms_limit}
+                      onChange={(e) =>
+                        setEditPlan({ ...editPlan, sms_limit: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>SMS تسويقية / شهر</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={editPlan.marketing_sms_limit}
+                      onChange={(e) =>
+                        setEditPlan({ ...editPlan, marketing_sms_limit: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>AI prompts / شهر</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={editPlan.ai_limit}
+                      onChange={(e) =>
+                        setEditPlan({ ...editPlan, ai_limit: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>زمن استجابة الدعم (ساعات)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={editPlan.support_sla_hours}
+                    onChange={(e) =>
+                      setEditPlan({ ...editPlan, support_sla_hours: Number(e.target.value) })
+                    }
+                  />
+                </div>
               </div>
 
               <Separator />

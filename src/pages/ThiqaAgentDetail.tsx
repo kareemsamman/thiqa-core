@@ -21,7 +21,10 @@ import {
   ArrowRight, Save, CreditCard, Settings, Loader2, Building2,
   MessageSquare, Palette, Users, Shield, Phone, Mail, Image, Bot,
   Upload, Trash2, Eye, EyeOff, Plus, UserPlus, UserMinus, CalendarIcon,
+  ShoppingCart, Tag,
 } from "lucide-react";
+import { AgentAddonsManager } from "@/components/thiqa/AgentAddonsManager";
+import { AgentDiscountManager } from "@/components/thiqa/AgentDiscountManager";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -934,6 +937,8 @@ export default function ThiqaAgentDetail() {
               <TabsTrigger value="auth" className="text-xs md:text-sm px-2 md:px-3"><Shield className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />المصادقة</TabsTrigger>
               <TabsTrigger value="tranzila" className="text-xs md:text-sm px-2 md:px-3"><CreditCard className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />Tranzila</TabsTrigger>
               <TabsTrigger value="features" className="text-xs md:text-sm px-2 md:px-3"><Settings className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />الميزات</TabsTrigger>
+              <TabsTrigger value="addons" className="text-xs md:text-sm px-2 md:px-3"><ShoppingCart className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />الإضافات</TabsTrigger>
+              <TabsTrigger value="discounts" className="text-xs md:text-sm px-2 md:px-3"><Tag className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />الخصومات</TabsTrigger>
               <TabsTrigger value="payments" className="text-xs md:text-sm px-2 md:px-3"><CreditCard className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />المدفوعات</TabsTrigger>
               <TabsTrigger value="import" className="text-xs md:text-sm px-2 md:px-3"><Upload className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />استيراد بيانات</TabsTrigger>
               <TabsTrigger value="stats" className="text-xs md:text-sm px-2 md:px-3"><Building2 className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />إحصائيات</TabsTrigger>
@@ -1327,6 +1332,16 @@ export default function ThiqaAgentDetail() {
               </CardContent>
             </Card>
 
+          </TabsContent>
+
+           {/* ═══════════ ADDONS TAB — per-agent cart (extra user/branch/SMS/etc) ═══════════ */}
+          <TabsContent value="addons" className="space-y-4">
+            {agent && <AgentAddonsManager agentId={agent.id} />}
+          </TabsContent>
+
+           {/* ═══════════ DISCOUNTS TAB — time-boxed price overrides ═══════════ */}
+          <TabsContent value="discounts" className="space-y-4">
+            {agent && <AgentDiscountManager agentId={agent.id} />}
           </TabsContent>
 
            {/* ═══════════ PAYMENTS TAB ═══════════ */}
