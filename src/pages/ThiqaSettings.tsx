@@ -664,7 +664,6 @@ const SYSTEM_FEATURES = [
   { key: 'sms', label: 'إرسال SMS' },
   { key: 'marketing_sms', label: 'SMS تسويقية' },
   { key: 'ai_assistant', label: 'المساعد الذكي (ثاقب)' },
-  { key: 'ippbx', label: 'Click2Call / PBX' },
   // Financial / management
   { key: 'financial_management', label: 'الإدارة المالية' },
   { key: 'financial_reports', label: 'التقارير المالية' },
@@ -677,7 +676,6 @@ const SYSTEM_FEATURES = [
   { key: 'receipts', label: 'الإيصالات' },
   { key: 'road_services', label: 'خدمات الطريق' },
   { key: 'accident_fees', label: 'رسوم الحوادث' },
-  { key: 'leads', label: 'Whatsapp Leads' },
 ];
 
 function PlansSettingsTab() {
