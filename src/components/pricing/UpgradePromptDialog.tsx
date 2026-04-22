@@ -172,6 +172,13 @@ export function UpgradePromptDialog({
   const currentPlanKey = planInfo?.plan_key ?? null;
   const isOnTrial = agent?.subscription_status === 'trial' ||
     (agent?.monthly_price === 0 && agent?.subscription_status === 'active');
+  // Lifted so clicking "show details" on any card expands all four
+  // cards at once — users compare features across plans side by side
+  // instead of expanding each one separately.
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  useEffect(() => {
+    if (!open) setDetailsOpen(false);
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -209,7 +216,7 @@ export function UpgradePromptDialog({
                 'radial-gradient(circle at 20% 30%, white 0%, transparent 35%), radial-gradient(circle at 80% 70%, white 0%, transparent 40%)',
             }}
           />
-          <div className="relative flex items-start gap-4 pr-12">
+          <div className="relative flex items-start gap-4 pl-12">
             <div className="h-16 w-16 rounded-2xl bg-white/25 backdrop-blur flex items-center justify-center ring-1 ring-white/40 shadow-lg shrink-0">
               <HeroIcon className="h-8 w-8 text-white" weight="duotone" />
             </div>
@@ -307,6 +314,8 @@ export function UpgradePromptDialog({
                     featureLabel={featureLabel}
                     resourceMeta={meta}
                     newQuota={newQuota ?? null}
+                    detailsOpen={detailsOpen}
+                    onToggleDetails={() => setDetailsOpen((v) => !v)}
                     onSelect={() => {
                       onOpenChange(false);
                       window.location.href = '/subscription';
@@ -353,6 +362,8 @@ function PlanCard({
   featureLabel,
   resourceMeta,
   newQuota,
+  detailsOpen,
+  onToggleDetails,
   onSelect,
 }: {
   plan: PlanRow;
@@ -363,9 +374,10 @@ function PlanCard({
   featureLabel: string | undefined;
   resourceMeta: { label: string; icon: typeof Users } | null;
   newQuota: number | null;
+  detailsOpen: boolean;
+  onToggleDetails: () => void;
   onSelect: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   return (
     <div
       className={cn(
@@ -460,46 +472,39 @@ function PlanCard({
         <QuotaRow icon={Robot} label="طلب AI / شهر" value={plan.ai_limit ? `${plan.ai_limit}` : '—'} />
       </div>
 
-      {/* Expandable full-feature list — lets the user open one card
-          to see every gate-able feature for that plan without leaving
-          the dialog. */}
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="mt-4 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
-      >
-        {expanded ? 'إخفاء التفاصيل' : 'عرض جميع الميزات'}
-        <CaretDown
-          className={cn('h-3.5 w-3.5 transition-transform', expanded && 'rotate-180')}
-          weight="bold"
-        />
-      </button>
-      {expanded && (
-        <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+      {/* Expandable full-feature list — lifted state means clicking
+          "show details" on any card expands all four at once so the
+          user can compare features plan-by-plan side by side. Toggle
+          lives at the BOTTOM of the expanded list so the user scrolls
+          through the details and collapses from where they finished. */}
+      {detailsOpen && (
+        <div className="mt-4 pt-4 border-t border-slate-100 space-y-4">
           {PLAN_FEATURE_CATALOG.map((group) => (
             <div key={group.group}>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
                 {group.group}
               </p>
-              <ul className="space-y-1">
+              <ul className="space-y-1.5">
                 {group.items.map((f) => {
                   const has = plan.default_features?.[f.key] === true;
                   return (
                     <li
                       key={f.key}
                       className={cn(
-                        'flex items-center gap-2 text-xs',
-                        has ? 'text-slate-800' : 'text-slate-400',
+                        'flex items-center gap-2 text-sm',
+                        has ? 'text-slate-900 font-medium' : 'text-slate-500',
                       )}
                     >
                       {has ? (
-                        <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" weight="fill" />
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-emerald-500 text-white shrink-0">
+                          <Check className="h-3 w-3" weight="bold" />
+                        </span>
                       ) : (
-                        <X className="h-3.5 w-3.5 text-slate-300 shrink-0" weight="bold" />
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-slate-100 text-slate-400 shrink-0">
+                          <X className="h-3 w-3" weight="bold" />
+                        </span>
                       )}
-                      <span className={cn('truncate', !has && 'line-through opacity-70')}>
-                        {f.label}
-                      </span>
+                      <span className="truncate">{f.label}</span>
                     </li>
                   );
                 })}
@@ -508,6 +513,17 @@ function PlanCard({
           ))}
         </div>
       )}
+      <button
+        type="button"
+        onClick={onToggleDetails}
+        className="mt-4 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
+      >
+        {detailsOpen ? 'إخفاء التفاصيل' : 'عرض جميع الميزات'}
+        <CaretDown
+          className={cn('h-3.5 w-3.5 transition-transform', detailsOpen && 'rotate-180')}
+          weight="bold"
+        />
+      </button>
 
       {/* CTA */}
       <div className="mt-5">
