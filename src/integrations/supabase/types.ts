@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       ab_ledger: {
@@ -686,22 +711,81 @@ export type Database = {
           },
         ]
       }
+      agent_addons: {
+        Row: {
+          addon_type: string
+          agent_id: string
+          billing_cycle: string
+          created_at: string
+          created_by: string | null
+          ends_at: string | null
+          id: string
+          notes: string | null
+          quantity: number
+          starts_at: string
+          status: string
+          unit_price: number
+          updated_at: string
+        }
+        Insert: {
+          addon_type: string
+          agent_id: string
+          billing_cycle: string
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string | null
+          id?: string
+          notes?: string | null
+          quantity?: number
+          starts_at?: string
+          status?: string
+          unit_price: number
+          updated_at?: string
+        }
+        Update: {
+          addon_type?: string
+          agent_id?: string
+          billing_cycle?: string
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string | null
+          id?: string
+          notes?: string | null
+          quantity?: number
+          starts_at?: string
+          status?: string
+          unit_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_addons_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_credit_wallet: {
         Row: {
           agent_id: string
           ai_credit_balance: number
+          marketing_sms_credit_balance: number
           sms_credit_balance: number
           updated_at: string
         }
         Insert: {
           agent_id: string
           ai_credit_balance?: number
+          marketing_sms_credit_balance?: number
           sms_credit_balance?: number
           updated_at?: string
         }
         Update: {
           agent_id?: string
           ai_credit_balance?: number
+          marketing_sms_credit_balance?: number
           sms_credit_balance?: number
           updated_at?: string
         }
@@ -710,6 +794,47 @@ export type Database = {
             foreignKeyName: "agent_credit_wallet_agent_id_fkey"
             columns: ["agent_id"]
             isOneToOne: true
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_discounts: {
+        Row: {
+          agent_id: string
+          created_at: string
+          created_by: string | null
+          discounted_price: number
+          ends_at: string
+          id: string
+          reason: string | null
+          starts_at: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          created_by?: string | null
+          discounted_price: number
+          ends_at: string
+          id?: string
+          reason?: string | null
+          starts_at?: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          created_by?: string | null
+          discounted_price?: number
+          ends_at?: string
+          id?: string
+          reason?: string | null
+          starts_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_discounts_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
             referencedRelation: "agents"
             referencedColumns: ["id"]
           },
@@ -737,6 +862,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "agent_feature_flags_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_shortcuts: {
+        Row: {
+          action_key: string
+          agent_id: string
+          enabled: boolean
+          key_combination: string | null
+          updated_at: string
+          updated_by_admin_id: string | null
+        }
+        Insert: {
+          action_key: string
+          agent_id: string
+          enabled?: boolean
+          key_combination?: string | null
+          updated_at?: string
+          updated_by_admin_id?: string | null
+        }
+        Update: {
+          action_key?: string
+          agent_id?: string
+          enabled?: boolean
+          key_combination?: string | null
+          updated_at?: string
+          updated_by_admin_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_shortcuts_agent_id_fkey"
             columns: ["agent_id"]
             isOneToOne: false
             referencedRelation: "agents"
@@ -801,6 +961,8 @@ export type Database = {
           ai_limit_type: string
           created_at: string | null
           id: string
+          marketing_sms_limit_count: number
+          marketing_sms_limit_type: string
           sms_limit_count: number
           sms_limit_type: string
           updated_at: string | null
@@ -811,6 +973,8 @@ export type Database = {
           ai_limit_type?: string
           created_at?: string | null
           id?: string
+          marketing_sms_limit_count?: number
+          marketing_sms_limit_type?: string
           sms_limit_count?: number
           sms_limit_type?: string
           updated_at?: string | null
@@ -821,6 +985,8 @@ export type Database = {
           ai_limit_type?: string
           created_at?: string | null
           id?: string
+          marketing_sms_limit_count?: number
+          marketing_sms_limit_type?: string
           sms_limit_count?: number
           sms_limit_type?: string
           updated_at?: string | null
@@ -965,6 +1131,7 @@ export type Database = {
           billing_cycle_day: number | null
           cancelled_at: string | null
           created_at: string | null
+          default_employee_permissions: Json
           email: string
           id: string
           logo_url: string | null
@@ -986,6 +1153,7 @@ export type Database = {
           billing_cycle_day?: number | null
           cancelled_at?: string | null
           created_at?: string | null
+          default_employee_permissions?: Json
           email: string
           id?: string
           logo_url?: string | null
@@ -1007,6 +1175,7 @@ export type Database = {
           billing_cycle_day?: number | null
           cancelled_at?: string | null
           created_at?: string | null
+          default_employee_permissions?: Json
           email?: string
           id?: string
           logo_url?: string | null
@@ -3467,6 +3636,7 @@ export type Database = {
       }
       login_attempts: {
         Row: {
+          agent_id: string | null
           created_at: string
           email: string
           id: string
@@ -3478,6 +3648,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          agent_id?: string | null
           created_at?: string
           email: string
           id?: string
@@ -3489,6 +3660,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          agent_id?: string | null
           created_at?: string
           email?: string
           id?: string
@@ -4811,6 +4983,7 @@ export type Database = {
           last_seen_notifications_at: string | null
           onboarding_completed: boolean
           pbx_extension: string | null
+          permissions: Json
           phone: string | null
           status: Database["public"]["Enums"]["user_status"]
           updated_at: string
@@ -4827,6 +5000,7 @@ export type Database = {
           last_seen_notifications_at?: string | null
           onboarding_completed?: boolean
           pbx_extension?: string | null
+          permissions?: Json
           phone?: string | null
           status?: Database["public"]["Enums"]["user_status"]
           updated_at?: string
@@ -4843,6 +5017,7 @@ export type Database = {
           last_seen_notifications_at?: string | null
           onboarding_completed?: boolean
           pbx_extension?: string | null
+          permissions?: Json
           phone?: string | null
           status?: Database["public"]["Enums"]["user_status"]
           updated_at?: string
@@ -5682,52 +5857,76 @@ export type Database = {
       }
       subscription_plans: {
         Row: {
+          ai_limit: number
           badge: string | null
+          branches_limit: number | null
           created_at: string | null
+          default_features: Json
           description: string | null
           features: Json
           id: string
           is_active: boolean
           is_hidden: boolean
+          marketing_sms_limit: number
           monthly_price: number
           name: string
           name_ar: string | null
           plan_key: string
+          policies_limit: number | null
+          sms_limit: number
           sort_order: number
+          support_sla_hours: number
           updated_at: string | null
-          yearly_price: number
+          users_limit: number | null
+          yearly_price: number | null
         }
         Insert: {
+          ai_limit?: number
           badge?: string | null
+          branches_limit?: number | null
           created_at?: string | null
+          default_features?: Json
           description?: string | null
           features?: Json
           id?: string
           is_active?: boolean
           is_hidden?: boolean
+          marketing_sms_limit?: number
           monthly_price?: number
           name: string
           name_ar?: string | null
           plan_key: string
+          policies_limit?: number | null
+          sms_limit?: number
           sort_order?: number
+          support_sla_hours?: number
           updated_at?: string | null
-          yearly_price?: number
+          users_limit?: number | null
+          yearly_price?: number | null
         }
         Update: {
+          ai_limit?: number
           badge?: string | null
+          branches_limit?: number | null
           created_at?: string | null
+          default_features?: Json
           description?: string | null
           features?: Json
           id?: string
           is_active?: boolean
           is_hidden?: boolean
+          marketing_sms_limit?: number
           monthly_price?: number
           name?: string
           name_ar?: string | null
           plan_key?: string
+          policies_limit?: number | null
+          sms_limit?: number
           sort_order?: number
+          support_sla_hours?: number
           updated_at?: string | null
-          yearly_price?: number
+          users_limit?: number | null
+          yearly_price?: number | null
         }
         Relationships: []
       }
@@ -5912,12 +6111,15 @@ export type Database = {
           city: string | null
           country: string | null
           created_at: string | null
+          current_path: string | null
           device_type: string | null
           duration_minutes: number | null
           ended_at: string | null
           id: string
           ip_address: string | null
           is_active: boolean | null
+          kicked_at: string | null
+          last_seen_at: string
           os_name: string | null
           started_at: string
           user_agent: string | null
@@ -5930,12 +6132,15 @@ export type Database = {
           city?: string | null
           country?: string | null
           created_at?: string | null
+          current_path?: string | null
           device_type?: string | null
           duration_minutes?: number | null
           ended_at?: string | null
           id?: string
           ip_address?: string | null
           is_active?: boolean | null
+          kicked_at?: string | null
+          last_seen_at?: string
           os_name?: string | null
           started_at?: string
           user_agent?: string | null
@@ -5948,12 +6153,15 @@ export type Database = {
           city?: string | null
           country?: string | null
           created_at?: string | null
+          current_path?: string | null
           device_type?: string | null
           duration_minutes?: number | null
           ended_at?: string | null
           id?: string
           ip_address?: string | null
           is_active?: boolean | null
+          kicked_at?: string | null
+          last_seen_at?: string
           os_name?: string | null
           started_at?: string
           user_agent?: string | null
@@ -6118,6 +6326,14 @@ export type Database = {
         Args: { _attempt_user_id: string }
         Returns: boolean
       }
+      can_view_login_attempt_agent: {
+        Args: { _attempt_agent_id: string; _attempt_user_id: string }
+        Returns: boolean
+      }
+      can_view_user_session: {
+        Args: { _session_agent_id: string; _session_user_id: string }
+        Returns: boolean
+      }
       check_email_provider_public: { Args: { p_email: string }; Returns: Json }
       clear_data_for_import: { Args: never; Returns: Json }
       dashboard_company_debts: {
@@ -6194,6 +6410,14 @@ export type Database = {
         Args: never
         Returns: {
           email: string
+        }[]
+      }
+      get_agent_effective_limit: {
+        Args: { p_agent_id: string; p_resource: string }
+        Returns: {
+          addon_quantity: number
+          plan_key: string
+          plan_limit: number
         }[]
       }
       get_all_companies_wallet_summary: {
@@ -7055,6 +7279,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       age_band: ["UNDER_24", "UP_24", "ANY"],
