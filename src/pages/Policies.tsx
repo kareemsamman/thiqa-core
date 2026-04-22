@@ -14,6 +14,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { PolicyEditDrawer } from "@/components/policies/PolicyEditDrawer";
 import { PolicyFilters, PolicyFilterValues } from "@/components/policies/PolicyFilters";
@@ -95,6 +96,11 @@ interface PolicyRecord {
 export default function Policies() {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
+  const { can } = usePermissions();
+  // Recalculate Profits recomputes the profit column on every policy —
+  // that's a financial operation, gated by the single view_financial
+  // permission so the agent admin can grant it to a trusted worker.
+  const canViewFinancial = can('view_financial');
   const { openWizard } = usePolicyWizardController();
   const [policies, setPolicies] = useState<PolicyRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -425,8 +431,8 @@ export default function Policies() {
               filters={filters}
               onFiltersChange={(f) => { setFilters(f); setCurrentPage(1); }}
             />
-            {/* Recalculate button - Admin only */}
-            {isAdmin && (
+            {/* Recalculate button — gated by view_financial */}
+            {canViewFinancial && (
               recalculating ? (
                 <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg border">
                   <RefreshCw className="h-4 w-4 animate-spin text-primary" />

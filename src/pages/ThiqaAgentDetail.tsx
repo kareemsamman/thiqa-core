@@ -399,14 +399,26 @@ export default function ThiqaAgentDetail() {
       .eq('agent_id', agent.id)
       .eq('status', 'active');
 
-    const { error } = await supabase.from('agent_subscription_payments').insert({
+    const { data: inserted, error } = await supabase.from('agent_subscription_payments').insert({
       agent_id: agent.id, amount: parseFloat(paymentAmount), plan: agent.plan,
       payment_date: format(paymentDate, 'yyyy-MM-dd'),
       period_start: format(periodStart, 'yyyy-MM-dd'),
       period_end: format(periodEnd, 'yyyy-MM-dd'),
       received_by: user?.id, notes: paymentNotes || null,
       status: 'active',
-    } as any);
+    } as any).select('id').single();
+
+    // Kick off the PDF invoice generation in the background — this
+    // uploads a branded HTML receipt to BunnyCDN and stores the URL on
+    // the payment row. Fire-and-forget so the admin UI isn't blocked
+    // by a slow CDN round-trip; on failure we just log (the admin can
+    // regenerate from the row later).
+    if (!error && inserted?.id) {
+      supabase.functions
+        .invoke('generate-subscription-invoice', { body: { payment_id: inserted.id } })
+        .catch((err) => console.error('Invoice generation failed:', err));
+    }
+
     if (!error) {
       // If the admin ticked "include unbilled overages", mark every unbilled
       // overage row for this agent as billed so the agent's next-billing

@@ -915,6 +915,7 @@ export type Database = {
           period_end: string | null
           period_start: string | null
           plan: string
+          receipt_url: string | null
           received_by: string | null
           status: string
         }
@@ -928,6 +929,7 @@ export type Database = {
           period_end?: string | null
           period_start?: string | null
           plan: string
+          receipt_url?: string | null
           received_by?: string | null
           status?: string
         }
@@ -941,6 +943,7 @@ export type Database = {
           period_end?: string | null
           period_start?: string | null
           plan?: string
+          receipt_url?: string | null
           received_by?: string | null
           status?: string
         }
@@ -6609,6 +6612,7 @@ export type Database = {
         Returns: string
       }
       normalize_arabic: { Args: { p_text: string }; Returns: string }
+      notify_subscription_expiry: { Args: never; Returns: undefined }
       report_client_debts:
         | {
             Args: {

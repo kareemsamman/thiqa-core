@@ -41,6 +41,7 @@ interface PaymentRecord {
   payment_date: string;
   notes: string | null;
   created_at: string;
+  receipt_url: string | null;
 }
 
 interface UnbilledOverage {
@@ -338,7 +339,7 @@ export default function Subscription() {
         const [paymentsRes, overagesRes] = await Promise.all([
           supabase
             .from("agent_subscription_payments")
-            .select("id, amount, plan, payment_date, notes, created_at")
+            .select("id, amount, plan, payment_date, notes, created_at, receipt_url")
             .eq("agent_id", agentId)
             .order("payment_date", { ascending: false })
             .limit(50),
@@ -1061,6 +1062,7 @@ export default function Subscription() {
                           <th className="text-right p-3 font-medium text-muted-foreground">المبلغ</th>
                           <th className="text-right p-3 font-medium text-muted-foreground">الخطة</th>
                           <th className="text-right p-3 font-medium text-muted-foreground">ملاحظات</th>
+                          <th className="text-right p-3 font-medium text-muted-foreground w-24">الإيصال</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1070,6 +1072,21 @@ export default function Subscription() {
                             <td className="p-3 font-semibold">₪{p.amount?.toLocaleString()}</td>
                             <td className="p-3"><Badge variant="secondary" className="text-xs">{p.plan}</Badge></td>
                             <td className="p-3 text-muted-foreground text-xs truncate max-w-[200px]">{p.notes || "—"}</td>
+                            <td className="p-3">
+                              {p.receipt_url ? (
+                                <a
+                                  href={p.receipt_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline text-xs inline-flex items-center gap-1"
+                                >
+                                  <Receipt className="h-3.5 w-3.5" />
+                                  تحميل
+                                </a>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

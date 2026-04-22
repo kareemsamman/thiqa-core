@@ -66,6 +66,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { ClickablePhone } from '@/components/shared/ClickablePhone';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
@@ -249,6 +250,12 @@ const PAGE_SIZE = 25;
 export default function PolicyReports() {
   const navigate = useNavigate();
   const { isAdmin, user } = useAuth();
+  const { can } = usePermissions();
+  // PDF export embeds the same profit/commission columns the agent
+  // sees on screen, so gate the button by the same view_financial
+  // permission — keeps a restricted worker from leaking numbers by
+  // exporting a report.
+  const canViewFinancial = can('view_financial');
   const { agentId } = useAgentContext();
   const [activeTab, setActiveTab] = useState('created');
   // Sub-tab inside the Renewals top-tab. Starts on "pending" — the
@@ -1488,8 +1495,8 @@ export default function PolicyReports() {
                     <Users className="h-4 w-4 ml-2" />
                     مساعد التجديد
                   </Button>
-                  {/* PDF للمسؤولين فقط */}
-                  {isAdmin && (
+                  {/* PDF export — gated by view_financial (see hook comment) */}
+                  {canViewFinancial && (
                     <Button variant="outline" onClick={handleGeneratePdf} disabled={generatingPdf}>
                       {generatingPdf ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Download className="h-4 w-4 ml-2" />}
                       تصدير PDF
