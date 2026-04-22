@@ -47,15 +47,16 @@ function UsageRow({
   limit: ResourceLimit;
   unit?: string;
 }) {
-  const usedText = limit.effective === null
-    ? `${limit.used}${unit} مستخدم`
+  const isUnlimited = limit.effective === null;
+  const usedText = isUnlimited
+    ? `${limit.used}${unit} / غير محدود`
     : `${limit.used}${unit} / ${limit.effective}${unit}`;
 
-  const percent = limit.effective === null
+  const percent = isUnlimited
     ? 0
-    : Math.min(100, (limit.used / Math.max(1, limit.effective)) * 100);
+    : Math.min(100, (limit.used / Math.max(1, limit.effective!)) * 100);
 
-  const color = limit.effective === null
+  const color = isUnlimited
     ? 'bg-primary/60'
     : percent >= 90
     ? 'bg-destructive'
@@ -68,13 +69,13 @@ function UsageRow({
       <div className="flex items-center justify-between text-sm">
         <span className="font-medium">{label}</span>
         <span className="font-mono ltr-nums text-muted-foreground">
-          {limit.effective === null ? 'غير محدود' : usedText}
-          {limit.addonQuantity > 0 && limit.effective !== null && (
+          {usedText}
+          {limit.addonQuantity > 0 && !isUnlimited && (
             <span className="text-emerald-600 text-xs mr-1">(+{limit.addonQuantity} إضافي)</span>
           )}
         </span>
       </div>
-      {limit.effective !== null && (
+      {!isUnlimited && (
         <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
           <div
             className={cn('h-full transition-all', color)}
