@@ -16,6 +16,7 @@ import {
   Rocket, Shield, Trash2, XCircle, Loader2, Settings, BarChart3, Receipt, UserCog, Plus, ChevronDown,
 } from "lucide-react";
 import { AddQuotaDialog, type OverageUsageType } from "@/components/subscription/AddQuotaDialog";
+import { AgentPlanOverview } from "@/components/subscription/AgentPlanOverview";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -517,6 +518,13 @@ export default function Subscription() {
           </TabsList>
 
           <TabsContent value="plan" className="mt-5 space-y-5">
+        {/* ═══ New pricing-model overview — plan, effective price
+            (with active discount if any), usage bars vs effective
+            limits, and active addons. Sits on top of the older
+            status + plan-picker cards below so the existing flows
+            keep working. */}
+        <AgentPlanOverview />
+
         {/* ═══ Current Status Card ═══ */}
         {!sub ? <Skeleton className="h-48 w-full rounded-xl" /> : (
           <Card className="overflow-hidden shadow-sm">
