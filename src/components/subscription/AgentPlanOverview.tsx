@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Crown, MessageCircle, ShoppingCart, Tag, TrendingUp } from 'lucide-react';
+import { Check, Crown, Lock, MessageCircle, ShoppingCart, Sparkles, Tag, TrendingUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { useAgentLimits, ResourceLimit } from '@/hooks/useAgentLimits';
@@ -37,6 +37,52 @@ const ADDON_LABELS: Record<string, string> = {
   onboarding: 'إعداد أولي',
   data_migration: 'هجرة بيانات',
 };
+
+// Same catalog as ThiqaSettings.SYSTEM_FEATURES — keys match the ones
+// useAgentContext.hasFeature() resolves against. Grouped so the card
+// reads top-down from daily workflow → files → comms → finance.
+const FEATURE_CATALOG: { group: string; items: { key: string; label: string }[] }[] = [
+  {
+    group: 'العمل اليومي',
+    items: [
+      { key: 'dashboard', label: 'لوحة التحكم' },
+      { key: 'tasks', label: 'صفحة المهام + السجل' },
+      { key: 'contacts', label: 'جهات الاتصال' },
+      { key: 'accident_reports', label: 'بلاغات الحوادث' },
+      { key: 'correspondence', label: 'المراسلات' },
+      { key: 'renewals', label: 'تجديدات البوالص' },
+    ],
+  },
+  {
+    group: 'الملفات والتوقيعات',
+    items: [
+      { key: 'files_upload', label: 'رفع الملفات' },
+      { key: 'files_explorer', label: 'مستكشف الملفات' },
+      { key: 'digital_signatures', label: 'التوقيعات الرقمية' },
+    ],
+  },
+  {
+    group: 'التواصل',
+    items: [
+      { key: 'sms', label: 'إرسال SMS' },
+      { key: 'marketing_sms', label: 'SMS تسويقية' },
+      { key: 'ai_assistant', label: 'المساعد الذكي (ثاقب)' },
+    ],
+  },
+  {
+    group: 'المالية والإدارة',
+    items: [
+      { key: 'financial_reports', label: 'التقارير المالية' },
+      { key: 'broker_wallet', label: 'محفظة الوسطاء' },
+      { key: 'company_settlement', label: 'التسويات مع الشركات' },
+      { key: 'accounting', label: 'المحاسبة' },
+      { key: 'receipts', label: 'الإيصالات' },
+      { key: 'cheques', label: 'الشيكات' },
+      { key: 'debt_tracking', label: 'متابعة الديون' },
+      { key: 'repair_claims', label: 'المطالبات' },
+    ],
+  },
+];
 
 function UsageRow({
   label,
@@ -95,7 +141,7 @@ function UsageRow({
  * admin side (purchase-usage-overage edge function + AgentAddonsManager).
  */
 export function AgentPlanOverview() {
-  const { agent, planInfo } = useAgentContext();
+  const { agent, planInfo, hasFeature } = useAgentContext();
   const limits = useAgentLimits();
   const [discount, setDiscount] = useState<ActiveDiscount | null>(null);
   const [addons, setAddons] = useState<ActiveAddon[]>([]);
@@ -309,6 +355,83 @@ export function AgentPlanOverview() {
               <UsageRow label="طلبات AI (هذا الشهر)" limit={limits.ai} />
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Feature access — every gate-able feature with a clear
+          included/not-included marker so the agent can see exactly
+          what their plan unlocks in one glance. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            الميزات المتوفرة في حزمتك
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {(() => {
+            const total = FEATURE_CATALOG.reduce((s, g) => s + g.items.length, 0);
+            const enabled = FEATURE_CATALOG.reduce(
+              (s, g) => s + g.items.filter((i) => hasFeature(i.key)).length,
+              0,
+            );
+            return (
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-primary/5 border border-primary/15 px-3 py-2.5 text-sm">
+                <span className="font-medium text-primary">
+                  {enabled} من {total} ميزة مفعّلة
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  الميزات المقفلة متاحة في حزم أعلى
+                </span>
+              </div>
+            );
+          })()}
+          {FEATURE_CATALOG.map((group) => (
+            <div key={group.group}>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                {group.group}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {group.items.map((f) => {
+                  const enabled = hasFeature(f.key);
+                  return (
+                    <div
+                      key={f.key}
+                      className={cn(
+                        'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
+                        enabled
+                          ? 'bg-emerald-50/70 text-emerald-900'
+                          : 'bg-slate-50 text-slate-500',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'inline-flex h-5 w-5 items-center justify-center rounded-md shrink-0',
+                          enabled
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-slate-200 text-slate-500',
+                        )}
+                      >
+                        {enabled ? (
+                          <Check className="h-3 w-3" strokeWidth={3} />
+                        ) : (
+                          <Lock className="h-3 w-3" />
+                        )}
+                      </span>
+                      <span
+                        className={cn(
+                          'flex-1 truncate',
+                          enabled ? 'font-semibold' : 'font-medium',
+                        )}
+                      >
+                        {f.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </CardContent>
       </Card>
 

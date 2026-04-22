@@ -637,21 +637,23 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                           }}
                           style={{ ['--i' as any]: idx }}
                           className={cn(
-                            "nav-leaf relative w-full flex items-center py-2 text-[13.5px] transition-colors duration-150 rounded-[0.2rem] cursor-pointer",
-                            "text-[#a0a0a3] font-normal hover:text-[#656565] hover:bg-slate-50",
+                            "nav-leaf group/locked relative w-full flex items-center py-2 text-[13.5px] font-semibold transition-all duration-150 rounded-md cursor-pointer",
+                            "text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 hover:text-amber-900",
                           )}
                         >
                           <span
                             aria-hidden="true"
-                            className="pointer-events-none absolute w-px bg-[#e9e9e9] z-10"
+                            className="pointer-events-none absolute w-px bg-amber-200 z-10"
                             style={{ insetInlineStart: '17px', top: '-1px', bottom: '-1px' }}
                           />
                           <span
-                            className="relative z-20 flex-1 flex items-center gap-1.5 text-right"
+                            className="relative z-20 flex-1 flex items-center gap-2 text-right"
                             style={{ paddingInline: '33px 12px' }}
                           >
                             <span className="flex-1">{item.name}</span>
-                            <Lock className="h-3.5 w-3.5 text-[#a0a0a3] shrink-0" weight="bold" />
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-amber-500/15 ring-1 ring-amber-500/30 shrink-0 transition-colors group-hover/locked:bg-amber-500/25">
+                              <Lock className="h-3 w-3 text-amber-700" weight="fill" />
+                            </span>
                           </span>
                         </button>
                       );
