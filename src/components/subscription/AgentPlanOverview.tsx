@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Check, Crown, Lock, MessageCircle, ShoppingCart, Sparkles, Tag, TrendingUp } from 'lucide-react';
+import { PLAN_PLAN_FEATURE_CATALOG } from '@/lib/planFeatureCatalog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { useAgentLimits, ResourceLimit } from '@/hooks/useAgentLimits';
@@ -38,51 +39,6 @@ const ADDON_LABELS: Record<string, string> = {
   data_migration: 'هجرة بيانات',
 };
 
-// Same catalog as ThiqaSettings.SYSTEM_FEATURES — keys match the ones
-// useAgentContext.hasFeature() resolves against. Grouped so the card
-// reads top-down from daily workflow → files → comms → finance.
-const FEATURE_CATALOG: { group: string; items: { key: string; label: string }[] }[] = [
-  {
-    group: 'العمل اليومي',
-    items: [
-      { key: 'dashboard', label: 'لوحة التحكم' },
-      { key: 'tasks', label: 'صفحة المهام + السجل' },
-      { key: 'contacts', label: 'جهات الاتصال' },
-      { key: 'accident_reports', label: 'بلاغات الحوادث' },
-      { key: 'correspondence', label: 'المراسلات' },
-      { key: 'renewals', label: 'تجديدات البوالص' },
-    ],
-  },
-  {
-    group: 'الملفات والتوقيعات',
-    items: [
-      { key: 'files_upload', label: 'رفع الملفات' },
-      { key: 'files_explorer', label: 'مستكشف الملفات' },
-      { key: 'digital_signatures', label: 'التوقيعات الرقمية' },
-    ],
-  },
-  {
-    group: 'التواصل',
-    items: [
-      { key: 'sms', label: 'إرسال SMS' },
-      { key: 'marketing_sms', label: 'SMS تسويقية' },
-      { key: 'ai_assistant', label: 'المساعد الذكي (ثاقب)' },
-    ],
-  },
-  {
-    group: 'المالية والإدارة',
-    items: [
-      { key: 'financial_reports', label: 'التقارير المالية' },
-      { key: 'broker_wallet', label: 'محفظة الوسطاء' },
-      { key: 'company_settlement', label: 'التسويات مع الشركات' },
-      { key: 'accounting', label: 'المحاسبة' },
-      { key: 'receipts', label: 'الإيصالات' },
-      { key: 'cheques', label: 'الشيكات' },
-      { key: 'debt_tracking', label: 'متابعة الديون' },
-      { key: 'repair_claims', label: 'المطالبات' },
-    ],
-  },
-];
 
 function UsageRow({
   label,
@@ -370,8 +326,8 @@ export function AgentPlanOverview() {
         </CardHeader>
         <CardContent className="space-y-5">
           {(() => {
-            const total = FEATURE_CATALOG.reduce((s, g) => s + g.items.length, 0);
-            const enabled = FEATURE_CATALOG.reduce(
+            const total = PLAN_FEATURE_CATALOG.reduce((s, g) => s + g.items.length, 0);
+            const enabled = PLAN_FEATURE_CATALOG.reduce(
               (s, g) => s + g.items.filter((i) => hasFeature(i.key)).length,
               0,
             );
@@ -386,7 +342,7 @@ export function AgentPlanOverview() {
               </div>
             );
           })()}
-          {FEATURE_CATALOG.map((group) => (
+          {PLAN_FEATURE_CATALOG.map((group) => (
             <div key={group.group}>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                 {group.group}

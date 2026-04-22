@@ -23,10 +23,12 @@ import {
   CheckCircle,
   Crown,
   Sparkle,
+  CaretDown,
 } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { cn } from '@/lib/utils';
+import { PLAN_FEATURE_CATALOG } from '@/lib/planFeatureCatalog';
 
 export type LimitResource = 'users' | 'branches' | 'policies' | 'sms' | 'marketing_sms' | 'ai';
 
@@ -175,7 +177,7 @@ export function UpgradePromptDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideCloseButton
-        className="w-[96vw] max-w-[1400px] max-h-[94vh] overflow-hidden flex flex-col p-0 gap-0 border-0 shadow-2xl"
+        className="w-[94vw] max-w-[1180px] max-h-[94vh] overflow-hidden flex flex-col p-0 gap-0 border-0 shadow-2xl"
         dir="rtl"
       >
         {/* Custom close button — circular, glassy, always visible over the hero gradient */}
@@ -363,6 +365,7 @@ function PlanCard({
   newQuota: number | null;
   onSelect: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   return (
     <div
       className={cn(
@@ -456,6 +459,55 @@ function PlanCard({
         />
         <QuotaRow icon={Robot} label="طلب AI / شهر" value={plan.ai_limit ? `${plan.ai_limit}` : '—'} />
       </div>
+
+      {/* Expandable full-feature list — lets the user open one card
+          to see every gate-able feature for that plan without leaving
+          the dialog. */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="mt-4 inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
+      >
+        {expanded ? 'إخفاء التفاصيل' : 'عرض جميع الميزات'}
+        <CaretDown
+          className={cn('h-3.5 w-3.5 transition-transform', expanded && 'rotate-180')}
+          weight="bold"
+        />
+      </button>
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+          {PLAN_FEATURE_CATALOG.map((group) => (
+            <div key={group.group}>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                {group.group}
+              </p>
+              <ul className="space-y-1">
+                {group.items.map((f) => {
+                  const has = plan.default_features?.[f.key] === true;
+                  return (
+                    <li
+                      key={f.key}
+                      className={cn(
+                        'flex items-center gap-2 text-xs',
+                        has ? 'text-slate-800' : 'text-slate-400',
+                      )}
+                    >
+                      {has ? (
+                        <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" weight="fill" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 text-slate-300 shrink-0" weight="bold" />
+                      )}
+                      <span className={cn('truncate', !has && 'line-through opacity-70')}>
+                        {f.label}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* CTA */}
       <div className="mt-5">

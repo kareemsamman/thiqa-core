@@ -638,12 +638,13 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                           style={{ ['--i' as any]: idx }}
                           className={cn(
                             "nav-leaf group/locked relative w-full flex items-center py-2 text-[13.5px] font-semibold transition-all duration-150 rounded-md cursor-pointer",
-                            "text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 hover:text-amber-900",
+                            "text-violet-700 hover:text-violet-900",
+                            "bg-gradient-to-l from-violet-50 via-fuchsia-50 to-amber-50/70 hover:from-violet-100 hover:via-fuchsia-100 hover:to-amber-100",
                           )}
                         >
                           <span
                             aria-hidden="true"
-                            className="pointer-events-none absolute w-px bg-amber-200 z-10"
+                            className="pointer-events-none absolute w-px bg-fuchsia-200 z-10"
                             style={{ insetInlineStart: '17px', top: '-1px', bottom: '-1px' }}
                           />
                           <span
@@ -651,8 +652,14 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                             style={{ paddingInline: '33px 12px' }}
                           >
                             <span className="flex-1">{item.name}</span>
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-amber-500/15 ring-1 ring-amber-500/30 shrink-0 transition-colors group-hover/locked:bg-amber-500/25">
-                              <Lock className="h-3 w-3 text-amber-700" weight="fill" />
+                            <span
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-md shrink-0 shadow-sm ring-1 ring-white/40 transition-transform group-hover/locked:scale-110"
+                              style={{
+                                background:
+                                  'linear-gradient(135deg, #6a3bd1 0%, #c93fa8 55%, #ed6a44 100%)',
+                              }}
+                            >
+                              <Lock className="h-3 w-3 text-white" weight="fill" />
                             </span>
                           </span>
                         </button>
