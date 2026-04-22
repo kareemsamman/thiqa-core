@@ -21,6 +21,7 @@ import { PermissionRoute } from "@/components/auth/PermissionRoute";
 import { SiteHelmet } from "@/components/layout/SiteHelmet";
 import { AppChrome } from "@/components/layout/AppChrome";
 import { AgentProvider } from "@/hooks/useAgentContext";
+import { UpgradePromptProvider } from "@/components/pricing/UpgradePromptProvider";
 import { ThiqaAdminRoute } from "@/components/auth/ThiqaAdminRoute";
 
 // All pages are code-split. Each route's bundle is only downloaded when
@@ -262,6 +263,7 @@ const App = () => (
           <AuthProvider>
             <SessionTrackerWrapper>
             <AgentProvider>
+            <UpgradePromptProvider>
             <SiteHelmet />
             <SidebarStateProvider>
             <RecentClientProvider>
@@ -578,6 +580,7 @@ const App = () => (
             </PolicyWizardControllerProvider>
             </RecentClientProvider>
             </SidebarStateProvider>
+            </UpgradePromptProvider>
             </AgentProvider>
             </SessionTrackerWrapper>
           </AuthProvider>

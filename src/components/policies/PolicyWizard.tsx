@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Save, ArrowRight, ArrowLeft, Minus, X } from "lucide-react";
 import type { WizardDraftSummary } from "@/hooks/usePolicyWizardController";
@@ -72,6 +73,7 @@ export function PolicyWizard({
   renewalData,
 }: PolicyWizardProps) {
   const { toast } = useToast();
+  const { handleLimitError } = useUpgradePrompt();
   const navigate = useNavigate();
 
   // Use the centralized wizard state hook. In the multi-instance model
@@ -1602,6 +1604,15 @@ export function PolicyWizard({
       onComplete?.(policyIdToUse);
     } catch (error: unknown) {
       console.error('Save error:', error);
+
+      // Policy-limit triggers raise LIMIT_EXCEEDED:policies:... when
+      // the agent hits their plan's معاملات cap for the current
+      // period. Swallow and show the marketing upsell instead of a
+      // generic "save failed" toast so the user lands on the sales
+      // flow.
+      if (handleLimitError(error)) {
+        return;
+      }
 
       const formatSaveError = (err: unknown): string => {
         // Our own thrown errors should always be user-friendly.

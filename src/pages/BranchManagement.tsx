@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ interface Branch {
 export default function BranchManagement() {
   const { isAdmin } = useAuth();
   const { agentId } = useAgentContext();
+  const { handleLimitError } = useUpgradePrompt();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -147,7 +149,15 @@ export default function BranchManagement() {
       setDialogOpen(false);
       fetchBranches();
     } catch (e: any) {
-      toast.error(e.message || "فشل في حفظ الفرع");
+      // DB triggers raise LIMIT_EXCEEDED:branches:... when the agent
+      // hits their plan's branch cap. Swallow that specific error and
+      // open the upgrade popup instead of a toast so the user sees a
+      // sales-flavored blocker rather than a raw DB message.
+      if (handleLimitError(e)) {
+        setDialogOpen(false);
+      } else {
+        toast.error(e.message || "فشل في حفظ الفرع");
+      }
     } finally {
       setSaving(false);
     }
