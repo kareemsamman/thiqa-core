@@ -19,6 +19,7 @@ import {
   Robot,
   Check,
   X,
+  Lock,
 } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
@@ -29,9 +30,13 @@ export type LimitResource = 'users' | 'branches' | 'policies' | 'sms' | 'marketi
 interface UpgradePromptDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  resource: LimitResource;
+  /** Quota-limit variant (user hit the cap on a countable resource). */
+  resource?: LimitResource;
   current?: number;
   limit?: number;
+  /** Feature-lock variant (user clicked a sidebar item their plan doesn't include). */
+  featureLabel?: string;
+  featureKey?: string;
 }
 
 interface PlanRow {
@@ -49,6 +54,7 @@ interface PlanRow {
   ai_limit: number;
   support_sla_hours: number;
   sort_order: number;
+  default_features: Record<string, boolean>;
 }
 
 const RESOURCE_META: Record<LimitResource, { label: string; icon: typeof Users; accent: string }> = {
@@ -90,7 +96,10 @@ export function UpgradePromptDialog({
   resource,
   current,
   limit,
+  featureLabel,
+  featureKey,
 }: UpgradePromptDialogProps) {
+  const isFeatureLock = !!featureLabel;
   const { planInfo } = useAgentContext();
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [copy, setCopy] = useState<{ title: string; subtitle: string; cta: string }>({
@@ -110,7 +119,7 @@ export function UpgradePromptDialog({
         const [plansResp, settingsResp] = await Promise.all([
           supabase
             .from('subscription_plans')
-            .select('plan_key, name, name_ar, badge, monthly_price, yearly_price, users_limit, branches_limit, policies_limit, sms_limit, marketing_sms_limit, ai_limit, support_sla_hours, sort_order')
+            .select('plan_key, name, name_ar, badge, monthly_price, yearly_price, users_limit, branches_limit, policies_limit, sms_limit, marketing_sms_limit, ai_limit, support_sla_hours, sort_order, default_features')
             .eq('is_active', true)
             .neq('plan_key', 'free_trial')
             .order('sort_order'),
@@ -127,6 +136,10 @@ export function UpgradePromptDialog({
               ...p,
               monthly_price: Number(p.monthly_price),
               yearly_price: p.yearly_price !== null ? Number(p.yearly_price) : null,
+              default_features:
+                typeof p.default_features === 'string'
+                  ? JSON.parse(p.default_features)
+                  : (p.default_features as Record<string, boolean>) ?? {},
             })) as PlanRow[],
           );
         }
@@ -148,12 +161,24 @@ export function UpgradePromptDialog({
     return () => { cancelled = true; };
   }, [open]);
 
-  const meta = RESOURCE_META[resource];
-  const ResourceIcon = meta.icon;
+  const meta = resource ? RESOURCE_META[resource] : null;
+  const ResourceIcon = isFeatureLock ? Lock : meta?.icon ?? Lock;
   const currentPlanOrder = planInfo
     ? plans.find((p) => p.plan_key === planInfo.plan_key)?.sort_order ?? 0
     : 0;
-  const upgradePlans = plans.filter((p) => p.sort_order > currentPlanOrder);
+  // In quota mode we show only plans above the current one. In
+  // feature-lock mode we show every plan that has this feature in
+  // its default_features (even if it's the same tier — the agent
+  // might be on free_trial and the same-tier paid plan would be
+  // the answer), filtered to > current.
+  const upgradePlans = isFeatureLock
+    ? plans.filter(
+        (p) =>
+          p.sort_order > currentPlanOrder &&
+          featureKey !== undefined &&
+          p.default_features?.[featureKey] === true,
+      )
+    : plans.filter((p) => p.sort_order > currentPlanOrder);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -165,31 +190,47 @@ export function UpgradePromptDialog({
               <ResourceIcon className="h-7 w-7 text-primary" weight="duotone" />
             </div>
             <div className="flex-1">
-              <DialogTitle className="text-2xl mb-1">{copy.title}</DialogTitle>
+              <DialogTitle className="text-2xl mb-1">
+                {isFeatureLock ? `"${featureLabel}" غير متوفر في حزمتك` : copy.title}
+              </DialogTitle>
               <DialogDescription className="text-base">
-                {copy.subtitle}
+                {isFeatureLock
+                  ? 'هذه الميزة متوفرة في الحزم الموضّحة أدناه — رقِّ حزمتك للوصول إليها.'
+                  : copy.subtitle}
               </DialogDescription>
             </div>
           </div>
 
-          {/* Current usage snapshot */}
+          {/* Current snapshot */}
           {planInfo && (
             <div className="mt-6 grid grid-cols-2 md:grid-cols-3 gap-3">
               <div className="rounded-lg border bg-card p-3">
                 <p className="text-xs text-muted-foreground">حزمتك الحالية</p>
                 <p className="text-lg font-bold mt-1">{planInfo.name_ar || planInfo.name}</p>
               </div>
-              <div className="rounded-lg border bg-card p-3">
-                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  <ResourceIcon className="h-3.5 w-3.5" />
-                  {meta.label}
-                </p>
-                <p className="text-lg font-bold mt-1">
-                  {current !== undefined && limit !== undefined
-                    ? `${current} / ${limit}`
-                    : formatLimit(resourceValue(planInfo as unknown as PlanRow, resource), resource)}
-                </p>
-              </div>
+              {isFeatureLock ? (
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Lock className="h-3.5 w-3.5" />
+                    الميزة المطلوبة
+                  </p>
+                  <p className="text-lg font-bold mt-1">{featureLabel}</p>
+                </div>
+              ) : (
+                meta && resource && (
+                  <div className="rounded-lg border bg-card p-3">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <ResourceIcon className="h-3.5 w-3.5" />
+                      {meta.label}
+                    </p>
+                    <p className="text-lg font-bold mt-1">
+                      {current !== undefined && limit !== undefined
+                        ? `${current} / ${limit}`
+                        : formatLimit(resourceValue(planInfo as unknown as PlanRow, resource), resource)}
+                    </p>
+                  </div>
+                )
+              )}
               <div className="rounded-lg border bg-card p-3 hidden md:block">
                 <p className="text-xs text-muted-foreground">السعر الشهري</p>
                 <p className="text-lg font-bold mt-1">₪{planInfo.monthly_price}</p>
@@ -219,7 +260,7 @@ export function UpgradePromptDialog({
               <h3 className="text-lg font-bold mb-4">رقِّ إلى حزمة أعلى</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {upgradePlans.map((plan) => {
-                  const newValue = resourceValue(plan, resource);
+                  const newValue = resource ? resourceValue(plan, resource) : null;
                   return (
                     <div
                       key={plan.plan_key}
@@ -246,13 +287,26 @@ export function UpgradePromptDialog({
                         )}
                       </div>
 
-                      {/* Highlighted resource upgrade */}
-                      <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                        <p className="text-xs text-muted-foreground">{meta.label} في هذه الحزمة</p>
-                        <p className={cn('text-2xl font-bold mt-1', meta.accent)}>
-                          {formatLimit(newValue ?? null, resource)}
-                        </p>
-                      </div>
+                      {/* Highlighted row — in quota mode shows the new
+                          cap for the resource; in feature-lock mode
+                          shows a green confirmation that the feature
+                          is included. */}
+                      {isFeatureLock ? (
+                        <div className="mb-4 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+                          <p className="text-xs text-muted-foreground">{featureLabel}</p>
+                          <p className="text-lg font-bold mt-1 text-emerald-600 flex items-center gap-1.5">
+                            <Check className="h-5 w-5" weight="bold" />
+                            مشمول
+                          </p>
+                        </div>
+                      ) : meta && resource ? (
+                        <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                          <p className="text-xs text-muted-foreground">{meta.label} في هذه الحزمة</p>
+                          <p className={cn('text-2xl font-bold mt-1', meta.accent)}>
+                            {formatLimit(newValue ?? null, resource)}
+                          </p>
+                        </div>
+                      ) : null}
 
                       {/* Per-plan quotas snapshot */}
                       <div className="space-y-1.5 text-sm">

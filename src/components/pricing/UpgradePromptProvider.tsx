@@ -2,9 +2,14 @@ import { createContext, ReactNode, useCallback, useContext, useState } from 'rea
 import { UpgradePromptDialog, LimitResource } from './UpgradePromptDialog';
 
 interface UpgradePromptState {
-  resource: LimitResource;
+  // Quota-limit variant (e.g. hit the user cap, policy cap)
+  resource?: LimitResource;
   current?: number;
   limit?: number;
+  // Feature-lock variant (clicked a sidebar item the plan doesn't
+  // include — e.g. Dashboard on Entry)
+  featureLabel?: string;
+  featureKey?: string;
 }
 
 interface UpgradePromptContextType {
@@ -104,6 +109,8 @@ export function UpgradePromptProvider({ children }: { children: ReactNode }) {
           resource={state.resource}
           current={state.current}
           limit={state.limit}
+          featureLabel={state.featureLabel}
+          featureKey={state.featureKey}
         />
       )}
     </UpgradePromptContext.Provider>

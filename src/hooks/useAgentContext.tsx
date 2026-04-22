@@ -241,8 +241,10 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     if (isThiqaSuperAdmin || isImpersonating) return true;
     if (!agent) return true;
 
-    // Trial: all non-admin-gated features enabled
-    if (isTrial) return true;
+    // NB: trial no longer auto-unlocks every feature. Trial is now its
+    // own plan (`free_trial`) with explicit default_features set by
+    // Thiqa admin, so trial agents honor the same default_features →
+    // agent_feature_flags pipeline as paid agents.
 
     // Explicit agent-level override takes priority over plan defaults.
     if (featureKey in agentFeatures) return agentFeatures[featureKey];

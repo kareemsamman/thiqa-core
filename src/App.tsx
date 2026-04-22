@@ -297,25 +297,25 @@ const App = () => (
               <Route path="/thiqa/analytics" element={<ThiqaAdminRoute><ThiqaAnalytics /></ThiqaAdminRoute>} />
               <Route path="/" element={<Landing />} />
               <Route path="/dashboard" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.dashboard" feature="dashboard">
                   <Index />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               <Route path="/tasks" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.tasks" feature="tasks">
                   <Tasks />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               {/* Activity log is now a dialog in Dashboard, but keep the page as fallback */}
               <Route path="/activity" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.activity">
                   <ActivityLog />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               <Route path="/contacts" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.contacts" feature="contacts">
                   <BusinessContacts />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               <Route path="/clients" element={
                 <ProtectedRoute>
@@ -343,29 +343,29 @@ const App = () => (
                 </PermissionRoute>
               } />
               <Route path="/brokers" element={
-                <PermissionRoute permission="page.brokers">
+                <PermissionRoute permission="page.brokers" feature="broker_wallet">
                   <Brokers />
                 </PermissionRoute>
               } />
               <Route path="/brokers/:brokerId" element={
-                <PermissionRoute permission="page.brokers">
+                <PermissionRoute permission="page.brokers" feature="broker_wallet">
                   <Brokers />
                 </PermissionRoute>
               } />
               <Route path="/brokers/:brokerId/wallet" element={
-                <PermissionRoute permission="page.brokers">
+                <PermissionRoute permission="page.brokers" feature="broker_wallet">
                   <BrokerWallet />
                 </PermissionRoute>
               } />
               <Route path="/cheques" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.cheques" feature="cheques">
                   <Cheques />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               <Route path="/media" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.media" feature="files_upload">
                   <Media />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/users" element={
                 <PermissionRoute permission="page.users">
@@ -383,12 +383,12 @@ const App = () => (
                 </PermissionRoute>
               } />
               <Route path="/receipts" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.receipts" feature="receipts">
                   <Receipts />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               <Route path="/accounting" element={
-                <PermissionRoute permission="page.accounting">
+                <PermissionRoute permission="page.accounting" feature="accounting">
                   <Accounting />
                 </PermissionRoute>
               } />
@@ -424,12 +424,12 @@ const App = () => (
                 </PermissionRoute>
               } />
               <Route path="/admin/road-services" element={
-                <PermissionRoute permission="page.road_services">
+                <PermissionRoute permission="page.road_services" feature="road_services">
                   <RoadServices />
                 </PermissionRoute>
               } />
               <Route path="/admin/accident-fee-services" element={
-                <PermissionRoute permission="page.accident_fees">
+                <PermissionRoute permission="page.accident_fees" feature="accident_fees">
                   <AccidentFeeServices />
                 </PermissionRoute>
               } />
@@ -444,7 +444,7 @@ const App = () => (
                 </PermissionRoute>
               } />
               <Route path="/admin/customer-signatures" element={
-                <PermissionRoute permission="page.customer_signatures">
+                <PermissionRoute permission="page.customer_signatures" feature="digital_signatures">
                   <CustomerSignatures />
                 </PermissionRoute>
               } />
@@ -464,14 +464,14 @@ const App = () => (
                 </PermissionRoute>
               } />
               <Route path="/sms-history" element={
-                <PermissionRoute permission="page.sms_history">
+                <PermissionRoute permission="page.sms_history" feature="sms">
                   <SmsHistory />
                 </PermissionRoute>
               } />
               <Route path="/debt-tracking" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.debt_tracking" feature="debt_tracking">
                   <DebtTracking />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/auth-settings" element={
                 <PermissionRoute permission="page.auth_settings">
@@ -479,7 +479,7 @@ const App = () => (
                 </PermissionRoute>
               } />
               <Route path="/reports/financial" element={
-                <PermissionRoute permission="page.financial_reports">
+                <PermissionRoute permission="page.financial_reports" feature="financial_reports">
                   <FinancialReports />
                 </PermissionRoute>
               } />
@@ -494,20 +494,20 @@ const App = () => (
                 </ProtectedRoute>
               } />
               <Route path="/accidents" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.accidents" feature="accident_reports">
                   <AccidentReports />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               {/* Direct accident report access by reportId only */}
               <Route path="/accidents/:reportId" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.accidents" feature="accident_reports">
                   <AccidentReportForm />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               <Route path="/policies/:policyId/accident/:reportId?" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.accidents" feature="accident_reports">
                   <AccidentReportForm />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/accident-template-mapper/:companyId" element={
                 <PermissionRoute permission="page.accident_fees">
@@ -515,7 +515,7 @@ const App = () => (
                 </PermissionRoute>
               } />
               <Route path="/admin/marketing-sms" element={
-                <PermissionRoute permission="page.marketing_sms">
+                <PermissionRoute permission="page.marketing_sms" feature="marketing_sms">
                   <MarketingSms />
                 </PermissionRoute>
               } />
@@ -526,37 +526,37 @@ const App = () => (
                 </ThiqaAdminRoute>
               } />
               <Route path="/admin/correspondence" element={
-                <PermissionRoute permission="page.correspondence">
+                <PermissionRoute permission="page.correspondence" feature="correspondence">
                   <CorrespondenceLetters />
                 </PermissionRoute>
               } />
               {/* Form Templates */}
               <Route path="/form-templates" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.form_templates" feature="files_explorer">
                   <FormTemplates />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               <Route path="/form-templates/edit/:fileId" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.form_templates" feature="files_explorer">
                   <FormTemplateEditor />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
-              {/* Leads from WhatsApp - accessible to all authenticated users */}
+              {/* Leads from WhatsApp — no plan feature gate (kept free) */}
               <Route path="/leads" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.leads">
                   <Leads />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
-              {/* Claims routes - accessible to all users */}
+              {/* Claims routes */}
               <Route path="/admin/claims" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.repair_claims" feature="repair_claims">
                   <RepairClaims />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/claims/:claimId" element={
-                <ProtectedRoute>
+                <PermissionRoute permission="page.repair_claims" feature="repair_claims">
                   <RepairClaimDetail />
-                </ProtectedRoute>
+                </PermissionRoute>
               } />
               {/* Public payment callback routes (loaded in iframe) */}
               <Route path="/payment/success" element={<PaymentSuccess />} />

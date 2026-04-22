@@ -7,29 +7,37 @@ import { LoadingScreen } from '@/components/shared/LoadingScreen';
 
 interface PermissionRouteProps {
   permission: PermissionKey;
+  /**
+   * Optional plan-level feature key. When set, the route also requires
+   * hasFeature(featureKey) to be true — so the plan's default_features
+   * can lock out a page even if the per-user permission would have
+   * allowed it. Admin / super admin / impersonating super admin
+   * bypass this check too (via hasFeature in useAgentContext).
+   */
+  feature?: string;
   children: ReactNode;
 }
 
 /**
- * Route guard keyed by a single permission string. Admin / super admin
- * / impersonating super admin all bypass the check (they can see
- * everything in their agent). Workers fall through to the
+ * Route guard keyed by a single permission string plus an optional
+ * plan feature. Admin / super admin / impersonating super admin all
+ * bypass both checks. Workers fall through to the
  * profile.permissions → agent.default_employee_permissions → false
  * resolution inside usePermissions.
  *
  * Replaces AdminRoute. Use:
- *   <PermissionRoute permission="page.brokers">
+ *   <PermissionRoute permission="page.brokers" feature="broker_wallet">
  *     <Brokers />
  *   </PermissionRoute>
  */
-export function PermissionRoute({ permission, children }: PermissionRouteProps) {
+export function PermissionRoute({ permission, feature, children }: PermissionRouteProps) {
   const { user, loading, profileLoading, profile, isActive, isSuperAdmin } = useAuth();
-  const { isImpersonating } = useAgentContext();
+  const { isImpersonating, hasFeature, loading: agentLoading } = useAgentContext();
   const { can, loading: permsLoading } = usePermissions();
 
   const needsProfileLoading = user && !isSuperAdmin && profileLoading && !profile;
 
-  if (loading || needsProfileLoading || permsLoading) {
+  if (loading || needsProfileLoading || permsLoading || agentLoading) {
     return <LoadingScreen />;
   }
 
@@ -48,6 +56,10 @@ export function PermissionRoute({ permission, children }: PermissionRouteProps) 
   }
 
   if (!can(permission)) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (feature && !hasFeature(feature)) {
     return <Navigate to="/" replace />;
   }
 

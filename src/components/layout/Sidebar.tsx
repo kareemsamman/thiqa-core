@@ -71,6 +71,8 @@ import { ProfileEditDrawer } from "./ProfileEditDrawer";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
+import { Lock } from "@phosphor-icons/react";
 import thiqaLogo from "@/assets/thiqa-logo-full.svg";
 import { useSidebarState } from "@/hooks/useSidebarState";
 
@@ -307,11 +309,15 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
   const { data: siteSettings } = useSiteSettings();
   const { hasFeature, isThiqaSuperAdmin, agent } = useAgentContext();
   const { can } = usePermissions();
+  const { showUpgradePrompt } = useUpgradePrompt();
 
-  // Filter groups and items by (1) the agent's plan (featureKey) and
-  // (2) the logged-in user's permission matrix (permissionKey). The
-  // agent admin bypasses permissionKey via can() returning true for
-  // everything, so they still see the full sidebar.
+  // Two-stage filter:
+  //   1. Hide items the user lacks permission for (agent admin decides
+  //      per-employee) — they shouldn't even know the item exists.
+  //   2. Keep items the plan doesn't include but decorate them as
+  //      "locked" so the user sees what they're missing. Clicking a
+  //      locked item opens the upgrade popup instead of navigating.
+  //   Thiqa super admin sees everything in the Thiqa group only.
   const filteredGroups = navigationGroups
     .filter(group => {
       if (isThiqaSuperAdmin) return group.name === 'إدارة ثقة';
@@ -319,14 +325,18 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
     })
     .map(group => ({
       ...group,
-      items: group.items.filter(item => {
-        if (isThiqaSuperAdmin) return true;
-        if (item.thiqaSuperAdminOnly && !isThiqaSuperAdmin) return false;
-        if (item.superAdminOnly && !isSuperAdmin) return false;
-        if (item.featureKey && !hasFeature(item.featureKey)) return false;
-        if (item.permissionKey && !can(item.permissionKey)) return false;
-        return true;
-      }),
+      items: group.items
+        .filter(item => {
+          if (isThiqaSuperAdmin) return true;
+          if (item.thiqaSuperAdminOnly && !isThiqaSuperAdmin) return false;
+          if (item.superAdminOnly && !isSuperAdmin) return false;
+          if (item.permissionKey && !can(item.permissionKey)) return false;
+          return true;
+        })
+        .map(item => ({
+          ...item,
+          locked: !isThiqaSuperAdmin && !!item.featureKey && !hasFeature(item.featureKey),
+        })),
     }))
     .filter(group => group.items.length > 0);
 
@@ -605,6 +615,48 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 <div className="nav-leaves relative mt-1 py-1 space-y-0.5">
                   {group.items.map((item, idx) => {
                     const isActiveRoute = matchesPath(item.href);
+                    const itemLocked = (item as typeof item & { locked?: boolean }).locked;
+
+                    // Locked items render as a button (not a link) so
+                    // clicking opens the upgrade popup keyed to the
+                    // missing feature instead of navigating into a
+                    // page that would just redirect anyway. The chip
+                    // styling is muted + lock icon so it reads as
+                    // "can be yours, not yet" — part of the always-be-
+                    // selling UX the product asked for.
+                    if (itemLocked) {
+                      return (
+                        <button
+                          key={item.name}
+                          type="button"
+                          onClick={() => {
+                            showUpgradePrompt({
+                              featureLabel: item.name,
+                              featureKey: item.featureKey,
+                            });
+                          }}
+                          style={{ ['--i' as any]: idx }}
+                          className={cn(
+                            "nav-leaf relative w-full flex items-center py-2 text-[13.5px] transition-colors duration-150 rounded-[0.2rem] cursor-pointer",
+                            "text-[#a0a0a3] font-normal hover:text-[#656565] hover:bg-slate-50",
+                          )}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute w-px bg-[#e9e9e9] z-10"
+                            style={{ insetInlineStart: '17px', top: '-1px', bottom: '-1px' }}
+                          />
+                          <span
+                            className="relative z-20 flex-1 flex items-center gap-1.5 text-right"
+                            style={{ paddingInline: '33px 12px' }}
+                          >
+                            <span className="flex-1">{item.name}</span>
+                            <Lock className="h-3.5 w-3.5 text-[#a0a0a3] shrink-0" weight="bold" />
+                          </span>
+                        </button>
+                      );
+                    }
+
                     return (
                       <NavLink
                         key={item.name}
