@@ -53,11 +53,11 @@ function UsageRow({
     : `${limit.used}${unit} / ${limit.effective}${unit}`;
 
   const percent = isUnlimited
-    ? 0
+    ? 100
     : Math.min(100, (limit.used / Math.max(1, limit.effective!)) * 100);
 
   const color = isUnlimited
-    ? 'bg-primary/60'
+    ? 'bg-primary/30'
     : percent >= 90
     ? 'bg-destructive'
     : percent >= 70
@@ -75,14 +75,12 @@ function UsageRow({
           )}
         </span>
       </div>
-      {!isUnlimited && (
-        <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
-          <div
-            className={cn('h-full transition-all', color)}
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-      )}
+      <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn('h-full transition-all', color)}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
     </div>
   );
 }
@@ -154,6 +152,23 @@ export function AgentPlanOverview() {
     .filter((a) => a.billing_cycle === 'monthly')
     .reduce((sum, a) => sum + a.quantity * a.unit_price, 0);
 
+  const isTrial =
+    agent.subscription_status === 'trial' ||
+    (agent.monthly_price === 0 && agent.subscription_status === 'active');
+  const trialEndDate = agent.trial_ends_at
+    ? new Date(agent.trial_ends_at)
+    : agent.subscription_expires_at
+    ? new Date(agent.subscription_expires_at)
+    : null;
+  const trialMsRemaining = trialEndDate
+    ? Math.max(0, trialEndDate.getTime() - Date.now())
+    : 0;
+  const trialDaysRemaining = trialEndDate ? Math.floor(trialMsRemaining / 86400000) : null;
+  const trialProgress =
+    isTrial && trialDaysRemaining !== null
+      ? Math.min(100, Math.max(0, ((35 * 86400000 - trialMsRemaining) / (35 * 86400000)) * 100))
+      : 0;
+
   // Prefill WhatsApp with an addon-inquiry message so Thiqa knows
   // what the agent wants before the conversation starts.
   const whatsAppMessage = encodeURIComponent(
@@ -208,6 +223,38 @@ export function AgentPlanOverview() {
                       خصم ساري حتى {format(new Date(discount.ends_at), 'dd/MM/yyyy', { locale: ar })}
                       {discount.reason && ` — ${discount.reason}`}
                     </span>
+                  </div>
+                )}
+                {isTrial && trialDaysRemaining !== null && (
+                  <div className="mt-3 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span
+                        className={cn(
+                          'font-semibold',
+                          trialDaysRemaining <= 0
+                            ? 'text-destructive'
+                            : trialDaysRemaining <= 7
+                            ? 'text-destructive'
+                            : 'text-primary',
+                        )}
+                      >
+                        {trialDaysRemaining <= 0
+                          ? 'انتهت الفترة التجريبية'
+                          : `متبقي ${trialDaysRemaining} يوم على انتهاء التجربة`}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {Math.round(trialProgress)}% منتهية
+                      </span>
+                    </div>
+                    <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={cn(
+                          'h-full transition-all',
+                          trialDaysRemaining <= 7 ? 'bg-destructive' : 'bg-primary',
+                        )}
+                        style={{ width: `${trialProgress}%` }}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
