@@ -40,6 +40,7 @@ import {
   UserCheck,
   UserX,
   Shield,
+  ShieldCheck,
   User,
   Clock,
   CheckCircle,
@@ -57,6 +58,8 @@ import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
 import { UserSessionsTab } from "@/components/admin/UserSessionsTab";
+import { UserPermissionsDialog } from "@/components/admin/UserPermissionsDialog";
+import { DefaultEmployeePermissionsCard } from "@/components/admin/DefaultEmployeePermissionsCard";
 import { isPasswordValid } from "@/lib/authValidation";
 import { digitsOnly } from "@/lib/validation";
 import {
@@ -117,6 +120,10 @@ export default function AdminUsers() {
     action: 'approve' | 'block' | 'unblock';
     userName: string;
   } | null>(null);
+
+  // Per-user permissions dialog state. Opens from the "صلاحيات" button
+  // on each active-user row.
+  const [permissionsUser, setPermissionsUser] = useState<UserWithRole | null>(null);
 
   // Create user form state
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
@@ -577,7 +584,7 @@ export default function AdminUsers() {
 
         {/* Tabs */}
         <Tabs defaultValue="active" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto gap-1 p-1">
+          <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 h-auto gap-1 p-1">
             <TabsTrigger value="active" className="gap-2 py-2.5">
               <CheckCircle className="h-4 w-4" />
               نشط ({activeUsers.length})
@@ -597,6 +604,10 @@ export default function AdminUsers() {
             <TabsTrigger value="attempts" className="gap-2 py-2.5">
               <KeyRound className="h-4 w-4" />
               محاولات الدخول
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-2 py-2.5">
+              <Shield className="h-4 w-4" />
+              الإعدادات
             </TabsTrigger>
           </TabsList>
 
@@ -764,26 +775,38 @@ export default function AdminUsers() {
                         </TableCell>
                         <TableCell>
                           {!isProtectedSuperAdmin(user) && (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => setConfirmDialog({
-                                open: true,
-                                userId: user.id,
-                                action: 'block',
-                                userName: user.full_name || user.email,
-                              })}
-                              disabled={actionLoading === user.id}
-                            >
-                              {actionLoading === user.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <>
-                                  <UserX className="h-4 w-4 ml-1" />
-                                  حظر
-                                </>
-                              )}
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setPermissionsUser(user)}
+                                className="gap-1"
+                                title="تعديل صلاحيات المستخدم"
+                              >
+                                <ShieldCheck className="h-4 w-4" />
+                                صلاحيات
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => setConfirmDialog({
+                                  open: true,
+                                  userId: user.id,
+                                  action: 'block',
+                                  userName: user.full_name || user.email,
+                                })}
+                                disabled={actionLoading === user.id}
+                              >
+                                {actionLoading === user.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <UserX className="h-4 w-4 ml-1" />
+                                    حظر
+                                  </>
+                                )}
+                              </Button>
+                            </div>
                           )}
                           {isProtectedSuperAdmin(user) && (
                             <Badge variant="outline" className="bg-primary/10 text-primary">
@@ -928,8 +951,21 @@ export default function AdminUsers() {
               )}
             </div>
           </TabsContent>
+
+          {/* Settings Tab — agent-level defaults for new employee permissions */}
+          <TabsContent value="settings" className="space-y-4">
+            <DefaultEmployeePermissionsCard />
+          </TabsContent>
         </Tabs>
       </div>
+
+      {/* Per-user permissions dialog */}
+      <UserPermissionsDialog
+        user={permissionsUser}
+        open={!!permissionsUser}
+        onOpenChange={(open) => !open && setPermissionsUser(null)}
+        onSaved={fetchUsers}
+      />
 
       {/* Create User Sheet */}
       <Sheet open={createSheetOpen} onOpenChange={setCreateSheetOpen}>
