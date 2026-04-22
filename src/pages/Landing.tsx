@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   ChevronLeft, ChevronUp, ChevronDown, CheckCircle, Star, ArrowLeft, Play, X, Check,
@@ -359,6 +360,19 @@ const featureTabs = [
 ];
 
 export default function Landing() {
+  // Logged-in agents should never see the public marketing page —
+  // bounce them back into the app so a locked-route redirect (or any
+  // stray "/" nav) doesn't dump them on the pricing site.
+  const { user, loading: authLoading, isSuperAdmin } = useAuth();
+  if (!authLoading && user) {
+    // Send to /dashboard: if the agent has it, they see the app;
+    // if not, PermissionRoute forwards them to /subscription.
+    return <Navigate to={isSuperAdmin ? "/thiqa/agents" : "/dashboard"} replace />;
+  }
+  return <LandingContent />;
+}
+
+function LandingContent() {
   usePageView("/landing");
   const { data: content } = useLandingContent();
   const [activeTab, setActiveTab] = useState("policies");

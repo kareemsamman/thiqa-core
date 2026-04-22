@@ -55,12 +55,16 @@ export function PermissionRoute({ permission, feature, children }: PermissionRou
     return <Navigate to="/no-access" replace />;
   }
 
+  // Redirect locked/unpermitted agents to /subscription (always
+  // accessible for a logged-in agent, shows their plan + upgrade CTAs)
+  // rather than "/" — "/" is the public marketing Landing page and
+  // logged-in agents should never end up there.
   if (!can(permission)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/subscription" replace />;
   }
 
   if (feature && !hasFeature(feature)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/subscription" replace />;
   }
 
   return <>{children}</>;
