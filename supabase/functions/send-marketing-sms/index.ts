@@ -120,18 +120,22 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Enforce SMS quota — the whole campaign must fit within the agent's remaining budget
-      const smsCheck = await checkUsageLimit(supabase, agentId, "sms");
+      // Enforce MARKETING SMS quota — counted separately from transactional
+      // SMS since the new pricing model splits Promotional SMS out (e.g.
+      // Professional gives 100 sms + 200 marketing_sms as independent
+      // quotas). The whole campaign must fit within the agent's remaining
+      // marketing-SMS budget + any extra_marketing_sms credit wallet.
+      const smsCheck = await checkUsageLimit(supabase, agentId, "marketing_sms");
       if (!smsCheck.allowed) {
-        return limitReachedResponse("sms", smsCheck, corsHeaders);
+        return limitReachedResponse("marketing_sms", smsCheck, corsHeaders);
       }
       if (smsCheck.limit_type !== "unlimited") {
         const remaining = Math.max(0, smsCheck.limit - smsCheck.used);
         if (recipients.length > remaining) {
           return new Response(
             JSON.stringify({
-              error: `رصيد الرسائل غير كافٍ: متاح ${remaining} من ${smsCheck.limit} ${smsCheck.period_label}، والحملة تحتاج ${recipients.length} رسالة. تواصل مع إدارة ثقة لزيادة الحد.`,
-              error_code: "sms_limit_insufficient",
+              error: `رصيد الرسائل التسويقية غير كافٍ: متاح ${remaining} من ${smsCheck.limit} ${smsCheck.period_label}، والحملة تحتاج ${recipients.length} رسالة. تواصل مع إدارة ثقة لزيادة الحد.`,
+              error_code: "marketing_sms_limit_insufficient",
               available: remaining,
               requested: recipients.length,
               limit: smsCheck.limit,
@@ -277,7 +281,7 @@ Deno.serve(async (req) => {
         });
 
         if (isAccepted) {
-          await logUsage(supabase, agentId, "sms");
+          await logUsage(supabase, agentId, "marketing_sms");
         }
 
         await new Promise(resolve => setTimeout(resolve, 100));

@@ -11,7 +11,7 @@
  * overrides when raising limits.
  */
 
-export type UsageType = "sms" | "ai_chat";
+export type UsageType = "sms" | "ai_chat" | "marketing_sms";
 export type LimitType = "monthly" | "yearly" | "unlimited";
 
 export interface LimitConfig {
@@ -62,7 +62,9 @@ export async function resolveLimitConfig(
   try {
     const { data: agentLimits } = await supabase
       .from("agent_usage_limits")
-      .select("sms_limit_type, sms_limit_count, ai_limit_type, ai_limit_count")
+      .select(
+        "sms_limit_type, sms_limit_count, ai_limit_type, ai_limit_count, marketing_sms_limit_type, marketing_sms_limit_count",
+      )
       .eq("agent_id", agentId)
       .maybeSingle();
 
@@ -79,6 +81,12 @@ export async function resolveLimitConfig(
           limit_count: agentLimits.ai_limit_count ?? 0,
         };
       }
+      if (usageType === "marketing_sms" && agentLimits.marketing_sms_limit_type) {
+        return {
+          limit_type: agentLimits.marketing_sms_limit_type as LimitType,
+          limit_count: agentLimits.marketing_sms_limit_count ?? 0,
+        };
+      }
     }
   } catch (err) {
     console.warn("[usage-limits] agent_usage_limits lookup failed:", err);
@@ -86,8 +94,18 @@ export async function resolveLimitConfig(
 
   // 2. Platform defaults
   try {
-    const typeKey = usageType === "sms" ? "default_sms_limit_type" : "default_ai_limit_type";
-    const countKey = usageType === "sms" ? "default_sms_limit_count" : "default_ai_limit_count";
+    const typeKey =
+      usageType === "sms"
+        ? "default_sms_limit_type"
+        : usageType === "marketing_sms"
+        ? "default_marketing_sms_limit_type"
+        : "default_ai_limit_type";
+    const countKey =
+      usageType === "sms"
+        ? "default_sms_limit_count"
+        : usageType === "marketing_sms"
+        ? "default_marketing_sms_limit_count"
+        : "default_ai_limit_count";
     const { data: rows } = await supabase
       .from("thiqa_platform_settings")
       .select("setting_key, setting_value")
@@ -125,13 +143,13 @@ async function getCreditBalance(
   try {
     const { data } = await supabase
       .from("agent_credit_wallet")
-      .select("sms_credit_balance, ai_credit_balance")
+      .select("sms_credit_balance, ai_credit_balance, marketing_sms_credit_balance")
       .eq("agent_id", agentId)
       .maybeSingle();
     if (!data) return 0;
-    return usageType === "sms"
-      ? (data.sms_credit_balance ?? 0)
-      : (data.ai_credit_balance ?? 0);
+    if (usageType === "sms") return data.sms_credit_balance ?? 0;
+    if (usageType === "marketing_sms") return data.marketing_sms_credit_balance ?? 0;
+    return data.ai_credit_balance ?? 0;
   } catch (err) {
     console.warn("[usage-limits] agent_credit_wallet lookup failed:", err);
     return 0;
