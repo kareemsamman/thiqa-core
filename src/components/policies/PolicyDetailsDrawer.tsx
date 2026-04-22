@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage, toastFunctionError } from "@/lib/functionError";
 import {
@@ -255,6 +256,11 @@ const Section = ({ title, icon: Icon, children, className }: {
 export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, onViewRelatedPolicy }: PolicyDetailsDrawerProps) {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
+  const { can } = usePermissions();
+  // Profit + commission cards are gated by view_financial. Other
+  // admin-only actions (delete/edit) keep using isAdmin for now —
+  // the user asked for page-level permissions, not action-level.
+  const canViewFinancial = can('view_financial');
   const [loading, setLoading] = useState(true);
   const [policy, setPolicy] = useState<PolicyDetails | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -1051,7 +1057,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                         ELZAMI policies in the package (or the current policy
                         if it's ELZAMI). Kept separate from "الربح" since the
                         user wants ELZAMI earnings tracked distinctly. */}
-                    {isAdmin && packageTotalCommission > 0 && (
+                    {canViewFinancial && packageTotalCommission > 0 && (
                       <div className="rounded-xl p-4 border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-amber-100/60">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
@@ -1073,7 +1079,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                     )}
 
                     {/* Profit Card - Enhanced styling for admin */}
-                    {!isElzami && isAdmin && (
+                    {!isElzami && canViewFinancial && (
                       <div className={cn(
                         "rounded-xl p-4 border-2",
                         (policy.cancelled || isTransferred)
@@ -1449,7 +1455,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                         the drawer is meant to be a lightweight overview. */}
 
                     {/* Office Commission - show for ELZAMI if > 0 */}
-                    {isAdmin && policy.policy_type_parent === 'ELZAMI' && (policy.office_commission || 0) > 0 && (
+                    {canViewFinancial && policy.policy_type_parent === 'ELZAMI' && (policy.office_commission || 0) > 0 && (
                       <Section title="عمولة للمكتب" icon={CircleDollarSign}>
                         <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
                           <p className="font-bold text-lg text-amber-700 ltr-nums">{formatCurrency(policy.office_commission)}</p>

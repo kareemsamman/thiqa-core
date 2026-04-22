@@ -70,6 +70,7 @@ import { SidebarSearch } from "./SidebarSearch";
 import { ProfileEditDrawer } from "./ProfileEditDrawer";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useAgentContext } from "@/hooks/useAgentContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import thiqaLogo from "@/assets/thiqa-logo-full.svg";
 import { useSidebarState } from "@/hooks/useSidebarState";
 
@@ -77,10 +78,27 @@ interface NavItem {
   name: string;
   href: string;
   icon: Icon;
+  /**
+   * Legacy admin-only marker. Keep so the type stays backward-compatible
+   * with NavigationSearch etc., but the Sidebar now derives visibility
+   * from permissionKey — adminOnly is only used as a hint that an item
+   * belongs to the "settings" bucket.
+   */
   adminOnly?: boolean;
   superAdminOnly?: boolean;
   thiqaSuperAdminOnly?: boolean;
+  /**
+   * Plan-level gate. If the agent's plan doesn't include this feature,
+   * hide the item. featureKey → hasFeature() from useAgentContext.
+   */
   featureKey?: string;
+  /**
+   * Per-user visibility gate. If the logged-in user's permissions map
+   * (or the agent's default_employee_permissions fallback) resolves
+   * this key to false, hide the item. permissionKey → can() from
+   * usePermissions. Agent admin always passes.
+   */
+  permissionKey?: string;
   badge?: 'notifications' | 'debt' | 'tasks' | 'claims' | 'accidents' | 'renewals';
 }
 
@@ -104,57 +122,56 @@ export const navigationGroups: NavGroup[] = [
     icon: SquaresFour,
     defaultOpen: true,
     items: [
-      { name: "لوحة التحكم", href: "/dashboard", icon: SquaresFour },
-      { name: "المهام", href: "/tasks", icon: ListChecks, badge: 'tasks' },
-      { name: "سجل النشاط", href: "/activity", icon: Pulse },
-      { name: "التنبيهات", href: "/notifications", icon: Bell, badge: 'notifications' },
-      { name: "تقارير المعاملات والتجديدات", href: "/reports/policies", icon: ChartBar, badge: 'renewals' },
+      { name: "لوحة التحكم", href: "/dashboard", icon: SquaresFour, permissionKey: 'page.dashboard' },
+      { name: "المهام", href: "/tasks", icon: ListChecks, badge: 'tasks', permissionKey: 'page.tasks' },
+      { name: "سجل النشاط", href: "/activity", icon: Pulse, permissionKey: 'page.activity' },
+      { name: "التنبيهات", href: "/notifications", icon: Bell, badge: 'notifications', permissionKey: 'page.notifications' },
+      { name: "تقارير المعاملات والتجديدات", href: "/reports/policies", icon: ChartBar, badge: 'renewals', permissionKey: 'page.policy_reports' },
     ],
   },
   {
     name: "العملاء والشركات",
     icon: Users,
     items: [
-      { name: "العملاء", href: "/clients", icon: Users },
-      { name: "الوسطاء", href: "/brokers", icon: Wallet, adminOnly: true, featureKey: 'broker_wallet' },
-      { name: "الشركات", href: "/companies", icon: Buildings, adminOnly: true },
-      { name: "بلاغات الحوادث", href: "/accidents", icon: Warning, badge: 'accidents', featureKey: 'accident_reports' },
+      { name: "العملاء", href: "/clients", icon: Users, permissionKey: 'page.clients' },
+      { name: "الوسطاء", href: "/brokers", icon: Wallet, featureKey: 'broker_wallet', permissionKey: 'page.brokers' },
+      { name: "الشركات", href: "/companies", icon: Buildings, permissionKey: 'page.companies' },
+      { name: "بلاغات الحوادث", href: "/accidents", icon: Warning, badge: 'accidents', featureKey: 'accident_reports', permissionKey: 'page.accidents' },
     ],
   },
   {
     name: "المالية",
     icon: Wallet,
     items: [
-      { name: "متابعة الديون", href: "/debt-tracking", icon: CurrencyDollar, badge: 'debt' },
-      { name: "الشيكات", href: "/cheques", icon: CreditCard, featureKey: 'cheques' },
-      { name: "الإيصالات", href: "/receipts", icon: FileText, featureKey: 'receipts' },
-      { name: "المحاسبة", href: "/accounting", icon: CurrencyDollar, adminOnly: true, featureKey: 'accounting' },
+      { name: "متابعة الديون", href: "/debt-tracking", icon: CurrencyDollar, badge: 'debt', permissionKey: 'page.debt_tracking' },
+      { name: "الشيكات", href: "/cheques", icon: CreditCard, featureKey: 'cheques', permissionKey: 'page.cheques' },
+      { name: "الإيصالات", href: "/receipts", icon: FileText, featureKey: 'receipts', permissionKey: 'page.receipts' },
+      { name: "المحاسبة", href: "/accounting", icon: CurrencyDollar, featureKey: 'accounting', permissionKey: 'page.accounting' },
     ],
   },
   {
     name: "أخرى",
     icon: Image,
     items: [
-      { name: "جهات الاتصال", href: "/contacts", icon: AddressBook },
-      { name: "المطالبات", href: "/admin/claims", icon: FileX, badge: 'claims', featureKey: 'repair_claims' },
-      { name: "الوسائط", href: "/media", icon: Image },
-      { name: "ملفات", href: "/form-templates", icon: FileText },
-      { name: "المراسلات", href: "/admin/correspondence", icon: Envelope, featureKey: 'correspondence' },
-      { name: "SMS تسويقية", href: "/admin/marketing-sms", icon: Megaphone, featureKey: 'marketing_sms' },
-      { name: "سجل الرسائل", href: "/sms-history", icon: ClockCounterClockwise, featureKey: 'sms' },
-      { name: "توقيعات العملاء", href: "/admin/customer-signatures", icon: Signature },
+      { name: "جهات الاتصال", href: "/contacts", icon: AddressBook, permissionKey: 'page.contacts' },
+      { name: "المطالبات", href: "/admin/claims", icon: FileX, badge: 'claims', featureKey: 'repair_claims', permissionKey: 'page.repair_claims' },
+      { name: "الوسائط", href: "/media", icon: Image, permissionKey: 'page.media' },
+      { name: "ملفات", href: "/form-templates", icon: FileText, permissionKey: 'page.form_templates' },
+      { name: "المراسلات", href: "/admin/correspondence", icon: Envelope, featureKey: 'correspondence', permissionKey: 'page.correspondence' },
+      { name: "SMS تسويقية", href: "/admin/marketing-sms", icon: Megaphone, featureKey: 'marketing_sms', permissionKey: 'page.marketing_sms' },
+      { name: "سجل الرسائل", href: "/sms-history", icon: ClockCounterClockwise, featureKey: 'sms', permissionKey: 'page.sms_history' },
+      { name: "توقيعات العملاء", href: "/admin/customer-signatures", icon: Signature, permissionKey: 'page.customer_signatures' },
     ],
   },
   {
     name: "الإعدادات",
     icon: Gear,
-    adminOnly: true,
     items: [
-      { name: "المستخدمون", href: "/admin/users", icon: UserGear },
-      { name: "الفروع", href: "/admin/branches", icon: Buildings },
-      { name: "خدمات الطريق", href: "/admin/road-services", icon: Truck, featureKey: 'road_services' },
-      { name: "إعفاء رسوم الحادث", href: "/admin/accident-fee-services", icon: Shield, featureKey: 'accident_fees' },
-      { name: "العلامة التجارية", href: "/admin/branding", icon: Palette },
+      { name: "المستخدمون", href: "/admin/users", icon: UserGear, permissionKey: 'page.users' },
+      { name: "الفروع", href: "/admin/branches", icon: Buildings, permissionKey: 'page.branches' },
+      { name: "خدمات الطريق", href: "/admin/road-services", icon: Truck, featureKey: 'road_services', permissionKey: 'page.road_services' },
+      { name: "إعفاء رسوم الحادث", href: "/admin/accident-fee-services", icon: Shield, featureKey: 'accident_fees', permissionKey: 'page.accident_fees' },
+      { name: "العلامة التجارية", href: "/admin/branding", icon: Palette, permissionKey: 'page.branding' },
     ],
   },
   {
@@ -289,23 +306,25 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
   const { profile, signOut, isAdmin, branchName, isSuperAdmin } = useAuth();
   const { data: siteSettings } = useSiteSettings();
   const { hasFeature, isThiqaSuperAdmin, agent } = useAgentContext();
+  const { can } = usePermissions();
 
-  // Filter groups and items based on role + features
-  // Thiqa super admin only sees the Thiqa management section
+  // Filter groups and items by (1) the agent's plan (featureKey) and
+  // (2) the logged-in user's permission matrix (permissionKey). The
+  // agent admin bypasses permissionKey via can() returning true for
+  // everything, so they still see the full sidebar.
   const filteredGroups = navigationGroups
     .filter(group => {
       if (isThiqaSuperAdmin) return group.name === 'إدارة ثقة';
-      if (group.adminOnly && !isAdmin) return false;
       return true;
     })
     .map(group => ({
       ...group,
       items: group.items.filter(item => {
-        if (isThiqaSuperAdmin) return true; // Thiqa admin sees all items in their groups
+        if (isThiqaSuperAdmin) return true;
         if (item.thiqaSuperAdminOnly && !isThiqaSuperAdmin) return false;
         if (item.superAdminOnly && !isSuperAdmin) return false;
-        if (item.adminOnly && !isAdmin) return false;
         if (item.featureKey && !hasFeature(item.featureKey)) return false;
+        if (item.permissionKey && !can(item.permissionKey)) return false;
         return true;
       }),
     }))

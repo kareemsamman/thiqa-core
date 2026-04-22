@@ -17,6 +17,7 @@ import { Users, Car, TrendingUp, CreditCard, Building2, FileText, Calendar } fro
 import { supabase } from "@/integrations/supabase/client";
 import { useProfitSummary } from "@/hooks/useProfitSummary";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { ExpiringPolicies } from "@/components/dashboard/ExpiringPolicies";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 
@@ -65,6 +66,12 @@ const profitPeriodOptions = [
 
 export default function Dashboard() {
   const { isAdmin, profile } = useAuth();
+  const { can } = usePermissions();
+  // Financial data (profit, company production, company debt) is
+  // gated by one permission — the agent admin decides per-employee.
+  // Admins always pass can('view_financial') via the admin bypass in
+  // usePermissions.
+  const canViewFinancial = can('view_financial');
   const { summary: profitSummary, loading: profitLoading, refetch: refetchProfit } = useProfitSummary();
   
   // Stats
@@ -307,7 +314,7 @@ export default function Dashboard() {
         </div>
 
         {/* Row 2: Production summary + Company debt total */}
-        {isAdmin && (
+        {canViewFinancial && (
           <div className="grid gap-4 md:grid-cols-2">
             {/* Production summary card */}
             <Card className="p-6 border shadow-sm hover:shadow-md transition-shadow bg-primary/5 border-primary/20">
@@ -348,7 +355,7 @@ export default function Dashboard() {
         )}
 
         {/* Row 3: Company Production Table */}
-        {isAdmin && (
+        {canViewFinancial && (
           <Card className="border shadow-sm">
             <div className="p-4 flex items-center justify-between border-b">
               <div>
@@ -425,7 +432,7 @@ export default function Dashboard() {
         )}
 
         {/* Row 4: Company Debts Table */}
-        {isAdmin && (
+        {canViewFinancial && (
           <Card className="border shadow-sm">
             <div className="p-4 flex items-center justify-between border-b">
               <div>

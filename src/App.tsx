@@ -17,7 +17,7 @@ import { useLocation } from "react-router-dom";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
 import { SidebarStateProvider } from "@/hooks/useSidebarState";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { AdminRoute } from "@/components/auth/AdminRoute";
+import { PermissionRoute } from "@/components/auth/PermissionRoute";
 import { SiteHelmet } from "@/components/layout/SiteHelmet";
 import { AppChrome } from "@/components/layout/AppChrome";
 import { AgentProvider } from "@/hooks/useAgentContext";
@@ -335,27 +335,25 @@ const App = () => (
                   <Policies />
                 </ProtectedRoute>
               } />
-              {/* Admin-only route: Companies */}
               <Route path="/companies" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.companies">
                   <Companies />
-                </AdminRoute>
+                </PermissionRoute>
               } />
-              {/* Admin-only routes: Brokers, BrokerWallet */}
               <Route path="/brokers" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.brokers">
                   <Brokers />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/brokers/:brokerId" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.brokers">
                   <Brokers />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/brokers/:brokerId/wallet" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.brokers">
                   <BrokerWallet />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/cheques" element={
                 <ProtectedRoute>
@@ -367,21 +365,20 @@ const App = () => (
                   <Media />
                 </ProtectedRoute>
               } />
-              {/* Admin-only routes */}
               <Route path="/admin/users" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.users">
                   <AdminUsers />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/branches" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.branches">
                   <BranchManagement />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/sms-settings" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.sms_settings">
                   <SmsOnboarding />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/receipts" element={
                 <ProtectedRoute>
@@ -389,65 +386,65 @@ const App = () => (
                 </ProtectedRoute>
               } />
               <Route path="/accounting" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.accounting">
                   <Accounting />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/reports/company-settlement" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.company_settlement">
                   <CompanySettlement />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/reports/company-settlement/:companyId" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.company_settlement">
                   <CompanySettlementDetail />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/reports/company-settlement/:companyId/wallet" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.company_settlement">
                   <CompanyWallet />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               {/* Redirect old wallet route to new location */}
               <Route path="/companies/:companyId/wallet" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.company_settlement">
                   <CompanyWallet />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/invoice-templates" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.invoice_templates">
                   <InvoiceTemplates />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/insurance-categories" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.insurance_categories">
                   <InsuranceCategories />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/road-services" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.road_services">
                   <RoadServices />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/accident-fee-services" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.accident_fees">
                   <AccidentFeeServices />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/payment-settings" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.payment_settings">
                   <PaymentSettings />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/sms-settings" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.sms_settings">
                   <SmsSettings />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/customer-signatures" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.customer_signatures">
                   <CustomerSignatures />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/notifications" element={
                 <ProtectedRoute>
@@ -455,19 +452,19 @@ const App = () => (
                 </ProtectedRoute>
               } />
               <Route path="/admin/wordpress-import" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.database_migration">
                   <WordPressImport />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/database-migration" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.database_migration">
                   <DatabaseMigration />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/sms-history" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.sms_history">
                   <SmsHistory />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/debt-tracking" element={
                 <ProtectedRoute>
@@ -475,19 +472,19 @@ const App = () => (
                 </ProtectedRoute>
               } />
               <Route path="/admin/auth-settings" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.auth_settings">
                   <AuthSettings />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/reports/financial" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.financial_reports">
                   <FinancialReports />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/reports/elzami-costs" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.elzami_costs">
                   <ElzamiCostsReport />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/reports/policies" element={
                 <ProtectedRoute>
@@ -511,14 +508,14 @@ const App = () => (
                 </ProtectedRoute>
               } />
               <Route path="/admin/accident-template-mapper/:companyId" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.accident_fees">
                   <AccidentTemplateMapper />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/admin/marketing-sms" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.marketing_sms">
                   <MarketingSms />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               {/* Thiqa super admin announcement settings */}
               <Route path="/thiqa/announcements" element={
@@ -526,11 +523,10 @@ const App = () => (
                   <AnnouncementSettings />
                 </ThiqaAdminRoute>
               } />
-              {/* Admin correspondence letters */}
               <Route path="/admin/correspondence" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.correspondence">
                   <CorrespondenceLetters />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               {/* Form Templates */}
               <Route path="/form-templates" element={
@@ -566,9 +562,9 @@ const App = () => (
               {/* Public signature page */}
               <Route path="/sign/:token" element={<SignaturePage />} />
               <Route path="/admin/branding" element={
-                <AdminRoute>
+                <PermissionRoute permission="page.branding">
                   <BrandingSettings />
-                </AdminRoute>
+                </PermissionRoute>
               } />
               <Route path="/subscription" element={
                 <ProtectedRoute>

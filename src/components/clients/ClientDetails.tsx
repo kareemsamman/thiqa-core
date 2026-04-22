@@ -101,6 +101,7 @@ import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
 import { ChequeImageGallery } from '@/components/shared/ChequeImageGallery';
 import { useBranches } from '@/hooks/useBranches';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useShortcutAction } from '@/hooks/useShortcutAction';
 import type { RenewalData } from '@/components/policies/wizard/types';
 
@@ -296,6 +297,11 @@ const carTypeLabels: Record<string, string> = {
 export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, returnPath, returnTab }: ClientDetailsProps) {
   const { getBranchName } = useBranches();
   const { isAdmin, isSuperAdmin, profile, user } = useAuth();
+  const { can } = usePermissions();
+  // Total-profit card is gated by view_financial. Delete-policy button
+  // below stays on isAdmin (action-level, outside this refactor's
+  // page-level permission model).
+  const canViewFinancial = can('view_financial');
   const { setRecentClient } = useRecentClient();
   // Sidebar-aware content width: when the sidebar is collapsed there's
   // ~10rem of extra horizontal room, so let the client profile stretch
@@ -1776,8 +1782,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             />
           </Card>
 
-          {/* Profit card - Admin only */}
-          {isAdmin && (
+          {/* Total-profit card — gated by the view_financial permission */}
+          {canViewFinancial && (
             <Card className="p-2.5 sm:p-4 flex items-center gap-2 sm:gap-4">
               <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                 <TrendingUp className="h-4 w-4 sm:h-6 sm:w-6 text-primary" />
