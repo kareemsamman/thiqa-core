@@ -112,6 +112,7 @@ export function UpgradePromptDialog({
             .from('subscription_plans')
             .select('plan_key, name, name_ar, badge, monthly_price, yearly_price, users_limit, branches_limit, policies_limit, sms_limit, marketing_sms_limit, ai_limit, support_sla_hours, sort_order')
             .eq('is_active', true)
+            .neq('plan_key', 'free_trial')
             .order('sort_order'),
           supabase
             .from('thiqa_platform_settings')

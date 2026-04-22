@@ -43,6 +43,7 @@ export default function SubscriptionExpired() {
           .from("subscription_plans")
           .select("id, plan_key, name, name_ar, description, monthly_price, badge, features, sort_order")
           .eq("is_active", true)
+          .neq("plan_key", "free_trial")
           .order("sort_order");
         if (data) {
           setPlans(data.map((p: any) => ({

@@ -83,6 +83,14 @@ Deno.serve(async (req) => {
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + 35);
 
+    // New sign-ups go on the free_trial plan (its own row in
+    // subscription_plans with 1 user / 1 branch / unlimited policies /
+    // 100 SMS / 100 mkt SMS / 100 AI, editable from /thiqa/settings).
+    // subscription_status 'trial' + trial_ends_at is the canonical
+    // trial marker checked by useAgentContext.isTrial — the
+    // sync_plan_change_features trigger will re-seed agent_feature_
+    // flags from the plan's default_features, so every feature is on
+    // out of the box.
     const { data: agentData, error: agentError } = await adminClient
       .from("agents")
       .insert({
@@ -90,9 +98,10 @@ Deno.serve(async (req) => {
         name_ar: fullName,
         email: normalizedEmail,
         phone: phone?.trim() || null,
-        plan: "basic",
-        subscription_status: "active",
-        subscription_expires_at: trialEnd.toISOString(),
+        plan: "free_trial",
+        subscription_status: "trial",
+        trial_ends_at: trialEnd.toISOString(),
+        subscription_started_at: new Date().toISOString(),
         monthly_price: 0,
       })
       .select("id")

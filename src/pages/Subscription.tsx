@@ -320,6 +320,7 @@ export default function Subscription() {
           .from("subscription_plans")
           .select("id, plan_key, name, name_ar, description, monthly_price, yearly_price, badge, features, sort_order")
           .eq("is_active", true)
+          .neq("plan_key", "free_trial")
           .order("sort_order");
         if (data && data.length > 0) {
           setPlans(data.map((p: any) => ({
