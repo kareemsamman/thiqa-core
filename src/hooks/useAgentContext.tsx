@@ -96,26 +96,14 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     setPlanInfo(null);
   }, []);
 
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      setAgentId(null);
-      setAgent(null);
-      setAgentFeatures({});
-      setPlanInfo(null);
-      setImpersonatedAgent(null);
-      setLoading(false);
-      return;
-    }
-
-    // Shared loader — fetches agent + plan + feature flags for a given
-    // agent_id. Used by both the "I'm an agent user" path and the
-    // "I'm a super admin impersonating an agent" path so the behavior
-    // lines up between them.
-    const loadAgentContext = async (
-      loadAgentId: string,
-      isImpersonation: boolean,
-    ) => {
+  // Shared loader — fetches agent + plan + feature flags for a given
+  // agent_id. Used by both the "I'm an agent user" path and the
+  // "I'm a super admin impersonating an agent" path so the behavior
+  // lines up between them. Hoisted out of the effect so the realtime
+  // subscription below can re-invoke it when Thiqa admin edits the
+  // agent's plan or toggles feature flags.
+  const loadAgentContext = useCallback(
+    async (loadAgentId: string, isImpersonation: boolean) => {
       try {
         const { data: agentData } = await supabase
           .from('agents')
@@ -184,7 +172,21 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       } finally {
         setLoading(false);
       }
-    };
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setAgentId(null);
+      setAgent(null);
+      setAgentFeatures({});
+      setPlanInfo(null);
+      setImpersonatedAgent(null);
+      setLoading(false);
+      return;
+    }
 
     // Super admin impersonating an agent
     if (isSuperAdmin && impersonatedAgentId) {
@@ -215,7 +217,36 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     };
 
     fetchForAgentUser();
-  }, [user, authLoading, isSuperAdmin, impersonatedAgentId]);
+  }, [user, authLoading, isSuperAdmin, impersonatedAgentId, loadAgentContext]);
+
+  // Live-refresh agent context whenever Thiqa admin edits the plan,
+  // the agent's row, or the agent's per-feature overrides. Without
+  // this the browser caches planInfo.default_features at login and
+  // toggles in /thiqa/settings don't take effect until a hard refresh.
+  useEffect(() => {
+    if (!agentId || !agent?.plan) return;
+    const isImpersonation = isSuperAdmin && !!impersonatedAgentId;
+    const refetch = () => { loadAgentContext(agentId, isImpersonation); };
+    const channel = supabase
+      .channel(`agent-context-${agentId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'subscription_plans', filter: `plan_key=eq.${agent.plan}` },
+        refetch,
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'agents', filter: `id=eq.${agentId}` },
+        refetch,
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'agent_feature_flags', filter: `agent_id=eq.${agentId}` },
+        refetch,
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [agentId, agent?.plan, isSuperAdmin, impersonatedAgentId, loadAgentContext]);
 
   const subscriptionStatus = agent?.subscription_status;
   const isTrial = subscriptionStatus === 'trial';
