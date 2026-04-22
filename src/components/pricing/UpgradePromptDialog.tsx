@@ -29,6 +29,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { cn } from '@/lib/utils';
 import { PLAN_FEATURE_CATALOG } from '@/lib/planFeatureCatalog';
+import { PlanChangeConfirmDialog, type PlanTarget } from './PlanChangeConfirmDialog';
 
 export type LimitResource = 'users' | 'branches' | 'policies' | 'sms' | 'marketing_sms' | 'ai';
 
@@ -176,11 +177,16 @@ export function UpgradePromptDialog({
   // cards at once — users compare features across plans side by side
   // instead of expanding each one separately.
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<PlanTarget | null>(null);
   useEffect(() => {
-    if (!open) setDetailsOpen(false);
+    if (!open) {
+      setDetailsOpen(false);
+      setConfirmTarget(null);
+    }
   }, [open]);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideCloseButton
@@ -316,10 +322,7 @@ export function UpgradePromptDialog({
                     newQuota={newQuota ?? null}
                     detailsOpen={detailsOpen}
                     onToggleDetails={() => setDetailsOpen((v) => !v)}
-                    onSelect={() => {
-                      onOpenChange(false);
-                      window.location.href = '/subscription';
-                    }}
+                    onSelect={() => setConfirmTarget(plan)}
                   />
                 );
               })}
@@ -350,6 +353,18 @@ export function UpgradePromptDialog({
         </div>
       </DialogContent>
     </Dialog>
+    <PlanChangeConfirmDialog
+      open={!!confirmTarget}
+      onOpenChange={(v) => !v && setConfirmTarget(null)}
+      targetPlan={confirmTarget}
+      onSuccess={() => {
+        // Close the outer upgrade popup too once the switch succeeds —
+        // the realtime useAgentContext subscription refreshes the
+        // sidebar + plan badges without a reload.
+        setTimeout(() => onOpenChange(false), 400);
+      }}
+    />
+    </>
   );
 }
 
