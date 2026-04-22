@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -173,36 +174,50 @@ export function UpgradePromptDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-5xl max-h-[92vh] overflow-hidden flex flex-col p-0 gap-0 border-0 shadow-2xl"
+        hideCloseButton
+        className="w-[96vw] max-w-[1400px] max-h-[94vh] overflow-hidden flex flex-col p-0 gap-0 border-0 shadow-2xl"
         dir="rtl"
       >
-        {/* Hero — premium gradient with subtle pattern */}
-        <DialogHeader className="relative px-8 pt-8 pb-6 overflow-hidden border-b">
+        {/* Custom close button — circular, glassy, always visible over the hero gradient */}
+        <DialogClose className="absolute top-4 left-4 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white ring-1 ring-white/30 backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white">
+          <X className="h-4 w-4" weight="bold" />
+          <span className="sr-only">إغلاق</span>
+        </DialogClose>
+
+        {/* Hero — vivid multi-stop gradient (blue → violet → pink → orange) */}
+        <DialogHeader className="relative px-8 pt-8 pb-7 overflow-hidden border-b">
           <div
-            className="absolute inset-0 opacity-95"
+            className="absolute inset-0"
             style={{
               background:
-                'linear-gradient(135deg, rgb(69, 94, 187) 0%, rgb(112, 134, 207) 55%, rgb(138, 150, 203) 100%)',
+                'linear-gradient(120deg, #3b2fd8 0%, #6a3bd1 28%, #c93fa8 58%, #ed6a44 85%, #f5a548 100%)',
             }}
           />
           <div
-            className="absolute inset-0 opacity-[0.08]"
+            className="absolute inset-0"
             style={{
-              backgroundImage:
-                'radial-gradient(circle at 15% 20%, white 0%, transparent 40%), radial-gradient(circle at 85% 80%, white 0%, transparent 40%)',
+              background:
+                'radial-gradient(1200px 400px at 10% 0%, rgba(255,255,255,0.25), transparent 55%), radial-gradient(900px 500px at 95% 100%, rgba(255,255,255,0.18), transparent 60%)',
             }}
           />
-          <div className="relative flex items-start gap-4">
-            <div className="h-16 w-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center ring-1 ring-white/30 shrink-0">
+          <div
+            className="absolute inset-0 mix-blend-overlay opacity-20"
+            style={{
+              backgroundImage:
+                'radial-gradient(circle at 20% 30%, white 0%, transparent 35%), radial-gradient(circle at 80% 70%, white 0%, transparent 40%)',
+            }}
+          />
+          <div className="relative flex items-start gap-4 pr-12">
+            <div className="h-16 w-16 rounded-2xl bg-white/25 backdrop-blur flex items-center justify-center ring-1 ring-white/40 shadow-lg shrink-0">
               <HeroIcon className="h-8 w-8 text-white" weight="duotone" />
             </div>
             <div className="flex-1 min-w-0">
-              <DialogTitle className="text-2xl md:text-[26px] font-bold text-white mb-1.5 tracking-tight">
+              <DialogTitle className="text-2xl md:text-[28px] font-bold text-white mb-1.5 tracking-tight drop-shadow-sm">
                 {isFeatureLock
                   ? `"${featureLabel}" غير متوفر في حزمتك`
                   : copy.title}
               </DialogTitle>
-              <DialogDescription className="text-sm md:text-base text-white/85">
+              <DialogDescription className="text-sm md:text-base text-white/90 drop-shadow-sm">
                 {isFeatureLock
                   ? 'هذه الميزة مفتوحة في الحزم الموضّحة أدناه — اختر الحزمة الأنسب لوكالتك للوصول إليها.'
                   : copy.subtitle}
