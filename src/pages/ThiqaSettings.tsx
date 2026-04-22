@@ -665,7 +665,6 @@ const SYSTEM_FEATURES = [
   { key: 'marketing_sms', label: 'SMS تسويقية' },
   { key: 'ai_assistant', label: 'المساعد الذكي (ثاقب)' },
   // Financial / management
-  { key: 'financial_management', label: 'الإدارة المالية' },
   { key: 'financial_reports', label: 'التقارير المالية' },
   { key: 'broker_wallet', label: 'محفظة الوسطاء' },
   { key: 'company_settlement', label: 'تسويات الشركات' },

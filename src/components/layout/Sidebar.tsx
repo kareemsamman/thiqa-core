@@ -122,8 +122,8 @@ export const navigationGroups: NavGroup[] = [
     icon: SquaresFour,
     defaultOpen: true,
     items: [
-      { name: "لوحة التحكم", href: "/dashboard", icon: SquaresFour, permissionKey: 'page.dashboard' },
-      { name: "المهام", href: "/tasks", icon: ListChecks, badge: 'tasks', permissionKey: 'page.tasks' },
+      { name: "لوحة التحكم", href: "/dashboard", icon: SquaresFour, featureKey: 'dashboard', permissionKey: 'page.dashboard' },
+      { name: "المهام", href: "/tasks", icon: ListChecks, badge: 'tasks', featureKey: 'tasks', permissionKey: 'page.tasks' },
       { name: "سجل النشاط", href: "/activity", icon: Pulse, permissionKey: 'page.activity' },
       { name: "التنبيهات", href: "/notifications", icon: Bell, badge: 'notifications', permissionKey: 'page.notifications' },
       { name: "تقارير المعاملات والتجديدات", href: "/reports/policies", icon: ChartBar, badge: 'renewals', permissionKey: 'page.policy_reports' },
@@ -143,7 +143,7 @@ export const navigationGroups: NavGroup[] = [
     name: "المالية",
     icon: Wallet,
     items: [
-      { name: "متابعة الديون", href: "/debt-tracking", icon: CurrencyDollar, badge: 'debt', permissionKey: 'page.debt_tracking' },
+      { name: "متابعة الديون", href: "/debt-tracking", icon: CurrencyDollar, badge: 'debt', featureKey: 'debt_tracking', permissionKey: 'page.debt_tracking' },
       { name: "الشيكات", href: "/cheques", icon: CreditCard, featureKey: 'cheques', permissionKey: 'page.cheques' },
       { name: "الإيصالات", href: "/receipts", icon: FileText, featureKey: 'receipts', permissionKey: 'page.receipts' },
       { name: "المحاسبة", href: "/accounting", icon: CurrencyDollar, featureKey: 'accounting', permissionKey: 'page.accounting' },
@@ -153,14 +153,14 @@ export const navigationGroups: NavGroup[] = [
     name: "أخرى",
     icon: Image,
     items: [
-      { name: "جهات الاتصال", href: "/contacts", icon: AddressBook, permissionKey: 'page.contacts' },
+      { name: "جهات الاتصال", href: "/contacts", icon: AddressBook, featureKey: 'contacts', permissionKey: 'page.contacts' },
       { name: "المطالبات", href: "/admin/claims", icon: FileX, badge: 'claims', featureKey: 'repair_claims', permissionKey: 'page.repair_claims' },
-      { name: "الوسائط", href: "/media", icon: Image, permissionKey: 'page.media' },
-      { name: "ملفات", href: "/form-templates", icon: FileText, permissionKey: 'page.form_templates' },
+      { name: "الوسائط", href: "/media", icon: Image, featureKey: 'files_upload', permissionKey: 'page.media' },
+      { name: "ملفات", href: "/form-templates", icon: FileText, featureKey: 'files_explorer', permissionKey: 'page.form_templates' },
       { name: "المراسلات", href: "/admin/correspondence", icon: Envelope, featureKey: 'correspondence', permissionKey: 'page.correspondence' },
       { name: "SMS تسويقية", href: "/admin/marketing-sms", icon: Megaphone, featureKey: 'marketing_sms', permissionKey: 'page.marketing_sms' },
       { name: "سجل الرسائل", href: "/sms-history", icon: ClockCounterClockwise, featureKey: 'sms', permissionKey: 'page.sms_history' },
-      { name: "توقيعات العملاء", href: "/admin/customer-signatures", icon: Signature, permissionKey: 'page.customer_signatures' },
+      { name: "توقيعات العملاء", href: "/admin/customer-signatures", icon: Signature, featureKey: 'digital_signatures', permissionKey: 'page.customer_signatures' },
     ],
   },
   {

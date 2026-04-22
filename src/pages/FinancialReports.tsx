@@ -29,6 +29,7 @@ import { Link } from "react-router-dom";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAgentContext } from "@/hooks/useAgentContext";
+import { useFeatureGuard } from "@/hooks/useFeatureGuard";
 
 const CACHE_KEY = "ab_financial_reports_cache_2026";
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
@@ -256,6 +257,7 @@ const fetchFinancialData = async () => {
 };
 
 export default function FinancialReports() {
+  useFeatureGuard('financial_reports');
   const { agent } = useAgentContext();
   const agentName = agent?.name_ar || agent?.name || 'الوكالة';
   const { summary: profitSummary, loading: profitLoading, refetch: refetchProfit } = useProfitSummary();

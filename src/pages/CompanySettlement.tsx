@@ -29,6 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useFeatureGuard } from '@/hooks/useFeatureGuard';
 import { cn } from '@/lib/utils';
 import { POLICY_TYPE_LABELS, getInsuranceTypeBadgeClass, POLICY_CHILD_LABELS } from '@/lib/insuranceTypes';
 import { PolicyDetailsDrawer } from '@/components/policies/PolicyDetailsDrawer';
@@ -64,6 +65,7 @@ interface PolicyWithoutCompany {
 }
 
 export default function CompanySettlement() {
+  useFeatureGuard('company_settlement');
   const navigate = useNavigate();
   const { toast } = useToast();
   const { isAdmin } = useAuth();

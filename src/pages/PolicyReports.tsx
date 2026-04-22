@@ -256,7 +256,10 @@ export default function PolicyReports() {
   // permission — keeps a restricted worker from leaking numbers by
   // exporting a report.
   const canViewFinancial = can('view_financial');
-  const { agentId } = useAgentContext();
+  const { agentId, hasFeature } = useAgentContext();
+  // Renewals + "تم التجديد" tabs are gated by the plan's `renewals`
+  // feature. Entry/Basic/Professional hide them; Ultimate shows both.
+  const canUseRenewals = hasFeature('renewals');
   const [activeTab, setActiveTab] = useState('created');
   // Sub-tab inside the Renewals top-tab. Starts on "pending" — the
   // legacy list — and flips to "renewed" whenever a follow-up is
@@ -954,19 +957,26 @@ export default function PolicyReports() {
 
       <div className="p-6 space-y-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full max-w-lg grid-cols-3">
+          <TabsList className={cn(
+            "grid w-full max-w-lg",
+            canUseRenewals ? "grid-cols-3" : "grid-cols-1",
+          )}>
             <TabsTrigger value="created" className="gap-2">
               <FileText className="h-4 w-4" />
               المعاملات المنشأة
             </TabsTrigger>
-            <TabsTrigger value="renewals" className="gap-2">
-              <RefreshCw className="h-4 w-4" />
-              التجديدات
-            </TabsTrigger>
-            <TabsTrigger value="renewed" className="gap-2">
-              <CheckCircle className="h-4 w-4" />
-              تم التجديد
-            </TabsTrigger>
+            {canUseRenewals && (
+              <TabsTrigger value="renewals" className="gap-2">
+                <RefreshCw className="h-4 w-4" />
+                التجديدات
+              </TabsTrigger>
+            )}
+            {canUseRenewals && (
+              <TabsTrigger value="renewed" className="gap-2">
+                <CheckCircle className="h-4 w-4" />
+                تم التجديد
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Created Policies Tab */}
