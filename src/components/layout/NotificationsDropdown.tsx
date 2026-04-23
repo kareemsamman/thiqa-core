@@ -18,8 +18,10 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Lock } from '@phosphor-icons/react';
 import { useNotifications, Notification } from '@/hooks/useNotifications';
 import { useAgentContext } from '@/hooks/useAgentContext';
+import { useUpgradePrompt } from '@/components/pricing/UpgradePromptProvider';
 import { PaymentMethodBadge } from '@/components/notifications/PaymentMethodBadge';
 import { PaymentTypeBadges } from '@/components/notifications/PaymentTypeBadges';
 import { formatDistanceToNow } from 'date-fns';
@@ -55,6 +57,8 @@ interface NotificationsDropdownProps {
 export function NotificationsDropdown({ className, iconClassName, badgeVariant = "count" }: NotificationsDropdownProps = {}) {
   const navigate = useNavigate();
   const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
+  const { showUpgradePrompt } = useUpgradePrompt();
+  const locked = !isThiqaSuperAdmin && !hasFeature('notifications');
   const {
     notifications,
     unreadCount,
@@ -67,8 +71,28 @@ export function NotificationsDropdown({ className, iconClassName, badgeVariant =
   } = useNotifications();
   const [open, setOpen] = useState(false);
 
-  if (!isThiqaSuperAdmin && !hasFeature('notifications')) {
-    return null;
+  if (locked) {
+    return (
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() =>
+          showUpgradePrompt({ featureKey: 'notifications', featureLabel: 'التنبيهات' })
+        }
+        className={cn('relative h-9 w-9 md:h-10 md:w-10', className)}
+      >
+        <Bell className={cn('h-4 w-4 md:h-5 md:w-5 text-muted-foreground', iconClassName)} />
+        <span
+          className="absolute -left-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full shadow-sm ring-1 ring-white/40"
+          style={{
+            background:
+              'linear-gradient(135deg, #6a3bd1 0%, #c93fa8 55%, #ed6a44 100%)',
+          }}
+        >
+          <Lock className="h-2.5 w-2.5 text-white" weight="fill" />
+        </span>
+      </Button>
+    );
   }
 
   const handleNotificationClick = async (notification: Notification) => {
