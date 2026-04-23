@@ -25,7 +25,9 @@ import {
 } from "lucide-react";
 import { AgentAddonsManager } from "@/components/thiqa/AgentAddonsManager";
 import { AgentDiscountManager } from "@/components/thiqa/AgentDiscountManager";
+import { AgentLimitOverrides } from "@/components/thiqa/AgentLimitOverrides";
 import { SmsProviderConfig, type SmsProviderChoice } from "@/components/sms/SmsProviderConfig";
+import { RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -381,6 +383,35 @@ export default function ThiqaAgentDetail() {
     setFeatures(prev => ({ ...prev, [key]: enabled }));
     await supabase.from('agent_feature_flags')
       .upsert({ agent_id: agentId!, feature_key: key, enabled }, { onConflict: 'agent_id,feature_key' });
+  };
+
+  // ─── Re-sync feature flags to the current plan's default_features.
+  // Uses the same RPC the plan-change trigger calls, so the result is
+  // identical to "what a brand new agent on this plan would get". Any
+  // manual toggles that had drifted from the plan are overwritten.
+  const [syncingFeatures, setSyncingFeatures] = useState(false);
+  const handleSyncFeatures = async () => {
+    if (!agent || !agentId) return;
+    setSyncingFeatures(true);
+    try {
+      const { error } = await supabase.rpc('set_features_for_plan', {
+        p_agent_id: agentId,
+        p_plan: agent.plan,
+      });
+      if (error) throw error;
+      const { data: ff } = await supabase
+        .from('agent_feature_flags')
+        .select('feature_key, enabled')
+        .eq('agent_id', agentId);
+      const featureMap: Record<string, boolean> = {};
+      (ff || []).forEach((f: any) => { featureMap[f.feature_key] = f.enabled; });
+      setFeatures(featureMap);
+      toast.success('تمت إعادة ضبط الميزات حسب الباقة');
+    } catch (err: any) {
+      toast.error('فشل في إعادة الضبط: ' + (err?.message ?? ''));
+    } finally {
+      setSyncingFeatures(false);
+    }
   };
 
   // ─── Extend subscription ───
@@ -1354,11 +1385,31 @@ export default function ThiqaAgentDetail() {
           </TabsContent>
 
           {/* ═══════════ FEATURES TAB ═══════════ */}
-          <TabsContent value="features">
+          <TabsContent value="features" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>ميزات الوكيل</CardTitle>
-                <CardDescription>تحكم بالميزات المتاحة لهذا الوكيل</CardDescription>
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <CardTitle>ميزات الوكيل</CardTitle>
+                    <CardDescription>
+                      تحكم بالميزات المتاحة لهذا الوكيل. إذا كانت الإعدادات لا تتطابق مع باقة <strong>{agent.plan}</strong> الحالية، استخدم زر إعادة الضبط.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSyncFeatures}
+                    disabled={syncingFeatures}
+                    className="gap-2 shrink-0"
+                  >
+                    {syncingFeatures ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    إعادة ضبط على الباقة
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1378,6 +1429,7 @@ export default function ThiqaAgentDetail() {
               </CardContent>
             </Card>
 
+            <AgentLimitOverrides agentId={agent.id} />
           </TabsContent>
 
            {/* ═══════════ ADDONS TAB — per-agent cart (extra user/branch/SMS/etc) ═══════════ */}

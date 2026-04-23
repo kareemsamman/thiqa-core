@@ -88,6 +88,25 @@ export function useAgentLimits(): AgentLimits {
     const run = async () => {
       setLoading(true);
       try {
+        // 0. Per-agent overrides from the agents row. NULL means inherit
+        // the plan column; -1 means "unlimited" (return null so the bar
+        // shows as uncapped); anything >=0 replaces the plan value.
+        const { data: overrideRow } = await supabase
+          .from('agents')
+          .select(
+            'users_limit_override, branches_limit_override, policies_limit_override, sms_limit_override, marketing_sms_limit_override, ai_limit_override',
+          )
+          .eq('id', agentId)
+          .maybeSingle();
+        const applyOverride = (
+          override: number | null | undefined,
+          planValue: number | null,
+        ): number | null => {
+          if (override == null) return planValue;
+          if (override === -1) return null;
+          return override;
+        };
+
         // 1. Active addon quantities, grouped by type
         const { data: addonRows } = await supabase
           .from('agent_addons')
@@ -174,22 +193,48 @@ export function useAgentLimits(): AgentLimits {
         if (cancelled) return;
 
         setPolicyPeriod(period);
-        setUsers(buildLimit(userCount ?? 0, planInfo.users_limit, addonQty.extra_user));
+        setUsers(
+          buildLimit(
+            userCount ?? 0,
+            applyOverride(overrideRow?.users_limit_override as number | null, planInfo.users_limit),
+            addonQty.extra_user,
+          ),
+        );
         setBranches(
-          buildLimit(branchCount ?? 0, planInfo.branches_limit, addonQty.extra_branch),
+          buildLimit(
+            branchCount ?? 0,
+            applyOverride(overrideRow?.branches_limit_override as number | null, planInfo.branches_limit),
+            addonQty.extra_branch,
+          ),
         );
         setPolicies(
-          buildLimit(distinctTransactions.size, planInfo.policies_limit, 0),
+          buildLimit(
+            distinctTransactions.size,
+            applyOverride(overrideRow?.policies_limit_override as number | null, planInfo.policies_limit),
+            0,
+          ),
         );
-        setSms(buildLimit(usageMap.sms ?? 0, planInfo.sms_limit, addonQty.extra_sms));
+        setSms(
+          buildLimit(
+            usageMap.sms ?? 0,
+            applyOverride(overrideRow?.sms_limit_override as number | null, planInfo.sms_limit),
+            addonQty.extra_sms,
+          ),
+        );
         setMarketingSms(
           buildLimit(
             usageMap.marketing_sms ?? 0,
-            planInfo.marketing_sms_limit,
+            applyOverride(overrideRow?.marketing_sms_limit_override as number | null, planInfo.marketing_sms_limit),
             addonQty.extra_marketing_sms,
           ),
         );
-        setAi(buildLimit(usageMap.ai_chat ?? 0, planInfo.ai_limit, addonQty.extra_ai));
+        setAi(
+          buildLimit(
+            usageMap.ai_chat ?? 0,
+            applyOverride(overrideRow?.ai_limit_override as number | null, planInfo.ai_limit),
+            addonQty.extra_ai,
+          ),
+        );
       } catch (error) {
         console.error('Error loading agent limits:', error);
       } finally {

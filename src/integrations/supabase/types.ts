@@ -1121,13 +1121,16 @@ export type Database = {
       agents: {
         Row: {
           ai_assistant_prompt: string | null
+          ai_limit_override: number | null
           billing_cycle_day: number | null
+          branches_limit_override: number | null
           cancelled_at: string | null
           created_at: string | null
           default_employee_permissions: Json
           email: string
           id: string
           logo_url: string | null
+          marketing_sms_limit_override: number | null
           monthly_price: number | null
           name: string
           name_ar: string | null
@@ -1135,21 +1138,27 @@ export type Database = {
           pending_plan: string | null
           phone: string | null
           plan: string
+          policies_limit_override: number | null
+          sms_limit_override: number | null
           subscription_expires_at: string | null
           subscription_started_at: string | null
           subscription_status: string
           trial_ends_at: string | null
           updated_at: string | null
+          users_limit_override: number | null
         }
         Insert: {
           ai_assistant_prompt?: string | null
+          ai_limit_override?: number | null
           billing_cycle_day?: number | null
+          branches_limit_override?: number | null
           cancelled_at?: string | null
           created_at?: string | null
           default_employee_permissions?: Json
           email: string
           id?: string
           logo_url?: string | null
+          marketing_sms_limit_override?: number | null
           monthly_price?: number | null
           name: string
           name_ar?: string | null
@@ -1157,21 +1166,27 @@ export type Database = {
           pending_plan?: string | null
           phone?: string | null
           plan?: string
+          policies_limit_override?: number | null
+          sms_limit_override?: number | null
           subscription_expires_at?: string | null
           subscription_started_at?: string | null
           subscription_status?: string
           trial_ends_at?: string | null
           updated_at?: string | null
+          users_limit_override?: number | null
         }
         Update: {
           ai_assistant_prompt?: string | null
+          ai_limit_override?: number | null
           billing_cycle_day?: number | null
+          branches_limit_override?: number | null
           cancelled_at?: string | null
           created_at?: string | null
           default_employee_permissions?: Json
           email?: string
           id?: string
           logo_url?: string | null
+          marketing_sms_limit_override?: number | null
           monthly_price?: number | null
           name?: string
           name_ar?: string | null
@@ -1179,11 +1194,14 @@ export type Database = {
           pending_plan?: string | null
           phone?: string | null
           plan?: string
+          policies_limit_override?: number | null
+          sms_limit_override?: number | null
           subscription_expires_at?: string | null
           subscription_started_at?: string | null
           subscription_status?: string
           trial_ends_at?: string | null
           updated_at?: string | null
+          users_limit_override?: number | null
         }
         Relationships: []
       }
