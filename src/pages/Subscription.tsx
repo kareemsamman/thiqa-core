@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { Header } from "@/components/layout/Header";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -380,8 +381,9 @@ export default function Subscription() {
 
   return (
     <MainLayout>
+      <Header title="الإعدادات" subtitle="اشتراكك، استخدامك للخدمات، ومدفوعاتك السابقة" />
       <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto" dir="rtl">
-        {/* Header */}
+        {/* In-page header: icon + title + contact button */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="h-11 w-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
