@@ -625,12 +625,13 @@ function buildPackageInvoiceHtml(
   const primaryDocumentNumber = stampedForDoc[0]?.doc
     || `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-${(policies[0]?.id || '').slice(0, 6).toUpperCase()}`;
 
-  // Brand block: always the bundled Thiqa SVG. The agent's uploaded
-  // logo is intentionally NOT used here — staff want the Thiqa wordmark
-  // to stay anchored on every printed معاملة so the whitelabel doesn't
-  // bleed into the printed receipt. Other surfaces (sidebar, login,
-  // app chrome) continue to swap in the agent's logo as before.
-  const brandBlock = `<div class="logo logo-svg">${THIQA_LOGO_SVG}</div>`;
+  // Brand block: prefer the agent's uploaded logo (from BrandingSettings
+  // → agents.logo_url, exposed via getAgentBranding) so each agency's
+  // invoice carries its own mark. Fall back to the bundled Thiqa SVG
+  // only when the agent hasn't uploaded a logo yet.
+  const brandBlock = branding.logoUrl
+    ? `<div class="logo"><img src="${branding.logoUrl}" alt="${branding.companyName}" /></div>`
+    : `<div class="logo logo-svg">${THIQA_LOGO_SVG}</div>`;
 
   // Unique additional drivers across the package. Each child may appear
   // linked to multiple policies (policy_children is a join table); we
