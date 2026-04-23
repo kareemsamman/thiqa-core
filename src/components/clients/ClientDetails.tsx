@@ -1328,7 +1328,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     // this package?" without re-joining on the payments side.
     const packagePoliciesByGroup = new Map<
       string,
-      { id: string; policy_type_parent: string; policy_type_child: string | null }[]
+      { id: string; policy_type_parent: string; policy_type_child: string | null; document_number: string | null }[]
     >();
     for (const p of policies) {
       if (!p.group_id) continue;
