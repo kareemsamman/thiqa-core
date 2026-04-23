@@ -1014,11 +1014,16 @@ function buildPackageInvoiceHtml(
     }
     .brand { max-width: 55%; }
     .brand .logo {
-      max-height: 60px;
-      max-width: 220px;
-      object-fit: contain;
       display: block;
       margin-bottom: 10px;
+    }
+    .brand .logo img {
+      max-height: 60px;
+      max-width: 220px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      display: block;
     }
     .brand .logo-svg {
       display: block;
@@ -1638,10 +1643,12 @@ function buildPackageInvoiceHtml(
         text-align: center;
       }
       .brand .logo {
-        max-height: 110px;
-        max-width: 260px;
         margin-left: auto;
         margin-right: auto;
+      }
+      .brand .logo img {
+        max-height: 110px;
+        max-width: 260px;
       }
       .brand .logo-svg { margin-left: auto; margin-right: auto; }
       .brand .logo-svg svg { height: 72px; }

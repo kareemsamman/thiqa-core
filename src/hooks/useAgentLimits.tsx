@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from './useAgentContext';
 
@@ -97,6 +97,12 @@ export function useAgentLimits(): AgentLimits {
   const [policyPeriod, setPolicyPeriod] =
     useState<'monthly' | 'yearly' | 'lifetime'>('monthly');
   const [refetchTick, setRefetchTick] = useState(0);
+  // Track whether the first fetch has finished. Subsequent refetches
+  // (refetchTick bumps, e.g. after a credit top-up) must not re-flip
+  // loading to true — useSmsLock treats loading as "locked", and the
+  // flip causes a visible lock flicker on the SMS send button even
+  // though the cached sms state is still accurate.
+  const hasLoadedOnce = useRef(false);
 
   useEffect(() => {
     if (!agentId || !planInfo) {
@@ -107,7 +113,7 @@ export function useAgentLimits(): AgentLimits {
     let cancelled = false;
 
     const run = async () => {
-      setLoading(true);
+      if (!hasLoadedOnce.current) setLoading(true);
       try {
         // 0. Per-agent overrides from the agents row. NULL means inherit
         // the plan column; -1 means "unlimited" (return null so the bar
@@ -276,7 +282,10 @@ export function useAgentLimits(): AgentLimits {
       } catch (error) {
         console.error('Error loading agent limits:', error);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          hasLoadedOnce.current = true;
+          setLoading(false);
+        }
       }
     };
 
