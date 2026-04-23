@@ -65,6 +65,7 @@ const PLAN_ICONS: Record<string, typeof Rocket> = {
 
 function UsageStatsSection({ agentId }: { agentId: string | null }) {
   const planLimits = useAgentLimits();
+  const { hasFeature } = useAgentContext();
   const [limits, setLimits] = useState<any>(null);
   const [usage, setUsage] = useState<any[]>([]);
   const [wallet, setWallet] = useState<{ sms_credit_balance: number; ai_credit_balance: number }>({
@@ -177,13 +178,13 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
               <UsageRow
                 label="رسائل SMS (هذا الشهر)"
                 limit={planLimits.sms}
-                action={creditButton('sms', 'شحن SMS')}
+                action={hasFeature('sms') ? creditButton('sms', 'شحن SMS') : undefined}
               />
               <UsageRow label="SMS تسويقية (هذا الشهر)" limit={planLimits.marketingSms} />
               <UsageRow
                 label="طلبات AI (هذا الشهر)"
                 limit={planLimits.ai}
-                action={creditButton('ai_chat', 'شحن AI')}
+                action={hasFeature('ai_assistant') ? creditButton('ai_chat', 'شحن AI') : undefined}
               />
             </>
           )}

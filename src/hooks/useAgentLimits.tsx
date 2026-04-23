@@ -5,10 +5,12 @@ import { useAgentContext } from './useAgentContext';
 export interface ResourceLimit {
   used: number;
   planLimit: number | null;     // NULL = unlimited on plan column
-  addonQuantity: number;         // sum of active matching addons
+  addonQuantity: number;         // sum of active matching addons (includes credit wallet balance for SMS/AI)
   effective: number | null;      // planLimit + addonQuantity (NULL if unlimited)
   remaining: number | null;      // effective - used (NULL if unlimited)
   exceeded: boolean;
+  /** Never-expiring credit balance from agent_credit_wallet (SMS/AI/marketing SMS only; 0 elsewhere). */
+  creditBalance: number;
 }
 
 export interface AgentLimits {
@@ -30,6 +32,7 @@ const EMPTY: ResourceLimit = {
   effective: null,
   remaining: null,
   exceeded: false,
+  creditBalance: 0,
 };
 
 type AddonType =
@@ -43,18 +46,36 @@ function buildLimit(
   used: number,
   planLimit: number | null,
   addonQuantity: number,
+  creditBalance: number = 0,
 ): ResourceLimit {
   if (planLimit === null) {
-    return { used, planLimit: null, addonQuantity, effective: null, remaining: null, exceeded: false };
+    return {
+      used,
+      planLimit: null,
+      addonQuantity,
+      effective: null,
+      remaining: null,
+      exceeded: false,
+      creditBalance,
+    };
   }
   const effective = planLimit + addonQuantity;
+  // Mirror the server's `allowed = used < baseLimit || creditBalance > 0`
+  // from _shared/usage-limits.ts: if the agent has any never-expiring
+  // credit in the wallet, sending is allowed even while the monthly
+  // bucket is drained. The client's `exceeded` drives the UI lock, so
+  // it has to agree with the server or the bell/send buttons stay
+  // locked after a top-up that would actually go through.
+  const baseLimit = planLimit + Math.max(0, addonQuantity - creditBalance);
+  const exceeded = used >= baseLimit && creditBalance <= 0;
   return {
     used,
     planLimit,
     addonQuantity,
     effective,
     remaining: Math.max(0, effective - used),
-    exceeded: used >= effective,
+    exceeded,
+    creditBalance,
   };
 }
 
@@ -233,6 +254,7 @@ export function useAgentLimits(): AgentLimits {
             usageMap.sms ?? 0,
             applyOverride(overrideRow?.sms_limit_override as number | null, planInfo.sms_limit),
             addonQty.extra_sms + smsCredit,
+            smsCredit,
           ),
         );
         setMarketingSms(
@@ -240,6 +262,7 @@ export function useAgentLimits(): AgentLimits {
             usageMap.marketing_sms ?? 0,
             applyOverride(overrideRow?.marketing_sms_limit_override as number | null, planInfo.marketing_sms_limit),
             addonQty.extra_marketing_sms + marketingSmsCredit,
+            marketingSmsCredit,
           ),
         );
         setAi(
@@ -247,6 +270,7 @@ export function useAgentLimits(): AgentLimits {
             usageMap.ai_chat ?? 0,
             applyOverride(overrideRow?.ai_limit_override as number | null, planInfo.ai_limit),
             addonQty.extra_ai + aiCredit,
+            aiCredit,
           ),
         );
       } catch (error) {
