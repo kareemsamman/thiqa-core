@@ -62,6 +62,8 @@ import { PdfJsViewer } from "@/components/policies/PdfJsViewer";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { useToast } from "@/hooks/use-toast";
+import { useSmsLock } from "@/hooks/useSmsLock";
+import { Lock } from "@phosphor-icons/react";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH, getEffectiveChequeStatus, isChequeOverdue } from "@/lib/chequeUtils";
 import { AddCustomerChequeModal } from "@/components/cheques/AddCustomerChequeModal";
@@ -142,6 +144,7 @@ const statusLabels: Record<string, { label: string; variant: "default" | "second
 export default function Cheques() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { locked: smsLocked, openUpgradeDialog: openSmsUpgrade } = useSmsLock();
   const [cheques, setCheques] = useState<ChequeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1030,8 +1033,16 @@ export default function Cheques() {
                     <Edit className="h-4 w-4 ml-2" />
                     تغيير رقم الشيك
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => openSmsDialog(cheque)}>
-                    <MessageSquare className="h-4 w-4 ml-2" />
+                  <DropdownMenuItem
+                    onClick={() => (smsLocked ? openSmsUpgrade() : openSmsDialog(cheque))}
+                  >
+                    {smsLocked ? (
+                      <span className="h-4 w-4 ml-2 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                        <Lock className="h-2.5 w-2.5" weight="fill" />
+                      </span>
+                    ) : (
+                      <MessageSquare className="h-4 w-4 ml-2" />
+                    )}
                     إرسال SMS للعميل
                   </DropdownMenuItem>
                 </>

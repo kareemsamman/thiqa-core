@@ -43,11 +43,13 @@ import { PackagePaymentModal } from './PackagePaymentModal';
 import { PaymentGroupDetailsDialog, type GroupedPayment } from './PaymentGroupDetailsDialog';
 import { PaymentEditDialog } from './PaymentEditDialog';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
+import { Lock } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { pickPackageDocumentNumber } from '@/lib/packageDocumentNumber';
 import { toast } from 'sonner';
 import { toastFunctionError } from '@/lib/functionError';
+import { useSmsLock } from '@/hooks/useSmsLock';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -249,6 +251,7 @@ export function PolicyYearTimeline({
   onRenewPackage,
 }: PolicyYearTimelineProps) {
   const { isAdmin, isSuperAdmin } = useAuth();
+  const { locked: smsLocked, openUpgradeDialog: openSmsUpgrade } = useSmsLock();
   
   // Use external data if provided (from ClientDetails), otherwise use internal state
   const hasExternalData = externalPaymentInfo !== undefined;
@@ -1486,11 +1489,15 @@ function PolicyPackageCard({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
-                  disabled={invoiceBusy !== null || !clientPhone}
+                  className="relative h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
+                  disabled={invoiceBusy !== null || (!smsLocked && !clientPhone)}
                   onClick={async (e) => {
                     e.stopPropagation();
                     if (invoiceBusy) return;
+                    if (smsLocked) {
+                      openSmsUpgrade();
+                      return;
+                    }
                     if (!clientPhone) {
                       toast.error('لا يوجد رقم هاتف للعميل');
                       return;
@@ -1508,6 +1515,11 @@ function PolicyPackageCard({
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Send className="h-4 w-4" />
+                  )}
+                  {smsLocked && (
+                    <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                      <Lock className="h-2.5 w-2.5" weight="fill" />
+                    </span>
                   )}
                 </Button>
               </HoverCardTrigger>

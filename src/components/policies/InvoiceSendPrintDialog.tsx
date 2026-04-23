@@ -9,8 +9,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Send, Printer, X, FileText } from "lucide-react";
+import { Lock } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { extractFunctionErrorMessage, toastFunctionError } from "@/lib/functionError";
+import { useSmsLock } from "@/hooks/useSmsLock";
 
 interface InvoiceSendPrintDialogProps {
   open: boolean;
@@ -28,6 +30,7 @@ export function InvoiceSendPrintDialog({
   clientPhone,
 }: InvoiceSendPrintDialogProps) {
   const [sendingType, setSendingType] = useState<"sms" | "print" | null>(null);
+  const { locked: smsLocked, openUpgradeDialog: openSmsUpgrade } = useSmsLock();
 
   const handleSendSms = async () => {
     setSendingType("sms");
@@ -111,8 +114,8 @@ export function InvoiceSendPrintDialog({
         <div className="space-y-3 py-4">
           {/* Send SMS Option */}
           <button
-            className="w-full p-4 rounded-xl border-2 border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 text-right flex items-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={handleSendSms}
+            className="relative w-full p-4 rounded-xl border-2 border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 text-right flex items-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={smsLocked ? openSmsUpgrade : handleSendSms}
             disabled={isSending}
           >
             <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
@@ -128,6 +131,11 @@ export function InvoiceSendPrintDialog({
                 سيتم إرسال رابط المعاملة للرقم {clientPhone || "المسجل"}
               </div>
             </div>
+            {smsLocked && (
+              <span className="absolute top-2 left-2 h-5 w-5 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                <Lock className="h-3 w-3" weight="fill" />
+              </span>
+            )}
           </button>
 
           {/* Print Option */}
