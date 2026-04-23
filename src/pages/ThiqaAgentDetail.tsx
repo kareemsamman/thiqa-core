@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { AgentAddonsManager } from "@/components/thiqa/AgentAddonsManager";
 import { AgentDiscountManager } from "@/components/thiqa/AgentDiscountManager";
+import { SmsProviderConfig, type SmsProviderChoice } from "@/components/sms/SmsProviderConfig";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -197,6 +198,7 @@ export default function ThiqaAgentDetail() {
   const [userRoles, setUserRoles] = useState<Record<string, string>>({});
   const [branches, setBranches] = useState<any[]>([]);
   const [smsSettings, setSmsSettings] = useState<any>(null);
+  const [platformSmsDefaultProvider, setPlatformSmsDefaultProvider] = useState<"019sms" | "htd">("019sms");
   const [authSettings, setAuthSettings] = useState<any>(null);
   const [paymentSettings, setPaymentSettings] = useState<any>(null);
   const [siteSettings, setSiteSettings] = useState<any>(null);
@@ -286,6 +288,15 @@ export default function ThiqaAgentDetail() {
       if (paymentsRes.data) setPayments(paymentsRes.data);
       if (usersRes.data) setAgentUsers(usersRes.data);
       if (smsRes.data) setSmsSettings(smsRes.data);
+      // Fetch the Thiqa platform default so the SMS config component can
+      // tell the user what "inherit" resolves to.
+      const { data: platformDefaultRow } = await supabase
+        .from('thiqa_platform_settings')
+        .select('setting_value')
+        .eq('setting_key', 'default_sms_provider')
+        .maybeSingle();
+      const pd = (platformDefaultRow?.setting_value || '').toLowerCase();
+      setPlatformSmsDefaultProvider(pd === 'htd' ? 'htd' : '019sms');
       if (authRes.data) setAuthSettings(authRes.data);
       if (payRes.data) setPaymentSettings(payRes.data);
       if (siteRes.data) setSiteSettings(siteRes.data);
@@ -510,8 +521,11 @@ export default function ThiqaAgentDetail() {
   // ─── Save SMS settings ───
   const saveSmsSettings = async () => {
     setSavingSection('sms');
+    // Empty provider === "inherit platform default" — persist as NULL so
+    // the resolver falls back to thiqa_platform_settings.default_sms_provider.
+    const rawProvider = (smsSettings?.provider ?? '').toString().trim();
     const payload = {
-      provider: smsSettings?.provider || '019sms',
+      provider: rawProvider === '' ? null : rawProvider,
       sms_user: smsSettings?.sms_user || '',
       sms_token: smsSettings?.sms_token || '',
       sms_source: smsSettings?.sms_source || '',
@@ -1212,7 +1226,7 @@ export default function ThiqaAgentDetail() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5" />إعدادات SMS</CardTitle>
                 <CardDescription>
-                  اختر المزوّد الخاص بهذا الوكيل. إذا تركت المزوّد فارغاً والبيانات كلها فارغة، سيستخدم الوكيل الافتراضيات المضبوطة في إعدادات منصة ثقة.
+                  اختر "استخدام الافتراضي من ثقة" لتتبع الإعدادات العامة، أو اختر مزوّداً صريحاً لتخصيص هذا الوكيل.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
@@ -1220,71 +1234,30 @@ export default function ThiqaAgentDetail() {
                   <Switch checked={initSms().is_enabled} onCheckedChange={v => setSmsSettings({...initSms(), ...smsSettings, is_enabled: v})} />
                   <Label>تفعيل SMS</Label>
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="font-bold">المزوّد</Label>
-                  <Select
-                    value={initSms().provider || ''}
-                    onValueChange={v => setSmsSettings({...initSms(), ...smsSettings, provider: v})}
-                  >
-                    <SelectTrigger className="w-full md:w-72">
-                      <SelectValue placeholder="استخدام الافتراضي من إعدادات ثقة" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="019sms">019sms (إسرائيل)</SelectItem>
-                      <SelectItem value="htd">HTD (sms.htd.ps — فلسطين)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-muted-foreground">
-                    اختيار مزوّد يعني أن هذا الوكيل سيستخدمه بدلاً من الافتراضي.
-                  </p>
-                </div>
-
-                {/* 019sms credentials */}
-                <div className="border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold">019sms</span>
-                    {(initSms().provider === '019sms' || initSms().provider === '019') && (
-                      <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">المُختار</span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div><Label>اسم المستخدم</Label><Input value={initSms().sms_user || ''} onChange={e => setSmsSettings({...initSms(), ...smsSettings, sms_user: e.target.value})} dir="ltr" /></div>
-                    <div>
-                      <Label>Token</Label>
-                      <div className="relative">
-                        <Input type={showTokens.smsToken ? 'text' : 'password'} value={initSms().sms_token || ''} onChange={e => setSmsSettings({...initSms(), ...smsSettings, sms_token: e.target.value})} dir="ltr" />
-                        <Button variant="ghost" size="icon" className="absolute left-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => toggleToken('smsToken')}>
-                          {showTokens.smsToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                    </div>
-                    <div><Label>رقم المصدر (Sender)</Label><Input value={initSms().sms_source || ''} onChange={e => setSmsSettings({...initSms(), ...smsSettings, sms_source: e.target.value})} dir="ltr" /></div>
-                  </div>
-                </div>
-
-                {/* HTD credentials */}
-                <div className="border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold">HTD</span>
-                    {initSms().provider === 'htd' && (
-                      <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">المُختار</span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label>API ID</Label>
-                      <div className="relative">
-                        <Input type={showTokens.htdId ? 'text' : 'password'} value={initSms().htd_id || ''} onChange={e => setSmsSettings({...initSms(), ...smsSettings, htd_id: e.target.value})} dir="ltr" placeholder="من صفحة My Account في htd.ps" />
-                        <Button variant="ghost" size="icon" className="absolute left-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => toggleToken('htdId')}>
-                          {showTokens.htdId ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                    </div>
-                    <div><Label>Sender ID</Label><Input value={initSms().htd_sender || ''} onChange={e => setSmsSettings({...initSms(), ...smsSettings, htd_sender: e.target.value})} dir="ltr" placeholder="الاسم الذي يظهر للمستلم" /></div>
-                  </div>
-                </div>
-
+                <SmsProviderConfig
+                  context="agent"
+                  platformDefaultProvider={platformSmsDefaultProvider}
+                  value={{
+                    provider: ((initSms().provider === 'htd' || initSms().provider === '019sms' ? initSms().provider : '') as SmsProviderChoice),
+                    sms_user: initSms().sms_user || '',
+                    sms_token: initSms().sms_token || '',
+                    sms_source: initSms().sms_source || '',
+                    htd_id: initSms().htd_id || '',
+                    htd_sender: initSms().htd_sender || '',
+                  }}
+                  onChange={(next) =>
+                    setSmsSettings({
+                      ...initSms(),
+                      ...smsSettings,
+                      provider: next.provider,
+                      sms_user: next.sms_user,
+                      sms_token: next.sms_token,
+                      sms_source: next.sms_source,
+                      htd_id: next.htd_id,
+                      htd_sender: next.htd_sender,
+                    })
+                  }
+                />
                 <Button onClick={saveSmsSettings} disabled={savingSection === 'sms'}>
                   {savingSection === 'sms' ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
                   حفظ إعدادات SMS

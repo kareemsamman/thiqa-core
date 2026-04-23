@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { SmsProviderConfig, type SmsProviderChoice } from "@/components/sms/SmsProviderConfig";
 import { extractFunctionErrorMessage, toastFunctionError } from "@/lib/functionError";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,7 +20,9 @@ import { createSafeHtml } from "@/lib/sanitize";
 
 interface SmsSettings {
   id?: string;
-  provider: string;
+  // Empty string means "inherit Thiqa platform default"; '019sms' / 'htd'
+  // are explicit overrides.
+  provider: SmsProviderChoice;
   sms_user: string;
   sms_token: string;
   sms_source: string;
@@ -66,8 +68,9 @@ export default function SmsSettings() {
   const [testPhone, setTestPhone] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
   
+  const [platformDefaultProvider, setPlatformDefaultProvider] = useState<"019sms" | "htd">("019sms");
   const [settings, setSettings] = useState<SmsSettings>({
-    provider: "019sms",
+    provider: "",
     sms_user: "",
     sms_token: "",
     sms_source: "",
@@ -117,10 +120,21 @@ export default function SmsSettings() {
         .maybeSingle();
 
       if (error) throw error;
+      // Fetch the Thiqa platform default so the SMS config component
+      // can label the "inherit" option with the concrete provider.
+      const { data: pdRow } = await supabase
+        .from("thiqa_platform_settings")
+        .select("setting_value")
+        .eq("setting_key", "default_sms_provider")
+        .maybeSingle();
+      const pd = (pdRow?.setting_value || "").toLowerCase();
+      setPlatformDefaultProvider(pd === "htd" ? "htd" : "019sms");
+
       if (data) {
+        const rawProvider = (data.provider || "").toLowerCase();
         setSettings({
           id: data.id,
-          provider: data.provider || "019sms",
+          provider: (rawProvider === "htd" ? "htd" : rawProvider === "019sms" ? "019sms" : "") as SmsProviderChoice,
           sms_user: data.sms_user || "",
           sms_token: data.sms_token || "",
           sms_source: data.sms_source || "",
@@ -168,12 +182,15 @@ export default function SmsSettings() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Empty provider string means "inherit platform default" — persist
+      // as NULL so the resolver knows to fall back.
+      const providerValueForDb = settings.provider === "" ? null : settings.provider;
       if (settings.id) {
         // Update existing
         const { error } = await supabase
           .from("sms_settings")
           .update({
-            provider: settings.provider,
+            provider: providerValueForDb,
             sms_user: settings.sms_user,
             sms_token: settings.sms_token,
             sms_source: settings.sms_source,
@@ -202,7 +219,7 @@ export default function SmsSettings() {
         const { data, error } = await supabase
           .from("sms_settings")
           .insert({
-            provider: settings.provider || "019sms",
+            provider: providerValueForDb,
             sms_user: settings.sms_user,
             sms_token: settings.sms_token,
             sms_source: settings.sms_source,
@@ -434,7 +451,7 @@ export default function SmsSettings() {
                     إعدادات SMS
                   </CardTitle>
                   <CardDescription>
-                    اختر مزوّد الرسائل (019sms أو HTD) وأدخل بياناته. إذا تركت الحقول فارغة، سيستخدم حسابك الإعدادات الافتراضية من منصة ثقة.
+                    اختر "استخدام الافتراضي من ثقة" لاستعمال الإعدادات العامة، أو اختر مزوّداً (019sms أو HTD) لتخصيص حسابك.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -454,100 +471,29 @@ export default function SmsSettings() {
                     />
                   </div>
 
-                  {/* Provider selector */}
-                  <div className="space-y-2">
-                    <Label className="font-medium">المزوّد</Label>
-                    <Select
-                      value={settings.provider || "019sms"}
-                      onValueChange={(v) => setSettings((prev) => ({ ...prev, provider: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="019sms">019sms (إسرائيل)</SelectItem>
-                        <SelectItem value="htd">HTD (sms.htd.ps — فلسطين)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      اختر المزوّد الذي ترغب بإرسال رسائلك من خلاله.
-                    </p>
-                  </div>
-
-                  {/* 019sms credentials */}
-                  <div className="border rounded-lg p-4 space-y-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold">019sms</span>
-                      {(settings.provider === "019sms" || settings.provider === "019") && (
-                        <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">نشط</span>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="sms_user">اسم المستخدم (SMSUSER)</Label>
-                      <Input
-                        id="sms_user"
-                        placeholder="أدخل اسم المستخدم..."
-                        value={settings.sms_user}
-                        onChange={(e) => setSettings((prev) => ({ ...prev, sms_user: e.target.value }))}
-                        className="ltr-input"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="sms_token">رمز API (SMSTOKEN)</Label>
-                      <Input
-                        id="sms_token"
-                        type="password"
-                        placeholder="أدخل رمز API..."
-                        value={settings.sms_token}
-                        onChange={(e) => setSettings((prev) => ({ ...prev, sms_token: e.target.value }))}
-                        className="ltr-input"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="sms_source">مصدر الرسالة (SMSSOURCE)</Label>
-                      <Input
-                        id="sms_source"
-                        placeholder="اسم المرسل (مثال: ABInsurance)..."
-                        value={settings.sms_source}
-                        onChange={(e) => setSettings((prev) => ({ ...prev, sms_source: e.target.value }))}
-                        className="ltr-input"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        الاسم الذي سيظهر للعميل كمرسل الرسالة
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* HTD credentials */}
-                  <div className="border rounded-lg p-4 space-y-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold">HTD</span>
-                      {settings.provider === "htd" && (
-                        <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">نشط</span>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="htd_id">API ID</Label>
-                      <Input
-                        id="htd_id"
-                        type="password"
-                        placeholder="من صفحة My Account في htd.ps"
-                        value={settings.htd_id}
-                        onChange={(e) => setSettings((prev) => ({ ...prev, htd_id: e.target.value }))}
-                        className="ltr-input"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="htd_sender">Sender ID</Label>
-                      <Input
-                        id="htd_sender"
-                        placeholder="الاسم الذي يظهر للمستلم"
-                        value={settings.htd_sender}
-                        onChange={(e) => setSettings((prev) => ({ ...prev, htd_sender: e.target.value }))}
-                        className="ltr-input"
-                      />
-                    </div>
-                  </div>
+                  <SmsProviderConfig
+                    context="agent"
+                    platformDefaultProvider={platformDefaultProvider}
+                    value={{
+                      provider: settings.provider,
+                      sms_user: settings.sms_user,
+                      sms_token: settings.sms_token,
+                      sms_source: settings.sms_source,
+                      htd_id: settings.htd_id,
+                      htd_sender: settings.htd_sender,
+                    }}
+                    onChange={(next) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        provider: next.provider,
+                        sms_user: next.sms_user,
+                        sms_token: next.sms_token,
+                        sms_source: next.sms_source,
+                        htd_id: next.htd_id,
+                        htd_sender: next.htd_sender,
+                      }))
+                    }
+                  />
 
                   {/* Auto Reminders Toggle */}
                   <div className="flex items-center justify-between p-4 rounded-lg border bg-amber-500/10 border-amber-500/20">

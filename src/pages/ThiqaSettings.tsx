@@ -16,6 +16,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Settings, Mail, Save, Loader2, Eye, EyeOff, Shield, Send, CheckCircle2, XCircle, HardDrive, CreditCard, Plus, Trash2, GripVertical, Pencil, Bot, Users } from "lucide-react";
+import { SmsProviderConfig, type SmsProviderChoice } from "@/components/sms/SmsProviderConfig";
 
 function useThiqaPlatformSettings() {
   return useQuery({
@@ -1233,54 +1234,16 @@ function AgentDefaultsTab() {
     addon_onboarding_price: "200",
     addon_data_migration_price: "450",
   });
-  const [showHtdId, setShowHtdId] = useState(false);
-  const [testPhone, setTestPhone] = useState("");
-  const [testing, setTesting] = useState(false);
-
-  const handleTestSms = async () => {
-    const phone = testPhone.trim();
-    if (!phone) {
-      toast({ title: "خطأ", description: "يرجى إدخال رقم هاتف للاختبار", variant: "destructive" });
-      return;
-    }
-    setTesting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("test-sms-credentials", {
-        body: {
-          provider: form.default_sms_provider === "htd" ? "htd" : "019",
-          phone,
-          sms_user: form.default_sms_019_user,
-          sms_token: form.default_sms_019_token,
-          sms_source: form.default_sms_019_source,
-          htd_id: form.default_sms_htd_id,
-          htd_sender: form.default_sms_htd_sender,
-        },
-      });
-      if (error) throw error;
-      if (data?.success) {
-        toast({
-          title: "نجح الإرسال",
-          description: `عبر ${data.provider === "htd" ? "HTD" : "019sms"} — ${data.api_message || "تم إرسال الرسالة"}`,
-        });
-      } else {
-        toast({
-          title: "فشل الإرسال",
-          description: data?.error || data?.raw || "تعذّر إرسال الرسالة",
-          variant: "destructive",
-        });
-      }
-    } catch (err: any) {
-      toast({
-        title: "فشل الإرسال",
-        description: err?.message || "تعذّر الاتصال بوظيفة الاختبار",
-        variant: "destructive",
-      });
-    } finally {
-      setTesting(false);
-    }
+  // Mirror the form fields into the shape SmsProviderConfig expects.
+  const smsProviderValue = {
+    provider: (form.default_sms_provider === "htd" ? "htd" : "019sms") as SmsProviderChoice,
+    sms_user: form.default_sms_019_user,
+    sms_token: form.default_sms_019_token,
+    sms_source: form.default_sms_019_source,
+    htd_id: form.default_sms_htd_id,
+    htd_sender: form.default_sms_htd_sender,
   };
   const [showPassword, setShowPassword] = useState(false);
-  const [showToken, setShowToken] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -1345,151 +1308,22 @@ function AgentDefaultsTab() {
             اختر مزوّد الرسائل الافتراضي وأدخل بيانات كلا المزوّدين. يمكن لكل وكيل تخصيص مزوّد مختلف أو إعادة استخدام هذه الافتراضيات.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label className="font-bold">المزوّد الافتراضي</Label>
-            <Select
-              value={form.default_sms_provider}
-              onValueChange={(v) => setForm((f) => ({ ...f, default_sms_provider: v }))}
-            >
-              <SelectTrigger className="w-full md:w-72">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="019sms">019sms (إسرائيل)</SelectItem>
-                <SelectItem value="htd">HTD (sms.htd.ps — فلسطين)</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-muted-foreground">
-              الوكلاء الذين لا يملكون إعدادات خاصة سيستخدمون هذا المزوّد وبياناته أدناه.
-            </p>
-          </div>
-
-          {/* 019sms credentials */}
-          <div className="border rounded-lg p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold">019sms</span>
-              {form.default_sms_provider === "019sms" && (
-                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">الافتراضي</span>
-              )}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>اسم المستخدم</Label>
-                <Input
-                  value={form.default_sms_019_user}
-                  onChange={(e) => setForm((f) => ({ ...f, default_sms_019_user: e.target.value }))}
-                  dir="ltr"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Token</Label>
-                <div className="relative">
-                  <Input
-                    type={showToken ? "text" : "password"}
-                    value={form.default_sms_019_token}
-                    onChange={(e) => setForm((f) => ({ ...f, default_sms_019_token: e.target.value }))}
-                    dir="ltr"
-                    className="pe-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowToken(!showToken)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>رقم المصدر (Sender)</Label>
-                <Input
-                  value={form.default_sms_019_source}
-                  onChange={(e) => setForm((f) => ({ ...f, default_sms_019_source: e.target.value }))}
-                  dir="ltr"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* HTD credentials */}
-          <div className="border rounded-lg p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold">HTD</span>
-              {form.default_sms_provider === "htd" && (
-                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">الافتراضي</span>
-              )}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>API ID</Label>
-                <div className="relative">
-                  <Input
-                    type={showHtdId ? "text" : "password"}
-                    value={form.default_sms_htd_id}
-                    onChange={(e) => setForm((f) => ({ ...f, default_sms_htd_id: e.target.value }))}
-                    dir="ltr"
-                    className="pe-10"
-                    placeholder="من صفحة My Account في htd.ps"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowHtdId(!showHtdId)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showHtdId ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Sender ID</Label>
-                <Input
-                  value={form.default_sms_htd_sender}
-                  onChange={(e) => setForm((f) => ({ ...f, default_sms_htd_sender: e.target.value }))}
-                  dir="ltr"
-                  placeholder="الاسم الذي يظهر للمستلم"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Test-send using the values currently typed in the form
-              (no need to save first). Uses the test-sms-credentials
-              edge function which is gated to Thiqa super admins. */}
-          <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
-            <div className="flex items-center gap-2">
-              <Send className="h-4 w-4 text-primary" />
-              <span className="text-sm font-bold">اختبار الإرسال</span>
-              <span className="text-[10px] text-muted-foreground">
-                يستخدم القيم المكتوبة أعلاه — لا حاجة للحفظ أولاً
-              </span>
-            </div>
-            <div className="flex flex-col md:flex-row gap-2">
-              <Input
-                placeholder="05xxxxxxxx أو 972xxxxxxxxx"
-                value={testPhone}
-                onChange={(e) => setTestPhone(e.target.value)}
-                dir="ltr"
-                className="md:max-w-xs"
-              />
-              <Button
-                onClick={handleTestSms}
-                disabled={testing}
-                variant="outline"
-                className="gap-2"
-              >
-                {testing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-                إرسال رسالة اختبار
-              </Button>
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              سيتم الإرسال عبر <strong>{form.default_sms_provider === "htd" ? "HTD" : "019sms"}</strong> باستخدام البيانات الحالية في الحقول أعلاه.
-            </p>
-          </div>
+        <CardContent>
+          <SmsProviderConfig
+            context="platform"
+            value={smsProviderValue}
+            onChange={(next) =>
+              setForm((f) => ({
+                ...f,
+                default_sms_provider: next.provider === "htd" ? "htd" : "019sms",
+                default_sms_019_user: next.sms_user,
+                default_sms_019_token: next.sms_token,
+                default_sms_019_source: next.sms_source,
+                default_sms_htd_id: next.htd_id,
+                default_sms_htd_sender: next.htd_sender,
+              }))
+            }
+          />
         </CardContent>
       </Card>
 

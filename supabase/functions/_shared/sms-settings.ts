@@ -30,8 +30,14 @@ export interface ResolvedSmsSettings {
 function normalizeProvider(raw: unknown): SmsProvider {
   const v = String(raw ?? '').toLowerCase().trim();
   if (v === 'htd') return 'htd';
-  // '019', '019sms', '' all mean 019 for backward compatibility.
+  // '019' / '019sms' → 019. Any other non-empty string falls through too.
   return '019';
+}
+
+/** True if the stored value should be treated as "no explicit choice". */
+function isInheritProvider(raw: unknown): boolean {
+  const v = String(raw ?? '').toLowerCase().trim();
+  return v === '' || v === 'inherit' || v === 'default';
 }
 
 export async function resolveSmsSettings(
@@ -62,9 +68,13 @@ export async function resolveSmsSettings(
     platform[r.setting_key] = r.setting_value ?? '';
   });
 
-  // Pick provider: agent's row first, else platform default, else '019'.
-  const provider: SmsProvider = agentRow?.provider
-    ? normalizeProvider(agentRow.provider)
+  // Pick provider:
+  //   1. Agent's row, if it names a concrete provider (not NULL/empty).
+  //   2. Otherwise inherit the platform default.
+  //   3. Otherwise '019' as the absolute last resort.
+  const agentProviderRaw = agentRow?.provider;
+  const provider: SmsProvider = agentProviderRaw && !isInheritProvider(agentProviderRaw)
+    ? normalizeProvider(agentProviderRaw)
     : normalizeProvider(platform.default_sms_provider);
 
   const is_enabled = agentRow?.is_enabled ?? true;
