@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { AddQuotaDialog, type OverageUsageType } from "@/components/subscription/AddQuotaDialog";
 import { AgentPlanOverview } from "@/components/subscription/AgentPlanOverview";
+import { PlanLadder } from "@/components/pricing/PlanLadder";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -648,7 +649,10 @@ export default function Subscription() {
           </Card>
         )}
 
-        {/* ═══ Plans Section ═══ */}
+        {/* ═══ Plans Section ═══ Rendered by the shared PlanLadder so the
+            four-card grid + "current plan" highlight + confirmation flow
+            (with prorated billing + support email) stay identical to the
+            upgrade popup. */}
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-bold">
@@ -656,141 +660,11 @@ export default function Subscription() {
             </h2>
             <p className="text-sm text-muted-foreground">
               {sub?.isTrial
-                ? "أنت حالياً تستخدم جميع ميزات Pro مجاناً. اختر الخطة التي تريد الاستمرار بها."
-                : "قارن بين الخطط واختر ما يناسب احتياجاتك"}
+                ? "الحزمة التي تختارها تُفعَّل تلقائياً عند انتهاء التجربة."
+                : "قارن بين الحزم واختر ما يناسب احتياجاتك."}
             </p>
           </div>
-
-          {loadingPlans ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-72 w-full rounded-xl" />)}
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {plans.map((plan) => {
-                  const isCurrent = !sub?.isTrial && agent.plan === plan.plan_key;
-                  const isPending = agent.pending_plan === plan.plan_key;
-                  const isUpgrade = sub?.isTrial
-                    ? true  // From trial, everything is "choosing"
-                    : plan.monthly_price > (agent.monthly_price || 0);
-                  const isCustom = plan.plan_key === "custom";
-                  const PlanIcon = PLAN_ICONS[plan.plan_key] || Shield;
-
-                  return (
-                    <Card key={plan.id} className={cn(
-                      "relative overflow-hidden transition-all",
-                      isCurrent ? "border-2 border-primary shadow-md" : "border hover:border-primary/30 hover:shadow-sm",
-                      isPending && !isCurrent && "border-2 border-primary/50"
-                    )}>
-                      {isCurrent && (
-                        <div className="bg-primary text-primary-foreground text-center text-xs font-bold py-1">
-                          خطتك الحالية
-                        </div>
-                      )}
-                      {isPending && !isCurrent && (
-                        <div className="bg-primary/80 text-primary-foreground text-center text-xs font-bold py-1">
-                          تم الاختيار — تبدأ بعد التجربة
-                        </div>
-                      )}
-                      {plan.badge && !isCurrent && !isPending && (
-                        <div className="bg-muted text-muted-foreground text-center text-xs font-medium py-1">
-                          {plan.badge}
-                        </div>
-                      )}
-
-                      <CardContent className={cn("pt-6 pb-5 space-y-4", (isCurrent || isPending || plan.badge) && "pt-4")}>
-                        <div className="flex items-center gap-3">
-                          <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center",
-                            isCurrent ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                          )}>
-                            <PlanIcon className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <h4 className="text-lg font-bold">{plan.name}</h4>
-                            {plan.name_ar && <p className="text-xs text-muted-foreground">{plan.name_ar}</p>}
-                          </div>
-                        </div>
-
-                        <div className="flex items-baseline gap-1.5">
-                          {plan.monthly_price > 0 ? (
-                            <>
-                              <span className="text-3xl font-extrabold">₪{plan.monthly_price}</span>
-                              <span className="text-sm text-muted-foreground">/ شهرياً</span>
-                            </>
-                          ) : (
-                            <span className="text-lg font-bold text-muted-foreground">حسب الطلب</span>
-                          )}
-                        </div>
-
-                        {plan.description && (
-                          <p className="text-xs text-muted-foreground leading-relaxed">{plan.description}</p>
-                        )}
-
-                        <ul className="space-y-2">
-                          {plan.features.map((f, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm">
-                              <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                              <span>{f.text}</span>
-                            </li>
-                          ))}
-                        </ul>
-
-                        <div className="pt-2">
-                          {isCurrent ? (
-                            <Button variant="outline" className="w-full" disabled>الخطة الحالية</Button>
-                          ) : isPending ? (
-                            <Button variant="outline" className="w-full text-primary border-primary/30" disabled>تم الاختيار</Button>
-                          ) : isCustom ? (
-                            <a
-                              href={`https://wa.me/972525143581?text=${encodeURIComponent(`مرحباً، أريد طلب خطة اشتراك مخصصة.\nمعرف الوكيل: ${agentId}`)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="block"
-                            >
-                              <Button variant="outline" className="w-full gap-2">
-                                <MessageCircle className="h-4 w-4" />
-                                طلب خطة مخصصة
-                              </Button>
-                            </a>
-                          ) : (
-                            <Button
-                              className={cn("w-full gap-2",
-                                sub?.isTrial ? "" :
-                                isUpgrade ? "" : "bg-muted text-foreground hover:bg-muted/80"
-                              )}
-                              onClick={() => setConfirmDialog({
-                                type: sub?.isTrial ? (plan.plan_key === "pro" ? "upgrade" : "downgrade") :
-                                      isUpgrade ? "upgrade" : "downgrade",
-                                plan,
-                              })}
-                            >
-                              {sub?.isTrial ? (
-                                <>اختيار هذه الخطة</>
-                              ) : isUpgrade ? (
-                                <><ArrowUp className="h-4 w-4" />ترقية</>
-                              ) : (
-                                <><ArrowDown className="h-4 w-4" />تغيير</>
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
-                <Info className="h-4 w-4 mt-0.5 shrink-0" />
-                <div>
-                  {sub?.isTrial
-                    ? "خلال الفترة التجريبية، جميع ميزات Pro متاحة لك. بعد انتهائها ستعمل الخطة التي اخترتها. يمكنك تغيير اختيارك في أي وقت قبل انتهاء التجربة."
-                    : "عند الترقية ستحصل على الميزات فوراً ويُحسب الفرق في الفاتورة القادمة. عند التخفيض يتم التحويل فوراً بدون استرجاع."}
-                </div>
-              </div>
-            </>
-          )}
+          <PlanLadder />
         </div>
 
           </TabsContent>
