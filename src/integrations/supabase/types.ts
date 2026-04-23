@@ -7157,7 +7157,7 @@ export type Database = {
         | "manual"
         | "payment_request"
       under24_type: "none" | "client" | "additional_driver"
-      user_status: "pending" | "active" | "blocked"
+      user_status: "pending" | "active" | "blocked" | "plan_locked"
     }
     CompositeTypes: {
       [_ in never]: never

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ShieldX, Mail, LogOut, Loader2 } from "lucide-react";
+import { ShieldX, Mail, LogOut, Loader2, Lock } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -41,20 +41,34 @@ export default function NoAccess() {
     );
   }
 
+  const isPlanLocked = profile?.status === 'plan_locked';
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md border shadow-lg animate-scale-in">
         <CardHeader className="text-center space-y-4">
           {/* Icon */}
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10 border border-destructive/20">
-            <ShieldX className="h-8 w-8 text-destructive" />
+          <div
+            className={
+              isPlanLocked
+                ? "mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/30"
+                : "mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10 border border-destructive/20"
+            }
+          >
+            {isPlanLocked ? (
+              <Lock className="h-8 w-8 text-amber-600 dark:text-amber-400" />
+            ) : (
+              <ShieldX className="h-8 w-8 text-destructive" />
+            )}
           </div>
           <div>
             <CardTitle className="text-2xl font-bold text-foreground">
-              لا تملك صلاحية الدخول
+              {isPlanLocked ? "حسابك مقفل مؤقتاً" : "لا تملك صلاحية الدخول"}
             </CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
-              حسابك بانتظار موافقة المدير
+              {isPlanLocked
+                ? "تم تجاوز عدد المستخدمين المسموح في باقة وكالتك"
+                : "حسابك بانتظار موافقة المدير"}
             </CardDescription>
           </div>
         </CardHeader>
@@ -70,10 +84,14 @@ export default function NoAccess() {
 
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground text-center">
-              يحتاج المدير إلى الموافقة على طلب دخولك قبل أن تتمكن من استخدام النظام.
+              {isPlanLocked
+                ? "يحتاج المدير إلى ترقية باقة الوكالة أو إضافة مستخدمين إضافيين لفتح حسابك."
+                : "يحتاج المدير إلى الموافقة على طلب دخولك قبل أن تتمكن من استخدام النظام."}
             </p>
             <p className="text-sm text-muted-foreground text-center">
-              إذا كنت تعتقد أن هذا خطأ، يرجى التواصل مع:
+              {isPlanLocked
+                ? "للتواصل مع مدير الوكالة:"
+                : "إذا كنت تعتقد أن هذا خطأ، يرجى التواصل مع:"}
             </p>
             {adminEmails.length > 0 ? (
               adminEmails.map((e) => (

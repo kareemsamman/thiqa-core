@@ -6,7 +6,7 @@ interface UserProfile {
   id: string;
   email: string;
   full_name: string | null;
-  status: 'pending' | 'active' | 'blocked';
+  status: 'pending' | 'active' | 'blocked' | 'plan_locked';
   avatar_url: string | null;
   branch_id: string | null;
   agent_id: string | null;

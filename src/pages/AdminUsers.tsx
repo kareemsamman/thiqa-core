@@ -51,7 +51,10 @@ import {
   UserPlus,
   Plus,
   KeyRound,
+  Lock,
+  Sparkles,
 } from "lucide-react";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,7 +76,7 @@ interface UserProfile {
   id: string;
   email: string;
   full_name: string | null;
-  status: 'pending' | 'active' | 'blocked';
+  status: 'pending' | 'active' | 'blocked' | 'plan_locked';
   created_at: string;
   updated_at: string;
   branch_id: string | null;
@@ -106,6 +109,7 @@ export default function AdminUsers() {
   const { branches, getBranchName } = useBranches();
   const { agentId } = useAgentContext();
   const { toast } = useToast();
+  const { showUpgradePrompt } = useUpgradePrompt();
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([]);
   const [attemptsLoading, setAttemptsLoading] = useState(false);
@@ -310,7 +314,7 @@ export default function AdminUsers() {
       const branchId = selectedBranch[userId] || (branches.length > 0 ? branches[0].id : null);
 
       // Update profile status to active and set branch
-      const updateData: { status: 'active' | 'pending' | 'blocked'; branch_id?: string } = { status: 'active' };
+      const updateData: { status: 'active' | 'pending' | 'blocked' | 'plan_locked'; branch_id?: string } = { status: 'active' };
       if (branchId) {
         updateData.branch_id = branchId;
       }
@@ -468,7 +472,12 @@ export default function AdminUsers() {
 
 
   const pendingUsers = users.filter(u => u.status === 'pending');
-  const activeUsers = users.filter(u => u.status === 'active');
+  // Plan-locked users show inside the "active" tab with a lock badge +
+  // upgrade CTA — they appear locked in the UI but keep their slot in
+  // the active list so the admin can tell a plan-overflow user apart
+  // from someone they intentionally blocked.
+  const activeUsers = users.filter(u => u.status === 'active' || u.status === 'plan_locked');
+  const planLockedCount = users.filter(u => u.status === 'plan_locked').length;
   const blockedUsers = users.filter(u => u.status === 'blocked');
 
   // Redirect non-admins
@@ -484,6 +493,8 @@ export default function AdminUsers() {
         return <Badge variant="outline" className="bg-success/10 text-success border-success/30"><CheckCircle className="h-3 w-3 ml-1" />نشط</Badge>;
       case 'blocked':
         return <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30"><XCircle className="h-3 w-3 ml-1" />محظور</Badge>;
+      case 'plan_locked':
+        return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400"><Lock className="h-3 w-3 ml-1" />مقفل — تجاوز حد الباقة</Badge>;
       default:
         return null;
     }
@@ -709,6 +720,28 @@ export default function AdminUsers() {
 
           {/* Active Users */}
           <TabsContent value="active">
+            {planLockedCount > 0 && (
+              <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
+                <Lock className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div className="flex-1 text-sm">
+                  <p className="font-medium text-foreground">
+                    {planLockedCount} مستخدم مقفل بسبب تجاوز حد الباقة
+                  </p>
+                  <p className="text-muted-foreground text-xs mt-0.5">
+                    هؤلاء المستخدمون لا يستطيعون تسجيل الدخول. قم بترقية الباقة أو أضف مستخدمين إضافيين لفتحهم تلقائياً.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                  onClick={() => showUpgradePrompt({ resource: 'users' })}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  ترقية الباقة
+                </Button>
+              </div>
+            )}
             <div className="rounded-lg border bg-card">
               {loading ? (
                 <div className="p-4">{renderTableSkeleton()}</div>
@@ -729,19 +762,38 @@ export default function AdminUsers() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {activeUsers.map((user) => (
-                      <TableRow key={user.id}>
+                    {activeUsers.map((user) => {
+                      const isPlanLocked = user.status === 'plan_locked';
+                      return (
+                      <TableRow
+                        key={user.id}
+                        className={isPlanLocked ? 'bg-amber-500/5 hover:bg-amber-500/10' : undefined}
+                      >
                         <TableCell className="font-medium">
-                          {user.full_name || 'غير محدد'}
+                          <div className="flex items-center gap-2">
+                            {isPlanLocked && (
+                              <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                            )}
+                            <span className={isPlanLocked ? 'text-muted-foreground' : undefined}>
+                              {user.full_name || 'غير محدد'}
+                            </span>
+                          </div>
+                          {isPlanLocked && (
+                            <div className="mt-1">
+                              {getStatusBadge('plan_locked')}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <bdi>{user.email}</bdi>
+                          <bdi className={isPlanLocked ? 'text-muted-foreground' : undefined}>
+                            {user.email}
+                          </bdi>
                         </TableCell>
                         <TableCell>
                           <Select
                             value={user.branch_id || 'all'}
                             onValueChange={(value) => handleChangeBranch(user.id, value === 'all' ? null : value)}
-                            disabled={actionLoading === user.id || isProtectedSuperAdmin(user)}
+                            disabled={actionLoading === user.id || isProtectedSuperAdmin(user) || isPlanLocked}
                           >
                             <SelectTrigger className="w-32">
                               <SelectValue placeholder="اختر الفرع" />
@@ -759,10 +811,10 @@ export default function AdminUsers() {
                         <TableCell>
                           <Select
                             value={user.role || 'worker'}
-                            onValueChange={(value: 'admin' | 'worker') => 
+                            onValueChange={(value: 'admin' | 'worker') =>
                               handleChangeRole(user.id, value)
                             }
-                            disabled={actionLoading === user.id || isProtectedSuperAdmin(user)}
+                            disabled={actionLoading === user.id || isProtectedSuperAdmin(user) || isPlanLocked}
                           >
                             <SelectTrigger className="w-32">
                               <SelectValue />
@@ -774,7 +826,17 @@ export default function AdminUsers() {
                           </Select>
                         </TableCell>
                         <TableCell>
-                          {!isProtectedSuperAdmin(user) && (
+                          {isPlanLocked ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                              onClick={() => showUpgradePrompt({ resource: 'users' })}
+                            >
+                              <Sparkles className="h-4 w-4" />
+                              ترقية الباقة
+                            </Button>
+                          ) : !isProtectedSuperAdmin(user) ? (
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
@@ -807,8 +869,7 @@ export default function AdminUsers() {
                                 )}
                               </Button>
                             </div>
-                          )}
-                          {isProtectedSuperAdmin(user) && (
+                          ) : (
                             <Badge variant="outline" className="bg-primary/10 text-primary">
                               <Shield className="h-3 w-3 ml-1" />
                               مدير النظام
@@ -816,7 +877,8 @@ export default function AdminUsers() {
                           )}
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
