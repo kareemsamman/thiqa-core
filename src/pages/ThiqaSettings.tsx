@@ -1222,6 +1222,13 @@ function AgentDefaultsTab() {
     default_ai_limit_count: "100",
     sms_overage_unit_price: "0.3",
     ai_overage_unit_price: "0.5",
+    addon_extra_user_price: "30",
+    addon_extra_branch_price: "120",
+    addon_extra_ai_price: "50",
+    addon_extra_sms_price: "50",
+    addon_extra_marketing_sms_price: "50",
+    addon_onboarding_price: "200",
+    addon_data_migration_price: "450",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showToken, setShowToken] = useState(false);
@@ -1242,6 +1249,13 @@ function AgentDefaultsTab() {
         default_ai_limit_count: settings.default_ai_limit_count || "100",
         sms_overage_unit_price: settings.sms_overage_unit_price || "0.3",
         ai_overage_unit_price: settings.ai_overage_unit_price || "0.5",
+        addon_extra_user_price: settings.addon_extra_user_price || "30",
+        addon_extra_branch_price: settings.addon_extra_branch_price || "120",
+        addon_extra_ai_price: settings.addon_extra_ai_price || "50",
+        addon_extra_sms_price: settings.addon_extra_sms_price || "50",
+        addon_extra_marketing_sms_price: settings.addon_extra_marketing_sms_price || "50",
+        addon_onboarding_price: settings.addon_onboarding_price || "200",
+        addon_data_migration_price: settings.addon_data_migration_price || "450",
       });
     }
   }, [settings]);
@@ -1448,6 +1462,54 @@ function AgentDefaultsTab() {
                 مثال: 0.5 = نصف شيكل لكل محادثة. شراء +100 محادثة يكلف ₪{(parseFloat(form.ai_overage_unit_price || "0") * 100).toFixed(2)}.
               </p>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Addon catalog pricing — shown to agents on /subscription as
+          "إضافات متوفرة للشراء". Fulfillment is still manual (WhatsApp
+          → AgentAddonsManager), these values are the public price tags. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Plus className="h-5 w-5" />
+            أسعار الإضافات (كتالوج الشراء)
+          </CardTitle>
+          <CardDescription>
+            الأسعار التي يراها الوكلاء في صفحة الاشتراك تحت "إضافات متوفرة للشراء".
+            تغيير أي سعر ينعكس فوراً بدون الحاجة لإعادة نشر التطبيق.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              { key: "addon_extra_user_price", label: "مستخدم إضافي", suffix: "₪ / شهر / مستخدم" },
+              { key: "addon_extra_branch_price", label: "فرع إضافي", suffix: "₪ / شهر / فرع" },
+              { key: "addon_extra_ai_price", label: "باقة AI", suffix: "₪ / شهر" },
+              { key: "addon_extra_sms_price", label: "باقة SMS", suffix: "₪ / شهر" },
+              { key: "addon_extra_marketing_sms_price", label: "باقة SMS تسويقية", suffix: "₪ / شهر" },
+              { key: "addon_onboarding_price", label: "إعداد أولي", suffix: "₪ مرة واحدة" },
+              { key: "addon_data_migration_price", label: "هجرة بيانات (يبدأ من)", suffix: "₪ مرة واحدة" },
+            ].map((item) => (
+              <div key={item.key} className="border rounded-lg p-4 space-y-2">
+                <Label className="font-bold">{item.label}</Label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={form[item.key as keyof typeof form] as string}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, [item.key]: e.target.value }))
+                    }
+                    className="pl-24"
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground whitespace-nowrap">
+                    {item.suffix}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
