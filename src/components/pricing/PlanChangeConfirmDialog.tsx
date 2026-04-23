@@ -37,12 +37,16 @@ export interface PlanTarget {
   default_features: Record<string, boolean>;
 }
 
+export type BillingCycle = 'monthly' | 'yearly';
+
 interface PlanChangeConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   targetPlan: PlanTarget | null;
   /** Called after the server confirms the plan switch succeeded. */
   onSuccess?: () => void;
+  /** Which cycle the user picked on the plan card (defaults to monthly). */
+  initialCycle?: BillingCycle;
 }
 
 const ARABIC_MONTHS = [
@@ -76,8 +80,10 @@ interface Billing {
   proratedAmount: number;
   /** Days between now and startDate. */
   daysRemaining: number;
-  /** Full monthly price of the new plan (what will be charged going forward). */
-  monthlyPrice: number;
+  /** Recurring price of the new plan per cycle (monthly OR yearly). */
+  cyclePrice: number;
+  /** Which cycle the price is on. */
+  cycle: BillingCycle;
 }
 
 /**
@@ -95,8 +101,11 @@ function computeBilling(
     trial_ends_at: string | null;
     subscription_expires_at: string | null;
     billing_cycle_day: number | null;
+    billing_cycle?: BillingCycle | null;
   } | null,
   newMonthlyPrice: number,
+  newYearlyPrice: number | null,
+  targetCycle: BillingCycle,
   today: Date = new Date(),
 ): Billing | null {
   if (!agent) return null;
@@ -105,7 +114,12 @@ function computeBilling(
     agent.subscription_status === 'trial' ||
     (Number(agent.monthly_price) === 0 && agent.subscription_status === 'active');
 
-  const currentPrice = Number(agent.monthly_price ?? 0);
+  const currentMonthly = Number(agent.monthly_price ?? 0);
+  const currentCycle = (agent.billing_cycle as BillingCycle) ?? 'monthly';
+  // Fall back to monthly × 12 so a plan without an explicit yearly
+  // price still has a sensible annual number.
+  const yearlyPrice = newYearlyPrice != null ? newYearlyPrice : newMonthlyPrice * 12;
+  const cyclePrice = targetCycle === 'yearly' ? yearlyPrice : newMonthlyPrice;
 
   if (isTrial) {
     const trialEnd = agent.trial_ends_at ? new Date(agent.trial_ends_at) : null;
@@ -115,7 +129,8 @@ function computeBilling(
       startDate: start,
       proratedAmount: 0,
       daysRemaining: Math.max(0, Math.floor((start.getTime() - today.getTime()) / 86400000)),
-      monthlyPrice: newMonthlyPrice,
+      cyclePrice,
+      cycle: targetCycle,
     };
   }
 
@@ -132,12 +147,24 @@ function computeBilling(
 
   const msPerDay = 86400000;
   const daysRemaining = Math.max(1, Math.ceil((nextBilling.getTime() - today.getTime()) / msPerDay));
-  const dailyDelta = (newMonthlyPrice - currentPrice) / 30;
-  const proratedAmount = Math.round(dailyDelta * daysRemaining);
 
+  // Switching to yearly OR changing cycles charges the full new cycle
+  // up front (credit on the monthly leftover is minimal and not worth
+  // the complexity). For like-for-like monthly→monthly switches we
+  // keep the original per-day delta pro-rata so small upgrades stay
+  // cheap.
+  let proratedAmount: number;
+  if (targetCycle === 'yearly' || currentCycle !== targetCycle) {
+    proratedAmount = Math.round(cyclePrice);
+  } else {
+    const dailyDelta = (newMonthlyPrice - currentMonthly) / 30;
+    proratedAmount = Math.round(dailyDelta * daysRemaining);
+  }
+
+  const compareCurrent = currentCycle === 'yearly' ? currentMonthly * 12 : currentMonthly;
   let kind: Billing['kind'];
-  if (newMonthlyPrice > currentPrice) kind = 'upgrade';
-  else if (newMonthlyPrice < currentPrice) kind = 'downgrade';
+  if (cyclePrice > compareCurrent) kind = 'upgrade';
+  else if (cyclePrice < compareCurrent) kind = 'downgrade';
   else kind = 'same_price';
 
   return {
@@ -145,7 +172,8 @@ function computeBilling(
     startDate: nextBilling,
     proratedAmount,
     daysRemaining,
-    monthlyPrice: newMonthlyPrice,
+    cyclePrice,
+    cycle: targetCycle,
   };
 }
 
@@ -161,10 +189,12 @@ export function PlanChangeConfirmDialog({
   onOpenChange,
   targetPlan,
   onSuccess,
+  initialCycle = 'monthly',
 }: PlanChangeConfirmDialogProps) {
   const { agent, planInfo } = useAgentContext();
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [cycle, setCycle] = useState<BillingCycle>(initialCycle);
   const [successState, setSuccessState] = useState<null | {
     switchMode: 'immediate' | 'after_trial';
     emailSent: boolean;
@@ -175,14 +205,22 @@ export function PlanChangeConfirmDialog({
       setPrivacyAccepted(false);
       setSubmitting(false);
       setSuccessState(null);
+      setCycle(initialCycle);
+    } else {
+      setCycle(initialCycle);
     }
-  }, [open]);
+  }, [open, initialCycle]);
 
   if (!targetPlan) return null;
 
-  const currentPrice = Number(agent?.monthly_price ?? 0);
-  const newPrice = Number(targetPlan.monthly_price);
-  const billing = computeBilling(agent, newPrice);
+  const currentMonthlyPrice = Number(agent?.monthly_price ?? 0);
+  const newMonthly = Number(targetPlan.monthly_price);
+  const newYearly =
+    targetPlan.yearly_price != null ? Number(targetPlan.yearly_price) : null;
+  const cyclePrice = cycle === 'yearly' ? (newYearly ?? newMonthly * 12) : newMonthly;
+  const billing = computeBilling(agent, newMonthly, newYearly, cycle);
+  const yearlySavings =
+    newYearly != null ? Math.max(0, Math.round(newMonthly * 12 - newYearly)) : 0;
 
   const handleConfirm = async () => {
     if (!privacyAccepted || submitting) return;
@@ -192,6 +230,7 @@ export function PlanChangeConfirmDialog({
         body: {
           target_plan_key: targetPlan.plan_key,
           privacy_accepted: true,
+          billing_cycle: cycle,
         },
       });
       if (error) throw error;
@@ -257,6 +296,46 @@ export function PlanChangeConfirmDialog({
 
         {!successState ? (
           <div className="flex-1 overflow-y-auto px-6 md:px-7 py-5 bg-slate-50/50 space-y-4">
+            {/* Monthly / yearly toggle */}
+            <div className="flex gap-2 p-1 rounded-xl bg-white ring-1 ring-slate-200">
+              <button
+                type="button"
+                onClick={() => setCycle('monthly')}
+                className={cn(
+                  'flex-1 py-2 rounded-lg text-sm font-semibold transition-all',
+                  cycle === 'monthly'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                شهري
+              </button>
+              <button
+                type="button"
+                onClick={() => setCycle('yearly')}
+                className={cn(
+                  'flex-1 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-1.5',
+                  cycle === 'yearly'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                سنوي
+                {yearlySavings > 0 && (
+                  <span
+                    className={cn(
+                      'text-[10px] px-1.5 py-0.5 rounded-full font-bold',
+                      cycle === 'yearly'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-emerald-500/15 text-emerald-700',
+                    )}
+                  >
+                    وفّر ₪{yearlySavings.toLocaleString('en')}
+                  </span>
+                )}
+              </button>
+            </div>
+
             {/* Compact from → to summary */}
             <div className="flex items-center gap-2 justify-between rounded-xl bg-white ring-1 ring-slate-200 p-3">
               <div className="flex-1 min-w-0 text-right">
@@ -265,7 +344,7 @@ export function PlanChangeConfirmDialog({
                   {planInfo?.name_ar || planInfo?.name || agent?.plan || '—'}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  ₪{currentPrice.toLocaleString('en')} / شهر
+                  ₪{currentMonthlyPrice.toLocaleString('en')} / شهر
                 </p>
               </div>
               <ArrowLeft className="h-4 w-4 text-primary shrink-0" weight="bold" />
@@ -275,7 +354,7 @@ export function PlanChangeConfirmDialog({
                   {targetPlan.name_ar || targetPlan.name}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  ₪{newPrice.toLocaleString('en')} / شهر
+                  ₪{cyclePrice.toLocaleString('en')} / {cycle === 'yearly' ? 'سنة' : 'شهر'}
                 </p>
               </div>
             </div>
@@ -384,6 +463,7 @@ export function PlanChangeConfirmDialog({
 function BillingExplanation({ billing }: { billing: Billing }) {
   const date = formatArabicDate(billing.startDate);
   const amountStr = (n: number) => `₪${Math.abs(n).toLocaleString('en')}`;
+  const cycleLabel = billing.cycle === 'yearly' ? 'سنة' : 'شهر';
 
   if (billing.kind === 'trial') {
     return (
@@ -391,7 +471,7 @@ function BillingExplanation({ billing }: { billing: Billing }) {
         <p className="text-sm text-slate-800">
           ستبدأ الفوترة تلقائياً في{' '}
           <span className="font-bold text-primary">{date}</span> بسعر{' '}
-          <span className="font-bold tabular-nums">{amountStr(billing.monthlyPrice)}</span> / شهر.
+          <span className="font-bold tabular-nums">{amountStr(billing.cyclePrice)}</span> / {cycleLabel}.
         </p>
         <p className="text-xs text-muted-foreground">
           لن يتم خصم أي مبلغ منك حتى ذلك التاريخ.
@@ -403,9 +483,9 @@ function BillingExplanation({ billing }: { billing: Billing }) {
   if (billing.kind === 'same_price') {
     return (
       <p className="text-sm text-slate-800">
-        سيتم تفعيل الحزمة فوراً. لن يتغيّر المبلغ الشهري — ستستمر بدفع{' '}
-        <span className="font-bold tabular-nums">{amountStr(billing.monthlyPrice)}</span> / شهر
-        في فاتورتك القادمة بتاريخ{' '}
+        سيتم تفعيل الحزمة فوراً. لن يتغيّر المبلغ — ستستمر بدفع{' '}
+        <span className="font-bold tabular-nums">{amountStr(billing.cyclePrice)}</span> / {cycleLabel}
+        {' '}في فاتورتك القادمة بتاريخ{' '}
         <span className="font-bold">{date}</span>.
       </p>
     );
@@ -422,7 +502,12 @@ function BillingExplanation({ billing }: { billing: Billing }) {
             <span className="font-bold tabular-nums text-primary">
               {amountStr(billing.proratedAmount)}
             </span>{' '}
-            (فرق {billing.daysRemaining} يوم متبقي) إلى فاتورتك القادمة في{' '}
+            {billing.cycle === 'yearly' ? (
+              <>(مقدّم الدفع السنوي)</>
+            ) : (
+              <>(فرق {billing.daysRemaining} يوم متبقي)</>
+            )}{' '}
+            إلى فاتورتك القادمة في{' '}
             <span className="font-bold">{date}</span>.
           </>
         ) : (
@@ -438,7 +523,7 @@ function BillingExplanation({ billing }: { billing: Billing }) {
       </p>
       <p className="text-xs text-muted-foreground">
         بعدها ستدفع{' '}
-        <span className="font-semibold tabular-nums">{amountStr(billing.monthlyPrice)}</span> / شهر.
+        <span className="font-semibold tabular-nums">{amountStr(billing.cyclePrice)}</span> / {cycleLabel}.
       </p>
     </div>
   );

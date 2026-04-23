@@ -70,6 +70,8 @@ Deno.serve(async (req) => {
     const targetPlanKey: string = body.target_plan_key;
     const privacyAccepted: boolean = body.privacy_accepted === true;
     const notes: string | null = body.notes ?? null;
+    const rawCycle = String(body.billing_cycle ?? "monthly").toLowerCase();
+    const billingCycle: "monthly" | "yearly" = rawCycle === "yearly" ? "yearly" : "monthly";
     if (!targetPlanKey) throw new Error("target_plan_key مطلوب");
     if (!privacyAccepted) throw new Error("يجب الموافقة على سياسة الخصوصية");
 
@@ -85,7 +87,7 @@ Deno.serve(async (req) => {
 
     const { data: agent } = await adminClient
       .from("agents")
-      .select("id, name, name_ar, email, plan, monthly_price, subscription_status, trial_ends_at, pending_plan")
+      .select("id, name, name_ar, email, plan, monthly_price, subscription_status, trial_ends_at, pending_plan, billing_cycle")
       .eq("id", agentUser.agent_id)
       .single();
     if (!agent) throw new Error("لم يتم العثور على بيانات الوكيل");
@@ -109,20 +111,40 @@ Deno.serve(async (req) => {
       (Number(agent.monthly_price) === 0 && agent.subscription_status === "active");
     const switchMode: "immediate" | "after_trial" = isTrial ? "after_trial" : "immediate";
 
-    // Don't no-op silently — if they're already on this plan with no
-    // different pending plan, surface a clear error.
-    if (!isTrial && agent.plan === targetPlan.plan_key) {
+    // Yearly pricing falls back to monthly_price × 12 if the plan
+    // doesn't declare a yearly_price — that way a yearly toggle on
+    // a legacy plan still charges a predictable amount.
+    const yearlyPrice =
+      targetPlan.yearly_price != null
+        ? Number(targetPlan.yearly_price)
+        : Number(targetPlan.monthly_price) * 12;
+    const effectivePrice =
+      billingCycle === "yearly" ? yearlyPrice / 12 : Number(targetPlan.monthly_price);
+
+    const currentCycle = (agent.billing_cycle as "monthly" | "yearly") ?? "monthly";
+    const sameTarget =
+      agent.plan === targetPlan.plan_key && currentCycle === billingCycle;
+
+    // Don't no-op silently — if they're already on this plan + cycle
+    // combo, surface a clear error.
+    if (!isTrial && sameTarget) {
       throw new Error("أنت بالفعل على هذه الحزمة");
     }
-    if (isTrial && agent.pending_plan === targetPlan.plan_key) {
+    if (isTrial && agent.pending_plan === targetPlan.plan_key && currentCycle === billingCycle) {
       throw new Error("هذه الحزمة مُختارة بالفعل كخطة ما بعد التجربة");
     }
 
-    // Apply the switch.
+    // Apply the switch. `monthly_price` stays stored as the monthly
+    // rate even on yearly plans so the per-month displays elsewhere
+    // (AgentPlanOverview etc.) keep working; yearly subscribers pay
+    // monthly_price × 12 upfront at renewal instead.
     if (switchMode === "after_trial") {
       const { error: updErr } = await adminClient
         .from("agents")
-        .update({ pending_plan: targetPlan.plan_key })
+        .update({
+          pending_plan: targetPlan.plan_key,
+          billing_cycle: billingCycle,
+        })
         .eq("id", agent.id);
       if (updErr) throw new Error(updErr.message);
     } else {
@@ -130,7 +152,8 @@ Deno.serve(async (req) => {
         .from("agents")
         .update({
           plan: targetPlan.plan_key,
-          monthly_price: Number(targetPlan.monthly_price),
+          monthly_price: effectivePrice,
+          billing_cycle: billingCycle,
           pending_plan: null,
         })
         .eq("id", agent.id);
@@ -172,10 +195,17 @@ Deno.serve(async (req) => {
         ? "تفعيل بعد انتهاء الفترة التجريبية"
         : "تفعيل فوري";
 
+      const cycleLabelAr = billingCycle === "yearly" ? "سنوي" : "شهري";
+      const newTotalAr =
+        billingCycle === "yearly"
+          ? `${fmtPrice(yearlyPrice)} / سنة`
+          : `${fmtPrice(Number(targetPlan.monthly_price))} / شهر`;
+
       const rows = [
         ["الوكالة", `${agent.name_ar || agent.name} (${agent.email})`],
-        ["من", `${currentPlan?.name_ar || currentPlan?.name || agent.plan} — ${fmtPrice(Number(agent.monthly_price ?? 0))} / شهر`],
-        ["إلى", `${targetPlan.name_ar || targetPlan.name} — ${fmtPrice(Number(targetPlan.monthly_price))} / شهر`],
+        ["من", `${currentPlan?.name_ar || currentPlan?.name || agent.plan} — ${fmtPrice(Number(agent.monthly_price ?? 0))} / شهر (${currentCycle === "yearly" ? "سنوي" : "شهري"})`],
+        ["إلى", `${targetPlan.name_ar || targetPlan.name} — ${newTotalAr}`],
+        ["دورة الفوترة", cycleLabelAr],
         ["نوع التحويل", modeLabel],
         ["الحالة الحالية", agent.subscription_status],
         ["سياسة الخصوصية", "تمت الموافقة"],

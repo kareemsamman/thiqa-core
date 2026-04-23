@@ -16,6 +16,7 @@ interface AgentInfo {
   trial_ends_at: string | null;
   subscription_started_at: string | null;
   billing_cycle_day: number | null;
+  billing_cycle: 'monthly' | 'yearly' | null;
   pending_plan: string | null;
   cancelled_at: string | null;
   default_employee_permissions: Record<string, boolean> | null;
