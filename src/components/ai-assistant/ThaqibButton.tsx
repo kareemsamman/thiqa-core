@@ -23,7 +23,7 @@ export function ThaqibButton({ onClick, visible, locked = false }: ThaqibButtonP
           : "bg-black hover:bg-neutral-800 text-white ring-1 ring-white/10",
         visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
       )}
-      title={locked ? "وصلت الحد الشهري لمحادثات ثاقب — اضغط للترقية" : "ثاقب — المساعد الذكي"}
+      title={locked ? "المساعد الذكي (ثاقب) — اضغط للترقية" : "ثاقب — المساعد الذكي"}
     >
       <Bot className="h-6 w-6 md:h-7 md:w-7" />
       {locked && (

@@ -42,13 +42,29 @@ export function ThaqibWidget() {
   );
 
   if (isPublicRoute) return null;
-  if (isThiqaSuperAdmin || !hasFeature("ai_assistant")) return null;
+  if (isThiqaSuperAdmin) return null;
 
-  // AI quota is exhausted → clicking the FAB surfaces the upgrade
-  // dialog instead of opening the chat. ThaqibButton itself flips to
-  // the locked visual via the `locked` prop.
+  // Two "locked" states — both render the FAB in amber with a lock
+  // badge, so the agent sees the surface even before they upgrade:
+  //   * plan doesn't include the ai_assistant feature → feature-lock
+  //     variant of the upgrade dialog (shows plans that unlock it).
+  //   * plan includes it but this month's quota is gone → quota variant
+  //     of the dialog (shows current/limit numbers).
+  // Either way, clicking the FAB opens the upgrade dialog instead of
+  // the chat panel.
+  const hasAiFeature = hasFeature("ai_assistant");
+  const quotaGone = hasAiFeature && aiLimit.exceeded;
+  const locked = !hasAiFeature || quotaGone;
+
   const handleClick = () => {
-    if (aiLimit.exceeded) {
+    if (!hasAiFeature) {
+      showUpgradePrompt({
+        featureKey: "ai_assistant",
+        featureLabel: "المساعد الذكي (ثاقب)",
+      });
+      return;
+    }
+    if (quotaGone) {
       showUpgradePrompt({
         resource: "ai",
         current: aiLimit.used,
@@ -61,8 +77,8 @@ export function ThaqibWidget() {
 
   return (
     <>
-      <ThaqibButton onClick={handleClick} visible={!open} locked={aiLimit.exceeded} />
-      <ThaqibPanel open={open} onClose={() => setOpen(false)} />
+      <ThaqibButton onClick={handleClick} visible={!open} locked={locked} />
+      {hasAiFeature && <ThaqibPanel open={open} onClose={() => setOpen(false)} />}
     </>
   );
 }
