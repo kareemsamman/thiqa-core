@@ -79,17 +79,12 @@ export function NotificationsDropdown({ className, iconClassName, badgeVariant =
         onClick={() =>
           showUpgradePrompt({ featureKey: 'notifications', featureLabel: 'التنبيهات' })
         }
+        title="التنبيهات — اضغط للترقية"
         className={cn('relative h-9 w-9 md:h-10 md:w-10', className)}
       >
         <Bell className={cn('h-4 w-4 md:h-5 md:w-5 text-muted-foreground', iconClassName)} />
-        <span
-          className="absolute -left-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full shadow-sm ring-1 ring-white/40"
-          style={{
-            background:
-              'linear-gradient(135deg, #6a3bd1 0%, #c93fa8 55%, #ed6a44 100%)',
-          }}
-        >
-          <Lock className="h-2.5 w-2.5 text-white" weight="fill" />
+        <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+          <Lock className="h-2.5 w-2.5" weight="fill" />
         </span>
       </Button>
     );
