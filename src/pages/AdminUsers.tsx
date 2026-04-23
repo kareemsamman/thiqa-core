@@ -55,6 +55,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
+import { useAgentLimits } from "@/hooks/useAgentLimits";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,7 +110,15 @@ export default function AdminUsers() {
   const { branches, getBranchName } = useBranches();
   const { agentId } = useAgentContext();
   const { toast } = useToast();
-  const { showUpgradePrompt } = useUpgradePrompt();
+  const { showUpgradePrompt, handleLimitError } = useUpgradePrompt();
+  const { users: userLimit, refetch: refetchLimits } = useAgentLimits();
+
+  const openUserUpgrade = () =>
+    showUpgradePrompt({
+      resource: 'users',
+      current: userLimit.used,
+      limit: userLimit.effective ?? 0,
+    });
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([]);
   const [attemptsLoading, setAttemptsLoading] = useState(false);
@@ -150,6 +159,12 @@ export default function AdminUsers() {
 
   const handleCreateUser = async () => {
     if (!agentId) return;
+    // Pre-flight gate: if the agent is already at their user quota,
+    // don't even hit the edge function — open the upgrade popup.
+    if (userLimit.exceeded) {
+      openUserUpgrade();
+      return;
+    }
 
     const email = newUserEmail.trim();
     const password = newUserPassword;
@@ -196,8 +211,15 @@ export default function AdminUsers() {
       resetCreateForm();
       setCreateSheetOpen(false);
       fetchUsers();
+      refetchLimits();
     } catch (err: any) {
-      toast({ title: "خطأ", description: err.message || "فشل في إنشاء المستخدم", variant: "destructive" });
+      // If the DB trigger raised LIMIT_EXCEEDED:users:..., swallow the
+      // toast and open the upgrade dialog instead.
+      if (handleLimitError(err)) {
+        setCreateSheetOpen(false);
+      } else {
+        toast({ title: "خطأ", description: err.message || "فشل في إنشاء المستخدم", variant: "destructive" });
+      }
     } finally {
       setCreatingUser(false);
     }
@@ -308,6 +330,14 @@ export default function AdminUsers() {
   }, [isAdmin, agentId, attemptsRange]);
 
   const handleApproveUser = async (userId: string) => {
+    // Pre-flight: approving flips status pending → active, which will
+    // trip enforce_user_limit if the agent is already at cap. Skip the
+    // round-trip and open the upgrade dialog directly.
+    if (userLimit.exceeded) {
+      openUserUpgrade();
+      setConfirmDialog(null);
+      return;
+    }
     setActionLoading(userId);
     try {
       const role = selectedRole[userId] || 'worker';
@@ -318,7 +348,7 @@ export default function AdminUsers() {
       if (branchId) {
         updateData.branch_id = branchId;
       }
-      
+
       const { error: profileError } = await supabase
         .from('profiles')
         .update(updateData)
@@ -341,13 +371,18 @@ export default function AdminUsers() {
       });
 
       fetchUsers();
-    } catch (error) {
-      console.error('Error approving user:', error);
-      toast({
-        title: "خطأ",
-        description: "فشل في تفعيل المستخدم",
-        variant: "destructive",
-      });
+      refetchLimits();
+    } catch (error: any) {
+      if (handleLimitError(error)) {
+        // upgrade dialog will be shown by the provider
+      } else {
+        console.error('Error approving user:', error);
+        toast({
+          title: "خطأ",
+          description: error?.message || "فشل في تفعيل المستخدم",
+          variant: "destructive",
+        });
+      }
     } finally {
       setActionLoading(null);
       setConfirmDialog(null);
@@ -384,6 +419,14 @@ export default function AdminUsers() {
   };
 
   const handleUnblockUser = async (userId: string) => {
+    // Unblocking flips blocked → active, which consumes a seat. If the
+    // agent is already at their cap we'd get LIMIT_EXCEEDED from the
+    // DB trigger; surface the upgrade flow up front instead.
+    if (userLimit.exceeded) {
+      openUserUpgrade();
+      setConfirmDialog(null);
+      return;
+    }
     setActionLoading(userId);
     try {
       const { error } = await supabase
@@ -399,13 +442,18 @@ export default function AdminUsers() {
       });
 
       fetchUsers();
-    } catch (error) {
-      console.error('Error unblocking user:', error);
-      toast({
-        title: "خطأ",
-        description: "فشل في إلغاء حظر المستخدم",
-        variant: "destructive",
-      });
+      refetchLimits();
+    } catch (error: any) {
+      if (handleLimitError(error)) {
+        // upgrade dialog is shown by the provider
+      } else {
+        console.error('Error unblocking user:', error);
+        toast({
+          title: "خطأ",
+          description: error?.message || "فشل في إلغاء حظر المستخدم",
+          variant: "destructive",
+        });
+      }
     } finally {
       setActionLoading(null);
       setConfirmDialog(null);
@@ -529,10 +577,22 @@ export default function AdminUsers() {
       <div className="p-6 space-y-6">
         {/* Toolbar */}
         <div className="flex items-center justify-between gap-2">
-          <Button onClick={() => { resetCreateForm(); setCreateSheetOpen(true); }} className="gap-2">
-            <UserPlus className="h-4 w-4" />
-            إنشاء مستخدم
-          </Button>
+          {userLimit.exceeded ? (
+            <Button
+              variant="outline"
+              onClick={openUserUpgrade}
+              className="gap-2 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+            >
+              <Lock className="h-4 w-4" />
+              إنشاء مستخدم
+              <Sparkles className="h-3.5 w-3.5 opacity-70" />
+            </Button>
+          ) : (
+            <Button onClick={() => { resetCreateForm(); setCreateSheetOpen(true); }} className="gap-2">
+              <UserPlus className="h-4 w-4" />
+              إنشاء مستخدم
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
