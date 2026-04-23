@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useNotifications, Notification } from '@/hooks/useNotifications';
+import { useAgentContext } from '@/hooks/useAgentContext';
 import { PaymentMethodBadge } from '@/components/notifications/PaymentMethodBadge';
 import { PaymentTypeBadges } from '@/components/notifications/PaymentTypeBadges';
 import { formatDistanceToNow } from 'date-fns';
@@ -53,17 +54,22 @@ interface NotificationsDropdownProps {
 
 export function NotificationsDropdown({ className, iconClassName, badgeVariant = "count" }: NotificationsDropdownProps = {}) {
   const navigate = useNavigate();
-  const { 
-    notifications, 
-    unreadCount, 
-    loading, 
-    markAsRead, 
-    markAllAsRead, 
+  const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
+  const {
+    notifications,
+    unreadCount,
+    loading,
+    markAsRead,
+    markAllAsRead,
     deleteNotification,
     recentlyArrivedIds,
     badgePulse
   } = useNotifications();
   const [open, setOpen] = useState(false);
+
+  if (!isThiqaSuperAdmin && !hasFeature('notifications')) {
+    return null;
+  }
 
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.is_read) {
