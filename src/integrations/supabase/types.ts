@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       ab_ledger: {
@@ -1510,7 +1485,6 @@ export type Database = {
           name: string
           name_ar: string | null
           slug: string
-          status: string
           updated_at: string
         }
         Insert: {
@@ -1522,7 +1496,6 @@ export type Database = {
           name: string
           name_ar?: string | null
           slug: string
-          status?: string
           updated_at?: string
         }
         Update: {
@@ -1534,7 +1507,6 @@ export type Database = {
           name?: string
           name_ar?: string | null
           slug?: string
-          status?: string
           updated_at?: string
         }
         Relationships: [
@@ -4203,6 +4175,62 @@ export type Database = {
           },
         ]
       }
+      plan_change_events: {
+        Row: {
+          agent_id: string
+          changed_by_user: string | null
+          created_at: string
+          email_error: string | null
+          email_sent: boolean
+          from_plan: string
+          from_price: number
+          id: string
+          notes: string | null
+          privacy_accepted: boolean
+          switch_mode: string
+          to_plan: string
+          to_price: number
+        }
+        Insert: {
+          agent_id: string
+          changed_by_user?: string | null
+          created_at?: string
+          email_error?: string | null
+          email_sent?: boolean
+          from_plan: string
+          from_price?: number
+          id?: string
+          notes?: string | null
+          privacy_accepted?: boolean
+          switch_mode: string
+          to_plan: string
+          to_price?: number
+        }
+        Update: {
+          agent_id?: string
+          changed_by_user?: string | null
+          created_at?: string
+          email_error?: string | null
+          email_sent?: boolean
+          from_plan?: string
+          from_price?: number
+          id?: string
+          notes?: string | null
+          privacy_accepted?: boolean
+          switch_mode?: string
+          to_plan?: string
+          to_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_change_events_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       policies: {
         Row: {
           accident_fee_service_id: string | null
@@ -5729,8 +5757,6 @@ export type Database = {
           default_signature_template_id: string | null
           enable_auto_reminders: boolean | null
           enable_auto_renewal_reminders: boolean | null
-          htd_id: string | null
-          htd_sender: string | null
           id: string
           invoice_sms_template: string | null
           is_enabled: boolean
@@ -5770,8 +5796,6 @@ export type Database = {
           default_signature_template_id?: string | null
           enable_auto_reminders?: boolean | null
           enable_auto_renewal_reminders?: boolean | null
-          htd_id?: string | null
-          htd_sender?: string | null
           id?: string
           invoice_sms_template?: string | null
           is_enabled?: boolean
@@ -5811,8 +5835,6 @@ export type Database = {
           default_signature_template_id?: string | null
           enable_auto_reminders?: boolean | null
           enable_auto_renewal_reminders?: boolean | null
-          htd_id?: string | null
-          htd_sender?: string | null
           id?: string
           invoice_sms_template?: string | null
           is_enabled?: boolean
@@ -7166,7 +7188,7 @@ export type Database = {
         | "manual"
         | "payment_request"
       under24_type: "none" | "client" | "additional_driver"
-      user_status: "pending" | "active" | "blocked" | "plan_locked"
+      user_status: "pending" | "active" | "blocked"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -7292,9 +7314,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       age_band: ["UNDER_24", "UP_24", "ANY"],
