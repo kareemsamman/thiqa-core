@@ -1234,6 +1234,51 @@ function AgentDefaultsTab() {
     addon_data_migration_price: "450",
   });
   const [showHtdId, setShowHtdId] = useState(false);
+  const [testPhone, setTestPhone] = useState("");
+  const [testing, setTesting] = useState(false);
+
+  const handleTestSms = async () => {
+    const phone = testPhone.trim();
+    if (!phone) {
+      toast({ title: "خطأ", description: "يرجى إدخال رقم هاتف للاختبار", variant: "destructive" });
+      return;
+    }
+    setTesting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("test-sms-credentials", {
+        body: {
+          provider: form.default_sms_provider === "htd" ? "htd" : "019",
+          phone,
+          sms_user: form.default_sms_019_user,
+          sms_token: form.default_sms_019_token,
+          sms_source: form.default_sms_019_source,
+          htd_id: form.default_sms_htd_id,
+          htd_sender: form.default_sms_htd_sender,
+        },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast({
+          title: "نجح الإرسال",
+          description: `عبر ${data.provider === "htd" ? "HTD" : "019sms"} — ${data.api_message || "تم إرسال الرسالة"}`,
+        });
+      } else {
+        toast({
+          title: "فشل الإرسال",
+          description: data?.error || data?.raw || "تعذّر إرسال الرسالة",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "فشل الإرسال",
+        description: err?.message || "تعذّر الاتصال بوظيفة الاختبار",
+        variant: "destructive",
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
   const [showPassword, setShowPassword] = useState(false);
   const [showToken, setShowToken] = useState(false);
 
@@ -1406,6 +1451,44 @@ function AgentDefaultsTab() {
                 />
               </div>
             </div>
+          </div>
+
+          {/* Test-send using the values currently typed in the form
+              (no need to save first). Uses the test-sms-credentials
+              edge function which is gated to Thiqa super admins. */}
+          <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Send className="h-4 w-4 text-primary" />
+              <span className="text-sm font-bold">اختبار الإرسال</span>
+              <span className="text-[10px] text-muted-foreground">
+                يستخدم القيم المكتوبة أعلاه — لا حاجة للحفظ أولاً
+              </span>
+            </div>
+            <div className="flex flex-col md:flex-row gap-2">
+              <Input
+                placeholder="05xxxxxxxx أو 972xxxxxxxxx"
+                value={testPhone}
+                onChange={(e) => setTestPhone(e.target.value)}
+                dir="ltr"
+                className="md:max-w-xs"
+              />
+              <Button
+                onClick={handleTestSms}
+                disabled={testing}
+                variant="outline"
+                className="gap-2"
+              >
+                {testing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                إرسال رسالة اختبار
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              سيتم الإرسال عبر <strong>{form.default_sms_provider === "htd" ? "HTD" : "019sms"}</strong> باستخدام البيانات الحالية في الحقول أعلاه.
+            </p>
           </div>
         </CardContent>
       </Card>
