@@ -392,26 +392,39 @@ export default function ThiqaAgentDetail() {
         patch.pending_plan = null;
         patch.cancelled_at = null;
       } else {
-        // → paid. Flip status + pull price + clear trial fields only if
-        // the admin didn't already set them in the form.
-        if (agent.subscription_status === 'trial') {
-          patch.subscription_status = 'active';
-        }
-        if (!agent.monthly_price || agent.monthly_price === 0) {
-          patch.monthly_price = targetPrice;
-        }
-        patch.trial_ends_at = null;
-        if (!agent.subscription_started_at) {
-          patch.subscription_started_at = nowIso;
-        }
-        if (
-          !agent.subscription_expires_at ||
-          new Date(agent.subscription_expires_at).getTime() < Date.now()
-        ) {
-          patch.subscription_expires_at = oneMonthIso;
-        }
+        // → paid (either from trial or paid→paid). Always pull the new
+        // plan's monthly_price on a plan change — the form's current
+        // monthly_price is still the OLD plan's value since the admin
+        // only touched the plan dropdown. If they want a custom
+        // price, they can edit the field *after* save. Clear trial
+        // state only if coming from trial; for paid→paid keep the
+        // existing subscription_expires_at intact so the next billing
+        // date doesn't silently reset (matches the prorated-billing
+        // promise in PlanChangeConfirmDialog).
+        const comingFromTrial =
+          prevPlan === 'free_trial' || agent.subscription_status === 'trial';
+
+        patch.monthly_price = targetPrice;
         patch.pending_plan = null;
         patch.cancelled_at = null;
+
+        if (comingFromTrial) {
+          patch.subscription_status = 'active';
+          patch.trial_ends_at = null;
+          if (!agent.subscription_started_at) {
+            patch.subscription_started_at = nowIso;
+          }
+          if (
+            !agent.subscription_expires_at ||
+            new Date(agent.subscription_expires_at).getTime() < Date.now()
+          ) {
+            patch.subscription_expires_at = oneMonthIso;
+          }
+        }
+        // paid → paid: leave subscription_status, subscription_expires_at,
+        // subscription_started_at, trial_ends_at alone. Only the price
+        // changes; the next billing date stays where it was and Thiqa
+        // applies the prorated delta on the next invoice.
       }
     }
 
