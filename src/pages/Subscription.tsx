@@ -3,7 +3,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,7 +16,8 @@ import {
   Rocket, Shield, Trash2, XCircle, Loader2, Settings, BarChart3, Receipt, UserCog, Plus, ChevronDown,
 } from "lucide-react";
 import { AddQuotaDialog, type OverageUsageType } from "@/components/subscription/AddQuotaDialog";
-import { AgentPlanOverview } from "@/components/subscription/AgentPlanOverview";
+import { AgentPlanOverview, UsageRow } from "@/components/subscription/AgentPlanOverview";
+import { useAgentLimits } from "@/hooks/useAgentLimits";
 import { PlanLadder } from "@/components/pricing/PlanLadder";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -62,6 +63,7 @@ const PLAN_ICONS: Record<string, typeof Rocket> = {
 };
 
 function UsageStatsSection({ agentId }: { agentId: string | null }) {
+  const planLimits = useAgentLimits();
   const [limits, setLimits] = useState<any>(null);
   const [usage, setUsage] = useState<any[]>([]);
   const [wallet, setWallet] = useState<{ sms_credit_balance: number; ai_credit_balance: number }>({
@@ -251,6 +253,19 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
     );
   };
 
+  const creditButton = (type: OverageUsageType, label: string) => (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-6 px-2 gap-1 text-[11px]"
+      onClick={() => setQuotaDialogType(type)}
+    >
+      <Plus className="h-3 w-3" />
+      {label}
+    </Button>
+  );
+
   return (
     <div className="space-y-4">
       <div>
@@ -262,6 +277,53 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
           لكل حساب حد شهري مجاني يتجدد كل شهر. عند استنفاده يمكنك شحن رصيد إضافي يبقى معك ولا ينتهي حتى تستخدمه كاملاً.
         </p>
       </div>
+
+      {/* Unified usage bars — moved here from the Plan tab so every
+          resource (users / branches / policies / SMS / marketing SMS /
+          AI) sits in one place. SMS and AI rows get an inline "buy
+          credit" button so the agent can top up without leaving the
+          tab. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">استخدامك الحالي</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {planLimits.loading ? (
+            <>
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+            </>
+          ) : (
+            <>
+              <UsageRow label="المستخدمين" limit={planLimits.users} />
+              <UsageRow label="الفروع" limit={planLimits.branches} />
+              <UsageRow
+                label={`المعاملات (${
+                  planLimits.policyPeriod === 'monthly'
+                    ? 'هذا الشهر'
+                    : planLimits.policyPeriod === 'yearly'
+                    ? 'هذه السنة'
+                    : 'إجمالي'
+                })`}
+                limit={planLimits.policies}
+              />
+              <UsageRow
+                label="رسائل SMS (هذا الشهر)"
+                limit={planLimits.sms}
+                action={creditButton('sms', 'شحن SMS')}
+              />
+              <UsageRow label="SMS تسويقية (هذا الشهر)" limit={planLimits.marketingSms} />
+              <UsageRow
+                label="طلبات AI (هذا الشهر)"
+                limit={planLimits.ai}
+                action={creditButton('ai_chat', 'شحن AI')}
+              />
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {renderUsageCard({
           title: "رسائل SMS",
@@ -290,7 +352,7 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
           open={!!quotaDialogType}
           onOpenChange={(open) => { if (!open) setQuotaDialogType(null); }}
           usageType={quotaDialogType}
-          onPurchased={() => setReloadToken((t) => t + 1)}
+          onPurchased={() => { setReloadToken((t) => t + 1); planLimits.refetch(); }}
         />
       )}
     </div>

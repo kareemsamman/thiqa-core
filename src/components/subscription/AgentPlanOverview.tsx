@@ -154,14 +154,17 @@ const ADDON_CATALOG: {
 ];
 
 
-function UsageRow({
+export function UsageRow({
   label,
   limit,
   unit = '',
+  action,
 }: {
   label: string;
   limit: ResourceLimit;
   unit?: string;
+  /** Optional trailing element (e.g. a "buy credit" button) rendered after the label. */
+  action?: React.ReactNode;
 }) {
   const isUnlimited = limit.effective === null;
   // Format: "limit / used" (plan cap first, current usage second).
@@ -183,9 +186,12 @@ function UsageRow({
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-sm">
-        <span className="font-medium">{label}</span>
-        <span className="font-mono ltr-nums text-muted-foreground">
+      <div className="flex items-center justify-between text-sm gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-medium truncate">{label}</span>
+          {action}
+        </div>
+        <span className="font-mono ltr-nums text-muted-foreground shrink-0">
           {usedText}
           {limit.addonQuantity > 0 && !isUnlimited && (
             <span className="text-emerald-600 text-xs mr-1">(+{limit.addonQuantity} إضافي)</span>
@@ -215,7 +221,6 @@ function UsageRow({
  */
 export function AgentPlanOverview() {
   const { agent, planInfo } = useAgentContext();
-  const limits = useAgentLimits();
   const { toast } = useToast();
   const [discount, setDiscount] = useState<ActiveDiscount | null>(null);
   const [addons, setAddons] = useState<ActiveAddon[]>([]);
@@ -442,40 +447,6 @@ export function AgentPlanOverview() {
               </a>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Usage bars */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">استخدامك الحالي</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {limits.loading ? (
-            <>
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </>
-          ) : (
-            <>
-              <UsageRow label="المستخدمين" limit={limits.users} />
-              <UsageRow label="الفروع" limit={limits.branches} />
-              <UsageRow
-                label={`المعاملات (${
-                  limits.policyPeriod === 'monthly'
-                    ? 'هذا الشهر'
-                    : limits.policyPeriod === 'yearly'
-                    ? 'هذه السنة'
-                    : 'إجمالي'
-                })`}
-                limit={limits.policies}
-              />
-              <UsageRow label="رسائل SMS (هذا الشهر)" limit={limits.sms} />
-              <UsageRow label="SMS تسويقية (هذا الشهر)" limit={limits.marketingSms} />
-              <UsageRow label="طلبات AI (هذا الشهر)" limit={limits.ai} />
-            </>
-          )}
         </CardContent>
       </Card>
 
