@@ -657,6 +657,7 @@ const SYSTEM_FEATURES = [
   { key: 'accident_reports', label: 'بلاغات الحوادث' },
   { key: 'correspondence', label: 'المراسلات' },
   { key: 'renewals', label: 'تجديدات البوالص' },
+  { key: 'notifications', label: 'التنبيهات' },
   // Files
   { key: 'files_upload', label: 'رفع الملفات' },
   { key: 'files_explorer', label: 'مستكشف الملفات' },

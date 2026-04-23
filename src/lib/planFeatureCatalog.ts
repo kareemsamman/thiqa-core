@@ -24,6 +24,7 @@ export const PLAN_FEATURE_CATALOG: PlanFeatureGroup[] = [
       { key: 'accident_reports', label: 'بلاغات الحوادث' },
       { key: 'correspondence', label: 'المراسلات' },
       { key: 'renewals', label: 'تجديدات البوالص' },
+      { key: 'notifications', label: 'التنبيهات' },
     ],
   },
   {

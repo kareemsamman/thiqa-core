@@ -126,9 +126,9 @@ export const navigationGroups: NavGroup[] = [
     items: [
       { name: "لوحة التحكم", href: "/dashboard", icon: SquaresFour, featureKey: 'dashboard', permissionKey: 'page.dashboard' },
       { name: "المهام", href: "/tasks", icon: ListChecks, badge: 'tasks', featureKey: 'tasks', permissionKey: 'page.tasks' },
-      { name: "سجل النشاط", href: "/activity", icon: Pulse, permissionKey: 'page.activity' },
-      { name: "التنبيهات", href: "/notifications", icon: Bell, badge: 'notifications', permissionKey: 'page.notifications' },
-      { name: "تقارير المعاملات والتجديدات", href: "/reports/policies", icon: ChartBar, badge: 'renewals', permissionKey: 'page.policy_reports' },
+      { name: "سجل النشاط", href: "/activity", icon: Pulse, featureKey: 'tasks', permissionKey: 'page.activity' },
+      { name: "التنبيهات", href: "/notifications", icon: Bell, badge: 'notifications', featureKey: 'notifications', permissionKey: 'page.notifications' },
+      { name: "تقارير المعاملات والتجديدات", href: "/reports/policies", icon: ChartBar, badge: 'renewals', featureKey: 'renewals', permissionKey: 'page.policy_reports' },
     ],
   },
   {
