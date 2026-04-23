@@ -2,6 +2,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { BottomToolbar } from "./BottomToolbar";
 import { AnnouncementPopup } from "./AnnouncementPopup";
+import { FeatureRouteGate } from "./FeatureRouteGate";
 import { TaskPopupReminder } from "@/components/tasks/TaskPopupReminder";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -83,6 +84,8 @@ export function AppChrome() {
           </Button>
         </div>
       )}
+
+      <FeatureRouteGate />
 
       <Sidebar />
 
