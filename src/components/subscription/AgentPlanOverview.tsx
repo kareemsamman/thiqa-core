@@ -193,9 +193,24 @@ export function UsageRow({
         </div>
         <span className="font-mono ltr-nums text-muted-foreground shrink-0">
           {usedText}
-          {limit.addonQuantity > 0 && !isUnlimited && (
-            <span className="text-emerald-600 text-xs mr-1">(+{limit.addonQuantity} إضافي)</span>
-          )}
+          {!isUnlimited && limit.addonQuantity > 0 && (() => {
+            // addonQuantity from useAgentLimits is `extra_<type>` addon +
+            // credit balance. Split them back out so the recurring
+            // addon ("باقة") and never-expiring top-up ("شحن") are
+            // visible as separate adders — otherwise the user can't
+            // tell why effective = plan + 7 when they only topped up 5.
+            const recurring = Math.max(0, limit.addonQuantity - limit.creditBalance);
+            const credit = limit.creditBalance;
+            const parts: string[] = [];
+            if (recurring > 0) parts.push(`+${recurring} باقة`);
+            if (credit > 0) parts.push(`+${credit} شحن`);
+            if (parts.length === 0) return null;
+            return (
+              <span className="text-emerald-600 text-xs mr-1">
+                ({parts.join(' / ')})
+              </span>
+            );
+          })()}
         </span>
       </div>
       <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
