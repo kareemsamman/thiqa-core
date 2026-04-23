@@ -1485,6 +1485,7 @@ export type Database = {
           name: string
           name_ar: string | null
           slug: string
+          status: string
           updated_at: string
         }
         Insert: {
@@ -1496,6 +1497,7 @@ export type Database = {
           name: string
           name_ar?: string | null
           slug: string
+          status?: string
           updated_at?: string
         }
         Update: {
@@ -1507,6 +1509,7 @@ export type Database = {
           name?: string
           name_ar?: string | null
           slug?: string
+          status?: string
           updated_at?: string
         }
         Relationships: [
@@ -5757,6 +5760,8 @@ export type Database = {
           default_signature_template_id: string | null
           enable_auto_reminders: boolean | null
           enable_auto_renewal_reminders: boolean | null
+          htd_id: string | null
+          htd_sender: string | null
           id: string
           invoice_sms_template: string | null
           is_enabled: boolean
@@ -5796,6 +5801,8 @@ export type Database = {
           default_signature_template_id?: string | null
           enable_auto_reminders?: boolean | null
           enable_auto_renewal_reminders?: boolean | null
+          htd_id?: string | null
+          htd_sender?: string | null
           id?: string
           invoice_sms_template?: string | null
           is_enabled?: boolean
@@ -5835,6 +5842,8 @@ export type Database = {
           default_signature_template_id?: string | null
           enable_auto_reminders?: boolean | null
           enable_auto_renewal_reminders?: boolean | null
+          htd_id?: string | null
+          htd_sender?: string | null
           id?: string
           invoice_sms_template?: string | null
           is_enabled?: boolean
@@ -7188,7 +7197,7 @@ export type Database = {
         | "manual"
         | "payment_request"
       under24_type: "none" | "client" | "additional_driver"
-      user_status: "pending" | "active" | "blocked"
+      user_status: "pending" | "active" | "blocked" | "plan_locked"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -7392,7 +7401,7 @@ export const Constants = {
         "payment_request",
       ],
       under24_type: ["none", "client", "additional_driver"],
-      user_status: ["pending", "active", "blocked"],
+      user_status: ["pending", "active", "blocked", "plan_locked"],
     },
   },
 } as const

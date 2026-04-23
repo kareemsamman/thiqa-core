@@ -76,8 +76,9 @@ export default function BranchManagement() {
       const clientMap = count(clientsRes.data, "branch_id");
       const policyMap = count(policiesRes.data, "branch_id");
 
-      setBranches((data || []).map(b => ({
+      setBranches((data || []).map((b: any) => ({
         ...b,
+        status: (b.status as 'active' | 'plan_locked') ?? 'active',
         user_count: userMap[b.id] || 0,
         client_count: clientMap[b.id] || 0,
         policy_count: policyMap[b.id] || 0,
