@@ -20,6 +20,8 @@ const USAGE_LABEL: Record<UsageType, string> = {
   ai_chat: "المساعد الذكي (ثاقب)",
 };
 
+const SUPPORT_EMAIL = "support@getthiqa.com";
+
 // Reasonable upper bound so a typo doesn't rack up a huge bill.
 const MAX_OVERAGE_PER_PURCHASE = 5000;
 
@@ -220,16 +222,14 @@ Deno.serve(async (req) => {
       .eq("id", user.id)
       .maybeSingle();
 
-    // Send email notification to all super admins. Swallow any email failures
-    // so they don't block the purchase itself (the row is already committed).
+    // Send email notification to the Thiqa support inbox (same
+    // address used by change-agent-plan), not to the super_admins
+    // table — that table sometimes contains per-agent admin emails
+    // which are the WRONG recipient for billing notifications.
+    // Swallow any email failures so they don't block the purchase
+    // itself (the row is already committed).
     try {
-      const { data: superAdmins } = await adminClient
-        .from("thiqa_super_admins")
-        .select("email, name");
-
-      const recipients = (superAdmins || [])
-        .map((s: any) => String(s.email || "").trim())
-        .filter((e: string) => e && e.includes("@") && !e.endsWith("@phone.local"));
+      const recipients = [SUPPORT_EMAIL];
 
       if (recipients.length > 0) {
         const smtp = await getSmtpSettings(adminClient);

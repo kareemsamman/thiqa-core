@@ -190,6 +190,20 @@ export function useAgentLimits(): AgentLimits {
           usageMap[u.usage_type] = u.count;
         });
 
+        // 7. Credit wallet — never-expiring balances topped up by
+        // purchase-usage-overage. Treat them as extra headroom on the
+        // effective SMS / AI limits so the bar reflects what the
+        // server actually allows (checkUsageLimit adds credits to the
+        // base allowance the same way).
+        const { data: walletRow } = await supabase
+          .from('agent_credit_wallet')
+          .select('sms_credit_balance, ai_credit_balance, marketing_sms_credit_balance')
+          .eq('agent_id', agentId)
+          .maybeSingle();
+        const smsCredit = (walletRow as any)?.sms_credit_balance ?? 0;
+        const aiCredit = (walletRow as any)?.ai_credit_balance ?? 0;
+        const marketingSmsCredit = (walletRow as any)?.marketing_sms_credit_balance ?? 0;
+
         if (cancelled) return;
 
         setPolicyPeriod(period);
@@ -218,21 +232,21 @@ export function useAgentLimits(): AgentLimits {
           buildLimit(
             usageMap.sms ?? 0,
             applyOverride(overrideRow?.sms_limit_override as number | null, planInfo.sms_limit),
-            addonQty.extra_sms,
+            addonQty.extra_sms + smsCredit,
           ),
         );
         setMarketingSms(
           buildLimit(
             usageMap.marketing_sms ?? 0,
             applyOverride(overrideRow?.marketing_sms_limit_override as number | null, planInfo.marketing_sms_limit),
-            addonQty.extra_marketing_sms,
+            addonQty.extra_marketing_sms + marketingSmsCredit,
           ),
         );
         setAi(
           buildLimit(
             usageMap.ai_chat ?? 0,
             applyOverride(overrideRow?.ai_limit_override as number | null, planInfo.ai_limit),
-            addonQty.extra_ai,
+            addonQty.extra_ai + aiCredit,
           ),
         );
       } catch (error) {
