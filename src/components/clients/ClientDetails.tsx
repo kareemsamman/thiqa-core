@@ -67,6 +67,7 @@ import {
   Receipt,
   AlertTriangle,
   Handshake,
+  Lock,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -103,6 +104,8 @@ import { useBranches } from '@/hooks/useBranches';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useShortcutAction } from '@/hooks/useShortcutAction';
+import { useAgentLimits } from '@/hooks/useAgentLimits';
+import { useUpgradePrompt } from '@/components/pricing/UpgradePromptProvider';
 import type { RenewalData } from '@/components/policies/wizard/types';
 
 interface Client {
@@ -368,6 +371,19 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [policyDetailsOpen, setPolicyDetailsOpen] = useState(false);
   const [selectedPolicyId, setSelectedPolicyId] = useState<string | null>(null);
   const [policyWizardOpen, setPolicyWizardOpen] = useState(false);
+  const { policies: policiesLimit } = useAgentLimits();
+  const { showUpgradePrompt } = useUpgradePrompt();
+  const openPolicyWizardGated = () => {
+    if (policiesLimit.exceeded) {
+      showUpgradePrompt({
+        resource: 'policies',
+        current: policiesLimit.used,
+        limit: policiesLimit.effective ?? 0,
+      });
+      return;
+    }
+    setPolicyWizardOpen(true);
+  };
   const [clientDrawerOpen, setClientDrawerOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
 
@@ -1940,10 +1956,22 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   {dedupedPolicyCount} معاملة مسجلة
                 </button>
               </div>
-              <Button variant="gradient" onClick={() => setPolicyWizardOpen(true)}>
-                <Plus className="h-4 w-4 ml-2" />
-                إضافة معاملة جديدة
-              </Button>
+              {policiesLimit.exceeded ? (
+                <Button
+                  variant="outline"
+                  onClick={openPolicyWizardGated}
+                  className="border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                  title="تجاوزت حد المعاملات — اضغط للترقية"
+                >
+                  <Lock className="h-4 w-4 ml-2" />
+                  إضافة معاملة جديدة
+                </Button>
+              ) : (
+                <Button variant="gradient" onClick={openPolicyWizardGated}>
+                  <Plus className="h-4 w-4 ml-2" />
+                  إضافة معاملة جديدة
+                </Button>
+              )}
             </div>
             
             {/* Car Filter Chips - Visual car selector */}

@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useCallback, useContext, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { UpgradePromptDialog, LimitResource } from './UpgradePromptDialog';
 
 interface UpgradePromptState {
@@ -81,6 +81,18 @@ export function UpgradePromptProvider({ children }: { children: ReactNode }) {
     setState(params);
     setOpen(true);
   }, []);
+
+  // Let non-React code (edge-function error helpers, toast actions, etc.)
+  // open the dialog by dispatching a `thiqa:open-upgrade-dialog` window
+  // event. The detail shape matches the UpgradePromptState.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<UpgradePromptState>).detail;
+      if (detail) showUpgradePrompt(detail);
+    };
+    window.addEventListener('thiqa:open-upgrade-dialog', handler);
+    return () => window.removeEventListener('thiqa:open-upgrade-dialog', handler);
+  }, [showUpgradePrompt]);
 
   const handleLimitError = useCallback(
     (error: unknown) => {

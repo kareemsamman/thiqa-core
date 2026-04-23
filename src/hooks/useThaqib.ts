@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { extractFunctionErrorMessage, parseFunctionError, isQuotaReachedError, openQuotaDialog } from "@/lib/functionError";
+import { extractFunctionErrorMessage, parseFunctionError, isQuotaReachedError, openUpgradeDialog } from "@/lib/functionError";
 import { toast } from "sonner";
 
 export interface ChatMessage {
@@ -105,17 +105,13 @@ export function useThaqib() {
       };
       setMessages(prev => [...prev, errorMsg]);
 
-      // If the AI quota is exhausted, also show a toast with a "buy more"
-      // action so the user can unblock themselves in one click.
+      // If the AI quota is exhausted, open the upgrade dialog so the
+      // agent sees the marketing surface instead of a plain toast.
       const { quotaReached, usageType } = isQuotaReachedError(parsed);
       if (quotaReached && usageType) {
-        toast.error(content, {
-          duration: 12000,
-          action: {
-            label: "شراء رصيد إضافي",
-            onClick: () => openQuotaDialog(usageType),
-          },
-        });
+        const used = typeof parsed.payload?.used === "number" ? (parsed.payload.used as number) : undefined;
+        const limit = typeof parsed.payload?.limit === "number" ? (parsed.payload.limit as number) : undefined;
+        openUpgradeDialog(usageType === "ai_chat" ? "ai" : "sms", used, limit);
       }
     } finally {
       setLoading(false);

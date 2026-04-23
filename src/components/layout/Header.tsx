@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, FileText, Keyboard } from "lucide-react";
+import { Plus, FileText, Keyboard, Lock, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NotificationsDropdown } from "./NotificationsDropdown";
@@ -10,6 +10,8 @@ import { ShortcutsCheatsheetDialog } from "./ShortcutsCheatsheetDialog";
 import { navigationGroups } from "./Sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
+import { useAgentLimits } from "@/hooks/useAgentLimits";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
 import { useRecentClient } from "@/hooks/useRecentClient";
 import { useShortcutAction } from "@/hooks/useShortcutAction";
@@ -37,6 +39,8 @@ export function Header({ title, subtitle }: HeaderProps) {
   const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
   const { openWizard } = usePolicyWizardController();
   const { recentClient } = useRecentClient();
+  const { policies: policiesLimit } = useAgentLimits();
+  const { showUpgradePrompt } = useUpgradePrompt();
   const activeTabRef = useRef<HTMLButtonElement | null>(null);
 
   const isOnClientProfilePage = /^\/clients\/[^/]+/.test(location.pathname);
@@ -87,10 +91,20 @@ export function Header({ title, subtitle }: HeaderProps) {
     location.pathname === href || location.pathname.startsWith(href + "/");
 
   const openNewPolicy = useCallback(() => {
+    // Pre-flight: if the agent is over the policies quota for the
+    // current period, open the upgrade dialog instead of the wizard.
+    if (policiesLimit.exceeded) {
+      showUpgradePrompt({
+        resource: "policies",
+        current: policiesLimit.used,
+        limit: policiesLimit.effective ?? 0,
+      });
+      return;
+    }
     openWizard({
       clientId: isOnClientProfilePage ? recentClient?.id : undefined,
     });
-  }, [openWizard, isOnClientProfilePage, recentClient?.id]);
+  }, [openWizard, isOnClientProfilePage, recentClient?.id, policiesLimit, showUpgradePrompt]);
 
   // Expose the header's "new policy" button to the global shortcut bus.
   // The listener in MainLayout routes the bound combo here; subscribing
@@ -170,13 +184,26 @@ export function Header({ title, subtitle }: HeaderProps) {
             expandedInputClassName="w-[320px] sm:w-[320px]"
           />
 
-          <Button
-            onClick={openNewPolicy}
-            className="h-11 px-4 rounded-full gap-2 shadow-md hover:shadow-lg hover:shadow-foreground/20 active:scale-[0.98] text-[15px] bg-foreground text-background hover:bg-foreground/90"
-          >
-            <Plus className="h-4 w-4" />
-            <span>معاملة جديدة</span>
-          </Button>
+          {policiesLimit.exceeded ? (
+            <Button
+              onClick={openNewPolicy}
+              variant="outline"
+              className="h-11 px-4 rounded-full gap-2 shadow-md hover:shadow-lg border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 active:scale-[0.98] text-[15px]"
+              title="تجاوزت حد المعاملات — اضغط للترقية"
+            >
+              <Lock className="h-4 w-4" />
+              <span>معاملة جديدة</span>
+              <Sparkles className="h-3.5 w-3.5 opacity-70" />
+            </Button>
+          ) : (
+            <Button
+              onClick={openNewPolicy}
+              className="h-11 px-4 rounded-full gap-2 shadow-md hover:shadow-lg hover:shadow-foreground/20 active:scale-[0.98] text-[15px] bg-foreground text-background hover:bg-foreground/90"
+            >
+              <Plus className="h-4 w-4" />
+              <span>معاملة جديدة</span>
+            </Button>
+          )}
 
           <HeaderDraftsButton />
 
@@ -217,15 +244,28 @@ export function Header({ title, subtitle }: HeaderProps) {
             )}
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <Button
-              onClick={openNewPolicy}
-              size="sm"
-              className="h-9 px-3 rounded-full gap-2 bg-foreground text-background hover:bg-foreground/90"
-            >
-              <Plus className="h-4 w-4 sm:hidden" />
-              <FileText className="h-4 w-4 hidden sm:inline" />
-              <span className="hidden sm:inline">معاملة جديدة</span>
-            </Button>
+            {policiesLimit.exceeded ? (
+              <Button
+                onClick={openNewPolicy}
+                size="sm"
+                variant="outline"
+                className="h-9 px-3 rounded-full gap-1.5 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                title="تجاوزت حد المعاملات — اضغط للترقية"
+              >
+                <Lock className="h-4 w-4" />
+                <span className="hidden sm:inline">معاملة جديدة</span>
+              </Button>
+            ) : (
+              <Button
+                onClick={openNewPolicy}
+                size="sm"
+                className="h-9 px-3 rounded-full gap-2 bg-foreground text-background hover:bg-foreground/90"
+              >
+                <Plus className="h-4 w-4 sm:hidden" />
+                <FileText className="h-4 w-4 hidden sm:inline" />
+                <span className="hidden sm:inline">معاملة جديدة</span>
+              </Button>
+            )}
           </div>
         </div>
 

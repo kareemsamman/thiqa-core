@@ -110,6 +110,24 @@ export function openQuotaDialog(usageType: "sms" | "ai_chat"): void {
 }
 
 /**
+ * Ask the globally-mounted UpgradePromptDialog host to open for a quota
+ * that's been exceeded. Used as the default reaction when an edge
+ * function returns `{ error_code: "sms_limit_reached" }` or similar —
+ * the upgrade popup is a stronger prompt than a buy-credit toast.
+ */
+export function openUpgradeDialog(
+  resource: "sms" | "marketing_sms" | "ai" | "users" | "branches" | "policies",
+  current?: number,
+  limit?: number,
+): void {
+  window.dispatchEvent(
+    new CustomEvent("thiqa:open-upgrade-dialog", {
+      detail: { resource, current, limit },
+    }),
+  );
+}
+
+/**
  * Parse an edge-function error and show a sonner toast with the Arabic
  * message. When the error is a usage-quota-reached response, the toast
  * gets an action button that opens the AddQuotaDialog so the agent can
@@ -132,13 +150,13 @@ export async function toastFunctionError(
   const description = parsed.message || fallback || "حدث خطأ غير متوقع";
 
   if (quotaReached && usageType) {
-    toast.error(description, {
-      duration: 12000,
-      action: {
-        label: "شراء رصيد إضافي",
-        onClick: () => openQuotaDialog(usageType),
-      },
-    });
+    // Quota is gone → open the plan-upgrade dialog rather than a toast.
+    // The agent can still buy topup credits from /subscription → الاستخدام,
+    // but the marketing surface is the stronger ask up front.
+    const resource = usageType === "ai_chat" ? "ai" : "sms";
+    const used = typeof parsed.payload?.used === "number" ? (parsed.payload.used as number) : undefined;
+    const limit = typeof parsed.payload?.limit === "number" ? (parsed.payload.limit as number) : undefined;
+    openUpgradeDialog(resource, used, limit);
   } else {
     toast.error(description);
   }

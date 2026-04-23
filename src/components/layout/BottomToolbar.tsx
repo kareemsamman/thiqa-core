@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, FileText, X } from "lucide-react";
+import { Plus, FileText, X, Lock, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationsDropdown } from "./NotificationsDropdown";
 import { cn } from "@/lib/utils";
 import { useRecentClient } from "@/hooks/useRecentClient";
 import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
+import { useAgentLimits } from "@/hooks/useAgentLimits";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { BottomToolbarInlineSearch } from "./BottomToolbarInlineSearch";
 
 export function BottomToolbar() {
@@ -13,6 +15,8 @@ export function BottomToolbar() {
   const location = useLocation();
   const { recentClient, clearRecentClient } = useRecentClient();
   const { openWizard } = usePolicyWizardController();
+  const { policies: policiesLimit } = useAgentLimits();
+  const { showUpgradePrompt } = useUpgradePrompt();
 
   const [isHovered, setIsHovered] = useState(false);
   const [isOverContent, setIsOverContent] = useState(false);
@@ -123,21 +127,43 @@ export function BottomToolbar() {
               HeaderDraftsButton. The bottom toolbar stops owning drafts;
               it just keeps the new-policy/search/notifications trio. */}
 
-          {/* Create Insurance Button — always opens a fresh wizard instance
-              so the user can have several drafts going at once. */}
-          <Button
-            onClick={() => {
-              openWizard({
-                clientId: isOnClientProfilePage ? recentClient?.id : undefined,
-              });
-            }}
-            className="rounded-full gap-2"
-            size="sm"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">معاملة جديدة</span>
-            <FileText className="h-4 w-4 sm:hidden" />
-          </Button>
+          {/* Create Insurance Button — pre-flight gates on policy quota.
+              When the agent is over the cap the button flips to an amber
+              locked variant that opens the upgrade popup instead of
+              launching the wizard. */}
+          {policiesLimit.exceeded ? (
+            <Button
+              onClick={() =>
+                showUpgradePrompt({
+                  resource: "policies",
+                  current: policiesLimit.used,
+                  limit: policiesLimit.effective ?? 0,
+                })
+              }
+              variant="outline"
+              size="sm"
+              className="rounded-full gap-2 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+              title="تجاوزت حد المعاملات — اضغط للترقية"
+            >
+              <Lock className="h-4 w-4" />
+              <span className="hidden sm:inline">معاملة جديدة</span>
+              <Sparkles className="h-3.5 w-3.5 opacity-70 hidden sm:inline" />
+            </Button>
+          ) : (
+            <Button
+              onClick={() => {
+                openWizard({
+                  clientId: isOnClientProfilePage ? recentClient?.id : undefined,
+                });
+              }}
+              className="rounded-full gap-2"
+              size="sm"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">معاملة جديدة</span>
+              <FileText className="h-4 w-4 sm:hidden" />
+            </Button>
+          )}
 
           {/* Separator */}
           <div className="h-6 w-px bg-border/50" />

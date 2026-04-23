@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useAgentContext } from "@/hooks/useAgentContext";
+import { useAgentLimits } from "@/hooks/useAgentLimits";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { ThaqibButton } from "./ThaqibButton";
 import { ThaqibPanel } from "./ThaqibPanel";
 
@@ -26,6 +28,8 @@ const PUBLIC_ROUTE_PREFIXES = [
 
 export function ThaqibWidget() {
   const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
+  const { ai: aiLimit } = useAgentLimits();
+  const { showUpgradePrompt } = useUpgradePrompt();
   const location = useLocation();
   const [open, setOpen] = useState(false);
 
@@ -40,9 +44,24 @@ export function ThaqibWidget() {
   if (isPublicRoute) return null;
   if (isThiqaSuperAdmin || !hasFeature("ai_assistant")) return null;
 
+  // AI quota is exhausted → clicking the FAB surfaces the upgrade
+  // dialog instead of opening the chat. ThaqibButton itself flips to
+  // the locked visual via the `locked` prop.
+  const handleClick = () => {
+    if (aiLimit.exceeded) {
+      showUpgradePrompt({
+        resource: "ai",
+        current: aiLimit.used,
+        limit: aiLimit.effective ?? 0,
+      });
+      return;
+    }
+    setOpen(true);
+  };
+
   return (
     <>
-      <ThaqibButton onClick={() => setOpen(true)} visible={!open} />
+      <ThaqibButton onClick={handleClick} visible={!open} locked={aiLimit.exceeded} />
       <ThaqibPanel open={open} onClose={() => setOpen(false)} />
     </>
   );
