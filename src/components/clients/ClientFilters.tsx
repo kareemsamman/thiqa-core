@@ -8,6 +8,7 @@ import { Filter, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useBranches } from "@/hooks/useBranches";
+import { LockedBranchSelect } from "@/components/shared/LockedBranchSelect";
 
 interface ClientFiltersProps {
   onFiltersChange: (filters: ClientFilterValues) => void;
@@ -111,17 +112,14 @@ export function ClientFilters({ onFiltersChange, filters }: ClientFiltersProps) 
           {isAdmin && (
             <div className="space-y-1.5">
               <Label className="text-right block text-sm">الفرع</Label>
-              <Select value={localFilters.branchId} onValueChange={v => setLocalFilters(f => ({ ...f, branchId: v }))}>
-                <SelectTrigger className="h-9 text-right">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-right">الكل</SelectItem>
-                  {branches.map(b => (
-                    <SelectItem key={b.id} value={b.id} className="text-right">{b.name_ar || b.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <LockedBranchSelect
+                value={localFilters.branchId}
+                onValueChange={v => setLocalFilters(f => ({ ...f, branchId: v }))}
+                branches={branches}
+                placeholder="الكل"
+                triggerClassName="h-9 text-right"
+                allOption={{ value: 'all', label: 'الكل' }}
+              />
             </div>
           )}
 

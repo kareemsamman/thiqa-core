@@ -3,6 +3,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { useAuth } from "@/hooks/useAuth";
 import { useBranches } from "@/hooks/useBranches";
+import { LockedBranchSelect } from "@/components/shared/LockedBranchSelect";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Navigate } from "react-router-dom";
@@ -850,23 +851,15 @@ export default function AdminUsers() {
                           </bdi>
                         </TableCell>
                         <TableCell>
-                          <Select
+                          <LockedBranchSelect
                             value={user.branch_id || 'all'}
                             onValueChange={(value) => handleChangeBranch(user.id, value === 'all' ? null : value)}
+                            branches={branches}
+                            placeholder="اختر الفرع"
+                            triggerClassName="w-32"
+                            allOption={{ value: 'all', label: 'جميع الفروع' }}
                             disabled={actionLoading === user.id || isProtectedSuperAdmin(user) || isPlanLocked}
-                          >
-                            <SelectTrigger className="w-32">
-                              <SelectValue placeholder="اختر الفرع" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">جميع الفروع</SelectItem>
-                              {branches.map(branch => (
-                                <SelectItem key={branch.id} value={branch.id}>
-                                  {branch.name_ar || branch.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          />
                         </TableCell>
                         <TableCell>
                           <Select
@@ -1143,14 +1136,12 @@ export default function AdminUsers() {
             {branches.length > 0 && (
               <div className="space-y-2">
                 <Label>الفرع *</Label>
-                <Select value={newUserBranch} onValueChange={setNewUserBranch}>
-                  <SelectTrigger><SelectValue placeholder="اختر الفرع" /></SelectTrigger>
-                  <SelectContent>
-                    {branches.map(branch => (
-                      <SelectItem key={branch.id} value={branch.id}>{branch.name_ar || branch.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <LockedBranchSelect
+                  value={newUserBranch}
+                  onValueChange={setNewUserBranch}
+                  branches={branches}
+                  placeholder="اختر الفرع"
+                />
               </div>
             )}
             <div className="flex gap-2 pt-4">

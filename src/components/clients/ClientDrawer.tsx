@@ -33,6 +33,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useBranches } from '@/hooks/useBranches';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
+import { LockedBranchSelect } from '@/components/shared/LockedBranchSelect';
 import { ClientChildrenManager } from './ClientChildrenManager';
 import type { ClientChild, NewChildForm } from '@/types/clientChildren';
 
@@ -452,23 +453,14 @@ export function ClientDrawer({ open, onOpenChange, client, onSaved }: ClientDraw
                       <Building2 className="h-4 w-4" />
                       الفرع
                     </FormLabel>
-                    <Select
-                      value={field.value || ''}
-                      onValueChange={field.onChange}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="اختر الفرع" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {branches.map((branch) => (
-                          <SelectItem key={branch.id} value={branch.id}>
-                            {branch.name_ar || branch.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <LockedBranchSelect
+                        value={field.value || ''}
+                        onValueChange={field.onChange}
+                        branches={branches}
+                        placeholder="اختر الفرع"
+                      />
+                    </FormControl>
                     {isEditing && (
                       <p className="text-xs text-muted-foreground">
                         تغيير الفرع سينقل جميع معاملات وسيارات العميل للفرع الجديد
