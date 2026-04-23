@@ -251,7 +251,6 @@ export function PolicyYearTimeline({
   onRenewPackage,
 }: PolicyYearTimelineProps) {
   const { isAdmin, isSuperAdmin } = useAuth();
-  const { locked: smsLocked, openUpgradeDialog: openSmsUpgrade } = useSmsLock();
   
   // Use external data if provided (from ClientDetails), otherwise use internal state
   const hasExternalData = externalPaymentInfo !== undefined;
@@ -1149,6 +1148,7 @@ function PolicyPackageCard({
   onSaveNotes?: (policyId: string) => void;
   onPoliciesUpdate?: () => void;
 }) {
+  const { locked: smsLocked, openUpgradeDialog: openSmsUpgrade } = useSmsLock();
   const policy = pkg.mainPolicy || pkg.addons[0];
   if (!policy) return null;
 
