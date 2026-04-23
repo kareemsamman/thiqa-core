@@ -190,6 +190,27 @@ export const navigationGroups: NavGroup[] = [
   },
 ];
 
+// Fallback route for logged-in agents when /dashboard is locked on
+// their plan — walks the sidebar in order and returns the href of the
+// first item that's both permitted (can) and feature-unlocked
+// (hasFeature). Used by Landing ("/") so login doesn't dump users on
+// /subscription just because dashboard is off.
+export function getFirstAccessibleRoute(
+  hasFeature: (key: string) => boolean,
+  can: (key: string) => boolean,
+  isThiqaSuperAdmin: boolean,
+): string | null {
+  for (const group of navigationGroups) {
+    for (const item of group.items) {
+      if (item.thiqaSuperAdminOnly && !isThiqaSuperAdmin) continue;
+      if (item.permissionKey && !can(item.permissionKey)) continue;
+      if (item.featureKey && !isThiqaSuperAdmin && !hasFeature(item.featureKey)) continue;
+      return item.href;
+    }
+  }
+  return null;
+}
+
 // Persist the nav scroll across both route navigations (Sidebar
 // remounts because MainLayout wraps every page) AND full-page refreshes.
 // sessionStorage so it lives for the tab's session but doesn't leak

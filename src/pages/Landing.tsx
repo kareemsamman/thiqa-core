@@ -2,6 +2,10 @@ import { useState, useRef, useEffect } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { useAuth } from "@/hooks/useAuth";
+import { useAgentContext } from "@/hooks/useAgentContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { getFirstAccessibleRoute } from "@/components/layout/Sidebar";
+import { LoadingScreen } from "@/components/shared/LoadingScreen";
 import { Button } from "@/components/ui/button";
 import {
   ChevronLeft, ChevronUp, ChevronDown, CheckCircle, Star, ArrowLeft, Play, X, Check,
@@ -364,10 +368,26 @@ export default function Landing() {
   // bounce them back into the app so a locked-route redirect (or any
   // stray "/" nav) doesn't dump them on the pricing site.
   const { user, loading: authLoading, isSuperAdmin } = useAuth();
+  const { hasFeature, isThiqaSuperAdmin, loading: agentLoading } = useAgentContext();
+  const { can, loading: permsLoading } = usePermissions();
+
   if (!authLoading && user) {
-    // Send to /dashboard: if the agent has it, they see the app;
-    // if not, PermissionRoute forwards them to /subscription.
-    return <Navigate to={isSuperAdmin ? "/thiqa/agents" : "/dashboard"} replace />;
+    if (isSuperAdmin) {
+      return <Navigate to="/thiqa/agents" replace />;
+    }
+    // Wait for feature + permission data before picking a landing
+    // route — otherwise hasFeature/can return false and we'd always
+    // fall through to /subscription on first paint.
+    if (agentLoading || permsLoading) {
+      return <LoadingScreen />;
+    }
+    // If dashboard (or whichever page is first in the sidebar) is
+    // locked on this plan, walk the nav and pick the first page the
+    // agent can actually open. Fallback to /subscription when nothing
+    // is accessible — same as PermissionRoute's own fallback.
+    const target =
+      getFirstAccessibleRoute(hasFeature, can, isThiqaSuperAdmin) ?? "/subscription";
+    return <Navigate to={target} replace />;
   }
   return <LandingContent />;
 }
