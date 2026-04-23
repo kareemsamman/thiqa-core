@@ -178,7 +178,11 @@ interface AgentDetail {
   plan: string;
   subscription_status: string;
   subscription_expires_at: string | null;
+  subscription_started_at: string | null;
+  trial_ends_at: string | null;
   monthly_price: number | null;
+  pending_plan: string | null;
+  cancelled_at: string | null;
   notes: string | null;
 }
 
@@ -342,18 +346,86 @@ export default function ThiqaAgentDetail() {
     // Detect plan change to auto-update feature flags
     const prevPlan = agents_original_plan;
     const newPlan = agent.plan;
+    const planChanged = prevPlan !== newPlan;
+
+    // Belt-and-suspenders: reconcile subscription state here on the
+    // client too, in case the DB trigger that handles this (migration
+    // 20260423000700_sync_trial_paid_transitions) hasn't been applied
+    // yet. The Thiqa admin was hitting a case where "move agent from
+    // free_trial to basic" only changed the plan column and left
+    // subscription_status='trial'/monthly_price=0 stale.
+    let patch: Record<string, any> = {
+      name: agent.name,
+      name_ar: agent.name_ar,
+      email: agent.email,
+      phone: agent.phone,
+      plan: agent.plan,
+      subscription_status: agent.subscription_status,
+      subscription_expires_at: agent.subscription_expires_at,
+      monthly_price: agent.monthly_price,
+      notes: agent.notes,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (planChanged) {
+      const { data: targetPlan } = await supabase
+        .from('subscription_plans')
+        .select('monthly_price')
+        .eq('plan_key', newPlan)
+        .maybeSingle();
+      const targetPrice = Number(targetPlan?.monthly_price ?? 0);
+      const nowIso = new Date().toISOString();
+      const oneMonth = new Date();
+      oneMonth.setMonth(oneMonth.getMonth() + 1);
+      const oneMonthIso = oneMonth.toISOString();
+
+      if (newPlan === 'free_trial') {
+        // paid → free_trial
+        patch.subscription_status = 'trial';
+        patch.monthly_price = 0;
+        patch.trial_ends_at = agent.trial_ends_at ?? (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + 35);
+          return d.toISOString();
+        })();
+        patch.subscription_expires_at = null;
+        patch.pending_plan = null;
+        patch.cancelled_at = null;
+      } else {
+        // → paid. Flip status + pull price + clear trial fields only if
+        // the admin didn't already set them in the form.
+        if (agent.subscription_status === 'trial') {
+          patch.subscription_status = 'active';
+        }
+        if (!agent.monthly_price || agent.monthly_price === 0) {
+          patch.monthly_price = targetPrice;
+        }
+        patch.trial_ends_at = null;
+        if (!agent.subscription_started_at) {
+          patch.subscription_started_at = nowIso;
+        }
+        if (
+          !agent.subscription_expires_at ||
+          new Date(agent.subscription_expires_at).getTime() < Date.now()
+        ) {
+          patch.subscription_expires_at = oneMonthIso;
+        }
+        patch.pending_plan = null;
+        patch.cancelled_at = null;
+      }
+    }
 
     const { error } = await supabase
       .from('agents')
-      .update({
-        name: agent.name, name_ar: agent.name_ar, email: agent.email,
-        phone: agent.phone, plan: agent.plan,
-        subscription_status: agent.subscription_status,
-        subscription_expires_at: agent.subscription_expires_at,
-        monthly_price: agent.monthly_price, notes: agent.notes,
-        updated_at: new Date().toISOString(),
-      })
+      .update(patch)
       .eq('id', agent.id);
+
+    // Reflect the patched subscription state back into local component
+    // state so the header badge / trial banner in the Thiqa admin page
+    // update without needing a reload.
+    if (!error && planChanged) {
+      setAgent((prev) => (prev ? { ...prev, ...patch } : prev));
+    }
 
     // Auto-set feature flags if plan changed
     if (!error && prevPlan !== newPlan) {
