@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { extractFunctionErrorMessage, toastFunctionError } from "@/lib/functionError";
@@ -35,6 +36,7 @@ export function BrokerSmsModal({
 }: BrokerSmsModalProps) {
   const { toast } = useToast();
   const { user, profile } = useAuth();
+  const { guardSend: guardSmsSend } = useSmsLock();
   const [phone, setPhone] = useState(broker.phone || "");
   const [message, setMessage] = useState(defaultMessage);
   const [sending, setSending] = useState(false);
@@ -57,6 +59,8 @@ export function BrokerSmsModal({
       });
       return;
     }
+
+    if (!guardSmsSend('click')) return;
 
     setSending(true);
     try {

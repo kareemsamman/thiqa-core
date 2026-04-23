@@ -21,6 +21,7 @@ import { ChequeScannerDialog } from '@/components/payments/ChequeScannerDialog';
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from '@/lib/chequeUtils';
 import { BankBranchPicker } from '@/components/shared/BankBranchPicker';
 import { useToast } from '@/hooks/use-toast';
+import { useSmsLock } from '@/hooks/useSmsLock';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 
 // Represents each policy inside a debt item
@@ -126,6 +127,7 @@ export function DebtPaymentModal({
 }: DebtPaymentModalProps) {
   const { toast: uiToast } = useToast();
   const { hasFeature } = useAgentContext();
+  const { guardSend: guardSmsSend } = useSmsLock();
   const paymentTypes = useMemo(() => hasFeature('visa_payment') ? [...paymentTypesBase, paymentTypeVisa] : paymentTypesBase, [hasFeature]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -762,7 +764,8 @@ export function DebtPaymentModal({
 
   const sendPaymentConfirmationSms = async (paidAmount: number, paymentIds: string[]) => {
     if (!clientPhone || paymentIds.length === 0) return;
-    
+    if (!guardSmsSend('auto')) return;
+
     try {
       // Use bulk receipt function to aggregate all payments into one receipt
       const { data: receiptData, error: receiptError } = await supabase.functions.invoke('generate-bulk-payment-receipt', {

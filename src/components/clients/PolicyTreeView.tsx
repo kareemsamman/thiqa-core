@@ -36,6 +36,7 @@ import { ExpiryBadge } from '@/components/shared/ExpiryBadge';
 import { PackagePaymentModal } from './PackagePaymentModal';
 import { SinglePolicyPaymentModal } from './SinglePolicyPaymentModal';
 import { supabase } from '@/integrations/supabase/client';
+import { useSmsLock } from '@/hooks/useSmsLock';
 import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -167,6 +168,7 @@ export function PolicyTreeView({
   onTransferPackage,
   onCancelPackage
 }: PolicyTreeViewProps) {
+  const { guardSend: guardSmsSend } = useSmsLock();
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo>({});
   const [loadingPayments, setLoadingPayments] = useState(true);
   const [packagePaymentOpen, setPackagePaymentOpen] = useState(false);
@@ -414,6 +416,7 @@ export function PolicyTreeView({
   // Send package invoice/files to customer
   const handleSendPackageInvoice = async (e: React.MouseEvent, policyIds: string[], groupKey: string) => {
     e.stopPropagation();
+    if (!guardSmsSend('click')) return;
     setSendingPackage(groupKey);
     try {
       const { data, error } = await supabase.functions.invoke('send-package-invoice-sms', {
@@ -445,6 +448,7 @@ export function PolicyTreeView({
   // Send single policy invoice/files to customer
   const handleSendPolicyInvoice = async (e: React.MouseEvent, policyId: string) => {
     e.stopPropagation();
+    if (!guardSmsSend('click')) return;
     setSendingPolicy(policyId);
     try {
       // Unified route — single policies go through the package

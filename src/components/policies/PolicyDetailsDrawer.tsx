@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useSmsLock } from "@/hooks/useSmsLock";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/integrations/supabase/client";
@@ -257,6 +258,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const { can } = usePermissions();
+  const { guardSend: guardSmsSend } = useSmsLock();
   // Profit + commission cards are gated by view_financial. Other
   // admin-only actions (delete/edit) keep using isAdmin for now —
   // the user asked for page-level permissions, not action-level.
@@ -287,6 +289,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
       toast({ title: "خطأ", description: "رقم هاتف العميل مطلوب", variant: "destructive" });
       return;
     }
+    if (!guardSmsSend('click')) return;
 
     setSendingSignatureSms(true);
     try {

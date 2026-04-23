@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   ImageIcon, Plus, Trash2, Download, X, Loader2, FileText, FolderOpen, 
@@ -49,6 +50,7 @@ export function PolicyFilesSection({
   packagePolicyIds 
 }: PolicyFilesSectionProps) {
   const { toast } = useToast();
+  const { guardSend: guardSmsSend } = useSmsLock();
   const [insuranceFiles, setInsuranceFiles] = useState<MediaFile[]>([]);
   const [crmFiles, setCrmFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -192,7 +194,9 @@ export function PolicyFilesSection({
     // Cancel auto-send timer
     if (autoSendRef.current) clearTimeout(autoSendRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
-    
+
+    if (!guardSmsSend('click')) return;
+
     setSendingToClient(true);
     try {
       const { data, error } = await supabase.functions.invoke('send-package-invoice-sms', {

@@ -6,7 +6,9 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { FileSignature, Send, Loader2, CheckCircle2, AlertTriangle, ExternalLink } from "lucide-react";
+import { Lock } from "@phosphor-icons/react";
 import { SignaturePreviewDialog } from "./SignaturePreviewDialog";
+import { useSmsLock } from "@/hooks/useSmsLock";
 
 interface ClientSignatureSectionProps {
   clientId: string;
@@ -24,6 +26,7 @@ export function ClientSignatureSection({
   onSignatureSent,
 }: ClientSignatureSectionProps) {
   const { toast } = useToast();
+  const { locked: smsLocked, guardSend: guardSmsSend } = useSmsLock();
   const [sending, setSending] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -48,6 +51,7 @@ export function ClientSignatureSection({
   };
 
   const handleSendSignatureRequest = async () => {
+    if (!guardSmsSend('click')) return;
     if (!phoneNumber) {
       toast({
         title: "خطأ",
@@ -136,11 +140,15 @@ export function ClientSignatureSection({
               <Button
                 size="sm"
                 onClick={handleSendSignatureRequest}
-                disabled={sending || !phoneNumber}
-                className="w-full gap-2"
+                disabled={sending || (!smsLocked && !phoneNumber)}
+                className="relative w-full gap-2"
               >
                 {sending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
+                ) : smsLocked ? (
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-white text-amber-600 ring-2 ring-amber-500">
+                    <Lock className="h-2.5 w-2.5" weight="fill" />
+                  </span>
                 ) : (
                   <Send className="h-4 w-4" />
                 )}

@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { Loader2, XCircle, Send, AlertTriangle } from "lucide-react";
@@ -68,7 +69,8 @@ export function CancelPolicyModal({
   const isPackage = effectivePolicyIds.length > 1;
   const { toast } = useToast();
   const { user } = useAuth();
-  
+  const { guardSend: guardSmsSend } = useSmsLock();
+
   const [saving, setSaving] = useState(false);
   const [cancellationNote, setCancellationNote] = useState("");
   const [cancellationDate, setCancellationDate] = useState(
@@ -193,8 +195,9 @@ export function CancelPolicyModal({
         if (walletError) throw walletError;
       }
 
-      // 3. Send SMS if enabled
-      if (sendSms && clientPhone && smsMessage) {
+      // 3. Send SMS if enabled (and plan allows it — skip quietly
+      // otherwise so the policy-cancel flow still completes).
+      if (sendSms && clientPhone && smsMessage && guardSmsSend('auto')) {
         try {
           const { data: smsData, error: smsError } = await supabase.functions.invoke("send-sms", {
             body: {

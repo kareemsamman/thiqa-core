@@ -68,6 +68,7 @@ import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAgentContext } from '@/hooks/useAgentContext';
+import { useSmsLock } from '@/hooks/useSmsLock';
 import { ClickablePhone } from '@/components/shared/ClickablePhone';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
 import { RenewalAssistant } from '@/components/reports/RenewalAssistant';
@@ -257,6 +258,7 @@ export default function PolicyReports() {
   // exporting a report.
   const canViewFinancial = can('view_financial');
   const { agentId, hasFeature } = useAgentContext();
+  const { guardSend: guardSmsSend } = useSmsLock();
   // Renewals + "تم التجديد" tabs are gated by the plan's `renewals`
   // feature. Entry/Basic/Professional hide them; Ultimate shows both.
   const canUseRenewals = hasFeature('renewals');
@@ -797,6 +799,7 @@ export default function PolicyReports() {
 
   // Send bulk SMS reminders
   const handleSendReminders = async () => {
+    if (!guardSmsSend('click')) return;
     setSendingReminders(true);
     try {
       const { data, error } = await supabase.functions.invoke('send-renewal-reminders', {
@@ -827,6 +830,7 @@ export default function PolicyReports() {
 
   // Send single renewal reminder SMS for ALL client's policies
   const handleSendSingleSms = async (client: RenewalClient) => {
+    if (!guardSmsSend('click')) return;
     if (!client.client_phone) {
       toast.error('رقم هاتف العميل مطلوب');
       return;

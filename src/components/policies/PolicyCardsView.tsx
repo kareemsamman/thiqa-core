@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useSmsLock } from '@/hooks/useSmsLock';
 import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { toast } from 'sonner';
 import { 
@@ -30,6 +31,7 @@ export function PolicyCardsView({
   onEditPolicy,
   onDeletePolicy 
 }: PolicyCardsViewProps) {
+  const { guardSend: guardSmsSend } = useSmsLock();
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo>({});
   const [loadingPayments, setLoadingPayments] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -182,6 +184,7 @@ export function PolicyCardsView({
 
   const handleSendInvoice = async (e: React.MouseEvent, policyId: string) => {
     e.stopPropagation();
+    if (!guardSmsSend('click')) return;
     setSendingPolicy(policyId);
     try {
       const { data, error } = await supabase.functions.invoke('send-package-invoice-sms', {

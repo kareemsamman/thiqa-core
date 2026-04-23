@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
 import { getBankName } from '@/lib/banks';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
+import { useSmsLock } from '@/hooks/useSmsLock';
 import { pickPackageDocumentNumber } from '@/lib/packageDocumentNumber';
 
 // ---------- Types ----------
@@ -433,6 +434,7 @@ export function ClientReportModal({
   branchName,
 }: ClientReportModalProps) {
   const { data: siteSettings } = useSiteSettings();
+  const { guardSend: guardSmsSend } = useSmsLock();
   const [sendingSms, setSendingSms] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
 
@@ -759,6 +761,7 @@ export function ClientReportModal({
       toast.error('لا يوجد رقم هاتف للعميل');
       return;
     }
+    if (!guardSmsSend('click')) return;
     setSendingSms(true);
     try {
       const reportResponse = await supabase.functions.invoke('generate-client-report', {

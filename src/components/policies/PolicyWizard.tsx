@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useSmsLock } from "@/hooks/useSmsLock";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Save, ArrowRight, ArrowLeft, Minus, X } from "lucide-react";
@@ -74,6 +75,7 @@ export function PolicyWizard({
 }: PolicyWizardProps) {
   const { toast } = useToast();
   const { handleLimitError } = useUpgradePrompt();
+  const { guardSend: guardSmsSend } = useSmsLock();
   const navigate = useNavigate();
 
   // Use the centralized wizard state hook. In the multi-instance model
@@ -1560,6 +1562,7 @@ export function PolicyWizard({
           .single()
           .then(({ data: clientData }) => {
             if (!clientData?.signature_url) {
+              if (!guardSmsSend('auto')) return;
               console.log('[PolicyWizard] Sending signature SMS...');
               supabase.functions.invoke('send-signature-sms', {
                 body: { 

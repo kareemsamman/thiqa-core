@@ -144,7 +144,7 @@ const statusLabels: Record<string, { label: string; variant: "default" | "second
 export default function Cheques() {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { locked: smsLocked, openUpgradeDialog: openSmsUpgrade } = useSmsLock();
+  const { locked: smsLocked, openUpgradeDialog: openSmsUpgrade, guardSend: guardSmsSend } = useSmsLock();
   const [cheques, setCheques] = useState<ChequeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -566,7 +566,7 @@ export default function Cheques() {
       toast({ title: "تم التحديث", description: "تم تحديث حالة الشيك" });
       
       // Auto SMS on returned cheque
-      if (newStatus === 'returned') {
+      if (newStatus === 'returned' && guardSmsSend('auto')) {
         const cheque = cheques.find(c => c.id === chequeId);
         if (cheque?.policy?.client?.phone_number) {
           const clientName = cheque.policy.client.full_name || "العميل";
@@ -684,6 +684,7 @@ export default function Cheques() {
       toast({ title: "خطأ", description: "لا يوجد رقم هاتف للعميل", variant: "destructive" });
       return;
     }
+    if (!guardSmsSend('click')) return;
 
     setSendingSms(true);
     try {

@@ -24,6 +24,7 @@ import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { DebtPaymentModal } from "@/components/debt/DebtPaymentModal";
 import { ClientNotesPopover } from "@/components/clients/ClientNotesPopover";
 import { useAuth } from "@/hooks/useAuth";
+import { useSmsLock } from "@/hooks/useSmsLock";
 
 interface ClientDebt {
   client_id: string;
@@ -246,6 +247,7 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
 export default function DebtTracking() {
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { guardSend: guardSmsSend } = useSmsLock();
 
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<ClientDebt[]>([]);
@@ -434,7 +436,8 @@ export default function DebtTracking() {
 
   const handleSendReminder = async () => {
     if (!selectedClient) return;
-    
+    if (!guardSmsSend('click')) return;
+
     const targetClientName = selectedClient.client_name;
     setSmsDialogOpen(false);
     setCustomMessage("");
@@ -489,7 +492,8 @@ export default function DebtTracking() {
   // Handle bulk SMS send
   const handleBulkSmsSend = async () => {
     if (summary.totalClients === 0) return;
-    
+    if (!guardSmsSend('click')) return;
+
     setSendingBulkSms(true);
     try {
       // Call edge function to send bulk SMS

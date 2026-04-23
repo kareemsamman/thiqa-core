@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useAgentContext } from './useAgentContext';
 import { useAgentLimits } from './useAgentLimits';
 import { useUpgradePrompt } from '@/components/pricing/UpgradePromptProvider';
+import { toast } from 'sonner';
 
 // Central gate for "send SMS" buttons across the agent app. Returns
 // whether the button should render as locked + an onClick handler that
@@ -36,5 +37,29 @@ export function useSmsLock() {
     });
   }, [featureOff, sms.used, sms.effective, showUpgradePrompt]);
 
-  return { locked, openUpgradeDialog };
+  // Use at any SMS send call site to short-circuit when the plan is
+  // out of quota. Returns true → proceed with the send; false → bail.
+  // Default behavior on a blocked send is:
+  //   * visible click (mode='click')    → open upgrade dialog
+  //   * auto-fire flow (mode='auto')    → toast a brief note and skip
+  //   * fully silent (mode='silent')    → no UI at all
+  // Super admin always passes.
+  const guardSend = useCallback(
+    (mode: 'click' | 'auto' | 'silent' = 'click'): boolean => {
+      if (!locked) return true;
+      if (mode === 'click') {
+        openUpgradeDialog();
+      } else if (mode === 'auto') {
+        toast.info(
+          featureOff
+            ? 'لم يتم إرسال الرسالة — إرسال SMS غير متاح في باقتك الحالية.'
+            : 'لم يتم إرسال الرسالة — الحد الشهري للـ SMS مستنفد.',
+        );
+      }
+      return false;
+    },
+    [locked, featureOff, openUpgradeDialog],
+  );
+
+  return { locked, openUpgradeDialog, guardSend };
 }

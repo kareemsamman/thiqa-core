@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Send } from 'lucide-react';
+import { useSmsLock } from '@/hooks/useSmsLock';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { digitsOnly } from '@/lib/validation';
@@ -34,6 +35,7 @@ export function SendSmsModal({
 }: SendSmsModalProps) {
   const [phone, setPhone] = useState('');
   const [sending, setSending] = useState(false);
+  const { guardSend: guardSmsSend } = useSmsLock();
 
   useEffect(() => {
     if (open) {
@@ -47,6 +49,7 @@ export function SendSmsModal({
       toast.error('يرجى إدخال رقم هاتف صحيح');
       return;
     }
+    if (!guardSmsSend('click')) return;
 
     setSending(true);
     try {

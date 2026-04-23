@@ -6,6 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { toast } from "sonner";
@@ -42,6 +43,7 @@ export function PolicySuccessDialog({
   const [sendingSms, setSendingSms] = useState(false);
   const [smsSent, setSmsSent] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { guardSend: guardSmsSend } = useSmsLock();
 
   const extractErrorMessage = async (result: { data: any; error: any }): Promise<string> => {
     if (result.error) {
@@ -117,6 +119,7 @@ export function PolicySuccessDialog({
       toast.error("لا يوجد رقم هاتف للعميل");
       return;
     }
+    if (!guardSmsSend('click')) return;
 
     setSendingSms(true);
     setErrorMessage(null);

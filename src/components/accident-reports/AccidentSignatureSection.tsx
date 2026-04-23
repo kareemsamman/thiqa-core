@@ -6,6 +6,7 @@
  import { Badge } from "@/components/ui/badge";
  import { supabase } from "@/integrations/supabase/client";
  import { useToast } from "@/hooks/use-toast";
+ import { useSmsLock } from "@/hooks/useSmsLock";
  import { extractFunctionErrorMessage } from "@/lib/functionError";
  import {
    Send,
@@ -35,11 +36,13 @@
    onSignatureUpdate,
  }: AccidentSignatureSectionProps) {
    const { toast } = useToast();
+   const { guardSend: guardSmsSend } = useSmsLock();
    const [sending, setSending] = useState(false);
    const [phoneOverride, setPhoneOverride] = useState("");
    const [useOverride, setUseOverride] = useState(false);
- 
+
    const handleSendSignatureLink = async () => {
+     if (!guardSmsSend('click')) return;
      setSending(true);
      try {
        const phoneToUse = useOverride && phoneOverride ? phoneOverride : clientPhone;
