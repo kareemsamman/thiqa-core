@@ -8,6 +8,7 @@ export interface Branch {
   slug: string;
   is_active: boolean;
   is_default: boolean;
+  status: 'active' | 'plan_locked';
 }
 
 export function useBranches() {
@@ -19,12 +20,12 @@ export function useBranches() {
     try {
       const { data, error } = await supabase
         .from('branches')
-        .select('id, name, name_ar, slug, is_active, is_default')
+        .select('id, name, name_ar, slug, is_active, is_default, status')
         .eq('is_active', true)
         .order('name');
 
       if (error) throw error;
-      setBranches(data || []);
+      setBranches((data || []) as Branch[]);
     } catch (error) {
       console.error('Error fetching branches:', error);
     } finally {

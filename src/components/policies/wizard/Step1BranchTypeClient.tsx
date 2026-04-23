@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { Search, Plus, User, AlertCircle, CheckCircle, AlertTriangle, Building2, Settings, Sparkles } from "lucide-react";
+import { Search, Plus, User, AlertCircle, CheckCircle, AlertTriangle, Building2, Settings, Sparkles, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InsuranceTypeCards } from "./InsuranceTypeCards";
 import { CreateClientForm } from "./CreateClientForm";
@@ -22,7 +22,7 @@ import { normalizeArabic } from "@/lib/arabicNormalize";
 interface Step1Props {
   // Branch
   isAdmin: boolean;
-  branches: Array<{ id: string; name: string; name_ar: string | null }>;
+  branches: Array<{ id: string; name: string; name_ar: string | null; status?: 'active' | 'plan_locked' }>;
   loadingBranches?: boolean;
   selectedBranchId: string;
   setSelectedBranchId: (id: string) => void;
@@ -298,11 +298,25 @@ export function Step1BranchTypeClient({
                 <SelectValue placeholder="اختر الفرع" />
               </SelectTrigger>
               <SelectContent>
-                {branches.map((branch) => (
-                  <SelectItem key={branch.id} value={branch.id}>
-                    {branch.name_ar || branch.name}
-                  </SelectItem>
-                ))}
+                {branches.map((branch) => {
+                  const isLocked = branch.status === 'plan_locked';
+                  return (
+                    <SelectItem
+                      key={branch.id}
+                      value={branch.id}
+                      disabled={isLocked}
+                      className={isLocked ? 'opacity-60' : undefined}
+                    >
+                      <span className="flex items-center gap-2">
+                        {isLocked && <Lock className="h-3.5 w-3.5 text-amber-600" />}
+                        <span>{branch.name_ar || branch.name}</span>
+                        {isLocked && (
+                          <span className="text-[10px] text-amber-600">(مقفل — ترقية الباقة)</span>
+                        )}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           )}

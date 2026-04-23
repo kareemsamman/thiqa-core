@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Building2, Plus, Pencil, Trash2, Users, Save, Loader2, MapPin, Star } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Users, Save, Loader2, MapPin, Star, Lock, Sparkles } from "lucide-react";
+import { useAgentLimits } from "@/hooks/useAgentLimits";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { BranchFormFields, BranchFormValue, emptyBranchForm } from "@/components/branches/BranchFormFields";
@@ -22,6 +24,7 @@ interface Branch {
   slug: string;
   is_active: boolean;
   is_default: boolean;
+  status: 'active' | 'plan_locked';
   created_at: string;
   user_count?: number;
   client_count?: number;
@@ -31,7 +34,8 @@ interface Branch {
 export default function BranchManagement() {
   const { isAdmin } = useAuth();
   const { agentId } = useAgentContext();
-  const { handleLimitError } = useUpgradePrompt();
+  const { handleLimitError, showUpgradePrompt } = useUpgradePrompt();
+  const { branches: branchLimit, refetch: refetchLimits } = useAgentLimits();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -148,6 +152,7 @@ export default function BranchManagement() {
 
       setDialogOpen(false);
       fetchBranches();
+      refetchLimits();
     } catch (e: any) {
       // DB triggers raise LIMIT_EXCEEDED:branches:... when the agent
       // hits their plan's branch cap. Swallow that specific error and
@@ -203,11 +208,59 @@ export default function BranchManagement() {
       <div className="p-4 md:p-6 space-y-6" dir="rtl">
         {/* Toolbar */}
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={openNew} className="gap-2">
-            <Plus className="h-4 w-4" />
-            فرع جديد
-          </Button>
+          {branchLimit.exceeded ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                showUpgradePrompt({
+                  resource: 'branches',
+                  current: branchLimit.used,
+                  limit: branchLimit.effective ?? 0,
+                })
+              }
+              className="gap-2 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+            >
+              <Lock className="h-4 w-4" />
+              فرع جديد
+              <Sparkles className="h-3.5 w-3.5 opacity-70" />
+            </Button>
+          ) : (
+            <Button size="sm" onClick={openNew} className="gap-2">
+              <Plus className="h-4 w-4" />
+              فرع جديد
+            </Button>
+          )}
         </div>
+
+        {branches.some((b) => b.status === 'plan_locked') && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
+            <Lock className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div className="flex-1 text-sm">
+              <p className="font-medium text-foreground">
+                {branches.filter((b) => b.status === 'plan_locked').length} فرع مقفل بسبب تجاوز حد الباقة
+              </p>
+              <p className="text-muted-foreground text-xs mt-0.5">
+                الفروع المقفلة تبقى ظاهرة للاطلاع على البيانات السابقة، لكن لا يمكن استخدامها في معاملات جديدة. قم بترقية الباقة أو أضف فرعاً إضافياً لفتحها.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+              onClick={() =>
+                showUpgradePrompt({
+                  resource: 'branches',
+                  current: branchLimit.used,
+                  limit: branchLimit.effective ?? 0,
+                })
+              }
+            >
+              <Sparkles className="h-4 w-4" />
+              ترقية الباقة
+            </Button>
+          </div>
+        )}
 
         {loading ? (
           <div className="space-y-3">
@@ -227,16 +280,33 @@ export default function BranchManagement() {
           </Card>
         ) : (
           <div className="space-y-3">
-            {branches.map(branch => (
-              <Card key={branch.id} className="shadow-sm">
+            {branches.map(branch => {
+              const isLocked = branch.status === 'plan_locked';
+              return (
+              <Card
+                key={branch.id}
+                className={cn(
+                  'shadow-sm',
+                  isLocked && 'border-amber-500/30 bg-amber-500/5',
+                )}
+              >
                 <CardContent className="py-4 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                      <Building2 className="h-5 w-5" />
+                    <div
+                      className={cn(
+                        'h-10 w-10 rounded-xl flex items-center justify-center shrink-0',
+                        isLocked
+                          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                          : 'bg-primary/10 text-primary',
+                      )}
+                    >
+                      {isLocked ? <Lock className="h-5 w-5" /> : <Building2 className="h-5 w-5" />}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold">{branch.name_ar || branch.name}</span>
+                        <span className={cn('font-bold', isLocked && 'text-muted-foreground')}>
+                          {branch.name_ar || branch.name}
+                        </span>
                         {branch.name_ar && branch.name !== branch.name_ar && (
                           <span className="text-sm text-muted-foreground">({branch.name})</span>
                         )}
@@ -246,7 +316,16 @@ export default function BranchManagement() {
                             افتراضي
                           </Badge>
                         )}
-                        {!branch.is_active && (
+                        {isLocked && (
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 gap-1 text-xs"
+                          >
+                            <Lock className="h-3 w-3" />
+                            مقفل — تجاوز حد الباقة
+                          </Badge>
+                        )}
+                        {!branch.is_active && !isLocked && (
                           <Badge variant="secondary" className="text-xs">غير فعال</Badge>
                         )}
                       </div>
@@ -258,22 +337,43 @@ export default function BranchManagement() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Button variant="outline" size="sm" onClick={() => openEdit(branch)}>
-                      <Pencil className="h-3.5 w-3.5 ml-1" />
-                      تعديل
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => setDeleteBranchId(branch.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    {isLocked ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                        onClick={() =>
+                          showUpgradePrompt({
+                            resource: 'branches',
+                            current: branchLimit.used,
+                            limit: branchLimit.effective ?? 0,
+                          })
+                        }
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        ترقية الباقة
+                      </Button>
+                    ) : (
+                      <>
+                        <Button variant="outline" size="sm" onClick={() => openEdit(branch)}>
+                          <Pencil className="h-3.5 w-3.5 ml-1" />
+                          تعديل
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeleteBranchId(branch.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
 

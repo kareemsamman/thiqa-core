@@ -117,11 +117,14 @@ export function useAgentLimits(): AgentLimits {
           .eq('agent_id', agentId)
           .in('status', ['active', 'pending']);
 
-        // 3. Branch count
+        // 3. Branch count — only active consumes a seat; plan_locked
+        // branches are parked over-limit rows, same treatment as
+        // plan_locked profiles in the user count above.
         const { count: branchCount } = await supabase
           .from('branches')
           .select('id', { count: 'exact', head: true })
-          .eq('agent_id', agentId);
+          .eq('agent_id', agentId)
+          .eq('status', 'active');
 
         // 4. Policy period source + window
         const { data: periodRow } = await supabase

@@ -1510,6 +1510,7 @@ export type Database = {
           name: string
           name_ar: string | null
           slug: string
+          status: string
           updated_at: string
         }
         Insert: {
@@ -1521,6 +1522,7 @@ export type Database = {
           name: string
           name_ar?: string | null
           slug: string
+          status?: string
           updated_at?: string
         }
         Update: {
@@ -1532,6 +1534,7 @@ export type Database = {
           name?: string
           name_ar?: string | null
           slug?: string
+          status?: string
           updated_at?: string
         }
         Relationships: [
