@@ -27,7 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import { Loader2, Plus, ShoppingCart, Trash2, Check, X, Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -51,8 +51,10 @@ interface Addon {
   billing_cycle: 'monthly' | 'one_time';
   starts_at: string;
   ends_at: string | null;
-  status: 'active' | 'cancelled';
+  status: 'active' | 'cancelled' | 'pending_approval' | 'rejected';
   notes: string | null;
+  rejection_reason: string | null;
+  requested_at: string | null;
   created_at: string;
 }
 
@@ -185,6 +187,47 @@ export function AgentAddonsManager({ agentId }: AgentAddonsManagerProps) {
     }
   };
 
+  const handleApprove = async (id: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from('agent_addons')
+        .update({
+          status: 'active',
+          reviewed_by_user_id: user?.id ?? null,
+          reviewed_at: new Date().toISOString(),
+          starts_at: new Date().toISOString().slice(0, 10),
+        })
+        .eq('id', id);
+      if (error) throw error;
+      toast({ title: 'تمت الموافقة', description: 'تم تفعيل الإضافة للوكيل' });
+      fetchData();
+    } catch (err: any) {
+      toast({ title: 'خطأ', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    const reason = window.prompt('سبب الرفض (اختياري):') ?? '';
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from('agent_addons')
+        .update({
+          status: 'rejected',
+          reviewed_by_user_id: user?.id ?? null,
+          reviewed_at: new Date().toISOString(),
+          rejection_reason: reason.trim() || null,
+        })
+        .eq('id', id);
+      if (error) throw error;
+      toast({ title: 'تم الرفض' });
+      fetchData();
+    } catch (err: any) {
+      toast({ title: 'خطأ', description: err.message, variant: 'destructive' });
+    }
+  };
+
   const handleDelete = async (id: string) => {
     try {
       const { error } = await supabase.from('agent_addons').delete().eq('id', id);
@@ -267,7 +310,16 @@ export function AgentAddonsManager({ agentId }: AgentAddonsManagerProps) {
                           {a.ends_at && ` → ${format(new Date(a.ends_at), 'dd/MM/yyyy', { locale: ar })}`}
                         </TableCell>
                         <TableCell>
-                          {a.status === 'cancelled' ? (
+                          {a.status === 'pending_approval' ? (
+                            <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 gap-1">
+                              <Clock className="h-3 w-3" />
+                              طلب قيد المراجعة
+                            </Badge>
+                          ) : a.status === 'rejected' ? (
+                            <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
+                              مرفوض
+                            </Badge>
+                          ) : a.status === 'cancelled' ? (
                             <Badge variant="outline" className="text-muted-foreground">ملغاة</Badge>
                           ) : isActive ? (
                             <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/20" variant="outline">
@@ -279,19 +331,43 @@ export function AgentAddonsManager({ agentId }: AgentAddonsManagerProps) {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            {a.status === 'active' && (
-                              <Button size="sm" variant="outline" onClick={() => handleCancel(a.id)}>
-                                إلغاء
-                              </Button>
+                            {a.status === 'pending_approval' ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  onClick={() => handleApprove(a.id)}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  موافقة
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="gap-1 text-destructive hover:text-destructive"
+                                  onClick={() => handleReject(a.id)}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  رفض
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                {a.status === 'active' && (
+                                  <Button size="sm" variant="outline" onClick={() => handleCancel(a.id)}>
+                                    إلغاء
+                                  </Button>
+                                )}
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="text-destructive h-8 w-8"
+                                  onClick={() => handleDelete(a.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
                             )}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="text-destructive h-8 w-8"
-                              onClick={() => handleDelete(a.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>

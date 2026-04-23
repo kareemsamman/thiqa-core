@@ -2,8 +2,17 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Crown,
   MessageCircle,
@@ -16,10 +25,13 @@ import {
   Megaphone,
   Rocket,
   Database,
+  Clock,
+  Loader2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { useAgentLimits, ResourceLimit } from '@/hooks/useAgentLimits';
+import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { arDZ as ar } from 'date-fns/locale';
@@ -38,6 +50,8 @@ interface ActiveAddon {
   unit_price: number;
   billing_cycle: 'monthly' | 'one_time';
   ends_at: string | null;
+  status: 'active' | 'pending_approval';
+  requested_at: string | null;
 }
 
 const ADDON_LABELS: Record<string, string> = {
@@ -193,17 +207,27 @@ function UsageRow({
  * pricing model (plan + discount + addons + per-resource usage).
  * Lives at the top of /subscription → تبويب الاشتراك.
  *
- * "Buy add-on" button opens a prefilled WhatsApp message to Thiqa
- * support, since actual addon provisioning happens from the Thiqa
- * admin side (purchase-usage-overage edge function + AgentAddonsManager).
+ * The catalog section lets the agent self-serve-request an addon:
+ * clicking "اشترِ" opens a confirmation dialog and posts to the
+ * request-addon-purchase edge function. The resulting row is a
+ * pending_approval record the Thiqa admin approves from the agent
+ * detail page, plus an email notification.
  */
 export function AgentPlanOverview() {
   const { agent, planInfo } = useAgentContext();
   const limits = useAgentLimits();
+  const { toast } = useToast();
   const [discount, setDiscount] = useState<ActiveDiscount | null>(null);
   const [addons, setAddons] = useState<ActiveAddon[]>([]);
   const [catalogPrices, setCatalogPrices] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  // Purchase-confirmation dialog state. `item` is the catalog entry being
+  // requested; clearing it closes the dialog.
+  const [pendingItem, setPendingItem] = useState<typeof ADDON_CATALOG[number] | null>(null);
+  const [pendingQuantity, setPendingQuantity] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!agent?.id) return;
@@ -222,12 +246,13 @@ export function AgentPlanOverview() {
             .order('starts_at', { ascending: false })
             .limit(1)
             .maybeSingle(),
+          // Pull both active and pending_approval rows — we show them
+          // together so the agent can see what they've asked for.
           supabase
             .from('agent_addons')
-            .select('id, addon_type, quantity, unit_price, billing_cycle, ends_at')
+            .select('id, addon_type, quantity, unit_price, billing_cycle, ends_at, status, requested_at')
             .eq('agent_id', agent.id)
-            .eq('status', 'active')
-            .lte('starts_at', today)
+            .in('status', ['active', 'pending_approval'])
             .or(`ends_at.is.null,ends_at.gte.${today}`)
             .order('created_at', { ascending: false }),
           supabase
@@ -256,7 +281,38 @@ export function AgentPlanOverview() {
     return () => {
       cancelled = true;
     };
-  }, [agent?.id]);
+  }, [agent?.id, reloadToken]);
+
+  const handleConfirmPurchase = async () => {
+    if (!pendingItem) return;
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('request-addon-purchase', {
+        body: { addon_type: pendingItem.type, quantity: pendingQuantity },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast({
+        title: 'تم إرسال الطلب',
+        description: 'سيتم مراجعة طلبك من فريق ثقة وتفعيل الإضافة بعد الموافقة.',
+      });
+      setPendingItem(null);
+      setPendingQuantity(1);
+      setReloadToken((t) => t + 1);
+    } catch (err: any) {
+      toast({
+        title: 'تعذّر إرسال الطلب',
+        description: err?.message || 'حدث خطأ غير متوقع',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const pendingAddonTypes = new Set(
+    addons.filter((a) => a.status === 'pending_approval').map((a) => a.addon_type),
+  );
 
   if (!planInfo || !agent) {
     return <Skeleton className="h-64 w-full rounded-xl" />;
@@ -378,16 +434,10 @@ export function AgentPlanOverview() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <a href={whatsAppHref} target="_blank" rel="noopener noreferrer">
-                <Button variant="default" size="sm" className="gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  طلب شراء إضافة
-                </Button>
-              </a>
               <a href="https://wa.me/972525143581" target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" size="sm" className="gap-2">
                   <MessageCircle className="h-4 w-4" />
-                  تواصل
+                  تواصل مع ثقة
                 </Button>
               </a>
             </div>
@@ -442,25 +492,42 @@ export function AgentPlanOverview() {
             <Skeleton className="h-16 w-full" />
           ) : addons.length > 0 ? (
             <div className="space-y-2">
-              {addons.map((a) => (
-                <div
-                  key={a.id}
-                  className="flex items-center justify-between p-3 rounded-lg border bg-card"
-                >
-                  <div>
-                    <p className="font-medium text-sm">{ADDON_LABELS[a.addon_type] || a.addon_type}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {a.quantity} × ₪{a.unit_price}
-                      {a.billing_cycle === 'monthly' ? ' / شهر' : ' مرة واحدة'}
-                      {a.ends_at && ` — حتى ${format(new Date(a.ends_at), 'dd/MM/yyyy', { locale: ar })}`}
-                    </p>
+              {addons.map((a) => {
+                const isPending = a.status === 'pending_approval';
+                return (
+                  <div
+                    key={a.id}
+                    className={cn(
+                      'flex items-center justify-between p-3 rounded-lg border',
+                      isPending ? 'bg-amber-500/5 border-amber-500/30' : 'bg-card',
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-sm">{ADDON_LABELS[a.addon_type] || a.addon_type}</p>
+                        {isPending && (
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 gap-1 text-[10px]"
+                          >
+                            <Clock className="h-3 w-3" />
+                            قيد المراجعة
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {a.quantity} × ₪{a.unit_price}
+                        {a.billing_cycle === 'monthly' ? ' / شهر' : ' مرة واحدة'}
+                        {a.ends_at && ` — حتى ${format(new Date(a.ends_at), 'dd/MM/yyyy', { locale: ar })}`}
+                      </p>
+                    </div>
+                    <Badge variant={a.billing_cycle === 'monthly' ? 'default' : 'secondary'}>
+                      ₪{a.quantity * a.unit_price}
+                      {a.billing_cycle === 'monthly' && '/شهر'}
+                    </Badge>
                   </div>
-                  <Badge variant={a.billing_cycle === 'monthly' ? 'default' : 'secondary'}>
-                    ₪{a.quantity * a.unit_price}
-                    {a.billing_cycle === 'monthly' && '/شهر'}
-                  </Badge>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground text-center py-3">
@@ -470,9 +537,12 @@ export function AgentPlanOverview() {
         </CardContent>
       </Card>
 
-      {/* Available addon catalog — always visible so the agent can see
-          what they can buy and what it costs. Prices come from
-          thiqa_platform_settings (admin-editable from /thiqa/settings). */}
+      {/* Available addon catalog — self-serve request flow. Clicking
+          "اشترِ" opens a confirmation dialog, and confirming posts to
+          request-addon-purchase which creates a pending row + emails
+          Thiqa super admins. The catalog prices live in
+          thiqa_platform_settings so Thiqa can change them without a
+          code deploy. */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -481,13 +551,13 @@ export function AgentPlanOverview() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          <p className="text-xs text-muted-foreground mb-3">
+            اضغط "اشترِ" لإرسال طلب الشراء إلى فريق ثقة. سيتم تفعيل الإضافة تلقائياً فور الموافقة.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {ADDON_CATALOG.map((item) => {
               const price = catalogPrices[item.settingKey] ?? item.defaultPrice;
-              const addonMessage = encodeURIComponent(
-                `مرحباً، أنا ${agent.name_ar || agent.name} وأرغب بشراء الإضافة "${item.label}" لحزمتي (${planInfo.name_ar || planInfo.name}).`,
-              );
-              const addonHref = `https://wa.me/972525143581?text=${addonMessage}`;
+              const isPending = pendingAddonTypes.has(item.type);
               return (
                 <div
                   key={item.type}
@@ -507,17 +577,124 @@ export function AgentPlanOverview() {
                       <span className="text-[11px] text-muted-foreground">{item.priceSuffix}</span>
                     </div>
                   </div>
-                  <a href={addonHref} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                    <Button size="sm" variant="outline" className="h-8">
-                      طلب
+                  {isPending ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300"
+                      disabled
+                    >
+                      <Clock className="h-3.5 w-3.5" />
+                      قيد المراجعة
                     </Button>
-                  </a>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="h-8 gap-1 shrink-0"
+                      onClick={() => {
+                        setPendingItem(item);
+                        setPendingQuantity(1);
+                      }}
+                    >
+                      اشترِ
+                    </Button>
+                  )}
                 </div>
               );
             })}
           </div>
         </CardContent>
       </Card>
+
+      {/* Purchase confirmation dialog */}
+      <Dialog
+        open={!!pendingItem}
+        onOpenChange={(open) => {
+          if (!open && !submitting) {
+            setPendingItem(null);
+            setPendingQuantity(1);
+          }
+        }}
+      >
+        <DialogContent dir="rtl" className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {pendingItem && <pendingItem.Icon className="h-5 w-5 text-primary" />}
+              تأكيد شراء {pendingItem?.label}
+            </DialogTitle>
+            <DialogDescription className="text-right pt-1">
+              سيُرسَل طلبك إلى فريق ثقة للمراجعة. لن يتم خصم أي مبلغ قبل التأكيد — الإضافة تُفعَّل فور الموافقة وتُضاف إلى فاتورة الشهر الحالي.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingItem && (
+            <div className="space-y-4 py-2">
+              {pendingItem.billing === 'monthly' && (
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">الكمية</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={pendingQuantity}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      setPendingQuantity(Number.isFinite(v) && v > 0 ? Math.min(50, v) : 1);
+                    }}
+                    className="h-10 text-lg font-semibold tabular-nums text-center"
+                  />
+                </div>
+              )}
+              <div className="rounded-xl border bg-muted/30 p-4 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">سعر الوحدة</span>
+                  <span className="font-semibold tabular-nums">
+                    ₪{catalogPrices[pendingItem.settingKey] ?? pendingItem.defaultPrice}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">نوع الفوترة</span>
+                  <span className="font-semibold">
+                    {pendingItem.billing === 'monthly' ? 'شهري متكرر' : 'مرة واحدة'}
+                  </span>
+                </div>
+                <div className="h-px bg-border my-1" />
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">
+                    {pendingItem.billing === 'monthly' ? 'الإجمالي الشهري' : 'المبلغ الإجمالي'}
+                  </span>
+                  <span className="text-2xl font-bold tabular-nums text-primary">
+                    ₪
+                    {(
+                      (catalogPrices[pendingItem.settingKey] ?? pendingItem.defaultPrice) *
+                      pendingQuantity
+                    ).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPendingItem(null);
+                setPendingQuantity(1);
+              }}
+              disabled={submitting}
+            >
+              إلغاء
+            </Button>
+            <Button onClick={handleConfirmPurchase} disabled={submitting}>
+              {submitting ? (
+                <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+              ) : (
+                <ShoppingCart className="h-4 w-4 ml-2" />
+              )}
+              تأكيد وإرسال الطلب
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

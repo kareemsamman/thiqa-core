@@ -697,6 +697,11 @@ export type Database = {
           id: string
           notes: string | null
           quantity: number
+          rejection_reason: string | null
+          requested_at: string | null
+          requested_by_user_id: string | null
+          reviewed_at: string | null
+          reviewed_by_user_id: string | null
           starts_at: string
           status: string
           unit_price: number
@@ -712,6 +717,11 @@ export type Database = {
           id?: string
           notes?: string | null
           quantity?: number
+          rejection_reason?: string | null
+          requested_at?: string | null
+          requested_by_user_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by_user_id?: string | null
           starts_at?: string
           status?: string
           unit_price: number
@@ -727,6 +737,11 @@ export type Database = {
           id?: string
           notes?: string | null
           quantity?: number
+          rejection_reason?: string | null
+          requested_at?: string | null
+          requested_by_user_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by_user_id?: string | null
           starts_at?: string
           status?: string
           unit_price?: number
