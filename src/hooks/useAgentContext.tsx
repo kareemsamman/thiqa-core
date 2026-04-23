@@ -269,6 +269,13 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
+    // Treat the loading window as "feature unknown → locked" so the
+    // sidebar, notifications bell, etc. don't render briefly as
+    // unlocked before the real plan data arrives. Without this gate
+    // the agent row below hasn't loaded yet, !agent shortcut kicks in
+    // and every feature reads as available for a frame or two.
+    if (loading) return false;
+
     if (isThiqaSuperAdmin || isImpersonating) return true;
     if (!agent) return true;
 

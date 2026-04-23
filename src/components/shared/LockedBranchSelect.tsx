@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useAgentContext } from '@/hooks/useAgentContext';
 import { useAgentLimits } from '@/hooks/useAgentLimits';
 import { useUpgradePrompt } from '@/components/pricing/UpgradePromptProvider';
 
@@ -42,10 +43,17 @@ export function LockedBranchSelect({
   allOption,
   disabled,
 }: LockedBranchSelectProps) {
-  const { branches: branchLimit } = useAgentLimits();
+  const { loading: contextLoading, isThiqaSuperAdmin } = useAgentContext();
+  const { loading: limitsLoading, branches: branchLimit } = useAgentLimits();
   const { showUpgradePrompt } = useUpgradePrompt();
 
-  const locked = branchLimit.effective === 1;
+  // Lock while any plan data is still loading so the Select doesn't
+  // render briefly as unlocked before the limit check kicks in. Once
+  // loaded, lock only when the plan caps branches at exactly 1.
+  // Thiqa super admins always pass.
+  const stillLoading = contextLoading || limitsLoading;
+  const locked =
+    !isThiqaSuperAdmin && (stillLoading || branchLimit.effective === 1);
 
   if (locked) {
     const selected =
