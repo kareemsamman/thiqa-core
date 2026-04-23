@@ -30,6 +30,9 @@ verify_jwt = false
 [functions.test-platform-smtp]
 verify_jwt = false
 
+[functions.test-sms-credentials]
+verify_jwt = false
+
 # The functions gateway still verifies tokens with the legacy HS256
 # secret while auth issues ES256 tokens on this project, so every user
 # request hits "Invalid JWT" at the gateway. The functions below do
