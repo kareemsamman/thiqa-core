@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.88.0';
 import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms as sendSmsUnified } from "../_shared/sms-sender.ts";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
@@ -374,59 +375,7 @@ async function sendSms(
   phone: string,
   message: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { sms_user, sms_token, sms_source } = settings;
-
-  if (!sms_user || !sms_token || !sms_source) {
-    return { success: false, error: 'SMS settings incomplete' };
-  }
-
-  const escapeXml = (value: string) =>
-    value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
-
-  let cleanPhone = phone.replace(/[^0-9]/g, '');
-  if (cleanPhone.startsWith('972')) {
-    cleanPhone = '0' + cleanPhone.substring(3);
-  }
-
-  const dlr = crypto.randomUUID();
-  const smsXml =
-    `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<sms>` +
-    `<user><username>${escapeXml(sms_user)}</username></user>` +
-    `<source>${escapeXml(sms_source)}</source>` +
-    `<destinations><phone id="${dlr}">${escapeXml(cleanPhone)}</phone></destinations>` +
-    `<message>${escapeXml(message)}</message>` +
-    `</sms>`;
-
-  console.log(`Sending SMS to ${cleanPhone}`);
-
-  const smsResponse = await fetch('https://019sms.co.il/api', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${sms_token}`,
-      'Content-Type': 'application/xml; charset=utf-8',
-    },
-    body: smsXml,
-  });
-
-  const smsResult = await smsResponse.text();
-
-  const extractTag = (xml: string, tag: string) => {
-    const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i'));
-    return match?.[1]?.trim() ?? null;
-  };
-
-  const status = extractTag(smsResult, 'status');
-  const apiMessage = extractTag(smsResult, 'message');
-
-  if (!smsResponse.ok || status !== '0') {
-    return { success: false, error: apiMessage || `SMS API error (status=${status})` };
-  }
-
-  return { success: true };
+  const result = await sendSmsUnified(settings, phone, message);
+  console.log(`[send-manual-reminder] ${result.provider} raw response:`, result.rawResponse);
+  return { success: result.success, error: result.error };
 }

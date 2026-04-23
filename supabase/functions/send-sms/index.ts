@@ -3,6 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 import { getAgentBranding } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -93,105 +95,31 @@ serve(async (req) => {
       );
     }
 
-    // Get SMS settings for this agent
-    const { data: smsSettings, error: settingsError } = await supabase
-      .from("sms_settings")
-      .select("*")
-      .eq("agent_id", agentId)
-      .maybeSingle();
-
-    if (settingsError) {
-      console.error("Error fetching SMS settings:", settingsError);
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch SMS settings" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Agent-level credentials
-    let sms_user = smsSettings?.sms_user || "";
-    let sms_token = smsSettings?.sms_token || "";
-    let sms_source = smsSettings?.sms_source || "";
-
-    // Fallback to Thiqa platform default SMS credentials if agent has none
-    if (!sms_user || !sms_token) {
-      const { data: platformRows } = await supabase
-        .from("thiqa_platform_settings")
-        .select("setting_key, setting_value")
-        .in("setting_key", ["default_sms_019_user", "default_sms_019_token", "default_sms_019_source"]);
-      const platform: Record<string, string> = {};
-      (platformRows || []).forEach((r: any) => { platform[r.setting_key] = r.setting_value || ""; });
-      sms_user = sms_user || platform.default_sms_019_user || "";
-      sms_token = sms_token || platform.default_sms_019_token || "";
-      sms_source = sms_source || platform.default_sms_019_source || "";
-    }
-
-    if (!sms_user || !sms_token || !sms_source) {
+    // Resolve provider + credentials (agent override → platform default).
+    const smsSettings = await resolveSmsSettings(supabase, agentId);
+    if (!smsSettings) {
       return new Response(
         JSON.stringify({ error: "SMS settings are incomplete. Please contact support." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const escapeXml = (value: string) =>
-      value
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
-        .replace(/'/g, "&apos;");
-
-    // Normalize phone for 019sms (expects 05xxxxxxx or 5xxxxxxx)
-    let cleanPhone = phone.replace(/[^0-9]/g, "");
-    if (cleanPhone.startsWith("972")) {
-      cleanPhone = "0" + cleanPhone.substring(3);
-    }
-
-    // Append the agent-branded footer (owner name + phones) before escaping.
+    // Append the agent-branded footer (owner name + phones) before sending.
     const branding = await getAgentBranding(supabase, agentId);
     const finalMessage = appendSmsFooter(message, branding);
 
-    // Build 019sms XML request (official API)
-    // Docs: https://docs.019sms.co.il/sms/send-sms.html
-    const dlr = crypto.randomUUID();
-    const smsXml =
-      `<?xml version="1.0" encoding="UTF-8"?>` +
-      `<sms>` +
-      `<user><username>${escapeXml(sms_user)}</username></user>` +
-      `<source>${escapeXml(sms_source)}</source>` +
-      `<destinations><phone id="${dlr}">${escapeXml(cleanPhone)}</phone></destinations>` +
-      `<message>${escapeXml(finalMessage)}</message>` +
-      `</sms>`;
+    const cleanPhone = normalizePhoneFor(smsSettings.provider, phone);
+    console.log(`Sending SMS via ${smsSettings.provider} to ${cleanPhone}`);
 
-    console.log(`Sending SMS to ${cleanPhone} from ${sms_source}`);
+    const result = await sendSms(smsSettings, phone, finalMessage);
+    console.log(`${smsSettings.provider} raw response:`, result.rawResponse);
 
-    const smsResponse = await fetch("https://019sms.co.il/api", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${sms_token}`,
-        "Content-Type": "application/xml; charset=utf-8",
-      },
-      body: smsXml,
-    });
-
-    const smsResult = await smsResponse.text();
-    console.log("019sms raw response:", smsResult);
-
-    const extractTag = (xml: string, tag: string) => {
-      const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
-      return match?.[1]?.trim() ?? null;
-    };
-
-    const status = extractTag(smsResult, "status");
-    const apiMessage = extractTag(smsResult, "message");
-    const shipmentId = extractTag(smsResult, "shipment_id");
-
-    if (!smsResponse.ok || status !== "0") {
+    if (!result.success) {
       return new Response(
         JSON.stringify({
-          error: apiMessage || `SMS API error (status=${status ?? "unknown"})`,
-          status,
-          http_status: smsResponse.status,
+          error: result.error || "SMS API error",
+          provider: result.provider,
+          http_status: result.httpStatus,
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -218,9 +146,10 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: apiMessage || "SMS sent successfully",
+        message: result.apiMessage || "SMS sent successfully",
+        provider: result.provider,
         phone: cleanPhone,
-        shipment_id: shipmentId,
+        shipment_id: result.shipmentId,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

@@ -5,6 +5,7 @@ import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { THIQA_LOGO_SVG } from "../_shared/thiqa-logo.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
@@ -502,57 +503,17 @@ serve(async (req) => {
 
     smsMessage = appendSmsFooter(smsMessage, branding);
 
-    const escapeXml = (value: string) =>
-      value
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
-        .replace(/'/g, "&apos;");
+    const cleanPhone = normalizePhoneFor(smsSettingsData.provider, client.phone_number);
 
-    // Normalize phone
-    let cleanPhone = client.phone_number.replace(/[^0-9]/g, "");
-    if (cleanPhone.startsWith("972")) {
-      cleanPhone = "0" + cleanPhone.substring(3);
-    }
+    console.log(`[send-package-invoice-sms] Sending SMS via ${smsSettingsData.provider} to ${cleanPhone} with ${policyFileUrls.length} policy files`);
 
-    // Send SMS via 019sms
-    const dlr = crypto.randomUUID();
-    const smsXml =
-      `<?xml version="1.0" encoding="UTF-8"?>` +
-      `<sms>` +
-      `<user><username>${escapeXml(smsSettingsData.sms_user || "")}</username></user>` +
-      `<source>${escapeXml(smsSettingsData.sms_source || "")}</source>` +
-      `<destinations><phone id="${dlr}">${escapeXml(cleanPhone)}</phone></destinations>` +
-      `<message>${escapeXml(smsMessage)}</message>` +
-      `</sms>`;
+    const sendResult = await sendSms(smsSettingsData, client.phone_number, smsMessage);
+    console.log(`[send-package-invoice-sms] ${sendResult.provider} raw response:`, sendResult.rawResponse);
 
-    console.log(`[send-package-invoice-sms] Sending SMS to ${cleanPhone} with ${policyFileUrls.length} policy files`);
-
-    const smsResponse = await fetch("https://019sms.co.il/api", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${smsSettingsData.sms_token}`,
-        "Content-Type": "application/xml; charset=utf-8",
-      },
-      body: smsXml,
-    });
-
-    const smsResult = await smsResponse.text();
-    console.log("[send-package-invoice-sms] 019sms response:", smsResult);
-
-    const extractTag = (xml: string, tag: string) => {
-      const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
-      return match?.[1]?.trim() ?? null;
-    };
-
-    const status = extractTag(smsResult, "status");
-    const apiMessage = extractTag(smsResult, "message");
-
-    if (!smsResponse.ok || status !== "0") {
-      console.error(`[send-package-invoice-sms] SMS failed: status=${status} message=${apiMessage}`);
+    if (!sendResult.success) {
+      console.error(`[send-package-invoice-sms] SMS failed via ${sendResult.provider}: ${sendResult.error}`);
       return new Response(
-        JSON.stringify({ error: apiMessage || `خطأ في إرسال الرسالة` }),
+        JSON.stringify({ error: sendResult.error || `خطأ في إرسال الرسالة` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

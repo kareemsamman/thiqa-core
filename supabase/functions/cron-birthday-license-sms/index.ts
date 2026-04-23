@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms } from "../_shared/sms-sender.ts";
 import { getAgentBranding } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 
@@ -58,49 +59,12 @@ Deno.serve(async (req) => {
       licenseFailed: 0,
     };
 
-    // Helper function to send SMS
-    async function sendSms(phone: string, message: string): Promise<boolean> {
+    // Helper function to send SMS via the unified provider router
+    async function sendSmsHelper(phone: string, message: string): Promise<boolean> {
       try {
-        // Normalize phone number
-        let normalizedPhone = phone.replace(/\D/g, '');
-        if (normalizedPhone.startsWith('972')) {
-          normalizedPhone = '0' + normalizedPhone.slice(3);
-        }
-        if (!normalizedPhone.startsWith('0')) {
-          normalizedPhone = '0' + normalizedPhone;
-        }
-
-        const escapeXml = (str: string) =>
-          str
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&apos;');
-
-        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
-<sms>
-  <user>${escapeXml(smsSettings.sms_user)}</user>
-  <source>${escapeXml(smsSettings.sms_source)}</source>
-  <destinations>
-    <phone>${escapeXml(normalizedPhone)}</phone>
-  </destinations>
-  <message>${escapeXml(message)}</message>
-</sms>`;
-
-        const response = await fetch('https://019sms.co.il/api', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/xml',
-            'Authorization': `Bearer ${smsSettings.sms_token}`,
-          },
-          body: xmlPayload,
-        });
-
-        const responseText = await response.text();
-        return responseText.includes('<status>0</status>') || 
-               responseText.includes('success') ||
-               response.ok;
+        const sendResult = await sendSms(smsSettings, phone, message);
+        console.log(`[cron-birthday-license-sms] ${sendResult.provider} raw response:`, sendResult.rawResponse);
+        return sendResult.success;
       } catch (error) {
         console.error('SMS send error:', error);
         return false;
@@ -153,7 +117,7 @@ Deno.serve(async (req) => {
           const message = appendSmsFooter(baseMessage, branding);
 
           // Send SMS
-          const success = await sendSms(client.phone_number!, message);
+          const success = await sendSmsHelper(client.phone_number!, message);
 
           // Log to automated_sms_log
           await supabase.from('automated_sms_log').insert({
@@ -251,7 +215,7 @@ Deno.serve(async (req) => {
           const message = appendSmsFooter(baseMessage, branding);
 
           // Send SMS
-          const success = await sendSms(client.phone_number, message);
+          const success = await sendSmsHelper(client.phone_number, message);
 
           // Log to automated_sms_log
           await supabase.from('automated_sms_log').insert({

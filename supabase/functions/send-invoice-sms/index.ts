@@ -4,6 +4,7 @@ import { buildBunnyStorageUploadUrl, normalizeBunnyCdnUrl, resolveBunnyStorageZo
 import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
@@ -334,59 +335,19 @@ serve(async (req) => {
     // Append the shared agent footer (owner + phones).
     smsMessage = appendSmsFooter(smsMessage, branding);
 
-    const escapeXml = (value: string) =>
-      value
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
-        .replace(/'/g, "&apos;");
+    const cleanPhone = normalizePhoneFor(smsSettingsData.provider, policy.client.phone_number);
 
-    // Normalize phone for 019sms (expects 05xxxxxxx or 5xxxxxxx)
-    let cleanPhone = policy.client.phone_number.replace(/[^0-9]/g, "");
-    if (cleanPhone.startsWith("972")) {
-      cleanPhone = "0" + cleanPhone.substring(3);
-    }
-
-    // Send SMS via 019sms (official XML API)
-    const dlr = crypto.randomUUID();
-    const smsXml =
-      `<?xml version="1.0" encoding="UTF-8"?>` +
-      `<sms>` +
-      `<user><username>${escapeXml(smsSettingsData.sms_user || "")}</username></user>` +
-      `<source>${escapeXml(smsSettingsData.sms_source || "")}</source>` +
-      `<destinations><phone id="${dlr}">${escapeXml(cleanPhone)}</phone></destinations>` +
-      `<message>${escapeXml(smsMessage)}</message>` +
-      `</sms>`;
-
-    console.log(`[send-invoice-sms] Sending SMS to ${cleanPhone}`);
+    console.log(`[send-invoice-sms] Sending SMS via ${smsSettingsData.provider} to ${cleanPhone}`);
     console.log(`[send-invoice-sms] Policy URLs: ${sortedPolicyUrls.length} files`);
     console.log(`[send-invoice-sms] AB Invoice URL: ${abInvoiceUrl}`);
 
-    const smsResponse = await fetch("https://019sms.co.il/api", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${smsSettingsData.sms_token}`,
-        "Content-Type": "application/xml; charset=utf-8",
-      },
-      body: smsXml,
-    });
+    const sendResult = await sendSms(smsSettingsData, policy.client.phone_number, smsMessage);
+    console.log(`[send-invoice-sms] ${sendResult.provider} raw response:`, sendResult.rawResponse);
 
-    const smsResult = await smsResponse.text();
-    console.log("[send-invoice-sms] 019sms raw response:", smsResult);
-
-    const extractTag = (xml: string, tag: string) => {
-      const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
-      return match?.[1]?.trim() ?? null;
-    };
-
-    const status = extractTag(smsResult, "status");
-    const apiMessage = extractTag(smsResult, "message");
-
-    if (!smsResponse.ok || status !== "0") {
-      console.error(`[send-invoice-sms] SMS failed: status=${status} message=${apiMessage}`);
+    if (!sendResult.success) {
+      console.error(`[send-invoice-sms] SMS failed via ${sendResult.provider}: ${sendResult.error}`);
       return new Response(
-        JSON.stringify({ error: apiMessage || `خطأ في إرسال الرسالة (status=${status ?? "unknown"})` }),
+        JSON.stringify({ error: sendResult.error || "خطأ في إرسال الرسالة" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

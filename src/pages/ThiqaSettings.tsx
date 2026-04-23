@@ -1209,9 +1209,12 @@ function AgentDefaultsTab() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useThiqaPlatformSettings();
   const [form, setForm] = useState({
+    default_sms_provider: "019sms",
     default_sms_019_user: "",
     default_sms_019_token: "",
     default_sms_019_source: "",
+    default_sms_htd_id: "",
+    default_sms_htd_sender: "",
     default_agent_smtp_host: "",
     default_agent_smtp_port: "465",
     default_agent_smtp_user: "",
@@ -1230,15 +1233,19 @@ function AgentDefaultsTab() {
     addon_onboarding_price: "200",
     addon_data_migration_price: "450",
   });
+  const [showHtdId, setShowHtdId] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showToken, setShowToken] = useState(false);
 
   useEffect(() => {
     if (settings) {
       setForm({
+        default_sms_provider: settings.default_sms_provider || "019sms",
         default_sms_019_user: settings.default_sms_019_user || "",
         default_sms_019_token: settings.default_sms_019_token || "",
         default_sms_019_source: settings.default_sms_019_source || "",
+        default_sms_htd_id: settings.default_sms_htd_id || "",
+        default_sms_htd_sender: settings.default_sms_htd_sender || "",
         default_agent_smtp_host: settings.default_agent_smtp_host || "",
         default_agent_smtp_port: settings.default_agent_smtp_port || "465",
         default_agent_smtp_user: settings.default_agent_smtp_user || "",
@@ -1282,33 +1289,122 @@ function AgentDefaultsTab() {
 
   return (
     <div className="space-y-4">
-      {/* Default SMS 019 Settings */}
+      {/* Default SMS Provider + Credentials */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5" />
-            إعدادات SMS الافتراضية (019)
+            إعدادات SMS الافتراضية
           </CardTitle>
-          <CardDescription>ستُطبق تلقائياً على الوكلاء الجدد</CardDescription>
+          <CardDescription>
+            اختر مزوّد الرسائل الافتراضي وأدخل بيانات كلا المزوّدين. يمكن لكل وكيل تخصيص مزوّد مختلف أو إعادة استخدام هذه الافتراضيات.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>اسم المستخدم (019)</Label>
-              <Input value={form.default_sms_019_user} onChange={e => setForm(f => ({ ...f, default_sms_019_user: e.target.value }))} dir="ltr" />
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label className="font-bold">المزوّد الافتراضي</Label>
+            <Select
+              value={form.default_sms_provider}
+              onValueChange={(v) => setForm((f) => ({ ...f, default_sms_provider: v }))}
+            >
+              <SelectTrigger className="w-full md:w-72">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="019sms">019sms (إسرائيل)</SelectItem>
+                <SelectItem value="htd">HTD (sms.htd.ps — فلسطين)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              الوكلاء الذين لا يملكون إعدادات خاصة سيستخدمون هذا المزوّد وبياناته أدناه.
+            </p>
+          </div>
+
+          {/* 019sms credentials */}
+          <div className="border rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold">019sms</span>
+              {form.default_sms_provider === "019sms" && (
+                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">الافتراضي</span>
+              )}
             </div>
-            <div className="space-y-2">
-              <Label>Token (019)</Label>
-              <div className="relative">
-                <Input type={showToken ? "text" : "password"} value={form.default_sms_019_token} onChange={e => setForm(f => ({ ...f, default_sms_019_token: e.target.value }))} dir="ltr" className="pe-10" />
-                <button type="button" onClick={() => setShowToken(!showToken)} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>اسم المستخدم</Label>
+                <Input
+                  value={form.default_sms_019_user}
+                  onChange={(e) => setForm((f) => ({ ...f, default_sms_019_user: e.target.value }))}
+                  dir="ltr"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Token</Label>
+                <div className="relative">
+                  <Input
+                    type={showToken ? "text" : "password"}
+                    value={form.default_sms_019_token}
+                    onChange={(e) => setForm((f) => ({ ...f, default_sms_019_token: e.target.value }))}
+                    dir="ltr"
+                    className="pe-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowToken(!showToken)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>رقم المصدر (Sender)</Label>
+                <Input
+                  value={form.default_sms_019_source}
+                  onChange={(e) => setForm((f) => ({ ...f, default_sms_019_source: e.target.value }))}
+                  dir="ltr"
+                />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>رقم المصدر الافتراضي</Label>
-              <Input value={form.default_sms_019_source} onChange={e => setForm(f => ({ ...f, default_sms_019_source: e.target.value }))} dir="ltr" />
+          </div>
+
+          {/* HTD credentials */}
+          <div className="border rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold">HTD</span>
+              {form.default_sms_provider === "htd" && (
+                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">الافتراضي</span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>API ID</Label>
+                <div className="relative">
+                  <Input
+                    type={showHtdId ? "text" : "password"}
+                    value={form.default_sms_htd_id}
+                    onChange={(e) => setForm((f) => ({ ...f, default_sms_htd_id: e.target.value }))}
+                    dir="ltr"
+                    className="pe-10"
+                    placeholder="من صفحة My Account في htd.ps"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowHtdId(!showHtdId)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showHtdId ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Sender ID</Label>
+                <Input
+                  value={form.default_sms_htd_sender}
+                  onChange={(e) => setForm((f) => ({ ...f, default_sms_htd_sender: e.target.value }))}
+                  dir="ltr"
+                  placeholder="الاسم الذي يظهر للمستلم"
+                />
+              </div>
             </div>
           </div>
         </CardContent>

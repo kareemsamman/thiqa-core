@@ -9,6 +9,7 @@ import {
 } from "../_shared/bunny-storage.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -262,43 +263,14 @@ serve(async (req) => {
           let smsMessage = `مرحباً ${broker.name}،\n\nيمكنك مشاهدة كشف حسابك عبر الرابط:\n${cdnUrl}`;
           smsMessage = appendSmsFooter(smsMessage, branding);
 
-          const escapeXml = (value: string) =>
-            value
-              .replace(/&/g, "&amp;")
-              .replace(/</g, "&lt;")
-              .replace(/>/g, "&gt;")
-              .replace(/"/g, "&quot;")
-              .replace(/'/g, "&apos;");
-
-          let cleanPhone = rawPhone.replace(/[^0-9]/g, "");
-          if (cleanPhone.startsWith("972")) {
-            cleanPhone = "0" + cleanPhone.substring(3);
-          }
-
-          const dlr = crypto.randomUUID();
-          const smsXml =
-            `<?xml version="1.0" encoding="UTF-8"?>` +
-            `<sms>` +
-            `<user><username>${escapeXml(smsSettingsData.sms_user || "")}</username></user>` +
-            `<source>${escapeXml(smsSettingsData.sms_source || "")}</source>` +
-            `<destinations><phone id="${dlr}">${escapeXml(cleanPhone)}</phone></destinations>` +
-            `<message>${escapeXml(smsMessage)}</message>` +
-            `</sms>`;
+          const cleanPhone = normalizePhoneFor(smsSettingsData.provider, rawPhone);
 
           try {
-            const smsResponse = await fetch("https://019sms.co.il/api", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${smsSettingsData.sms_token}`,
-                "Content-Type": "application/xml; charset=utf-8",
-              },
-              body: smsXml,
-            });
-            const smsResultText = await smsResponse.text();
-            console.log("[generate-broker-report] 019sms response:", smsResponse.status, smsResultText);
+            const sendResult = await sendSms(smsSettingsData, rawPhone, smsMessage);
+            console.log(`[generate-broker-report] ${sendResult.provider} raw response:`, sendResult.rawResponse);
 
-            if (!smsResponse.ok) {
-              smsError = `فشل إرسال SMS (${smsResponse.status})`;
+            if (!sendResult.success) {
+              smsError = sendResult.error || `فشل إرسال SMS`;
             } else {
               smsSent = true;
               // Log the outbound SMS so it shows up in sms_logs like every

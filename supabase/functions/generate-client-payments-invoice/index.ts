@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { getAgentBranding, resolveAgentId, buildLogoHtml, type AgentBranding } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -688,46 +689,15 @@ serve(async (req) => {
       const smsSettingsData = await resolveSmsSettings(supabase, agentId);
 
       if (smsSettingsData) {
-        // Normalize phone for 019sms
-        let cleanPhone = client.phone_number.replace(/[^0-9]/g, "");
-        if (cleanPhone.startsWith("972")) {
-          cleanPhone = "0" + cleanPhone.substring(3);
-        }
+        const cleanPhone = normalizePhoneFor(smsSettingsData.provider, client.phone_number);
 
         const baseSmsMessage = `مرحباً ${client.full_name}، تم إصدار فاتورة شاملة بجميع الدفعات الخاصة بك:\n${invoiceUrl}`;
         const smsMessage = appendSmsFooter(baseSmsMessage, branding);
 
-        const escapeXml = (value: string) =>
-          value
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/\"/g, "&quot;")
-            .replace(/'/g, "&apos;");
+        console.log(`[generate-client-payments-invoice] Sending SMS via ${smsSettingsData.provider} to ${cleanPhone}`);
 
-        const dlr = crypto.randomUUID();
-        const smsXml =
-          `<?xml version="1.0" encoding="UTF-8"?>` +
-          `<sms>` +
-          `<user><username>${escapeXml(smsSettingsData.sms_user || "")}</username></user>` +
-          `<source>${escapeXml(smsSettingsData.sms_source || "")}</source>` +
-          `<destinations><phone id="${dlr}">${escapeXml(cleanPhone)}</phone></destinations>` +
-          `<message>${escapeXml(smsMessage)}</message>` +
-          `</sms>`;
-
-        console.log(`[generate-client-payments-invoice] Sending SMS to ${cleanPhone}`);
-
-        const smsResponse = await fetch("https://019sms.co.il/api", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${smsSettingsData.sms_token}`,
-            "Content-Type": "application/xml; charset=utf-8",
-          },
-          body: smsXml,
-        });
-
-        const smsResult = await smsResponse.text();
-        console.log("[generate-client-payments-invoice] 019sms response:", smsResult);
+        const sendResult = await sendSms(smsSettingsData, client.phone_number, smsMessage);
+        console.log(`[generate-client-payments-invoice] ${sendResult.provider} raw response:`, sendResult.rawResponse);
       }
     }
 

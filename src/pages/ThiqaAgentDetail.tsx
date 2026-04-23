@@ -510,18 +510,25 @@ export default function ThiqaAgentDetail() {
   // ─── Save SMS settings ───
   const saveSmsSettings = async () => {
     setSavingSection('sms');
+    const payload = {
+      provider: smsSettings?.provider || '019sms',
+      sms_user: smsSettings?.sms_user || '',
+      sms_token: smsSettings?.sms_token || '',
+      sms_source: smsSettings?.sms_source || '',
+      htd_id: smsSettings?.htd_id || '',
+      htd_sender: smsSettings?.htd_sender || '',
+      is_enabled: smsSettings?.is_enabled ?? false,
+    };
     if (smsSettings?.id) {
       const { error } = await supabase.from('sms_settings').update({
-        sms_user: smsSettings.sms_user, sms_token: smsSettings.sms_token,
-        sms_source: smsSettings.sms_source, is_enabled: smsSettings.is_enabled,
+        ...payload,
         updated_at: new Date().toISOString(),
       }).eq('id', smsSettings.id);
       if (error) { setSavingSection(null); toast.error('فشل في حفظ إعدادات SMS: ' + error.message); return; }
     } else {
       const { data, error } = await supabase.from('sms_settings').insert({
-        agent_id: agentId!, provider: '019',
-        sms_user: smsSettings?.sms_user || '', sms_token: smsSettings?.sms_token || '',
-        sms_source: smsSettings?.sms_source || '', is_enabled: smsSettings?.is_enabled ?? false,
+        agent_id: agentId!,
+        ...payload,
       }).select().single();
       if (error) { setSavingSection(null); toast.error('فشل في حفظ إعدادات SMS: ' + error.message); return; }
       if (data) setSmsSettings(data);
@@ -883,7 +890,7 @@ export default function ThiqaAgentDetail() {
     return <MainLayout><div className="p-8 text-center text-muted-foreground">الوكيل غير موجود</div></MainLayout>;
   }
 
-  const initSms = () => smsSettings || { sms_user: '', sms_token: '', sms_source: '', is_enabled: false };
+  const initSms = () => smsSettings || { provider: '', sms_user: '', sms_token: '', sms_source: '', htd_id: '', htd_sender: '', is_enabled: false };
   const initAuth = () => authSettings || {
     email_otp_enabled: false, sms_otp_enabled: false,
     smtp_host: '', smtp_port: 465, smtp_user: '', smtp_password: '',
@@ -1199,31 +1206,85 @@ export default function ThiqaAgentDetail() {
             </Card>
           </TabsContent>
 
-          {/* ═══════════ SMS 019 TAB ═══════════ */}
+          {/* ═══════════ SMS TAB ═══════════ */}
           <TabsContent value="sms">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5" />إعدادات SMS — 019</CardTitle>
-                <CardDescription>بيانات حساب 019 لإرسال الرسائل النصية</CardDescription>
+                <CardTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5" />إعدادات SMS</CardTitle>
+                <CardDescription>
+                  اختر المزوّد الخاص بهذا الوكيل. إذا تركت المزوّد فارغاً والبيانات كلها فارغة، سيستخدم الوكيل الافتراضيات المضبوطة في إعدادات منصة ثقة.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-5">
                 <div className="flex items-center gap-3">
                   <Switch checked={initSms().is_enabled} onCheckedChange={v => setSmsSettings({...initSms(), ...smsSettings, is_enabled: v})} />
                   <Label>تفعيل SMS</Label>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div><Label>اسم المستخدم (019)</Label><Input value={initSms().sms_user} onChange={e => setSmsSettings({...initSms(), ...smsSettings, sms_user: e.target.value})} dir="ltr" /></div>
-                  <div>
-                    <Label>Token (019)</Label>
-                    <div className="relative">
-                      <Input type={showTokens.smsToken ? 'text' : 'password'} value={initSms().sms_token} onChange={e => setSmsSettings({...initSms(), ...smsSettings, sms_token: e.target.value})} dir="ltr" />
-                      <Button variant="ghost" size="icon" className="absolute left-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => toggleToken('smsToken')}>
-                        {showTokens.smsToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                  <div><Label>رقم المصدر</Label><Input value={initSms().sms_source} onChange={e => setSmsSettings({...initSms(), ...smsSettings, sms_source: e.target.value})} dir="ltr" /></div>
+
+                <div className="space-y-2">
+                  <Label className="font-bold">المزوّد</Label>
+                  <Select
+                    value={initSms().provider || ''}
+                    onValueChange={v => setSmsSettings({...initSms(), ...smsSettings, provider: v})}
+                  >
+                    <SelectTrigger className="w-full md:w-72">
+                      <SelectValue placeholder="استخدام الافتراضي من إعدادات ثقة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="019sms">019sms (إسرائيل)</SelectItem>
+                      <SelectItem value="htd">HTD (sms.htd.ps — فلسطين)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    اختيار مزوّد يعني أن هذا الوكيل سيستخدمه بدلاً من الافتراضي.
+                  </p>
                 </div>
+
+                {/* 019sms credentials */}
+                <div className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold">019sms</span>
+                    {(initSms().provider === '019sms' || initSms().provider === '019') && (
+                      <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">المُختار</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div><Label>اسم المستخدم</Label><Input value={initSms().sms_user || ''} onChange={e => setSmsSettings({...initSms(), ...smsSettings, sms_user: e.target.value})} dir="ltr" /></div>
+                    <div>
+                      <Label>Token</Label>
+                      <div className="relative">
+                        <Input type={showTokens.smsToken ? 'text' : 'password'} value={initSms().sms_token || ''} onChange={e => setSmsSettings({...initSms(), ...smsSettings, sms_token: e.target.value})} dir="ltr" />
+                        <Button variant="ghost" size="icon" className="absolute left-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => toggleToken('smsToken')}>
+                          {showTokens.smsToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                    <div><Label>رقم المصدر (Sender)</Label><Input value={initSms().sms_source || ''} onChange={e => setSmsSettings({...initSms(), ...smsSettings, sms_source: e.target.value})} dir="ltr" /></div>
+                  </div>
+                </div>
+
+                {/* HTD credentials */}
+                <div className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold">HTD</span>
+                    {initSms().provider === 'htd' && (
+                      <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">المُختار</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label>API ID</Label>
+                      <div className="relative">
+                        <Input type={showTokens.htdId ? 'text' : 'password'} value={initSms().htd_id || ''} onChange={e => setSmsSettings({...initSms(), ...smsSettings, htd_id: e.target.value})} dir="ltr" placeholder="من صفحة My Account في htd.ps" />
+                        <Button variant="ghost" size="icon" className="absolute left-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => toggleToken('htdId')}>
+                          {showTokens.htdId ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                    <div><Label>Sender ID</Label><Input value={initSms().htd_sender || ''} onChange={e => setSmsSettings({...initSms(), ...smsSettings, htd_sender: e.target.value})} dir="ltr" placeholder="الاسم الذي يظهر للمستلم" /></div>
+                  </div>
+                </div>
+
                 <Button onClick={saveSmsSettings} disabled={savingSection === 'sms'}>
                   {savingSection === 'sms' ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
                   حفظ إعدادات SMS

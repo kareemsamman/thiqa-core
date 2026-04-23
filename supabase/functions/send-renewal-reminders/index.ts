@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
 import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { checkUsageLimit, logUsage } from "../_shared/usage-limits.ts";
@@ -271,37 +272,10 @@ serve(async (req) => {
           .replace('{price_line}', priceLine);
         const message = appendSmsFooter(baseMessage, branding);
 
-        let phone = client.phone_number.replace(/[\s\-\(\)]/g, '');
-        if (phone.startsWith('0')) {
-          phone = '972' + phone.slice(1);
-        } else if (!phone.startsWith('972') && !phone.startsWith('+972')) {
-          phone = '972' + phone;
-        }
-        phone = phone.replace('+', '');
+        const phone = normalizePhoneFor(smsSettings.provider, client.phone_number);
 
-        const smsPayload = `<?xml version="1.0" encoding="UTF-8"?>
-<sms>
-  <user>${smsSettings.sms_user}</user>
-  <password>${smsSettings.sms_token}</password>
-  <source>${smsSettings.sms_source}</source>
-  <destinations>
-    <phone>${phone}</phone>
-  </destinations>
-  <message>${message}</message>
-</sms>`;
-
-        const smsResponse = await fetch('https://019sms.co.il/api', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/xml',
-            'Authorization': `Bearer ${smsSettings.sms_token}`
-          },
-          body: smsPayload
-        });
-
-        const responseText = await smsResponse.text();
-        const statusMatch = responseText.match(/<status>(\d+)<\/status>/);
-        const status = statusMatch ? parseInt(statusMatch[1]) : -1;
+        const sendResult = await sendSms(smsSettings, client.phone_number, message);
+        console.log(`[send-renewal-reminders] ${sendResult.provider} raw response:`, sendResult.rawResponse);
 
         await supabase.from('sms_logs').insert({
           policy_id: policy.id,
@@ -309,12 +283,12 @@ serve(async (req) => {
           phone_number: phone,
           message: message,
           sms_type: 'renewal_reminder',
-          status: status === 0 ? 'sent' : 'failed',
-          error_message: status !== 0 ? `Status: ${status}` : null,
+          status: sendResult.success ? 'sent' : 'failed',
+          error_message: sendResult.success ? null : sendResult.error,
           sent_at: new Date().toISOString()
         });
 
-        if (status === 0) {
+        if (sendResult.success) {
           batchSent++;
           await supabase.from('policy_renewal_tracking').upsert({
             policy_id: policy.id,

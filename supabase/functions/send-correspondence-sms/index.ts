@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
 import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
@@ -207,14 +208,7 @@ Deno.serve(async (req) => {
       return limitReachedResponse("sms", smsCheck, corsHeaders);
     }
 
-    // Normalize phone
-    let phone = phone_number.replace(/\D/g, '');
-    if (phone.startsWith('972')) {
-      phone = '0' + phone.slice(3);
-    }
-    if (!phone.startsWith('0')) {
-      phone = '0' + phone;
-    }
+    const phone = normalizePhoneFor(smsSettings.provider, phone_number);
 
     const branding = await getAgentBranding(supabase, agentId);
     const companyName = branding.companyName;
@@ -227,33 +221,12 @@ ${letter.recipient_name}
 ${letterUrl}`;
     const message = appendSmsFooter(baseMessage, branding);
 
-    // Escape XML
-    const escapeXml = (str: string) =>
-      str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
+    console.log(`[send-correspondence-sms] Sending SMS via ${smsSettings.provider} to:`, phone);
 
-    const dlr = crypto.randomUUID();
-    const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><sms><user><username>${escapeXml(smsSettings.sms_user)}</username></user><source>${escapeXml(smsSettings.sms_source)}</source><destinations><phone id="${dlr}">${escapeXml(phone)}</phone></destinations><message>${escapeXml(message)}</message></sms>`;
+    const sendResult = await sendSms(smsSettings, phone_number, message);
+    console.log(`[send-correspondence-sms] ${sendResult.provider} raw response:`, sendResult.rawResponse);
 
-    console.log('Sending SMS to:', phone);
-
-    const smsResponse = await fetch('https://019sms.co.il/api', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/xml',
-        'Authorization': `Bearer ${smsSettings.sms_token}`,
-      },
-      body: xmlPayload,
-    });
-
-    const responseText = await smsResponse.text();
-    console.log('SMS response:', responseText);
-
-    const isSuccess = responseText.includes('<status>0</status>');
+    const isSuccess = sendResult.success;
 
     // Look up client by letter's client_id or recipient phone
     let letterClientId = letter.client_id || null;
@@ -273,7 +246,7 @@ ${letterUrl}`;
       phone_number: phone,
       message: message.slice(0, 500),
       status: isSuccess ? 'sent' : 'failed',
-      error_message: isSuccess ? null : responseText.slice(0, 500),
+      error_message: isSuccess ? null : (sendResult.error || sendResult.rawResponse).slice(0, 500),
       sms_type: 'correspondence',
       entity_type: 'correspondence',
       entity_id: letter.id,
@@ -282,7 +255,7 @@ ${letterUrl}`;
     });
 
     if (!isSuccess) {
-      return new Response(JSON.stringify({ error: 'SMS sending failed', details: responseText }), {
+      return new Response(JSON.stringify({ error: 'SMS sending failed', details: sendResult.error || sendResult.rawResponse }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

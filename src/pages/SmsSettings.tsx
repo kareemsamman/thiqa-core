@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage, toastFunctionError } from "@/lib/functionError";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +24,8 @@ interface SmsSettings {
   sms_user: string;
   sms_token: string;
   sms_source: string;
+  htd_id: string;
+  htd_sender: string;
   is_enabled: boolean;
   invoice_sms_template?: string | null;
   signature_sms_template?: string | null;
@@ -68,6 +71,8 @@ export default function SmsSettings() {
     sms_user: "",
     sms_token: "",
     sms_source: "",
+    htd_id: "",
+    htd_sender: "",
     is_enabled: false,
     invoice_sms_template: null,
     signature_sms_template: null,
@@ -119,6 +124,8 @@ export default function SmsSettings() {
           sms_user: data.sms_user || "",
           sms_token: data.sms_token || "",
           sms_source: data.sms_source || "",
+          htd_id: data.htd_id || "",
+          htd_sender: data.htd_sender || "",
           is_enabled: data.is_enabled || false,
           invoice_sms_template: data.invoice_sms_template ?? null,
           signature_sms_template: data.signature_sms_template ?? null,
@@ -166,9 +173,12 @@ export default function SmsSettings() {
         const { error } = await supabase
           .from("sms_settings")
           .update({
+            provider: settings.provider,
             sms_user: settings.sms_user,
             sms_token: settings.sms_token,
             sms_source: settings.sms_source,
+            htd_id: settings.htd_id,
+            htd_sender: settings.htd_sender,
             is_enabled: settings.is_enabled,
             invoice_sms_template: settings.invoice_sms_template ?? null,
             signature_sms_template: settings.signature_sms_template ?? null,
@@ -192,10 +202,12 @@ export default function SmsSettings() {
         const { data, error } = await supabase
           .from("sms_settings")
           .insert({
-            provider: "019sms",
+            provider: settings.provider || "019sms",
             sms_user: settings.sms_user,
             sms_token: settings.sms_token,
             sms_source: settings.sms_source,
+            htd_id: settings.htd_id,
+            htd_sender: settings.htd_sender,
             is_enabled: settings.is_enabled,
             invoice_sms_template: settings.invoice_sms_template ?? null,
             signature_sms_template: settings.signature_sms_template ?? null,
@@ -419,10 +431,10 @@ export default function SmsSettings() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <MessageSquare className="h-5 w-5 text-primary" />
-                    إعدادات 019sms
+                    إعدادات SMS
                   </CardTitle>
                   <CardDescription>
-                    قم بإدخال بيانات الاتصال بخدمة 019sms لإرسال الرسائل النصية
+                    اختر مزوّد الرسائل (019sms أو HTD) وأدخل بياناته. إذا تركت الحقول فارغة، سيستخدم حسابك الإعدادات الافتراضية من منصة ثقة.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -442,50 +454,99 @@ export default function SmsSettings() {
                     />
                   </div>
 
-                  {/* SMS User */}
+                  {/* Provider selector */}
                   <div className="space-y-2">
-                    <Label htmlFor="sms_user">اسم المستخدم (SMSUSER)</Label>
-                    <Input
-                      id="sms_user"
-                      placeholder="أدخل اسم المستخدم..."
-                      value={settings.sms_user}
-                      onChange={(e) =>
-                        setSettings((prev) => ({ ...prev, sms_user: e.target.value }))
-                      }
-                      className="ltr-input"
-                    />
-                  </div>
-
-                  {/* SMS Token */}
-                  <div className="space-y-2">
-                    <Label htmlFor="sms_token">رمز API (SMSTOKEN)</Label>
-                    <Input
-                      id="sms_token"
-                      type="password"
-                      placeholder="أدخل رمز API..."
-                      value={settings.sms_token}
-                      onChange={(e) =>
-                        setSettings((prev) => ({ ...prev, sms_token: e.target.value }))
-                      }
-                      className="ltr-input"
-                    />
-                  </div>
-
-                  {/* SMS Source */}
-                  <div className="space-y-2">
-                    <Label htmlFor="sms_source">مصدر الرسالة (SMSSOURCE)</Label>
-                    <Input
-                      id="sms_source"
-                      placeholder="اسم المرسل (مثال: ABInsurance)..."
-                      value={settings.sms_source}
-                      onChange={(e) =>
-                        setSettings((prev) => ({ ...prev, sms_source: e.target.value }))
-                      }
-                      className="ltr-input"
-                    />
+                    <Label className="font-medium">المزوّد</Label>
+                    <Select
+                      value={settings.provider || "019sms"}
+                      onValueChange={(v) => setSettings((prev) => ({ ...prev, provider: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="019sms">019sms (إسرائيل)</SelectItem>
+                        <SelectItem value="htd">HTD (sms.htd.ps — فلسطين)</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <p className="text-xs text-muted-foreground">
-                      الاسم الذي سيظهر للعميل كمرسل الرسالة
+                      اختر المزوّد الذي ترغب بإرسال رسائلك من خلاله.
                     </p>
+                  </div>
+
+                  {/* 019sms credentials */}
+                  <div className="border rounded-lg p-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold">019sms</span>
+                      {(settings.provider === "019sms" || settings.provider === "019") && (
+                        <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">نشط</span>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="sms_user">اسم المستخدم (SMSUSER)</Label>
+                      <Input
+                        id="sms_user"
+                        placeholder="أدخل اسم المستخدم..."
+                        value={settings.sms_user}
+                        onChange={(e) => setSettings((prev) => ({ ...prev, sms_user: e.target.value }))}
+                        className="ltr-input"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="sms_token">رمز API (SMSTOKEN)</Label>
+                      <Input
+                        id="sms_token"
+                        type="password"
+                        placeholder="أدخل رمز API..."
+                        value={settings.sms_token}
+                        onChange={(e) => setSettings((prev) => ({ ...prev, sms_token: e.target.value }))}
+                        className="ltr-input"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="sms_source">مصدر الرسالة (SMSSOURCE)</Label>
+                      <Input
+                        id="sms_source"
+                        placeholder="اسم المرسل (مثال: ABInsurance)..."
+                        value={settings.sms_source}
+                        onChange={(e) => setSettings((prev) => ({ ...prev, sms_source: e.target.value }))}
+                        className="ltr-input"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        الاسم الذي سيظهر للعميل كمرسل الرسالة
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* HTD credentials */}
+                  <div className="border rounded-lg p-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold">HTD</span>
+                      {settings.provider === "htd" && (
+                        <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">نشط</span>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="htd_id">API ID</Label>
+                      <Input
+                        id="htd_id"
+                        type="password"
+                        placeholder="من صفحة My Account في htd.ps"
+                        value={settings.htd_id}
+                        onChange={(e) => setSettings((prev) => ({ ...prev, htd_id: e.target.value }))}
+                        className="ltr-input"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="htd_sender">Sender ID</Label>
+                      <Input
+                        id="htd_sender"
+                        placeholder="الاسم الذي يظهر للمستلم"
+                        value={settings.htd_sender}
+                        onChange={(e) => setSettings((prev) => ({ ...prev, htd_sender: e.target.value }))}
+                        className="ltr-input"
+                      />
+                    </div>
                   </div>
 
                   {/* Auto Reminders Toggle */}

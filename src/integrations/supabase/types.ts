@@ -5729,6 +5729,8 @@ export type Database = {
           default_signature_template_id: string | null
           enable_auto_reminders: boolean | null
           enable_auto_renewal_reminders: boolean | null
+          htd_id: string | null
+          htd_sender: string | null
           id: string
           invoice_sms_template: string | null
           is_enabled: boolean
@@ -5768,6 +5770,8 @@ export type Database = {
           default_signature_template_id?: string | null
           enable_auto_reminders?: boolean | null
           enable_auto_renewal_reminders?: boolean | null
+          htd_id?: string | null
+          htd_sender?: string | null
           id?: string
           invoice_sms_template?: string | null
           is_enabled?: boolean
@@ -5807,6 +5811,8 @@ export type Database = {
           default_signature_template_id?: string | null
           enable_auto_reminders?: boolean | null
           enable_auto_renewal_reminders?: boolean | null
+          htd_id?: string | null
+          htd_sender?: string | null
           id?: string
           invoice_sms_template?: string | null
           is_enabled?: boolean

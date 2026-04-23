@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.88.0';
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
 import { getAgentBranding } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
@@ -225,40 +226,23 @@ Deno.serve(async (req) => {
 
     // ── Send SMS to this batch ──
     let batchFailed = 0;
-    const escapeXml = (str: string) =>
-      str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 
     for (const recipient of pendingRecipients) {
       try {
-        let phone = recipient.phone_number.replace(/\D/g, '');
-        if (phone.startsWith('972')) phone = '0' + phone.slice(3);
-        if (!phone.startsWith('0')) phone = '0' + phone;
+        const phone = normalizePhoneFor(smsSettings.provider, recipient.phone_number);
 
-        const dlr = crypto.randomUUID();
-        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?><sms><user><username>${escapeXml(smsSettings.sms_user)}</username></user><source>${escapeXml(smsSettings.sms_source)}</source><destinations><phone id="${dlr}">${escapeXml(phone)}</phone></destinations><message>${escapeXml(campaignMessageWithFooter)}</message></sms>`;
-
-        const smsResponse = await fetch('https://019sms.co.il/api', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/xml',
-            'Authorization': `Bearer ${smsSettings.sms_token}`,
-          },
-          body: xmlPayload,
-        });
-
-        const responseText = await smsResponse.text();
-        const statusMatch = responseText.match(/<status>(\d+)<\/status>/);
-        const responseStatus = statusMatch ? parseInt(statusMatch[1]) : -1;
-        const isAccepted = responseStatus === 0;
+        const sendResult = await sendSms(smsSettings, recipient.phone_number, campaignMessageWithFooter);
+        console.log(`[send-marketing-sms] ${sendResult.provider} raw response:`, sendResult.rawResponse);
+        const isAccepted = sendResult.success;
 
         await supabase
           .from('marketing_sms_recipients')
           .update({
             status: isAccepted ? 'sent' : 'failed',
             sent_at: new Date().toISOString(),
-            dlr_id: dlr,
+            dlr_id: sendResult.shipmentId || crypto.randomUUID(),
             dlr_status: isAccepted ? 'pending' : 'rejected',
-            dlr_message: isAccepted ? null : responseText.slice(0, 500),
+            dlr_message: isAccepted ? null : (sendResult.error || sendResult.rawResponse).slice(0, 500),
           })
           .eq('id', recipient.id);
 

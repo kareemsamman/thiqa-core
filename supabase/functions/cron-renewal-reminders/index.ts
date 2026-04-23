@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
 import { getAgentBranding } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 
@@ -134,9 +135,9 @@ serve(async (req) => {
     console.log(`[cron-renewal-reminders] Found ${policiesOneWeek?.length || 0} policies for 1-week reminder`);
 
     // Helper to send SMS
-    const sendSms = async (
-      policy: any, 
-      template: string, 
+    const sendReminderSms = async (
+      policy: any,
+      template: string,
       reminderType: '1month' | '1week'
     ): Promise<boolean> => {
       const client = policy.client;
@@ -192,44 +193,13 @@ serve(async (req) => {
         .replace(/{price_line}/g, priceLine);
       const message = appendSmsFooter(baseMessage, branding);
 
-      // Normalize phone
-      let cleanPhone = client.phone_number.replace(/[^0-9]/g, "");
-      if (cleanPhone.startsWith("972")) {
-        cleanPhone = "0" + cleanPhone.substring(3);
-      }
-
-      // Send SMS via 019sms
-      const escapeXml = (value: string) =>
-        value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-          .replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
-
-      const dlr = crypto.randomUUID();
-      const smsXml = `<?xml version="1.0" encoding="UTF-8"?>` +
-        `<sms>` +
-        `<user><username>${escapeXml(smsSettings.sms_user || "")}</username></user>` +
-        `<source>${escapeXml(smsSettings.sms_source || "")}</source>` +
-        `<destinations><phone id="${dlr}">${escapeXml(cleanPhone)}</phone></destinations>` +
-        `<message>${escapeXml(message)}</message>` +
-        `</sms>`;
+      const cleanPhone = normalizePhoneFor(smsSettings.provider, client.phone_number);
 
       try {
-        const smsResponse = await fetch("https://019sms.co.il/api", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${smsSettings.sms_token}`,
-            "Content-Type": "application/xml; charset=utf-8",
-          },
-          body: smsXml,
-        });
+        const sendResult = await sendSms(smsSettings, client.phone_number, message);
+        console.log(`[cron-renewal-reminders] ${sendResult.provider} raw response:`, sendResult.rawResponse);
 
-        const smsResult = await smsResponse.text();
-        const extractTag = (xml: string, tag: string) => {
-          const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
-          return match?.[1]?.trim() ?? null;
-        };
-        const status = extractTag(smsResult, "status");
-
-        if (status === "0") {
+        if (sendResult.success) {
           // Log SMS
           const { data: smsLog } = await supabase
             .from("sms_logs")
@@ -268,7 +238,7 @@ serve(async (req) => {
           sentCount++;
           return true;
         } else {
-          console.error(`[cron-renewal-reminders] SMS failed for policy ${policy.id}: status=${status}`);
+          console.error(`[cron-renewal-reminders] SMS failed for policy ${policy.id} via ${sendResult.provider}: ${sendResult.error}`);
           errorCount++;
           return false;
         }
@@ -282,14 +252,14 @@ serve(async (req) => {
     // Process 1 month reminders
     if (agentSmsRow?.renewal_reminder_1month_enabled !== false) {
       for (const policy of (policiesOneMonth || [])) {
-        await sendSms(policy, template1Month, '1month');
+        await sendReminderSms(policy, template1Month, '1month');
       }
     }
 
-    // Process 1 week reminders  
+    // Process 1 week reminders
     if (agentSmsRow?.renewal_reminder_1week_enabled !== false) {
       for (const policy of (policiesOneWeek || [])) {
-        await sendSms(policy, template1Week, '1week');
+        await sendReminderSms(policy, template1Week, '1week');
       }
     }
 

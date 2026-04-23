@@ -2,27 +2,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { getAgentBranding, resolveAgentId } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-// Helper to escape XML special characters
-const escapeXml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-
-// Helper to extract XML tag content
-const extractTag = (xml: string, tag: string) => {
-  const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
-  return match?.[1]?.trim() ?? null;
 };
 
 // Helper to get policy type label in Arabic
@@ -205,22 +191,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    const smsUser = smsSettings.sms_user;
-    const smsToken = smsSettings.sms_token;
-    const smsSource = smsSettings.sms_source;
-
     let sentCount = 0;
     let failedCount = 0;
 
     // Send SMS to each client
     for (const client of clientsWithPhone) {
       try {
-        // Clean phone number - normalize to 05xxxxxxx format
-        let cleanPhone = client.client_phone.replace(/[^0-9]/g, "");
-        if (cleanPhone.startsWith("972")) {
-          cleanPhone = "0" + cleanPhone.substring(3);
-        }
-        
+        const cleanPhone = normalizePhoneFor(smsSettings.provider, client.client_phone);
+
         const clientName = client.client_name || "عميل";
         
         // Use the unified total_remaining from the RPC (already calculated correctly)
@@ -268,34 +246,12 @@ Deno.serve(async (req) => {
 ${policyLines}`;
         message = appendSmsFooter(message, brandingData);
 
-        // Build 019sms XML request (official API format)
-        const dlr = crypto.randomUUID();
-        const smsXml =
-          `<?xml version="1.0" encoding="UTF-8"?>` +
-          `<sms>` +
-          `<user><username>${escapeXml(smsUser)}</username></user>` +
-          `<source>${escapeXml(smsSource)}</source>` +
-          `<destinations><phone id="${dlr}">${escapeXml(cleanPhone)}</phone></destinations>` +
-          `<message>${escapeXml(message)}</message>` +
-          `</sms>`;
+        console.log(`[send-bulk-debt-sms] Sending SMS via ${smsSettings.provider} to ${cleanPhone}`);
 
-        console.log(`Sending SMS to ${cleanPhone} from ${smsSource}`);
+        const sendResult = await sendSms(smsSettings, client.client_phone, message);
+        console.log(`[send-bulk-debt-sms] ${sendResult.provider} raw response:`, sendResult.rawResponse);
 
-        const smsResponse = await fetch("https://019sms.co.il/api", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${smsToken}`,
-            "Content-Type": "application/xml; charset=utf-8",
-          },
-          body: smsXml,
-        });
-
-        const smsResult = await smsResponse.text();
-        console.log(`019sms response for ${cleanPhone}:`, smsResult);
-
-        const status = extractTag(smsResult, "status");
-        const apiMessage = extractTag(smsResult, "message");
-        const isSuccess = status === "0";
+        const isSuccess = sendResult.success;
 
         // Log the SMS
         await supabase.from("sms_logs").insert({
@@ -304,7 +260,7 @@ ${policyLines}`;
           sms_type: "payment_request",
           client_id: client.client_id,
           status: isSuccess ? "sent" : "failed",
-          error_message: isSuccess ? null : (apiMessage || smsResult.substring(0, 200)),
+          error_message: isSuccess ? null : (sendResult.error || sendResult.rawResponse.substring(0, 200)),
           sent_at: new Date().toISOString(),
           created_by: user.id,
         });

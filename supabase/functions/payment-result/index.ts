@@ -1,3 +1,8 @@
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
+import { getAgentBranding } from "../_shared/agent-branding.ts";
+import { appendSmsFooter } from "../_shared/sms-footer.ts";
+
 // This edge function returns the payment result HTML page for Tranzila
 // after the customer is redirected back from the payment gateway.
 //
@@ -315,16 +320,7 @@ async function sendPaymentReceiptSms(supabase: any, payment: any) {
       return
     }
 
-    // Normalize phone number
-    let phone = client.phone_number.replace(/\D/g, '')
-    if (phone.startsWith('972')) {
-      phone = '0' + phone.slice(3)
-    } else if (phone.startsWith('+972')) {
-      phone = '0' + phone.slice(4)
-    }
-    if (!phone.startsWith('0')) {
-      phone = '0' + phone
-    }
+    const phone = normalizePhoneFor(smsSettings.provider, client.phone_number)
 
     // Build SMS message
     const amount = payment.amount
@@ -358,26 +354,10 @@ async function sendPaymentReceiptSms(supabase: any, payment: any) {
     // carries the same signature.
     message = appendSmsFooter(message, branding)
 
-    // Send SMS via 019sms
-    const smsUrl = 'https://019sms.co.il/api'
-    const smsBody = new URLSearchParams({
-      user: smsSettings.sms_user || '',
-      password: smsSettings.sms_token || '',
-      from: smsSettings.sms_source || 'AB-INS',
-      to: phone,
-      message: message,
-    })
+    console.log(`Sending payment receipt SMS via ${smsSettings.provider} to:`, phone)
 
-    console.log('Sending payment receipt SMS to:', phone)
-    
-    const smsResponse = await fetch(smsUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: smsBody.toString(),
-    })
-
-    const smsResult = await smsResponse.text()
-    console.log('SMS result:', smsResult)
+    const sendResult = await sendSms(smsSettings, client.phone_number, message)
+    console.log(`[payment-result] ${sendResult.provider} raw response:`, sendResult.rawResponse)
 
     // Log SMS to sms_logs table
     const { error: logError } = await supabase.from('sms_logs').insert({
@@ -386,7 +366,8 @@ async function sendPaymentReceiptSms(supabase: any, payment: any) {
       phone_number: phone,
       message: message,
       sms_type: 'payment_confirmation',
-      status: 'sent',
+      status: sendResult.success ? 'sent' : 'failed',
+      error_message: sendResult.success ? null : sendResult.error,
       sent_at: new Date().toISOString(),
     });
 
