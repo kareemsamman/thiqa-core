@@ -41,12 +41,13 @@ export function Header({ title, subtitle }: HeaderProps) {
   const { recentClient } = useRecentClient();
   const { policies: policiesLimit, loading: limitsLoading } = useAgentLimits();
   const { showUpgradePrompt } = useUpgradePrompt();
-  // Treat "still loading" the same as "exceeded" so the button renders as
-  // locked until the real quota data arrives. Otherwise useAgentLimits's
-  // initial EMPTY state (exceeded=false) flashes the unlocked variant for a
-  // few hundred ms and the click handler lets the wizard through before the
-  // quota check kicks in — a trivial paywall bypass.
-  const policiesLocked = limitsLoading || policiesLimit.exceeded;
+  // Only commit to the locked variant once limits have actually loaded,
+  // so we don't flash the amber lock on an agent who's perfectly within
+  // quota. During the hydration window the unlocked variant renders with
+  // `disabled=limitsLoading` + a handler guard — prevents the bypass
+  // (can't click through the flash) without misleading the user about
+  // their plan.
+  const policiesLocked = !limitsLoading && policiesLimit.exceeded;
   const activeTabRef = useRef<HTMLButtonElement | null>(null);
 
   const isOnClientProfilePage = /^\/clients\/[^/]+/.test(location.pathname);
@@ -207,6 +208,7 @@ export function Header({ title, subtitle }: HeaderProps) {
           ) : (
             <Button
               onClick={openNewPolicy}
+              disabled={limitsLoading}
               className="h-11 px-4 rounded-full gap-2 shadow-md hover:shadow-lg hover:shadow-foreground/20 active:scale-[0.98] text-[15px] bg-foreground text-background hover:bg-foreground/90"
             >
               <Plus className="h-4 w-4" />
@@ -267,6 +269,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             ) : (
               <Button
                 onClick={openNewPolicy}
+                disabled={limitsLoading}
                 size="sm"
                 className="h-9 px-3 rounded-full gap-2 bg-foreground text-background hover:bg-foreground/90"
               >

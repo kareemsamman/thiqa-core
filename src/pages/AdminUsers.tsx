@@ -113,10 +113,11 @@ export default function AdminUsers() {
   const { toast } = useToast();
   const { showUpgradePrompt, handleLimitError } = useUpgradePrompt();
   const { users: userLimit, loading: limitsLoading, refetch: refetchLimits } = useAgentLimits();
-  // Render locked until the real quota loads — otherwise the initial
-  // exceeded=false default flashes the unlocked button and a fast click
-  // opens the create sheet before the gate resolves.
-  const userLocked = limitsLoading || userLimit.exceeded;
+  // Only commit to the locked variant once limits have loaded — otherwise
+  // we flash the amber lock on agents who are perfectly within quota.
+  // During hydration the unlocked variant renders with disabled=true so
+  // the flash can't be clicked through.
+  const userLocked = !limitsLoading && userLimit.exceeded;
 
   const openUserUpgrade = () =>
     showUpgradePrompt({
@@ -585,13 +586,7 @@ export default function AdminUsers() {
           {userLocked ? (
             <Button
               variant="outline"
-              onClick={() => {
-                // Swallow clicks during the hydration flash; once quota
-                // resolves we either stay locked and show upgrade, or
-                // re-render as the unlocked variant on the next tick.
-                if (limitsLoading) return;
-                openUserUpgrade();
-              }}
+              onClick={openUserUpgrade}
               className="gap-2 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
             >
               <Lock className="h-4 w-4" />
@@ -599,7 +594,15 @@ export default function AdminUsers() {
               <Sparkles className="h-3.5 w-3.5 opacity-70" />
             </Button>
           ) : (
-            <Button onClick={() => { resetCreateForm(); setCreateSheetOpen(true); }} className="gap-2">
+            <Button
+              onClick={() => {
+                if (limitsLoading) return;
+                resetCreateForm();
+                setCreateSheetOpen(true);
+              }}
+              disabled={limitsLoading}
+              className="gap-2"
+            >
               <UserPlus className="h-4 w-4" />
               إنشاء مستخدم
             </Button>
