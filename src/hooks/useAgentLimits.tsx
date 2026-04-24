@@ -295,6 +295,33 @@ export function useAgentLimits(): AgentLimits {
     };
   }, [agentId, planInfo, refetchTick]);
 
+  // Keep the cached counts in sync with the server in real time so the
+  // SMS / AI send buttons flip to locked the moment an edge function
+  // decrements the wallet or bumps the usage log. Without this the
+  // client runs on the initial fetch until the next mount, which lets
+  // e.g. an agent who burns through their last 5 credits in one session
+  // keep clicking send after the server has already zero'd the wallet —
+  // the client still thinks credit=5 and renders the button unlocked.
+  useEffect(() => {
+    if (!agentId) return;
+    const channel = supabase
+      .channel(`agent-limits-${agentId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'agent_credit_wallet', filter: `agent_id=eq.${agentId}` },
+        () => setRefetchTick((t) => t + 1),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'agent_usage_log', filter: `agent_id=eq.${agentId}` },
+        () => setRefetchTick((t) => t + 1),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [agentId]);
+
   return {
     loading,
     users,

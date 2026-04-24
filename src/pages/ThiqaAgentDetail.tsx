@@ -34,118 +34,6 @@ import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { DateInputPicker } from "@/components/shared/DateInputPicker";
 
-// ─── Usage Limits Editor ───
-function UsageLimitsEditor({ agentId }: { agentId: string }) {
-  const [limits, setLimits] = useState<any>(null);
-  const [usage, setUsage] = useState<any[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      const [limitsRes, usageRes] = await Promise.all([
-        supabase.from('agent_usage_limits' as any).select('*').eq('agent_id', agentId).maybeSingle(),
-        supabase.from('agent_usage_log' as any).select('*').eq('agent_id', agentId).order('period', { ascending: false }).limit(12),
-      ]);
-      if (limitsRes.data) setLimits(limitsRes.data);
-      else setLimits({ sms_limit_type: 'monthly', sms_limit_count: 100, ai_limit_type: 'monthly', ai_limit_count: 100 });
-      setUsage((usageRes.data as any) || []);
-      setLoaded(true);
-    })();
-  }, [agentId]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    const payload = {
-      agent_id: agentId,
-      sms_limit_type: limits.sms_limit_type,
-      sms_limit_count: limits.sms_limit_count,
-      ai_limit_type: limits.ai_limit_type,
-      ai_limit_count: limits.ai_limit_count,
-    };
-    const { error } = await supabase.from('agent_usage_limits' as any).upsert(payload, { onConflict: 'agent_id' });
-    setSaving(false);
-    if (error) toast.error('فشل في الحفظ: ' + error.message);
-    else toast.success('تم حفظ حدود الاستخدام');
-  };
-
-  if (!loaded) return null;
-
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const currentYear = String(now.getFullYear());
-  const smsUsedMonth = usage.find((u: any) => u.usage_type === 'sms' && u.period === currentMonth)?.count || 0;
-  const smsUsedYear = usage.filter((u: any) => u.usage_type === 'sms' && u.period.startsWith(currentYear)).reduce((s: number, u: any) => s + u.count, 0);
-  const aiUsedMonth = usage.find((u: any) => u.usage_type === 'ai_chat' && u.period === currentMonth)?.count || 0;
-  const aiUsedYear = usage.filter((u: any) => u.usage_type === 'ai_chat' && u.period.startsWith(currentYear)).reduce((s: number, u: any) => s + u.count, 0);
-
-  const limitTypeLabels: Record<string, string> = { monthly: 'شهري', yearly: 'سنوي', unlimited: 'غير محدود' };
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* SMS Limits */}
-        <div className="border rounded-lg p-4 space-y-3">
-          <h4 className="font-bold text-sm flex items-center gap-2"><MessageSquare className="h-4 w-4" />حدود SMS</h4>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-xs">النوع</Label>
-              <Select value={limits.sms_limit_type} onValueChange={v => setLimits({...limits, sms_limit_type: v})}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monthly">شهري</SelectItem>
-                  <SelectItem value="yearly">سنوي</SelectItem>
-                  <SelectItem value="unlimited">غير محدود</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {limits.sms_limit_type !== 'unlimited' && (
-              <div>
-                <Label className="text-xs">الحد الأقصى</Label>
-                <Input type="number" className="h-8 text-xs" value={limits.sms_limit_count} onChange={e => setLimits({...limits, sms_limit_count: parseInt(e.target.value) || 0})} />
-              </div>
-            )}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            الاستخدام: <strong>{smsUsedMonth}</strong> هذا الشهر | <strong>{smsUsedYear}</strong> هذا العام
-          </div>
-        </div>
-
-        {/* AI Limits */}
-        <div className="border rounded-lg p-4 space-y-3">
-          <h4 className="font-bold text-sm flex items-center gap-2"><Bot className="h-4 w-4" />حدود المساعد الذكي</h4>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-xs">النوع</Label>
-              <Select value={limits.ai_limit_type} onValueChange={v => setLimits({...limits, ai_limit_type: v})}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monthly">شهري</SelectItem>
-                  <SelectItem value="yearly">سنوي</SelectItem>
-                  <SelectItem value="unlimited">غير محدود</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {limits.ai_limit_type !== 'unlimited' && (
-              <div>
-                <Label className="text-xs">الحد الأقصى</Label>
-                <Input type="number" className="h-8 text-xs" value={limits.ai_limit_count} onChange={e => setLimits({...limits, ai_limit_count: parseInt(e.target.value) || 0})} />
-              </div>
-            )}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            الاستخدام: <strong>{aiUsedMonth}</strong> هذا الشهر | <strong>{aiUsedYear}</strong> هذا العام
-          </div>
-        </div>
-      </div>
-      <Button size="sm" onClick={handleSave} disabled={saving}>
-        {saving ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
-        حفظ الحدود
-      </Button>
-    </div>
-  );
-}
-
 // ─── Feature flags ───
 const ALL_FEATURES = [
   { key: 'sms', label: 'إرسال SMS', description: 'إرسال رسائل نصية للعملاء' },
@@ -1864,17 +1752,11 @@ export default function ThiqaAgentDetail() {
 
           {/* ═══════════ STATS TAB ═══════════ */}
           <TabsContent value="stats">
-            {/* Usage Limits */}
-            <Card className="mb-4">
-              <CardHeader>
-                <CardTitle>حدود الاستخدام</CardTitle>
-                <CardDescription>تحديد عدد الرسائل النصية ومحادثات الذكاء الاصطناعي المسموح بها</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <UsageLimitsEditor agentId={agentId!} />
-              </CardContent>
-            </Card>
-
+            {/* Usage limits are edited on the main tab via AgentLimitOverrides,
+                which writes to agents.*_limit_override — the source both the
+                DB triggers and the edge functions read. The old editor that
+                used to live here wrote to agent_usage_limits, a leftover
+                table that no longer drives enforcement. */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />إحصائيات الوكيل</CardTitle>
