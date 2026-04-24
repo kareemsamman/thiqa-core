@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
     await adminClient.rpc("set_features_for_plan", {
       p_agent_id: agentData.id,
       p_plan: "trial",
-    }).then(({ error: featErr }) => {
+    }).then(({ error: featErr }: { error: any }) => {
       if (featErr) console.error("Feature flags init error:", featErr);
     });
 
@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
       sms_token: "",
       sms_source: "",
       is_enabled: true,
-    }, { onConflict: "agent_id" }).then(({ error: smsErr }) => {
+    }, { onConflict: "agent_id" }).then(({ error: smsErr }: { error: any }) => {
       if (smsErr) console.error("SMS settings init error:", smsErr);
     });
 
@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
       agent_id: agentData.id,
       email_otp_enabled: true,
       sms_otp_enabled: false,
-    }, { onConflict: "agent_id" }).then(({ error: authErr }) => {
+    }, { onConflict: "agent_id" }).then(({ error: authErr }: { error: any }) => {
       if (authErr) console.error("Auth settings init error:", authErr);
     });
 
