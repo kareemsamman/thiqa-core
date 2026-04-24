@@ -150,7 +150,7 @@ function buildBulkReceiptHtml(
   _paymentDate: string,
   _paymentType: string,
   companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string },
-  branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' } as AgentBranding,
+  branding: AgentBranding = DEFAULT_BRANDING,
 ): string {
   const today = new Date();
   // Pick the package's representative document_number the same way the

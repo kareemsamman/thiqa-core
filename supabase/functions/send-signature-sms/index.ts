@@ -342,7 +342,7 @@ function buildSignaturePageHtml(
   expiresAt: string | null,
   template: TemplateContent,
   supabaseUrl: string,
-  branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' }
+  branding: AgentBranding = DEFAULT_BRANDING
 ): string {
   const expiryText = expiresAt ? formatDate(expiresAt) : '';
 

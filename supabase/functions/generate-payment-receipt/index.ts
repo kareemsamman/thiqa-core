@@ -144,7 +144,7 @@ function buildPaymentReceiptHtml(
   client: any,
   car: any,
   companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string },
-  branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' }
+  branding: AgentBranding = DEFAULT_BRANDING
 ): string {
   const paymentMethodLabel = paymentTypeLabel(payment);
   const policyDocumentNumber = policy?.document_number || policy?.policy_number || '—';
