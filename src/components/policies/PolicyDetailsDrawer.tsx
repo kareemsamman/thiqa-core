@@ -46,6 +46,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { Lock as LockIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { PolicyEditDrawer } from "./PolicyEditDrawer";
 import { PolicyPaymentsSection } from "./PolicyPaymentsSection";
@@ -258,7 +259,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const { can } = usePermissions();
-  const { guardSend: guardSmsSend } = useSmsLock();
+  const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade, guardSend: guardSmsSend } = useSmsLock();
   // Profit + commission cards are gated by view_financial. Other
   // admin-only actions (delete/edit) keep using isAdmin for now —
   // the user asked for page-level permissions, not action-level.
@@ -827,9 +828,13 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                         <Button
                           size="sm"
                           variant="secondary"
-                          onClick={handleSendPolicySms}
-                          disabled={sendingPolicySms}
-                          className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
+                          onClick={() => {
+                            if (smsLoading) return;
+                            if (smsLocked) { openSmsUpgrade(); return; }
+                            handleSendPolicySms();
+                          }}
+                          disabled={sendingPolicySms || smsLoading}
+                          className="relative gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
                         >
                           {sendingPolicySms ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -837,6 +842,11 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                             <Send className="h-3.5 w-3.5" />
                           )}
                           SMS
+                          {smsLocked && (
+                            <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                              <LockIcon className="h-2.5 w-2.5" weight="fill" />
+                            </span>
+                          )}
                         </Button>
                       )}
                       <Button
@@ -942,12 +952,16 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                       <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                         <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
                         <span className="text-amber-800 text-sm font-medium">العميل لم يوقّع بعد</span>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant="outline"
-                          className="mr-auto border-amber-300 text-amber-700 hover:bg-amber-100"
-                          onClick={handleSendSignatureSms}
-                          disabled={sendingSignatureSms}
+                          className="relative mr-auto border-amber-300 text-amber-700 hover:bg-amber-100"
+                          onClick={() => {
+                            if (smsLoading) return;
+                            if (smsLocked) { openSmsUpgrade(); return; }
+                            handleSendSignatureSms();
+                          }}
+                          disabled={sendingSignatureSms || smsLoading}
                         >
                           {sendingSignatureSms ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin ml-1" />
@@ -955,6 +969,11 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                             <Send className="h-3.5 w-3.5 ml-1" />
                           )}
                           إرسال طلب توقيع
+                          {smsLocked && (
+                            <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                              <LockIcon className="h-2.5 w-2.5" weight="fill" />
+                            </span>
+                          )}
                         </Button>
                       </div>
                     )}

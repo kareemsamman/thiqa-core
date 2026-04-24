@@ -963,6 +963,7 @@ export function PolicyYearTimeline({
                       <PolicyPackageCard
                         key={pkgIndex}
                         pkg={pkg}
+                        sequence={pkgIndex + 1}
                         transferAdjustments={transferAdjustments}
                         paymentStatus={getPackagePaymentStatus(pkg)}
                         accidentCount={accidentCount}
@@ -1078,6 +1079,7 @@ export function PolicyYearTimeline({
 // Simplified Policy Card Component
 function PolicyPackageCard({
   pkg,
+  sequence,
   transferAdjustments,
   paymentStatus,
   accidentCount = 0,
@@ -1111,6 +1113,10 @@ function PolicyPackageCard({
   onPoliciesUpdate,
 }: {
   pkg: PolicyPackage;
+  /** 1-based sibling index within the current year — shown as "#N" prefix
+   *  on the doc-number chip so staff can refer to cards by position
+   *  without leaning on the server-assigned document number. */
+  sequence?: number;
   /** new_policy_id → customer-pays transfer adjustment (amount + the
    *  three transfer notes), so the breakdown can surface a standalone
    *  'عمولة التحويل' row and attach the transfer reason + office note
@@ -1237,32 +1243,10 @@ function PolicyPackageCard({
       <div className="p-4">
         {/* Top Row: Status + Type + Actions */}
         <div className="flex items-center gap-2 flex-wrap mb-3">
-          {/* Policy Number — click to copy. Staff asked for this at
-              the head of every policy card so they can grab the number
-              without opening the details drawer. */}
-          {policy.policy_number && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                navigator.clipboard
-                  .writeText(policy.policy_number!)
-                  .then(() => toast.success(`تم نسخ رقم البوليصة: ${policy.policy_number}`))
-                  .catch(() => toast.error('فشل نسخ رقم البوليصة'));
-              }}
-              className="focus:outline-none"
-              title="اضغط لنسخ رقم البوليصة"
-            >
-              <Badge
-                variant="outline"
-                className="gap-1 font-mono ltr-nums cursor-pointer bg-muted/40 hover:bg-muted border-border/60 group"
-              >
-                <Hash className="h-3 w-3 text-muted-foreground" />
-                {policy.policy_number}
-                <Copy className="h-3 w-3 text-muted-foreground opacity-60 group-hover:opacity-100 transition-opacity" />
-              </Badge>
-            </button>
-          )}
+          {/* The top-row policy_number copy chip was removed — the row-level
+              PolicyNumberInlineEdit already exposes (and lets you edit) the
+              same value, and duplicating it in the card header added noise
+              without unique information. */}
           {/* Status badges (سارية / منتهية / محولة / ملغاة) moved after
               flex-1 so they sit with the action cluster on the left. Kept
               here as no-op markers to preserve surrounding logic. */}
@@ -1281,7 +1265,7 @@ function PolicyPackageCard({
               : [policy];
             const docNumber = pickPackageDocumentNumber(policiesInCard);
             if (!docNumber) return null;
-            return <CardLevelPolicyNumberChip value={docNumber} />;
+            return <CardLevelPolicyNumberChip value={docNumber} sequence={sequence} />;
           })()}
 
           {isPkg && pkg.mainPolicy ? (
@@ -2188,7 +2172,11 @@ function PackageComponentRow({
 // policies.document_number, which is auto-assigned by a DB trigger
 // (format 'NN/YYYY'). Click copies the number to the clipboard so
 // staff can paste it elsewhere quickly.
-function CardLevelPolicyNumberChip({ value }: { value: string }) {
+//
+// `sequence` is a 1-based position within the current year group so
+// staff can say "open #3" without leaning on the doc number; it's
+// rendered as a subtle "#N" prefix before the "رقم المعاملة" label.
+function CardLevelPolicyNumberChip({ value, sequence }: { value: string; sequence?: number }) {
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     navigator.clipboard
@@ -2202,10 +2190,13 @@ function CardLevelPolicyNumberChip({ value }: { value: string }) {
       onClick={handleClick}
       title={`رقم المعاملة: ${value} — اضغط للنسخ`}
       data-doc-number={value}
-      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-700 font-mono ltr-nums hover:bg-emerald-500/15 hover:border-emerald-500/50 transition-colors"
+      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/15 hover:border-emerald-500/50 transition-colors"
     >
-      <Hash className="h-3 w-3" />
-      <span className="font-semibold tracking-tight">{value}</span>
+      {sequence !== undefined && (
+        <span className="font-mono ltr-nums font-bold text-emerald-600/80">#{sequence}</span>
+      )}
+      <span>رقم المعاملة :</span>
+      <span className="font-mono ltr-nums font-semibold tracking-tight">{value}</span>
     </button>
   );
 }

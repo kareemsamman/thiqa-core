@@ -17,6 +17,7 @@
    Image as ImageIcon,
    Clock,
  } from "lucide-react";
+ import { Lock } from "@phosphor-icons/react";
  import { format } from "date-fns";
  import { arDZ as ar } from "date-fns/locale";
  
@@ -36,7 +37,7 @@
    onSignatureUpdate,
  }: AccidentSignatureSectionProps) {
    const { toast } = useToast();
-   const { guardSend: guardSmsSend } = useSmsLock();
+   const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade, guardSend: guardSmsSend } = useSmsLock();
    const [sending, setSending] = useState(false);
    const [phoneOverride, setPhoneOverride] = useState("");
    const [useOverride, setUseOverride] = useState(false);
@@ -189,9 +190,13 @@
                )}
  
                <Button
-                 onClick={handleSendSignatureLink}
-                 disabled={sending || (!clientPhone && !phoneOverride)}
-                 className="w-full"
+                 onClick={() => {
+                   if (smsLoading) return;
+                   if (smsLocked) { openSmsUpgrade(); return; }
+                   handleSendSignatureLink();
+                 }}
+                 disabled={sending || smsLoading || (!smsLocked && !clientPhone && !phoneOverride)}
+                 className="relative w-full"
                >
                  {sending ? (
                    <Loader2 className="h-4 w-4 animate-spin ml-2" />
@@ -199,6 +204,11 @@
                    <Send className="h-4 w-4 ml-2" />
                  )}
                  إرسال رابط التوقيع عبر SMS
+                 {smsLocked && (
+                   <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                     <Lock className="h-2.5 w-2.5" weight="fill" />
+                   </span>
+                 )}
                </Button>
              </div>
            </div>

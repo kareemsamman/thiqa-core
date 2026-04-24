@@ -17,6 +17,7 @@ import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
 import { Loader2, XCircle, Send, AlertTriangle } from "lucide-react";
+import { Lock as LockIcon } from "@phosphor-icons/react";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -69,7 +70,7 @@ export function CancelPolicyModal({
   const isPackage = effectivePolicyIds.length > 1;
   const { toast } = useToast();
   const { user } = useAuth();
-  const { guardSend: guardSmsSend } = useSmsLock();
+  const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade, guardSend: guardSmsSend } = useSmsLock();
 
   const [saving, setSaving] = useState(false);
   const [cancellationNote, setCancellationNote] = useState("");
@@ -333,10 +334,21 @@ export function CancelPolicyModal({
                 <Label htmlFor="sendSms" className="font-medium flex items-center gap-2">
                   <Send className="h-4 w-4" />
                   إرسال رسالة SMS للعميل
+                  {smsLocked && (
+                    <button
+                      type="button"
+                      onClick={openSmsUpgrade}
+                      className="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-full px-2 py-0.5 hover:bg-amber-500/15 transition-colors"
+                    >
+                      <LockIcon className="h-2.5 w-2.5" weight="fill" />
+                      مقفول — اضغط للترقية
+                    </button>
+                  )}
                 </Label>
                 <Switch
                   id="sendSms"
-                  checked={sendSms}
+                  checked={sendSms && !smsLocked}
+                  disabled={smsLocked || smsLoading}
                   onCheckedChange={handleSendSmsChange}
                 />
               </div>

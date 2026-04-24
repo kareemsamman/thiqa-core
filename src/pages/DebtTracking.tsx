@@ -20,6 +20,7 @@ import {
   MessageSquare, RefreshCw, ChevronDown, ChevronUp, Wallet, MessageCircle,
   SendHorizonal
 } from "lucide-react";
+import { Lock } from "@phosphor-icons/react";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { DebtPaymentModal } from "@/components/debt/DebtPaymentModal";
 import { ClientNotesPopover } from "@/components/clients/ClientNotesPopover";
@@ -247,7 +248,7 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
 export default function DebtTracking() {
   const { toast } = useToast();
   const { profile } = useAuth();
-  const { guardSend: guardSmsSend } = useSmsLock();
+  const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade, guardSend: guardSmsSend } = useSmsLock();
 
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<ClientDebt[]>([]);
@@ -963,8 +964,13 @@ ${policyDetails}
               إلغاء
             </Button>
             <Button
-              onClick={handleSendReminder}
-              disabled={sendingSmsTo === selectedClient?.client_id}
+              onClick={() => {
+                if (smsLoading) return;
+                if (smsLocked) { openSmsUpgrade(); return; }
+                handleSendReminder();
+              }}
+              disabled={sendingSmsTo === selectedClient?.client_id || smsLoading}
+              className="relative"
             >
               {sendingSmsTo === selectedClient?.client_id ? (
                 <RefreshCw className="h-4 w-4 ml-2 animate-spin" />
@@ -972,6 +978,11 @@ ${policyDetails}
                 <Send className="h-4 w-4 ml-2" />
               )}
               إرسال
+              {smsLocked && (
+                <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                  <Lock className="h-2.5 w-2.5" weight="fill" />
+                </span>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1017,8 +1028,13 @@ ${policyDetails}
               إلغاء
             </Button>
             <Button
-              onClick={handleBulkSmsSend}
-              disabled={sendingBulkSms || summary.totalClients === 0}
+              onClick={() => {
+                if (smsLoading) return;
+                if (smsLocked) { openSmsUpgrade(); return; }
+                handleBulkSmsSend();
+              }}
+              disabled={sendingBulkSms || summary.totalClients === 0 || smsLoading}
+              className="relative"
             >
               {sendingBulkSms ? (
                 <RefreshCw className="h-4 w-4 ml-2 animate-spin" />
@@ -1026,6 +1042,11 @@ ${policyDetails}
                 <SendHorizonal className="h-4 w-4 ml-2" />
               )}
               إرسال ({summary.totalClients})
+              {smsLocked && (
+                <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                  <Lock className="h-2.5 w-2.5" weight="fill" />
+                </span>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

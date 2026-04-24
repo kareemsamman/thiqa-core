@@ -69,6 +69,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { useSmsLock } from '@/hooks/useSmsLock';
+import { Lock } from '@phosphor-icons/react';
 import { ClickablePhone } from '@/components/shared/ClickablePhone';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
 import { RenewalAssistant } from '@/components/reports/RenewalAssistant';
@@ -258,7 +259,7 @@ export default function PolicyReports() {
   // exporting a report.
   const canViewFinancial = can('view_financial');
   const { agentId, hasFeature } = useAgentContext();
-  const { guardSend: guardSmsSend } = useSmsLock();
+  const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade, guardSend: guardSmsSend } = useSmsLock();
   // Renewals + "تم التجديد" tabs are gated by the plan's `renewals`
   // feature. Entry/Basic/Professional hide them; Ultimate shows both.
   const canUseRenewals = hasFeature('renewals');
@@ -1517,9 +1518,23 @@ export default function PolicyReports() {
                     </Button>
                   )}
                   {/* SMS للجميع */}
-                  <Button variant="outline" onClick={handleSendReminders} disabled={sendingReminders || renewalClients.length === 0}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (smsLoading) return;
+                      if (smsLocked) { openSmsUpgrade(); return; }
+                      handleSendReminders();
+                    }}
+                    disabled={sendingReminders || smsLoading || renewalClients.length === 0}
+                    className="relative"
+                  >
                     {sendingReminders ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Send className="h-4 w-4 ml-2" />}
                     إرسال تذكيرات SMS {renewalClients.length > 0 && `(${renewalsTotalRows})`}
+                    {smsLocked && (
+                      <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                        <Lock className="h-2.5 w-2.5" weight="fill" />
+                      </span>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -1676,12 +1691,20 @@ export default function PolicyReports() {
                                   </DropdownMenuItem>
                                   {client.client_phone && (
                                     <>
-                                      <DropdownMenuItem 
-                                        onClick={() => handleSendSingleSms(client)}
-                                        disabled={sendingSingleSms === client.client_id}
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          if (smsLoading) return;
+                                          if (smsLocked) { openSmsUpgrade(); return; }
+                                          handleSendSingleSms(client);
+                                        }}
+                                        disabled={sendingSingleSms === client.client_id || smsLoading}
                                       >
                                         {sendingSingleSms === client.client_id ? (
                                           <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                                        ) : smsLocked ? (
+                                          <span className="h-4 w-4 ml-2 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                                            <Lock className="h-2.5 w-2.5" weight="fill" />
+                                          </span>
                                         ) : (
                                           <Send className="h-4 w-4 ml-2" />
                                         )}

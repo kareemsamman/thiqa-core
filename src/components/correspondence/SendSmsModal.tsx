@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Send } from 'lucide-react';
+import { Lock } from '@phosphor-icons/react';
 import { useSmsLock } from '@/hooks/useSmsLock';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -35,7 +36,7 @@ export function SendSmsModal({
 }: SendSmsModalProps) {
   const [phone, setPhone] = useState('');
   const [sending, setSending] = useState(false);
-  const { guardSend: guardSmsSend } = useSmsLock();
+  const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade, guardSend: guardSmsSend } = useSmsLock();
 
   useEffect(() => {
     if (open) {
@@ -104,13 +105,26 @@ export function SendSmsModal({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             إلغاء
           </Button>
-          <Button onClick={handleSend} disabled={sending}>
+          <Button
+            onClick={() => {
+              if (smsLoading) return;
+              if (smsLocked) { openSmsUpgrade(); return; }
+              handleSend();
+            }}
+            disabled={sending || smsLoading}
+            className="relative"
+          >
             {sending ? (
               <Loader2 className="h-4 w-4 ml-2 animate-spin" />
             ) : (
               <Send className="h-4 w-4 ml-2" />
             )}
             إرسال
+            {smsLocked && (
+              <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                <Lock className="h-2.5 w-2.5" weight="fill" />
+              </span>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

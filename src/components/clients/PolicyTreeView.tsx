@@ -37,6 +37,7 @@ import { PackagePaymentModal } from './PackagePaymentModal';
 import { SinglePolicyPaymentModal } from './SinglePolicyPaymentModal';
 import { supabase } from '@/integrations/supabase/client';
 import { useSmsLock } from '@/hooks/useSmsLock';
+import { Lock } from '@phosphor-icons/react';
 import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -889,6 +890,7 @@ function PolicyCardHeader({
   onCancelPackage?: (policyIds: string[]) => void;
   hasFiles?: boolean;
 }) {
+  const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade } = useSmsLock();
   return (
     <div className="space-y-3">
       {/* Top Row */}
@@ -989,16 +991,18 @@ function PolicyCardHeader({
             <Button
               variant="outline"
               size="sm"
-              className="gap-1"
+              className="relative gap-1"
               onClick={(e) => {
                 e.stopPropagation();
+                if (smsLoading) return;
+                if (smsLocked) { openSmsUpgrade(); return; }
                 if (isPackage && onSendPackageInvoice && allPolicyIds && groupKey) {
                   onSendPackageInvoice(e, allPolicyIds, groupKey);
                 } else {
                   onSendInvoice(e, policy.id);
                 }
               }}
-              disabled={isPackage ? isSendingPackage : isSending}
+              disabled={(isPackage ? isSendingPackage : isSending) || smsLoading}
             >
               {(isPackage ? isSendingPackage : isSending) ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1006,6 +1010,11 @@ function PolicyCardHeader({
                 <Send className="h-3.5 w-3.5" />
               )}
               <span className="hidden sm:inline">إرسال للعميل</span>
+              {smsLocked && (
+                <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                  <Lock className="h-2.5 w-2.5" weight="fill" />
+                </span>
+              )}
             </Button>
           )}
           
