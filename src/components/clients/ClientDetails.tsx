@@ -1571,7 +1571,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         {/* Professional Header Card */}
         <Card className="overflow-hidden">
           <div className="bg-gradient-to-l from-primary/10 via-primary/5 to-transparent p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+            {/* Identity on top, action buttons below — stacked until lg.
+                The row layout at sm+ was collapsing badly at 800-1000px
+                viewports: 4 action buttons (~400px) + avatar + name +
+                flex-wrapped ID/phone/file/date chips would all fight
+                for the same ~770px row, pushing the avatar into the
+                buttons and wrapping the name mid-word. */}
+            <div className="flex flex-col lg:flex-row lg:items-start gap-3 sm:gap-4">
               {/* Identity block — back button + avatar + client info */}
               <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
                 {returnPath ? (

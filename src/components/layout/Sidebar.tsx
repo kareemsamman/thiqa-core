@@ -1472,6 +1472,23 @@ export function Sidebar() {
     setMobileOpen(false);
   }, [location.pathname]);
 
+  // Auto-collapse at narrow desktop widths (< xl, 1280px). Expanded
+  // sidebar is 222px + margins, leaving ~620px of content area at
+  // 900-1000px viewports — the layout inside (header + stat cards
+  // etc.) starts folding badly. Force collapse whenever the viewport
+  // is below the xl breakpoint so there's enough room for content.
+  // User can still expand manually at that width via the collapse
+  // chevron; the effect only fires on resize crossings + initial mount.
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1279px)");
+    const apply = () => {
+      if (mq.matches) setCollapsed(true);
+    };
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [setCollapsed]);
+
   return (
     <>
       {/* Mobile top navbar */}
