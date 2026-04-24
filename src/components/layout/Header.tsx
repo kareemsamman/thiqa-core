@@ -143,13 +143,16 @@ export function Header({ title, subtitle }: HeaderProps) {
   return (
     <>
       {/* Desktop header — three inline zones: title (start), tabs
-          (flex-1, content-centered), cluster (end). Tabs used to sit
-          in an absolutely-centered 629px lane which visually read as
-          off-center because the cluster overlapped its left half;
-          flex-1 + inner justify-center puts them in the TRUE visual
-          middle between the title and the cluster. */}
+          (flex-1, content-centered), cluster (end). At md-lg range
+          (~768-1023px) the nav tabs are hidden because the sidebar
+          is still consuming ~280px and the title+cluster already
+          fill the remaining ~620px; showing tabs there forced them
+          to overlap with the title. Tabs reappear at lg+, where
+          there's room for all three zones. `justify-between` keeps
+          title on the right and cluster on the left even while the
+          nav between them is display:none. */}
       <Popover open={searchOpen} onOpenChange={setSearchOpen}>
-      <header className="hidden md:flex relative items-center sticky top-0 z-30 h-20 bg-background px-6 mb-6 gap-4">
+      <header className="hidden md:flex relative items-center justify-between sticky top-0 z-30 h-20 bg-background px-6 mb-6 gap-4">
         {/* Right: title + subtitle. The `border-l` puts a thin vertical
             line at the title block's left edge — in RTL that reads as
             a divider "after the logo", separating the page title from
@@ -163,9 +166,10 @@ export function Header({ title, subtitle }: HeaderProps) {
 
         {/* Center: sibling tabs in a flex-1 lane so they always sit
             centered in whatever space remains between title and
-            cluster. If there are too many tabs to fit, the lane
-            scrolls internally instead of pushing the cluster. */}
-        <nav className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden flex justify-center">
+            cluster. Hidden between md and lg — too cramped there;
+            users fall back to the sidebar for sibling navigation at
+            those widths. */}
+        <nav className="hidden lg:flex flex-1 min-w-0 overflow-x-auto overflow-y-hidden justify-center">
           <div className="flex items-center gap-2 w-max pb-1">
             {siblingTabs.map((tab) => {
               const active = isTabActive(tab.href);

@@ -1764,8 +1764,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           </div>
         </Card>
 
-        {/* Financial Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
+        {/* Financial Summary Cards — stacked full-width below xl so
+            the remaining-amount card (which has a DebtIndicator chip
+            and can carry an extra refund/requested line) isn't forced
+            to fracture digits mid-number at the md/lg range. Four
+            columns side-by-side only at xl+, where there's room. */}
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-2 sm:gap-4">
           <Card className="p-2.5 sm:p-4 flex items-center gap-2 sm:gap-4">
             <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
               <Wallet className="h-4 w-4 sm:h-6 sm:w-6 text-success" />
