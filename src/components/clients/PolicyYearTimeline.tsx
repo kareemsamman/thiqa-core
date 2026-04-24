@@ -1772,9 +1772,10 @@ function PolicyPackageCard({
             </div>
             <div className="rounded-lg border border-border/60 overflow-hidden bg-muted/20">
               {/* Table header — each row is a بوليصة, not a standalone معاملة. */}
-              <div className="grid grid-cols-[minmax(80px,auto)_1fr_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
+              <div className="grid grid-cols-[minmax(80px,auto)_1fr_auto_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
                 <span>رقم البوليصة</span>
                 <span>البوليصة</span>
+                <span className="text-center min-w-[110px]">المدة</span>
                 <span className="text-left min-w-[70px]">السعر</span>
               </div>
               {/* Main policy */}
@@ -1912,9 +1913,10 @@ function PolicyPackageCard({
               المعاملة
             </div>
             <div className="rounded-lg border border-border/60 overflow-hidden bg-muted/20 mb-2">
-              <div className="grid grid-cols-[minmax(80px,auto)_1fr_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
+              <div className="grid grid-cols-[minmax(80px,auto)_1fr_auto_auto] items-center gap-3 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/40 border-b border-border/60">
                 <span>رقم البوليصة</span>
                 <span>البوليصة</span>
+                <span className="text-center min-w-[110px]">المدة</span>
                 <span className="text-left min-w-[70px]">السعر</span>
               </div>
               <PackageComponentRow
@@ -2112,7 +2114,7 @@ function PackageComponentRow({
     <div
       data-policy-row-id={policy.id}
       className={cn(
-        "grid grid-cols-[minmax(80px,auto)_1fr_auto] items-center gap-3 px-3 py-2 text-xs border-b border-border/60 last:border-b-0 transition-colors hover:bg-muted/30",
+        "grid grid-cols-[minmax(80px,auto)_1fr_auto_auto] items-center gap-3 px-3 py-2 text-xs border-b border-border/60 last:border-b-0 transition-colors hover:bg-muted/30",
         !isActive && "opacity-70"
       )}
     >
@@ -2148,6 +2150,15 @@ function PackageComponentRow({
             {policy.broker.name}
           </span>
         )}
+      </div>
+
+      {/* Coverage period — start → end. Kept compact (font-mono, small)
+          so a long provider name in the previous column doesn't force
+          the row to wrap. */}
+      <div className="flex items-center gap-1.5 min-w-[110px] justify-center text-[10px] font-mono ltr-nums text-muted-foreground whitespace-nowrap">
+        <span>{formatDate(policy.start_date)}</span>
+        <span aria-hidden="true">→</span>
+        <span>{formatDate(policy.end_date)}</span>
       </div>
 
       {/* Price column */}
@@ -2215,24 +2226,32 @@ function PolicyNumberInlineEdit({
   onSaved?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
+  // `displayValue` is what we render in the non-editing chip. It starts
+  // from the prop, absorbs the user's saved value after commit, and only
+  // snaps back to the prop when the prop itself actually changes. This
+  // stops the chip from flashing the pre-save value during the commit
+  // → setEditing(false) round-trip (no parent refetch needed).
+  const [displayValue, setDisplayValue] = useState(policyNumber ?? "");
   const [value, setValue] = useState(policyNumber ?? "");
   const [saving, setSaving] = useState(false);
 
-  // Sync back if the server data changes under us (e.g. after a parent
-  // refresh) while we're NOT actively editing.
   useEffect(() => {
+    setDisplayValue(policyNumber ?? "");
     if (!editing) setValue(policyNumber ?? "");
-  }, [policyNumber, editing]);
+    // Deliberately omit `editing` — we only want to sync from the prop
+    // when the prop itself changes, not when the edit state flips.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [policyNumber]);
 
   const beginEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setValue(policyNumber ?? "");
+    setValue(displayValue);
     setEditing(true);
   };
 
   const commit = async () => {
     const next = value.trim();
-    const prev = policyNumber ?? "";
+    const prev = displayValue;
     if (next === prev) {
       setEditing(false);
       return;
@@ -2249,8 +2268,13 @@ function PolicyNumberInlineEdit({
       setValue(prev);
       return;
     }
+    // Reflect the new value locally. We deliberately do NOT call
+    // onSaved here — the user asked for "write and save and that's
+    // it", no parent refetch / card refresh after a number edit. The
+    // prop can still drive a later sync if something else refreshes
+    // the card.
+    setDisplayValue(next);
     toast.success(next ? "تم حفظ رقم البوليصة" : "تم مسح رقم البوليصة");
-    onSaved?.();
   };
 
   if (editing) {
@@ -2267,7 +2291,7 @@ function PolicyNumberInlineEdit({
             e.preventDefault();
             (e.currentTarget as HTMLInputElement).blur();
           } else if (e.key === "Escape") {
-            setValue(policyNumber ?? "");
+            setValue(displayValue);
             setEditing(false);
           }
         }}
@@ -2277,7 +2301,7 @@ function PolicyNumberInlineEdit({
     );
   }
 
-  if (policyNumber) {
+  if (displayValue) {
     return (
       <button
         type="button"
@@ -2286,7 +2310,7 @@ function PolicyNumberInlineEdit({
         className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold ltr-nums text-foreground bg-background border border-border/60 rounded px-1.5 h-6 hover:border-primary/40 transition-colors"
       >
         <Hash className="h-2.5 w-2.5 text-muted-foreground" />
-        {policyNumber}
+        {displayValue}
       </button>
     );
   }
