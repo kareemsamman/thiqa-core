@@ -210,12 +210,15 @@ export function Header({ title, subtitle }: HeaderProps) {
                 spans from the search icon on the right all the way to
                 the bell on the left. align="center" + matching width
                 means the panel sits edge-to-edge with the cluster. */}
+            {/* Fixed 369px width per design — anchors to the cluster's
+                start edge (right in RTL = search-icon side) so the
+                panel drops below the search icon and extends leftward
+                without ever being wider than needed. */}
             <PopoverContent
-              align="center"
+              align="start"
               side="bottom"
               sideOffset={8}
-              style={{ width: 'var(--radix-popper-anchor-width)' }}
-              className="p-0 bg-transparent border-0 shadow-none"
+              className="w-[369px] p-0 bg-transparent border-0 shadow-none"
             >
               {/* dropdownMatchWidth makes the results panel match the
                   input's own width; the BottomToolbarInlineSearch

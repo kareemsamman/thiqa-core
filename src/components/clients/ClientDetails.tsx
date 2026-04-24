@@ -68,6 +68,7 @@ import {
   AlertTriangle,
   Handshake,
   Lock,
+  Sparkles,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -371,9 +372,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [policyDetailsOpen, setPolicyDetailsOpen] = useState(false);
   const [selectedPolicyId, setSelectedPolicyId] = useState<string | null>(null);
   const [policyWizardOpen, setPolicyWizardOpen] = useState(false);
-  const { policies: policiesLimit } = useAgentLimits();
+  const { policies: policiesLimit, loading: limitsLoading } = useAgentLimits();
   const { showUpgradePrompt } = useUpgradePrompt();
+  // Only commit to the locked variant once limits resolve, matching the
+  // flash-free pattern used on the header "معاملة جديدة" button.
+  const policiesLocked = !limitsLoading && policiesLimit.exceeded;
   const openPolicyWizardGated = () => {
+    // Drop clicks during hydration — we don't know the real quota yet.
+    if (limitsLoading) return;
     if (policiesLimit.exceeded) {
       showUpgradePrompt({
         resource: 'policies',
@@ -1960,20 +1966,25 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   {dedupedPolicyCount} معاملة مسجلة
                 </button>
               </div>
-              {policiesLimit.exceeded ? (
+              {policiesLocked ? (
                 <Button
-                  variant="outline"
                   onClick={openPolicyWizardGated}
-                  className="border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                  variant="outline"
+                  className="h-11 px-4 rounded-full gap-2 shadow-md hover:shadow-lg border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 active:scale-[0.98] text-[15px]"
                   title="تجاوزت حد المعاملات — اضغط للترقية"
                 >
-                  <Lock className="h-4 w-4 ml-2" />
-                  إضافة معاملة جديدة
+                  <Lock className="h-4 w-4" />
+                  <span>إضافة معاملة جديدة</span>
+                  <Sparkles className="h-3.5 w-3.5 opacity-70" />
                 </Button>
               ) : (
-                <Button variant="gradient" onClick={openPolicyWizardGated}>
-                  <Plus className="h-4 w-4 ml-2" />
-                  إضافة معاملة جديدة
+                <Button
+                  onClick={openPolicyWizardGated}
+                  disabled={limitsLoading}
+                  className="h-11 px-4 rounded-full gap-2 shadow-md hover:shadow-lg hover:shadow-foreground/20 active:scale-[0.98] text-[15px] bg-foreground text-background hover:bg-foreground/90"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>إضافة معاملة جديدة</span>
                 </Button>
               )}
             </div>
