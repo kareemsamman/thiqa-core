@@ -348,19 +348,50 @@ export function AgentPlanOverview() {
   const isTrial =
     agent.subscription_status === 'trial' ||
     (agent.monthly_price === 0 && agent.subscription_status === 'active');
-  const trialEndDate = agent.trial_ends_at
-    ? new Date(agent.trial_ends_at)
-    : agent.subscription_expires_at
-    ? new Date(agent.subscription_expires_at)
-    : null;
-  const trialMsRemaining = trialEndDate
-    ? Math.max(0, trialEndDate.getTime() - Date.now())
+  // Period end used by the countdown + bar. On trial it's
+  // trial_ends_at; on a paid plan it's subscription_expires_at
+  // (start of the next billing cycle).
+  const periodEndDate =
+    isTrial && agent.trial_ends_at
+      ? new Date(agent.trial_ends_at)
+      : agent.subscription_expires_at
+      ? new Date(agent.subscription_expires_at)
+      : null;
+  const periodMsRemaining = periodEndDate
+    ? Math.max(0, periodEndDate.getTime() - Date.now())
     : 0;
-  const trialDaysRemaining = trialEndDate ? Math.floor(trialMsRemaining / 86400000) : null;
-  const trialProgress =
-    isTrial && trialDaysRemaining !== null
-      ? Math.min(100, Math.max(0, ((35 * 86400000 - trialMsRemaining) / (35 * 86400000)) * 100))
+  const periodDaysRemaining = periodEndDate
+    ? Math.floor(periodMsRemaining / 86400000)
+    : null;
+  // Denominator for the progress bar: 35-day trial, 365-day yearly
+  // billing, 30-day monthly billing otherwise. This lets `progress` go
+  // smoothly from 0% at the start of a billing period to 100% at the
+  // moment it expires, regardless of whether the agent is on trial or
+  // a paid plan.
+  const periodLengthDays = isTrial
+    ? 35
+    : agent.billing_cycle === 'yearly'
+    ? 365
+    : 30;
+  const periodProgress =
+    periodDaysRemaining !== null
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            ((periodLengthDays * 86400000 - periodMsRemaining) /
+              (periodLengthDays * 86400000)) *
+              100,
+          ),
+        )
       : 0;
+  const periodLabel = isTrial
+    ? periodDaysRemaining !== null && periodDaysRemaining <= 0
+      ? 'انتهت الفترة التجريبية'
+      : `متبقي ${periodDaysRemaining} يوم على انتهاء التجربة`
+    : periodDaysRemaining !== null && periodDaysRemaining <= 0
+    ? 'انتهى الاشتراك — بانتظار التجديد'
+    : `متبقي ${periodDaysRemaining} يوم على تجديد الاشتراك`;
 
   // Prefill WhatsApp with an addon-inquiry message so Thiqa knows
   // what the agent wants before the conversation starts.
@@ -418,34 +449,30 @@ export function AgentPlanOverview() {
                     </span>
                   </div>
                 )}
-                {isTrial && trialDaysRemaining !== null && (
+                {periodDaysRemaining !== null && (
                   <div className="mt-3 space-y-1.5">
                     <div className="flex items-center justify-between gap-2 text-xs">
                       <span
                         className={cn(
                           'font-semibold',
-                          trialDaysRemaining <= 0
-                            ? 'text-destructive'
-                            : trialDaysRemaining <= 7
+                          periodDaysRemaining <= 7
                             ? 'text-destructive'
                             : 'text-primary',
                         )}
                       >
-                        {trialDaysRemaining <= 0
-                          ? 'انتهت الفترة التجريبية'
-                          : `متبقي ${trialDaysRemaining} يوم على انتهاء التجربة`}
+                        {periodLabel}
                       </span>
                       <span className="text-muted-foreground">
-                        {Math.round(trialProgress)}% منتهية
+                        {Math.round(periodProgress)}% منتهية
                       </span>
                     </div>
                     <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
                       <div
                         className={cn(
                           'h-full transition-all',
-                          trialDaysRemaining <= 7 ? 'bg-destructive' : 'bg-primary',
+                          periodDaysRemaining <= 7 ? 'bg-destructive' : 'bg-primary',
                         )}
-                        style={{ width: `${trialProgress}%` }}
+                        style={{ width: `${periodProgress}%` }}
                       />
                     </div>
                   </div>
