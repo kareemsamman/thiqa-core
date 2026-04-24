@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState, ReactNode } fr
 import { useLocation, useNavigate } from "react-router-dom";
 import { Plus, FileText, Keyboard, Lock, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { NotificationsDropdown } from "./NotificationsDropdown";
 import { BottomToolbarInlineSearch } from "./BottomToolbarInlineSearch";
@@ -142,32 +142,31 @@ export function Header({ title, subtitle }: HeaderProps) {
 
   return (
     <>
-      {/* Desktop header — tabs sit in an absolutely-centered nav so they
-          stay pinned to the visual center no matter how long the title
-          gets or how wide the search grows on focus. Title lives on the
-          right, cluster on the left, both anchored to their respective
-          ends by flex justify-between. */}
-      <header className="hidden md:flex relative items-center justify-between sticky top-0 z-30 h-20 bg-background px-6 mb-6">
+      {/* Desktop header — three inline zones: title (start), tabs
+          (flex-1, content-centered), cluster (end). Tabs used to sit
+          in an absolutely-centered 629px lane which visually read as
+          off-center because the cluster overlapped its left half;
+          flex-1 + inner justify-center puts them in the TRUE visual
+          middle between the title and the cluster. */}
+      <Popover open={searchOpen} onOpenChange={setSearchOpen}>
+      <header className="hidden md:flex relative items-center sticky top-0 z-30 h-20 bg-background px-6 mb-6 gap-4">
         {/* Right: title + subtitle. The `border-l` puts a thin vertical
             line at the title block's left edge — in RTL that reads as
             a divider "after the logo", separating the page title from
             the center-tabs zone the user is about to enter. */}
-        <div className="min-w-0 flex-shrink overflow-hidden max-w-[28%] border-l border-border/70 pl-4">
+        <div className="min-w-0 shrink overflow-hidden max-w-[28%] border-l border-border/70 pl-4">
           <h1 className="text-xl font-semibold text-foreground truncate">{title}</h1>
           {subtitle && (
             <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
           )}
         </div>
 
-        {/* Center: sibling tabs, absolutely pinned so neither the
-            growing cluster nor a longer title nudges them. Locked to a
-            fixed 629px lane — when a group has more tabs than fit, the
-            lane scrolls internally with a visible thin scrollbar. */}
-        <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[629px] overflow-x-auto overflow-y-hidden">
-          {/* `w-max` sizes the row to exactly its natural content width
-              so it CAN exceed the 629px lane and trigger the parent's
-              scroll; `mx-auto` centers it when it's narrower. */}
-          <div className="flex items-center gap-2 w-max mx-auto pb-1">
+        {/* Center: sibling tabs in a flex-1 lane so they always sit
+            centered in whatever space remains between title and
+            cluster. If there are too many tabs to fit, the lane
+            scrolls internally instead of pushing the cluster. */}
+        <nav className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden flex justify-center">
+          <div className="flex items-center gap-2 w-max pb-1">
             {siblingTabs.map((tab) => {
               const active = isTabActive(tab.href);
               return (
@@ -190,13 +189,13 @@ export function Header({ title, subtitle }: HeaderProps) {
           </div>
         </nav>
 
-        {/* Left: cluster — `justify-between` on the parent keeps it
-            anchored to the header's left edge. Search now lives inside
-            a popover so clicking the icon drops the input panel below
-            the cluster instead of expanding in place. */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <Popover open={searchOpen} onOpenChange={setSearchOpen}>
-            <PopoverTrigger asChild>
+        {/* Left: cluster. PopoverAnchor wraps the whole cluster so the
+            search popover below matches the cluster's full width
+            (from the search icon all the way to the leftmost icon),
+            instead of being a fixed 400px leaning to one side. */}
+        <PopoverAnchor asChild>
+        <div className="flex items-center gap-2 shrink-0">
+          <PopoverTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
@@ -207,14 +206,16 @@ export function Header({ title, subtitle }: HeaderProps) {
                 <Search className="md:h-[18px] md:w-[18px] text-foreground" />
               </Button>
             </PopoverTrigger>
-            {/* align="start" in RTL = popover's right edge aligned with
-                trigger's right edge, extending leftward from there —
-                what the user asked for ("down and to the left"). */}
+            {/* Popover width matches the anchor (cluster) so the panel
+                spans from the search icon on the right all the way to
+                the bell on the left. align="center" + matching width
+                means the panel sits edge-to-edge with the cluster. */}
             <PopoverContent
-              align="start"
+              align="center"
               side="bottom"
               sideOffset={8}
-              className="w-[400px] p-0 bg-transparent border-0 shadow-none"
+              style={{ width: 'var(--radix-popper-anchor-width)' }}
+              className="p-0 bg-transparent border-0 shadow-none"
             >
               {/* dropdownMatchWidth makes the results panel match the
                   input's own width; the BottomToolbarInlineSearch
@@ -226,7 +227,6 @@ export function Header({ title, subtitle }: HeaderProps) {
                 inputClassName="h-11 w-full bg-white border-border/60 shadow-md"
               />
             </PopoverContent>
-          </Popover>
 
           {policiesLocked ? (
             <Button
@@ -278,7 +278,9 @@ export function Header({ title, subtitle }: HeaderProps) {
             badgeVariant="dot"
           />
         </div>
+        </PopoverAnchor>
       </header>
+      </Popover>
 
       <ShortcutsCheatsheetDialog
         open={cheatsheetOpen}
