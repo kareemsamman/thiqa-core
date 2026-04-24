@@ -10,7 +10,8 @@ const corsHeaders = {
 
 const EMAIL_EXISTS_REGEX = /already been registered|email_exists/i;
 
-type AdminClient = ReturnType<typeof createClient>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AdminClient = any;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
