@@ -755,6 +755,20 @@ export type Database = {
             referencedRelation: "agents"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "agent_addons_requested_by_user_id_fkey"
+            columns: ["requested_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_addons_reviewed_by_user_id_fkey"
+            columns: ["reviewed_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       agent_credit_wallet: {
@@ -1122,6 +1136,7 @@ export type Database = {
         Row: {
           ai_assistant_prompt: string | null
           ai_limit_override: number | null
+          billing_cycle: string
           billing_cycle_day: number | null
           branches_limit_override: number | null
           cancelled_at: string | null
@@ -1150,6 +1165,7 @@ export type Database = {
         Insert: {
           ai_assistant_prompt?: string | null
           ai_limit_override?: number | null
+          billing_cycle?: string
           billing_cycle_day?: number | null
           branches_limit_override?: number | null
           cancelled_at?: string | null
@@ -1178,6 +1194,7 @@ export type Database = {
         Update: {
           ai_assistant_prompt?: string | null
           ai_limit_override?: number | null
+          billing_cycle?: string
           billing_cycle_day?: number | null
           branches_limit_override?: number | null
           cancelled_at?: string | null
@@ -5801,7 +5818,7 @@ export type Database = {
           license_expiry_sms_enabled: boolean | null
           license_expiry_sms_template: string | null
           payment_request_template: string | null
-          provider: string
+          provider: string | null
           reminder_1month_template: string | null
           reminder_1week_template: string | null
           renewal_reminder_1month_enabled: boolean | null
@@ -5842,7 +5859,7 @@ export type Database = {
           license_expiry_sms_enabled?: boolean | null
           license_expiry_sms_template?: string | null
           payment_request_template?: string | null
-          provider?: string
+          provider?: string | null
           reminder_1month_template?: string | null
           reminder_1week_template?: string | null
           renewal_reminder_1month_enabled?: boolean | null
@@ -5883,7 +5900,7 @@ export type Database = {
           license_expiry_sms_enabled?: boolean | null
           license_expiry_sms_template?: string | null
           payment_request_template?: string | null
-          provider?: string
+          provider?: string | null
           reminder_1month_template?: string | null
           reminder_1week_template?: string | null
           renewal_reminder_1month_enabled?: boolean | null
@@ -6412,6 +6429,22 @@ export type Database = {
       }
       check_email_provider_public: { Args: { p_email: string }; Returns: Json }
       clear_data_for_import: { Args: never; Returns: Json }
+      dashboard_client_debt_buckets: {
+        Args: never
+        Returns: {
+          amount: number
+          bucket: string
+          tx_count: number
+        }[]
+      }
+      dashboard_client_debt_buckets_range: {
+        Args: { p_end_date: string; p_start_date: string }
+        Returns: {
+          amount: number
+          bucket: string
+          tx_count: number
+        }[]
+      }
       dashboard_company_debts: {
         Args: never
         Returns: {
@@ -6433,9 +6466,60 @@ export type Database = {
           total_count: number
         }[]
       }
+      dashboard_income_expense_monthly: {
+        Args: { p_months?: number }
+        Returns: {
+          expense: number
+          income: number
+          month: string
+        }[]
+      }
+      dashboard_income_expense_totals: {
+        Args: { p_end_date: string; p_start_date: string }
+        Returns: {
+          expense: number
+          income: number
+        }[]
+      }
       dashboard_insured_cars_count: {
         Args: { p_end_date: string; p_start_date: string }
         Returns: number
+      }
+      dashboard_kpis_v2: {
+        Args: { p_end_date: string; p_start_date: string }
+        Returns: {
+          cars_insured: number
+          period_profit: number
+          policies_count: number
+          total_clients: number
+        }[]
+      }
+      dashboard_policies_overview: {
+        Args: never
+        Returns: {
+          active_count: number
+          cancelled_count: number
+          expired_count: number
+          expiring_30d_count: number
+        }[]
+      }
+      dashboard_policies_overview_range: {
+        Args: { p_end_date: string; p_start_date: string }
+        Returns: {
+          active_count: number
+          cancelled_count: number
+          expired_count: number
+          expiring_30d_count: number
+        }[]
+      }
+      dashboard_top_companies: {
+        Args: { p_end_date: string; p_limit?: number; p_start_date: string }
+        Returns: {
+          company_id: string
+          company_name: string
+          total_profit: number
+          tx_count: number
+        }[]
       }
       dashboard_total_client_debt: { Args: never; Returns: number }
       delete_agent_cascade: { Args: { p_agent_id: string }; Returns: undefined }
