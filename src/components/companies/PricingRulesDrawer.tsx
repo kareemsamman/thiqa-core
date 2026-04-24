@@ -36,6 +36,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { Tables, Enums } from '@/integrations/supabase/types';
+import { PricingRulesHelp } from './PricingRulesHelp';
 
 type Company = Tables<'insurance_companies'>;
 type PricingRule = Tables<'pricing_rules'>;
@@ -300,6 +301,7 @@ export function PricingRulesDrawer({ open, onClose, company }: PricingRulesDrawe
           </DrawerHeader>
 
           <div className="p-4 overflow-y-auto">
+            <PricingRulesHelp />
             <div className="rounded-lg border">
               <Table>
                 <TableHeader>

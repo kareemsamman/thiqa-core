@@ -387,7 +387,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: "تم إرسال الوثائق عبر الرسائل",
+        message: "تم إرسال المعاملات عبر الرسائل",
         sent_to: cleanPhone,
         policy_urls: sortedPolicyUrls,
         ab_invoice_url: abInvoiceUrl,

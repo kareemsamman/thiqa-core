@@ -259,7 +259,7 @@ function buildDetailedReportHtml(clients: ClientWithPolicies[], totalPolicies: n
           ${client.client_file_number ? `<span class="client-file">#${client.client_file_number}</span>` : ''}
         </td>
         <td class="client-days ${urgentClass}">${daysLabel}</td>
-        <td class="client-count">${client.policies.length} وثيقة</td>
+        <td class="client-count">${client.policies.length} معاملة</td>
         <td class="client-total">₪${(client.total_price || 0).toLocaleString('en-US')}</td>
       </tr>`;
     
@@ -603,7 +603,7 @@ function buildDetailedReportHtml(clients: ClientWithPolicies[], totalPolicies: n
     <!-- Header -->
     <div class="report-header">
       <div class="header-title">
-        <h1>📋 تقرير الوثائق المنتهية</h1>
+        <h1>📋 تقرير المعاملات المنتهية</h1>
         <p>${monthName}</p>
       </div>
       <div class="header-stats">
@@ -613,7 +613,7 @@ function buildDetailedReportHtml(clients: ClientWithPolicies[], totalPolicies: n
         </div>
         <div class="header-stat">
           <span class="stat-value">${totalPolicies}</span>
-          <span class="stat-label">وثيقة</span>
+          <span class="stat-label">معاملة</span>
         </div>
         <div class="header-stat">
           <span class="stat-value">₪${totalPrice.toLocaleString('en-US')}</span>
@@ -656,7 +656,7 @@ function buildDetailedReportHtml(clients: ClientWithPolicies[], totalPolicies: n
         </tr>
       </thead>
       <tbody>
-        ${tableRows || '<tr><td colspan="8" style="text-align:center;padding:40px;color:#64748b;">لا يوجد وثائق منتهية في هذه الفترة</td></tr>'}
+        ${tableRows || '<tr><td colspan="8" style="text-align:center;padding:40px;color:#64748b;">لا يوجد معاملات منتهية في هذه الفترة</td></tr>'}
       </tbody>
     </table>
     

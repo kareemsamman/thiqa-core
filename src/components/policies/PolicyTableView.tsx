@@ -398,17 +398,25 @@ export function PolicyTableView({
                     </div>
                   </TableCell>
 
-                  {/* Insurance types with company names and service subtypes - multi-line */}
+                  {/* Insurance types with company names and service subtypes
+                      - multi-line. Uses an SVG chevron instead of a unicode
+                      arrow so RTL bidi doesn't flip it. */}
                   <TableCell>
                     <div className="flex flex-col gap-0.5 text-xs">
                       {insuranceLines.map((line) => (
-                        <div key={line.policyId} className="whitespace-nowrap">
+                        <div key={line.policyId} className="flex items-center gap-1 whitespace-nowrap">
                           <span className="font-medium">{line.label}</span>
                           {line.companyName && (
-                            <span className="text-muted-foreground"> ← {line.companyName}</span>
+                            <>
+                              <ArrowLeft className="h-3 w-3 text-muted-foreground shrink-0" />
+                              <span className="text-muted-foreground">{line.companyName}</span>
+                            </>
                           )}
                           {line.serviceName && (
-                            <span className="text-muted-foreground"> ← {line.serviceName}</span>
+                            <>
+                              <ArrowLeft className="h-3 w-3 text-muted-foreground shrink-0" />
+                              <span className="text-muted-foreground">{line.serviceName}</span>
+                            </>
                           )}
                         </div>
                       ))}

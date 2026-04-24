@@ -609,7 +609,7 @@ function buildBulkReceiptHtml(
 
     <!-- Policy-link note -->
     <div class="policy-note">
-      هذه السندات تخص الوثيقة رقم <strong>${escapeHtml(primaryDocumentNumber)}</strong>.
+      هذه السندات تخص المعاملة رقم <strong>${escapeHtml(primaryDocumentNumber)}</strong>.
     </div>
 
     <!-- Footer -->

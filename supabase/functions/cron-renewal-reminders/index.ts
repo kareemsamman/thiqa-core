@@ -70,9 +70,9 @@ serve(async (req) => {
     }
 
     const template1Month = agentSmsRow?.reminder_1month_template ||
-      "مرحباً {client_name}، نذكرك بأن وثيقة التأمين لسيارتك ({car_number}) ستنتهي بعد شهر تقريباً في تاريخ {end_date}.{price_line} يرجى التواصل معنا للتجديد.";
+      "مرحباً {client_name}، نذكرك بأن معاملة التأمين لسيارتك ({car_number}) ستنتهي بعد شهر تقريباً في تاريخ {end_date}.{price_line} يرجى التواصل معنا للتجديد.";
     const template1Week = agentSmsRow?.reminder_1week_template ||
-      "مرحباً {client_name}، تنبيه عاجل: وثيقة التأمين لسيارتك ({car_number}) ستنتهي خلال أسبوع في تاريخ {end_date}.{price_line} يرجى التجديد قبل الانتهاء.";
+      "مرحباً {client_name}، تنبيه عاجل: معاملة التأمين لسيارتك ({car_number}) ستنتهي خلال أسبوع في تاريخ {end_date}.{price_line} يرجى التجديد قبل الانتهاء.";
 
     const cooldownDays = agentSmsRow?.renewal_reminder_cooldown_days || 7;
     const cooldownDate = new Date();

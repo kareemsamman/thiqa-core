@@ -455,7 +455,7 @@ function generateReportHtml(
     
     <div class="summary-cards">
       <div class="summary-card">
-        <div class="label">عدد الوثائق</div>
+        <div class="label">عدد المعاملات</div>
         <div class="value">${formatNumber(summary.totalPolicies)}</div>
       </div>
       <div class="summary-card">
@@ -473,7 +473,7 @@ function generateReportHtml(
     </div>
     
     <div class="content">
-      <h2 class="section-title">تفاصيل الوثائق (${formatNumber(policies.length)} وثيقة)</h2>
+      <h2 class="section-title">تفاصيل المعاملات (${formatNumber(policies.length)} معاملة)</h2>
       <div style="overflow-x: auto;">
         <table>
            <thead>
@@ -494,7 +494,7 @@ function generateReportHtml(
             </tr>
           </thead>
           <tbody>
-            ${policyRows || '<tr><td colspan="13" style="text-align: center; padding: 30px;">لا توجد وثائق</td></tr>'}
+            ${policyRows || '<tr><td colspan="13" style="text-align: center; padding: 30px;">لا توجد معاملات</td></tr>'}
           </tbody>
         </table>
       </div>

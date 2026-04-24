@@ -2199,7 +2199,7 @@ export default function PolicyReports() {
                   {/* Pagination */}
                   <div className="flex items-center justify-between p-4 border-t">
                     <p className="text-sm text-muted-foreground">
-                      إجمالي: {renewedTotalRows} عميل تم تجديد وثائقهم
+                      إجمالي: {renewedTotalRows} عميل تم تجديد معاملاتهم
                     </p>
                     <div className="flex items-center gap-2">
                       <Button

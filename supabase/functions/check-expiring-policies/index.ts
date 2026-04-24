@@ -111,8 +111,8 @@ Deno.serve(async (req) => {
         notifications.push({
           user_id: user.id,
           type: 'expiring',
-          title: 'وثيقة تنتهي قريباً',
-          message: `وثيقة العميل ${clientName} ${policy.policy_number ? `رقم ${policy.policy_number}` : ''} تنتهي خلال ${daysUntilExpiry} ${daysUntilExpiry === 1 ? 'يوم' : 'أيام'}`,
+          title: 'معاملة تنتهي قريباً',
+          message: `معاملة العميل ${clientName} ${policy.policy_number ? `رقم ${policy.policy_number}` : ''} تنتهي خلال ${daysUntilExpiry} ${daysUntilExpiry === 1 ? 'يوم' : 'أيام'}`,
           link: '/policies',
           entity_type: 'policy',
           entity_id: policy.id,

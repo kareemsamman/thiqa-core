@@ -437,7 +437,7 @@ function generateHtml(
         <div class="value">${rows.length}</div>
       </div>
       <div class="summary-card">
-        <div class="label">عدد الوثائق</div>
+        <div class="label">عدد المعاملات</div>
         <div class="value">${totalPolicyCount}</div>
       </div>
       <div class="summary-card">
@@ -450,7 +450,7 @@ function generateHtml(
       </div>
     </div>
     <div class="content">
-      <h2 class="section-title">تفاصيل الوثائق</h2>
+      <h2 class="section-title">تفاصيل المعاملات</h2>
       <div style="overflow-x:auto;">
         <table>
           <thead>
@@ -459,7 +459,7 @@ function generateHtml(
               <th>العميل</th>
               <th>الهاتف</th>
               <th>رقم الهوية</th>
-              <th>عدد الوثائق</th>
+              <th>عدد المعاملات</th>
               <th>رقم السيارة</th>
               <th>نوع التأمين</th>
               <th>تاريخ الدفع</th>
@@ -469,9 +469,9 @@ function generateHtml(
             </tr>
           </thead>
           <tbody>
-            ${tableRows || '<tr><td colspan="10" style="text-align:center;padding:30px;">لا توجد وثائق</td></tr>'}
+            ${tableRows || '<tr><td colspan="10" style="text-align:center;padding:30px;">لا توجد معاملات</td></tr>'}
             <tr class="total-row">
-              <td colspan="8" style="border:1px solid #2d4a6f;padding:12px;text-align:center;">الإجمالي (${rows.length} عميل / ${totalPolicyCount} وثيقة)</td>
+              <td colspan="8" style="border:1px solid #2d4a6f;padding:12px;text-align:center;">الإجمالي (${rows.length} عميل / ${totalPolicyCount} معاملة)</td>
               <td style="border:1px solid #2d4a6f;padding:12px;text-align:left;direction:ltr;">₪${formatNumber(totalAmount)}</td>
               <td style="border:1px solid #2d4a6f;padding:12px;text-align:left;direction:ltr;">₪${formatNumber(totalProfit)}</td>
               <td class="rivhit-col" style="display:none;border:1px solid #2d4a6f;padding:12px;"></td>

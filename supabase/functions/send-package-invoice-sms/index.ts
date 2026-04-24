@@ -553,7 +553,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: "تم إرسال الوثائق عبر الرسائل",
+        message: "تم إرسال المعاملات عبر الرسائل",
         sent_to: cleanPhone,
         policy_count: policy_ids.length,
         file_count: policyFileUrls.length,
@@ -608,7 +608,7 @@ function buildPackageInvoiceHtml(
 ): string {
   const client = policies[0]?.client || {};
   const today = new Date();
-  // Primary document number (رقم الوثيقة). A package is one معاملة so
+  // Primary document number (رقم المعاملة). A package is one معاملة so
   // we pick a single بوليصة whose number represents the whole
   // printout. Rule (mirrors the card + payments log so all three
   // surfaces agree): THIRD_FULL > ELZAMI > addons, smallest doc
@@ -688,7 +688,7 @@ function buildPackageInvoiceHtml(
     else if (policyTypeKinds.has('road')) invoiceSubtitle = 'خدمات الطريق';
     else if (policyTypeKinds.has('accident_fee')) invoiceSubtitle = 'إعفاء رسوم';
   } else {
-    invoiceSubtitle = 'وثائق التأمين والخدمات';
+    invoiceSubtitle = 'معاملات التأمين والخدمات';
   }
 
   // Extra drivers block — dedicated table right after customer info.

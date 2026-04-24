@@ -613,7 +613,7 @@ export default function BrokerWallet() {
 
         {/* Summary Cards - 3 cards: policy count, total amount, net balance */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* عدد الوثائق - Policy count */}
+          {/* عدد المعاملات - Policy count */}
           <Card className="p-4 border-blue-200 dark:border-blue-800">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/30">

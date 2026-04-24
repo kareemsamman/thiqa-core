@@ -537,7 +537,7 @@
              <span class="info-value">${companyName}</span>
            </div>
            <div class="info-row">
-             <span class="info-label">رقم الوثيقة:</span>
+             <span class="info-label">رقم المعاملة:</span>
              <span class="info-value">${policyNumber}</span>
            </div>
          </div>

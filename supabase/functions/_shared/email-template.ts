@@ -140,7 +140,7 @@ export function welcomeAgentEmailBody(agentName: string): string {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;max-width:380px;">
       <tr>
         <td style="background:#f8f9fa;border-radius:10px;padding:20px 24px;text-align:right;">
-          <p style="margin:0 0 10px;color:#333;font-size:14px;line-height:1.8;">✅ إدارة العملاء والوثائق</p>
+          <p style="margin:0 0 10px;color:#333;font-size:14px;line-height:1.8;">✅ إدارة العملاء والمعاملات</p>
           <p style="margin:0 0 10px;color:#333;font-size:14px;line-height:1.8;">✅ حساب الأسعار والأرباح تلقائياً</p>
           <p style="margin:0 0 10px;color:#333;font-size:14px;line-height:1.8;">✅ تتبع المدفوعات والشيكات</p>
           <p style="margin:0;color:#333;font-size:14px;line-height:1.8;">✅ تقارير مالية شاملة</p>

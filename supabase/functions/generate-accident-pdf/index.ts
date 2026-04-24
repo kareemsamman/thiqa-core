@@ -1396,7 +1396,7 @@ function generateHtmlReport(
             <div class="info-item"><label>رقم السيارة</label><span>${escapeHtml(tp.vehicle_number || "-")}</span></div>
             <div class="info-item"><label>نوع السيارة</label><span>${escapeHtml(tp.vehicle_manufacturer || "")} ${escapeHtml(tp.vehicle_model || "")} ${tp.vehicle_year || ""}</span></div>
             <div class="info-item"><label>شركة التأمين</label><span>${escapeHtml(tp.insurance_company || "-")}</span></div>
-            <div class="info-item"><label>رقم الوثيقة</label><span>${escapeHtml(tp.insurance_policy_number || "-")}</span></div>
+            <div class="info-item"><label>رقم المعاملة</label><span>${escapeHtml(tp.insurance_policy_number || "-")}</span></div>
             <div class="info-item full-width"><label>وصف الأضرار</label><span>${escapeHtml(tp.damage_description || "-")}</span></div>
           </div>
         </div>
@@ -1455,9 +1455,9 @@ function generateHtmlReport(
   </div>
 
   <div class="section">
-    <h2 class="section-title">بيانات الوثيقة</h2>
+    <h2 class="section-title">بيانات المعاملة</h2>
     <div class="info-grid">
-      <div class="info-item"><label>رقم الوثيقة</label><span>${escapeHtml(report.policies.policy_number || "-")}</span></div>
+      <div class="info-item"><label>رقم المعاملة</label><span>${escapeHtml(report.policies.policy_number || "-")}</span></div>
       <div class="info-item"><label>شركة التأمين</label><span>${escapeHtml(insurerName)}</span></div>
       <div class="info-item"><label>نوع التأمين</label><span>${policyTypeLabel}</span></div>
       <div class="info-item"><label>تاريخ البداية</label><span>${formatDate(report.policies.start_date)}</span></div>

@@ -467,7 +467,7 @@ function generateReportHtml(args: GenerateReportArgs): string {
           </tr>
         `;
       }).join('')
-    : `<tr><td colspan="4" class="empty-cell">لا توجد وثائق لهذا الوسيط</td></tr>`;
+    : `<tr><td colspan="4" class="empty-cell">لا توجد معاملات لهذا الوسيط</td></tr>`;
 
   // Settlements log — the "wallet" section. Lists every settlement record
   // (completed + pending) so the reader sees the full accounting trail.
@@ -980,7 +980,7 @@ function generateReportHtml(args: GenerateReportArgs): string {
           <div class="value tabular">${broker.phone || '-'}</div>
         </div>
         <div class="cell">
-          <div class="label">عدد الوثائق</div>
+          <div class="label">عدد المعاملات</div>
           <div class="value tabular">${policies.length}</div>
         </div>
         ${broker.notes ? `
@@ -993,7 +993,7 @@ function generateReportHtml(args: GenerateReportArgs): string {
     </div>
 
     <div class="customer">
-      <div class="section-title">الوثائق</div>
+      <div class="section-title">المعاملات</div>
       <table class="data-table items">
         <thead>
           <tr>
@@ -1017,11 +1017,11 @@ function generateReportHtml(args: GenerateReportArgs): string {
     <div class="bottom">
       <table class="totals">
         <tr>
-          <td class="label">له عليّ (وثائق)</td>
+          <td class="label">له عليّ (معاملات)</td>
           <td class="val">₪${fromBrokerTotal.toLocaleString('en-US')}</td>
         </tr>
         <tr>
-          <td class="label">ليَ عليه (وثائق)</td>
+          <td class="label">ليَ عليه (معاملات)</td>
           <td class="val">₪${toBrokerTotal.toLocaleString('en-US')}</td>
         </tr>
         <tr>

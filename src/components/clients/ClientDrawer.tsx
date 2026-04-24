@@ -290,7 +290,7 @@ export function ClientDrawer({ open, onOpenChange, client, onSaved }: ClientDraw
 
       if (isEditing) {
         if (branchChanged) {
-          toast.success('تم تحديث بيانات العميل ونقل جميع وثائقه للفرع الجديد');
+          toast.success('تم تحديث بيانات العميل ونقل جميع معاملاته للفرع الجديد');
         } else {
           toast.success('تم تحديث بيانات العميل');
         }

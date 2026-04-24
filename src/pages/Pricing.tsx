@@ -33,7 +33,7 @@ const FALLBACK_PLANS: PlanData[] = [
     badge: null,
     features: [
       { text: "إدارة حتى 200 عميل", info: true },
-      { text: "إصدار وثائق أساسي", info: true },
+      { text: "إصدار معاملات أساسي", info: true },
       { text: "تقارير مالية شهرية", info: false },
       { text: "دعم عبر البريد الإلكتروني", info: false },
       { text: "استيراد بيانات أساسي", info: true },
@@ -50,7 +50,7 @@ const FALLBACK_PLANS: PlanData[] = [
     badge: "الأكثر شعبية",
     features: [
       { text: "إدارة عملاء بلا حدود", info: true },
-      { text: "إصدار وثائق متقدم", info: true },
+      { text: "إصدار معاملات متقدم", info: true },
       { text: "إدارة مطالبات كاملة", info: false },
       { text: "SMS وتذكيرات تلقائية", info: true },
       { text: "تقارير مالية كاملة", info: true },

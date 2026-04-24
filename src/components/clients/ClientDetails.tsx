@@ -343,7 +343,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
   // Scroll to the policies section and run a 3-second attention pulse on
   // every #N document-number chip so the user can see which concrete rows
-  // the "الوثائق" stat is counting. Re-clicks restart the animation via a
+  // the "المعاملات" stat is counting. Re-clicks restart the animation via a
   // forced reflow between remove/add.
   const handleRevealDocs = () => {
     policiesHeaderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });

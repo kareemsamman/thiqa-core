@@ -21,7 +21,7 @@ const POLICY_TYPE_LABELS: Record<string, string> = {
 };
 
 const getPolicyTypeLabel = (parent: string | null, child: string | null): string => {
-  if (!parent) return 'وثيقة';
+  if (!parent) return 'معاملة';
   const parentLabel = POLICY_TYPE_LABELS[parent] || parent;
   if (child && parent === 'THIRD_FULL') {
     return child === 'FULL' ? 'شامل' : child === 'THIRD' ? 'ثالث' : parentLabel;
@@ -242,7 +242,7 @@ Deno.serve(async (req) => {
 
 عليك تسديد المبلغ: ₪${totalRemaining.toLocaleString()}
 
-الوثائق:
+المعاملات:
 ${policyLines}`;
         message = appendSmsFooter(message, brandingData);
 

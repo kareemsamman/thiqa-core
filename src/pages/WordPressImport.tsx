@@ -175,7 +175,7 @@ const WordPressImport = () => {
     brokers: "الوسطاء",
     clients: "العملاء",
     cars: "السيارات",
-    policies: "الوثائق",
+    policies: "المعاملات",
     payments: "المدفوعات",
     outsideCheques: "الشيكات الخارجية",
     media: "ملفات الوسائط",
@@ -305,7 +305,7 @@ const WordPressImport = () => {
       stats.found = allPolicyIds.length;
       
       if (stats.found === 0) {
-        toast({ title: "لا توجد وثائق", description: "لم يتم العثور على أرقام POL-" });
+        toast({ title: "لا توجد معاملات", description: "لم يتم العثور على أرقام POL-" });
         setClearingPolNumbers(false);
         return;
       }
@@ -460,7 +460,7 @@ const WordPressImport = () => {
       }
       
       if (allElzamiPolicies.length === 0) {
-        toast({ title: "لا توجد وثائق إلزامي", description: "لم يتم العثور على أي وثائق إلزامي" });
+        toast({ title: "لا توجد معاملات إلزامي", description: "لم يتم العثور على أي معاملات إلزامي" });
         setFixingElzami(false);
         return;
       }
@@ -490,7 +490,7 @@ const WordPressImport = () => {
       stats.found = needsPayment.length;
       
       if (stats.found === 0) {
-        toast({ title: "لا توجد وثائق بحاجة إصلاح", description: "جميع وثائق الإلزامي لديها دفعات" });
+        toast({ title: "لا توجد معاملات بحاجة إصلاح", description: "جميع معاملات الإلزامي لديها دفعات" });
         setFixingElzami(false);
         setElzamiFixStats(stats);
         return;
@@ -887,7 +887,7 @@ const WordPressImport = () => {
         payments: { new: totalPayments, existing: 0 }, // Payments will be linked to policies
       });
       
-      toast({ title: "تم التحليل", description: `موجود: ${clientIdSet.size} عميل، ${carNumberSet.size} سيارة، ${policyWpIdSet.size} وثيقة` });
+      toast({ title: "تم التحليل", description: `موجود: ${clientIdSet.size} عميل، ${carNumberSet.size} سيارة، ${policyWpIdSet.size} معاملة` });
     } catch (err: any) {
       console.error('Analysis error:', err);
       toast({ title: "خطأ في التحليل", description: err.message, variant: "destructive" });
@@ -998,7 +998,7 @@ const WordPressImport = () => {
       { key: 'brokers', label: 'الوسطاء', status: completedSteps.includes('brokers') ? 'done' : 'pending', count: 0 },
       { key: 'clients', label: 'العملاء', status: completedSteps.includes('clients') ? 'done' : 'pending', count: 0 },
       { key: 'cars', label: 'السيارات', status: completedSteps.includes('cars') ? 'done' : 'pending', count: 0 },
-      { key: 'policies', label: 'الوثائق', status: completedSteps.includes('policies') ? 'done' : 'pending', count: 0 },
+      { key: 'policies', label: 'المعاملات', status: completedSteps.includes('policies') ? 'done' : 'pending', count: 0 },
       { key: 'payments', label: 'المدفوعات', status: completedSteps.includes('payments') ? 'done' : 'pending', count: 0 },
       { key: 'media', label: 'ملفات الوسائط (CDN)', status: completedSteps.includes('media') ? 'done' : 'pending', count: 0 },
       { key: 'invoices', label: 'فواتير PDF', status: completedSteps.includes('invoices') ? 'done' : 'pending', count: 0 },
@@ -1463,7 +1463,7 @@ const WordPressImport = () => {
 
       toast({ 
         title: "تم الربط", 
-        description: `تم ربط ${data.linked} وثيقة بالشركة` 
+        description: `تم ربط ${data.linked} معاملة بالشركة`
       });
       
       // Refresh stats
@@ -1519,7 +1519,7 @@ const WordPressImport = () => {
       
       toast({ 
         title: "تم الربط", 
-        description: `تم ربط ${result.linked} وثيقة من أصل ${result.found}` 
+        description: `تم ربط ${result.linked} معاملة من أصل ${result.found}`
       });
     } catch (err: any) {
       toast({ title: "خطأ", description: err.message, variant: "destructive" });
@@ -1544,7 +1544,7 @@ const WordPressImport = () => {
     if (total === 0) {
       toast({
         title: "خطأ",
-        description: "ملف JSON لا يحتوي على وثائق",
+        description: "ملف JSON لا يحتوي على معاملات",
         variant: "destructive",
       });
       return;
@@ -1625,7 +1625,7 @@ const WordPressImport = () => {
       } else {
         toast({
           title: "تم التحديث",
-          description: `تم تحديث ${totals.policiesUpdated} وثيقة وإضافة ${totals.paymentsInserted} مدفوعة`,
+          description: `تم تحديث ${totals.policiesUpdated} معاملة وإضافة ${totals.paymentsInserted} مدفوعة`,
         });
       }
     } catch (err: any) {
@@ -1832,7 +1832,7 @@ const WordPressImport = () => {
                         </div>
                       </div>
                       <div className="p-3 rounded-lg border border-green-300 bg-white dark:bg-green-900/20">
-                        <div className="text-xs text-muted-foreground mb-1">الوثائق</div>
+                        <div className="text-xs text-muted-foreground mb-1">المعاملات</div>
                         <div className="flex items-center gap-2">
                           <Badge className="bg-green-500">🆕 {incrementalAnalysis.policies.new}</Badge>
                           <Badge variant="secondary">🔄 {incrementalAnalysis.policies.existing}</Badge>
@@ -1997,7 +1997,7 @@ const WordPressImport = () => {
                   حذف جميع البيانات
                 </CardTitle>
                 <CardDescription>
-                  سيتم حذف: العملاء، السيارات، الوثائق، المدفوعات، الفواتير، الوسائط، الحوادث، الوسطاء
+                  سيتم حذف: العملاء، السيارات، المعاملات، المدفوعات، الفواتير، الوسائط، الحوادث، الوسطاء
                   <br />
                   <strong>لن يتم حذف:</strong> شركات التأمين، قواعد التسعير، الفروع، المستخدمين
                 </CardDescription>
@@ -2047,10 +2047,10 @@ const WordPressImport = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-primary">
                   <RefreshCw className="h-5 w-5" />
-                  تحديث الوثائق والمدفوعات فقط
+                  تحديث المعاملات والمدفوعات فقط
                 </CardTitle>
                 <CardDescription>
-                  يعيد مزامنة المدفوعات من ملف JSON للوثائق الموجودة فقط (يحذف المدفوعات القديمة ويستبدلها)
+                  يعيد مزامنة المدفوعات من ملف JSON للمعاملات الموجودة فقط (يحذف المدفوعات القديمة ويستبدلها)
                   <br />
                   <strong>لا يمس:</strong> العملاء، السيارات، شركات التأمين، الوسائط
                 </CardDescription>
@@ -2065,7 +2065,7 @@ const WordPressImport = () => {
                 {jsonData && (
                   <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg space-y-1">
                     <p className="text-sm">
-                      <strong>الوثائق في JSON:</strong> {(jsonData?.policies || []).length}
+                      <strong>المعاملات في JSON:</strong> {(jsonData?.policies || []).length}
                     </p>
                     <p className="text-sm">
                       <strong>إجمالي المدفوعات:</strong>{' '}
@@ -2112,7 +2112,7 @@ const WordPressImport = () => {
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>
                         {updatePoliciesChunkRange
-                          ? `جاري معالجة الوثائق ${updatePoliciesChunkRange.from}-${updatePoliciesChunkRange.to}`
+                          ? `جاري معالجة المعاملات ${updatePoliciesChunkRange.from}-${updatePoliciesChunkRange.to}`
                           : "جاري المعالجة..."}
                       </span>
                       <span>
@@ -2149,7 +2149,7 @@ const WordPressImport = () => {
                   <div className="p-4 border rounded-lg space-y-2 bg-muted">
                     <div className="grid grid-cols-3 gap-4 text-center">
                       <div>
-                        <p className="text-sm text-muted-foreground">وثائق محدثة</p>
+                        <p className="text-sm text-muted-foreground">معاملات محدثة</p>
                         <p className="text-2xl font-bold text-green-600">{updatePoliciesStats.policiesUpdated}</p>
                       </div>
                       <div>
@@ -2163,7 +2163,7 @@ const WordPressImport = () => {
                     </div>
                     {updatePoliciesStats.policiesSkipped > 0 && (
                       <p className="text-sm text-amber-600">
-                        ⚠️ تم تخطي {updatePoliciesStats.policiesSkipped} وثيقة (غير موجودة في النظام)
+                        ⚠️ تم تخطي {updatePoliciesStats.policiesSkipped} معاملة (غير موجودة في النظام)
                       </p>
                     )}
                     {updatePoliciesStats.errors?.length > 0 && (
@@ -2186,16 +2186,16 @@ const WordPressImport = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Link2 className="h-5 w-5" />
-                  ربط الوثائق بشركة التأمين (بدون JSON)
+                  ربط المعاملات بشركة التأمين (بدون JSON)
                 </CardTitle>
                 <CardDescription>
-                  اختر شركة التأمين وربط جميع الوثائق غير المربوطة بها
+                  اختر شركة التأمين وربط جميع المعاملات غير المربوطة بها
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {unlinkedStats && (
                   <div className="p-3 bg-muted rounded-lg space-y-2">
-                    <p className="font-medium">وثائق بدون شركة: {unlinkedStats.total}</p>
+                    <p className="font-medium">معاملات بدون شركة: {unlinkedStats.total}</p>
                     <div className="flex flex-wrap gap-2">
                       {Object.entries(unlinkedStats.byType).map(([type, count]) => (
                         <Badge key={type} variant="outline">
@@ -2223,7 +2223,7 @@ const WordPressImport = () => {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>نوع الوثيقة</Label>
+                    <Label>نوع المعاملة</Label>
                     <Select value={bulkPolicyType} onValueChange={setBulkPolicyType}>
                       <SelectTrigger>
                         <SelectValue />
@@ -2240,7 +2240,7 @@ const WordPressImport = () => {
 
                 <Button onClick={handleBulkAssignCompany} disabled={bulkAssigning || !bulkCompanyId}>
                   {bulkAssigning ? <Loader2 className="h-4 w-4 ml-2 animate-spin" /> : <Link2 className="h-4 w-4 ml-2" />}
-                  {bulkAssigning ? "جاري الربط..." : "ربط الوثائق"}
+                  {bulkAssigning ? "جاري الربط..." : "ربط المعاملات"}
                 </Button>
               </CardContent>
             </Card>
@@ -2250,7 +2250,7 @@ const WordPressImport = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <FileJson className="h-5 w-5" />
-                  ربط الوثائق باستخدام JSON (متقدم)
+                  ربط المعاملات باستخدام JSON (متقدم)
                 </CardTitle>
                 <CardDescription>
                   يستخدم بيانات JSON للمطابقة التلقائية - مطلوب تحميل ملف JSON أولاً
@@ -2271,7 +2271,7 @@ const WordPressImport = () => {
                   <div className="space-y-3 p-4 border rounded-lg">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">وثائق بدون شركة</p>
+                        <p className="text-sm text-muted-foreground">معاملات بدون شركة</p>
                         <p className="text-2xl font-bold">{linkingStats.found}</p>
                       </div>
                       <div>
@@ -2303,16 +2303,16 @@ const WordPressImport = () => {
                   إصلاح دفعات الإلزامي
                 </CardTitle>
                 <CardDescription>
-                  يقوم بإضافة دفعة تلقائية لكل وثيقة إلزامي بدون دفعات.
+                  يقوم بإضافة دفعة تلقائية لكل معاملة إلزامي بدون دفعات.
                   <br />
-                  الإلزامي يُدفع مباشرة للشركة، لذا يجب أن تكون كل وثيقة "مدفوعة".
+                  الإلزامي يُدفع مباشرة للشركة، لذا يجب أن تكون كل معاملة "مدفوعة".
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Show count of unpaid ELZAMI */}
                 <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">وثائق إلزامي بدون دفعات:</span>
+                    <span className="text-sm">معاملات إلزامي بدون دفعات:</span>
                     <Badge variant={elzamiUnpaidCount && elzamiUnpaidCount > 0 ? "destructive" : "secondary"}>
                       {elzamiUnpaidCount !== null ? elzamiUnpaidCount : '...'}
                     </Badge>
@@ -2347,7 +2347,7 @@ const WordPressImport = () => {
                   <div className="p-4 border rounded-lg space-y-2 bg-muted">
                     <div className="grid grid-cols-2 gap-4 text-center">
                       <div>
-                        <p className="text-sm text-muted-foreground">وثائق بحاجة إصلاح</p>
+                        <p className="text-sm text-muted-foreground">معاملات بحاجة إصلاح</p>
                         <p className="text-2xl font-bold">{elzamiFixStats.found}</p>
                       </div>
                       <div>
@@ -2378,7 +2378,7 @@ const WordPressImport = () => {
                   ربط الباقات المفقودة
                 </CardTitle>
                 <CardDescription>
-                  تبحث عن وثائق يجب أن تكون ضمن باقة واحدة:
+                  تبحث عن معاملات يجب أن تكون ضمن باقة واحدة:
                   <br />
                   • نفس العميل والسيارة
                   <br />
@@ -2473,7 +2473,7 @@ const WordPressImport = () => {
                                 <Badge variant="outline">{pkg.car_number}</Badge>
                               </div>
                               <div className="text-sm text-muted-foreground mt-1">
-                                {pkg.policy_count} وثائق: {pkg.types.join('، ')}
+                                {pkg.policy_count} معاملات: {pkg.types.join('، ')}
                               </div>
                               <div className="text-sm text-muted-foreground">
                                 المجموع: ₪{(pkg.total_price || 0).toLocaleString()}
@@ -2531,7 +2531,7 @@ const WordPressImport = () => {
                 {/* Show count */}
                 <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">وثائق تحتوي أرقام POL-:</span>
+                    <span className="text-sm">معاملات تحتوي أرقام POL-:</span>
                     <Badge variant={polNumbersCount && polNumbersCount > 0 ? "destructive" : "secondary"}>
                       {polNumbersCount !== null ? polNumbersCount.toLocaleString() : '...'}
                     </Badge>
@@ -2566,7 +2566,7 @@ const WordPressImport = () => {
                   <div className="p-4 border rounded-lg space-y-2 bg-muted">
                     <div className="grid grid-cols-2 gap-4 text-center">
                       <div>
-                        <p className="text-sm text-muted-foreground">وثائق تم العثور عليها</p>
+                        <p className="text-sm text-muted-foreground">معاملات تم العثور عليها</p>
                         <p className="text-2xl font-bold">{polNumbersClearStats.found.toLocaleString()}</p>
                       </div>
                       <div>

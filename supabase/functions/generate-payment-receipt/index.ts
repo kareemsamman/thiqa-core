@@ -648,7 +648,7 @@ function buildPaymentReceiptHtml(
 
     <!-- Policy link note -->
     <div class="policy-note">
-      هذا السند يخص الوثيقة رقم <strong>${escapeHtml(policyDocumentNumber)}</strong>.
+      هذا السند يخص المعاملة رقم <strong>${escapeHtml(policyDocumentNumber)}</strong>.
     </div>
 
     <!-- Footer -->

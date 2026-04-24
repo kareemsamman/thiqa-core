@@ -974,7 +974,7 @@ function generateReportHtml(args: GenerateReportArgs): string {
         }
         return renderPackageBlock(item, i + 1);
       }).join('')
-    : `<tr><td colspan="4" class="empty-cell">لا توجد وثائق مسجلة</td></tr>`;
+    : `<tr><td colspan="4" class="empty-cell">لا توجد معاملات مسجلة</td></tr>`;
 
   // Payment history table — one row per payment, sorted oldest → newest,
   // showing receipt number, method, date, and amount.
@@ -1849,7 +1849,7 @@ function generateReportHtml(args: GenerateReportArgs): string {
          reads consistently on paper. Packages render as an indented
          block (header row + one component row per member). -->
     <div class="customer">
-      <div class="section-title">الوثائق</div>
+      <div class="section-title">المعاملات</div>
       <table class="data-table items">
         <thead>
           <tr>
