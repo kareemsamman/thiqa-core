@@ -102,7 +102,7 @@ export function IncomeExpenseChart({
   };
 
   return (
-    <Card className="rounded-2xl border shadow-sm">
+    <Card className="rounded-2xl border shadow-sm h-full flex flex-col">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <div>
           <CardTitle className="text-base font-semibold">الإيرادات مقابل المصروفات</CardTitle>
@@ -112,7 +112,7 @@ export function IncomeExpenseChart({
         </div>
         <SeeAllButton locked={!canAccounting} onClick={handleSeeAll} />
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1 flex flex-col">
         <div className="flex items-center gap-6 text-sm mb-3">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: INCOME_COLOR }} />
@@ -125,7 +125,7 @@ export function IncomeExpenseChart({
             <span className="font-semibold ltr-nums">₪{Math.round(totals.expense).toLocaleString("en-US")}</span>
           </div>
         </div>
-        <div className="h-[220px]">
+        <div className="flex-1 min-h-[220px]">
           {loading ? (
             <Skeleton className="h-full w-full rounded-lg" />
           ) : (

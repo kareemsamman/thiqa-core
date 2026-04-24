@@ -61,12 +61,12 @@ export function PoliciesDonut({ range }: { range: PeriodRange }) {
   const total = chartData.reduce((s, d) => s + d.value, 0);
 
   return (
-    <Card className="rounded-2xl border shadow-sm">
+    <Card className="rounded-2xl border shadow-sm h-full flex flex-col">
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-semibold">نظرة عامة على المعاملات</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="h-[180px] relative">
+      <CardContent className="flex-1 flex flex-col">
+        <div className="flex-1 min-h-[180px] relative">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <Skeleton className="h-32 w-32 rounded-full" />

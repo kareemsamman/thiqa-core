@@ -22,7 +22,7 @@ export default function Dashboard() {
   const { can } = usePermissions();
   const canViewFinancial = can("view_financial");
 
-  const [period, setPeriod] = useState<DashboardPeriod>("month");
+  const [period, setPeriod] = useState<DashboardPeriod>("today");
   const range = useMemo(() => getPeriodRange(period), [period]);
 
   return (

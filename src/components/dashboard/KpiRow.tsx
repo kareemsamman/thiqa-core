@@ -106,21 +106,21 @@ export function KpiRow({
   return (
     <div className="grid gap-4 grid-cols-2 xl:grid-cols-4">
       <KpiTile
-        title="إجمالي العملاء"
+        title="عملاء جدد"
         value={(data?.total_clients ?? 0).toLocaleString("en-US")}
         icon={Users}
         tone="primary"
         loading={loading}
       />
       <KpiTile
-        title="السيارات المؤمنة"
+        title="سيارات جديدة"
         value={(data?.cars_insured ?? 0).toLocaleString("en-US")}
         icon={Car}
         tone="blue"
-      loading={loading}
+        loading={loading}
       />
       <KpiTile
-        title="المعاملات"
+        title="معاملات"
         value={(data?.policies_count ?? 0).toLocaleString("en-US")}
         icon={FileText}
         tone="amber"
