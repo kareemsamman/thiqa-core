@@ -19,7 +19,7 @@ export interface AgentBranding {
   invoiceAddress: string;
 }
 
-const DEFAULT_BRANDING: AgentBranding = {
+export const DEFAULT_BRANDING: AgentBranding = {
   companyName: 'وكالة التأمين',
   companyNameEn: 'Insurance Agency',
   logoUrl: null,
