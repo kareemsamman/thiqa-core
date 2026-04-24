@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { crypto } from "https://deno.land/std@0.190.0/crypto/mod.ts";
-import nodemailer from "npm:nodemailer@6.9.16";
+import nodemailer from "https://esm.sh/nodemailer@6.9.16";
 import { buildEmailHtml, otpEmailBody } from "../_shared/email-template.ts";
 
 const corsHeaders = {
