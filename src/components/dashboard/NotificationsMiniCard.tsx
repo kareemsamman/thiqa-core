@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Bell, ChevronLeft } from "lucide-react";
+import { Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
+import { SeeAllButton } from "./SeeAllButton";
 
 interface Notif {
   id: string;
@@ -32,10 +35,26 @@ function formatAgo(iso: string) {
 }
 
 export function NotificationsMiniCard() {
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const { can } = usePermissions();
+  const { showUpgradePrompt } = useUpgradePrompt();
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [unreadTotal, setUnreadTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  const canNotifications = can("page.notifications");
+
+  const handleSeeAll = () => {
+    if (canNotifications) {
+      navigate("/notifications");
+    } else {
+      showUpgradePrompt({
+        featureKey: "notifications",
+        featureLabel: "التنبيهات",
+      });
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -80,54 +99,52 @@ export function NotificationsMiniCard() {
     };
   }, [user?.id]);
 
-  const markAllRead = async () => {
-    if (!user) return;
-    await supabase
-      .from("notifications")
-      .update({ is_read: true, read_at: new Date().toISOString() })
-      .eq("user_id", user.id)
-      .eq("is_read", false);
-  };
-
   return (
     <Card className="rounded-2xl border shadow-sm">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
+      <CardHeader className="flex flex-row items-center justify-between pb-3">
         <div className="flex items-center gap-2">
-          <Bell className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          <div className="rounded-lg bg-amber-500/10 p-1.5">
+            <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          </div>
           <CardTitle className="text-base font-semibold">التنبيهات</CardTitle>
           {unreadTotal > 0 && (
-            <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30">
+            <Badge
+              variant="outline"
+              className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 h-5 px-2"
+            >
               {unreadTotal}
             </Badge>
           )}
         </div>
-        {unreadTotal > 0 && (
-          <Button variant="ghost" size="sm" className="text-primary" onClick={markAllRead}>
-            تحديد الكل كمقروء <ChevronLeft className="mr-1 h-4 w-4" />
-          </Button>
-        )}
+        <SeeAllButton locked={!canNotifications} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent className="space-y-2">
         {loading ? (
-          Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)
+          Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+          ))
         ) : notifs.length === 0 ? (
           <div className="text-center py-6 text-sm text-muted-foreground">لا توجد تنبيهات</div>
         ) : (
           notifs.map((n) => (
             <div
               key={n.id}
-              className={`rounded-lg p-2.5 transition-colors cursor-pointer ${
-                n.is_read ? "bg-secondary/30 hover:bg-secondary/60" : "bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20"
-              }`}
+              className="group flex items-center justify-between gap-3 rounded-xl border border-border/40 bg-secondary/30 p-3 transition-colors hover:bg-secondary/60 cursor-pointer"
               onClick={() => {
-                if (n.link) window.location.href = n.link;
+                if (n.link) navigate(n.link);
+                else handleSeeAll();
               }}
             >
-              <div className="flex items-start justify-between gap-2">
-                <p className="font-medium text-sm text-foreground truncate flex-1">{n.title}</p>
-                <span className="text-xs text-muted-foreground shrink-0 ltr-nums">{formatAgo(n.created_at)}</span>
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <p className="font-medium text-sm text-foreground truncate">{n.title}</p>
+                <p className="text-xs text-muted-foreground line-clamp-1">{n.message}</p>
               </div>
-              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{n.message}</p>
+              <div className="shrink-0 text-left flex flex-col items-end gap-1">
+                <span className="text-xs text-muted-foreground ltr-nums">{formatAgo(n.created_at)}</span>
+                {!n.is_read && (
+                  <span className="h-2 w-2 rounded-full bg-amber-500" aria-label="غير مقروء" />
+                )}
+              </div>
             </div>
           ))
         )}

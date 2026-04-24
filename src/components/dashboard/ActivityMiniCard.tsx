@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { History, ChevronLeft, FileText } from "lucide-react";
+import { History, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
+import { SeeAllButton } from "./SeeAllButton";
 
 interface Item {
   id: string;
@@ -34,8 +36,19 @@ function formatAgo(iso: string) {
 
 export function ActivityMiniCard() {
   const navigate = useNavigate();
+  const { can } = usePermissions();
+  const { showUpgradePrompt } = useUpgradePrompt();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const canActivity = can("page.activity");
+  const handleSeeAll = () => {
+    if (canActivity) {
+      navigate("/activity");
+    } else {
+      showUpgradePrompt({ featureKey: "activity", featureLabel: "سجل النشاط" });
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -75,9 +88,7 @@ export function ActivityMiniCard() {
           <History className="h-5 w-5 text-success" />
           <CardTitle className="text-base font-semibold">آخر النشاطات</CardTitle>
         </div>
-        <Button variant="ghost" size="sm" className="text-primary" onClick={() => navigate("/policies")}>
-          عرض الكل <ChevronLeft className="mr-1 h-4 w-4" />
-        </Button>
+        <SeeAllButton locked={!canActivity} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent className="space-y-2">
         {loading ? (

@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
+import { SeeAllButton } from "./SeeAllButton";
 
 interface Overview {
   active_count: number;
@@ -23,8 +24,19 @@ const COLORS = {
 
 export function PoliciesDonut() {
   const navigate = useNavigate();
+  const { can } = usePermissions();
+  const { showUpgradePrompt } = useUpgradePrompt();
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const canPolicies = can("page.policies");
+  const handleSeeAll = () => {
+    if (canPolicies) {
+      navigate("/policies");
+    } else {
+      showUpgradePrompt({ featureKey: "policies", featureLabel: "البوالص" });
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -63,14 +75,7 @@ export function PoliciesDonut() {
     <Card className="rounded-2xl border shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-base font-semibold">نظرة عامة على المعاملات</CardTitle>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-primary"
-          onClick={() => navigate("/policies")}
-        >
-          عرض الكل <ChevronLeft className="mr-1 h-4 w-4" />
-        </Button>
+        <SeeAllButton locked={!canPolicies} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent>
         <div className="h-[180px] relative">

@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { CheckSquare, ChevronLeft, Lock, Clock } from "lucide-react";
+import { CheckSquare, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
+import { SeeAllButton } from "./SeeAllButton";
 
 interface Task {
   id: string;
@@ -85,10 +85,7 @@ export function TasksMiniCard() {
           <CheckSquare className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           <CardTitle className="text-base font-semibold">مهامي</CardTitle>
         </div>
-        <Button variant="ghost" size="sm" className="text-primary" onClick={handleSeeAll}>
-          {canTasks ? "عرض الكل" : <><Lock className="h-3.5 w-3.5 ml-1" /> الترقية</>}
-          {canTasks && <ChevronLeft className="mr-1 h-4 w-4" />}
-        </Button>
+        <SeeAllButton locked={!canTasks} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent className="space-y-2">
         {loading ? (

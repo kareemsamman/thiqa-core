@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, ChevronLeft } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
+import { SeeAllButton } from "./SeeAllButton";
 
 interface ExpiringPolicy {
   id: string;
@@ -22,9 +24,20 @@ interface ExpiringPolicy {
 
 export function FollowUpsCard() {
   const navigate = useNavigate();
+  const { can } = usePermissions();
+  const { showUpgradePrompt } = useUpgradePrompt();
   const [policies, setPolicies] = useState<ExpiringPolicy[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  const canReports = can("page.policy_reports");
+  const handleSeeAll = () => {
+    if (canReports) {
+      navigate("/reports/policies?tab=renewals");
+    } else {
+      showUpgradePrompt({ featureKey: "policy_reports", featureLabel: "تقارير المعاملات" });
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -92,14 +105,7 @@ export function FollowUpsCard() {
             </Badge>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-primary"
-          onClick={() => navigate("/reports/policies?tab=renewals")}
-        >
-          عرض الكل <ChevronLeft className="mr-1 h-4 w-4" />
-        </Button>
+        <SeeAllButton locked={!canReports} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent className="space-y-2.5">
         {loading ? (
@@ -115,7 +121,7 @@ export function FollowUpsCard() {
             <div
               key={p.id}
               className="flex items-center justify-between gap-3 rounded-xl bg-secondary/40 p-3 hover:bg-secondary cursor-pointer transition-colors"
-              onClick={() => navigate("/reports/policies?tab=renewals")}
+              onClick={handleSeeAll}
             >
               <div className="flex items-center gap-3 min-w-0">
                 <ExpiryBadge endDate={p.end_date} showDays={true} />

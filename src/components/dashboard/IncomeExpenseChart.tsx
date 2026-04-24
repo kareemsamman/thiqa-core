@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, Lock } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
+import { SeeAllButton } from "./SeeAllButton";
 
 interface Row {
   month: string;
@@ -53,15 +52,15 @@ export function IncomeExpenseChart() {
     return () => { cancelled = true; };
   }, []);
 
-  const canReports = can("page.financial_reports") && hasFeature("financial_reports");
+  const canAccounting = can("page.accounting") && hasFeature("accounting");
 
   const handleSeeAll = () => {
-    if (canReports) {
-      navigate("/reports/financial");
+    if (canAccounting) {
+      navigate("/accounting");
     } else {
       showUpgradePrompt({
-        featureKey: "financial_reports",
-        featureLabel: "التقارير المالية",
+        featureKey: "accounting",
+        featureLabel: "المحاسبة",
       });
     }
   };
@@ -78,10 +77,7 @@ export function IncomeExpenseChart() {
           <CardTitle className="text-base font-semibold">الإيرادات مقابل المصروفات</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">آخر 6 أشهر</p>
         </div>
-        <Button variant="ghost" size="sm" className="text-primary" onClick={handleSeeAll}>
-          {canReports ? "عرض الكل" : <><Lock className="h-3.5 w-3.5 ml-1" /> الترقية</>}
-          {canReports && <ChevronLeft className="mr-1 h-4 w-4" />}
-        </Button>
+        <SeeAllButton locked={!canAccounting} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-6 text-sm mb-3">

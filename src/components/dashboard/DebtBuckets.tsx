@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
+import { SeeAllButton } from "./SeeAllButton";
 
 type BucketKey = "overdue_60" | "overdue_30" | "current" | "paid";
 
@@ -106,10 +105,7 @@ export function DebtBuckets() {
           <CardTitle className="text-base font-semibold">حالة مدفوعات العملاء</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">لا تشمل بوالص الوسطاء · الحزم تُحتسب معاملة واحدة</p>
         </div>
-        <Button variant="ghost" size="sm" className="text-primary" onClick={handleSeeAll}>
-          {canDebt ? "عرض الكل" : <><Lock className="h-3.5 w-3.5 ml-1" /> الترقية</>}
-          {canDebt && <ChevronLeft className="mr-1 h-4 w-4" />}
-        </Button>
+        <SeeAllButton locked={!canDebt} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (

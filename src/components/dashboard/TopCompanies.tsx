@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, Lock, Building2 } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { PeriodRange } from "./PeriodPills";
+import { SeeAllButton } from "./SeeAllButton";
 
 interface Company {
   company_id: string;
@@ -90,10 +90,7 @@ export function TopCompanies({ range }: { range: PeriodRange }) {
           <Building2 className="h-5 w-5 text-primary" />
           <CardTitle className="text-base font-semibold">أفضل شركات التأمين</CardTitle>
         </div>
-        <Button variant="ghost" size="sm" className="text-primary" onClick={handleSeeAll}>
-          {canSettlement ? "عرض الكل" : <><Lock className="h-3.5 w-3.5 ml-1" /> الترقية</>}
-          {canSettlement && <ChevronLeft className="mr-1 h-4 w-4" />}
-        </Button>
+        <SeeAllButton locked={!canSettlement} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent className="space-y-3">
         {loading ? (
