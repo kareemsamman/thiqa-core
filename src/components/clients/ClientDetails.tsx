@@ -1765,8 +1765,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
               <Wallet className="h-4 w-4 sm:h-6 sm:w-6 text-success" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] sm:text-xs text-muted-foreground">إجمالي المدفوع</p>
-              <p className="text-sm sm:text-xl font-bold text-success tabular-nums break-words leading-tight">₪{paymentSummary.total_paid.toLocaleString()}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">إجمالي المدفوع</p>
+              <p className="text-sm sm:text-base lg:text-xl font-bold text-success tabular-nums whitespace-nowrap truncate leading-tight">₪{paymentSummary.total_paid.toLocaleString()}</p>
             </div>
           </Card>
 
@@ -1775,8 +1775,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
               <AlertCircle className="h-4 w-4 sm:h-6 sm:w-6 text-destructive" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] sm:text-xs text-muted-foreground">إجمالي المتبقي</p>
-              <p className={cn("text-sm sm:text-xl font-bold tabular-nums break-words leading-tight",
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">إجمالي المتبقي</p>
+              <p className={cn("text-sm sm:text-base lg:text-xl font-bold tabular-nums whitespace-nowrap truncate leading-tight",
                 (paymentSummary.total_remaining - walletBalance.total_refunds) > 0
                   ? "text-destructive"
                   : "text-success"
@@ -1790,11 +1790,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 </div>
               )}
             </div>
+            {/* DebtIndicator only shown from lg up; at sm/md the card
+                already competes with the remaining-amount number for
+                horizontal space and was forcing the digits to break
+                mid-number (₪1,3,00). */}
             <DebtIndicator
               totalOwed={paymentSummary.total_paid + paymentSummary.total_remaining}
               totalPaid={paymentSummary.total_paid + walletBalance.total_refunds}
               showAmount={false}
-              className="hidden sm:inline-flex"
+              className="hidden lg:inline-flex"
             />
           </Card>
 
@@ -1805,8 +1809,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 <TrendingUp className="h-4 w-4 sm:h-6 sm:w-6 text-primary" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] sm:text-xs text-muted-foreground">إجمالي الأرباح</p>
-                <p className="text-sm sm:text-xl font-bold text-primary tabular-nums break-words leading-tight">₪{paymentSummary.total_profit.toLocaleString()}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground truncate">إجمالي الأرباح</p>
+                <p className="text-sm sm:text-base lg:text-xl font-bold text-primary tabular-nums whitespace-nowrap truncate leading-tight">₪{paymentSummary.total_profit.toLocaleString()}</p>
               </div>
             </Card>
           )}
@@ -1818,8 +1822,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 <Banknote className="h-4 w-4 sm:h-6 sm:w-6 text-amber-600" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] sm:text-xs text-amber-700">مرتجع للعميل</p>
-                <p className="text-sm sm:text-xl font-bold text-amber-600 tabular-nums break-words leading-tight">₪{(walletBalance.total_refunds - paymentSummary.total_remaining).toLocaleString()}</p>
+                <p className="text-[10px] sm:text-xs text-amber-700 truncate">مرتجع للعميل</p>
+                <p className="text-sm sm:text-base lg:text-xl font-bold text-amber-600 tabular-nums whitespace-nowrap truncate leading-tight">₪{(walletBalance.total_refunds - paymentSummary.total_remaining).toLocaleString()}</p>
                 <p className="text-[9px] sm:text-[10px] text-amber-600/70 leading-tight">نحن مدينون للعميل بهذا المبلغ</p>
               </div>
             </Card>
