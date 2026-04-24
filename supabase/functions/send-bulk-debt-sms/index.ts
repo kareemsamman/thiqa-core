@@ -89,6 +89,12 @@ Deno.serve(async (req) => {
     // Parse request body
     // Resolve agent branding
     const agentId = await resolveAgentId(supabase, user.id);
+    if (!agentId) {
+      return new Response(
+        JSON.stringify({ error: "لا يوجد وكيل مرتبط بهذا الحساب" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const brandingData = await getAgentBranding(supabase, agentId);
 
     const { filter_days, search } = await req.json();

@@ -150,6 +150,12 @@ Deno.serve(async (req) => {
 
     // Get SMS credentials for this agent (with Thiqa platform fallback)
     const tempAgentId = await resolveAgentId(supabase, user.id);
+    if (!tempAgentId) {
+      return new Response(
+        JSON.stringify({ error: 'لا يوجد وكيل مرتبط بهذا الحساب' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     const smsSettings = await resolveSmsSettings(supabase, tempAgentId);
 
     if (!smsSettings) {
