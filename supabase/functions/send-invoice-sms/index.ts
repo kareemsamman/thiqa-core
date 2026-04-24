@@ -245,7 +245,7 @@ serve(async (req) => {
     const remaining = (policy.insurance_price || 0) - totalPaid;
 
     // Generate AB Invoice HTML and upload to Bunny CDN
-    const abInvoiceHtml = buildAbInvoiceHtml(policy, payments || [], paymentType, totalPaid, remaining, insuranceFiles || [], policyChildren || [], companySettings, branding);
+    const abInvoiceHtml = buildAbInvoiceHtml(policy, payments || [], paymentType, totalPaid, remaining, insuranceFiles || [], policyChildren || [], companySettings, branding, bunnyCdnUrl);
     
     const now = new Date();
     const year = now.getFullYear();
@@ -334,6 +334,14 @@ serve(async (req) => {
 
     // Append the shared agent footer (owner + phones).
     smsMessage = appendSmsFooter(smsMessage, branding);
+
+    // Re-assert (TS narrowing lost across the skip_sms early return above)
+    if (!smsSettingsData) {
+      return new Response(
+        JSON.stringify({ error: "خدمة الرسائل غير مفعلة" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const cleanPhone = normalizePhoneFor(smsSettingsData.provider, policy.client.phone_number);
 
@@ -433,7 +441,8 @@ function buildAbInvoiceHtml(
   policyFiles: { cdn_url: string; original_name: string; mime_type: string }[],
   policyChildren: any[] = [],
   companySettings: { company_email?: string; company_phones?: string[]; company_whatsapp?: string; company_location?: string },
-  branding: AgentBranding = DEFAULT_BRANDING
+  branding: AgentBranding = DEFAULT_BRANDING,
+  bunnyCdnUrl: string = ''
 ): string {
   const client = policy.client || {};
   const car = policy.car || {};
