@@ -15,8 +15,12 @@ export function BottomToolbar() {
   const location = useLocation();
   const { recentClient, clearRecentClient } = useRecentClient();
   const { openWizard } = usePolicyWizardController();
-  const { policies: policiesLimit } = useAgentLimits();
+  const { policies: policiesLimit, loading: limitsLoading } = useAgentLimits();
   const { showUpgradePrompt } = useUpgradePrompt();
+  // Render as locked until the real quota loads; otherwise the initial
+  // EMPTY state (exceeded=false) flashes the unlocked variant and a fast
+  // click opens the wizard before the gate catches up.
+  const policiesLocked = limitsLoading || policiesLimit.exceeded;
 
   const [isHovered, setIsHovered] = useState(false);
   const [isOverContent, setIsOverContent] = useState(false);
@@ -131,15 +135,18 @@ export function BottomToolbar() {
               When the agent is over the cap the button flips to an amber
               locked variant that opens the upgrade popup instead of
               launching the wizard. */}
-          {policiesLimit.exceeded ? (
+          {policiesLocked ? (
             <Button
-              onClick={() =>
+              onClick={() => {
+                // Swallow clicks during the hydration flash — once limits
+                // resolve we either stay locked (show upgrade) or unlock.
+                if (limitsLoading) return;
                 showUpgradePrompt({
                   resource: "policies",
                   current: policiesLimit.used,
                   limit: policiesLimit.effective ?? 0,
-                })
-              }
+                });
+              }}
               variant="outline"
               size="sm"
               className="rounded-full gap-2 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"

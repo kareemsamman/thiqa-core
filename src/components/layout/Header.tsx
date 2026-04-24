@@ -39,8 +39,14 @@ export function Header({ title, subtitle }: HeaderProps) {
   const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
   const { openWizard } = usePolicyWizardController();
   const { recentClient } = useRecentClient();
-  const { policies: policiesLimit } = useAgentLimits();
+  const { policies: policiesLimit, loading: limitsLoading } = useAgentLimits();
   const { showUpgradePrompt } = useUpgradePrompt();
+  // Treat "still loading" the same as "exceeded" so the button renders as
+  // locked until the real quota data arrives. Otherwise useAgentLimits's
+  // initial EMPTY state (exceeded=false) flashes the unlocked variant for a
+  // few hundred ms and the click handler lets the wizard through before the
+  // quota check kicks in — a trivial paywall bypass.
+  const policiesLocked = limitsLoading || policiesLimit.exceeded;
   const activeTabRef = useRef<HTMLButtonElement | null>(null);
 
   const isOnClientProfilePage = /^\/clients\/[^/]+/.test(location.pathname);
@@ -91,8 +97,11 @@ export function Header({ title, subtitle }: HeaderProps) {
     location.pathname === href || location.pathname.startsWith(href + "/");
 
   const openNewPolicy = useCallback(() => {
-    // Pre-flight: if the agent is over the policies quota for the
-    // current period, open the upgrade dialog instead of the wizard.
+    // Drop clicks during the hydration window — we don't know the quota
+    // yet, and opening the wizard speculatively is the bypass the lock is
+    // meant to prevent. The button also renders locked while `limitsLoading`
+    // so in practice this only catches a fast double-click on the flash.
+    if (limitsLoading) return;
     if (policiesLimit.exceeded) {
       showUpgradePrompt({
         resource: "policies",
@@ -104,7 +113,7 @@ export function Header({ title, subtitle }: HeaderProps) {
     openWizard({
       clientId: isOnClientProfilePage ? recentClient?.id : undefined,
     });
-  }, [openWizard, isOnClientProfilePage, recentClient?.id, policiesLimit, showUpgradePrompt]);
+  }, [openWizard, isOnClientProfilePage, recentClient?.id, limitsLoading, policiesLimit, showUpgradePrompt]);
 
   // Expose the header's "new policy" button to the global shortcut bus.
   // The listener in MainLayout routes the bound combo here; subscribing
@@ -184,7 +193,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             expandedInputClassName="w-[320px] sm:w-[320px]"
           />
 
-          {policiesLimit.exceeded ? (
+          {policiesLocked ? (
             <Button
               onClick={openNewPolicy}
               variant="outline"
@@ -244,7 +253,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             )}
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            {policiesLimit.exceeded ? (
+            {policiesLocked ? (
               <Button
                 onClick={openNewPolicy}
                 size="sm"

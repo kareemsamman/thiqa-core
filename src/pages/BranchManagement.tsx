@@ -35,7 +35,11 @@ export default function BranchManagement() {
   const { isAdmin } = useAuth();
   const { agentId } = useAgentContext();
   const { handleLimitError, showUpgradePrompt } = useUpgradePrompt();
-  const { branches: branchLimit, refetch: refetchLimits } = useAgentLimits();
+  const { branches: branchLimit, loading: limitsLoading, refetch: refetchLimits } = useAgentLimits();
+  // Render locked until the real quota loads — otherwise the initial
+  // exceeded=false default flashes the unlocked button and a fast click
+  // opens the sheet before the gate catches up.
+  const branchLocked = limitsLoading || branchLimit.exceeded;
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -209,17 +213,21 @@ export default function BranchManagement() {
       <div className="p-4 md:p-6 space-y-6" dir="rtl">
         {/* Toolbar */}
         <div className="flex items-center gap-2">
-          {branchLimit.exceeded ? (
+          {branchLocked ? (
             <Button
               size="sm"
               variant="outline"
-              onClick={() =>
+              onClick={() => {
+                // Swallow clicks during the hydration flash; once quota
+                // resolves we either stay locked and show upgrade, or
+                // re-render as the unlocked variant.
+                if (limitsLoading) return;
                 showUpgradePrompt({
                   resource: 'branches',
                   current: branchLimit.used,
                   limit: branchLimit.effective ?? 0,
-                })
-              }
+                });
+              }}
               className="gap-2 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
             >
               <Lock className="h-4 w-4" />
