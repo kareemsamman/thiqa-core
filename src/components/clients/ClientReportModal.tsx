@@ -38,6 +38,7 @@ import {
   Zap,
   Handshake,
 } from 'lucide-react';
+import { Lock } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
 import { parseFunctionError } from '@/lib/functionError';
 import { toast } from 'sonner';
@@ -434,7 +435,7 @@ export function ClientReportModal({
   branchName,
 }: ClientReportModalProps) {
   const { data: siteSettings } = useSiteSettings();
-  const { guardSend: guardSmsSend } = useSmsLock();
+  const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade, guardSend: guardSmsSend } = useSmsLock();
   const [sendingSms, setSendingSms] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
 
@@ -1449,10 +1450,20 @@ export function ClientReportModal({
             </button>
             <Button
               size="sm"
-              onClick={handleSendSms}
-              disabled={sendingSms || !client.phone_number}
-              className="gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
-              title={!client.phone_number ? 'لا يوجد رقم هاتف' : 'إرسال رابط التقرير للعميل'}
+              onClick={() => {
+                if (smsLoading) return;
+                if (smsLocked) { openSmsUpgrade(); return; }
+                handleSendSms();
+              }}
+              disabled={sendingSms || smsLoading || (!smsLocked && !client.phone_number)}
+              className="relative gap-1.5 bg-white/20 hover:bg-white/30 text-white border-0"
+              title={
+                smsLocked
+                  ? 'إرسال SMS غير متاح — اضغط للترقية'
+                  : !client.phone_number
+                  ? 'لا يوجد رقم هاتف'
+                  : 'إرسال رابط التقرير للعميل'
+              }
             >
               {sendingSms ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1460,6 +1471,11 @@ export function ClientReportModal({
                 <MessageSquare className="h-4 w-4" />
               )}
               <span className="hidden sm:inline">SMS</span>
+              {smsLocked && (
+                <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                  <Lock className="h-2.5 w-2.5" weight="fill" />
+                </span>
+              )}
             </Button>
             <Button
               size="sm"
