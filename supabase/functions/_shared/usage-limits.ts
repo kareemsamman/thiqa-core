@@ -1,14 +1,16 @@
 /**
- * Shared usage-limits helper for SMS and AI chat.
+ * Shared usage-limits helper for SMS / marketing SMS / AI chat.
  *
- * Precedence when resolving a limit:
- *   1. row in `agent_usage_limits` for the agent (super-admin override)
- *   2. platform defaults in `thiqa_platform_settings` (default_sms_limit_*, default_ai_limit_*)
- *   3. hardcoded fallback: 100 / monthly
+ * Resolves the base monthly allowance from the same source the UI and the
+ * DB enforcement triggers use: `get_agent_effective_limit(agent_id, resource)`,
+ * which returns plan column + per-agent override + recurring addon quantity.
+ * That keeps the bar on /subscription and the edge-function enforcement in
+ * agreement — previously this file read from a separate `agent_usage_limits`
+ * table that was never kept in sync with the plan, so the server would allow
+ * sends well past the cap shown to the agent.
  *
- * Agents without an explicit row still get enforced at the platform default —
- * that way super-admins can leave defaults in place and only create per-agent
- * overrides when raising limits.
+ * Credits from `agent_credit_wallet` stack on top of the base allowance via
+ * `checkUsageLimit` below; they're never folded into `limit_count`.
  */
 
 export type UsageType = "sms" | "ai_chat" | "marketing_sms";
@@ -51,6 +53,13 @@ function periodLabel(limitType: LimitType): string {
 
 /**
  * Resolve the effective limit config for a given agent + usage type.
+ * Calls `get_agent_effective_limit(agent_id, resource)` — the same RPC the
+ * DB triggers use — so server enforcement agrees with the /subscription bar.
+ * NULL plan_limit (unlimited plan, or override = -1) maps to limit_type
+ * "unlimited". Recurring addons (extra_sms / extra_marketing_sms / extra_ai)
+ * are already folded into the RPC's addon_quantity, so they count toward
+ * the free base allowance — only once the combined bucket is drained does
+ * checkUsageLimit start pulling from the credit wallet.
  * Never throws — falls through to hardcoded defaults on any failure.
  */
 export async function resolveLimitConfig(
@@ -58,75 +67,28 @@ export async function resolveLimitConfig(
   agentId: string,
   usageType: UsageType,
 ): Promise<LimitConfig> {
-  // 1. Per-agent override
+  const resource = usageType === "ai_chat" ? "ai" : usageType;
   try {
-    const { data: agentLimits } = await supabase
-      .from("agent_usage_limits")
-      .select(
-        "sms_limit_type, sms_limit_count, ai_limit_type, ai_limit_count, marketing_sms_limit_type, marketing_sms_limit_count",
-      )
-      .eq("agent_id", agentId)
-      .maybeSingle();
-
-    if (agentLimits) {
-      if (usageType === "sms" && agentLimits.sms_limit_type) {
-        return {
-          limit_type: agentLimits.sms_limit_type as LimitType,
-          limit_count: agentLimits.sms_limit_count ?? 0,
-        };
-      }
-      if (usageType === "ai_chat" && agentLimits.ai_limit_type) {
-        return {
-          limit_type: agentLimits.ai_limit_type as LimitType,
-          limit_count: agentLimits.ai_limit_count ?? 0,
-        };
-      }
-      if (usageType === "marketing_sms" && agentLimits.marketing_sms_limit_type) {
-        return {
-          limit_type: agentLimits.marketing_sms_limit_type as LimitType,
-          limit_count: agentLimits.marketing_sms_limit_count ?? 0,
-        };
-      }
-    }
-  } catch (err) {
-    console.warn("[usage-limits] agent_usage_limits lookup failed:", err);
-  }
-
-  // 2. Platform defaults
-  try {
-    const typeKey =
-      usageType === "sms"
-        ? "default_sms_limit_type"
-        : usageType === "marketing_sms"
-        ? "default_marketing_sms_limit_type"
-        : "default_ai_limit_type";
-    const countKey =
-      usageType === "sms"
-        ? "default_sms_limit_count"
-        : usageType === "marketing_sms"
-        ? "default_marketing_sms_limit_count"
-        : "default_ai_limit_count";
-    const { data: rows } = await supabase
-      .from("thiqa_platform_settings")
-      .select("setting_key, setting_value")
-      .in("setting_key", [typeKey, countKey]);
-
-    const map: Record<string, string> = {};
-    (rows || []).forEach((r: any) => {
-      map[r.setting_key] = r.setting_value || "";
+    const { data, error } = await supabase.rpc("get_agent_effective_limit", {
+      p_agent_id: agentId,
+      p_resource: resource,
     });
-
-    const limit_type = (map[typeKey] || HARDCODED_DEFAULT.limit_type) as LimitType;
-    const limit_count = parseInt(map[countKey] || String(HARDCODED_DEFAULT.limit_count), 10);
-    if (!Number.isFinite(limit_count)) {
-      return HARDCODED_DEFAULT;
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row) {
+      // plan_limit NULL = unlimited (plan column NULL, or override -1).
+      if (row.plan_limit === null || row.plan_limit === undefined) {
+        return { limit_type: "unlimited", limit_count: 0 };
+      }
+      const planLimit = Number(row.plan_limit);
+      const addonQty = Number(row.addon_quantity ?? 0);
+      const limit_count = planLimit + addonQty;
+      if (!Number.isFinite(limit_count)) return HARDCODED_DEFAULT;
+      return { limit_type: "monthly", limit_count };
     }
-    return { limit_type, limit_count };
   } catch (err) {
-    console.warn("[usage-limits] thiqa_platform_settings lookup failed:", err);
+    console.warn("[usage-limits] get_agent_effective_limit failed:", err);
   }
-
-  // 3. Hardcoded fallback
   return HARDCODED_DEFAULT;
 }
 
