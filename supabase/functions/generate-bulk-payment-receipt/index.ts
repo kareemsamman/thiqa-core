@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
-import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
+import { getAgentBranding, resolveAgentId, DEFAULT_BRANDING, type AgentBranding } from "../_shared/agent-branding.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
