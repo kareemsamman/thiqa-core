@@ -15,6 +15,7 @@ import { TasksMiniCard } from "@/components/dashboard/TasksMiniCard";
 import { NotificationsMiniCard } from "@/components/dashboard/NotificationsMiniCard";
 import { ActivityMiniCard } from "@/components/dashboard/ActivityMiniCard";
 import { QuickActions } from "@/components/dashboard/QuickActions";
+import { RecalcProfitsButton } from "@/components/dashboard/RecalcProfitsButton";
 
 export default function Dashboard() {
   const { profile } = useAuth();
@@ -74,8 +75,9 @@ export default function Dashboard() {
         </div>
 
         {/* Quick actions strip */}
-        <div className="rounded-2xl border bg-card/50 p-4">
+        <div className="rounded-2xl border bg-card/50 p-4 flex items-center justify-between gap-4 flex-wrap">
           <QuickActions />
+          {canViewFinancial && <RecalcProfitsButton />}
         </div>
       </div>
     </MainLayout>

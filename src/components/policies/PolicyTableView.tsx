@@ -2,8 +2,9 @@ import { useState, useMemo, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { FileText } from 'lucide-react';
+import { FileText, ArrowLeft } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   Table,
   TableBody,
@@ -54,6 +55,8 @@ export function PolicyTableView({
   onPolicyClick,
   searchQuery = '',
 }: PolicyTableViewProps) {
+  const { can } = usePermissions();
+  const canViewFinancial = can('view_financial');
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo>({});
   const [loadingPayments, setLoadingPayments] = useState(true);
 
@@ -211,6 +214,21 @@ export function PolicyTableView({
     return { totalPrice, totalPaid, remaining, isPaid };
   };
 
+  const getPackageProfit = (group: PolicyGroup) => {
+    const allPolicyIds = [
+      ...(group.mainPolicy ? [group.mainPolicy.id] : []),
+      ...group.addons.map((a) => a.id),
+    ];
+    let total = 0;
+    allPolicyIds.forEach((id) => {
+      const policy = filteredPolicies.find((p) => p.id === id);
+      if (policy && policy.policy_type_parent !== 'ELZAMI') {
+        total += Number(policy.profit) || 0;
+      }
+    });
+    return total;
+  };
+
   // Get insurance lines with company names and service subtypes for multi-line display
   const getInsuranceLines = (group: PolicyGroup) => {
     const allPolicies = [
@@ -326,6 +344,9 @@ export function PolicyTableView({
               <TableHead className="w-[100px]">السيارة</TableHead>
               <TableHead className="min-w-[170px]">الفترة</TableHead>
               <TableHead className="w-[80px]">الإجمالي</TableHead>
+              {canViewFinancial && (
+                <TableHead className="w-[80px]">الربح</TableHead>
+              )}
               <TableHead className="w-[120px]">أنشأها</TableHead>
               <TableHead className="w-[80px] text-center">الحالة</TableHead>
               <TableHead className="min-w-[130px] text-center">الدفع</TableHead>
@@ -399,13 +420,20 @@ export function PolicyTableView({
                     {carNumber}
                   </TableCell>
 
-                  {/* Date ranges - start date first, then end date */}
+                  {/* Date ranges - start date first, then end date. Uses an
+                      SVG arrow instead of a unicode char so RTL bidi
+                      doesn't mirror it, and a soft pill background so the
+                      pair reads as one date range, not two loose numbers. */}
                   <TableCell>
-                    <div className="flex flex-col gap-0.5 text-xs">
+                    <div className="flex flex-col gap-1 text-xs">
                       {dateRanges.map((range, idx) => (
-                        <div key={idx} className="whitespace-nowrap">
-                          <span>{range.start}</span>
-                          <span className="text-muted-foreground"> ← {range.end}</span>
+                        <div
+                          key={idx}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 w-fit whitespace-nowrap ltr-nums"
+                        >
+                          <span className="font-medium">{range.start}</span>
+                          <ArrowLeft className="h-3 w-3 text-muted-foreground shrink-0" />
+                          <span className="text-muted-foreground">{range.end}</span>
                         </div>
                       ))}
                     </div>
@@ -415,6 +443,17 @@ export function PolicyTableView({
                   <TableCell className="font-bold">
                     {formatCurrency(paymentStatus.totalPrice)}
                   </TableCell>
+
+                  {/* Profit (view_financial only) */}
+                  {canViewFinancial && (() => {
+                    const profit = getPackageProfit(group);
+                    const tone = profit > 0 ? 'text-success' : profit < 0 ? 'text-destructive' : 'text-muted-foreground';
+                    return (
+                      <TableCell className={`font-semibold ${tone}`}>
+                        {formatCurrency(profit)}
+                      </TableCell>
+                    );
+                  })()}
 
                   {/* Created by with timestamp */}
                   <TableCell>
