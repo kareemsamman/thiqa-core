@@ -144,7 +144,7 @@ const statusLabels: Record<string, { label: string; variant: "default" | "second
 export default function Cheques() {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { locked: smsLocked, openUpgradeDialog: openSmsUpgrade, guardSend: guardSmsSend } = useSmsLock();
+  const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade, guardSend: guardSmsSend } = useSmsLock();
   const [cheques, setCheques] = useState<ChequeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1035,7 +1035,12 @@ export default function Cheques() {
                     تغيير رقم الشيك
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => (smsLocked ? openSmsUpgrade() : openSmsDialog(cheque))}
+                    disabled={smsLoading}
+                    onClick={() => {
+                      if (smsLoading) return;
+                      if (smsLocked) { openSmsUpgrade(); return; }
+                      openSmsDialog(cheque);
+                    }}
                   >
                     {smsLocked ? (
                       <span className="h-4 w-4 ml-2 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">

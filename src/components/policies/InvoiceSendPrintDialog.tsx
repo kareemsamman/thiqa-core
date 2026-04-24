@@ -30,7 +30,7 @@ export function InvoiceSendPrintDialog({
   clientPhone,
 }: InvoiceSendPrintDialogProps) {
   const [sendingType, setSendingType] = useState<"sms" | "print" | null>(null);
-  const { locked: smsLocked, openUpgradeDialog: openSmsUpgrade } = useSmsLock();
+  const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade } = useSmsLock();
 
   const handleSendSms = async () => {
     setSendingType("sms");
@@ -115,8 +115,12 @@ export function InvoiceSendPrintDialog({
           {/* Send SMS Option */}
           <button
             className="relative w-full p-4 rounded-xl border-2 border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 text-right flex items-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={smsLocked ? openSmsUpgrade : handleSendSms}
-            disabled={isSending}
+            onClick={() => {
+              if (smsLoading) return;
+              if (smsLocked) { openSmsUpgrade(); return; }
+              handleSendSms();
+            }}
+            disabled={isSending || smsLoading}
           >
             <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
               {sendingType === "sms" ? (

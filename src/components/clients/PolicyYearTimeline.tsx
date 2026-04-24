@@ -1148,7 +1148,7 @@ function PolicyPackageCard({
   onSaveNotes?: (policyId: string) => void;
   onPoliciesUpdate?: () => void;
 }) {
-  const { locked: smsLocked, openUpgradeDialog: openSmsUpgrade } = useSmsLock();
+  const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade } = useSmsLock();
   const policy = pkg.mainPolicy || pkg.addons[0];
   if (!policy) return null;
 
@@ -1490,10 +1490,10 @@ function PolicyPackageCard({
                   variant="ghost"
                   size="sm"
                   className="relative h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
-                  disabled={invoiceBusy !== null || (!smsLocked && !clientPhone)}
+                  disabled={invoiceBusy !== null || smsLoading || (!smsLocked && !clientPhone)}
                   onClick={async (e) => {
                     e.stopPropagation();
-                    if (invoiceBusy) return;
+                    if (invoiceBusy || smsLoading) return;
                     if (smsLocked) {
                       openSmsUpgrade();
                       return;

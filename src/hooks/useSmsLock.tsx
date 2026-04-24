@@ -4,15 +4,22 @@ import { useAgentLimits } from './useAgentLimits';
 import { useUpgradePrompt } from '@/components/pricing/UpgradePromptProvider';
 import { toast } from 'sonner';
 
-// Central gate for "send SMS" buttons across the agent app. Returns
-// whether the button should render as locked + an onClick handler that
-// opens the right upgrade dialog variant:
-//   * feature off on this plan          → feature-lock dialog
-//   * feature on but monthly quota gone → quota-lock dialog
-// Thiqa super admins always pass. While plan data is loading we treat
-// as locked so the button can't be clicked through during the flash
-// window — same guard pattern used by LockedBranchSelect and the
-// notifications bell.
+// Central gate for "send SMS" buttons across the agent app. Returns:
+//   * locked  → true only once the feature/quota check has resolved AND
+//               the agent is definitively blocked (feature off or monthly
+//               quota exhausted). Drives the lock badge / amber styling.
+//               Deliberately false during hydration so we don't flash a
+//               false "plan exceeded" on agents who aren't actually over.
+//   * loading → still resolving plan + limits. Bind to <Button disabled>
+//               so the flash window can't be clicked through. Clicks that
+//               somehow fire are also stopped inside guardSend.
+//   * openUpgradeDialog → opens the right upgrade dialog variant:
+//                           feature off → feature-lock dialog
+//                           quota gone  → quota-lock dialog
+//   * guardSend → call at the top of every send handler; returns false if
+//                 the send should be blocked (silently during hydration,
+//                 with a dialog/toast when truly locked).
+// Thiqa super admins always pass (locked=false, loading=false).
 export function useSmsLock() {
   const { hasFeature, isThiqaSuperAdmin, loading: contextLoading } =
     useAgentContext();
@@ -23,7 +30,8 @@ export function useSmsLock() {
   const featureOff = !hasFeature('sms');
   const quotaGone = sms.exceeded;
   const locked =
-    !isThiqaSuperAdmin && (stillLoading || featureOff || quotaGone);
+    !isThiqaSuperAdmin && !stillLoading && (featureOff || quotaGone);
+  const loading = !isThiqaSuperAdmin && stillLoading;
 
   const openUpgradeDialog = useCallback(() => {
     if (featureOff) {
@@ -43,9 +51,12 @@ export function useSmsLock() {
   //   * visible click (mode='click')    → open upgrade dialog
   //   * auto-fire flow (mode='auto')    → toast a brief note and skip
   //   * fully silent (mode='silent')    → no UI at all
-  // Super admin always passes.
+  // Hydration window drops the click silently in every mode — the
+  // disabled prop should already block it, this is defense in depth.
   const guardSend = useCallback(
     (mode: 'click' | 'auto' | 'silent' = 'click'): boolean => {
+      if (isThiqaSuperAdmin) return true;
+      if (stillLoading) return false;
       if (!locked) return true;
       if (mode === 'click') {
         openUpgradeDialog();
@@ -58,8 +69,8 @@ export function useSmsLock() {
       }
       return false;
     },
-    [locked, featureOff, openUpgradeDialog],
+    [isThiqaSuperAdmin, stillLoading, locked, featureOff, openUpgradeDialog],
   );
 
-  return { locked, openUpgradeDialog, guardSend };
+  return { locked, loading, openUpgradeDialog, guardSend };
 }

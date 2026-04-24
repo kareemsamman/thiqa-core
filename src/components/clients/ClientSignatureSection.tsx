@@ -26,7 +26,7 @@ export function ClientSignatureSection({
   onSignatureSent,
 }: ClientSignatureSectionProps) {
   const { toast } = useToast();
-  const { locked: smsLocked, guardSend: guardSmsSend } = useSmsLock();
+  const { locked: smsLocked, loading: smsLoading, guardSend: guardSmsSend } = useSmsLock();
   const [sending, setSending] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -140,7 +140,7 @@ export function ClientSignatureSection({
               <Button
                 size="sm"
                 onClick={handleSendSignatureRequest}
-                disabled={sending || (!smsLocked && !phoneNumber)}
+                disabled={sending || smsLoading || (!smsLocked && !phoneNumber)}
                 className="relative w-full gap-2"
               >
                 {sending ? (
