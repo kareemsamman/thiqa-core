@@ -227,11 +227,15 @@ export function Header({ title, subtitle }: HeaderProps) {
               {/* dropdownMatchWidth makes the results panel match the
                   input's own width; the BottomToolbarInlineSearch
                   already renders its own rounded/shadow glass shell,
-                  so the popover wrapper itself stays invisible. */}
+                  so the popover wrapper itself stays invisible. The
+                  inline component's default input class includes
+                  `sm:w-[200px]` which would win over a plain `w-full`
+                  at sm+ viewports, so we pin both base and sm widths
+                  to 369px to match the popover exactly. */}
               <BottomToolbarInlineSearch
                 direction="down"
                 dropdownMatchWidth
-                inputClassName="h-11 w-full bg-white border-border/60 shadow-md"
+                inputClassName="h-11 w-[369px] sm:w-[369px] bg-white border-border/60 shadow-md"
               />
             </PopoverContent>
 
