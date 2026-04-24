@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { buildBunnyStorageUploadUrl, normalizeBunnyCdnUrl, resolveBunnyStorageZone } from "../_shared/bunny-storage.ts";
-import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
+import { getAgentBranding, resolveAgentId, DEFAULT_BRANDING, type AgentBranding } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
@@ -342,7 +342,7 @@ function buildSignaturePageHtml(
   expiresAt: string | null,
   template: TemplateContent,
   supabaseUrl: string,
-  branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' }
+  branding: AgentBranding = DEFAULT_BRANDING
 ): string {
   const expiryText = expiresAt ? formatDate(expiresAt) : '';
 

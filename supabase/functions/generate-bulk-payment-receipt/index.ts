@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
-import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
+import { getAgentBranding, resolveAgentId, DEFAULT_BRANDING, type AgentBranding } from "../_shared/agent-branding.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -150,7 +150,7 @@ function buildBulkReceiptHtml(
   _paymentDate: string,
   _paymentType: string,
   companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string },
-  branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' } as AgentBranding,
+  branding: AgentBranding = DEFAULT_BRANDING,
 ): string {
   const today = new Date();
   // Pick the package's representative document_number the same way the

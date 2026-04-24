@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { buildBunnyStorageUploadUrl, normalizeBunnyCdnUrl, resolveBunnyStorageZone } from "../_shared/bunny-storage.ts";
-import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
+import { getAgentBranding, resolveAgentId, DEFAULT_BRANDING, type AgentBranding } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
 import { sendSms, normalizePhoneFor } from "../_shared/sms-sender.ts";
@@ -245,7 +245,7 @@ serve(async (req) => {
     const remaining = (policy.insurance_price || 0) - totalPaid;
 
     // Generate AB Invoice HTML and upload to Bunny CDN
-    const abInvoiceHtml = buildAbInvoiceHtml(policy, payments || [], paymentType, totalPaid, remaining, insuranceFiles || [], policyChildren || [], companySettings, branding);
+    const abInvoiceHtml = buildAbInvoiceHtml(policy, payments || [], paymentType, totalPaid, remaining, insuranceFiles || [], policyChildren || [], companySettings, branding, bunnyCdnUrl);
     
     const now = new Date();
     const year = now.getFullYear();
@@ -334,6 +334,14 @@ serve(async (req) => {
 
     // Append the shared agent footer (owner + phones).
     smsMessage = appendSmsFooter(smsMessage, branding);
+
+    // Re-assert (TS narrowing lost across the skip_sms early return above)
+    if (!smsSettingsData) {
+      return new Response(
+        JSON.stringify({ error: "خدمة الرسائل غير مفعلة" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const cleanPhone = normalizePhoneFor(smsSettingsData.provider, policy.client.phone_number);
 
@@ -433,7 +441,8 @@ function buildAbInvoiceHtml(
   policyFiles: { cdn_url: string; original_name: string; mime_type: string }[],
   policyChildren: any[] = [],
   companySettings: { company_email?: string; company_phones?: string[]; company_whatsapp?: string; company_location?: string },
-  branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' }
+  branding: AgentBranding = DEFAULT_BRANDING,
+  bunnyCdnUrl: string = ''
 ): string {
   const client = policy.client || {};
   const car = policy.car || {};

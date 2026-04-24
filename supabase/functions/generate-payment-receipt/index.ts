@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { buildBunnyStorageUploadUrl, normalizeBunnyCdnUrl, resolveBunnyStorageZone } from "../_shared/bunny-storage.ts";
-import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
+import { getAgentBranding, resolveAgentId, DEFAULT_BRANDING, type AgentBranding } from "../_shared/agent-branding.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -144,7 +144,7 @@ function buildPaymentReceiptHtml(
   client: any,
   car: any,
   companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string },
-  branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' }
+  branding: AgentBranding = DEFAULT_BRANDING
 ): string {
   const paymentMethodLabel = paymentTypeLabel(payment);
   const policyDocumentNumber = policy?.document_number || policy?.policy_number || '—';

@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { buildBunnyStorageUploadUrl, normalizeBunnyCdnUrl, resolveBunnyStorageZone } from "../_shared/bunny-storage.ts";
-import { getAgentBranding, resolveAgentId, type AgentBranding } from "../_shared/agent-branding.ts";
+import { getAgentBranding, resolveAgentId, DEFAULT_BRANDING, type AgentBranding } from "../_shared/agent-branding.ts";
 import { appendSmsFooter } from "../_shared/sms-footer.ts";
 import { THIQA_LOGO_SVG } from "../_shared/thiqa-logo.ts";
 import { resolveSmsSettings } from "../_shared/sms-settings.ts";
@@ -410,7 +410,7 @@ serve(async (req) => {
     });
 
     // Generate Package Invoice HTML with files and policy children
-    const packageInvoiceHtml = buildPackageInvoiceHtml(policies, paymentsByPolicy, totalPrice, totalPaid, totalRemaining, insuranceFiles || [], policyChildren || [], companySettings, branding, cancellationInfo, transferNoteByNewPolicyId, transferAdjustmentByNewPolicyId);
+    const packageInvoiceHtml = buildPackageInvoiceHtml(policies, paymentsByPolicy, totalPrice, totalPaid, totalRemaining, insuranceFiles || [], policyChildren || [], companySettings, branding, cancellationInfo, transferNoteByNewPolicyId, transferAdjustmentByNewPolicyId, bunnyCdnUrl);
     
     const now = new Date();
     const year = now.getFullYear();
@@ -502,6 +502,14 @@ serve(async (req) => {
     smsMessage += `\n\nمعاملة التأمين: ${packageInvoiceUrl}`;
 
     smsMessage = appendSmsFooter(smsMessage, branding);
+
+    // Re-assert (TS narrowing was lost across earlier branches above)
+    if (!smsSettingsData) {
+      return new Response(
+        JSON.stringify({ error: "خدمة الرسائل غير مفعلة" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const cleanPhone = normalizePhoneFor(smsSettingsData.provider, client.phone_number);
 
@@ -601,10 +609,11 @@ function buildPackageInvoiceHtml(
   policyFiles: { cdn_url: string; original_name: string; mime_type: string; entity_id: string }[],
   policyChildren: any[] = [],
   companySettings: { company_email?: string; company_phones?: string[]; company_whatsapp?: string; company_location?: string },
-  branding: AgentBranding = { companyName: 'وكالة التأمين', companyNameEn: '', logoUrl: null, siteDescription: '' },
+  branding: AgentBranding = DEFAULT_BRANDING,
   cancellationInfo: { isCancelled: boolean; date: string; note: string; refundAmount: number } = { isCancelled: false, date: '', note: '', refundAmount: 0 },
   transferNoteByNewPolicyId: Record<string, string> = {},
-  transferAdjustmentByNewPolicyId: Record<string, { amount: number; adjustmentNote: string | null }> = {}
+  transferAdjustmentByNewPolicyId: Record<string, { amount: number; adjustmentNote: string | null }> = {},
+  bunnyCdnUrl: string = ''
 ): string {
   const client = policies[0]?.client || {};
   const today = new Date();
