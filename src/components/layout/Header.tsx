@@ -1,7 +1,8 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, FileText, Keyboard, Lock, Sparkles } from "lucide-react";
+import { Plus, FileText, Keyboard, Lock, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { NotificationsDropdown } from "./NotificationsDropdown";
 import { BottomToolbarInlineSearch } from "./BottomToolbarInlineSearch";
@@ -131,6 +132,14 @@ export function Header({ title, subtitle }: HeaderProps) {
     useCallback(() => setCheatsheetOpen((v) => !v), []),
   );
 
+  // Header search now opens as a popover below the icon and extends
+  // leftward (RTL `align="start"` == right edge of trigger) so the
+  // expanding input doesn't push the cluster around or overlap the
+  // center tabs. The underlying BottomToolbarInlineSearch stays the
+  // same component — here we just render it inside the popover in its
+  // always-expanded (non-collapsible) mode.
+  const [searchOpen, setSearchOpen] = useState(false);
+
   return (
     <>
       {/* Desktop header — tabs sit in an absolutely-centered nav so they
@@ -139,8 +148,11 @@ export function Header({ title, subtitle }: HeaderProps) {
           right, cluster on the left, both anchored to their respective
           ends by flex justify-between. */}
       <header className="hidden md:flex relative items-center justify-between sticky top-0 z-30 h-20 bg-background px-6 mb-6">
-        {/* Right: title + subtitle */}
-        <div className="min-w-0 flex-shrink overflow-hidden max-w-[28%]">
+        {/* Right: title + subtitle. The `border-l` puts a thin vertical
+            line at the title block's left edge — in RTL that reads as
+            a divider "after the logo", separating the page title from
+            the center-tabs zone the user is about to enter. */}
+        <div className="min-w-0 flex-shrink overflow-hidden max-w-[28%] border-l border-border/70 pl-4">
           <h1 className="text-xl font-semibold text-foreground truncate">{title}</h1>
           {subtitle && (
             <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
@@ -178,21 +190,43 @@ export function Header({ title, subtitle }: HeaderProps) {
           </div>
         </nav>
 
-        {/* Left: cluster — search grows on focus via expandedInputClassName,
-            and flex justify-between keeps the cluster anchored to the
-            header's left edge while it expands. */}
+        {/* Left: cluster — `justify-between` on the parent keeps it
+            anchored to the header's left edge. Search now lives inside
+            a popover so clicking the icon drops the input panel below
+            the cluster instead of expanding in place. */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <BottomToolbarInlineSearch
-            collapsible
-            direction="down"
-            dropdownMatchWidth
-            // Include the sm: variant so tailwind-merge fully replaces
-            // the component's default `sm:w-[200px]` — otherwise the
-            // base width silently loses at md+ screens and the input
-            // never actually grows.
-            inputClassName="h-11 w-[280px] sm:w-[280px] bg-secondary/70 border-transparent"
-            expandedInputClassName="w-[320px] sm:w-[320px]"
-          />
+          <Popover open={searchOpen} onOpenChange={setSearchOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(ICON_BUTTON_CLASS, "md:h-11 md:w-11")}
+                aria-label="بحث"
+                title="بحث"
+              >
+                <Search className="md:h-[18px] md:w-[18px] text-foreground" />
+              </Button>
+            </PopoverTrigger>
+            {/* align="start" in RTL = popover's right edge aligned with
+                trigger's right edge, extending leftward from there —
+                what the user asked for ("down and to the left"). */}
+            <PopoverContent
+              align="start"
+              side="bottom"
+              sideOffset={8}
+              className="w-[400px] p-0 bg-transparent border-0 shadow-none"
+            >
+              {/* dropdownMatchWidth makes the results panel match the
+                  input's own width; the BottomToolbarInlineSearch
+                  already renders its own rounded/shadow glass shell,
+                  so the popover wrapper itself stays invisible. */}
+              <BottomToolbarInlineSearch
+                direction="down"
+                dropdownMatchWidth
+                inputClassName="h-11 w-full bg-white border-border/60 shadow-md"
+              />
+            </PopoverContent>
+          </Popover>
 
           {policiesLocked ? (
             <Button
@@ -215,6 +249,12 @@ export function Header({ title, subtitle }: HeaderProps) {
               <span>معاملة جديدة</span>
             </Button>
           )}
+
+          {/* Thin vertical divider separating the primary search + "new
+              policy" action from the secondary utility icons (drafts,
+              keyboard, notifications) that follow — requested as a
+              visual break "before the icons" in the cluster. */}
+          <div className="h-7 w-px bg-border/70 mx-1" aria-hidden="true" />
 
           <HeaderDraftsButton />
 
