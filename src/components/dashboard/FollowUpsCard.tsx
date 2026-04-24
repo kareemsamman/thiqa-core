@@ -7,7 +7,7 @@ import { AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ExpiryBadge } from "@/components/shared/ExpiryBadge";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
-import { usePermissions } from "@/hooks/usePermissions";
+import { useAgentContext } from "@/hooks/useAgentContext";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { SeeAllButton } from "./SeeAllButton";
 
@@ -24,18 +24,18 @@ interface ExpiringPolicy {
 
 export function FollowUpsCard() {
   const navigate = useNavigate();
-  const { can } = usePermissions();
+  const { hasFeature } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
   const [policies, setPolicies] = useState<ExpiringPolicy[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const canReports = can("page.policy_reports");
+  const canRenewals = hasFeature("renewals");
   const handleSeeAll = () => {
-    if (canReports) {
+    if (canRenewals) {
       navigate("/reports/policies?tab=renewals");
     } else {
-      showUpgradePrompt({ featureKey: "policy_reports", featureLabel: "تقارير المعاملات" });
+      showUpgradePrompt({ featureKey: "renewals", featureLabel: "التجديدات" });
     }
   };
 
@@ -105,7 +105,7 @@ export function FollowUpsCard() {
             </Badge>
           )}
         </div>
-        <SeeAllButton locked={!canReports} onClick={handleSeeAll} />
+        <SeeAllButton locked={!canRenewals} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent className="space-y-2.5">
         {loading ? (

@@ -4,20 +4,18 @@ import { Plus, Lock, Search, Calculator } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { useAgentLimits } from "@/hooks/useAgentLimits";
-import { usePermissions } from "@/hooks/usePermissions";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
 
 export function QuickActions() {
   const navigate = useNavigate();
   const { openWizard } = usePolicyWizardController();
-  const { can } = usePermissions();
   const { hasFeature } = useAgentContext();
   const { policies: policiesLimit, loading: limitsLoading } = useAgentLimits();
   const { showUpgradePrompt } = useUpgradePrompt();
 
   const policiesLocked = !limitsLoading && policiesLimit.exceeded;
-  const canAccounting = can("page.accounting") && hasFeature("accounting");
+  const canAccounting = hasFeature("accounting");
 
   const onNewPolicy = () => {
     if (limitsLoading) return;

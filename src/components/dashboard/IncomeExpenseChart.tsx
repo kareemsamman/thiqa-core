@@ -5,9 +5,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { usePermissions } from "@/hooks/usePermissions";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { SeeAllButton } from "./SeeAllButton";
+import { PeriodRange, DashboardPeriod } from "./PeriodPills";
 
 interface Row {
   month: string;
@@ -18,14 +18,27 @@ interface Row {
 const INCOME_COLOR = "hsl(210 90% 55%)";
 const EXPENSE_COLOR = "hsl(25 95% 55%)";
 
-export function IncomeExpenseChart() {
+const PERIOD_LABEL: Record<DashboardPeriod, string> = {
+  today: "اليوم",
+  week: "هذا الأسبوع",
+  month: "هذا الشهر",
+};
+
+export function IncomeExpenseChart({
+  range,
+  period,
+}: {
+  range: PeriodRange;
+  period: DashboardPeriod;
+}) {
   const navigate = useNavigate();
-  const { can } = usePermissions();
   const { hasFeature } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
   const [rows, setRows] = useState<Row[]>([]);
+  const [totals, setTotals] = useState({ income: 0, expense: 0 });
   const [loading, setLoading] = useState(true);
 
+  // Monthly trend (always 6 months — it's a trend chart)
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -43,7 +56,7 @@ export function IncomeExpenseChart() {
           }))
         );
       } catch (e) {
-        console.error("Error loading income/expense:", e);
+        console.error("Error loading income/expense monthly:", e);
         if (!cancelled) setRows([]);
       } finally {
         if (!cancelled) setLoading(false);
@@ -52,7 +65,30 @@ export function IncomeExpenseChart() {
     return () => { cancelled = true; };
   }, []);
 
-  const canAccounting = can("page.accounting") && hasFeature("accounting");
+  // Period-scoped totals (track the period pill)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await (supabase.rpc as any)("dashboard_income_expense_totals", {
+          p_start_date: range.start,
+          p_end_date: range.end,
+        });
+        if (error) throw error;
+        if (cancelled) return;
+        const row = Array.isArray(data) ? data[0] : data;
+        setTotals({
+          income: Number(row?.income ?? 0),
+          expense: Number(row?.expense ?? 0),
+        });
+      } catch (e) {
+        console.error("Error loading income/expense totals:", e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [range.start, range.end]);
+
+  const canAccounting = hasFeature("accounting");
 
   const handleSeeAll = () => {
     if (canAccounting) {
@@ -65,17 +101,14 @@ export function IncomeExpenseChart() {
     }
   };
 
-  const totals = rows.reduce(
-    (acc, r) => ({ income: acc.income + r.income, expense: acc.expense + r.expense }),
-    { income: 0, expense: 0 }
-  );
-
   return (
     <Card className="rounded-2xl border shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <div>
           <CardTitle className="text-base font-semibold">الإيرادات مقابل المصروفات</CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">آخر 6 أشهر</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            الأرقام تعكس {PERIOD_LABEL[period]} · الرسم يعرض آخر 6 أشهر
+          </p>
         </div>
         <SeeAllButton locked={!canAccounting} onClick={handleSeeAll} />
       </CardHeader>

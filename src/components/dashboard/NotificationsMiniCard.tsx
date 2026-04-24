@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { usePermissions } from "@/hooks/usePermissions";
+import { useAgentContext } from "@/hooks/useAgentContext";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { SeeAllButton } from "./SeeAllButton";
+import { PeriodRange } from "./PeriodPills";
 
 interface Notif {
   id: string;
@@ -34,16 +35,16 @@ function formatAgo(iso: string) {
   }
 }
 
-export function NotificationsMiniCard() {
+export function NotificationsMiniCard({ range }: { range: PeriodRange }) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { can } = usePermissions();
+  const { hasFeature } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [unreadTotal, setUnreadTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const canNotifications = can("page.notifications");
+  const canNotifications = hasFeature("notifications");
 
   const handleSeeAll = () => {
     if (canNotifications) {
@@ -59,20 +60,27 @@ export function NotificationsMiniCard() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+    setLoading(true);
     const load = async () => {
       try {
+        // Period end inclusive: cover full day
+        const endInclusive = `${range.end}T23:59:59.999Z`;
         const [listRes, countRes] = await Promise.all([
           supabase
             .from("notifications")
             .select("id, title, message, link, is_read, created_at")
             .eq("user_id", user.id)
+            .gte("created_at", range.start)
+            .lte("created_at", endInclusive)
             .order("created_at", { ascending: false })
             .limit(3),
           supabase
             .from("notifications")
             .select("id", { count: "exact", head: true })
             .eq("user_id", user.id)
-            .eq("is_read", false),
+            .eq("is_read", false)
+            .gte("created_at", range.start)
+            .lte("created_at", endInclusive),
         ]);
         if (cancelled) return;
         if (listRes.error) throw listRes.error;
@@ -97,7 +105,7 @@ export function NotificationsMiniCard() {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user?.id, range.start, range.end]);
 
   return (
     <Card className="rounded-2xl border shadow-sm">
@@ -124,14 +132,14 @@ export function NotificationsMiniCard() {
             <Skeleton key={i} className="h-16 w-full rounded-xl" />
           ))
         ) : notifs.length === 0 ? (
-          <div className="text-center py-6 text-sm text-muted-foreground">لا توجد تنبيهات</div>
+          <div className="text-center py-6 text-sm text-muted-foreground">لا توجد تنبيهات في هذه الفترة</div>
         ) : (
           notifs.map((n) => (
             <div
               key={n.id}
               className="group flex items-center justify-between gap-3 rounded-xl border border-border/40 bg-secondary/30 p-3 transition-colors hover:bg-secondary/60 cursor-pointer"
               onClick={() => {
-                if (n.link) navigate(n.link);
+                if (n.link && canNotifications) navigate(n.link);
                 else handleSeeAll();
               }}
             >

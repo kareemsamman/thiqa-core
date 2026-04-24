@@ -5,9 +5,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { History, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
-import { usePermissions } from "@/hooks/usePermissions";
+import { useAgentContext } from "@/hooks/useAgentContext";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { SeeAllButton } from "./SeeAllButton";
+import { PeriodRange } from "./PeriodPills";
 
 interface Item {
   id: string;
@@ -34,26 +35,32 @@ function formatAgo(iso: string) {
   }
 }
 
-export function ActivityMiniCard() {
+export function ActivityMiniCard({ range }: { range: PeriodRange }) {
   const navigate = useNavigate();
-  const { can } = usePermissions();
+  const { hasFeature } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const canActivity = can("page.activity");
+  // No dedicated `activity` feature in the plan catalog; the /activity
+  // route is permission-only. Gate by `dashboard` so the lock flips
+  // for plans that don't include the main dashboard module — which is
+  // the only realistic scenario where an agent couldn't reach it.
+  const canActivity = hasFeature("dashboard");
   const handleSeeAll = () => {
     if (canActivity) {
       navigate("/activity");
     } else {
-      showUpgradePrompt({ featureKey: "activity", featureLabel: "سجل النشاط" });
+      showUpgradePrompt({ featureKey: "dashboard", featureLabel: "سجل النشاط" });
     }
   };
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     const load = async () => {
       try {
+        const endInclusive = `${range.end}T23:59:59.999Z`;
         const { data, error } = await supabase
           .from("policies")
           .select(
@@ -62,6 +69,8 @@ export function ActivityMiniCard() {
              company:insurance_companies(name, name_ar)`
           )
           .is("deleted_at", null)
+          .gte("created_at", range.start)
+          .lte("created_at", endInclusive)
           .order("created_at", { ascending: false })
           .limit(3);
         if (error) throw error;
@@ -79,13 +88,15 @@ export function ActivityMiniCard() {
       cancelled = true;
       window.removeEventListener("thiqa:policy-created", handler);
     };
-  }, []);
+  }, [range.start, range.end]);
 
   return (
     <Card className="rounded-2xl border shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <div className="flex items-center gap-2">
-          <History className="h-5 w-5 text-success" />
+          <div className="rounded-lg bg-success/10 p-1.5">
+            <History className="h-4 w-4 text-success" />
+          </div>
           <CardTitle className="text-base font-semibold">آخر النشاطات</CardTitle>
         </div>
         <SeeAllButton locked={!canActivity} onClick={handleSeeAll} />
@@ -94,13 +105,13 @@ export function ActivityMiniCard() {
         {loading ? (
           Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)
         ) : items.length === 0 ? (
-          <div className="text-center py-6 text-sm text-muted-foreground">لا توجد نشاطات حديثة</div>
+          <div className="text-center py-6 text-sm text-muted-foreground">لا توجد نشاطات في هذه الفترة</div>
         ) : (
           items.map((it) => (
             <div
               key={it.id}
               className="flex items-center gap-3 rounded-lg bg-secondary/40 p-2.5 hover:bg-secondary cursor-pointer transition-colors"
-              onClick={() => navigate("/policies")}
+              onClick={handleSeeAll}
             >
               <div className="rounded-lg bg-success/10 p-2 shrink-0">
                 <FileText className="h-4 w-4 text-success" />

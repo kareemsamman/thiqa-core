@@ -7,9 +7,9 @@ import { CheckSquare, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { usePermissions } from "@/hooks/usePermissions";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { SeeAllButton } from "./SeeAllButton";
+import { PeriodRange } from "./PeriodPills";
 
 interface Task {
   id: string;
@@ -35,10 +35,9 @@ function formatDate(d: string) {
   }
 }
 
-export function TasksMiniCard() {
+export function TasksMiniCard({ range }: { range: PeriodRange }) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { can } = usePermissions();
   const { hasFeature } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -47,6 +46,7 @@ export function TasksMiniCard() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+    setLoading(true);
     (async () => {
       try {
         const { data, error } = await supabase
@@ -54,6 +54,8 @@ export function TasksMiniCard() {
           .select("id, title, due_date, due_time")
           .eq("assigned_to", user.id)
           .eq("status", "pending")
+          .gte("due_date", range.start)
+          .lte("due_date", range.end)
           .order("due_date", { ascending: true })
           .order("due_time", { ascending: true })
           .limit(3);
@@ -66,9 +68,9 @@ export function TasksMiniCard() {
       }
     })();
     return () => { cancelled = true; };
-  }, [user?.id]);
+  }, [user?.id, range.start, range.end]);
 
-  const canTasks = can("page.tasks") && hasFeature("tasks");
+  const canTasks = hasFeature("tasks");
 
   const handleSeeAll = () => {
     if (canTasks) {
@@ -82,7 +84,9 @@ export function TasksMiniCard() {
     <Card className="rounded-2xl border shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <div className="flex items-center gap-2">
-          <CheckSquare className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <div className="rounded-lg bg-blue-500/10 p-1.5">
+            <CheckSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          </div>
           <CardTitle className="text-base font-semibold">مهامي</CardTitle>
         </div>
         <SeeAllButton locked={!canTasks} onClick={handleSeeAll} />
@@ -91,7 +95,7 @@ export function TasksMiniCard() {
         {loading ? (
           Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)
         ) : tasks.length === 0 ? (
-          <div className="text-center py-6 text-sm text-muted-foreground">لا توجد مهام معلقة</div>
+          <div className="text-center py-6 text-sm text-muted-foreground">لا توجد مهام في هذه الفترة</div>
         ) : (
           tasks.map((t) => (
             <div

@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
-import { usePermissions } from "@/hooks/usePermissions";
-import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
-import { SeeAllButton } from "./SeeAllButton";
+import { PeriodRange } from "./PeriodPills";
 
 interface Overview {
   active_count: number;
@@ -22,27 +19,19 @@ const COLORS = {
   cancelled: "hsl(220 9% 65%)",
 };
 
-export function PoliciesDonut() {
-  const navigate = useNavigate();
-  const { can } = usePermissions();
-  const { showUpgradePrompt } = useUpgradePrompt();
+export function PoliciesDonut({ range }: { range: PeriodRange }) {
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const canPolicies = can("page.policies");
-  const handleSeeAll = () => {
-    if (canPolicies) {
-      navigate("/policies");
-    } else {
-      showUpgradePrompt({ featureKey: "policies", featureLabel: "البوالص" });
-    }
-  };
-
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     (async () => {
       try {
-        const { data: rows, error } = await (supabase.rpc as any)("dashboard_policies_overview");
+        const { data: rows, error } = await (supabase.rpc as any)(
+          "dashboard_policies_overview_range",
+          { p_start_date: range.start, p_end_date: range.end }
+        );
         if (error) throw error;
         if (cancelled) return;
         const row = Array.isArray(rows) ? rows[0] : rows;
@@ -60,7 +49,7 @@ export function PoliciesDonut() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [range.start, range.end]);
 
   const chartData = [
     { name: "سارية", value: data?.active_count ?? 0, color: COLORS.active },
@@ -73,9 +62,8 @@ export function PoliciesDonut() {
 
   return (
     <Card className="rounded-2xl border shadow-sm">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
+      <CardHeader className="pb-2">
         <CardTitle className="text-base font-semibold">نظرة عامة على المعاملات</CardTitle>
-        <SeeAllButton locked={!canPolicies} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent>
         <div className="h-[180px] relative">

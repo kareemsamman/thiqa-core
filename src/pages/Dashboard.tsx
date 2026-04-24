@@ -47,18 +47,18 @@ export default function Dashboard() {
         {canViewFinancial ? (
           <div className="grid gap-4 grid-cols-1 xl:grid-cols-3">
             <div className="xl:col-span-2">
-              <IncomeExpenseChart />
+              <IncomeExpenseChart range={range} period={period} />
             </div>
             <div>
-              <PoliciesDonut />
+              <PoliciesDonut range={range} />
             </div>
           </div>
         ) : (
-          <PoliciesDonut />
+          <PoliciesDonut range={range} />
         )}
 
         {/* Client debt buckets — full width */}
-        {canViewFinancial && <DebtBuckets />}
+        {canViewFinancial && <DebtBuckets range={range} />}
 
         {/* Top companies + Follow-ups */}
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
@@ -68,9 +68,9 @@ export default function Dashboard() {
 
         {/* Mini cards — tasks, notifications, activity */}
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
-          <TasksMiniCard />
-          <NotificationsMiniCard />
-          <ActivityMiniCard />
+          <TasksMiniCard range={range} />
+          <NotificationsMiniCard range={range} />
+          <ActivityMiniCard range={range} />
         </div>
 
         {/* Quick actions strip */}

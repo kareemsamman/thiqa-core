@@ -5,7 +5,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { usePermissions } from "@/hooks/usePermissions";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { PeriodRange } from "./PeriodPills";
 import { SeeAllButton } from "./SeeAllButton";
@@ -14,7 +13,7 @@ interface Company {
   company_id: string;
   company_name: string;
   tx_count: number;
-  total_amount: number;
+  total_profit: number;
 }
 
 const BAR_COLORS = [
@@ -27,7 +26,6 @@ const BAR_COLORS = [
 
 export function TopCompanies({ range }: { range: PeriodRange }) {
   const navigate = useNavigate();
-  const { can } = usePermissions();
   const { hasFeature } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
   const [rows, setRows] = useState<Company[]>([]);
@@ -50,7 +48,7 @@ export function TopCompanies({ range }: { range: PeriodRange }) {
             company_id: r.company_id,
             company_name: r.company_name,
             tx_count: Number(r.tx_count ?? 0),
-            total_amount: Number(r.total_amount ?? 0),
+            total_profit: Number(r.total_profit ?? 0),
           }))
         );
       } catch (e) {
@@ -69,16 +67,16 @@ export function TopCompanies({ range }: { range: PeriodRange }) {
     };
   }, [range.start, range.end]);
 
-  const max = Math.max(1, ...rows.map((r) => r.total_amount));
-  const canSettlement = can("page.company_settlement");
+  const max = Math.max(1, ...rows.map((r) => Math.abs(r.total_profit)));
+  const canAccounting = hasFeature("accounting");
 
   const handleSeeAll = () => {
-    if (canSettlement) {
-      navigate("/reports/company-settlement");
+    if (canAccounting) {
+      navigate("/accounting");
     } else {
       showUpgradePrompt({
-        featureKey: "company_settlement",
-        featureLabel: "تسوية الشركات",
+        featureKey: "accounting",
+        featureLabel: "المحاسبة",
       });
     }
   };
@@ -90,24 +88,24 @@ export function TopCompanies({ range }: { range: PeriodRange }) {
           <Building2 className="h-5 w-5 text-primary" />
           <CardTitle className="text-base font-semibold">أفضل شركات التأمين</CardTitle>
         </div>
-        <SeeAllButton locked={!canSettlement} onClick={handleSeeAll} />
+        <SeeAllButton locked={!canAccounting} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent className="space-y-3">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-lg" />)
         ) : rows.length === 0 ? (
           <div className="text-center py-6 text-sm text-muted-foreground">
-            لا يوجد إنتاج في هذه الفترة
+            لا يوجد ربح مسجل في هذه الفترة
           </div>
         ) : (
           rows.map((r, i) => {
-            const pct = Math.round((r.total_amount / max) * 100);
+            const pct = Math.round((Math.abs(r.total_profit) / max) * 100);
             return (
               <div key={r.company_id} className="space-y-1">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium text-foreground truncate">{r.company_name}</span>
                   <span className="text-muted-foreground ltr-nums shrink-0 mr-2">
-                    {r.tx_count} · ₪{Math.round(r.total_amount).toLocaleString("en-US")}
+                    {r.tx_count} · ₪{Math.round(r.total_profit).toLocaleString("en-US")}
                   </span>
                 </div>
                 <div className="h-2 rounded-full bg-secondary/70 overflow-hidden">

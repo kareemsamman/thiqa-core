@@ -4,9 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { usePermissions } from "@/hooks/usePermissions";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { SeeAllButton } from "./SeeAllButton";
+import { PeriodRange } from "./PeriodPills";
 
 type BucketKey = "overdue_60" | "overdue_30" | "current" | "paid";
 
@@ -41,9 +41,8 @@ const CFG: Record<BucketKey, { label: string; color: string; track: string }> = 
 
 const ORDER: BucketKey[] = ["overdue_60", "overdue_30", "current", "paid"];
 
-export function DebtBuckets() {
+export function DebtBuckets({ range }: { range: PeriodRange }) {
   const navigate = useNavigate();
-  const { can } = usePermissions();
   const { hasFeature } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
   const [rows, setRows] = useState<Bucket[]>([]);
@@ -52,8 +51,12 @@ export function DebtBuckets() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      setLoading(true);
       try {
-        const { data, error } = await (supabase.rpc as any)("dashboard_client_debt_buckets");
+        const { data, error } = await (supabase.rpc as any)(
+          "dashboard_client_debt_buckets_range",
+          { p_start_date: range.start, p_end_date: range.end }
+        );
         if (error) throw error;
         if (cancelled) return;
         setRows(
@@ -77,7 +80,7 @@ export function DebtBuckets() {
       cancelled = true;
       window.removeEventListener("thiqa:policy-created", handler);
     };
-  }, []);
+  }, [range.start, range.end]);
 
   const byKey = new Map(rows.map((r) => [r.bucket, r]));
   const maxAmount = Math.max(
@@ -85,7 +88,7 @@ export function DebtBuckets() {
     ...ORDER.filter((k) => k !== "paid").map((k) => byKey.get(k)?.amount ?? 0)
   );
 
-  const canDebt = can("page.debt_tracking") && hasFeature("debt_tracking");
+  const canDebt = hasFeature("debt_tracking");
 
   const handleSeeAll = () => {
     if (canDebt) {
