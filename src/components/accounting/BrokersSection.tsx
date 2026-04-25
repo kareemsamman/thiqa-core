@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { ReactNode, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -212,8 +213,18 @@ export function BrokersSection() {
     // Net "still owe brokers" — what the user wants on the pill: a
     // disbursement reduces it.
     const remainingDueSum = Math.max(0, grossOwed - disbursedSum);
-    return { sellSum, profitSum, disbursedSum, receivedSum, remainingDueSum };
-  }, [issuancesActive, disbursements, receipts, editLocal]);
+    const netProfitSum = profitSum - data.expensesTotal;
+    return {
+      sellSum,
+      profitSum,
+      disbursedSum,
+      receivedSum,
+      remainingDueSum,
+      grossOwed,
+      netProfitSum,
+      activeCount: overlayed.length,
+    };
+  }, [issuancesActive, disbursements, receipts, editLocal, data.expensesTotal]);
 
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
@@ -231,17 +242,111 @@ export function BrokersSection() {
 
   return (
     <div className="space-y-2.5">
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
-        <SummaryPill label="سعر البيع للعميل" value={fmt(totals.sellSum)} tone="primary" />
-        <Sep />
-        <SummaryPill label="الربح" value={fmt(totals.profitSum)} tone="success" />
-        <Sep />
-        <SummaryPill label="متبقي للوسطاء" value={fmt(totals.remainingDueSum)} tone="destructive" />
-        <Sep />
-        <SummaryPill label="مدفوع للوسطاء" value={fmt(totals.disbursedSum)} tone="amber" />
-        <Sep />
-        <SummaryPill label="مقبوض من الوسطاء" value={fmt(totals.receivedSum)} tone="emerald" />
-      </div>
+      <TooltipProvider delayDuration={150}>
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
+          <SummaryPill
+            label="سعر البيع للعميل"
+            value={fmt(totals.sellSum)}
+            tone="primary"
+            tooltip={
+              <BreakdownLines
+                title="سعر البيع للعميل"
+                lines={[
+                  { label: 'عدد المعاملات', value: `${totals.activeCount}` },
+                  { label: 'الإجمالي', value: fmt(totals.sellSum), strong: true },
+                ]}
+              />
+            }
+          />
+          <Sep />
+          <SummaryPill
+            label="الربح"
+            value={fmt(totals.profitSum)}
+            tone="success"
+            tooltip={
+              <BreakdownLines
+                title="الربح من الوسطاء"
+                lines={[
+                  { label: 'مجموع الأرباح', value: fmt(totals.profitSum), strong: true },
+                ]}
+              />
+            }
+          />
+          <Sep />
+          <SummaryPill
+            label="متبقي للوسطاء"
+            value={fmt(totals.remainingDueSum)}
+            tone="destructive"
+            tooltip={
+              <BreakdownLines
+                title="المتبقي للوسطاء"
+                lines={[
+                  { label: 'إجمالي مستحق', value: fmt(totals.grossOwed) },
+                  { label: 'مدفوع للوسطاء', value: `− ${fmt(totals.disbursedSum)}` },
+                  { label: 'المتبقي', value: fmt(totals.remainingDueSum), strong: true },
+                ]}
+              />
+            }
+          />
+          <Sep />
+          <SummaryPill
+            label="مدفوع للوسطاء"
+            value={fmt(totals.disbursedSum)}
+            tone="amber"
+            tooltip={
+              <BreakdownLines
+                title="مدفوع للوسطاء"
+                lines={[
+                  {
+                    label: 'سندات الصرف غير المرفوضة',
+                    value: `${disbursements.filter((r) => !r.refused).length}`,
+                  },
+                  { label: 'الإجمالي', value: fmt(totals.disbursedSum), strong: true },
+                ]}
+              />
+            }
+          />
+          <Sep />
+          <SummaryPill
+            label="مقبوض من الوسطاء"
+            value={fmt(totals.receivedSum)}
+            tone="emerald"
+            tooltip={
+              <BreakdownLines
+                title="مقبوض من الوسطاء"
+                lines={[
+                  {
+                    label: 'سندات القبض غير المرفوضة',
+                    value: `${receipts.filter((r) => !r.refused).length}`,
+                  },
+                  { label: 'الإجمالي', value: fmt(totals.receivedSum), strong: true },
+                ]}
+              />
+            }
+          />
+          <Sep />
+          <SummaryPill
+            label="الأرباح الصافية"
+            value={fmt(totals.netProfitSum)}
+            tone={totals.netProfitSum >= 0 ? 'emerald' : 'destructive'}
+            tooltip={
+              <BreakdownLines
+                title="الأرباح الصافية"
+                lines={[
+                  { label: 'الربح', value: fmt(totals.profitSum) },
+                  { label: 'المصاريف', value: `− ${fmt(data.expensesTotal)}` },
+                  { label: 'الصافي', value: fmt(totals.netProfitSum), strong: true },
+                  {
+                    label: 'ملاحظة',
+                    value: 'المعاملات الملغاة لا تُحتسب',
+                    muted: true,
+                  },
+                ]}
+              />
+            }
+          />
+        </div>
+      </TooltipProvider>
 
       <div className="flex flex-wrap items-center gap-2">
         <Tabs value={tab} onValueChange={(v) => setTab(v as SubTab)}>
@@ -395,10 +500,12 @@ function SummaryPill({
   label,
   value,
   tone,
+  tooltip,
 }: {
   label: string;
   value: string;
   tone: 'primary' | 'success' | 'amber' | 'emerald' | 'destructive';
+  tooltip?: ReactNode;
 }) {
   const cls =
     tone === 'primary'
@@ -410,10 +517,47 @@ function SummaryPill({
       : tone === 'destructive'
       ? 'text-destructive'
       : 'text-emerald-700';
-  return (
-    <div className="inline-flex items-center gap-1.5 px-1">
+  const pill = (
+    <div className="inline-flex items-center gap-1.5 px-1 cursor-help">
       <span className="text-[11px] text-muted-foreground">{label}</span>
       <span className={`text-sm font-bold tabular-nums ${cls}`}>{value}</span>
+    </div>
+  );
+  if (!tooltip) return pill;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{pill}</TooltipTrigger>
+      <TooltipContent side="bottom" className="p-2.5 max-w-xs">
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+interface BreakdownLine {
+  label: string;
+  value: string;
+  strong?: boolean;
+  muted?: boolean;
+}
+
+function BreakdownLines({ title, lines }: { title: string; lines: BreakdownLine[] }) {
+  return (
+    <div dir="rtl" className="space-y-1.5 text-xs">
+      <div className="font-semibold text-foreground">{title}</div>
+      <div className="flex flex-col gap-0.5">
+        {lines.map((l, i) => (
+          <div
+            key={i}
+            className={`flex items-center justify-between gap-4 ${
+              l.strong ? 'border-t pt-1 mt-0.5 font-bold' : ''
+            } ${l.muted ? 'text-muted-foreground italic text-[11px]' : ''}`}
+          >
+            <span>{l.label}</span>
+            <span className="tabular-nums">{l.value}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

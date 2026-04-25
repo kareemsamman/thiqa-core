@@ -14,9 +14,10 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Banknote, Building, CreditCard, FileText, Pencil, Trash2 } from 'lucide-react';
+import { Banknote, Building, CreditCard, FileText, ImageIcon, Pencil, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { PAYMENT_METHOD_LABELS } from './accountingTypes';
+import { getBank } from '@/lib/banks';
 
 export interface SettlementRow {
   id: string;
@@ -24,6 +25,9 @@ export interface SettlementRow {
   total_amount: number;
   payment_type: string | null;
   cheque_number: string | null;
+  bank_code: string | null;
+  branch_code: string | null;
+  cheque_image_url: string | null;
   status: string;
   refused: boolean | null;
   notes: string | null;
@@ -74,7 +78,8 @@ export function SettlementsTable({
               {showCol('entity') && <TableHead className="whitespace-nowrap min-w-[180px]">{entityLabel}</TableHead>}
               {showCol('amount') && <TableHead className="whitespace-nowrap min-w-[120px]">المبلغ</TableHead>}
               {showCol('payment_type') && <TableHead className="whitespace-nowrap min-w-[120px]">طريقة الدفع</TableHead>}
-              {showCol('cheque_number') && <TableHead className="whitespace-nowrap min-w-[120px]">رقم الشيك</TableHead>}
+              {showCol('cheque_number') && <TableHead className="whitespace-nowrap min-w-[200px]">رقم الشيك</TableHead>}
+              {showCol('cheque_image') && <TableHead className="whitespace-nowrap text-center w-16">المرفق</TableHead>}
               {showDirection && showCol('direction') && (
                 <TableHead className="whitespace-nowrap min-w-[110px]">الاتجاه</TableHead>
               )}
@@ -125,7 +130,34 @@ export function SettlementsTable({
                     </TableCell>
                   )}
                   {showCol('cheque_number') && (
-                    <TableCell className="font-mono text-xs">{r.cheque_number || '-'}</TableCell>
+                    <TableCell className="text-xs">
+                      <ChequeIdent
+                        chequeNumber={r.cheque_number}
+                        bankCode={r.bank_code}
+                        branchCode={r.branch_code}
+                      />
+                    </TableCell>
+                  )}
+                  {showCol('cheque_image') && (
+                    <TableCell className="text-center">
+                      {r.cheque_image_url ? (
+                        <a
+                          href={r.cheque_image_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-block"
+                          title="فتح صورة الشيك"
+                        >
+                          <img
+                            src={r.cheque_image_url}
+                            alt="صورة الشيك"
+                            className="h-8 w-8 rounded border object-cover hover:scale-110 transition-transform"
+                          />
+                        </a>
+                      ) : (
+                        <ImageIcon className="h-3.5 w-3.5 text-muted-foreground/40 mx-auto" />
+                      )}
+                    </TableCell>
                   )}
                   {showDirection && showCol('direction') && (
                     <TableCell>
@@ -216,6 +248,39 @@ export function SettlementsTable({
         </Table>
     </div>
     </TooltipProvider>
+  );
+}
+
+// Compact triple-line cheque identifier: number on top, then bank name +
+// branch underneath in muted text. The branch displays inside a small
+// rounded pill so it reads as a number-like identifier next to the bank.
+function ChequeIdent({
+  chequeNumber,
+  bankCode,
+  branchCode,
+}: {
+  chequeNumber: string | null;
+  bankCode: string | null;
+  branchCode: string | null;
+}) {
+  if (!chequeNumber && !bankCode && !branchCode) {
+    return <span className="text-muted-foreground">-</span>;
+  }
+  const bank = bankCode ? getBank(bankCode) : null;
+  return (
+    <div className="flex flex-col gap-0.5 leading-tight">
+      <span className="font-mono tabular-nums text-foreground">{chequeNumber || '—'}</span>
+      {(bank || bankCode || branchCode) && (
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          {bank?.nameAr ?? bankCode}
+          {branchCode && (
+            <span dir="ltr" className="font-mono px-1 rounded bg-muted text-[10px]">
+              {branchCode}
+            </span>
+          )}
+        </span>
+      )}
+    </div>
   );
 }
 

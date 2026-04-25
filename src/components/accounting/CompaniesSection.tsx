@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { ReactNode, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -190,10 +191,9 @@ export function CompaniesSection() {
     const insuranceSum = overlayed.reduce((s, r) => s + Number(r.insurance_price || 0), 0);
     // Total owed to companies — sum across active policies.
     const totalDue = overlayed.reduce((s, r) => s + Number(r.payed_for_company || 0), 0);
-    const profitSum = overlayed.reduce(
-      (s, r) => s + Number(r.profit || 0) + Number(r.office_commission || 0),
-      0,
-    );
+    const profitOnly = overlayed.reduce((s, r) => s + Number(r.profit || 0), 0);
+    const commissionOnly = overlayed.reduce((s, r) => s + Number(r.office_commission || 0), 0);
+    const profitSum = profitOnly + commissionOnly;
     // Disbursed = money we actually paid the companies (outgoing
     // settlements only, refused excluded).
     const disbursedSum = companySettlements
@@ -202,8 +202,22 @@ export function CompaniesSection() {
     // Net "still owe the companies" — what the user actually wants to
     // see on the pill: today's debt, not the lifetime gross.
     const dueSum = Math.max(0, totalDue - disbursedSum);
-    return { insuranceSum, dueSum, profitSum, disbursedSum };
-  }, [issuancesActive, companySettlements, editLocal]);
+    // Net profit = (profit + commission) − expenses. issuancesActive
+    // already excludes cancelled policies, so the cancellation rule
+    // ("no profit on cancelled") falls out automatically.
+    const netProfitSum = profitSum - data.expensesTotal;
+    return {
+      insuranceSum,
+      dueSum,
+      profitSum,
+      disbursedSum,
+      totalDue,
+      profitOnly,
+      commissionOnly,
+      netProfitSum,
+      activeCount: overlayed.length,
+    };
+  }, [issuancesActive, companySettlements, editLocal, data.expensesTotal]);
 
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
@@ -223,16 +237,98 @@ export function CompaniesSection() {
     <div className="space-y-2.5">
       {/* Compact summary strip — single horizontal row of pills.
           المستحق shows TODAY's net debt (gross owed minus what we've
-          already paid) so adding a سند صرف visibly reduces the pill. */}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
-        <SummaryPill label="إجمالي سعر التأمين" value={fmt(totals.insuranceSum)} tone="primary" />
-        <Sep />
-        <SummaryPill label="المستحق للشركات" value={fmt(totals.dueSum)} tone="destructive" />
-        <Sep />
-        <SummaryPill label="الأرباح + العمولات" value={fmt(totals.profitSum)} tone="success" />
-        <Sep />
-        <SummaryPill label="مدفوع للشركات" value={fmt(totals.disbursedSum)} tone="amber" />
-      </div>
+          already paid) so adding a سند صرف visibly reduces the pill.
+          Hover any pill for a breakdown of how the number was computed
+          (respects the active filter set). */}
+      <TooltipProvider delayDuration={150}>
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
+          <SummaryPill
+            label="إجمالي سعر التأمين"
+            value={fmt(totals.insuranceSum)}
+            tone="primary"
+            tooltip={
+              <BreakdownLines
+                title="إجمالي سعر التأمين"
+                lines={[
+                  { label: 'عدد المعاملات', value: `${totals.activeCount}` },
+                  { label: 'مجموع سعر التأمين', value: fmt(totals.insuranceSum) },
+                ]}
+              />
+            }
+          />
+          <Sep />
+          <SummaryPill
+            label="المستحق للشركات"
+            value={fmt(totals.dueSum)}
+            tone="destructive"
+            tooltip={
+              <BreakdownLines
+                title="المستحق للشركات (الصافي)"
+                lines={[
+                  { label: 'إجمالي مستحق', value: fmt(totals.totalDue) },
+                  { label: 'مدفوع للشركات', value: `− ${fmt(totals.disbursedSum)}` },
+                  { label: 'المتبقي', value: fmt(totals.dueSum), strong: true },
+                ]}
+              />
+            }
+          />
+          <Sep />
+          <SummaryPill
+            label="الأرباح + العمولات"
+            value={fmt(totals.profitSum)}
+            tone="success"
+            tooltip={
+              <BreakdownLines
+                title="الأرباح + العمولات"
+                lines={[
+                  { label: 'الأرباح', value: fmt(totals.profitOnly) },
+                  { label: 'عمولة المكتب', value: `+ ${fmt(totals.commissionOnly)}` },
+                  { label: 'الإجمالي', value: fmt(totals.profitSum), strong: true },
+                ]}
+              />
+            }
+          />
+          <Sep />
+          <SummaryPill
+            label="مدفوع للشركات"
+            value={fmt(totals.disbursedSum)}
+            tone="amber"
+            tooltip={
+              <BreakdownLines
+                title="مدفوع للشركات"
+                lines={[
+                  {
+                    label: 'سندات الصرف غير المرفوضة',
+                    value: `${companySettlements.filter((r) => !r.refused).length}`,
+                  },
+                  { label: 'الإجمالي', value: fmt(totals.disbursedSum), strong: true },
+                ]}
+              />
+            }
+          />
+          <Sep />
+          <SummaryPill
+            label="الأرباح الصافية"
+            value={fmt(totals.netProfitSum)}
+            tone={totals.netProfitSum >= 0 ? 'emerald' : 'destructive'}
+            tooltip={
+              <BreakdownLines
+                title="الأرباح الصافية"
+                lines={[
+                  { label: 'الأرباح + العمولات', value: fmt(totals.profitSum) },
+                  { label: 'المصاريف', value: `− ${fmt(data.expensesTotal)}` },
+                  { label: 'الصافي', value: fmt(totals.netProfitSum), strong: true },
+                  {
+                    label: 'ملاحظة',
+                    value: 'المعاملات الملغاة لا تُحتسب',
+                    muted: true,
+                  },
+                ]}
+              />
+            }
+          />
+        </div>
+      </TooltipProvider>
 
       {/* Single toolbar row: sub-tabs + count + manage columns + filter. */}
       <div className="flex flex-wrap items-center gap-2">
@@ -390,23 +486,62 @@ function SummaryPill({
   label,
   value,
   tone,
+  tooltip,
 }: {
   label: string;
   value: string;
-  tone: 'primary' | 'destructive' | 'success' | 'amber';
+  tone: 'primary' | 'destructive' | 'success' | 'amber' | 'emerald';
+  tooltip?: ReactNode;
 }) {
   const cls =
     tone === 'primary'
       ? 'text-primary'
       : tone === 'destructive'
       ? 'text-destructive'
-      : tone === 'success'
+      : tone === 'success' || tone === 'emerald'
       ? 'text-emerald-600'
       : 'text-amber-600';
-  return (
-    <div className="inline-flex items-center gap-1.5 px-1">
+  const pill = (
+    <div className="inline-flex items-center gap-1.5 px-1 cursor-help">
       <span className="text-[11px] text-muted-foreground">{label}</span>
       <span className={`text-sm font-bold tabular-nums ${cls}`}>{value}</span>
+    </div>
+  );
+  if (!tooltip) return pill;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{pill}</TooltipTrigger>
+      <TooltipContent side="bottom" className="p-2.5 max-w-xs">
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+interface BreakdownLine {
+  label: string;
+  value: string;
+  strong?: boolean;
+  muted?: boolean;
+}
+
+function BreakdownLines({ title, lines }: { title: string; lines: BreakdownLine[] }) {
+  return (
+    <div dir="rtl" className="space-y-1.5 text-xs">
+      <div className="font-semibold text-foreground">{title}</div>
+      <div className="flex flex-col gap-0.5">
+        {lines.map((l, i) => (
+          <div
+            key={i}
+            className={`flex items-center justify-between gap-4 ${
+              l.strong ? 'border-t pt-1 mt-0.5 font-bold' : ''
+            } ${l.muted ? 'text-muted-foreground italic text-[11px]' : ''}`}
+          >
+            <span>{l.label}</span>
+            <span className="tabular-nums">{l.value}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

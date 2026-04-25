@@ -51,6 +51,7 @@ export function CompactImagePicker({
       const url = data?.file?.cdn_url || data?.file?.url;
       if (!url) throw new Error('لم يُرجع الخادم رابطاً للصورة');
       onChange(url);
+      toast.success('تم رفع الصورة');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'فشل رفع الصورة';
       toast.error(message);

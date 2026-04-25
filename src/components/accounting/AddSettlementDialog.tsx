@@ -88,6 +88,10 @@ const PAYMENT_TYPE_ICON: Record<PaymentLineType, typeof Banknote> = {
 
 const today = () => format(new Date(), 'yyyy-MM-dd');
 
+function isSeedEmpty(line: PaymentLine): boolean {
+  return line.payment_type === 'cash' && Number(line.amount || 0) === 0;
+}
+
 function makeLine(type: PaymentLineType): PaymentLine {
   const base: PaymentLine = {
     id: crypto.randomUUID(),
@@ -166,7 +170,15 @@ export function AddSettlementDialog({
   const removeLine = (id: string) =>
     setLines((prev) => (prev.length === 1 ? prev : prev.filter((l) => l.id !== id)));
 
-  const addLineOfType = (t: PaymentLineType) => setLines((prev) => [...prev, makeLine(t)]);
+  // Drop the seeded empty cash line when the user adds a different
+  // payment — otherwise the dialog would keep that placeholder row
+  // alongside whatever they actually wanted, forcing them to delete it.
+  const addLineOfType = (t: PaymentLineType) =>
+    setLines((prev) => {
+      const stripped =
+        prev.length === 1 && isSeedEmpty(prev[0]) ? [] : prev;
+      return [...stripped, makeLine(t)];
+    });
 
   // تقسيط — N equal cheque lines spaced monthly. Uses today's date as
   // the issue and the i-th month as the due, mirroring the wallet flow.
@@ -188,7 +200,10 @@ export function AddSettlementDialog({
         cheque_due_date: due,
       };
     });
-    setLines((prev) => [...prev, ...next]);
+    setLines((prev) => {
+      const stripped = prev.length === 1 && isSeedEmpty(prev[0]) ? [] : prev;
+      return [...stripped, ...next];
+    });
     setSplitAmount('');
     setSplitCount(2);
     setSplitOpen(false);
@@ -215,7 +230,10 @@ export function AddSettlementDialog({
       cheque_image_url: c.image_url || undefined,
       branch_code: c.branch_number || null,
     }));
-    setLines((prev) => [...prev, ...next]);
+    setLines((prev) => {
+      const stripped = prev.length === 1 && isSeedEmpty(prev[0]) ? [] : prev;
+      return [...stripped, ...next];
+    });
     toast.success(`أُضيفت ${scanned.length} شيكات من الماسح`);
   };
 
@@ -564,7 +582,7 @@ function PaymentLineCard({
               value={line.payment_type}
               onValueChange={(v) => onChange({ payment_type: v as PaymentLineType })}
             >
-              <SelectTrigger className="h-9">
+              <SelectTrigger className="h-10">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -582,7 +600,6 @@ function PaymentLineCard({
             <ArabicDatePicker
               value={line.payment_date}
               onChange={(v) => onChange({ payment_date: v ?? '' })}
-              compact
             />
           </div>
 
@@ -594,7 +611,7 @@ function PaymentLineCard({
               onChange={(e) => onChange({ amount: parseFloat(e.target.value) || 0 })}
               placeholder="0"
               dir="ltr"
-              className="h-9 tabular-nums"
+              className="h-10 tabular-nums"
             />
           </div>
 
@@ -605,7 +622,7 @@ function PaymentLineCard({
                 value={line.bank_reference ?? ''}
                 onChange={(e) => onChange({ bank_reference: e.target.value })}
                 placeholder="رقم الحوالة"
-                className="h-9"
+                className="h-10"
                 dir="ltr"
               />
             </div>
@@ -730,7 +747,6 @@ function ChequeLineEditor({
           <ArabicDatePicker
             value={line.cheque_due_date ?? ''}
             onChange={(v) => onChange({ cheque_due_date: v ?? '' })}
-            compact
           />
         </div>
         <div className="space-y-1.5 min-w-0">
@@ -738,7 +754,6 @@ function ChequeLineEditor({
           <ArabicDatePicker
             value={line.cheque_issue_date ?? ''}
             onChange={(v) => onChange({ cheque_issue_date: v ?? '' })}
-            compact
           />
         </div>
       </div>

@@ -35,10 +35,17 @@ interface UseAccountingDataReturn {
   companySettlements: SettlementRow[];
   companyReceipts: SettlementRow[];
   brokerSettlements: SettlementRow[];
+  /** Filtered total expense amount — used by the net-profit pill. */
+  expensesTotal: number;
   refresh: () => Promise<void>;
   /** Optimistic in-place mutation for a single sub-policy — avoids the
    *  full refetch the package drawer used to trigger on every save. */
   patchSubPolicy: (subId: string, patch: Partial<SubPolicy>) => void;
+}
+
+interface RawExpense {
+  expense_date: string;
+  amount: number | null;
 }
 
 interface RawPolicy {
@@ -91,6 +98,9 @@ interface RawCompanySettlement {
   total_amount: number | null;
   payment_type: string | null;
   cheque_number: string | null;
+  bank_code: string | null;
+  branch_code: string | null;
+  cheque_image_url: string | null;
   status: string;
   refused: boolean | null;
   notes: string | null;
@@ -105,6 +115,9 @@ interface RawBrokerSettlement {
   total_amount: number | null;
   payment_type: string | null;
   cheque_number: string | null;
+  bank_code: string | null;
+  branch_code: string | null;
+  cheque_image_url: string | null;
   status: string;
   refused: boolean | null;
   notes: string | null;
@@ -132,6 +145,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
     (SettlementRow & { direction?: 'outgoing' | 'incoming' })[]
   >([]);
   const [brokerSettlements, setBrokerSettlements] = useState<SettlementRow[]>([]);
+  const [expenses, setExpenses] = useState<RawExpense[]>([]);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -325,7 +339,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
       let csQuery = supabase
         .from('company_settlements')
         .select(
-          'id, settlement_date, total_amount, payment_type, cheque_number, status, refused, notes, direction, company_id, insurance_companies(name, name_ar)',
+          'id, settlement_date, total_amount, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, status, refused, notes, direction, company_id, insurance_companies(name, name_ar)',
         )
         .order('settlement_date', { ascending: false });
       if (agentId) csQuery = csQuery.eq('agent_id', agentId);
@@ -338,6 +352,9 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         total_amount: Number(s.total_amount ?? 0),
         payment_type: s.payment_type,
         cheque_number: s.cheque_number,
+        bank_code: s.bank_code,
+        branch_code: s.branch_code,
+        cheque_image_url: s.cheque_image_url,
         status: s.status,
         refused: s.refused,
         notes: s.notes,
@@ -351,7 +368,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
       let bsQuery = supabase
         .from('broker_settlements')
         .select(
-          'id, settlement_date, total_amount, payment_type, cheque_number, status, refused, notes, direction, broker_id, brokers(name)',
+          'id, settlement_date, total_amount, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, status, refused, notes, direction, broker_id, brokers(name)',
         )
         .order('settlement_date', { ascending: false });
       if (agentId) bsQuery = bsQuery.eq('agent_id', agentId);
@@ -362,6 +379,9 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         total_amount: Number(s.total_amount ?? 0),
         payment_type: s.payment_type,
         cheque_number: s.cheque_number,
+        bank_code: s.bank_code,
+        branch_code: s.branch_code,
+        cheque_image_url: s.cheque_image_url,
         status: s.status,
         refused: s.refused,
         notes: s.notes,
@@ -370,6 +390,13 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         entity_name: s.brokers?.name ?? null,
       }));
       setBrokerSettlements(bsRows);
+
+      // 6. Expenses — only the sum is needed by the pills, but the full
+      //    rows are required to apply the date filter client-side.
+      let exQuery = supabase.from('expenses').select('expense_date, amount');
+      if (agentId) exQuery = exQuery.eq('agent_id', agentId);
+      const { data: exData } = await exQuery;
+      setExpenses((exData ?? []) as RawExpense[]);
     } finally {
       setLoading(false);
     }
@@ -445,6 +472,21 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
     [brokerSettlements, filters],
   );
 
+  const expensesTotal = useMemo(() => {
+    let rows = expenses;
+    if (filters.dateFrom) {
+      const from = new Date(filters.dateFrom).getTime();
+      rows = rows.filter((r) => new Date(r.expense_date).getTime() >= from);
+    }
+    if (filters.dateTo) {
+      const to = new Date(filters.dateTo);
+      to.setHours(23, 59, 59, 999);
+      const toMs = to.getTime();
+      rows = rows.filter((r) => new Date(r.expense_date).getTime() <= toMs);
+    }
+    return rows.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+  }, [expenses, filters]);
+
   return {
     loading,
     companies,
@@ -454,6 +496,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
     companySettlements: companyDisbursements,
     companyReceipts,
     brokerSettlements: filteredBrokerSettlements,
+    expensesTotal,
     refresh: fetchAll,
     patchSubPolicy,
   };

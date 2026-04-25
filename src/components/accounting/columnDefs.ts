@@ -50,6 +50,7 @@ export const SETTLEMENT_COLUMNS: ColumnOption[] = [
   { key: 'amount', label: 'المبلغ', required: true },
   { key: 'payment_type', label: 'طريقة الدفع' },
   { key: 'cheque_number', label: 'رقم الشيك' },
+  { key: 'cheque_image', label: 'المرفق' },
   { key: 'direction', label: 'الاتجاه' },
   { key: 'status', label: 'الحالة' },
   { key: 'notes', label: 'ملاحظات' },

@@ -7,10 +7,18 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Banknote, FileText, Loader2, Receipt, Wallet } from 'lucide-react';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 import { BankPicker } from '@/components/shared/BankPicker';
 import { CompactImagePicker } from '@/components/shared/CompactImagePicker';
@@ -18,6 +26,20 @@ import { sanitizeChequeNumber, validateChequeNumber } from '@/lib/chequeUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SettlementRow } from './SettlementsTable';
+
+const PAYMENT_TYPE_ICON = {
+  cash: Banknote,
+  cheque: FileText,
+  customer_cheque: Wallet,
+  bank_transfer: Receipt,
+} as const;
+
+const PAYMENT_TYPE_LABEL = {
+  cash: 'نقداً',
+  cheque: 'شيك جديد',
+  customer_cheque: 'شيك عميل',
+  bank_transfer: 'تحويل بنكي',
+} as const;
 
 export type SettlementTable = 'company_settlements' | 'broker_settlements';
 
@@ -149,9 +171,14 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
     }
   };
 
+  const Icon =
+    PAYMENT_TYPE_ICON[state.payment_type as keyof typeof PAYMENT_TYPE_ICON] ?? FileText;
+  const typeLabel =
+    PAYMENT_TYPE_LABEL[state.payment_type as keyof typeof PAYMENT_TYPE_LABEL] ?? 'دفعة';
+
   return (
     <Dialog open={open} onOpenChange={(v) => !saving && onOpenChange(v)}>
-      <DialogContent dir="rtl" className="max-w-xl">
+      <DialogContent dir="rtl" className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>تعديل السند</DialogTitle>
         </DialogHeader>
@@ -162,113 +189,131 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-[11px]">المبلغ</Label>
-                <Input
-                  type="number"
-                  value={state.total_amount || ''}
-                  onChange={(e) =>
-                    setState({ ...state, total_amount: parseFloat(e.target.value) || 0 })
-                  }
-                  className="h-9 tabular-nums"
-                  dir="ltr"
-                />
+            {/* Card body mirrors AddSettlementDialog's PaymentLineCard so
+                the edit and create flows feel like the same surface. */}
+            <Card className="p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-semibold text-muted-foreground">{typeLabel}</span>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px]">التاريخ</Label>
-                <ArabicDatePicker
-                  value={state.settlement_date}
-                  onChange={(v) => setState({ ...state, settlement_date: v ?? '' })}
-                  compact
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px]">طريقة الدفع</Label>
-                <select
-                  value={state.payment_type}
-                  onChange={(e) => setState({ ...state, payment_type: e.target.value })}
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                >
-                  <option value="cash">نقداً</option>
-                  <option value="cheque">شيك جديد</option>
-                  <option value="customer_cheque" disabled>
-                    شيك عميل (غير قابل للتعديل هنا)
-                  </option>
-                  <option value="bank_transfer">تحويل بنكي</option>
-                </select>
-              </div>
-            </div>
 
-            {state.payment_type === 'cheque' && (
-              <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="space-y-1.5 min-w-0">
-                    <Label className="text-[11px]">البنك</Label>
-                    <BankPicker
-                      value={state.bank_code}
-                      onChange={(c) => setState({ ...state, bank_code: c })}
-                    />
-                  </div>
-                  <div className="space-y-1.5 min-w-0">
-                    <Label className="text-[11px]">الفرع</Label>
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={4}
-                      placeholder="مثال: 305"
-                      value={state.branch_code ?? ''}
-                      onChange={(e) =>
-                        setState({
-                          ...state,
-                          branch_code: e.target.value.replace(/\D/g, '') || null,
-                        })
-                      }
-                      className="h-10 tabular-nums font-mono"
-                    />
-                  </div>
-                  <div className="space-y-1.5 min-w-0">
-                    <Label className="text-[11px]">رقم الشيك</Label>
-                    <Input
-                      value={state.cheque_number}
-                      onChange={(e) =>
-                        setState({
-                          ...state,
-                          cheque_number: sanitizeChequeNumber(e.target.value),
-                        })
-                      }
-                      placeholder="12345678"
-                      inputMode="numeric"
-                      dir="ltr"
-                      className="h-10 tabular-nums"
-                    />
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px]">طريقة الدفع</Label>
+                  <Select
+                    value={state.payment_type}
+                    onValueChange={(v) => setState({ ...state, payment_type: v })}
+                    disabled={state.payment_type === 'customer_cheque'}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">نقداً</SelectItem>
+                      <SelectItem value="cheque">شيك جديد</SelectItem>
+                      <SelectItem value="customer_cheque" disabled>
+                        شيك عميل (غير قابل للتعديل هنا)
+                      </SelectItem>
+                      <SelectItem value="bank_transfer">تحويل بنكي</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <CompactImagePicker
-                    value={state.cheque_image_url}
-                    onChange={(url) => setState({ ...state, cheque_image_url: url })}
-                    entityType="settlement_cheque"
-                    entityId={row?.id}
-                    label="صورة الشيك"
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px]">التاريخ</Label>
+                  <ArabicDatePicker
+                    value={state.settlement_date}
+                    onChange={(v) => setState({ ...state, settlement_date: v ?? '' })}
                   />
-                  <span>{state.cheque_image_url ? 'صورة مرفقة' : 'صورة الشيك (اختياري)'}</span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px]">المبلغ</Label>
+                  <Input
+                    type="number"
+                    value={state.total_amount || ''}
+                    onChange={(e) =>
+                      setState({ ...state, total_amount: parseFloat(e.target.value) || 0 })
+                    }
+                    className="h-10 tabular-nums"
+                    placeholder="0"
+                    dir="ltr"
+                  />
                 </div>
               </div>
-            )}
 
-            {state.payment_type === 'bank_transfer' && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">رقم المرجع البنكي</Label>
-                <Input
-                  value={state.bank_reference}
-                  onChange={(e) => setState({ ...state, bank_reference: e.target.value })}
-                  placeholder="رقم الحوالة"
-                  dir="ltr"
-                  className="h-9"
-                />
-              </div>
-            )}
+              {state.payment_type === 'cheque' && (
+                <div className="space-y-3 border-t pt-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="space-y-1.5 min-w-0">
+                      <Label className="text-[11px]">البنك</Label>
+                      <BankPicker
+                        value={state.bank_code}
+                        onChange={(c) => setState({ ...state, bank_code: c })}
+                      />
+                    </div>
+                    <div className="space-y-1.5 min-w-0">
+                      <Label className="text-[11px]">الفرع</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={4}
+                        placeholder="مثال: 305"
+                        value={state.branch_code ?? ''}
+                        onChange={(e) =>
+                          setState({
+                            ...state,
+                            branch_code: e.target.value.replace(/\D/g, '') || null,
+                          })
+                        }
+                        className="h-10 tabular-nums font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1.5 min-w-0">
+                      <Label className="text-[11px]">رقم الشيك</Label>
+                      <Input
+                        value={state.cheque_number}
+                        onChange={(e) =>
+                          setState({
+                            ...state,
+                            cheque_number: sanitizeChequeNumber(e.target.value),
+                          })
+                        }
+                        placeholder="12345678"
+                        inputMode="numeric"
+                        dir="ltr"
+                        className="h-10 tabular-nums"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <CompactImagePicker
+                      value={state.cheque_image_url}
+                      onChange={(url) => setState({ ...state, cheque_image_url: url })}
+                      entityType="settlement_cheque"
+                      entityId={row?.id}
+                      label="صورة الشيك"
+                    />
+                    <span>
+                      {state.cheque_image_url ? 'صورة الشيك مرفقة' : 'صورة الشيك (اختياري)'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {state.payment_type === 'bank_transfer' && (
+                <div className="space-y-1.5 border-t pt-3">
+                  <Label className="text-[11px]">رقم المرجع البنكي</Label>
+                  <Input
+                    value={state.bank_reference}
+                    onChange={(e) => setState({ ...state, bank_reference: e.target.value })}
+                    placeholder="رقم الحوالة"
+                    dir="ltr"
+                    className="h-10"
+                  />
+                </div>
+              )}
+            </Card>
 
             <div className="space-y-1.5">
               <Label className="text-xs">ملاحظات</Label>

@@ -346,7 +346,7 @@ export function ArabicDatePicker({
         dir="ltr"
         className={cn(
           "font-mono text-center ltr-nums flex-1 min-w-0",
-          compact ? "h-8 text-xs" : "h-9 text-sm",
+          compact ? "h-8 text-xs" : "h-10 text-sm",
           inputError && "border-destructive focus-visible:ring-destructive"
         )}
       />
@@ -359,7 +359,7 @@ export function ArabicDatePicker({
             variant="outline"
             size="icon"
             disabled={disabled}
-            className={cn(compact ? "h-8 w-8" : "h-9 w-9", "shrink-0")}
+            className={cn(compact ? "h-8 w-8" : "h-10 w-10", "shrink-0")}
           >
             <CalendarIcon className="h-4 w-4" />
           </Button>
