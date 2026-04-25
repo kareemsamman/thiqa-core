@@ -201,7 +201,7 @@ export function SettlementsTable({
                           <ChevronDown
                             className={cn(
                               'h-3.5 w-3.5 text-muted-foreground transition-transform',
-                              !isExpanded && '-rotate-90',
+                              isExpanded && 'rotate-180',
                             )}
                           />
                         ) : (
@@ -529,8 +529,9 @@ function ConsumedChequesRow({
                         <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
                       </div>
                     )}
-                    <div className="flex flex-col gap-0.5 leading-tight min-w-[120px]">
-                      <span className="font-mono tabular-nums text-foreground">
+                    <div className="flex flex-col gap-0.5 leading-tight min-w-[140px]">
+                      <span className="text-[10px] text-muted-foreground">رقم الشيك</span>
+                      <span className="font-mono tabular-nums text-foreground" dir="ltr">
                         {c.cheque_number || '—'}
                       </span>
                       <span className="text-[10px] text-muted-foreground">
