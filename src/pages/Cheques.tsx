@@ -112,7 +112,7 @@ interface ChequeRecord {
   /** What surface this cheque was written on. `customer` = a cheque
    *  the client gave us (policy_payments). The other values come from
    *  outgoing settlement vouchers — same cheque book, opposite flow. */
-  source?: 'customer' | 'company' | 'broker';
+  source?: 'customer' | 'company' | 'broker' | 'expense';
 }
 
 interface CustomerGroup {
@@ -329,71 +329,131 @@ export default function Cheques() {
     return Object.values(groups).sort((a, b) => a.customerName.localeCompare(b.customerName, 'ar'));
   }, [cheques]);
 
-  // Fetch summary stats separately (not affected by filters)
+  // Fetch summary stats separately (not affected by filters). The page
+  // counts cheques across all surfaces — customer cheques (in-bound) +
+  // outgoing settlement cheques to companies/brokers + outgoing expense
+  // cheques. Each source is normalized to a {amount, cheque_status,
+  // payment_date} triple so the same aggregation runs once at the end.
   const fetchSummaryStats = useCallback(async () => {
     try {
-      const { data: allCheques } = await supabase
-        .from('policy_payments')
-        .select('amount, cheque_status, payment_date')
-        .eq('payment_type', 'cheque');
+      const [ppRes, csRes, bsRes, exRes] = await Promise.all([
+        supabase
+          .from('policy_payments')
+          .select('amount, cheque_status, payment_date')
+          .eq('payment_type', 'cheque'),
+        supabase
+          .from('company_settlements')
+          .select('total_amount, status, refused, settlement_date')
+          .eq('payment_type', 'cheque'),
+        supabase
+          .from('broker_settlements')
+          .select('total_amount, status, refused, settlement_date')
+          .eq('payment_type', 'cheque'),
+        supabase
+          .from('expenses')
+          .select('amount, cheque_status, expense_date')
+          .eq('payment_method', 'cheque'),
+      ]);
 
-      if (allCheques) {
-        const todayIso = new Date().toISOString().split('T')[0];
-        const returnedCheques = allCheques.filter(c => c.cheque_status === 'returned');
-        const pendingCheques = allCheques.filter(c => c.cheque_status === 'pending' || !c.cheque_status);
-        const overdueCheques = allCheques.filter(c => isChequeOverdue(c.payment_date, c.cheque_status));
-        // Cheques whose استحقاق is exactly today and aren't already
-        // cashed or returned — that's what staff want to collect today.
-        const dueTodayCheques = allCheques.filter(
-          (c) => c.payment_date === todayIso && c.cheque_status !== 'cashed' && c.cheque_status !== 'returned',
-        );
+      type Norm = { amount: number; cheque_status: string | null; payment_date: string };
+      const normalized: Norm[] = [];
 
-        setSummaryStats({
-          returnedCount: returnedCheques.length,
-          returnedTotal: returnedCheques.reduce((sum, c) => sum + Number(c.amount), 0),
-          pendingCount: pendingCheques.length,
-          pendingTotal: pendingCheques.reduce((sum, c) => sum + Number(c.amount), 0),
-          overdueCount: overdueCheques.length,
-          overdueTotal: overdueCheques.reduce((sum, c) => sum + Number(c.amount), 0),
-          dueTodayCount: dueTodayCheques.length,
-          dueTodayTotal: dueTodayCheques.reduce((sum, c) => sum + Number(c.amount), 0),
+      ((ppRes.data ?? []) as Array<{ amount: number | null; cheque_status: string | null; payment_date: string }>).forEach((c) => {
+        normalized.push({
+          amount: Number(c.amount ?? 0),
+          cheque_status: c.cheque_status,
+          payment_date: c.payment_date,
         });
+      });
 
-        // Calculate monthly stats
-        const monthlyMap: Record<string, MonthlyStats> = {};
-        allCheques.forEach(c => {
-          const date = new Date(c.payment_date);
-          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-          
-          if (!monthlyMap[monthKey]) {
-            monthlyMap[monthKey] = {
-              month: monthKey,
-              total: 0, totalAmount: 0,
-              pending: 0, pendingAmount: 0,
-              cashed: 0, cashedAmount: 0,
-              returned: 0, returnedAmount: 0,
-            };
-          }
-          
-          monthlyMap[monthKey].total++;
-          monthlyMap[monthKey].totalAmount += Number(c.amount);
-          
-          const status = c.cheque_status || 'pending';
-          if (status === 'pending') {
-            monthlyMap[monthKey].pending++;
-            monthlyMap[monthKey].pendingAmount += Number(c.amount);
-          } else if (status === 'cashed') {
-            monthlyMap[monthKey].cashed++;
-            monthlyMap[monthKey].cashedAmount += Number(c.amount);
-          } else if (status === 'returned') {
-            monthlyMap[monthKey].returned++;
-            monthlyMap[monthKey].returnedAmount += Number(c.amount);
-          }
+      const settlementToStatus = (status: string | null, refused: boolean | null): string => {
+        if (refused) return 'returned';
+        if (status === 'completed') return 'cashed';
+        return 'pending';
+      };
+
+      ((csRes.data ?? []) as Array<{ total_amount: number | null; status: string | null; refused: boolean | null; settlement_date: string }>).forEach((c) => {
+        normalized.push({
+          amount: Number(c.total_amount ?? 0),
+          cheque_status: settlementToStatus(c.status, c.refused),
+          payment_date: c.settlement_date,
         });
+      });
 
-        const sortedMonths = Object.values(monthlyMap).sort((a, b) => b.month.localeCompare(a.month));
-        setMonthlyStats(sortedMonths);
-      }
+      ((bsRes.data ?? []) as Array<{ total_amount: number | null; status: string | null; refused: boolean | null; settlement_date: string }>).forEach((c) => {
+        normalized.push({
+          amount: Number(c.total_amount ?? 0),
+          cheque_status: settlementToStatus(c.status, c.refused),
+          payment_date: c.settlement_date,
+        });
+      });
+
+      ((exRes.data ?? []) as Array<{ amount: number | null; cheque_status: string | null; expense_date: string }>).forEach((c) => {
+        normalized.push({
+          amount: Number(c.amount ?? 0),
+          cheque_status: c.cheque_status,
+          payment_date: c.expense_date,
+        });
+      });
+
+      const todayIso = new Date().toISOString().split('T')[0];
+      const returnedCheques = normalized.filter((c) => c.cheque_status === 'returned');
+      const pendingCheques = normalized.filter((c) => c.cheque_status === 'pending' || !c.cheque_status);
+      const overdueCheques = normalized.filter((c) => isChequeOverdue(c.payment_date, c.cheque_status));
+      const dueTodayCheques = normalized.filter(
+        (c) =>
+          c.payment_date === todayIso &&
+          c.cheque_status !== 'cashed' &&
+          c.cheque_status !== 'returned',
+      );
+
+      setSummaryStats({
+        returnedCount: returnedCheques.length,
+        returnedTotal: returnedCheques.reduce((s, c) => s + c.amount, 0),
+        pendingCount: pendingCheques.length,
+        pendingTotal: pendingCheques.reduce((s, c) => s + c.amount, 0),
+        overdueCount: overdueCheques.length,
+        overdueTotal: overdueCheques.reduce((s, c) => s + c.amount, 0),
+        dueTodayCount: dueTodayCheques.length,
+        dueTodayTotal: dueTodayCheques.reduce((s, c) => s + c.amount, 0),
+      });
+
+      // Monthly stats — same normalized rows feed the per-month buckets.
+      const monthlyMap: Record<string, MonthlyStats> = {};
+      normalized.forEach((c) => {
+        const date = new Date(c.payment_date);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+        if (!monthlyMap[monthKey]) {
+          monthlyMap[monthKey] = {
+            month: monthKey,
+            total: 0, totalAmount: 0,
+            pending: 0, pendingAmount: 0,
+            cashed: 0, cashedAmount: 0,
+            returned: 0, returnedAmount: 0,
+          };
+        }
+
+        monthlyMap[monthKey].total++;
+        monthlyMap[monthKey].totalAmount += c.amount;
+
+        const status = c.cheque_status || 'pending';
+        if (status === 'pending') {
+          monthlyMap[monthKey].pending++;
+          monthlyMap[monthKey].pendingAmount += c.amount;
+        } else if (status === 'cashed') {
+          monthlyMap[monthKey].cashed++;
+          monthlyMap[monthKey].cashedAmount += c.amount;
+        } else if (status === 'returned') {
+          monthlyMap[monthKey].returned++;
+          monthlyMap[monthKey].returnedAmount += c.amount;
+        }
+      });
+
+      const sortedMonths = Object.values(monthlyMap).sort((a, b) =>
+        b.month.localeCompare(a.month),
+      );
+      setMonthlyStats(sortedMonths);
     } catch (error) {
       console.error('Error fetching summary stats:', error);
     }
@@ -1458,11 +1518,12 @@ export default function Cheques() {
                                       "h-4 w-4 transition-transform",
                                       !isExpanded && "-rotate-90"
                                     )} />
-                                    {/* Outgoing groups (company/broker recipients) get
-                                        a building icon + a "شركة"/"وسيط" badge so they're
+                                    {/* Outgoing groups (company/broker/expense recipients)
+                                        get a building icon + a typed badge so they're
                                         visually distinct from the customer groups. */}
                                     {group.customerId.startsWith('company-') ||
-                                    group.customerId.startsWith('broker-') ? (
+                                    group.customerId.startsWith('broker-') ||
+                                    group.customerId.startsWith('expense-') ? (
                                       <Building2 className="h-4 w-4 text-amber-600" />
                                     ) : (
                                       <User className="h-4 w-4 text-primary" />
@@ -1476,6 +1537,11 @@ export default function Cheques() {
                                     {group.customerId.startsWith('broker-') && (
                                       <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-300 text-amber-700">
                                         وسيط · شيكات صادرة
+                                      </Badge>
+                                    )}
+                                    {group.customerId.startsWith('expense-') && (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-300 text-amber-700">
+                                        مصروف · شيكات صادرة
                                       </Badge>
                                     )}
                                     {group.phone && (
@@ -1709,7 +1775,7 @@ export default function Cheques() {
  * search-by-name filter.
  */
 async function fetchOutgoingCheques(): Promise<ChequeRecord[]> {
-  const [csRes, bsRes] = await Promise.all([
+  const [csRes, bsRes, exRes] = await Promise.all([
     supabase
       .from('company_settlements')
       .select(
@@ -1722,6 +1788,12 @@ async function fetchOutgoingCheques(): Promise<ChequeRecord[]> {
         'id, settlement_date, total_amount, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, status, refused, notes, broker_id, brokers(name)',
       )
       .eq('payment_type', 'cheque'),
+    supabase
+      .from('expenses')
+      .select(
+        'id, expense_date, amount, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, cheque_status, notes, contact_name, category, description',
+      )
+      .eq('payment_method', 'cheque'),
   ]);
 
   const out: ChequeRecord[] = [];
@@ -1737,7 +1809,74 @@ async function fetchOutgoingCheques(): Promise<ChequeRecord[]> {
     out.push(buildOutgoingChequeRecord('broker', `bs-${row.id}`, recipientName, row.broker_id ?? null, row));
   });
 
+  ((exRes.data ?? []) as RawExpenseCheque[]).forEach((row) => {
+    out.push(buildExpenseChequeRecord(row));
+  });
+
   return out;
+}
+
+interface RawExpenseCheque {
+  id: string;
+  expense_date: string;
+  amount: number | null;
+  cheque_number: string | null;
+  bank_code: string | null;
+  branch_code: string | null;
+  cheque_image_url: string | null;
+  cheque_image_urls: string[] | null;
+  cheque_status: string | null;
+  notes: string | null;
+  contact_name: string | null;
+  category: string | null;
+  description: string | null;
+}
+
+function buildExpenseChequeRecord(row: RawExpenseCheque): ChequeRecord {
+  // Group label: prefer the contact (whoever we paid), fall back to
+  // category/description so the row still reads cleanly when a contact
+  // wasn't filled in. All expense cheques to the same contact land in
+  // a single group via the synthetic client.id.
+  const recipientName = row.contact_name || row.description || row.category || 'مصروف';
+  const groupKey = (row.contact_name || row.category || 'misc').trim().toLowerCase();
+  const status: string = row.cheque_status || 'pending';
+  const firstImage =
+    (Array.isArray(row.cheque_image_urls) && row.cheque_image_urls[0]) ||
+    row.cheque_image_url ||
+    null;
+  return {
+    id: `ex-${row.id}`,
+    policy_id: '',
+    amount: Number(row.amount ?? 0),
+    payment_date: row.expense_date,
+    cheque_number: row.cheque_number ?? null,
+    cheque_date: row.expense_date,
+    bank_code: row.bank_code ?? null,
+    branch_code: row.branch_code ?? null,
+    cheque_image_url: firstImage,
+    cheque_status: status,
+    refused: status === 'returned',
+    notes: row.notes,
+    policy: {
+      id: `ex-${row.id}`,
+      policy_type_parent: 'OUTGOING',
+      client: {
+        id: `expense-${groupKey}`,
+        full_name: recipientName,
+        broker_id: null,
+        phone_number: null,
+      },
+      car: null,
+    },
+    images: firstImage
+      ? [{ id: `ex-${row.id}-img`, image_url: firstImage, image_type: 'cheque' }]
+      : [],
+    transferred_to_type: 'expense',
+    transferred_to_id: null,
+    transferred_to_name: recipientName,
+    transferred_payment_id: null,
+    source: 'expense',
+  };
 }
 
 interface RawOutgoingSettlement {
