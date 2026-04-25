@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,6 +75,14 @@ export function CompanyIssuancesTable({
   const [editLocal, setEditLocal] = useState<Record<string, PolicyPatch & CarPatch>>({});
   const [page, setPage] = useState(1);
 
+  // Scroll-pane plumbing for the side prev/next arrows. We forward the
+  // ref into StickyHorizontalScroll so we can drive the same element
+  // its internal scrollbar already syncs against. atStart/atEnd derive
+  // from `Math.abs(scrollLeft)` so it works under both LTR and RTL
+  // (modern RTL uses negative scrollLeft going from 0 → -(maxScroll)).
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [scrollEdges, setScrollEdges] = useState({ atStart: true, atEnd: true });
+
   const savePolicy = useMemo(
     () => async (policyId: string, patch: PolicyPatch) => {
       const { error } = await supabase.from('policies').update(patch).eq('id', policyId);
@@ -108,6 +116,37 @@ export function CompanyIssuancesTable({
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paged = rows.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const update = () => {
+      const distance = Math.abs(el.scrollLeft);
+      const max = el.scrollWidth - el.clientWidth;
+      setScrollEdges({
+        atStart: distance < 1,
+        atEnd: max <= 0 || distance >= max - 1,
+      });
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    const obs = new ResizeObserver(update);
+    obs.observe(el);
+    Array.from(el.children).forEach((c) => obs.observe(c));
+    return () => {
+      el.removeEventListener('scroll', update);
+      obs.disconnect();
+    };
+  }, [paged.length, visible.length]);
+
+  const scrollByPage = (dir: 'prev' | 'next') => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const delta = el.clientWidth * 0.7;
+    // `prev` jumps the visible content one screen back, `next` one
+    // forward — browser handles the LTR/RTL sign mapping internally.
+    el.scrollBy({ left: dir === 'prev' ? -delta : delta, behavior: 'smooth' });
+  };
 
   const merge = (rowId: string, patch: PolicyPatch & CarPatch) =>
     setEditLocal((prev) => ({ ...prev, [rowId]: { ...(prev[rowId] ?? {}), ...patch } }));
@@ -182,8 +221,9 @@ export function CompanyIssuancesTable({
   return (
     <TooltipProvider delayDuration={250}>
       <div className="space-y-2.5">
+        <div className="relative">
         <div className="rounded-lg border bg-card">
-          <StickyHorizontalScroll>
+          <StickyHorizontalScroll ref={scrollerRef}>
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -223,7 +263,7 @@ export function CompanyIssuancesTable({
                     <TableHead className="whitespace-nowrap min-w-[140px]">سعر التأمين</TableHead>
                   )}
                   {showCol('actions') && (
-                    <TableHead className="whitespace-nowrap text-center sticky left-0 bg-slate-100/95 border-l z-10 w-20 min-w-[80px] px-1">
+                    <TableHead className="whitespace-nowrap text-center sticky left-0 bg-slate-100/95 z-10 w-20 min-w-[80px] px-1 shadow-[1px_0_0_0_hsl(var(--border))]">
                       إجراءات
                     </TableHead>
                   )}
@@ -517,7 +557,7 @@ export function CompanyIssuancesTable({
                         )}
 
                         {showCol('actions') && (
-                          <TableCell className="sticky left-0 bg-slate-50/95 border-l z-10 px-1 w-20 min-w-[80px]">
+                          <TableCell className="sticky left-0 bg-slate-50/95 z-10 px-1 w-20 min-w-[80px] shadow-[1px_0_0_0_hsl(var(--border))]">
                             <div className="flex items-center justify-center gap-0.5">
                               {row.is_grouped ? (
                                 <Tooltip>
@@ -612,6 +652,24 @@ export function CompanyIssuancesTable({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Side scroll arrows — render in a tall absolute lane on
+            each edge so a `position: sticky` child can pin to the
+            viewport while the user scrolls vertically through a long
+            table. The chevrons map directly to scroll direction;
+            disabled state mirrors `Math.abs(scrollLeft)` against the
+            scrollWidth so this works in both LTR and RTL. */}
+        <SideScrollArrow
+          side="right"
+          disabled={scrollEdges.atStart}
+          onClick={() => scrollByPage('prev')}
+        />
+        <SideScrollArrow
+          side="left"
+          disabled={scrollEdges.atEnd}
+          onClick={() => scrollByPage('next')}
+        />
         </div>
 
         <CalculationExplanationModal
@@ -740,4 +798,45 @@ function NumberCell({
     );
   }
   return inner;
+}
+
+// Floating prev/next horizontal-scroll button. The outer absolute
+// lane spans the full table height; the inner `position: sticky`
+// child pins around viewport-center as the user scrolls vertically
+// through long tables. `pointer-events-none` on the lane prevents it
+// from blocking clicks on table cells underneath, while the inner
+// button re-enables them for itself.
+function SideScrollArrow({
+  side,
+  disabled,
+  onClick,
+}: {
+  side: 'left' | 'right';
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const Icon = side === 'right' ? ChevronRight : ChevronLeft;
+  return (
+    <div
+      aria-hidden={disabled}
+      className={cn(
+        'absolute top-0 bottom-0 w-8 pointer-events-none hidden md:flex items-start',
+        side === 'right' ? '-right-3' : '-left-3',
+      )}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={side === 'right' ? 'تمرير لليمين' : 'تمرير لليسار'}
+        className={cn(
+          'sticky top-[45vh] mx-auto pointer-events-auto h-8 w-8 rounded-full bg-card border shadow-md',
+          'flex items-center justify-center text-foreground transition',
+          'hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none',
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </button>
+    </div>
+  );
 }

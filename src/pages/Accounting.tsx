@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { CompaniesSection } from '@/components/accounting/CompaniesSection';
 import { BrokersSection } from '@/components/accounting/BrokersSection';
 import { ExpensesSection } from '@/components/accounting/ExpensesSection';
+import { RecalcProfitsButton } from '@/components/dashboard/RecalcProfitsButton';
 
 type MainTab = 'companies' | 'brokers' | 'expenses';
 
@@ -26,20 +27,23 @@ export default function Accounting() {
 
       <div className="p-3 md:p-4 space-y-3">
         <Tabs value={tab} onValueChange={(v) => setTab(v as MainTab)}>
-          <TabsList className="grid w-full max-w-md grid-cols-3">
-            <TabsTrigger value="companies" className="gap-2">
-              <Building2 className="h-4 w-4" />
-              شركات التأمين
-            </TabsTrigger>
-            <TabsTrigger value="brokers" className="gap-2">
-              <Users className="h-4 w-4" />
-              الوسطاء
-            </TabsTrigger>
-            <TabsTrigger value="expenses" className="gap-2">
-              <Receipt className="h-4 w-4" />
-              المصاريف
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <TabsList className="grid w-full max-w-md grid-cols-3">
+              <TabsTrigger value="companies" className="gap-2">
+                <Building2 className="h-4 w-4" />
+                شركات التأمين
+              </TabsTrigger>
+              <TabsTrigger value="brokers" className="gap-2">
+                <Users className="h-4 w-4" />
+                الوسطاء
+              </TabsTrigger>
+              <TabsTrigger value="expenses" className="gap-2">
+                <Receipt className="h-4 w-4" />
+                المصاريف
+              </TabsTrigger>
+            </TabsList>
+            <RecalcProfitsButton />
+          </div>
 
           <TabsContent value="companies" className="mt-3">
             <CompaniesSection />

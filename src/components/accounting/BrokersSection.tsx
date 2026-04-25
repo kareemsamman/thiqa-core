@@ -153,14 +153,14 @@ export function BrokersSection() {
         </Tabs>
 
         <div className="flex items-center gap-2 mr-auto">
-          <div className="relative">
+          <div className="relative w-full sm:w-80 md:w-96">
             <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <Input
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="بحث بالاسم، رقم المعاملة، الهوية…"
-              className="h-8 w-56 pr-8 text-sm"
+              className="h-8 w-full pr-8 text-sm"
             />
           </div>
           <span className="text-xs text-muted-foreground">
