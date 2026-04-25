@@ -20,6 +20,7 @@ import { CalculationExplanationModal } from '@/components/reports/CalculationExp
 import { PolicyReceiptsDrawer } from './PolicyReceiptsDrawer';
 import { PackageDetailsDrawer } from './PackageDetailsDrawer';
 import { PolicyTypeBadge } from './PolicyTypeBadge';
+import { StickyHorizontalScroll } from './StickyHorizontalScroll';
 import { IssuanceRow, PAYMENT_METHOD_LABELS } from './accountingTypes';
 
 type Mode = 'company' | 'broker';
@@ -180,7 +181,7 @@ export function CompanyIssuancesTable({
     <TooltipProvider delayDuration={250}>
       <div className="space-y-2.5">
         <div className="rounded-lg border bg-card">
-          <div className="overflow-x-auto">
+          <StickyHorizontalScroll>
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -217,7 +218,7 @@ export function CompanyIssuancesTable({
                     <TableHead className="whitespace-nowrap min-w-[140px]">سعر التأمين</TableHead>
                   )}
                   {showCol('actions') && (
-                    <TableHead className="whitespace-nowrap text-left sticky left-0 bg-white z-10 min-w-[120px] shadow-[-4px_0_8px_-6px_rgba(15,23,42,0.18)]">
+                    <TableHead className="whitespace-nowrap text-left sticky left-0 bg-slate-100/90 backdrop-blur-sm border-l z-10 min-w-[100px]">
                       إجراءات
                     </TableHead>
                   )}
@@ -354,11 +355,43 @@ export function CompanyIssuancesTable({
                           </TableCell>
                         )}
 
-                        {showCol('company_name') && (
-                          <TableCell className="text-sm max-w-[180px] truncate" title={row.main.company_name ?? ''}>
-                            {row.main.company_name || '-'}
-                          </TableCell>
-                        )}
+                        {showCol('company_name') && (() => {
+                          // Count distinct companies across the group. The
+                          // main name is shown literally; if there are
+                          // others, render a "+N" pill that opens the
+                          // package drawer (mirrors the type column).
+                          const companyNames = Array.from(
+                            new Set(
+                              row.sub_policies
+                                .map((s) => s.company_name)
+                                .filter((n): n is string => !!n),
+                            ),
+                          );
+                          const otherCount = Math.max(0, companyNames.length - 1);
+                          return (
+                            <TableCell className="text-sm max-w-[200px]">
+                              <div className="flex items-center gap-1.5">
+                                <span className="truncate" title={row.main.company_name ?? ''}>
+                                  {row.main.company_name || '-'}
+                                </span>
+                                {otherCount > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setPackageRow(rawRow);
+                                      setPackageOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50 shrink-0"
+                                    title="عرض كل شركات الحزمة"
+                                  >
+                                    <Layers className="h-3 w-3" />
+                                    +{otherCount}
+                                  </button>
+                                )}
+                              </div>
+                            </TableCell>
+                          );
+                        })()}
 
                         {showCol('policy_type') && (
                           <TableCell>
@@ -462,36 +495,63 @@ export function CompanyIssuancesTable({
                         )}
 
                         {showCol('actions') && (
-                          <TableCell className="sticky left-0 bg-white z-10 text-left shadow-[-4px_0_8px_-6px_rgba(15,23,42,0.18)]">
-                            <div className="flex items-center gap-1">
-                              {row.is_grouped && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 px-2 gap-1 hover:bg-slate-100"
-                                  onClick={() => {
-                                    setPackageRow(rawRow);
-                                    setPackageOpen(true);
-                                  }}
-                                  title="تفاصيل الحزمة"
-                                >
-                                  <Layers className="h-3.5 w-3.5" />
-                                  <span className="text-xs">تفاصيل</span>
-                                </Button>
+                          <TableCell className="sticky left-0 bg-slate-50/80 backdrop-blur-sm border-l z-10 text-left">
+                            <div className="flex items-center gap-0.5">
+                              {row.is_grouped ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 hover:bg-slate-200/60"
+                                      onClick={() => {
+                                        setPackageRow(rawRow);
+                                        setPackageOpen(true);
+                                      }}
+                                    >
+                                      <Layers className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">تفاصيل الحزمة</TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 opacity-40 cursor-not-allowed"
+                                        disabled
+                                      >
+                                        <Layers className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">
+                                    معاملة فردية — لا توجد بنود متعددة
+                                  </TooltipContent>
+                                </Tooltip>
                               )}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 gap-1 hover:bg-slate-100"
-                                disabled={!row.main.company_id}
-                                onClick={() => {
-                                  setCalcRow(rawRow);
-                                  setCalcOpen(true);
-                                }}
-                                title="معاينة المعاملة"
-                              >
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 hover:bg-slate-200/60"
+                                      disabled={!row.main.company_id}
+                                      onClick={() => {
+                                        setCalcRow(rawRow);
+                                        setCalcOpen(true);
+                                      }}
+                                    >
+                                      <Eye className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">معاينة المعاملة</TooltipContent>
+                              </Tooltip>
                             </div>
                           </TableCell>
                         )}
@@ -501,7 +561,7 @@ export function CompanyIssuancesTable({
                 )}
               </TableBody>
             </Table>
-          </div>
+          </StickyHorizontalScroll>
 
           {!loading && rows.length > pageSize && (
             <div className="flex items-center justify-between border-t px-4 py-2.5">
