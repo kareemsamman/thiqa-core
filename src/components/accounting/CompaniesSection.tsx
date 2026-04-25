@@ -13,6 +13,10 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { AddSettlementDialog, SettlementKind } from './AddSettlementDialog';
+import { EditSettlementDialog } from './EditSettlementDialog';
+import { SettlementRow } from './SettlementsTable';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { CompanyIssuancesTable } from './CompanyIssuancesTable';
 import { SettlementsTable } from './SettlementsTable';
 import {
@@ -57,6 +61,8 @@ export function CompaniesSection() {
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [addKind, setAddKind] = useState<SettlementKind>('disbursement');
+  const [editRow, setEditRow] = useState<SettlementRow | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
   // Live overlay of inline edits across the issuances table — owned
   // here so the summary pills + calculation modal can mirror the cell
   // values before the debounced save flushes back. Keyed by row.id.
@@ -72,6 +78,43 @@ export function CompaniesSection() {
   });
 
   const data = useAccountingData(filters);
+
+  const handleDelete = async (row: SettlementRow) => {
+    // If the voucher consumed customer cheques, release them back to
+    // the available pool so they can be re-used for another settlement.
+    const { data: settlement, error: readError } = await supabase
+      .from('company_settlements')
+      .select('customer_cheque_ids')
+      .eq('id', row.id)
+      .maybeSingle();
+    if (!readError && settlement) {
+      const ids = (settlement as { customer_cheque_ids?: string[] | null }).customer_cheque_ids;
+      if (Array.isArray(ids) && ids.length > 0) {
+        await supabase
+          .from('policy_payments')
+          .update({
+            cheque_status: 'pending',
+            transferred_to_type: null,
+            transferred_to_id: null,
+            transferred_payment_id: null,
+            transferred_at: null,
+          })
+          .in('id', ids);
+      }
+    }
+    const { error } = await supabase.from('company_settlements').delete().eq('id', row.id);
+    if (error) {
+      toast.error(`فشل الحذف: ${error.message}`);
+      return;
+    }
+    toast.success('تم حذف السند');
+    data.refresh();
+  };
+
+  const handleEdit = (row: SettlementRow) => {
+    setEditRow(row);
+    setEditOpen(true);
+  };
 
   // One visibility state per logical table type. Issuance tabs (all /
   // issuances / returns) all show the same column set, so they share
@@ -290,6 +333,8 @@ export function CompaniesSection() {
             voucherKind="disbursement"
             visible={settlementCols.visible}
             entityLabel="شركة التأمين"
+            onEdit={handleEdit}
+            onDelete={handleDelete}
           />
         </TabsContent>
         <TabsContent value="receipts" className="m-0">
@@ -299,6 +344,8 @@ export function CompaniesSection() {
             voucherKind="receipt"
             visible={settlementCols.visible}
             entityLabel="شركة التأمين"
+            onEdit={handleEdit}
+            onDelete={handleDelete}
           />
           {!data.loading && companyReceipts.length === 0 && (
             <p className="text-center text-xs text-muted-foreground mt-3">
@@ -314,6 +361,14 @@ export function CompaniesSection() {
         mode="company"
         kind={addKind}
         entities={companyOptions.map((c) => ({ id: c.value, name: c.label }))}
+        onSaved={() => data.refresh()}
+      />
+
+      <EditSettlementDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        table="company_settlements"
+        row={editRow}
         onSaved={() => data.refresh()}
       />
     </div>

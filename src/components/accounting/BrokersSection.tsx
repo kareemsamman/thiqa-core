@@ -13,6 +13,10 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { AddSettlementDialog, SettlementKind } from './AddSettlementDialog';
+import { EditSettlementDialog } from './EditSettlementDialog';
+import { SettlementRow } from './SettlementsTable';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { CompanyIssuancesTable } from './CompanyIssuancesTable';
 import { SettlementsTable } from './SettlementsTable';
 import {
@@ -57,6 +61,8 @@ export function BrokersSection() {
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [addKind, setAddKind] = useState<SettlementKind>('disbursement');
+  const [editRow, setEditRow] = useState<SettlementRow | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
   const [editLocal, setEditLocal] = useState<IssuanceEditOverlay>({});
   const onPatch = (rowId: string, patch: IssuanceEditPatch) =>
     setEditLocal((prev) => ({ ...prev, [rowId]: { ...(prev[rowId] ?? {}), ...patch } }));
@@ -69,6 +75,41 @@ export function BrokersSection() {
   });
 
   const data = useAccountingData(filters);
+
+  const handleDelete = async (row: SettlementRow) => {
+    const { data: settlement, error: readError } = await supabase
+      .from('broker_settlements')
+      .select('customer_cheque_ids')
+      .eq('id', row.id)
+      .maybeSingle();
+    if (!readError && settlement) {
+      const ids = (settlement as { customer_cheque_ids?: string[] | null }).customer_cheque_ids;
+      if (Array.isArray(ids) && ids.length > 0) {
+        await supabase
+          .from('policy_payments')
+          .update({
+            cheque_status: 'pending',
+            transferred_to_type: null,
+            transferred_to_id: null,
+            transferred_payment_id: null,
+            transferred_at: null,
+          })
+          .in('id', ids);
+      }
+    }
+    const { error } = await supabase.from('broker_settlements').delete().eq('id', row.id);
+    if (error) {
+      toast.error(`فشل الحذف: ${error.message}`);
+      return;
+    }
+    toast.success('تم حذف السند');
+    data.refresh();
+  };
+
+  const handleEdit = (row: SettlementRow) => {
+    setEditRow(row);
+    setEditOpen(true);
+  };
 
   const issuanceCols = useTableColumnVisibility(
     'accounting-brokers-issuances-v4',
@@ -291,6 +332,8 @@ export function BrokersSection() {
             showDirection
             visible={settlementCols.visible}
             entityLabel="الوسيط"
+            onEdit={handleEdit}
+            onDelete={handleDelete}
           />
         </TabsContent>
         <TabsContent value="receipts" className="m-0">
@@ -301,6 +344,8 @@ export function BrokersSection() {
             showDirection
             visible={settlementCols.visible}
             entityLabel="الوسيط"
+            onEdit={handleEdit}
+            onDelete={handleDelete}
           />
         </TabsContent>
       </Tabs>
@@ -311,6 +356,14 @@ export function BrokersSection() {
         mode="broker"
         kind={addKind}
         entities={data.brokers.map((b) => ({ id: b.id, name: b.name }))}
+        onSaved={() => data.refresh()}
+      />
+
+      <EditSettlementDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        table="broker_settlements"
+        row={editRow}
         onSaved={() => data.refresh()}
       />
     </div>

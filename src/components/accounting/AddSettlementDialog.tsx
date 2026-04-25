@@ -21,14 +21,14 @@ import {
 } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
-import { Banknote, FileText, Loader2, Plus, Receipt, Scan, Split, Trash2, Wallet, X } from 'lucide-react';
+import { Banknote, FileText, Loader2, Plus, Receipt, Scan, Split, Trash2, Wallet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { toast } from 'sonner';
 import { CustomerChequeSelector, SelectableCheque } from '@/components/shared/CustomerChequeSelector';
-import { BankBranchPicker } from '@/components/shared/BankBranchPicker';
-import { FileUploader } from '@/components/media/FileUploader';
+import { BankPicker } from '@/components/shared/BankPicker';
+import { CompactImagePicker } from '@/components/shared/CompactImagePicker';
 import { sanitizeChequeNumber, validateChequeNumber } from '@/lib/chequeUtils';
 import { cn } from '@/lib/utils';
 
@@ -429,15 +429,22 @@ export function AddSettlementDialog({
                 </div>
               </div>
 
-              {lines.map((line, idx) => (
-                <PaymentLineCard
-                  key={line.id}
-                  index={idx}
-                  line={line}
-                  onChange={(patch) => updateLine(line.id, patch)}
-                  onRemove={lines.length > 1 ? () => removeLine(line.id) : undefined}
-                />
-              ))}
+              {/* Newest-first display so adding lines pushes prior
+                  entries down rather than scrolling the user past
+                  what they were just typing. The numeric label stays
+                  tied to the original index for stable identity. */}
+              {lines
+                .map((line, idx) => ({ line, idx }))
+                .reverse()
+                .map(({ line, idx }) => (
+                  <PaymentLineCard
+                    key={line.id}
+                    index={idx}
+                    line={line}
+                    onChange={(patch) => updateLine(line.id, patch)}
+                    onRemove={lines.length > 1 ? () => removeLine(line.id) : undefined}
+                  />
+                ))}
             </div>
 
             <div className="flex items-center justify-between rounded-lg bg-muted px-4 py-2.5">
@@ -627,32 +634,53 @@ function ChequeLineEditor({
     };
   }, [line.cheque_number, line.bank_code]);
 
+  // Three equal columns shared by both rows (bank/branch/cheque# and
+  // amount/due/issue) so every field on the cheque card renders at the
+  // same width — fixes the "البنك is bigger than الفرع" feedback. The
+  // image picker hangs off the bottom-left in its own compact slot.
+  const gridCls = 'grid grid-cols-1 md:grid-cols-3 gap-3';
+
   return (
     <div className="space-y-3 border-t pt-3">
-      {/* Bank + branch + cheque-number row — same layout as the policy
-          wizard's payment step, which the user explicitly pointed at. */}
-      <BankBranchPicker
-        bankCode={line.bank_code}
-        branchCode={line.branch_code}
-        onBankChange={(c) => onChange({ bank_code: c })}
-        onBranchChange={(c) => onChange({ branch_code: c })}
-        chequeNumberSlot={
-          <>
-            <Label className="text-xs font-semibold">رقم الشيك</Label>
-            <Input
-              value={line.cheque_number ?? ''}
-              onChange={(e) => onChange({ cheque_number: sanitizeChequeNumber(e.target.value) })}
-              placeholder="12345678"
-              inputMode="numeric"
-              dir="ltr"
-              className={cn(
-                'h-10 tabular-nums',
-                duplicate && 'border-amber-500 ring-1 ring-amber-200',
-              )}
-            />
-          </>
-        }
-      />
+      <div className={gridCls}>
+        <div className="space-y-1.5 min-w-0">
+          <Label className="text-[11px]">البنك</Label>
+          <BankPicker
+            value={line.bank_code}
+            onChange={(c) => onChange({ bank_code: c })}
+          />
+        </div>
+        <div className="space-y-1.5 min-w-0">
+          <Label className="text-[11px]">الفرع</Label>
+          <Input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={4}
+            className="h-10 tabular-nums font-mono"
+            placeholder="مثال: 305"
+            value={line.branch_code ?? ''}
+            onChange={(e) => {
+              const v = e.target.value.replace(/\D/g, '');
+              onChange({ branch_code: v || null });
+            }}
+          />
+        </div>
+        <div className="space-y-1.5 min-w-0">
+          <Label className="text-[11px]">رقم الشيك</Label>
+          <Input
+            value={line.cheque_number ?? ''}
+            onChange={(e) => onChange({ cheque_number: sanitizeChequeNumber(e.target.value) })}
+            placeholder="12345678"
+            inputMode="numeric"
+            dir="ltr"
+            className={cn(
+              'h-10 tabular-nums',
+              duplicate && 'border-amber-500 ring-1 ring-amber-200',
+            )}
+          />
+        </div>
+      </div>
 
       {duplicate && (
         <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
@@ -660,10 +688,10 @@ function ChequeLineEditor({
         </p>
       )}
 
-      {/* Amount + due date + issue date. Source order = right-to-left
-          in RTL: amount (right) → due → issue. */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="space-y-1.5">
+      {/* Amount + due date + issue date — same 3-column grid as the
+          bank row so columns align across both rows. */}
+      <div className={gridCls}>
+        <div className="space-y-1.5 min-w-0">
           <Label className="text-[11px]">المبلغ</Label>
           <Input
             type="number"
@@ -671,10 +699,10 @@ function ChequeLineEditor({
             onChange={(e) => onChange({ amount: parseFloat(e.target.value) || 0 })}
             placeholder="0"
             dir="ltr"
-            className="h-9 tabular-nums"
+            className="h-10 tabular-nums"
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-0">
           <Label className="text-[11px]">تاريخ الاستحقاق</Label>
           <ArabicDatePicker
             value={line.cheque_due_date ?? ''}
@@ -682,7 +710,7 @@ function ChequeLineEditor({
             compact
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-0">
           <Label className="text-[11px]">تاريخ الإصدار</Label>
           <ArabicDatePicker
             value={line.cheque_issue_date ?? ''}
@@ -692,41 +720,17 @@ function ChequeLineEditor({
         </div>
       </div>
 
-      {/* Image — use FileUploader keyed on the line's local id so each
-          cheque uploads independently. We grab the first uploaded url. */}
-      <div className="space-y-1.5">
-        <Label className="text-[11px]">صورة الشيك</Label>
-        {line.cheque_image_url ? (
-          <div className="flex items-center gap-3">
-            <img
-              src={line.cheque_image_url}
-              alt="صورة الشيك"
-              className="h-16 rounded border object-cover"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onChange({ cheque_image_url: undefined })}
-              className="gap-1.5"
-            >
-              <X className="h-3.5 w-3.5" />
-              إزالة
-            </Button>
-          </div>
-        ) : (
-          <FileUploader
-            entityType="settlement_cheque"
-            entityId={line.id}
-            accept="image/*"
-            maxFiles={1}
-            onUploadComplete={(files) => {
-              const first = files?.[0];
-              const url = first?.cdn_url || first?.url;
-              if (url) onChange({ cheque_image_url: url });
-            }}
-          />
-        )}
+      {/* Compact image picker — small button + thumbnail beside it,
+          tucked at the bottom-left so the card stays dense. */}
+      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+        <CompactImagePicker
+          value={line.cheque_image_url}
+          onChange={(url) => onChange({ cheque_image_url: url ?? undefined })}
+          entityType="settlement_cheque"
+          entityId={line.id}
+          label="صورة الشيك"
+        />
+        <span>{line.cheque_image_url ? 'صورة الشيك مرفقة' : 'صورة الشيك (اختياري)'}</span>
       </div>
     </div>
   );

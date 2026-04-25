@@ -1,7 +1,20 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Banknote, Building, CreditCard, FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Banknote, Building, CreditCard, FileText, Pencil, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { PAYMENT_METHOD_LABELS } from './accountingTypes';
 
@@ -29,6 +42,11 @@ interface Props {
   /** Controlled visibility — section owns the column-visibility state. */
   visible: string[];
   entityLabel: string; // "شركة التأمين" / "الوسيط"
+  /** Optional row actions — when omitted, the actions column is hidden.
+   *  Wired by the section so it can target the right table for delete
+   *  and supply the entity context for edit. */
+  onEdit?: (row: SettlementRow) => void;
+  onDelete?: (row: SettlementRow) => Promise<void> | void;
 }
 
 export function SettlementsTable({
@@ -38,11 +56,16 @@ export function SettlementsTable({
   showDirection = false,
   visible,
   entityLabel,
+  onEdit,
+  onDelete,
 }: Props) {
   const showCol = (key: string) => visible.includes(key);
   const kindClass = voucherKind === 'disbursement' ? 'text-orange-600' : 'text-emerald-600';
+  const showActions = !!(onEdit || onDelete);
+  const colSpan = visible.length + (showActions ? 1 : 0);
 
   return (
+    <TooltipProvider delayDuration={250}>
     <div className="rounded-lg border bg-card overflow-x-auto">
         <Table>
           <TableHeader>
@@ -57,13 +80,14 @@ export function SettlementsTable({
               )}
               {showCol('status') && <TableHead className="whitespace-nowrap min-w-[100px]">الحالة</TableHead>}
               {showCol('notes') && <TableHead className="whitespace-nowrap min-w-[180px]">ملاحظات</TableHead>}
+              {showActions && <TableHead className="whitespace-nowrap text-center w-24">إجراءات</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <TableRow key={`sk-${i}`}>
-                  {Array.from({ length: visible.length }).map((__, j) => (
+                  {Array.from({ length: colSpan }).map((__, j) => (
                     <TableCell key={j}>
                       <Skeleton className="h-6 w-full" />
                     </TableCell>
@@ -72,7 +96,7 @@ export function SettlementsTable({
               ))
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={visible.length} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={colSpan} className="text-center py-12 text-muted-foreground">
                   <FileText className="h-10 w-10 mx-auto mb-2 opacity-40" />
                   <p className="text-sm">لا توجد سندات</p>
                 </TableCell>
@@ -128,12 +152,70 @@ export function SettlementsTable({
                       {r.notes || '-'}
                     </TableCell>
                   )}
+                  {showActions && (
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-0.5">
+                        {onEdit && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 hover:bg-slate-200/60"
+                                onClick={() => onEdit(r)}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="whitespace-nowrap">تعديل</TooltipContent>
+                          </Tooltip>
+                        )}
+                        {onDelete && (
+                          <AlertDialog>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 hover:bg-destructive/10"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="whitespace-nowrap">حذف</TooltipContent>
+                            </Tooltip>
+                            <AlertDialogContent dir="rtl">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>حذف السند؟</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  سيتم حذف السند نهائياً. إذا كان السند يخصم شيكات عميل،
+                                  سيتم إعادة تلك الشيكات إلى الحالة "قيد الانتظار".
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => onDelete(r)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  حذف
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
     </div>
+    </TooltipProvider>
   );
 }
 
