@@ -20,6 +20,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 import { Banknote, FileText, Loader2, Plus, Receipt, Scan, Split, Trash2, Wallet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -279,6 +289,14 @@ export function AddSettlementDialog({
         }
         if (!(line.amount > 0)) {
           toast.error('أدخل مبلغ الشيك');
+          return;
+        }
+        // Cross-surface dup guard — even if the user dismissed the
+        // auto-switch popup, we still refuse to write a cheque whose
+        // (number + bank) already exists somewhere else.
+        const dup = await findExistingCheque(line.cheque_number ?? '', line.bank_code ?? null);
+        if (dup) {
+          toast.error(`لا يمكن حفظ شيك مكرر — موجود مسبقاً: ${dup.description}`);
           return;
         }
       }
@@ -658,21 +676,73 @@ function ChequeLineEditor({
   onChange: (patch: Partial<PaymentLine>) => void;
 }) {
   // Cross-surface duplicate detection — same query the expense form runs.
-  const [duplicate, setDuplicate] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState<DuplicateMatch | null>(null);
+  // Once the user dismisses the auto-switch prompt for a given cheque
+  // number we shouldn't keep popping it back up. Tracks the
+  // "{number}|{bank}" pair the user already saw the dialog for.
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+  const [switchOpen, setSwitchOpen] = useState(false);
   useEffect(() => {
     if (!line.cheque_number || !line.bank_code) {
       setDuplicate(null);
+      setSwitchOpen(false);
       return;
     }
     let cancelled = false;
     (async () => {
       const found = await findExistingCheque(line.cheque_number ?? '', line.bank_code ?? null);
-      if (!cancelled) setDuplicate(found);
+      if (cancelled) return;
+      setDuplicate(found);
+      // Only auto-open the switch dialog when the duplicate is a
+      // customer cheque (policy_payments) — duplicates in any other
+      // table can't be "switched to", they just have to be a different
+      // cheque. Dismissed pairs are remembered to avoid loops.
+      const key = `${line.cheque_number}|${line.bank_code}`;
+      if (
+        found &&
+        found.source === 'policy_payments' &&
+        dismissedKey !== key
+      ) {
+        setSwitchOpen(true);
+      } else {
+        setSwitchOpen(false);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [line.cheque_number, line.bank_code]);
+  }, [line.cheque_number, line.bank_code, dismissedKey]);
+
+  const acceptSwitch = async () => {
+    if (!duplicate || duplicate.source !== 'policy_payments') return;
+    const cheque = await loadPolicyPaymentAsCheque(duplicate.recordId);
+    if (!cheque) {
+      toast.error('تعذر تحميل بيانات الشيك');
+      return;
+    }
+    // Convert the line: customer_cheque type, pre-selected with the
+    // matched record. Clear the new-cheque fields since they're no
+    // longer relevant.
+    onChange({
+      payment_type: 'customer_cheque',
+      selected_cheques: [cheque],
+      amount: cheque.amount,
+      cheque_number: undefined,
+      bank_code: null,
+      branch_code: null,
+      cheque_image_url: undefined,
+      cheque_due_date: undefined,
+      cheque_issue_date: undefined,
+    });
+    setSwitchOpen(false);
+    setDuplicate(null);
+    toast.success('تم تحويل الدفعة إلى شيك عميل واختيار الشيك');
+  };
+
+  const declineSwitch = () => {
+    setDismissedKey(`${line.cheque_number}|${line.bank_code}`);
+    setSwitchOpen(false);
+  };
 
   // Three equal columns shared by both rows (bank/branch/cheque# and
   // amount/due/issue) so every field on the cheque card renders at the
@@ -723,10 +793,37 @@ function ChequeLineEditor({
       </div>
 
       {duplicate && (
-        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
-          ⚠ هذا الشيك مسجل مسبقاً في النظام: {duplicate}
-        </p>
+        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5 flex items-center justify-between gap-2 flex-wrap">
+          <span>⚠ هذا الشيك مسجل مسبقاً في النظام: {duplicate.description}</span>
+          {duplicate.source === 'policy_payments' && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px]"
+              onClick={() => setSwitchOpen(true)}
+            >
+              تحويل إلى شيك عميل
+            </Button>
+          )}
+        </div>
       )}
+
+      <AlertDialog open={switchOpen} onOpenChange={(v) => (v ? setSwitchOpen(true) : declineSwitch())}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>هذا الشيك موجود مسبقاً</AlertDialogTitle>
+            <AlertDialogDescription>
+              {duplicate?.description}. هل تريد تحويل هذه الدفعة إلى نوع <strong>شيك عميل</strong>{' '}
+              واختيار هذا الشيك مباشرة؟ إذا اخترت <strong>إلغاء</strong> فلن يُسمح بحفظ الشيك بنفس الرقم.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={declineSwitch}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction onClick={acceptSwitch}>تحويل واختيار</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Amount + due date + issue date — same 3-column grid as the
           bank row so columns align across both rows. */}
@@ -782,14 +879,24 @@ interface ScannedCheque {
   image_url?: string;
 }
 
+type DuplicateSource = 'company_settlements' | 'broker_settlements' | 'expenses' | 'policy_payments';
+
+interface DuplicateMatch {
+  description: string;
+  source: DuplicateSource;
+  recordId: string;
+}
+
 /**
- * Cross-surface cheque-duplicate lookup. Same logic as ExpensesSection's
+ * Cross-surface cheque-duplicate lookup. Returns the source + record id
+ * so the caller can offer a "switch to شيك عميل" flow when the match is
+ * a customer-cheque (policy_payments). Same scan as ExpensesSection's
  * helper — kept inline so the dialog stays self-contained.
  */
 async function findExistingCheque(
   chequeNumber: string,
   bankCode: string | null,
-): Promise<string | null> {
+): Promise<DuplicateMatch | null> {
   if (!chequeNumber || chequeNumber.length < 4) return null;
   const matchBank = <T,>(p: PromiseLike<T>) => p;
   const eqBank = (q: ReturnType<typeof supabase.from>) =>
@@ -832,9 +939,72 @@ async function findExistingCheque(
       ),
     ),
   ]);
-  if (cs && cs.length) return `سند صرف شركة بتاريخ ${cs[0].settlement_date}`;
-  if (bs && bs.length) return `سند وسيط بتاريخ ${bs[0].settlement_date}`;
-  if (ex && ex.length) return `مصروف بتاريخ ${ex[0].expense_date}`;
-  if (pp && pp.length) return `دفعة عميل بتاريخ ${pp[0].payment_date}`;
+  if (cs && cs.length) {
+    const row = cs[0] as { id: string; settlement_date: string };
+    return { source: 'company_settlements', recordId: row.id, description: `سند صرف شركة بتاريخ ${row.settlement_date}` };
+  }
+  if (bs && bs.length) {
+    const row = bs[0] as { id: string; settlement_date: string };
+    return { source: 'broker_settlements', recordId: row.id, description: `سند وسيط بتاريخ ${row.settlement_date}` };
+  }
+  if (ex && ex.length) {
+    const row = ex[0] as { id: string; expense_date: string };
+    return { source: 'expenses', recordId: row.id, description: `مصروف بتاريخ ${row.expense_date}` };
+  }
+  if (pp && pp.length) {
+    const row = pp[0] as { id: string; payment_date: string };
+    return { source: 'policy_payments', recordId: row.id, description: `دفعة عميل بتاريخ ${row.payment_date}` };
+  }
   return null;
+}
+
+/**
+ * Loads the policy_payment row + joined client/car info needed to build
+ * a SelectableCheque, so the auto-switch flow can pre-select the matched
+ * customer cheque without making the user pick it from the list.
+ */
+async function loadPolicyPaymentAsCheque(paymentId: string): Promise<SelectableCheque | null> {
+  const { data, error } = await supabase
+    .from('policy_payments')
+    .select(
+      'id, amount, payment_date, cheque_number, cheque_image_url, policy_id, bank_code, branch_code, transferred_to_type, refused, cheque_status, policies(clients(full_name, phone_number), cars(car_number))',
+    )
+    .eq('id', paymentId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const row = data as unknown as {
+    id: string;
+    amount: number | null;
+    payment_date: string;
+    cheque_number: string | null;
+    cheque_image_url: string | null;
+    policy_id: string;
+    bank_code: string | null;
+    branch_code: string | null;
+    transferred_to_type: string | null;
+    refused: boolean | null;
+    cheque_status: string | null;
+    policies: {
+      clients: { full_name: string; phone_number: string | null } | null;
+      cars: { car_number: string | null } | null;
+    } | null;
+  };
+  // Refuse to surface cheques already consumed elsewhere, refused, or
+  // explicitly past pending — those would just confuse the auto-switch.
+  if (row.transferred_to_type) return null;
+  if (row.refused) return null;
+  if (row.cheque_status && row.cheque_status !== 'pending') return null;
+  return {
+    id: row.id,
+    amount: Number(row.amount ?? 0),
+    payment_date: row.payment_date,
+    cheque_number: row.cheque_number,
+    cheque_image_url: row.cheque_image_url,
+    policy_id: row.policy_id,
+    bank_code: row.bank_code,
+    branch_code: row.branch_code,
+    client_name: row.policies?.clients?.full_name ?? '',
+    client_phone: row.policies?.clients?.phone_number ?? null,
+    car_number: row.policies?.cars?.car_number ?? null,
+  };
 }

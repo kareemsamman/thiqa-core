@@ -184,6 +184,23 @@ export function CompaniesSection() {
     [data.companyReceipts, search],
   );
 
+  // Broker policies feed the net-profit pill too — the user wants the
+  // الأرباح الصافية number on the companies tab to reflect *all* office
+  // earnings (companies + brokers) minus expenses, even though the rest
+  // of the page is scoped to companies-only. Brokers stay broken out
+  // in the tooltip so the source of each piece is visible.
+  const brokerProfit = useMemo(() => {
+    const brokerRows = data.issuances.filter((r) => !!r.main.broker_id);
+    return brokerRows.reduce((s, r) => {
+      if (r.main.broker_direction === 'to_broker') {
+        return s + Number(r.profit || 0);
+      }
+      return (
+        s + Math.max(0, Number(r.insurance_price || 0) - Number(r.broker_buy_price || 0))
+      );
+    }, 0);
+  }, [data.issuances]);
+
   const totals = useMemo(() => {
     // Apply the live edit overlay so the pills move in lock-step with
     // the table cells the user is typing into.
@@ -202,10 +219,12 @@ export function CompaniesSection() {
     // Net "still owe the companies" — what the user actually wants to
     // see on the pill: today's debt, not the lifetime gross.
     const dueSum = Math.max(0, totalDue - disbursedSum);
-    // Net profit = (profit + commission) − expenses. issuancesActive
-    // already excludes cancelled policies, so the cancellation rule
-    // ("no profit on cancelled") falls out automatically.
-    const netProfitSum = profitSum - data.expensesTotal;
+    // Net profit = (companies profit + commission + brokers profit) −
+    // expenses. issuancesActive already excludes cancelled policies, so
+    // the cancellation rule ("no profit on cancelled") falls out
+    // automatically. brokerProfit also derives from data.issuances which
+    // is post-cancelled-filter.
+    const netProfitSum = profitSum + brokerProfit - data.expensesTotal;
     return {
       insuranceSum,
       dueSum,
@@ -214,10 +233,11 @@ export function CompaniesSection() {
       totalDue,
       profitOnly,
       commissionOnly,
+      brokerProfit,
       netProfitSum,
       activeCount: overlayed.length,
     };
-  }, [issuancesActive, companySettlements, editLocal, data.expensesTotal]);
+  }, [issuancesActive, companySettlements, editLocal, data.expensesTotal, brokerProfit]);
 
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
@@ -315,7 +335,9 @@ export function CompaniesSection() {
               <BreakdownLines
                 title="الأرباح الصافية"
                 lines={[
-                  { label: 'الأرباح + العمولات', value: fmt(totals.profitSum) },
+                  { label: 'ربح الشركات', value: fmt(totals.profitOnly) },
+                  { label: 'عمولة المكتب', value: `+ ${fmt(totals.commissionOnly)}` },
+                  { label: 'ربح الوسطاء', value: `+ ${fmt(totals.brokerProfit)}` },
                   { label: 'المصاريف', value: `− ${fmt(data.expensesTotal)}` },
                   { label: 'الصافي', value: fmt(totals.netProfitSum), strong: true },
                   {
