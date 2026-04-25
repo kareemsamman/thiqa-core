@@ -21,7 +21,13 @@ import { PolicyReceiptsDrawer } from './PolicyReceiptsDrawer';
 import { PackageDetailsDrawer } from './PackageDetailsDrawer';
 import { PolicyTypeBadge } from './PolicyTypeBadge';
 import { StickyHorizontalScroll } from './StickyHorizontalScroll';
-import { IssuanceRow, PAYMENT_METHOD_LABELS } from './accountingTypes';
+import {
+  IssuanceEditOverlay,
+  IssuanceEditPatch,
+  IssuanceRow,
+  PAYMENT_METHOD_LABELS,
+  applyOverlay,
+} from './accountingTypes';
 
 type Mode = 'company' | 'broker';
 
@@ -38,24 +44,30 @@ interface Props {
   mode: Mode;
   /** Controlled visibility — section owns the column-visibility state. */
   visible: string[];
-  onRowSaved?: (rowId: string) => void;
+  /** Live edit overlay owned by the parent section so totals + the
+   *  calc modal can mirror the cell values without a refetch. */
+  editLocal: IssuanceEditOverlay;
+  onPatch: (rowId: string, patch: IssuanceEditPatch) => void;
+  /** Called after the package drawer persists a sub-policy edit; the
+   *  parent uses this to patch its data state optimistically instead
+   *  of triggering a full refetch. */
+  onSubPolicySaved?: (subPolicyId: string, patch: IssuanceEditPatch) => void;
   pageSize?: number;
 }
 
-interface PolicyPatch {
-  insurance_price?: number;
-  payed_for_company?: number;
-  profit?: number;
-  office_commission?: number;
-  broker_buy_price?: number;
-  issue_date?: string | null;
-  start_date?: string;
-  end_date?: string;
-}
+type PolicyPatch = Pick<
+  IssuanceEditPatch,
+  | 'insurance_price'
+  | 'payed_for_company'
+  | 'profit'
+  | 'office_commission'
+  | 'broker_buy_price'
+  | 'issue_date'
+  | 'start_date'
+  | 'end_date'
+>;
 
-interface CarPatch {
-  car_value?: number;
-}
+type CarPatch = Pick<IssuanceEditPatch, 'car_value'>;
 
 export function CompanyIssuancesTable({
   rows,
@@ -63,7 +75,9 @@ export function CompanyIssuancesTable({
   loading,
   mode,
   visible,
-  onRowSaved,
+  editLocal,
+  onPatch,
+  onSubPolicySaved,
   pageSize = 10,
 }: Props) {
   const [calcRow, setCalcRow] = useState<IssuanceRow | null>(null);
@@ -72,7 +86,6 @@ export function CompanyIssuancesTable({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [packageRow, setPackageRow] = useState<IssuanceRow | null>(null);
   const [packageOpen, setPackageOpen] = useState(false);
-  const [editLocal, setEditLocal] = useState<Record<string, PolicyPatch & CarPatch>>({});
   const [page, setPage] = useState(1);
 
   // Scroll-pane plumbing for the side prev/next arrows. We forward the
@@ -148,9 +161,6 @@ export function CompanyIssuancesTable({
     el.scrollBy({ left: dir === 'prev' ? -delta : delta, behavior: 'smooth' });
   };
 
-  const merge = (rowId: string, patch: PolicyPatch & CarPatch) =>
-    setEditLocal((prev) => ({ ...prev, [rowId]: { ...(prev[rowId] ?? {}), ...patch } }));
-
   const showCol = (key: string) => visible.includes(key);
   const visibleCount = visible.length;
 
@@ -162,13 +172,13 @@ export function CompanyIssuancesTable({
     if (row.is_grouped) return;
     const num = raw === '' ? 0 : Number(raw);
     if (Number.isNaN(num)) return;
-    merge(row.id, { [field]: num });
+    onPatch(row.id, { [field]: num });
     policyDebounced.schedule(row.main.id, { [field]: num });
   };
 
   const updateDateField = (row: IssuanceRow, field: 'issue_date' | 'start_date' | 'end_date', raw: string) => {
     if (row.is_grouped) return;
-    merge(row.id, { [field]: raw });
+    onPatch(row.id, { [field]: raw });
     policyDebounced.schedule(row.main.id, { [field]: raw || null });
   };
 
@@ -176,45 +186,45 @@ export function CompanyIssuancesTable({
     if (!row.main.car_id || row.is_grouped) return;
     const num = raw === '' ? 0 : Number(raw);
     if (Number.isNaN(num)) return;
-    merge(row.id, { car_value: num });
+    onPatch(row.id, { car_value: num });
     carDebounced.schedule(row.main.car_id, { car_value: num });
   };
 
-  const view = (row: IssuanceRow): IssuanceRow => {
-    const local = editLocal[row.id];
-    if (!local) return row;
-    const next: IssuanceRow = { ...row, main: { ...row.main } };
-    if ('insurance_price' in local) {
-      next.insurance_price = Number(local.insurance_price ?? row.insurance_price);
-      next.main.insurance_price = next.insurance_price;
-    }
-    if ('payed_for_company' in local) {
-      next.payed_for_company = Number(local.payed_for_company ?? row.payed_for_company);
-      next.main.payed_for_company = next.payed_for_company;
-    }
-    if ('profit' in local) {
-      next.profit = Number(local.profit ?? row.profit);
-      next.main.profit = next.profit;
-    }
-    if ('office_commission' in local) {
-      next.office_commission = Number(local.office_commission ?? row.office_commission);
-      next.main.office_commission = next.office_commission;
-    }
-    if ('broker_buy_price' in local) {
-      next.broker_buy_price = Number(local.broker_buy_price ?? row.broker_buy_price);
-      next.main.broker_buy_price = next.broker_buy_price;
-    }
-    if ('issue_date' in local) next.main.issue_date = local.issue_date ?? null;
-    if ('start_date' in local && local.start_date) next.main.start_date = local.start_date;
-    if ('end_date' in local && local.end_date) next.main.end_date = local.end_date;
-    if ('car_value' in local) next.main.car_value = Number(local.car_value ?? row.main.car_value);
-    return next;
-  };
+  const view = (row: IssuanceRow): IssuanceRow => applyOverlay(row, editLocal);
 
   const calcCompany = useMemo(() => {
     if (!calcRow?.main.company_id) return null;
     return companies.find((c) => c.id === calcRow.main.company_id) ?? null;
   }, [calcRow, companies]);
+
+  // The calc modal refetches pricing_rules whenever its `policy` prop
+  // identity changes — recomputing this object every parent render
+  // hammered Supabase. Keying off calcRow.main.id + the row's edit
+  // patch is enough to refresh exactly when the inputs change.
+  const calcPolicyPatch = calcRow ? editLocal[calcRow.id] : undefined;
+  const calcPolicy = useMemo(() => {
+    if (!calcRow) return null;
+    const v = applyOverlay(calcRow, editLocal);
+    return {
+      id: calcRow.main.id,
+      policy_type_parent: calcRow.main.policy_type_parent,
+      policy_type_child: calcRow.main.policy_type_child,
+      insurance_price: Number(v.insurance_price),
+      payed_for_company: v.payed_for_company ?? null,
+      profit: v.profit ?? null,
+      is_under_24: calcRow.main.is_under_24 ?? null,
+      car: calcRow.main.car_id
+        ? {
+            id: calcRow.main.car_id,
+            car_number: calcRow.main.car_number ?? '',
+            car_type: calcRow.main.car_type,
+            car_value: v.main.car_value ?? null,
+            year: calcRow.main.car_year,
+          }
+        : null,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calcRow?.main.id, calcPolicyPatch]);
 
   const disabledTip = 'تعديل الحزمة من أيقونة "تفاصيل" — لكل بند قيمته الخاصة';
 
@@ -291,6 +301,7 @@ export function CompanyIssuancesTable({
                   paged.map((rawRow, idx) => {
                     const row = view(rawRow);
                     const isElzami = row.main.policy_type_parent === 'ELZAMI';
+                    const isToBroker = row.main.broker_direction === 'to_broker';
                     const editable = !row.is_grouped;
                     const rowNumber = (safePage - 1) * pageSize + idx + 1;
                     return (
@@ -431,11 +442,14 @@ export function CompanyIssuancesTable({
                           );
                           const otherCount = Math.max(0, companyNames.length - 1);
                           return (
-                            <TableCell className="text-sm max-w-[200px]">
+                            <TableCell className="text-sm max-w-[220px]">
                               <div className="flex items-center gap-1.5">
                                 <span className="truncate" title={row.main.company_name ?? ''}>
                                   {row.main.company_name || '-'}
                                 </span>
+                                {mode === 'broker' && row.main.broker_direction && (
+                                  <BrokerDirectionPill direction={row.main.broker_direction} />
+                                )}
                                 {otherCount > 0 && (
                                   <button
                                     type="button"
@@ -500,10 +514,14 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             <NumberCell
                               value={row.broker_buy_price ?? 0}
-                              disabled={!editable}
+                              disabled={!editable || isToBroker}
                               onChange={(v) => updateNumericField(rawRow, 'broker_buy_price', v)}
                               tone="amber"
-                              tip={disabledTip}
+                              tip={
+                                isToBroker
+                                  ? 'البوليصة مباعة للوسيط — لا يوجد سعر شراء'
+                                  : disabledTip
+                              }
                             />
                           </TableCell>
                         )}
@@ -524,7 +542,10 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             {mode === 'broker' ? (
                               <span className="font-semibold tabular-nums text-emerald-700">
-                                ₪{Math.max(0, row.insurance_price - row.broker_buy_price).toLocaleString('en-US')}
+                                ₪{(isToBroker
+                                  ? Number(row.profit ?? 0)
+                                  : Math.max(0, row.insurance_price - row.broker_buy_price)
+                                ).toLocaleString('en-US')}
                               </span>
                             ) : (
                               <NumberCell
@@ -675,28 +696,7 @@ export function CompanyIssuancesTable({
         <CalculationExplanationModal
           open={calcOpen}
           onOpenChange={setCalcOpen}
-          policy={
-            calcRow
-              ? {
-                  id: calcRow.main.id,
-                  policy_type_parent: calcRow.main.policy_type_parent,
-                  policy_type_child: calcRow.main.policy_type_child,
-                  insurance_price: Number(view(calcRow).insurance_price),
-                  payed_for_company: view(calcRow).payed_for_company ?? null,
-                  profit: view(calcRow).profit ?? null,
-                  is_under_24: calcRow.main.is_under_24 ?? null,
-                  car: calcRow.main.car_id
-                    ? {
-                        id: calcRow.main.car_id,
-                        car_number: calcRow.main.car_number ?? '',
-                        car_type: calcRow.main.car_type,
-                        car_value: view(calcRow).main.car_value ?? null,
-                        year: calcRow.main.car_year,
-                      }
-                    : null,
-                }
-              : null
-          }
+          policy={calcPolicy}
           company={calcCompany}
         />
 
@@ -713,7 +713,7 @@ export function CompanyIssuancesTable({
           onOpenChange={setPackageOpen}
           row={packageRow}
           mode={mode}
-          onSubPolicySaved={(id) => onRowSaved?.(id)}
+          onSubPolicySaved={(id, patch) => onSubPolicySaved?.(id, patch)}
         />
       </div>
     </TooltipProvider>
@@ -798,6 +798,32 @@ function NumberCell({
     );
   }
   return inner;
+}
+
+// Tiny chip that tells the staff at a glance whether a broker policy
+// was bought FROM the broker or sold TO the broker. Drives the
+// broker_buy_price input's locked-state via the same flag.
+function BrokerDirectionPill({ direction }: { direction: 'from_broker' | 'to_broker' }) {
+  const isFrom = direction === 'from_broker';
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border shrink-0',
+            isFrom
+              ? 'bg-amber-50 text-amber-700 border-amber-200'
+              : 'bg-emerald-50 text-emerald-700 border-emerald-200',
+          )}
+        >
+          {isFrom ? 'شراء' : 'بيع'}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="whitespace-nowrap">
+        {isFrom ? 'اشترينا البوليصة من الوسيط' : 'الوسيط اشترى البوليصة منّا'}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 // Floating prev/next horizontal-scroll button. The outer absolute

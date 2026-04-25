@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import type { Enums } from '@/integrations/supabase/types';
@@ -36,6 +36,9 @@ interface UseAccountingDataReturn {
   companyReceipts: SettlementRow[];
   brokerSettlements: SettlementRow[];
   refresh: () => Promise<void>;
+  /** Optimistic in-place mutation for a single sub-policy — avoids the
+   *  full refetch the package drawer used to trigger on every save. */
+  patchSubPolicy: (subId: string, patch: Partial<SubPolicy>) => void;
 }
 
 interface RawPolicy {
@@ -57,6 +60,7 @@ interface RawPolicy {
   is_under_24: boolean | null;
   company_id: string | null;
   broker_id: string | null;
+  broker_direction: 'from_broker' | 'to_broker' | null;
   clients: { full_name: string; id_number: string | null; phone_number: string | null } | null;
   cars: {
     id: string;
@@ -149,7 +153,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
            issue_date, start_date, end_date,
            insurance_price, payed_for_company, profit, office_commission, broker_buy_price,
            policy_type_parent, policy_type_child, cancelled, is_under_24,
-           company_id, broker_id,
+           company_id, broker_id, broker_direction,
            clients(full_name, id_number, phone_number),
            cars(id, car_number, car_type, car_value, year),
            insurance_companies(id, name, name_ar, broker_id)`,
@@ -216,6 +220,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         company_id: p.company_id,
         company_name: p.insurance_companies?.name_ar || p.insurance_companies?.name || null,
         broker_id: p.broker_id ?? p.insurance_companies?.broker_id ?? null,
+        broker_direction: p.broker_direction,
         group_id: p.group_id,
       }));
 
@@ -367,28 +372,65 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
     fetchAll();
   }, [fetchAll]);
 
-  // ---- Apply filters client-side ----
-  const filteredPolicies = applyFilters(policies, filters);
-  const issuances = filteredPolicies.filter((p) => !p.main.cancelled);
-  const returns = filteredPolicies.filter((p) => !!p.main.cancelled);
+  const patchSubPolicy = useCallback((subId: string, patch: Partial<SubPolicy>) => {
+    setPolicies((prev) =>
+      prev.map((row) => {
+        const idx = row.sub_policies.findIndex((s) => s.id === subId);
+        if (idx === -1) return row;
+        const nextSubs = row.sub_policies.slice();
+        nextSubs[idx] = { ...nextSubs[idx], ...patch };
+        // Re-aggregate the money columns; everything else (client,
+        // company, dates) lives on `main` and survives untouched.
+        const aggregate = nextSubs.reduce(
+          (acc, s) => {
+            acc.insurance_price += Number(s.insurance_price ?? 0);
+            acc.payed_for_company += Number(s.payed_for_company ?? 0);
+            acc.profit += Number(s.profit ?? 0);
+            acc.office_commission += Number(s.office_commission ?? 0);
+            acc.broker_buy_price += Number(s.broker_buy_price ?? 0);
+            return acc;
+          },
+          {
+            insurance_price: 0,
+            payed_for_company: 0,
+            profit: 0,
+            office_commission: 0,
+            broker_buy_price: 0,
+          },
+        );
+        const main = pickMainSubPolicy(nextSubs);
+        return { ...row, sub_policies: nextSubs, main, ...aggregate };
+      }),
+    );
+  }, []);
 
-  const filteredCompanySettlements = applySettlementFilters(
-    companySettlements,
-    filters,
-    filters.companies, // entity-id filter pulls from selected companies
+  // ---- Apply filters client-side ----
+  // Memoized so a parent re-render driven by an unrelated state change
+  // (e.g. typing into a cell) doesn't redo the per-policy filter pass.
+  const filteredPolicies = useMemo(() => applyFilters(policies, filters), [policies, filters]);
+  const issuances = useMemo(
+    () => filteredPolicies.filter((p) => !p.main.cancelled),
+    [filteredPolicies],
   );
-  const companyDisbursements = filteredCompanySettlements; // payments to companies
+  const returns = useMemo(
+    () => filteredPolicies.filter((p) => !!p.main.cancelled),
+    [filteredPolicies],
+  );
+
+  const companyDisbursements = useMemo(
+    () => applySettlementFilters(companySettlements, filters, filters.companies),
+    [companySettlements, filters],
+  );
   // company_settlements only tracks money we PAID to companies. There's
   // no "money received from companies" table in this schema — refunds
   // come back as `refused=true` on the original settlement, not a new
   // row. We keep this empty array so the receipts tab can show an
   // explanatory empty state.
-  const companyReceipts: SettlementRow[] = [];
+  const companyReceipts: SettlementRow[] = useMemo(() => [], []);
 
-  const filteredBrokerSettlements = applySettlementFilters(
-    brokerSettlements,
-    filters,
-    [], // brokers filter not exposed via AccountingFiltersValue yet
+  const filteredBrokerSettlements = useMemo(
+    () => applySettlementFilters(brokerSettlements, filters, []),
+    [brokerSettlements, filters],
   );
 
   return {
@@ -401,6 +443,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
     companyReceipts,
     brokerSettlements: filteredBrokerSettlements,
     refresh: fetchAll,
+    patchSubPolicy,
   };
 }
 

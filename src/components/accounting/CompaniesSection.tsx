@@ -26,7 +26,13 @@ import {
   matchesSettlementSearch,
   useAccountingData,
 } from './useAccountingData';
-import { POLICY_TYPE_DISPLAY, PAYMENT_METHOD_LABELS } from './accountingTypes';
+import {
+  IssuanceEditOverlay,
+  IssuanceEditPatch,
+  POLICY_TYPE_DISPLAY,
+  PAYMENT_METHOD_LABELS,
+  applyOverlay,
+} from './accountingTypes';
 
 type SubTab = 'all' | 'issuances' | 'returns' | 'disbursements' | 'receipts';
 
@@ -46,6 +52,12 @@ const SETTLEMENT_DEFAULT_VISIBLE = SETTLEMENT_KEYS.filter((k) => !SETTLEMENT_DEF
 export function CompaniesSection() {
   const [tab, setTab] = useState<SubTab>('all');
   const [search, setSearch] = useState('');
+  // Live overlay of inline edits across the issuances table — owned
+  // here so the summary pills + calculation modal can mirror the cell
+  // values before the debounced save flushes back. Keyed by row.id.
+  const [editLocal, setEditLocal] = useState<IssuanceEditOverlay>({});
+  const onPatch = (rowId: string, patch: IssuanceEditPatch) =>
+    setEditLocal((prev) => ({ ...prev, [rowId]: { ...(prev[rowId] ?? {}), ...patch } }));
   const [filters, setFilters] = useState<AccountingFiltersValue>({
     dateFrom: '',
     dateTo: '',
@@ -91,27 +103,45 @@ export function CompaniesSection() {
     [],
   );
 
-  const onlyDirect = (rows: typeof data.issuances) =>
-    rows.filter((r) => !r.main.broker_id);
-
-  const issuancesAll = onlyDirect([...data.issuances, ...data.returns]).filter((r) =>
-    matchesIssuanceSearch(r, search),
+  // Memoized: recompute only when the underlying data or the search
+  // string changes — not on every editLocal keystroke.
+  const issuancesAll = useMemo(
+    () =>
+      [...data.issuances, ...data.returns]
+        .filter((r) => !r.main.broker_id)
+        .filter((r) => matchesIssuanceSearch(r, search)),
+    [data.issuances, data.returns, search],
   );
-  const issuancesActive = onlyDirect(data.issuances).filter((r) =>
-    matchesIssuanceSearch(r, search),
+  const issuancesActive = useMemo(
+    () =>
+      data.issuances
+        .filter((r) => !r.main.broker_id)
+        .filter((r) => matchesIssuanceSearch(r, search)),
+    [data.issuances, search],
   );
-  const returns = onlyDirect(data.returns).filter((r) => matchesIssuanceSearch(r, search));
-  const companySettlements = data.companySettlements.filter((r) =>
-    matchesSettlementSearch(r, search),
+  const returns = useMemo(
+    () =>
+      data.returns
+        .filter((r) => !r.main.broker_id)
+        .filter((r) => matchesIssuanceSearch(r, search)),
+    [data.returns, search],
   );
-  const companyReceipts = data.companyReceipts.filter((r) =>
-    matchesSettlementSearch(r, search),
+  const companySettlements = useMemo(
+    () => data.companySettlements.filter((r) => matchesSettlementSearch(r, search)),
+    [data.companySettlements, search],
+  );
+  const companyReceipts = useMemo(
+    () => data.companyReceipts.filter((r) => matchesSettlementSearch(r, search)),
+    [data.companyReceipts, search],
   );
 
   const totals = useMemo(() => {
-    const insuranceSum = issuancesActive.reduce((s, r) => s + Number(r.insurance_price || 0), 0);
-    const dueSum = issuancesActive.reduce((s, r) => s + Number(r.payed_for_company || 0), 0);
-    const profitSum = issuancesActive.reduce(
+    // Apply the live edit overlay so the pills move in lock-step with
+    // the table cells the user is typing into.
+    const overlayed = issuancesActive.map((r) => applyOverlay(r, editLocal));
+    const insuranceSum = overlayed.reduce((s, r) => s + Number(r.insurance_price || 0), 0);
+    const dueSum = overlayed.reduce((s, r) => s + Number(r.payed_for_company || 0), 0);
+    const profitSum = overlayed.reduce(
       (s, r) => s + Number(r.profit || 0) + Number(r.office_commission || 0),
       0,
     );
@@ -120,7 +150,7 @@ export function CompaniesSection() {
       0,
     );
     return { insuranceSum, dueSum, profitSum, disbursedSum };
-  }, [issuancesActive, companySettlements]);
+  }, [issuancesActive, companySettlements, editLocal]);
 
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
@@ -206,7 +236,9 @@ export function CompaniesSection() {
             loading={data.loading}
             mode="company"
             visible={issuanceCols.visible}
-            onRowSaved={() => data.refresh()}
+            editLocal={editLocal}
+            onPatch={onPatch}
+            onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
           />
         </TabsContent>
         <TabsContent value="issuances" className="m-0">
@@ -216,7 +248,9 @@ export function CompaniesSection() {
             loading={data.loading}
             mode="company"
             visible={issuanceCols.visible}
-            onRowSaved={() => data.refresh()}
+            editLocal={editLocal}
+            onPatch={onPatch}
+            onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
           />
         </TabsContent>
         <TabsContent value="returns" className="m-0">
@@ -226,7 +260,9 @@ export function CompaniesSection() {
             loading={data.loading}
             mode="company"
             visible={issuanceCols.visible}
-            onRowSaved={() => data.refresh()}
+            editLocal={editLocal}
+            onPatch={onPatch}
+            onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
           />
         </TabsContent>
         <TabsContent value="disbursements" className="m-0">

@@ -26,7 +26,13 @@ import {
   matchesSettlementSearch,
   useAccountingData,
 } from './useAccountingData';
-import { POLICY_TYPE_DISPLAY, PAYMENT_METHOD_LABELS } from './accountingTypes';
+import {
+  IssuanceEditOverlay,
+  IssuanceEditPatch,
+  POLICY_TYPE_DISPLAY,
+  PAYMENT_METHOD_LABELS,
+  applyOverlay,
+} from './accountingTypes';
 
 type SubTab = 'all' | 'issuances' | 'returns' | 'disbursements' | 'receipts';
 
@@ -46,6 +52,9 @@ const SETTLEMENT_DEFAULT_VISIBLE = SETTLEMENT_KEYS.filter((k) => !SETTLEMENT_DEF
 export function BrokersSection() {
   const [tab, setTab] = useState<SubTab>('all');
   const [search, setSearch] = useState('');
+  const [editLocal, setEditLocal] = useState<IssuanceEditOverlay>({});
+  const onPatch = (rowId: string, patch: IssuanceEditPatch) =>
+    setEditLocal((prev) => ({ ...prev, [rowId]: { ...(prev[rowId] ?? {}), ...patch } }));
   const [filters, setFilters] = useState<AccountingFiltersValue>({
     dateFrom: '',
     dateTo: '',
@@ -87,32 +96,63 @@ export function BrokersSection() {
     [],
   );
 
-  const onlyBroker = (rows: typeof data.issuances) =>
-    rows.filter((r) => !!r.main.broker_id);
-
-  const issuancesAll = onlyBroker([...data.issuances, ...data.returns]).filter((r) =>
-    matchesIssuanceSearch(r, search),
+  // Memoized — see CompaniesSection for the rationale.
+  const issuancesAll = useMemo(
+    () =>
+      [...data.issuances, ...data.returns]
+        .filter((r) => !!r.main.broker_id)
+        .filter((r) => matchesIssuanceSearch(r, search)),
+    [data.issuances, data.returns, search],
   );
-  const issuancesActive = onlyBroker(data.issuances).filter((r) =>
-    matchesIssuanceSearch(r, search),
+  const issuancesActive = useMemo(
+    () =>
+      data.issuances
+        .filter((r) => !!r.main.broker_id)
+        .filter((r) => matchesIssuanceSearch(r, search)),
+    [data.issuances, search],
   );
-  const returns = onlyBroker(data.returns).filter((r) => matchesIssuanceSearch(r, search));
+  const returns = useMemo(
+    () =>
+      data.returns
+        .filter((r) => !!r.main.broker_id)
+        .filter((r) => matchesIssuanceSearch(r, search)),
+    [data.returns, search],
+  );
 
-  const disbursements = data.brokerSettlements
-    .filter((s) => s.direction === 'we_owe')
-    .filter((r) => matchesSettlementSearch(r, search));
-  const receipts = data.brokerSettlements
-    .filter((s) => s.direction === 'broker_owes')
-    .filter((r) => matchesSettlementSearch(r, search));
+  const disbursements = useMemo(
+    () =>
+      data.brokerSettlements
+        .filter((s) => s.direction === 'we_owe')
+        .filter((r) => matchesSettlementSearch(r, search)),
+    [data.brokerSettlements, search],
+  );
+  const receipts = useMemo(
+    () =>
+      data.brokerSettlements
+        .filter((s) => s.direction === 'broker_owes')
+        .filter((r) => matchesSettlementSearch(r, search)),
+    [data.brokerSettlements, search],
+  );
 
   const totals = useMemo(() => {
-    const sellSum = issuancesActive.reduce((s, r) => s + Number(r.insurance_price || 0), 0);
-    const buySum = issuancesActive.reduce((s, r) => s + Number(r.broker_buy_price || 0), 0);
-    const profitSum = sellSum - buySum;
+    // Live overlay mirrors typed cell values into the pills before the
+    // debounced save flushes back. For broker rows, profit lives on
+    // each row's `profit` aggregate (which the recalc job sets to
+    // `insurance_price - broker_buy_price` for from_broker rows and to
+    // `insurance_price - payed_for_company` for to_broker rows), so
+    // summing it works for either direction.
+    const overlayed = issuancesActive.map((r) => applyOverlay(r, editLocal));
+    const sellSum = overlayed.reduce((s, r) => s + Number(r.insurance_price || 0), 0);
+    const profitSum = overlayed.reduce((s, r) => {
+      if (r.main.broker_direction === 'to_broker') {
+        return s + Number(r.profit || 0);
+      }
+      return s + Math.max(0, Number(r.insurance_price || 0) - Number(r.broker_buy_price || 0));
+    }, 0);
     const disbursedSum = disbursements.reduce((s, r) => s + Number(r.total_amount || 0), 0);
     const receivedSum = receipts.reduce((s, r) => s + Number(r.total_amount || 0), 0);
     return { sellSum, profitSum, disbursedSum, receivedSum };
-  }, [issuancesActive, disbursements, receipts]);
+  }, [issuancesActive, disbursements, receipts, editLocal]);
 
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
@@ -196,7 +236,9 @@ export function BrokersSection() {
             loading={data.loading}
             mode="broker"
             visible={issuanceCols.visible}
-            onRowSaved={() => data.refresh()}
+            editLocal={editLocal}
+            onPatch={onPatch}
+            onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
           />
         </TabsContent>
         <TabsContent value="issuances" className="m-0">
@@ -206,7 +248,9 @@ export function BrokersSection() {
             loading={data.loading}
             mode="broker"
             visible={issuanceCols.visible}
-            onRowSaved={() => data.refresh()}
+            editLocal={editLocal}
+            onPatch={onPatch}
+            onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
           />
         </TabsContent>
         <TabsContent value="returns" className="m-0">
@@ -216,7 +260,9 @@ export function BrokersSection() {
             loading={data.loading}
             mode="broker"
             visible={issuanceCols.visible}
-            onRowSaved={() => data.refresh()}
+            editLocal={editLocal}
+            onPatch={onPatch}
+            onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
           />
         </TabsContent>
         <TabsContent value="disbursements" className="m-0">

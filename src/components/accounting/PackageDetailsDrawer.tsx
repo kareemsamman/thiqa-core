@@ -17,8 +17,9 @@ interface Props {
   row: IssuanceRow | null;
   /** company / broker — drives which money fields are editable. */
   mode: 'company' | 'broker';
-  /** Bubble up after a successful save so the table can refetch. */
-  onSubPolicySaved?: (subPolicyId: string) => void;
+  /** Bubble up after a successful save so the parent can patch its
+   *  in-memory data optimistically (no full refetch). */
+  onSubPolicySaved?: (subPolicyId: string, patch: SubPatch) => void;
 }
 
 interface SubPatch {
@@ -50,7 +51,7 @@ export function PackageDetailsDrawer({ open, onOpenChange, row, mode, onSubPolic
       return;
     }
     toast.success('تم الحفظ', { duration: 1100 });
-    onSubPolicySaved?.(subId);
+    onSubPolicySaved?.(subId, patch);
   };
 
   const debounced = useDebouncedAutoSave<SubPatch>(save, 600);
@@ -74,6 +75,9 @@ export function PackageDetailsDrawer({ open, onOpenChange, row, mode, onSubPolic
 
   // Drawer-level totals reflect local edits so the header tile updates
   // in real-time as the user types — no waiting on a refetch.
+  // `broker_profit_total` is the broker-mode profit sum: for to_broker
+  // subs it's the stored profit (= insurance_price - payed_for_company),
+  // for from_broker subs it's the live `insurance_price - broker_buy_price`.
   const totals = row
     ? row.sub_policies.reduce(
         (acc, s) => {
@@ -87,9 +91,21 @@ export function PackageDetailsDrawer({ open, onOpenChange, row, mode, onSubPolic
           acc.profit += Number(pr);
           acc.office_commission += Number(oc);
           acc.broker_buy_price += Number(bb);
+          if (s.broker_direction === 'to_broker') {
+            acc.broker_profit_total += Number(pr);
+          } else {
+            acc.broker_profit_total += Math.max(0, Number(ip) - Number(bb));
+          }
           return acc;
         },
-        { insurance_price: 0, payed_for_company: 0, profit: 0, office_commission: 0, broker_buy_price: 0 },
+        {
+          insurance_price: 0,
+          payed_for_company: 0,
+          profit: 0,
+          office_commission: 0,
+          broker_buy_price: 0,
+          broker_profit_total: 0,
+        },
       )
     : null;
 
@@ -142,7 +158,7 @@ export function PackageDetailsDrawer({ open, onOpenChange, row, mode, onSubPolic
                   <div>
                     <p className="text-[11px] text-muted-foreground">الربح</p>
                     <p className="font-bold tabular-nums text-emerald-700">
-                      ₪{Math.max(0, totals.insurance_price - totals.broker_buy_price).toLocaleString('en-US')}
+                      ₪{totals.broker_profit_total.toLocaleString('en-US')}
                     </p>
                   </div>
                 </>
@@ -228,13 +244,22 @@ export function PackageDetailsDrawer({ open, onOpenChange, row, mode, onSubPolic
                               type="number"
                               value={brokerBuyPrice}
                               onChange={(e) => update(sub, 'broker_buy_price', e.target.value)}
+                              disabled={sub.broker_direction === 'to_broker'}
+                              title={
+                                sub.broker_direction === 'to_broker'
+                                  ? 'البوليصة مباعة للوسيط — لا يوجد سعر شراء'
+                                  : undefined
+                              }
                               className="h-8 text-sm tabular-nums text-amber-700"
                             />
                           </div>
                           <div className="col-span-2">
                             <p className="text-[10px] text-muted-foreground">الربح (محسوب)</p>
                             <p className="h-8 inline-flex items-center font-semibold tabular-nums text-emerald-700">
-                              ₪{brokerProfit.toLocaleString('en-US')}
+                              ₪{(sub.broker_direction === 'to_broker'
+                                ? Number(profit)
+                                : brokerProfit
+                              ).toLocaleString('en-US')}
                             </p>
                           </div>
                         </>
