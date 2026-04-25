@@ -32,22 +32,11 @@ import { CompactImagePicker } from '@/components/shared/CompactImagePicker';
 import { sanitizeChequeNumber, validateChequeNumber } from '@/lib/chequeUtils';
 import { cn } from '@/lib/utils';
 
-export type SettlementMode = 'company' | 'broker';
-export type SettlementKind = 'disbursement' | 'receipt';
 export type PaymentLineType = 'cash' | 'cheque' | 'customer_cheque' | 'bank_transfer';
-
-export interface SettlementEntity {
-  id: string;
-  name: string;
-}
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mode: SettlementMode;
-  kind: SettlementKind;
-  defaultEntityId?: string | null;
-  entities: SettlementEntity[];
   onSaved: () => void;
 }
 
@@ -55,20 +44,14 @@ interface PaymentLine {
   id: string;
   payment_type: PaymentLineType;
   amount: number;
-  /** Generic payment date — used by cash + bank_transfer. */
   payment_date: string;
-  /** New cheque (cheque type) — registry lookup data. */
   cheque_number?: string;
   bank_code?: string | null;
   branch_code?: string | null;
-  /** تاريخ الاستحقاق — when the cheque can be cashed. */
   cheque_due_date?: string;
-  /** تاريخ الإصدار — when we wrote the cheque / when money left. */
   cheque_issue_date?: string;
   cheque_image_url?: string;
-  /** Bank transfer reference number. */
   bank_reference?: string;
-  /** Customer cheque type — picked from the available pool. */
   selected_cheques?: SelectableCheque[];
 }
 
@@ -85,6 +68,16 @@ const PAYMENT_TYPE_ICON: Record<PaymentLineType, typeof Banknote> = {
   customer_cheque: Wallet,
   bank_transfer: Receipt,
 };
+
+const CATEGORY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'office', label: 'مكتب' },
+  { value: 'garage', label: 'كراج' },
+  { value: 'utilities', label: 'فواتير ومرافق' },
+  { value: 'salary', label: 'رواتب' },
+  { value: 'marketing', label: 'تسويق' },
+  { value: 'transport', label: 'مواصلات' },
+  { value: 'other', label: 'أخرى' },
+];
 
 const today = () => format(new Date(), 'yyyy-MM-dd');
 
@@ -104,33 +97,28 @@ function makeLine(type: PaymentLineType): PaymentLine {
   return base;
 }
 
-const titleFor = (mode: SettlementMode, kind: SettlementKind): string => {
-  if (mode === 'company') {
-    return kind === 'disbursement' ? 'إضافة سند صرف لشركة' : 'إضافة سند قبض من شركة';
-  }
-  return kind === 'disbursement' ? 'إضافة سند صرف لوسيط' : 'إضافة سند قبض من وسيط';
-};
-
-export function AddSettlementDialog({
-  open,
-  onOpenChange,
-  mode,
-  kind,
-  defaultEntityId,
-  entities,
-  onSaved,
-}: Props) {
+/**
+ * Multi-line expense voucher. Mirrors AddSettlementDialog's payments
+ * UX exactly — same quick-add buttons, تقسيط, مسح شيكات, cheque
+ * editor — but the "what" (description / category / contact) lives at
+ * the top of the dialog instead of a company/broker picker. Each
+ * effective payment line becomes its own row in the `expenses` table,
+ * sharing the description/category/contact_name across them so a
+ * "rent paid via 3000 cash + 2000 cheque" breakdown stays grouped in
+ * the table by description.
+ */
+export function AddExpenseDialog({ open, onOpenChange, onSaved }: Props) {
   const { user } = useAuth();
   const { agentId } = useAgentContext();
-  const [entityId, setEntityId] = useState<string>(defaultEntityId ?? '');
+  const [category, setCategory] = useState('office');
+  const [description, setDescription] = useState('');
+  const [contactName, setContactName] = useState('');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<PaymentLine[]>([makeLine('cash')]);
   const [saving, setSaving] = useState(false);
-  // تقسيط — split a single amount into N cheque lines spaced monthly.
   const [splitAmount, setSplitAmount] = useState('');
   const [splitCount, setSplitCount] = useState(2);
   const [splitOpen, setSplitOpen] = useState(false);
-  // Lazy-loaded cheque scanner — keeps the dialog bundle small.
   const [scannerOpen, setScannerOpen] = useState(false);
   const [ScannerComp, setScannerComp] = useState<React.ComponentType<{
     open: boolean;
@@ -139,15 +127,16 @@ export function AddSettlementDialog({
     title?: string;
   }> | null>(null);
 
-  // Reset whenever the dialog opens or mode/kind changes underneath.
   useEffect(() => {
     if (!open) return;
-    setEntityId(defaultEntityId ?? '');
+    setCategory('office');
+    setDescription('');
+    setContactName('');
     setNotes('');
     setLines([makeLine('cash')]);
     setSplitAmount('');
     setSplitCount(2);
-  }, [open, defaultEntityId, mode, kind]);
+  }, [open]);
 
   const total = useMemo(
     () =>
@@ -168,8 +157,6 @@ export function AddSettlementDialog({
 
   const addLineOfType = (t: PaymentLineType) => setLines((prev) => [...prev, makeLine(t)]);
 
-  // تقسيط — N equal cheque lines spaced monthly. Uses today's date as
-  // the issue and the i-th month as the due, mirroring the wallet flow.
   const handleSplit = () => {
     const amount = parseFloat(splitAmount);
     const count = Math.max(2, Math.min(24, Math.floor(splitCount)));
@@ -220,16 +207,7 @@ export function AddSettlementDialog({
   };
 
   const handleSave = async () => {
-    if (!entityId) {
-      toast.error(mode === 'company' ? 'الرجاء اختيار شركة' : 'الرجاء اختيار وسيط');
-      return;
-    }
-    // Silently drop empty placeholder lines — the dialog seeds with an
-    // empty cash row, and quick-add buttons stack more empty rows when
-    // staff are deciding what to add. A line counts as empty when:
-    //   - cash / bank_transfer: amount <= 0
-    //   - cheque: no amount AND no cheque_number AND no bank picked
-    //   - customer_cheque: no cheques selected
+    // Same empty-line drop pattern as AddSettlementDialog.
     const effective = lines.filter((line) => {
       if (line.payment_type === 'customer_cheque') {
         return (line.selected_cheques?.length ?? 0) > 0;
@@ -247,7 +225,6 @@ export function AddSettlementDialog({
       toast.error('أضف دفعة واحدة على الأقل');
       return;
     }
-    // Validate only the lines we'll actually save.
     for (const line of effective) {
       if (line.payment_type === 'cheque') {
         const v = validateChequeNumber(line.cheque_number ?? '');
@@ -280,76 +257,52 @@ export function AddSettlementDialog({
         const amount = isCustomerCheque
           ? (line.selected_cheques ?? []).reduce((s, c) => s + Number(c.amount || 0), 0)
           : Number(line.amount || 0);
-
-        // Settlement_date: we use the issue date for cheques (when money
-        // logically left), and payment_date for everything else.
-        const settlementDate =
+        const expenseDate =
           line.payment_type === 'cheque'
             ? line.cheque_issue_date ?? line.payment_date
             : line.payment_date;
 
-        const shared = {
-          total_amount: amount,
-          settlement_date: settlementDate,
-          status: 'completed' as const,
-          notes: notes || null,
-          created_by_admin_id: user?.id ?? null,
-          agent_id: agentId ?? null,
-          payment_type: line.payment_type,
-          cheque_number: line.payment_type === 'cheque' ? line.cheque_number ?? null : null,
-          bank_code: line.payment_type === 'cheque' ? line.bank_code ?? null : null,
-          branch_code: line.payment_type === 'cheque' ? line.branch_code ?? null : null,
-          cheque_image_url:
-            line.payment_type === 'cheque' ? line.cheque_image_url ?? null : null,
-          bank_reference:
-            line.payment_type === 'bank_transfer' ? line.bank_reference ?? null : null,
-          customer_cheque_ids: customerChequeIds,
-          refused: false,
-        };
+        const { data: inserted, error } = await supabase
+          .from('expenses')
+          .insert({
+            amount,
+            expense_date: expenseDate,
+            category,
+            description: description || null,
+            contact_name: contactName || null,
+            payment_method: line.payment_type,
+            notes: notes || null,
+            voucher_type: 'payment',
+            created_by_admin_id: user?.id ?? null,
+            agent_id: agentId ?? null,
+            cheque_number: line.payment_type === 'cheque' ? line.cheque_number ?? null : null,
+            bank_code: line.payment_type === 'cheque' ? line.bank_code ?? null : null,
+            branch_code: line.payment_type === 'cheque' ? line.branch_code ?? null : null,
+            cheque_image_url:
+              line.payment_type === 'cheque' ? line.cheque_image_url ?? null : null,
+            bank_reference:
+              line.payment_type === 'bank_transfer' ? line.bank_reference ?? null : null,
+            customer_cheque_ids: isCustomerCheque ? customerChequeIds : null,
+          } as never)
+          .select('id')
+          .single();
+        if (error) throw error;
 
-        let settlementId: string | null = null;
-        if (mode === 'company') {
-          const { data, error } = await supabase
-            .from('company_settlements')
-            .insert({
-              ...shared,
-              company_id: entityId,
-              direction: kind === 'disbursement' ? 'outgoing' : 'incoming',
-            } as never)
-            .select('id')
-            .single();
-          if (error) throw error;
-          settlementId = (data as { id: string }).id;
-        } else {
-          const { data, error } = await supabase
-            .from('broker_settlements')
-            .insert({
-              ...shared,
-              broker_id: entityId,
-              direction: kind === 'disbursement' ? 'we_owe' : 'broker_owes',
-            } as never)
-            .select('id')
-            .single();
-          if (error) throw error;
-          settlementId = (data as { id: string }).id;
-        }
-
-        if (isCustomerCheque && customerChequeIds.length > 0 && settlementId) {
+        if (isCustomerCheque && customerChequeIds.length > 0 && inserted) {
+          const expenseId = (inserted as { id: string }).id;
           const { error: updateError } = await supabase
             .from('policy_payments')
             .update({
               cheque_status: 'transferred_out',
-              transferred_to_type: mode,
-              transferred_to_id: entityId,
-              transferred_payment_id: settlementId,
+              transferred_to_type: 'expense',
+              transferred_payment_id: expenseId,
               transferred_at: new Date().toISOString(),
             })
             .in('id', customerChequeIds);
           if (updateError) throw updateError;
         }
       }
-
-      toast.success('تم الحفظ');
+      toast.success('تم حفظ المصروف');
       onSaved();
       onOpenChange(false);
     } catch (err) {
@@ -365,45 +318,67 @@ export function AddSettlementDialog({
       <Dialog open={open} onOpenChange={(v) => !saving && onOpenChange(v)}>
         <DialogContent dir="rtl" className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{titleFor(mode, kind)}</DialogTitle>
+            <DialogTitle>إضافة مصروف</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Entity picker */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">{mode === 'company' ? 'الشركة' : 'الوسيط'}</Label>
-              <Select value={entityId} onValueChange={setEntityId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={mode === 'company' ? 'اختر شركة' : 'اختر وسيط'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {entities.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* "What" — category + contact + description. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">الفئة</Label>
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORY_OPTIONS.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">الجهة (اختياري)</Label>
+                <Input
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                  placeholder="اسم الجهة"
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">الوصف / ملاحظات</Label>
+              <Label className="text-xs">الوصف</Label>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="مثلاً: إيجار المكتب"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">ملاحظات</Label>
               <Textarea
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="وصف السند..."
+                placeholder="ملاحظات إضافية..."
               />
             </div>
 
-            {/* Toolbar — type-specific quick adds + split + scanner */}
+            {/* Toolbar — same quick-adds as the settlement dialog. */}
             <div className="space-y-2">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <span className="text-sm font-semibold">الدفعات</span>
                 <div className="flex items-center gap-2 flex-wrap">
                   <QuickAddButton type="cash" onClick={() => addLineOfType('cash')} />
                   <QuickAddButton type="cheque" onClick={() => addLineOfType('cheque')} />
-                  <QuickAddButton type="customer_cheque" onClick={() => addLineOfType('customer_cheque')} />
+                  <QuickAddButton
+                    type="customer_cheque"
+                    onClick={() => addLineOfType('customer_cheque')}
+                  />
                   <QuickAddButton type="bank_transfer" onClick={() => addLineOfType('bank_transfer')} />
                   <Popover open={splitOpen} onOpenChange={setSplitOpen}>
                     <PopoverTrigger asChild>
@@ -452,10 +427,6 @@ export function AddSettlementDialog({
                 </div>
               </div>
 
-              {/* Newest-first display so adding lines pushes prior
-                  entries down rather than scrolling the user past
-                  what they were just typing. The numeric label stays
-                  tied to the original index for stable identity. */}
               {lines
                 .map((line, idx) => ({ line, idx }))
                 .reverse()
@@ -471,7 +442,7 @@ export function AddSettlementDialog({
             </div>
 
             <div className="flex items-center justify-between rounded-lg bg-muted px-4 py-2.5">
-              <span className="text-sm font-semibold">إجمالي السند:</span>
+              <span className="text-sm font-semibold">إجمالي المصروف:</span>
               <span className="text-lg font-bold tabular-nums">
                 ₪{total.toLocaleString('en-US')}
               </span>
@@ -498,7 +469,7 @@ export function AddSettlementDialog({
             handleScannedCheques(scanned);
             setScannerOpen(false);
           }}
-          title="مسح شيكات للسند"
+          title="مسح شيكات للمصروف"
         />
       )}
     </>
@@ -550,12 +521,6 @@ function PaymentLineCard({
         )}
       </div>
 
-      {/* CASH + BANK_TRANSFER row layout. Source order: payment_type
-          select → date → amount. RTL flex puts payment_type first
-          (rightmost — physical-right), as the user requested. We keep
-          the type select even though the line was created via the
-          quick-add button, so a typo can be corrected without removing
-          and re-adding. */}
       {(line.payment_type === 'cash' || line.payment_type === 'bank_transfer') && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="space-y-1.5">
@@ -576,7 +541,6 @@ function PaymentLineCard({
               </SelectContent>
             </Select>
           </div>
-
           <div className="space-y-1.5">
             <Label className="text-[11px]">التاريخ</Label>
             <ArabicDatePicker
@@ -585,7 +549,6 @@ function PaymentLineCard({
               compact
             />
           </div>
-
           <div className="space-y-1.5">
             <Label className="text-[11px]">المبلغ</Label>
             <Input
@@ -597,7 +560,6 @@ function PaymentLineCard({
               className="h-9 tabular-nums"
             />
           </div>
-
           {line.payment_type === 'bank_transfer' && (
             <div className="md:col-span-3 space-y-1.5">
               <Label className="text-[11px]">رقم المرجع البنكي</Label>
@@ -613,10 +575,8 @@ function PaymentLineCard({
         </div>
       )}
 
-      {/* CHEQUE — full chequebook entry. */}
       {line.payment_type === 'cheque' && <ChequeLineEditor line={line} onChange={onChange} />}
 
-      {/* CUSTOMER CHEQUE — picker. */}
       {line.payment_type === 'customer_cheque' && (
         <div className="space-y-2 border-t pt-3">
           <Label className="text-xs">اختر شيكات العميل</Label>
@@ -640,7 +600,6 @@ function ChequeLineEditor({
   line: PaymentLine;
   onChange: (patch: Partial<PaymentLine>) => void;
 }) {
-  // Cross-surface duplicate detection — same query the expense form runs.
   const [duplicate, setDuplicate] = useState<string | null>(null);
   useEffect(() => {
     if (!line.cheque_number || !line.bank_code) {
@@ -657,10 +616,6 @@ function ChequeLineEditor({
     };
   }, [line.cheque_number, line.bank_code]);
 
-  // Three equal columns shared by both rows (bank/branch/cheque# and
-  // amount/due/issue) so every field on the cheque card renders at the
-  // same width — fixes the "البنك is bigger than الفرع" feedback. The
-  // image picker hangs off the bottom-left in its own compact slot.
   const gridCls = 'grid grid-cols-1 md:grid-cols-3 gap-3';
 
   return (
@@ -711,8 +666,6 @@ function ChequeLineEditor({
         </p>
       )}
 
-      {/* Amount + due date + issue date — same 3-column grid as the
-          bank row so columns align across both rows. */}
       <div className={gridCls}>
         <div className="space-y-1.5 min-w-0">
           <Label className="text-[11px]">المبلغ</Label>
@@ -743,13 +696,11 @@ function ChequeLineEditor({
         </div>
       </div>
 
-      {/* Compact image picker — small button + thumbnail beside it,
-          tucked at the bottom-left so the card stays dense. */}
       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
         <CompactImagePicker
           value={line.cheque_image_url}
           onChange={(url) => onChange({ cheque_image_url: url ?? undefined })}
-          entityType="settlement_cheque"
+          entityType="expense_cheque"
           entityId={line.id}
           label="صورة الشيك"
         />
@@ -767,10 +718,6 @@ interface ScannedCheque {
   image_url?: string;
 }
 
-/**
- * Cross-surface cheque-duplicate lookup. Same logic as ExpensesSection's
- * helper — kept inline so the dialog stays self-contained.
- */
 async function findExistingCheque(
   chequeNumber: string,
   bankCode: string | null,

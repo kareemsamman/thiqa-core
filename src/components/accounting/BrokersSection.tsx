@@ -195,9 +195,24 @@ export function BrokersSection() {
       }
       return s + Math.max(0, Number(r.insurance_price || 0) - Number(r.broker_buy_price || 0));
     }, 0);
-    const disbursedSum = disbursements.reduce((s, r) => s + Number(r.total_amount || 0), 0);
-    const receivedSum = receipts.reduce((s, r) => s + Number(r.total_amount || 0), 0);
-    return { sellSum, profitSum, disbursedSum, receivedSum };
+    const disbursedSum = disbursements
+      .filter((r) => !r.refused)
+      .reduce((s, r) => s + Number(r.total_amount || 0), 0);
+    const receivedSum = receipts
+      .filter((r) => !r.refused)
+      .reduce((s, r) => s + Number(r.total_amount || 0), 0);
+    // Gross we owe brokers = sum of broker_buy_price on policies where
+    // we bought from the broker (from_broker direction). The to_broker
+    // rows are where we sold to the broker, so we don't owe them
+    // anything against those — broker_buy_price = 0 in that case.
+    const grossOwed = overlayed.reduce((s, r) => {
+      if (r.main.broker_direction === 'to_broker') return s;
+      return s + Number(r.broker_buy_price || 0);
+    }, 0);
+    // Net "still owe brokers" — what the user wants on the pill: a
+    // disbursement reduces it.
+    const remainingDueSum = Math.max(0, grossOwed - disbursedSum);
+    return { sellSum, profitSum, disbursedSum, receivedSum, remainingDueSum };
   }, [issuancesActive, disbursements, receipts, editLocal]);
 
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
@@ -220,6 +235,8 @@ export function BrokersSection() {
         <SummaryPill label="سعر البيع للعميل" value={fmt(totals.sellSum)} tone="primary" />
         <Sep />
         <SummaryPill label="الربح" value={fmt(totals.profitSum)} tone="success" />
+        <Sep />
+        <SummaryPill label="متبقي للوسطاء" value={fmt(totals.remainingDueSum)} tone="destructive" />
         <Sep />
         <SummaryPill label="مدفوع للوسطاء" value={fmt(totals.disbursedSum)} tone="amber" />
         <Sep />
@@ -381,7 +398,7 @@ function SummaryPill({
 }: {
   label: string;
   value: string;
-  tone: 'primary' | 'success' | 'amber' | 'emerald';
+  tone: 'primary' | 'success' | 'amber' | 'emerald' | 'destructive';
 }) {
   const cls =
     tone === 'primary'
@@ -390,6 +407,8 @@ function SummaryPill({
       ? 'text-emerald-600'
       : tone === 'amber'
       ? 'text-amber-600'
+      : tone === 'destructive'
+      ? 'text-destructive'
       : 'text-emerald-700';
   return (
     <div className="inline-flex items-center gap-1.5 px-1">

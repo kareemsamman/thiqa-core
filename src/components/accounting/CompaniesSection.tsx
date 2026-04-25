@@ -188,15 +188,20 @@ export function CompaniesSection() {
     // the table cells the user is typing into.
     const overlayed = issuancesActive.map((r) => applyOverlay(r, editLocal));
     const insuranceSum = overlayed.reduce((s, r) => s + Number(r.insurance_price || 0), 0);
-    const dueSum = overlayed.reduce((s, r) => s + Number(r.payed_for_company || 0), 0);
+    // Total owed to companies — sum across active policies.
+    const totalDue = overlayed.reduce((s, r) => s + Number(r.payed_for_company || 0), 0);
     const profitSum = overlayed.reduce(
       (s, r) => s + Number(r.profit || 0) + Number(r.office_commission || 0),
       0,
     );
-    const disbursedSum = companySettlements.reduce(
-      (s, r) => s + Number(r.total_amount || 0),
-      0,
-    );
+    // Disbursed = money we actually paid the companies (outgoing
+    // settlements only, refused excluded).
+    const disbursedSum = companySettlements
+      .filter((r) => !r.refused)
+      .reduce((s, r) => s + Number(r.total_amount || 0), 0);
+    // Net "still owe the companies" — what the user actually wants to
+    // see on the pill: today's debt, not the lifetime gross.
+    const dueSum = Math.max(0, totalDue - disbursedSum);
     return { insuranceSum, dueSum, profitSum, disbursedSum };
   }, [issuancesActive, companySettlements, editLocal]);
 
@@ -216,7 +221,9 @@ export function CompaniesSection() {
 
   return (
     <div className="space-y-2.5">
-      {/* Compact summary strip — single horizontal row of pills. */}
+      {/* Compact summary strip — single horizontal row of pills.
+          المستحق shows TODAY's net debt (gross owed minus what we've
+          already paid) so adding a سند صرف visibly reduces the pill. */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
         <SummaryPill label="إجمالي سعر التأمين" value={fmt(totals.insuranceSum)} tone="primary" />
         <Sep />
