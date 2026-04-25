@@ -1,6 +1,15 @@
 import { useMemo, useState } from 'react';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowDownRight, ArrowUpRight, FileText, RotateCcw, LayoutGrid, type LucideIcon } from 'lucide-react';
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  FileText,
+  RotateCcw,
+  LayoutGrid,
+  Search,
+  type LucideIcon,
+} from 'lucide-react';
 import { CompanyIssuancesTable } from './CompanyIssuancesTable';
 import { SettlementsTable } from './SettlementsTable';
 import {
@@ -12,7 +21,11 @@ import {
 import { AccountingFilters, AccountingFiltersValue } from './AccountingFilters';
 import { ManageColumnsDropdown } from './ManageColumnsDropdown';
 import { useTableColumnVisibility } from '@/hooks/useTableColumnVisibility';
-import { useAccountingData } from './useAccountingData';
+import {
+  matchesIssuanceSearch,
+  matchesSettlementSearch,
+  useAccountingData,
+} from './useAccountingData';
 import { POLICY_TYPE_DISPLAY, PAYMENT_METHOD_LABELS } from './accountingTypes';
 
 type SubTab = 'all' | 'issuances' | 'returns' | 'disbursements' | 'receipts';
@@ -32,6 +45,7 @@ const SETTLEMENT_DEFAULT_VISIBLE = SETTLEMENT_KEYS.filter((k) => !SETTLEMENT_DEF
 
 export function CompaniesSection() {
   const [tab, setTab] = useState<SubTab>('all');
+  const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<AccountingFiltersValue>({
     dateFrom: '',
     dateTo: '',
@@ -80,9 +94,19 @@ export function CompaniesSection() {
   const onlyDirect = (rows: typeof data.issuances) =>
     rows.filter((r) => !r.main.broker_id);
 
-  const issuancesAll = onlyDirect([...data.issuances, ...data.returns]);
-  const issuancesActive = onlyDirect(data.issuances);
-  const returns = onlyDirect(data.returns);
+  const issuancesAll = onlyDirect([...data.issuances, ...data.returns]).filter((r) =>
+    matchesIssuanceSearch(r, search),
+  );
+  const issuancesActive = onlyDirect(data.issuances).filter((r) =>
+    matchesIssuanceSearch(r, search),
+  );
+  const returns = onlyDirect(data.returns).filter((r) => matchesIssuanceSearch(r, search));
+  const companySettlements = data.companySettlements.filter((r) =>
+    matchesSettlementSearch(r, search),
+  );
+  const companyReceipts = data.companyReceipts.filter((r) =>
+    matchesSettlementSearch(r, search),
+  );
 
   const totals = useMemo(() => {
     const insuranceSum = issuancesActive.reduce((s, r) => s + Number(r.insurance_price || 0), 0);
@@ -91,12 +115,12 @@ export function CompaniesSection() {
       (s, r) => s + Number(r.profit || 0) + Number(r.office_commission || 0),
       0,
     );
-    const disbursedSum = data.companySettlements.reduce(
+    const disbursedSum = companySettlements.reduce(
       (s, r) => s + Number(r.total_amount || 0),
       0,
     );
     return { insuranceSum, dueSum, profitSum, disbursedSum };
-  }, [issuancesActive, data.companySettlements]);
+  }, [issuancesActive, companySettlements]);
 
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
@@ -108,8 +132,8 @@ export function CompaniesSection() {
       : tab === 'returns'
       ? returns.length
       : tab === 'disbursements'
-      ? data.companySettlements.length
-      : data.companyReceipts.length;
+      ? companySettlements.length
+      : companyReceipts.length;
   const countLabel = isSettlementTab ? 'سند' : 'معاملة';
 
   return (
@@ -139,6 +163,16 @@ export function CompaniesSection() {
         </Tabs>
 
         <div className="flex items-center gap-2 mr-auto">
+          <div className="relative">
+            <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="بحث بالاسم، رقم المعاملة، الهوية…"
+              className="h-8 w-56 pr-8 text-sm"
+            />
+          </div>
           <span className="text-xs text-muted-foreground">
             {data.loading ? '...' : `${activeRowCount} ${countLabel}`}
           </span>
@@ -197,7 +231,7 @@ export function CompaniesSection() {
         </TabsContent>
         <TabsContent value="disbursements" className="m-0">
           <SettlementsTable
-            rows={data.companySettlements}
+            rows={companySettlements}
             loading={data.loading}
             voucherKind="disbursement"
             visible={settlementCols.visible}
@@ -206,13 +240,13 @@ export function CompaniesSection() {
         </TabsContent>
         <TabsContent value="receipts" className="m-0">
           <SettlementsTable
-            rows={data.companyReceipts}
+            rows={companyReceipts}
             loading={data.loading}
             voucherKind="receipt"
             visible={settlementCols.visible}
             entityLabel="شركة التأمين"
           />
-          {!data.loading && data.companyReceipts.length === 0 && (
+          {!data.loading && companyReceipts.length === 0 && (
             <p className="text-center text-xs text-muted-foreground mt-3">
               لا يوجد سندات قبض من شركات التأمين — جميع تحصيلات الشركات تتم عبر تسوية الصرف.
             </p>

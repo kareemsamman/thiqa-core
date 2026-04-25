@@ -1,6 +1,15 @@
 import { useMemo, useState } from 'react';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowDownRight, ArrowUpRight, FileText, RotateCcw, LayoutGrid, type LucideIcon } from 'lucide-react';
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  FileText,
+  RotateCcw,
+  LayoutGrid,
+  Search,
+  type LucideIcon,
+} from 'lucide-react';
 import { CompanyIssuancesTable } from './CompanyIssuancesTable';
 import { SettlementsTable } from './SettlementsTable';
 import {
@@ -12,7 +21,11 @@ import {
 import { AccountingFilters, AccountingFiltersValue } from './AccountingFilters';
 import { ManageColumnsDropdown } from './ManageColumnsDropdown';
 import { useTableColumnVisibility } from '@/hooks/useTableColumnVisibility';
-import { useAccountingData } from './useAccountingData';
+import {
+  matchesIssuanceSearch,
+  matchesSettlementSearch,
+  useAccountingData,
+} from './useAccountingData';
 import { POLICY_TYPE_DISPLAY, PAYMENT_METHOD_LABELS } from './accountingTypes';
 
 type SubTab = 'all' | 'issuances' | 'returns' | 'disbursements' | 'receipts';
@@ -32,6 +45,7 @@ const SETTLEMENT_DEFAULT_VISIBLE = SETTLEMENT_KEYS.filter((k) => !SETTLEMENT_DEF
 
 export function BrokersSection() {
   const [tab, setTab] = useState<SubTab>('all');
+  const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<AccountingFiltersValue>({
     dateFrom: '',
     dateTo: '',
@@ -76,12 +90,20 @@ export function BrokersSection() {
   const onlyBroker = (rows: typeof data.issuances) =>
     rows.filter((r) => !!r.main.broker_id);
 
-  const issuancesAll = onlyBroker([...data.issuances, ...data.returns]);
-  const issuancesActive = onlyBroker(data.issuances);
-  const returns = onlyBroker(data.returns);
+  const issuancesAll = onlyBroker([...data.issuances, ...data.returns]).filter((r) =>
+    matchesIssuanceSearch(r, search),
+  );
+  const issuancesActive = onlyBroker(data.issuances).filter((r) =>
+    matchesIssuanceSearch(r, search),
+  );
+  const returns = onlyBroker(data.returns).filter((r) => matchesIssuanceSearch(r, search));
 
-  const disbursements = data.brokerSettlements.filter((s) => s.direction === 'we_owe');
-  const receipts = data.brokerSettlements.filter((s) => s.direction === 'broker_owes');
+  const disbursements = data.brokerSettlements
+    .filter((s) => s.direction === 'we_owe')
+    .filter((r) => matchesSettlementSearch(r, search));
+  const receipts = data.brokerSettlements
+    .filter((s) => s.direction === 'broker_owes')
+    .filter((r) => matchesSettlementSearch(r, search));
 
   const totals = useMemo(() => {
     const sellSum = issuancesActive.reduce((s, r) => s + Number(r.insurance_price || 0), 0);
@@ -131,6 +153,16 @@ export function BrokersSection() {
         </Tabs>
 
         <div className="flex items-center gap-2 mr-auto">
+          <div className="relative">
+            <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="بحث بالاسم، رقم المعاملة، الهوية…"
+              className="h-8 w-56 pr-8 text-sm"
+            />
+          </div>
           <span className="text-xs text-muted-foreground">
             {data.loading ? '...' : `${activeRowCount} ${countLabel}`}
           </span>

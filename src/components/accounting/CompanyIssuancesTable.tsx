@@ -83,9 +83,11 @@ export function CompanyIssuancesTable({
         return;
       }
       toast.success('تم الحفظ', { duration: 1200 });
-      onRowSaved?.(policyId);
+      // Inline edits skip the parent refresh on purpose — local state in
+      // `editLocal` already reflects the change, and re-fetching the
+      // whole table would steal focus / scroll on every keystroke save.
     },
-    [onRowSaved],
+    [],
   );
 
   const saveCar = useMemo(
@@ -354,13 +356,24 @@ export function CompanyIssuancesTable({
 
                         {showCol('payment_method') && (
                           <TableCell>
-                            {row.primary_payment_method ? (
-                              <Badge variant="outline" className="text-xs">
-                                {PAYMENT_METHOD_LABELS[row.primary_payment_method] ?? row.primary_payment_method}
-                              </Badge>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
+                            {(() => {
+                              // ELZAMI premiums are always paid on the
+                              // company portal with the customer's own
+                              // card — render as "فيزا خارجي" regardless
+                              // of whether a policy_payments row exists
+                              // yet (matches getPaymentTypeLabel).
+                              const label = isElzami
+                                ? 'فيزا خارجي'
+                                : row.primary_payment_method
+                                ? PAYMENT_METHOD_LABELS[row.primary_payment_method] ??
+                                  row.primary_payment_method
+                                : null;
+                              return label ? (
+                                <Badge variant="outline" className="text-xs">{label}</Badge>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              );
+                            })()}
                           </TableCell>
                         )}
 

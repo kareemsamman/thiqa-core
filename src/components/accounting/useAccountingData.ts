@@ -483,6 +483,37 @@ function narrowByType(row: IssuanceRow, allowed: Set<string>): IssuanceRow | nul
   };
 }
 
+/**
+ * Free-text search over the visible identifiers of a policy row —
+ * client name, ID, phone, document number, car number, company name.
+ * Empty/whitespace queries match everything.
+ */
+export function matchesIssuanceSearch(row: IssuanceRow, q: string): boolean {
+  const term = q.trim().toLowerCase();
+  if (!term) return true;
+  const fields: (string | null | undefined)[] = [
+    row.client_name,
+    row.client_id_number,
+    row.client_phone,
+    row.document_number,
+    row.main.car_number,
+    row.main.company_name,
+  ];
+  return fields.some((v) => v != null && v.toLowerCase().includes(term));
+}
+
+/** Same idea for settlements — entity, cheque #, notes. */
+export function matchesSettlementSearch(row: SettlementRow, q: string): boolean {
+  const term = q.trim().toLowerCase();
+  if (!term) return true;
+  const fields: (string | null | undefined)[] = [
+    row.entity_name,
+    row.cheque_number,
+    row.notes,
+  ];
+  return fields.some((v) => v != null && v.toLowerCase().includes(term));
+}
+
 function applySettlementFilters(
   rows: SettlementRow[],
   filters: AccountingFiltersValue,

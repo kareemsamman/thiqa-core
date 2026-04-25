@@ -1,7 +1,7 @@
 import { ColumnOption } from './ManageColumnsDropdown';
 
 export const COMPANY_ISSUANCE_COLUMNS: ColumnOption[] = [
-  { key: 'row_number', label: '#', required: true },
+  { key: 'row_number', label: '#' },
   { key: 'document_number', label: 'رقم المعاملة', required: true },
   { key: 'receipts', label: 'سندات القبض' },
   { key: 'client_name', label: 'العميل' },
@@ -22,7 +22,7 @@ export const COMPANY_ISSUANCE_COLUMNS: ColumnOption[] = [
 ];
 
 export const BROKER_ISSUANCE_COLUMNS: ColumnOption[] = [
-  { key: 'row_number', label: '#', required: true },
+  { key: 'row_number', label: '#' },
   { key: 'document_number', label: 'رقم المعاملة', required: true },
   { key: 'receipts', label: 'سندات القبض' },
   { key: 'client_name', label: 'العميل' },
