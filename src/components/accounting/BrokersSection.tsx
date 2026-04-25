@@ -43,7 +43,7 @@ export function BrokersSection() {
   const data = useAccountingData(filters);
 
   const issuanceCols = useTableColumnVisibility(
-    'accounting-brokers-issuances-v3',
+    'accounting-brokers-issuances-v4',
     ISSUANCE_DEFAULT_VISIBLE,
     ISSUANCE_KEYS,
   );

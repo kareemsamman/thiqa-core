@@ -185,6 +185,9 @@ export function CompanyIssuancesTable({
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  {showCol('row_number') && (
+                    <TableHead className="whitespace-nowrap w-12 text-center text-xs">#</TableHead>
+                  )}
                   {showCol('document_number') && (
                     <TableHead className="whitespace-nowrap min-w-[140px]">رقم المعاملة</TableHead>
                   )}
@@ -218,7 +221,7 @@ export function CompanyIssuancesTable({
                     <TableHead className="whitespace-nowrap min-w-[140px]">سعر التأمين</TableHead>
                   )}
                   {showCol('actions') && (
-                    <TableHead className="whitespace-nowrap text-left sticky left-0 bg-slate-100/90 backdrop-blur-sm border-l z-10 min-w-[100px]">
+                    <TableHead className="whitespace-nowrap text-center sticky left-0 bg-slate-100/95 border-l z-10 w-20 min-w-[80px] px-1">
                       إجراءات
                     </TableHead>
                   )}
@@ -243,10 +246,11 @@ export function CompanyIssuancesTable({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paged.map((rawRow) => {
+                  paged.map((rawRow, idx) => {
                     const row = view(rawRow);
                     const isElzami = row.main.policy_type_parent === 'ELZAMI';
                     const editable = !row.is_grouped;
+                    const rowNumber = (safePage - 1) * pageSize + idx + 1;
                     return (
                       <TableRow
                         key={row.id}
@@ -255,6 +259,11 @@ export function CompanyIssuancesTable({
                           row.main.cancelled && 'bg-destructive/5 hover:bg-destructive/10',
                         )}
                       >
+                        {showCol('row_number') && (
+                          <TableCell className="text-center text-xs text-muted-foreground tabular-nums">
+                            {rowNumber}
+                          </TableCell>
+                        )}
                         {showCol('document_number') && (
                           <TableCell className="font-mono text-sm">
                             <span>{row.document_number ?? '—'}</span>
@@ -495,8 +504,8 @@ export function CompanyIssuancesTable({
                         )}
 
                         {showCol('actions') && (
-                          <TableCell className="sticky left-0 bg-slate-50/80 backdrop-blur-sm border-l z-10 text-left">
-                            <div className="flex items-center gap-0.5">
+                          <TableCell className="sticky left-0 bg-slate-50/95 border-l z-10 px-1 w-20 min-w-[80px]">
+                            <div className="flex items-center justify-center gap-0.5">
                               {row.is_grouped ? (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -512,7 +521,7 @@ export function CompanyIssuancesTable({
                                       <Layers className="h-3.5 w-3.5" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent side="top">تفاصيل الحزمة</TooltipContent>
+                                  <TooltipContent side="top" className="whitespace-nowrap">تفاصيل الحزمة</TooltipContent>
                                 </Tooltip>
                               ) : (
                                 <Tooltip>
@@ -528,7 +537,7 @@ export function CompanyIssuancesTable({
                                       </Button>
                                     </span>
                                   </TooltipTrigger>
-                                  <TooltipContent side="top">
+                                  <TooltipContent side="top" className="whitespace-nowrap">
                                     معاملة فردية — لا توجد بنود متعددة
                                   </TooltipContent>
                                 </Tooltip>
@@ -550,7 +559,7 @@ export function CompanyIssuancesTable({
                                     </Button>
                                   </span>
                                 </TooltipTrigger>
-                                <TooltipContent side="top">معاينة المعاملة</TooltipContent>
+                                <TooltipContent side="top" className="whitespace-nowrap">معاينة المعاملة</TooltipContent>
                               </Tooltip>
                             </div>
                           </TableCell>
@@ -633,6 +642,7 @@ export function CompanyIssuancesTable({
           onOpenChange={setPackageOpen}
           row={packageRow}
           mode={mode}
+          onSubPolicySaved={(id) => onRowSaved?.(id)}
         />
       </div>
     </TooltipProvider>
@@ -667,7 +677,7 @@ function DateCell({
         <TooltipTrigger asChild>
           <div>{inner}</div>
         </TooltipTrigger>
-        <TooltipContent side="top">{tip}</TooltipContent>
+        <TooltipContent side="top" className="whitespace-nowrap">{tip}</TooltipContent>
       </Tooltip>
     );
   }
@@ -712,7 +722,7 @@ function NumberCell({
         <TooltipTrigger asChild>
           <div>{inner}</div>
         </TooltipTrigger>
-        <TooltipContent side="top">{tip}</TooltipContent>
+        <TooltipContent side="top" className="whitespace-nowrap">{tip}</TooltipContent>
       </Tooltip>
     );
   }

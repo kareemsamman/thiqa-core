@@ -406,10 +406,15 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
 
 function applyFilters(rows: IssuanceRow[], filters: AccountingFiltersValue): IssuanceRow[] {
   let out = rows;
+
+  // Date filter: match تاريخ الإصدار only — agents asked to filter by
+  // when the policy was *issued*, not its coverage window. Rows with
+  // null issue_date are excluded from the date filter (they can't
+  // match by definition).
   if (filters.dateFrom) {
     const from = new Date(filters.dateFrom).getTime();
     out = out.filter(
-      (r) => new Date(r.main.issue_date ?? r.main.start_date).getTime() >= from,
+      (r) => r.main.issue_date != null && new Date(r.main.issue_date).getTime() >= from,
     );
   }
   if (filters.dateTo) {
@@ -417,22 +422,27 @@ function applyFilters(rows: IssuanceRow[], filters: AccountingFiltersValue): Iss
     to.setHours(23, 59, 59, 999);
     const toMs = to.getTime();
     out = out.filter(
-      (r) => new Date(r.main.issue_date ?? r.main.start_date).getTime() <= toMs,
+      (r) => r.main.issue_date != null && new Date(r.main.issue_date).getTime() <= toMs,
     );
   }
+
   if (filters.companies.length > 0) {
     const set = new Set(filters.companies);
     out = out.filter((r) => r.main.company_id != null && set.has(r.main.company_id));
   }
+
+  // Type filter is special: instead of just keeping/dropping rows, we
+  // *narrow* each row to only the matching sub-policies and re-aggregate.
+  // That way filtering a "إلزامي + ثالث + خدمات الطريق" package by ثالث
+  // shows just the ثالث's prices in the row — and inline edits land
+  // on ثالث's policy_id, not the package's main.
   if (filters.types.length > 0) {
     const set = new Set(filters.types);
-    // A package matches if ANY sub-policy matches the selected type —
-    // so a "ثالث + إلزامي" package shows up when the user filters for
-    // either ثالث or إلزامي.
-    out = out.filter((r) =>
-      r.sub_policies.some((s) => set.has(policyTypeKey(s.policy_type_parent, s.policy_type_child))),
-    );
+    out = out
+      .map((r) => narrowByType(r, set))
+      .filter((r): r is IssuanceRow => r !== null);
   }
+
   if (filters.paymentMethods.length > 0) {
     const set = new Set(filters.paymentMethods);
     out = out.filter(
@@ -440,6 +450,37 @@ function applyFilters(rows: IssuanceRow[], filters: AccountingFiltersValue): Iss
     );
   }
   return out;
+}
+
+function narrowByType(row: IssuanceRow, allowed: Set<string>): IssuanceRow | null {
+  const matched = row.sub_policies.filter((s) =>
+    allowed.has(policyTypeKey(s.policy_type_parent, s.policy_type_child)),
+  );
+  if (matched.length === 0) return null;
+  if (matched.length === row.sub_policies.length) return row; // no narrowing needed
+
+  const main = pickMainSubPolicy(matched);
+  const insurance_price = matched.reduce((s, p) => s + Number(p.insurance_price ?? 0), 0);
+  const payed_for_company = matched.reduce((s, p) => s + Number(p.payed_for_company ?? 0), 0);
+  const profit = matched.reduce((s, p) => s + Number(p.profit ?? 0), 0);
+  const office_commission = matched.reduce((s, p) => s + Number(p.office_commission ?? 0), 0);
+  const broker_buy_price = matched.reduce((s, p) => s + Number(p.broker_buy_price ?? 0), 0);
+
+  return {
+    ...row,
+    sub_policies: matched,
+    main,
+    is_grouped: matched.length > 1,
+    insurance_price,
+    payed_for_company,
+    profit,
+    office_commission,
+    broker_buy_price,
+    // receipts/payment_method are still group-level — they're linked to
+    // policies so a per-sub recompute would need the receipts map. The
+    // table column shows the package's payment method anyway; narrowing
+    // doesn't change that meaningfully for the user's purpose.
+  };
 }
 
 function applySettlementFilters(

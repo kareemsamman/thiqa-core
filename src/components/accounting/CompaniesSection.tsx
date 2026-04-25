@@ -47,7 +47,7 @@ export function CompaniesSection() {
   // a single store. Disbursements + receipts share another. v3 forces
   // a clean slate after the layout refactor.
   const issuanceCols = useTableColumnVisibility(
-    'accounting-companies-issuances-v3',
+    'accounting-companies-issuances-v4',
     ISSUANCE_DEFAULT_VISIBLE,
     ISSUANCE_KEYS,
   );

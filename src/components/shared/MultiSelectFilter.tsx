@@ -125,7 +125,7 @@ export function MultiSelectFilter({
               filtered.map((option) => (
                 <label
                   key={option.value}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent cursor-pointer text-sm"
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer text-sm"
                 >
                   <Checkbox
                     checked={selected.includes(option.value)}
