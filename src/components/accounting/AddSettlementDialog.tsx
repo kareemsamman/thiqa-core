@@ -687,14 +687,20 @@ function ChequeLineEditor({
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
   const [switchOpen, setSwitchOpen] = useState(false);
   useEffect(() => {
-    if (!line.cheque_number || !line.bank_code) {
+    // Trigger on cheque number alone — bank is a *narrower* filter,
+    // not a precondition. Without this, agents who only typed the
+    // number (typical when copying off a paper cheque) never saw the
+    // dedup popup at all. We still pass bank_code to findExistingCheque
+    // so the search narrows when both are present.
+    const num = (line.cheque_number ?? '').trim();
+    if (num.length < 4) {
       setDuplicate(null);
       setSwitchOpen(false);
       return;
     }
     let cancelled = false;
     (async () => {
-      const found = await findExistingCheque(line.cheque_number ?? '', line.bank_code ?? null);
+      const found = await findExistingCheque(num, line.bank_code ?? null);
       if (cancelled) return;
       setDuplicate(found);
       // Only auto-open the switch dialog when the duplicate is a
@@ -907,45 +913,40 @@ async function findExistingCheque(
   bankCode: string | null,
 ): Promise<DuplicateMatch | null> {
   if (!chequeNumber || chequeNumber.length < 4) return null;
-  const matchBank = <T,>(p: PromiseLike<T>) => p;
-  const eqBank = (q: ReturnType<typeof supabase.from>) =>
-    bankCode ? q.eq('bank_code', bankCode) : q.is('bank_code', null);
+  // When a bank is selected we narrow the search to that bank — same
+  // cheque number across two different banks is a legitimate
+  // coincidence. When no bank is set we fall back to a number-only
+  // match so an in-progress entry still surfaces the duplicate.
+  const narrowBank = <T,>(q: T): T =>
+    bankCode ? ((q as { eq: (a: string, b: string) => T }).eq('bank_code', bankCode) as T) : q;
   const [{ data: cs }, { data: bs }, { data: ex }, { data: pp }] = await Promise.all([
-    matchBank(
-      eqBank(
-        supabase
-          .from('company_settlements')
-          .select('id, settlement_date')
-          .eq('cheque_number', chequeNumber)
-          .limit(1),
-      ),
+    narrowBank(
+      supabase
+        .from('company_settlements')
+        .select('id, settlement_date')
+        .eq('cheque_number', chequeNumber)
+        .limit(1),
     ),
-    matchBank(
-      eqBank(
-        supabase
-          .from('broker_settlements')
-          .select('id, settlement_date')
-          .eq('cheque_number', chequeNumber)
-          .limit(1),
-      ),
+    narrowBank(
+      supabase
+        .from('broker_settlements')
+        .select('id, settlement_date')
+        .eq('cheque_number', chequeNumber)
+        .limit(1),
     ),
-    matchBank(
-      eqBank(
-        supabase
-          .from('expenses')
-          .select('id, expense_date')
-          .eq('cheque_number', chequeNumber)
-          .limit(1),
-      ),
+    narrowBank(
+      supabase
+        .from('expenses')
+        .select('id, expense_date')
+        .eq('cheque_number', chequeNumber)
+        .limit(1),
     ),
-    matchBank(
-      eqBank(
-        supabase
-          .from('policy_payments')
-          .select('id, payment_date')
-          .eq('cheque_number', chequeNumber)
-          .limit(1),
-      ),
+    narrowBank(
+      supabase
+        .from('policy_payments')
+        .select('id, payment_date')
+        .eq('cheque_number', chequeNumber)
+        .limit(1),
     ),
   ]);
   if (cs && cs.length) {
