@@ -78,9 +78,9 @@ export function CompaniesSection() {
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Top totals + filter */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
         <SummaryCard label="إجمالي سعر التأمين" value={fmt(totals.insuranceSum)} tone="primary" />
         <SummaryCard label="المستحق للشركات" value={fmt(totals.dueSum)} tone="destructive" />
         <SummaryCard label="الأرباح + العمولات" value={fmt(totals.profitSum)} tone="success" />
@@ -196,9 +196,9 @@ function SummaryCard({
       : 'text-amber-600';
   return (
     <Card>
-      <CardContent className="py-3 px-4">
-        <p className="text-xs text-muted-foreground mb-1">{label}</p>
-        <p className={`text-lg font-bold tabular-nums ${cls}`}>{value}</p>
+      <CardContent className="py-2 px-3">
+        <p className="text-[11px] text-muted-foreground mb-0.5">{label}</p>
+        <p className={`text-base font-bold tabular-nums ${cls}`}>{value}</p>
       </CardContent>
     </Card>
   );

@@ -57,7 +57,7 @@ interface RawPolicy {
   is_under_24: boolean | null;
   company_id: string | null;
   broker_id: string | null;
-  clients: { full_name: string } | null;
+  clients: { full_name: string; id_number: string | null; phone_number: string | null } | null;
   cars: {
     id: string;
     car_number: string | null;
@@ -150,7 +150,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
            insurance_price, payed_for_company, profit, office_commission, broker_buy_price,
            policy_type_parent, policy_type_child, cancelled, is_under_24,
            company_id, broker_id,
-           clients(full_name),
+           clients(full_name, id_number, phone_number),
            cars(id, car_number, car_type, car_value, year),
            insurance_companies(id, name, name_ar, broker_id)`,
         )
@@ -229,11 +229,18 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         groupBuckets.set(key, arr);
       });
 
-      // Map sub-policy id → client name from the original raw fetch,
+      // Map sub-policy id → client info from the original raw fetch,
       // since SubPolicy doesn't carry the joined client.
-      const clientNameByPolicy = new Map<string, string | null>();
+      const clientByPolicy = new Map<
+        string,
+        { name: string | null; id_number: string | null; phone: string | null }
+      >();
       policyRows.forEach((p) => {
-        clientNameByPolicy.set(p.id, p.clients?.full_name ?? null);
+        clientByPolicy.set(p.id, {
+          name: p.clients?.full_name ?? null,
+          id_number: p.clients?.id_number ?? null,
+          phone: p.clients?.phone_number ?? null,
+        });
       });
 
       const issuances: IssuanceRow[] = Array.from(groupBuckets.values()).map(
@@ -274,10 +281,13 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
               })),
             ) ?? main.document_number;
 
+          const clientInfo = clientByPolicy.get(main.id);
           return {
             id: main.group_id ?? main.id,
             document_number: documentNumber,
-            client_name: clientNameByPolicy.get(main.id) ?? null,
+            client_name: clientInfo?.name ?? null,
+            client_id_number: clientInfo?.id_number ?? null,
+            client_phone: clientInfo?.phone ?? null,
             sub_policies: group,
             main,
             is_grouped: group.length > 1,

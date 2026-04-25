@@ -49,6 +49,8 @@ export interface IssuanceRow {
   document_number: string | null;
   /** Client name — shared within a group. */
   client_name: string | null;
+  client_id_number: string | null;
+  client_phone: string | null;
   /** All policies in this معاملة (1 for single, N for package). */
   sub_policies: SubPolicy[];
   /** The sub-policy whose values represent the معاملة as a whole. */

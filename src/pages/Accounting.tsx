@@ -24,7 +24,7 @@ export default function Accounting() {
         subtitle="عرض موحّد لشركات التأمين والوسطاء والمصاريف"
       />
 
-      <div className="p-4 md:p-6 space-y-5">
+      <div className="p-3 md:p-4 space-y-3">
         <Tabs value={tab} onValueChange={(v) => setTab(v as MainTab)}>
           <TabsList className="grid w-full max-w-md grid-cols-3">
             <TabsTrigger value="companies" className="gap-2">
@@ -41,13 +41,13 @@ export default function Accounting() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="companies" className="mt-5">
+          <TabsContent value="companies" className="mt-3">
             <CompaniesSection />
           </TabsContent>
-          <TabsContent value="brokers" className="mt-5">
+          <TabsContent value="brokers" className="mt-3">
             <BrokersSection />
           </TabsContent>
-          <TabsContent value="expenses" className="mt-5">
+          <TabsContent value="expenses" className="mt-3">
             <ExpensesSection />
           </TabsContent>
         </Tabs>

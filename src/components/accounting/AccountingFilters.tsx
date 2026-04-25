@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -5,6 +6,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Badge } from '@/components/ui/badge';
 import { Filter, X } from 'lucide-react';
 import { MultiSelectFilter } from '@/components/shared/MultiSelectFilter';
+import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
+import { cn } from '@/lib/utils';
 
 export interface FilterOption {
   value: string;
@@ -12,9 +15,9 @@ export interface FilterOption {
 }
 
 export interface AccountingFiltersValue {
-  /** First day of selected month, ISO yyyy-MM-dd. Empty = no filter. */
+  /** First day of selected range (or month), ISO yyyy-MM-dd. */
   dateFrom: string;
-  /** Last day of selected month, ISO yyyy-MM-dd. */
+  /** Last day of selected range (or month), ISO yyyy-MM-dd. */
   dateTo: string;
   companies: string[];
   types: string[];
@@ -27,7 +30,6 @@ interface Props {
   companyOptions: FilterOption[];
   typeOptions: FilterOption[];
   paymentMethodOptions: FilterOption[];
-  /** Hide filter sections that don't apply to the active tab. */
   show?: {
     dateRange?: boolean;
     companies?: boolean;
@@ -43,20 +45,13 @@ const ALL_SHOWN: Required<NonNullable<Props['show']>> = {
   paymentMethods: true,
 };
 
-/**
- * Convert an ISO date back to "yyyy-MM" so the native month input can
- * display the saved selection.
- */
+type DateMode = 'month' | 'range';
+
 function isoToMonthInput(iso: string): string {
   if (!iso) return '';
   return iso.slice(0, 7);
 }
 
-/**
- * Given a "yyyy-MM" value, return [first, last] day of that month in
- * ISO format. We compute the last day off the local Date constructor
- * trick (day 0 of the next month).
- */
 function monthInputToRange(monthInput: string): { from: string; to: string } {
   if (!monthInput) return { from: '', to: '' };
   const [y, m] = monthInput.split('-').map(Number);
@@ -64,6 +59,21 @@ function monthInputToRange(monthInput: string): { from: string; to: string } {
   const lastDay = new Date(y, m, 0).getDate();
   const pad = (n: number) => n.toString().padStart(2, '0');
   return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(lastDay)}` };
+}
+
+/**
+ * Detect whether the current dateFrom/dateTo represent a full month
+ * (so we can keep the user in "month" mode after a reload).
+ */
+function looksLikeFullMonth(from: string, to: string): boolean {
+  if (!from || !to) return false;
+  const f = from.split('-');
+  const t = to.split('-');
+  if (f.length !== 3 || t.length !== 3) return false;
+  if (f[0] !== t[0] || f[1] !== t[1]) return false;
+  if (f[2] !== '01') return false;
+  const lastDay = new Date(Number(f[0]), Number(f[1]), 0).getDate();
+  return Number(t[2]) === lastDay;
 }
 
 export function AccountingFilters({
@@ -75,6 +85,11 @@ export function AccountingFilters({
   show,
 }: Props) {
   const visible = { ...ALL_SHOWN, ...(show ?? {}) };
+  const [dateMode, setDateMode] = useState<DateMode>(() =>
+    looksLikeFullMonth(value.dateFrom, value.dateTo) || (!value.dateFrom && !value.dateTo)
+      ? 'month'
+      : 'range',
+  );
 
   const monthInput = isoToMonthInput(value.dateFrom);
 
@@ -99,6 +114,9 @@ export function AccountingFilters({
     onChange({ ...value, dateFrom: range.from, dateTo: range.to });
   };
 
+  const setFrom = (v: string) => onChange({ ...value, dateFrom: v });
+  const setTo = (v: string) => onChange({ ...value, dateTo: v });
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -112,7 +130,7 @@ export function AccountingFilters({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[340px] p-0" dir="rtl">
+      <PopoverContent align="end" className="w-[360px] p-0" dir="rtl">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h4 className="text-sm font-semibold">الفلاتر</h4>
           {activeCount > 0 && (
@@ -129,21 +147,69 @@ export function AccountingFilters({
 
         <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
           {visible.dateRange && (
-            <div className="space-y-1.5">
-              <Label className="text-xs">الشهر</Label>
-              <Input
-                type="month"
-                value={monthInput}
-                onChange={(e) => setMonth(e.target.value)}
-                className="h-9 text-sm"
-              />
-              {monthInput && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">التاريخ</Label>
+                <div className="inline-flex rounded-md border bg-muted p-0.5 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setDateMode('month')}
+                    className={cn(
+                      'px-2.5 py-0.5 rounded',
+                      dateMode === 'month' ? 'bg-white shadow-sm' : 'text-muted-foreground',
+                    )}
+                  >
+                    شهر
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateMode('range')}
+                    className={cn(
+                      'px-2.5 py-0.5 rounded',
+                      dateMode === 'range' ? 'bg-white shadow-sm' : 'text-muted-foreground',
+                    )}
+                  >
+                    من / إلى
+                  </button>
+                </div>
+              </div>
+
+              {dateMode === 'month' ? (
+                <Input
+                  type="month"
+                  value={monthInput}
+                  onChange={(e) => setMonth(e.target.value)}
+                  className="h-9 text-sm"
+                />
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">من</Label>
+                    <ArabicDatePicker
+                      value={value.dateFrom}
+                      onChange={setFrom}
+                      placeholder="من"
+                      compact
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">إلى</Label>
+                    <ArabicDatePicker
+                      value={value.dateTo}
+                      onChange={setTo}
+                      placeholder="إلى"
+                      compact
+                    />
+                  </div>
+                </div>
+              )}
+              {(value.dateFrom || value.dateTo) && (
                 <button
                   type="button"
-                  onClick={() => setMonth('')}
+                  onClick={() => onChange({ ...value, dateFrom: '', dateTo: '' })}
                   className="text-[11px] text-muted-foreground hover:text-destructive"
                 >
-                  مسح الشهر
+                  مسح التاريخ
                 </button>
               )}
             </div>
