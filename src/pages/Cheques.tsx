@@ -109,6 +109,10 @@ interface ChequeRecord {
   transferred_to_id?: string | null;
   transferred_to_name?: string | null;
   transferred_payment_id?: string | null;
+  /** What surface this cheque was written on. `customer` = a cheque
+   *  the client gave us (policy_payments). The other values come from
+   *  outgoing settlement vouchers — same cheque book, opposite flow. */
+  source?: 'customer' | 'company' | 'broker';
 }
 
 interface CustomerGroup {
@@ -487,7 +491,7 @@ export default function Cheques() {
         } else if (c.transferred_to_type === 'company' && c.transferred_to_id) {
           transferredToName = transferCompanyMap[c.transferred_to_id];
         }
-        
+
         return {
           id: c.id,
           policy_id: c.policy_id,
@@ -513,7 +517,23 @@ export default function Cheques() {
           transferred_to_id: c.transferred_to_id,
           transferred_to_name: transferredToName,
           transferred_payment_id: c.transferred_payment_id,
+          source: 'customer',
         };
+      });
+
+      // Outgoing settlement cheques — written from us TO a company or
+      // broker. They live in *_settlements with payment_type='cheque'
+      // (customer_cheque rows aren't fetched here because they're just
+      // re-uses of policy_payments and would double-count). Each row is
+      // wrapped in a synthetic ChequeRecord so the existing group-by-
+      // client UI groups them by recipient name automatically.
+      const outgoing = await fetchOutgoingCheques();
+      formattedCheques.push(...outgoing);
+      // Most-recent first across both sources.
+      formattedCheques.sort((a, b) => {
+        const ad = new Date(a.payment_date).getTime();
+        const bd = new Date(b.payment_date).getTime();
+        return bd - ad;
       });
 
       // Search filter (includes customer name search)
@@ -917,7 +937,18 @@ export default function Cheques() {
           </div>
         </TableCell>
         <TableCell className="font-mono text-sm">
-          <bdi>{cheque.cheque_number || "-"}</bdi>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <bdi>{cheque.cheque_number || "-"}</bdi>
+            {/* "خارجي" badge marks cheques we wrote out (settlement
+                vouchers). Customer cheques don't get a badge — they're
+                the default for this page. */}
+            {cheque.source && cheque.source !== 'customer' && (
+              <Badge variant="outline" className="text-[9px] px-1 py-0 gap-1 border-amber-300 text-amber-700 bg-amber-50">
+                <Building2 className="h-2.5 w-2.5" />
+                خارجي
+              </Badge>
+            )}
+          </div>
         </TableCell>
         <TableCell className="text-sm">
           {cheque.bank_code ? (
@@ -1427,8 +1458,26 @@ export default function Cheques() {
                                       "h-4 w-4 transition-transform",
                                       !isExpanded && "-rotate-90"
                                     )} />
-                                    <User className="h-4 w-4 text-primary" />
+                                    {/* Outgoing groups (company/broker recipients) get
+                                        a building icon + a "شركة"/"وسيط" badge so they're
+                                        visually distinct from the customer groups. */}
+                                    {group.customerId.startsWith('company-') ||
+                                    group.customerId.startsWith('broker-') ? (
+                                      <Building2 className="h-4 w-4 text-amber-600" />
+                                    ) : (
+                                      <User className="h-4 w-4 text-primary" />
+                                    )}
                                     <span className="font-semibold">{group.customerName}</span>
+                                    {group.customerId.startsWith('company-') && (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-300 text-amber-700">
+                                        شركة · شيكات صادرة
+                                      </Badge>
+                                    )}
+                                    {group.customerId.startsWith('broker-') && (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-300 text-amber-700">
+                                        وسيط · شيكات صادرة
+                                      </Badge>
+                                    )}
                                     {group.phone && (
                                       <span className="text-xs text-muted-foreground ltr-nums">({group.phone})</span>
                                     )}
@@ -1649,4 +1698,118 @@ export default function Cheques() {
       />
     </MainLayout>
   );
+}
+
+/**
+ * Fetches outgoing cheques (written from the office to companies or
+ * brokers via the settlement vouchers) and shapes each row to look
+ * like a ChequeRecord so it slots into the same grouped view as
+ * customer cheques. The synthetic `policy.client.full_name` is the
+ * recipient's name — that drives both the group header and the
+ * search-by-name filter.
+ */
+async function fetchOutgoingCheques(): Promise<ChequeRecord[]> {
+  const [csRes, bsRes] = await Promise.all([
+    supabase
+      .from('company_settlements')
+      .select(
+        'id, settlement_date, total_amount, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, status, refused, notes, company_id, insurance_companies(name, name_ar)',
+      )
+      .eq('payment_type', 'cheque'),
+    supabase
+      .from('broker_settlements')
+      .select(
+        'id, settlement_date, total_amount, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, status, refused, notes, broker_id, brokers(name)',
+      )
+      .eq('payment_type', 'cheque'),
+  ]);
+
+  const out: ChequeRecord[] = [];
+
+  ((csRes.data ?? []) as RawOutgoingSettlement[]).forEach((row) => {
+    const recipientName =
+      row.insurance_companies?.name_ar || row.insurance_companies?.name || 'شركة';
+    out.push(buildOutgoingChequeRecord('company', `cs-${row.id}`, recipientName, row.company_id ?? null, row));
+  });
+
+  ((bsRes.data ?? []) as RawOutgoingSettlement[]).forEach((row) => {
+    const recipientName = row.brokers?.name || 'وسيط';
+    out.push(buildOutgoingChequeRecord('broker', `bs-${row.id}`, recipientName, row.broker_id ?? null, row));
+  });
+
+  return out;
+}
+
+interface RawOutgoingSettlement {
+  id: string;
+  settlement_date: string;
+  total_amount: number | null;
+  cheque_number: string | null;
+  bank_code: string | null;
+  branch_code: string | null;
+  cheque_image_url: string | null;
+  cheque_image_urls: string[] | null;
+  status: string | null;
+  refused: boolean | null;
+  notes: string | null;
+  company_id?: string | null;
+  broker_id?: string | null;
+  insurance_companies?: { name: string; name_ar: string | null } | null;
+  brokers?: { name: string } | null;
+}
+
+function buildOutgoingChequeRecord(
+  source: 'company' | 'broker',
+  syntheticId: string,
+  recipientName: string,
+  recipientId: string | null,
+  row: RawOutgoingSettlement,
+): ChequeRecord {
+  // Map the settlement's status + refused flag onto the customer-cheque
+  // status enum so the same filter / badge code keeps working.
+  const status: string = row.refused
+    ? 'returned'
+    : row.status === 'completed'
+    ? 'cashed'
+    : 'pending';
+  const firstImage =
+    (Array.isArray(row.cheque_image_urls) && row.cheque_image_urls[0]) ||
+    row.cheque_image_url ||
+    null;
+  return {
+    id: syntheticId,
+    policy_id: '',
+    amount: Number(row.total_amount ?? 0),
+    payment_date: row.settlement_date,
+    cheque_number: row.cheque_number ?? null,
+    cheque_date: row.settlement_date ?? null,
+    bank_code: row.bank_code ?? null,
+    branch_code: row.branch_code ?? null,
+    cheque_image_url: firstImage,
+    cheque_status: status,
+    refused: row.refused ?? false,
+    notes: row.notes ?? null,
+    policy: {
+      id: syntheticId,
+      policy_type_parent: 'OUTGOING',
+      // The "client" object is synthetic — it's just the simplest way
+      // to reuse the existing group-by-client.id rendering. ID prefix
+      // (`company-` / `broker-`) prevents collisions with real clients.
+      client: {
+        id: `${source}-${recipientId ?? 'unknown'}`,
+        full_name: recipientName,
+        broker_id: null,
+        phone_number: null,
+      },
+      car: null,
+    },
+    images: firstImage
+      ? [{ id: `${syntheticId}-img`, image_url: firstImage, image_type: 'cheque' }]
+      : [],
+    transferred_to_type: source,
+    transferred_to_id: recipientId,
+    transferred_to_name: recipientName,
+    transferred_payment_id: null,
+    source,
+  };
 }
