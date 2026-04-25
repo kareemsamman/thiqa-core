@@ -26,8 +26,11 @@ import { ManageColumnsDropdown, ColumnOption } from './ManageColumnsDropdown';
 import { AccountingFilters, AccountingFiltersValue } from './AccountingFilters';
 import { PAYMENT_METHOD_LABELS } from './accountingTypes';
 import { CustomerChequeSelector, SelectableCheque } from '@/components/shared/CustomerChequeSelector';
+import { BankBranchPicker } from '@/components/shared/BankBranchPicker';
+import { FileUploader } from '@/components/media/FileUploader';
 import { sanitizeChequeNumber, validateChequeNumber } from '@/lib/chequeUtils';
 import { cn } from '@/lib/utils';
+import { X } from 'lucide-react';
 
 interface ExpenseRow {
   id: string;
@@ -67,13 +70,14 @@ const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
 );
 
 // Mirrors the settlement dialog so the same payment vocabulary is
-// available everywhere a voucher gets created.
+// available everywhere a voucher gets created. Visa is intentionally
+// excluded — companies/brokers/expenses are paid through cash, cheque,
+// transfer, or by handing over a customer's cheque.
 const EXPENSE_PAYMENT_METHODS: { value: string; label: string }[] = [
   { value: 'cash', label: 'نقداً' },
   { value: 'cheque', label: 'شيك جديد' },
   { value: 'customer_cheque', label: 'شيك عميل' },
   { value: 'bank_transfer', label: 'تحويل بنكي' },
-  { value: 'visa', label: 'بطاقة ائتمان' },
 ];
 
 export function ExpensesSection() {
@@ -105,8 +109,10 @@ export function ExpensesSection() {
     bank_code: '',
     branch_code: '',
     bank_reference: '',
+    cheque_image_url: '',
     customer_cheques: [] as SelectableCheque[],
   };
+  const formId = useMemo(() => crypto.randomUUID(), []);
   const [form, setForm] = useState(initialForm);
 
   // Cross-surface duplicate detection — same logic as the settlement
@@ -221,6 +227,7 @@ export function ExpensesSection() {
           branch_code: form.payment_method === 'cheque' ? form.branch_code || null : null,
           bank_reference: form.payment_method === 'bank_transfer' ? form.bank_reference || null : null,
           customer_cheque_ids: isCustomerCheque ? customerChequeIds : null,
+          cheque_image_url: form.payment_method === 'cheque' ? form.cheque_image_url || null : null,
         } as never)
         .select('id')
         .single();
@@ -458,58 +465,73 @@ export function ExpensesSection() {
               </div>
             </div>
 
-            {/* Cheque-specific fields — number, bank, branch, image. */}
+            {/* Cheque-specific fields — bank picker + branch + cheque
+                number + image, mirroring the settlement dialog. */}
             {form.payment_method === 'cheque' && (
-              <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <Label className="text-[11px]">رقم الشيك</Label>
-                    <Input
-                      value={form.cheque_number}
-                      onChange={(e) =>
-                        setForm({ ...form, cheque_number: sanitizeChequeNumber(e.target.value) })
-                      }
-                      placeholder="12345678"
-                      inputMode="numeric"
-                      dir="ltr"
-                      className={cn(
-                        'h-9 tabular-nums',
-                        chequeDuplicate && 'border-amber-500 ring-1 ring-amber-200',
-                      )}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[11px]">رقم البنك</Label>
-                    <Input
-                      value={form.bank_code}
-                      onChange={(e) =>
-                        setForm({ ...form, bank_code: e.target.value.replace(/\D/g, '').slice(0, 3) })
-                      }
-                      placeholder="11"
-                      inputMode="numeric"
-                      dir="ltr"
-                      className="h-9 tabular-nums"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[11px]">رقم الفرع</Label>
-                    <Input
-                      value={form.branch_code}
-                      onChange={(e) =>
-                        setForm({ ...form, branch_code: e.target.value.replace(/\D/g, '').slice(0, 4) })
-                      }
-                      placeholder="123"
-                      inputMode="numeric"
-                      dir="ltr"
-                      className="h-9 tabular-nums"
-                    />
-                  </div>
-                </div>
+              <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+                <BankBranchPicker
+                  bankCode={form.bank_code}
+                  branchCode={form.branch_code}
+                  onBankChange={(c) => setForm({ ...form, bank_code: c ?? '' })}
+                  onBranchChange={(c) => setForm({ ...form, branch_code: c ?? '' })}
+                  chequeNumberSlot={
+                    <>
+                      <Label className="text-xs font-semibold">رقم الشيك</Label>
+                      <Input
+                        value={form.cheque_number}
+                        onChange={(e) =>
+                          setForm({ ...form, cheque_number: sanitizeChequeNumber(e.target.value) })
+                        }
+                        placeholder="12345678"
+                        inputMode="numeric"
+                        dir="ltr"
+                        className={cn(
+                          'h-10 tabular-nums',
+                          chequeDuplicate && 'border-amber-500 ring-1 ring-amber-200',
+                        )}
+                      />
+                    </>
+                  }
+                />
                 {chequeDuplicate && (
                   <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
                     ⚠ هذا الشيك مسجل مسبقاً في النظام: {chequeDuplicate}
                   </p>
                 )}
+                <div>
+                  <Label className="text-[11px]">صورة الشيك</Label>
+                  {form.cheque_image_url ? (
+                    <div className="flex items-center gap-3 mt-1">
+                      <img
+                        src={form.cheque_image_url}
+                        alt="صورة الشيك"
+                        className="h-16 rounded border object-cover"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setForm({ ...form, cheque_image_url: '' })}
+                        className="gap-1.5"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        إزالة
+                      </Button>
+                    </div>
+                  ) : (
+                    <FileUploader
+                      entityType="expense_cheque"
+                      entityId={formId}
+                      accept="image/*"
+                      maxFiles={1}
+                      onUploadComplete={(files) => {
+                        const first = files?.[0];
+                        const url = first?.cdn_url || first?.url;
+                        if (url) setForm((f) => ({ ...f, cheque_image_url: url }));
+                      }}
+                    />
+                  )}
+                </div>
               </div>
             )}
 

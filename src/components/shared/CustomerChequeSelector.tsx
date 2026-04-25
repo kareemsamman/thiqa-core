@@ -18,6 +18,7 @@ import {
 import { Search, Receipt, User, Calendar, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { getBank } from "@/lib/banks";
 
 export interface SelectableCheque {
   id: string;
@@ -29,6 +30,9 @@ export interface SelectableCheque {
   client_name: string;
   client_phone: string | null;
   car_number: string | null;
+  /** From policy_payments — fed into the bank registry for display. */
+  bank_code: string | null;
+  branch_code: string | null;
 }
 
 interface CustomerChequeSelectorProps {
@@ -56,7 +60,7 @@ export function CustomerChequeSelector({
       // Fetch only waiting cheques (pending status, not transferred, not refused)
       const { data: paymentsData, error: paymentsError } = await supabase
         .from('policy_payments')
-        .select('id, amount, payment_date, cheque_number, cheque_image_url, policy_id')
+        .select('id, amount, payment_date, cheque_number, cheque_image_url, policy_id, bank_code, branch_code')
         .eq('payment_type', 'cheque')
         .is('transferred_to_type', null)
         .or('cheque_status.is.null,cheque_status.eq.pending')
@@ -118,6 +122,8 @@ export function CustomerChequeSelector({
           client_name: client?.full_name || 'غير معروف',
           client_phone: client?.phone_number || null,
           car_number: car?.car_number || null,
+          bank_code: p.bank_code ?? null,
+          branch_code: p.branch_code ?? null,
         };
       });
 
@@ -226,6 +232,7 @@ export function CustomerChequeSelector({
               <TableRow>
                 <TableHead className="w-12"></TableHead>
                 <TableHead>العميل</TableHead>
+                <TableHead>البنك / الفرع</TableHead>
                 <TableHead>رقم الشيك</TableHead>
                 <TableHead>تاريخ الاستحقاق</TableHead>
                 <TableHead>المبلغ</TableHead>
@@ -235,7 +242,8 @@ export function CustomerChequeSelector({
               {filteredCheques.map(cheque => {
                 const selected = isSelected(cheque.id);
                 const isOverdue = new Date(cheque.payment_date) < new Date();
-                
+                const bank = getBank(cheque.bank_code);
+
                 return (
                   <TableRow
                     key={cheque.id}
@@ -263,6 +271,21 @@ export function CustomerChequeSelector({
                           )}
                         </div>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {cheque.bank_code || cheque.branch_code ? (
+                        <div className="flex flex-col text-xs">
+                          <span className="font-medium">
+                            {bank?.nameAr ?? (cheque.bank_code ? `بنك ${cheque.bank_code}` : '—')}
+                          </span>
+                          <span className="text-muted-foreground font-mono" dir="ltr">
+                            {cheque.bank_code ? `${cheque.bank_code}` : '—'}
+                            {cheque.branch_code ? ` / ${cheque.branch_code}` : ''}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="font-mono">
