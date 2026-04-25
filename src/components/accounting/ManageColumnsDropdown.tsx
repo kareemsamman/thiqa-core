@@ -51,7 +51,7 @@ export function ManageColumnsDropdown({ columns, visible, onToggle, onReset }: P
             return (
               <label
                 key={col.key}
-                className="flex items-center gap-2 px-2 py-1.5 mx-1 rounded-md hover:bg-accent cursor-pointer text-sm"
+                className="flex items-center gap-2 px-2 py-1.5 mx-1 rounded-md hover:bg-slate-100 cursor-pointer text-sm"
               >
                 <Checkbox
                   checked={checked}

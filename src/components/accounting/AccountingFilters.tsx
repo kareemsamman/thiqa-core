@@ -12,7 +12,9 @@ export interface FilterOption {
 }
 
 export interface AccountingFiltersValue {
+  /** First day of selected month, ISO yyyy-MM-dd. Empty = no filter. */
   dateFrom: string;
+  /** Last day of selected month, ISO yyyy-MM-dd. */
   dateTo: string;
   companies: string[];
   types: string[];
@@ -41,6 +43,29 @@ const ALL_SHOWN: Required<NonNullable<Props['show']>> = {
   paymentMethods: true,
 };
 
+/**
+ * Convert an ISO date back to "yyyy-MM" so the native month input can
+ * display the saved selection.
+ */
+function isoToMonthInput(iso: string): string {
+  if (!iso) return '';
+  return iso.slice(0, 7);
+}
+
+/**
+ * Given a "yyyy-MM" value, return [first, last] day of that month in
+ * ISO format. We compute the last day off the local Date constructor
+ * trick (day 0 of the next month).
+ */
+function monthInputToRange(monthInput: string): { from: string; to: string } {
+  if (!monthInput) return { from: '', to: '' };
+  const [y, m] = monthInput.split('-').map(Number);
+  if (!y || !m) return { from: '', to: '' };
+  const lastDay = new Date(y, m, 0).getDate();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(lastDay)}` };
+}
+
 export function AccountingFilters({
   value,
   onChange,
@@ -51,9 +76,10 @@ export function AccountingFilters({
 }: Props) {
   const visible = { ...ALL_SHOWN, ...(show ?? {}) };
 
+  const monthInput = isoToMonthInput(value.dateFrom);
+
   const activeCount =
     (value.dateFrom ? 1 : 0) +
-    (value.dateTo ? 1 : 0) +
     value.companies.length +
     value.types.length +
     value.paymentMethods.length;
@@ -66,6 +92,11 @@ export function AccountingFilters({
       types: [],
       paymentMethods: [],
     });
+  };
+
+  const setMonth = (m: string) => {
+    const range = monthInputToRange(m);
+    onChange({ ...value, dateFrom: range.from, dateTo: range.to });
   };
 
   return (
@@ -81,7 +112,7 @@ export function AccountingFilters({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[360px] p-0" dir="rtl">
+      <PopoverContent align="end" className="w-[340px] p-0" dir="rtl">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h4 className="text-sm font-semibold">الفلاتر</h4>
           {activeCount > 0 && (
@@ -98,33 +129,28 @@ export function AccountingFilters({
 
         <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
           {visible.dateRange && (
-            <div className="space-y-2">
-              <Label className="text-xs">المدى الزمني</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-[10px] text-muted-foreground">من</Label>
-                  <Input
-                    type="date"
-                    value={value.dateFrom}
-                    onChange={(e) => onChange({ ...value, dateFrom: e.target.value })}
-                    className="h-9 text-sm"
-                  />
-                </div>
-                <div>
-                  <Label className="text-[10px] text-muted-foreground">إلى</Label>
-                  <Input
-                    type="date"
-                    value={value.dateTo}
-                    onChange={(e) => onChange({ ...value, dateTo: e.target.value })}
-                    className="h-9 text-sm"
-                  />
-                </div>
-              </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">الشهر</Label>
+              <Input
+                type="month"
+                value={monthInput}
+                onChange={(e) => setMonth(e.target.value)}
+                className="h-9 text-sm"
+              />
+              {monthInput && (
+                <button
+                  type="button"
+                  onClick={() => setMonth('')}
+                  className="text-[11px] text-muted-foreground hover:text-destructive"
+                >
+                  مسح الشهر
+                </button>
+              )}
             </div>
           )}
 
           {visible.companies && companyOptions.length > 0 && (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label className="text-xs">شركة التأمين</Label>
               <MultiSelectFilter
                 options={companyOptions}
@@ -136,7 +162,7 @@ export function AccountingFilters({
           )}
 
           {visible.types && typeOptions.length > 0 && (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label className="text-xs">نوع التأمين</Label>
               <MultiSelectFilter
                 options={typeOptions}
@@ -148,7 +174,7 @@ export function AccountingFilters({
           )}
 
           {visible.paymentMethods && paymentMethodOptions.length > 0 && (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label className="text-xs">طريقة الدفع</Label>
               <MultiSelectFilter
                 options={paymentMethodOptions}

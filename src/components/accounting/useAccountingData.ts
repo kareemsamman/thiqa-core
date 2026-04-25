@@ -2,7 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import type { Enums } from '@/integrations/supabase/types';
-import { IssuanceRow, policyTypeKey } from './accountingTypes';
+import { pickPackageDocumentNumber } from '@/lib/packageDocumentNumber';
+import {
+  IssuanceRow,
+  SubPolicy,
+  pickMainSubPolicy,
+  policyTypeKey,
+} from './accountingTypes';
 import { SettlementRow } from './SettlementsTable';
 import { AccountingFiltersValue } from './AccountingFilters';
 
@@ -35,6 +41,8 @@ interface UseAccountingDataReturn {
 interface RawPolicy {
   id: string;
   policy_number: string | null;
+  document_number: string | null;
+  group_id: string | null;
   issue_date: string | null;
   start_date: string;
   end_date: string;
@@ -42,6 +50,7 @@ interface RawPolicy {
   payed_for_company: number | null;
   profit: number | null;
   office_commission: number | null;
+  broker_buy_price: number | null;
   policy_type_parent: Enums<'policy_type_parent'>;
   policy_type_child: Enums<'policy_type_child'> | null;
   cancelled: boolean | null;
@@ -136,8 +145,9 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
       let policyQuery = supabase
         .from('policies')
         .select(
-          `id, policy_number, issue_date, start_date, end_date,
-           insurance_price, payed_for_company, profit, office_commission,
+          `id, policy_number, document_number, group_id,
+           issue_date, start_date, end_date,
+           insurance_price, payed_for_company, profit, office_commission, broker_buy_price,
            policy_type_parent, policy_type_child, cancelled, is_under_24,
            company_id, broker_id,
            clients(full_name),
@@ -181,36 +191,113 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         });
       }
 
-      const issuances: IssuanceRow[] = policyRows.map((p) => {
-        const recs = receiptsByPolicy.get(p.id);
-        return {
-          id: p.id,
-          policy_number: p.policy_number,
-          issue_date: p.issue_date,
-          start_date: p.start_date,
-          end_date: p.end_date,
-          insurance_price: Number(p.insurance_price ?? 0),
-          payed_for_company: p.payed_for_company,
-          profit: p.profit,
-          office_commission: p.office_commission,
-          policy_type_parent: p.policy_type_parent,
-          policy_type_child: p.policy_type_child,
-          cancelled: p.cancelled,
-          is_under_24: p.is_under_24,
-          client_name: p.clients?.full_name ?? null,
-          car_id: p.cars?.id ?? null,
-          car_number: p.cars?.car_number ?? null,
-          car_type: p.cars?.car_type ?? null,
-          car_value: p.cars?.car_value ?? null,
-          car_year: p.cars?.year ?? null,
-          company_id: p.company_id,
-          company_name: p.insurance_companies?.name_ar || p.insurance_companies?.name || null,
-          broker_id: p.broker_id ?? p.insurance_companies?.broker_id ?? null,
-          receipts_count: recs?.count ?? 0,
-          receipts_total: recs?.total ?? 0,
-          primary_payment_method: recs?.primaryType ?? null,
-          primary_receipt_number: recs?.primaryNumber ?? null,
-        };
+      // Flatten each raw row into a SubPolicy used for grouping below.
+      const subs: SubPolicy[] = policyRows.map((p) => ({
+        id: p.id,
+        policy_number: p.policy_number,
+        document_number: p.document_number,
+        issue_date: p.issue_date,
+        start_date: p.start_date,
+        end_date: p.end_date,
+        insurance_price: Number(p.insurance_price ?? 0),
+        payed_for_company: p.payed_for_company,
+        profit: p.profit,
+        office_commission: p.office_commission,
+        broker_buy_price: p.broker_buy_price,
+        policy_type_parent: p.policy_type_parent,
+        policy_type_child: p.policy_type_child,
+        cancelled: p.cancelled,
+        is_under_24: p.is_under_24,
+        car_id: p.cars?.id ?? null,
+        car_number: p.cars?.car_number ?? null,
+        car_type: p.cars?.car_type ?? null,
+        car_value: p.cars?.car_value ?? null,
+        car_year: p.cars?.year ?? null,
+        company_id: p.company_id,
+        company_name: p.insurance_companies?.name_ar || p.insurance_companies?.name || null,
+        broker_id: p.broker_id ?? p.insurance_companies?.broker_id ?? null,
+        group_id: p.group_id,
+      }));
+
+      // Group: standalone (no group_id) → each sub is its own معاملة;
+      // otherwise bucket by group_id.
+      const groupBuckets = new Map<string, SubPolicy[]>();
+      subs.forEach((s) => {
+        const key = s.group_id ?? `solo-${s.id}`;
+        const arr = groupBuckets.get(key) ?? [];
+        arr.push(s);
+        groupBuckets.set(key, arr);
+      });
+
+      // Map sub-policy id → client name from the original raw fetch,
+      // since SubPolicy doesn't carry the joined client.
+      const clientNameByPolicy = new Map<string, string | null>();
+      policyRows.forEach((p) => {
+        clientNameByPolicy.set(p.id, p.clients?.full_name ?? null);
+      });
+
+      const issuances: IssuanceRow[] = Array.from(groupBuckets.values()).map(
+        (group) => {
+          const main = pickMainSubPolicy(group);
+          const aggregate = group.reduce(
+            (acc, s) => {
+              const recs = receiptsByPolicy.get(s.id);
+              acc.insurance_price += s.insurance_price;
+              acc.payed_for_company += Number(s.payed_for_company ?? 0);
+              acc.profit += Number(s.profit ?? 0);
+              acc.office_commission += Number(s.office_commission ?? 0);
+              acc.broker_buy_price += Number(s.broker_buy_price ?? 0);
+              acc.receipts_count += recs?.count ?? 0;
+              acc.receipts_total += recs?.total ?? 0;
+              if (acc.primary_payment_method == null && recs?.primaryType) {
+                acc.primary_payment_method = recs.primaryType;
+              }
+              return acc;
+            },
+            {
+              insurance_price: 0,
+              payed_for_company: 0,
+              profit: 0,
+              office_commission: 0,
+              broker_buy_price: 0,
+              receipts_count: 0,
+              receipts_total: 0,
+              primary_payment_method: null as string | null,
+            },
+          );
+
+          const documentNumber =
+            pickPackageDocumentNumber(
+              group.map((s) => ({
+                document_number: s.document_number,
+                policy_type_parent: s.policy_type_parent,
+              })),
+            ) ?? main.document_number;
+
+          return {
+            id: main.group_id ?? main.id,
+            document_number: documentNumber,
+            client_name: clientNameByPolicy.get(main.id) ?? null,
+            sub_policies: group,
+            main,
+            is_grouped: group.length > 1,
+            insurance_price: aggregate.insurance_price,
+            payed_for_company: aggregate.payed_for_company,
+            profit: aggregate.profit,
+            office_commission: aggregate.office_commission,
+            broker_buy_price: aggregate.broker_buy_price,
+            receipts_count: aggregate.receipts_count,
+            receipts_total: aggregate.receipts_total,
+            primary_payment_method: aggregate.primary_payment_method,
+          };
+        },
+      );
+
+      // Most-recent first by main's issue_date (fallback start_date).
+      issuances.sort((a, b) => {
+        const ad = new Date(a.main.issue_date ?? a.main.start_date).getTime();
+        const bd = new Date(b.main.issue_date ?? b.main.start_date).getTime();
+        return bd - ad;
       });
 
       setPolicies(issuances);
@@ -272,8 +359,8 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
 
   // ---- Apply filters client-side ----
   const filteredPolicies = applyFilters(policies, filters);
-  const issuances = filteredPolicies.filter((p) => !p.cancelled);
-  const returns = filteredPolicies.filter((p) => !!p.cancelled);
+  const issuances = filteredPolicies.filter((p) => !p.main.cancelled);
+  const returns = filteredPolicies.filter((p) => !!p.main.cancelled);
 
   const filteredCompanySettlements = applySettlementFilters(
     companySettlements,
@@ -311,25 +398,36 @@ function applyFilters(rows: IssuanceRow[], filters: AccountingFiltersValue): Iss
   let out = rows;
   if (filters.dateFrom) {
     const from = new Date(filters.dateFrom).getTime();
-    out = out.filter((r) => new Date(r.issue_date ?? r.start_date).getTime() >= from);
+    out = out.filter(
+      (r) => new Date(r.main.issue_date ?? r.main.start_date).getTime() >= from,
+    );
   }
   if (filters.dateTo) {
     const to = new Date(filters.dateTo);
     to.setHours(23, 59, 59, 999);
     const toMs = to.getTime();
-    out = out.filter((r) => new Date(r.issue_date ?? r.start_date).getTime() <= toMs);
+    out = out.filter(
+      (r) => new Date(r.main.issue_date ?? r.main.start_date).getTime() <= toMs,
+    );
   }
   if (filters.companies.length > 0) {
     const set = new Set(filters.companies);
-    out = out.filter((r) => r.company_id != null && set.has(r.company_id));
+    out = out.filter((r) => r.main.company_id != null && set.has(r.main.company_id));
   }
   if (filters.types.length > 0) {
     const set = new Set(filters.types);
-    out = out.filter((r) => set.has(policyTypeKey(r.policy_type_parent, r.policy_type_child)));
+    // A package matches if ANY sub-policy matches the selected type —
+    // so a "ثالث + إلزامي" package shows up when the user filters for
+    // either ثالث or إلزامي.
+    out = out.filter((r) =>
+      r.sub_policies.some((s) => set.has(policyTypeKey(s.policy_type_parent, s.policy_type_child))),
+    );
   }
   if (filters.paymentMethods.length > 0) {
     const set = new Set(filters.paymentMethods);
-    out = out.filter((r) => r.primary_payment_method != null && set.has(r.primary_payment_method));
+    out = out.filter(
+      (r) => r.primary_payment_method != null && set.has(r.primary_payment_method),
+    );
   }
   return out;
 }

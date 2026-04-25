@@ -52,7 +52,7 @@ export function CompaniesSection() {
 
   // Restrict to companies (not broker-linked) on the policies side too.
   const onlyDirect = (rows: typeof data.issuances) =>
-    rows.filter((r) => !r.broker_id);
+    rows.filter((r) => !r.main.broker_id);
 
   const issuancesAll = onlyDirect([...data.issuances, ...data.returns]);
   const issuancesActive = onlyDirect(data.issuances);
@@ -61,12 +61,11 @@ export function CompaniesSection() {
   const totals = useMemo(() => {
     const insuranceSum = issuancesActive.reduce((s, r) => s + Number(r.insurance_price || 0), 0);
     const dueSum = issuancesActive.reduce((s, r) => s + Number(r.payed_for_company || 0), 0);
+    // Profit per row = profit for non-ELZAMI sub-policies + office_commission
+    // for ELZAMI sub-policies. The aggregate fields already sum each
+    // separately across the package, so we just add both pots.
     const profitSum = issuancesActive.reduce(
-      (s, r) =>
-        s +
-        (r.policy_type_parent === 'ELZAMI'
-          ? Number(r.office_commission || 0)
-          : Number(r.profit || 0)),
+      (s, r) => s + Number(r.profit || 0) + Number(r.office_commission || 0),
       0,
     );
     const disbursedSum = data.companySettlements.reduce(
@@ -121,6 +120,7 @@ export function CompaniesSection() {
             rows={issuancesAll}
             companies={data.companies}
             loading={data.loading}
+            mode="company"
             onRowSaved={() => data.refresh()}
             storageId="accounting-companies-all"
           />
@@ -131,6 +131,7 @@ export function CompaniesSection() {
             rows={issuancesActive}
             companies={data.companies}
             loading={data.loading}
+            mode="company"
             onRowSaved={() => data.refresh()}
             storageId="accounting-companies-issuances"
           />
@@ -141,6 +142,7 @@ export function CompaniesSection() {
             rows={returns}
             companies={data.companies}
             loading={data.loading}
+            mode="company"
             onRowSaved={() => data.refresh()}
             storageId="accounting-companies-returns"
           />

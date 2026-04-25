@@ -51,7 +51,7 @@ export function BrokersSection() {
   );
 
   const onlyBroker = (rows: typeof data.issuances) =>
-    rows.filter((r) => !!r.broker_id);
+    rows.filter((r) => !!r.main.broker_id);
 
   const issuancesAll = onlyBroker([...data.issuances, ...data.returns]);
   const issuancesActive = onlyBroker(data.issuances);
@@ -62,18 +62,15 @@ export function BrokersSection() {
   const receipts = data.brokerSettlements.filter((s) => s.direction === 'broker_owes');
 
   const totals = useMemo(() => {
-    const insuranceSum = issuancesActive.reduce((s, r) => s + Number(r.insurance_price || 0), 0);
-    const profitSum = issuancesActive.reduce(
-      (s, r) =>
-        s +
-        (r.policy_type_parent === 'ELZAMI'
-          ? Number(r.office_commission || 0)
-          : Number(r.profit || 0)),
-      0,
-    );
+    const sellSum = issuancesActive.reduce((s, r) => s + Number(r.insurance_price || 0), 0);
+    const buySum = issuancesActive.reduce((s, r) => s + Number(r.broker_buy_price || 0), 0);
+    // Broker profit = sell to client - buy from broker. Negative is
+    // possible (clipped to 0 in the column display) but reported as-is
+    // in the summary so the agent sees the real margin.
+    const profitSum = sellSum - buySum;
     const disbursedSum = disbursements.reduce((s, r) => s + Number(r.total_amount || 0), 0);
     const receivedSum = receipts.reduce((s, r) => s + Number(r.total_amount || 0), 0);
-    return { insuranceSum, profitSum, disbursedSum, receivedSum };
+    return { sellSum, profitSum, disbursedSum, receivedSum };
   }, [issuancesActive, disbursements, receipts]);
 
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
@@ -81,8 +78,8 @@ export function BrokersSection() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SummaryCard label="إجمالي عبر الوسطاء" value={fmt(totals.insuranceSum)} tone="primary" />
-        <SummaryCard label="الأرباح + العمولات" value={fmt(totals.profitSum)} tone="success" />
+        <SummaryCard label="سعر البيع للعميل" value={fmt(totals.sellSum)} tone="primary" />
+        <SummaryCard label="الربح" value={fmt(totals.profitSum)} tone="success" />
         <SummaryCard label="مدفوع للوسطاء" value={fmt(totals.disbursedSum)} tone="amber" />
         <SummaryCard label="مقبوض من الوسطاء" value={fmt(totals.receivedSum)} tone="emerald" />
       </div>
@@ -120,6 +117,7 @@ export function BrokersSection() {
             rows={issuancesAll}
             companies={data.companies}
             loading={data.loading}
+            mode="broker"
             onRowSaved={() => data.refresh()}
             storageId="accounting-brokers-all"
           />
@@ -129,6 +127,7 @@ export function BrokersSection() {
             rows={issuancesActive}
             companies={data.companies}
             loading={data.loading}
+            mode="broker"
             onRowSaved={() => data.refresh()}
             storageId="accounting-brokers-issuances"
           />
@@ -138,6 +137,7 @@ export function BrokersSection() {
             rows={returns}
             companies={data.companies}
             loading={data.loading}
+            mode="broker"
             onRowSaved={() => data.refresh()}
             storageId="accounting-brokers-returns"
           />
