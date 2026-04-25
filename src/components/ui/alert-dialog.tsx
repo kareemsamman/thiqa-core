@@ -49,7 +49,17 @@ const AlertDialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDiv
 AlertDialogHeader.displayName = "AlertDialogHeader";
 
 const AlertDialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)} {...props} />
+  <div
+    className={cn(
+      // Use `gap` instead of `space-x` so the spacing reads correctly
+      // under RTL too (space-x-* applies a single-side margin which
+      // visually glues the buttons together when the writing direction
+      // is reversed). `gap-2` mobile, `sm:gap-3` desktop.
+      "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3",
+      className,
+    )}
+    {...props}
+  />
 );
 AlertDialogFooter.displayName = "AlertDialogFooter";
 
