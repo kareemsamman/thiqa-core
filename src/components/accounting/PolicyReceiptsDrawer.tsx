@@ -19,7 +19,11 @@ interface Receipt {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  policyId: string | null;
+  /** All sub-policy ids covered by this معاملة. For a standalone
+   *  policy this is `[policy.id]`; for a package it's every sub-policy
+   *  in the group, so the drawer's count matches the badge that
+   *  aggregated across the same set in useAccountingData. */
+  policyIds: string[];
   policyNumber?: string | null;
   clientName?: string | null;
 }
@@ -35,22 +39,24 @@ const PAYMENT_TYPE_META: Record<string, { label: string; Icon: LucideIcon; cls: 
 export function PolicyReceiptsDrawer({
   open,
   onOpenChange,
-  policyId,
+  policyIds,
   policyNumber,
   clientName,
 }: Props) {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Re-fetch only when the *set* of ids changes, not on every render.
+  const idsKey = policyIds.join(',');
   useEffect(() => {
-    if (!open || !policyId) return;
+    if (!open || policyIds.length === 0) return;
     let cancelled = false;
     setLoading(true);
     (async () => {
       const { data } = await supabase
         .from('policy_payments')
         .select('id, amount, payment_date, payment_type, cheque_number, refused, notes')
-        .eq('policy_id', policyId)
+        .in('policy_id', policyIds)
         .order('payment_date', { ascending: false });
       if (!cancelled) {
         setReceipts((data ?? []) as Receipt[]);
@@ -60,7 +66,8 @@ export function PolicyReceiptsDrawer({
     return () => {
       cancelled = true;
     };
-  }, [open, policyId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, idsKey]);
 
   const total = receipts
     .filter((r) => !r.refused)

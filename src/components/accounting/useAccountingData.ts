@@ -94,6 +94,7 @@ interface RawCompanySettlement {
   status: string;
   refused: boolean | null;
   notes: string | null;
+  direction: 'outgoing' | 'incoming' | null;
   company_id: string | null;
   insurance_companies: { name: string; name_ar: string | null } | null;
 }
@@ -127,7 +128,9 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [brokers, setBrokers] = useState<BrokerOption[]>([]);
   const [policies, setPolicies] = useState<IssuanceRow[]>([]);
-  const [companySettlements, setCompanySettlements] = useState<SettlementRow[]>([]);
+  const [companySettlements, setCompanySettlements] = useState<
+    (SettlementRow & { direction?: 'outgoing' | 'incoming' })[]
+  >([]);
   const [brokerSettlements, setBrokerSettlements] = useState<SettlementRow[]>([]);
 
   const fetchAll = useCallback(async () => {
@@ -317,16 +320,19 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
 
       setPolicies(issuances);
 
-      // 4. Company settlements
+      // 4. Company settlements (both directions — split client-side
+      //    into disbursements / receipts based on `direction`)
       let csQuery = supabase
         .from('company_settlements')
         .select(
-          'id, settlement_date, total_amount, payment_type, cheque_number, status, refused, notes, company_id, insurance_companies(name, name_ar)',
+          'id, settlement_date, total_amount, payment_type, cheque_number, status, refused, notes, direction, company_id, insurance_companies(name, name_ar)',
         )
         .order('settlement_date', { ascending: false });
       if (agentId) csQuery = csQuery.eq('agent_id', agentId);
       const { data: csData } = await csQuery;
-      const csRows: SettlementRow[] = ((csData ?? []) as unknown as RawCompanySettlement[]).map((s) => ({
+      const csRows: (SettlementRow & { direction: 'outgoing' | 'incoming' })[] = (
+        (csData ?? []) as unknown as RawCompanySettlement[]
+      ).map((s) => ({
         id: s.id,
         settlement_date: s.settlement_date,
         total_amount: Number(s.total_amount ?? 0),
@@ -337,6 +343,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         notes: s.notes,
         entity_id: s.company_id ?? null,
         entity_name: s.insurance_companies?.name_ar || s.insurance_companies?.name || null,
+        direction: s.direction ?? 'outgoing',
       }));
       setCompanySettlements(csRows);
 
@@ -417,16 +424,21 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
     [filteredPolicies],
   );
 
-  const companyDisbursements = useMemo(
+  // Direction-aware split: 'outgoing' = we paid the company (سند صرف),
+  // 'incoming' = company paid us (سند قبض). The new dialog writes the
+  // appropriate flag; legacy rows default to outgoing.
+  const filteredAllCompanySettlements = useMemo(
     () => applySettlementFilters(companySettlements, filters, filters.companies),
     [companySettlements, filters],
   );
-  // company_settlements only tracks money we PAID to companies. There's
-  // no "money received from companies" table in this schema — refunds
-  // come back as `refused=true` on the original settlement, not a new
-  // row. We keep this empty array so the receipts tab can show an
-  // explanatory empty state.
-  const companyReceipts: SettlementRow[] = useMemo(() => [], []);
+  const companyDisbursements = useMemo(
+    () => filteredAllCompanySettlements.filter((s) => (s as { direction?: string }).direction !== 'incoming'),
+    [filteredAllCompanySettlements],
+  );
+  const companyReceipts = useMemo(
+    () => filteredAllCompanySettlements.filter((s) => (s as { direction?: string }).direction === 'incoming'),
+    [filteredAllCompanySettlements],
+  );
 
   const filteredBrokerSettlements = useMemo(
     () => applySettlementFilters(brokerSettlements, filters, []),

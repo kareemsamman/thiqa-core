@@ -1,15 +1,18 @@
 import { useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   ArrowDownRight,
   ArrowUpRight,
   FileText,
+  Plus,
   RotateCcw,
   LayoutGrid,
   Search,
   type LucideIcon,
 } from 'lucide-react';
+import { AddSettlementDialog, SettlementKind } from './AddSettlementDialog';
 import { CompanyIssuancesTable } from './CompanyIssuancesTable';
 import { SettlementsTable } from './SettlementsTable';
 import {
@@ -52,6 +55,8 @@ const SETTLEMENT_DEFAULT_VISIBLE = SETTLEMENT_KEYS.filter((k) => !SETTLEMENT_DEF
 export function CompaniesSection() {
   const [tab, setTab] = useState<SubTab>('all');
   const [search, setSearch] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
+  const [addKind, setAddKind] = useState<SettlementKind>('disbursement');
   // Live overlay of inline edits across the issuances table — owned
   // here so the summary pills + calculation modal can mirror the cell
   // values before the debounced save flushes back. Keyed by row.id.
@@ -203,6 +208,19 @@ export function CompaniesSection() {
               className="h-8 w-full pr-8 text-sm"
             />
           </div>
+          {(tab === 'disbursements' || tab === 'receipts') && (
+            <Button
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={() => {
+                setAddKind(tab === 'disbursements' ? 'disbursement' : 'receipt');
+                setAddOpen(true);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {tab === 'disbursements' ? 'إضافة سند صرف' : 'إضافة سند قبض'}
+            </Button>
+          )}
           <span className="text-xs text-muted-foreground">
             {data.loading ? '...' : `${activeRowCount} ${countLabel}`}
           </span>
@@ -284,11 +302,20 @@ export function CompaniesSection() {
           />
           {!data.loading && companyReceipts.length === 0 && (
             <p className="text-center text-xs text-muted-foreground mt-3">
-              لا يوجد سندات قبض من شركات التأمين — جميع تحصيلات الشركات تتم عبر تسوية الصرف.
+              لا يوجد سندات قبض — استخدم زر "إضافة سند قبض" لتسجيل دفعة واردة من شركة.
             </p>
           )}
         </TabsContent>
       </Tabs>
+
+      <AddSettlementDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        mode="company"
+        kind={addKind}
+        entities={companyOptions.map((c) => ({ id: c.value, name: c.label }))}
+        onSaved={() => data.refresh()}
+      />
     </div>
   );
 }

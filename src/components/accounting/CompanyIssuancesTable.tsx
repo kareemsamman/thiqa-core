@@ -703,7 +703,7 @@ export function CompanyIssuancesTable({
         <PolicyReceiptsDrawer
           open={drawerOpen}
           onOpenChange={setDrawerOpen}
-          policyId={drawerRow?.main.id ?? null}
+          policyIds={drawerRow?.sub_policies.map((s) => s.id) ?? []}
           policyNumber={drawerRow?.document_number ?? null}
           clientName={drawerRow?.client_name ?? null}
         />

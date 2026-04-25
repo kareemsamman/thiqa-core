@@ -1,15 +1,18 @@
 import { useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   ArrowDownRight,
   ArrowUpRight,
   FileText,
+  Plus,
   RotateCcw,
   LayoutGrid,
   Search,
   type LucideIcon,
 } from 'lucide-react';
+import { AddSettlementDialog, SettlementKind } from './AddSettlementDialog';
 import { CompanyIssuancesTable } from './CompanyIssuancesTable';
 import { SettlementsTable } from './SettlementsTable';
 import {
@@ -52,6 +55,8 @@ const SETTLEMENT_DEFAULT_VISIBLE = SETTLEMENT_KEYS.filter((k) => !SETTLEMENT_DEF
 export function BrokersSection() {
   const [tab, setTab] = useState<SubTab>('all');
   const [search, setSearch] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
+  const [addKind, setAddKind] = useState<SettlementKind>('disbursement');
   const [editLocal, setEditLocal] = useState<IssuanceEditOverlay>({});
   const onPatch = (rowId: string, patch: IssuanceEditPatch) =>
     setEditLocal((prev) => ({ ...prev, [rowId]: { ...(prev[rowId] ?? {}), ...patch } }));
@@ -203,6 +208,19 @@ export function BrokersSection() {
               className="h-8 w-full pr-8 text-sm"
             />
           </div>
+          {(tab === 'disbursements' || tab === 'receipts') && (
+            <Button
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={() => {
+                setAddKind(tab === 'disbursements' ? 'disbursement' : 'receipt');
+                setAddOpen(true);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {tab === 'disbursements' ? 'إضافة سند صرف' : 'إضافة سند قبض'}
+            </Button>
+          )}
           <span className="text-xs text-muted-foreground">
             {data.loading ? '...' : `${activeRowCount} ${countLabel}`}
           </span>
@@ -286,6 +304,15 @@ export function BrokersSection() {
           />
         </TabsContent>
       </Tabs>
+
+      <AddSettlementDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        mode="broker"
+        kind={addKind}
+        entities={data.brokers.map((b) => ({ id: b.id, name: b.name }))}
+        onSaved={() => data.refresh()}
+      />
     </div>
   );
 }
