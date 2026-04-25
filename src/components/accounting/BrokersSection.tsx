@@ -1,4 +1,4 @@
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -58,7 +58,11 @@ const ISSUANCE_DEFAULT_VISIBLE = ISSUANCE_KEYS.filter((k) => !ISSUANCE_DEFAULT_O
 const SETTLEMENT_KEYS = SETTLEMENT_COLUMNS.map((c) => c.key);
 const SETTLEMENT_DEFAULT_VISIBLE = SETTLEMENT_KEYS.filter((k) => !SETTLEMENT_DEFAULT_OFF.has(k));
 
-export function BrokersSection() {
+interface BrokersSectionProps {
+  focusSettlementId?: string | null;
+}
+
+export function BrokersSection({ focusSettlementId }: BrokersSectionProps = {}) {
   const [tab, setTab] = useState<SubTab>('all');
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -79,6 +83,18 @@ export function BrokersSection() {
   });
 
   const data = useAccountingData(filters);
+
+  useEffect(() => {
+    if (!focusSettlementId) return;
+    const inDisbursements = data.brokerSettlements.some(
+      (r) => r.id === focusSettlementId && r.direction === 'we_owe',
+    );
+    const inReceipts = data.brokerSettlements.some(
+      (r) => r.id === focusSettlementId && r.direction === 'broker_owes',
+    );
+    if (inDisbursements) setTab('disbursements');
+    else if (inReceipts) setTab('receipts');
+  }, [focusSettlementId, data.brokerSettlements]);
 
   const handleDelete = async (row: SettlementRow) => {
     const { data: settlement, error: readError } = await supabase
@@ -472,6 +488,8 @@ export function BrokersSection() {
             entityLabel="الوسيط"
             onEdit={handleEdit}
             onDelete={handleDelete}
+            focusSettlementId={focusSettlementId}
+            onSettlementChanged={() => data.refresh()}
           />
         </TabsContent>
         <TabsContent value="receipts" className="m-0">
@@ -484,6 +502,8 @@ export function BrokersSection() {
             entityLabel="الوسيط"
             onEdit={handleEdit}
             onDelete={handleDelete}
+            focusSettlementId={focusSettlementId}
+            onSettlementChanged={() => data.refresh()}
           />
         </TabsContent>
       </Tabs>

@@ -48,7 +48,13 @@ const CATEGORY_LABEL: Record<string, string> = {
   other: 'أخرى',
 };
 
-export function ExpensesSection() {
+interface ExpensesSectionProps {
+  /** Deep-link target — when matched, the matching row scrolls into
+   *  view and gets a brief highlight. */
+  focusSettlementId?: string | null;
+}
+
+export function ExpensesSection({ focusSettlementId }: ExpensesSectionProps = {}) {
   const { agentId } = useAgentContext();
 
   const [rows, setRows] = useState<ExpenseRow[]>([]);
@@ -228,7 +234,19 @@ export function ExpensesSection() {
               </TableRow>
             ) : (
               filtered.map((r) => (
-                <TableRow key={r.id}>
+                <TableRow
+                  key={r.id}
+                  ref={(el) => {
+                    // Deep-link target: scroll the matched row into view
+                    // once + flash a quick highlight so the user can
+                    // spot what they were sent to.
+                    if (el && focusSettlementId === r.id) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      el.classList.add('ring-2', 'ring-amber-400');
+                      setTimeout(() => el.classList.remove('ring-2', 'ring-amber-400'), 2400);
+                    }
+                  }}
+                >
                   {showCol('date') && (
                     <TableCell className="text-sm whitespace-nowrap">
                       {fmtDate(r.expense_date)}

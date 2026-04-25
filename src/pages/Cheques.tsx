@@ -153,7 +153,6 @@ export default function Cheques() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [customerFilter, setCustomerFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("customer");
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [dueTodayOnly, setDueTodayOnly] = useState(false);
@@ -169,9 +168,6 @@ export default function Cheques() {
   const [uploadingForChequeId, setUploadingForChequeId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Unique customers for filter
-  const [uniqueCustomers, setUniqueCustomers] = useState<{ id: string; name: string }[]>([]);
 
   // Summary stats
   const [summaryStats, setSummaryStats] = useState({
@@ -597,7 +593,7 @@ export default function Cheques() {
       });
 
       // Search filter (includes customer name search)
-      let filtered = searchQuery 
+      const filtered = searchQuery 
         ? formattedCheques.filter(c => 
             c.policy?.client?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             c.cheque_number?.includes(searchQuery) ||
@@ -605,24 +601,17 @@ export default function Cheques() {
           )
         : formattedCheques;
 
-      if (customerFilter !== "all") {
-        filtered = filtered.filter(c => c.policy?.client?.id === customerFilter);
-      }
-
-      // Build unique customers list
-      const customers = [...new Map(
-        formattedCheques
-          .filter(c => c.policy?.client?.id && c.policy?.client?.full_name)
-          .map(c => [c.policy!.client!.id, { id: c.policy!.client!.id, name: c.policy!.client!.full_name }])
-      ).values()];
-      setUniqueCustomers(customers.sort((a, b) => a.name.localeCompare(b.name, 'ar')));
+      // Auto-expand all groups when there's a small number of them so
+      // the user lands in a useful state without having to click around.
+      const groupIds = [
+        ...new Set(formattedCheques.map((c) => c.policy?.client?.id).filter(Boolean) as string[]),
+      ];
 
       setCheques(filtered);
       setTotalCount(count || 0);
-      
-      // Expand all customers by default if there are few
-      if (customers.length <= 10) {
-        setExpandedCustomers(new Set(customers.map(c => c.id)));
+
+      if (groupIds.length <= 10) {
+        setExpandedCustomers(new Set(groupIds));
       }
     } catch (error) {
       console.error('Error fetching cheques:', error);
@@ -630,7 +619,7 @@ export default function Cheques() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, statusFilter, overdueOnly, dueTodayOnly, searchQuery, customerFilter, toast]);
+  }, [currentPage, statusFilter, overdueOnly, dueTodayOnly, searchQuery, toast]);
 
   useEffect(() => { fetchSummaryStats(); }, [fetchSummaryStats]);
   useEffect(() => { fetchCheques(); }, [fetchCheques]);
@@ -1045,25 +1034,38 @@ export default function Cheques() {
                 {statusLabels[effectiveStatus]?.label || effectiveStatus}
               </Badge>
             </div>
-            {/* Show transfer info if transferred */}
+            {/* "تم استخدامه" — link points to the accounting page now,
+                not the entity wallet, since the settlement record lives
+                there. The page reads ?settlement=ID and switches to the
+                right tab + sub-tab + scrolls to the row. */}
             {cheque.cheque_status === 'transferred_out' && cheque.transferred_to_name && (
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                 <span>
-                  → {cheque.transferred_to_type === 'broker' ? 'وسيط' : 'شركة'}: {cheque.transferred_to_name}
+                  →{' '}
+                  {cheque.transferred_to_type === 'broker'
+                    ? 'وسيط'
+                    : cheque.transferred_to_type === 'expense'
+                    ? 'مصروف'
+                    : 'شركة'}
+                  : {cheque.transferred_to_name}
                 </span>
-                {cheque.transferred_to_type && cheque.transferred_to_id && cheque.transferred_payment_id && (
+                {cheque.transferred_to_type && cheque.transferred_payment_id && (
                   <button
                     className="underline hover:text-foreground"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (cheque.transferred_to_type === 'broker') {
-                        navigate(`/brokers/${cheque.transferred_to_id}/wallet?settlement=${cheque.transferred_payment_id}`);
-                      } else {
-                        navigate(`/companies/${cheque.transferred_to_id}/wallet?settlement=${cheque.transferred_payment_id}`);
-                      }
+                      const tab =
+                        cheque.transferred_to_type === 'broker'
+                          ? 'brokers'
+                          : cheque.transferred_to_type === 'expense'
+                          ? 'expenses'
+                          : 'companies';
+                      navigate(
+                        `/accounting?tab=${tab}&settlement=${cheque.transferred_payment_id}`,
+                      );
                     }}
                   >
-                    عرض في المحفظة
+                    عرض في المحاسبة
                   </button>
                 )}
               </div>
@@ -1338,17 +1340,6 @@ export default function Cheques() {
                 />
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <Select value={customerFilter} onValueChange={(v) => { setCustomerFilter(v); setCurrentPage(1); }}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="العميل" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">جميع العملاء</SelectItem>
-                    {uniqueCustomers.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
                   <SelectTrigger className="w-[130px]">
                     <SelectValue placeholder="الحالة" />

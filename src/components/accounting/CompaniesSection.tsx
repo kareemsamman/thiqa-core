@@ -1,4 +1,4 @@
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -58,7 +58,14 @@ const ISSUANCE_DEFAULT_VISIBLE = ISSUANCE_KEYS.filter((k) => !ISSUANCE_DEFAULT_O
 const SETTLEMENT_KEYS = SETTLEMENT_COLUMNS.map((c) => c.key);
 const SETTLEMENT_DEFAULT_VISIBLE = SETTLEMENT_KEYS.filter((k) => !SETTLEMENT_DEFAULT_OFF.has(k));
 
-export function CompaniesSection() {
+interface CompaniesSectionProps {
+  /** When set (typically from a deep link), the section finds the
+   *  matching settlement, switches to the right sub-tab, and the
+   *  table scrolls + highlights the row. */
+  focusSettlementId?: string | null;
+}
+
+export function CompaniesSection({ focusSettlementId }: CompaniesSectionProps = {}) {
   const [tab, setTab] = useState<SubTab>('all');
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -82,6 +89,19 @@ export function CompaniesSection() {
   });
 
   const data = useAccountingData(filters);
+
+  // Auto-switch sub-tab when a deep-link points at a specific settlement
+  // — disbursement rows live under the disbursements tab, receipts under
+  // receipts. The match runs against the loaded data; if the settlement
+  // hasn't been fetched yet, the effect re-runs once the data lands.
+  useEffect(() => {
+    if (!focusSettlementId) return;
+    if (data.companySettlements.some((r) => r.id === focusSettlementId)) {
+      setTab('disbursements');
+    } else if (data.companyReceipts.some((r) => r.id === focusSettlementId)) {
+      setTab('receipts');
+    }
+  }, [focusSettlementId, data.companySettlements, data.companyReceipts]);
 
   const handleDelete = async (row: SettlementRow) => {
     // If the voucher consumed customer cheques, release them back to
@@ -476,6 +496,8 @@ export function CompaniesSection() {
             entityLabel="شركة التأمين"
             onEdit={handleEdit}
             onDelete={handleDelete}
+            focusSettlementId={focusSettlementId}
+            onSettlementChanged={() => data.refresh()}
           />
         </TabsContent>
         <TabsContent value="receipts" className="m-0">
@@ -487,6 +509,8 @@ export function CompaniesSection() {
             entityLabel="شركة التأمين"
             onEdit={handleEdit}
             onDelete={handleDelete}
+            focusSettlementId={focusSettlementId}
+            onSettlementChanged={() => data.refresh()}
           />
           {!data.loading && companyReceipts.length === 0 && (
             <p className="text-center text-xs text-muted-foreground mt-3">

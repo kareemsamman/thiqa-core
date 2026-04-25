@@ -1,3 +1,4 @@
+import { Fragment, useEffect, useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,10 +15,24 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Banknote, Building, CreditCard, FileText, ImageIcon, Pencil, Trash2 } from 'lucide-react';
+import {
+  Banknote,
+  Building,
+  ChevronDown,
+  ChevronLeft,
+  CreditCard,
+  FileText,
+  ImageIcon,
+  Pencil,
+  Trash2,
+  Wallet,
+} from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { PAYMENT_METHOD_LABELS } from './accountingTypes';
 import { getBank } from '@/lib/banks';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 export interface SettlementRow {
   id: string;
@@ -39,6 +54,17 @@ export interface SettlementRow {
   direction?: 'we_owe' | 'broker_owes' | null; // brokers only
 }
 
+interface ConsumedCheque {
+  id: string;
+  amount: number;
+  cheque_number: string | null;
+  bank_code: string | null;
+  branch_code: string | null;
+  cheque_image_url: string | null;
+  payment_date: string;
+  client_name: string | null;
+}
+
 interface Props {
   rows: SettlementRow[];
   loading: boolean;
@@ -54,6 +80,13 @@ interface Props {
    *  and supply the entity context for edit. */
   onEdit?: (row: SettlementRow) => void;
   onDelete?: (row: SettlementRow) => Promise<void> | void;
+  /** Deep-link target — when present, the matching row scrolls into
+   *  view, gets a brief highlight, and the customer-cheque accordion
+   *  auto-opens for cheque-style settlements. */
+  focusSettlementId?: string | null;
+  /** Called after the user removes a constituent customer cheque from a
+   *  settlement so the parent can refresh its data. */
+  onSettlementChanged?: () => void;
 }
 
 export function SettlementsTable({
@@ -65,11 +98,29 @@ export function SettlementsTable({
   entityLabel,
   onEdit,
   onDelete,
+  focusSettlementId,
+  onSettlementChanged,
 }: Props) {
   const showCol = (key: string) => visible.includes(key);
   const kindClass = voucherKind === 'disbursement' ? 'text-orange-600' : 'text-emerald-600';
   const showActions = !!(onEdit || onDelete);
   const colSpan = visible.length + (showActions ? 1 : 0);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Auto-expand the deep-link target when it's a customer_cheque row,
+  // so the user lands directly on the breakdown they were sent to.
+  useEffect(() => {
+    if (!focusSettlementId) return;
+    const target = rows.find((r) => r.id === focusSettlementId);
+    if (target && target.payment_type === 'customer_cheque') {
+      setExpanded((prev) => {
+        if (prev.has(focusSettlementId)) return prev;
+        const next = new Set(prev);
+        next.add(focusSettlementId);
+        return next;
+      });
+    }
+  }, [focusSettlementId, rows]);
 
   return (
     <TooltipProvider delayDuration={250}>
@@ -110,11 +161,54 @@ export function SettlementsTable({
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((r) => (
-                <TableRow key={r.id} className={r.refused ? 'bg-destructive/5' : ''}>
+              rows.map((r) => {
+                const isCustomerCheque = r.payment_type === 'customer_cheque';
+                const isExpanded = expanded.has(r.id);
+                const toggle = () =>
+                  setExpanded((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(r.id)) next.delete(r.id);
+                    else next.add(r.id);
+                    return next;
+                  });
+                const isFocused = focusSettlementId === r.id;
+                return (
+                <Fragment key={r.id}>
+                <TableRow
+                  className={cn(
+                    r.refused && 'bg-destructive/5',
+                    isCustomerCheque && 'cursor-pointer hover:bg-muted/40',
+                    isFocused && 'ring-2 ring-amber-400 transition',
+                  )}
+                  ref={(el) => {
+                    if (el && isFocused) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                  }}
+                  onClick={(e) => {
+                    if (!isCustomerCheque) return;
+                    // Skip toggle when the click came from a button or
+                    // link inside the row (edit / delete / image).
+                    const target = e.target as HTMLElement;
+                    if (target.closest('button, a')) return;
+                    toggle();
+                  }}
+                >
                   {showCol('date') && (
                     <TableCell className="text-sm whitespace-nowrap">
-                      {fmtDate(r.settlement_date)}
+                      <div className="flex items-center gap-1">
+                        {isCustomerCheque ? (
+                          <ChevronDown
+                            className={cn(
+                              'h-3.5 w-3.5 text-muted-foreground transition-transform',
+                              !isExpanded && '-rotate-90',
+                            )}
+                          />
+                        ) : (
+                          <span className="inline-block w-3.5" />
+                        )}
+                        {fmtDate(r.settlement_date)}
+                      </div>
                     </TableCell>
                   )}
                   {showCol('entity') && (
@@ -229,12 +323,283 @@ export function SettlementsTable({
                     </TableCell>
                   )}
                 </TableRow>
-              ))
+                {isCustomerCheque && isExpanded && (
+                  <ConsumedChequesRow
+                    settlementId={r.id}
+                    voucherKind={voucherKind}
+                    colSpan={colSpan}
+                    onChanged={onSettlementChanged}
+                  />
+                )}
+                </Fragment>
+                );
+              })
             )}
           </TableBody>
         </Table>
     </div>
     </TooltipProvider>
+  );
+}
+
+/**
+ * Lazy-fetches the `customer_cheque_ids` payload for a settlement and
+ * renders each consumed customer cheque as a sub-row: number, branch,
+ * bank, amount, due date, image, and a "remove" button. Removal does
+ * the inverse of the original write — pulls the cheque out of the
+ * settlement (recomputing the total) and resets the policy_payment to
+ * pending so it shows up in the available pool again.
+ */
+function ConsumedChequesRow({
+  settlementId,
+  voucherKind,
+  colSpan,
+  onChanged,
+}: {
+  settlementId: string;
+  voucherKind: 'disbursement' | 'receipt';
+  colSpan: number;
+  onChanged?: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [cheques, setCheques] = useState<ConsumedCheque[]>([]);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [settlementTable, setSettlementTable] = useState<
+    'company_settlements' | 'broker_settlements' | null
+  >(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      // Settlement might live in either company_settlements or
+      // broker_settlements — probe both. company_settlements first
+      // because it's the more common case in production data.
+      const tables: ('company_settlements' | 'broker_settlements')[] = [
+        'company_settlements',
+        'broker_settlements',
+      ];
+      let chequeIds: string[] = [];
+      let foundTable: 'company_settlements' | 'broker_settlements' | null = null;
+      for (const t of tables) {
+        const { data } = await supabase
+          .from(t)
+          .select('customer_cheque_ids')
+          .eq('id', settlementId)
+          .maybeSingle();
+        if (data) {
+          const raw = (data as { customer_cheque_ids?: string[] | null }).customer_cheque_ids;
+          chequeIds = Array.isArray(raw) ? raw : [];
+          foundTable = t;
+          break;
+        }
+      }
+      if (cancelled) return;
+      setSettlementTable(foundTable);
+      if (chequeIds.length === 0) {
+        setCheques([]);
+        setLoading(false);
+        return;
+      }
+      const { data: pp } = await supabase
+        .from('policy_payments')
+        .select(
+          'id, amount, payment_date, cheque_number, bank_code, branch_code, cheque_image_url, policies(clients(full_name))',
+        )
+        .in('id', chequeIds);
+      if (cancelled) return;
+      const rows = ((pp ?? []) as Array<{
+        id: string;
+        amount: number | null;
+        payment_date: string;
+        cheque_number: string | null;
+        bank_code: string | null;
+        branch_code: string | null;
+        cheque_image_url: string | null;
+        policies?: { clients?: { full_name: string } | null } | null;
+      }>).map((p) => ({
+        id: p.id,
+        amount: Number(p.amount ?? 0),
+        payment_date: p.payment_date,
+        cheque_number: p.cheque_number,
+        bank_code: p.bank_code,
+        branch_code: p.branch_code,
+        cheque_image_url: p.cheque_image_url,
+        client_name: p.policies?.clients?.full_name ?? null,
+      }));
+      setCheques(rows);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [settlementId, reloadKey]);
+
+  const handleRemove = async (cheque: ConsumedCheque) => {
+    if (!settlementTable) return;
+    setRemoving(cheque.id);
+    try {
+      // Read the current settlement state — guards against drift if
+      // someone else modified the row in another tab.
+      const { data: cur, error: readErr } = await supabase
+        .from(settlementTable)
+        .select('customer_cheque_ids, total_amount')
+        .eq('id', settlementId)
+        .maybeSingle();
+      if (readErr) throw readErr;
+      if (!cur) throw new Error('السند غير موجود');
+      const curIds = Array.isArray((cur as { customer_cheque_ids?: string[] | null }).customer_cheque_ids)
+        ? ((cur as { customer_cheque_ids?: string[] | null }).customer_cheque_ids as string[])
+        : [];
+      const nextIds = curIds.filter((id) => id !== cheque.id);
+      const nextTotal = Math.max(0, Number((cur as { total_amount: number }).total_amount) - cheque.amount);
+
+      const { error: updErr } = await supabase
+        .from(settlementTable)
+        .update({ customer_cheque_ids: nextIds, total_amount: nextTotal } as never)
+        .eq('id', settlementId);
+      if (updErr) throw updErr;
+
+      // Release the cheque back to the pending pool so it shows up
+      // again in the customer-cheque selector.
+      const { error: ppErr } = await supabase
+        .from('policy_payments')
+        .update({
+          cheque_status: 'pending',
+          transferred_to_type: null,
+          transferred_to_id: null,
+          transferred_payment_id: null,
+          transferred_at: null,
+        })
+        .eq('id', cheque.id);
+      if (ppErr) throw ppErr;
+
+      toast.success('تم إزالة الشيك من السند');
+      setReloadKey((k) => k + 1);
+      onChanged?.();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'فشل الحذف';
+      toast.error(message);
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  return (
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
+      <TableCell colSpan={colSpan} className="p-0">
+        <div className="p-3 border-r-2 border-primary/40">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground mb-2">
+            <Wallet className="h-3.5 w-3.5" />
+            شيكات العميل المستخدمة في هذا السند
+          </div>
+          {loading ? (
+            <div className="space-y-1.5">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </div>
+          ) : cheques.length === 0 ? (
+            <p className="text-xs text-muted-foreground">لا توجد شيكات مرتبطة.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {cheques.map((c) => {
+                const bank = c.bank_code ? getBank(c.bank_code) : null;
+                return (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-3 rounded-md border bg-card px-3 py-2 text-xs"
+                  >
+                    {c.cheque_image_url ? (
+                      <a
+                        href={c.cheque_image_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="فتح صورة الشيك"
+                      >
+                        <img
+                          src={c.cheque_image_url}
+                          alt="صورة الشيك"
+                          className="h-10 w-10 rounded border object-cover"
+                        />
+                      </a>
+                    ) : (
+                      <div className="h-10 w-10 rounded border bg-muted/40 flex items-center justify-center">
+                        <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-0.5 leading-tight min-w-[120px]">
+                      <span className="font-mono tabular-nums text-foreground">
+                        {c.cheque_number || '—'}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {bank?.nameAr ?? c.bank_code ?? '—'}
+                        {c.branch_code && (
+                          <span dir="ltr" className="font-mono px-1 mx-1 rounded bg-muted">
+                            {c.branch_code}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-0.5 leading-tight">
+                      <span className="text-[10px] text-muted-foreground">العميل</span>
+                      <span>{c.client_name ?? '—'}</span>
+                    </div>
+                    <div className="flex flex-col gap-0.5 leading-tight">
+                      <span className="text-[10px] text-muted-foreground">تاريخ الاستحقاق</span>
+                      <span>{fmtDate(c.payment_date)}</span>
+                    </div>
+                    <div className="flex flex-col gap-0.5 leading-tight ms-auto">
+                      <span className="text-[10px] text-muted-foreground">المبلغ</span>
+                      <span
+                        className={cn(
+                          'font-semibold tabular-nums',
+                          voucherKind === 'disbursement' ? 'text-orange-600' : 'text-emerald-600',
+                        )}
+                      >
+                        ₪{c.amount.toLocaleString('en-US')}
+                      </span>
+                    </div>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 hover:bg-destructive/10"
+                          disabled={removing === c.id}
+                          aria-label="إزالة الشيك"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent dir="rtl">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>إزالة الشيك من السند؟</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            سيتم تعديل إجمالي السند وإعادة الشيك إلى الشيكات المعلّقة
+                            ليُستخدم في سند آخر.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleRemove(c)}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            إزالة
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
   );
 }
 

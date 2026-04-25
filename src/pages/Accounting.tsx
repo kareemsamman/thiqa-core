@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -14,7 +14,23 @@ type MainTab = 'companies' | 'brokers' | 'expenses';
 
 export default function Accounting() {
   const { isAdmin } = useAuth();
-  const [tab, setTab] = useState<MainTab>('companies');
+  const [searchParams] = useSearchParams();
+  const initialTab: MainTab =
+    searchParams.get('tab') === 'brokers'
+      ? 'brokers'
+      : searchParams.get('tab') === 'expenses'
+      ? 'expenses'
+      : 'companies';
+  const [tab, setTab] = useState<MainTab>(initialTab);
+  // Settlement id passed in via ?settlement=… — sections read this
+  // to scroll their corresponding row into view + highlight it.
+  const settlementParam = searchParams.get('settlement');
+
+  // If the URL changes after mount (deep link from Cheques page), keep
+  // the tab in sync without forcing remount.
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   if (!isAdmin) return <Navigate to="/" replace />;
 
@@ -46,13 +62,13 @@ export default function Accounting() {
           </div>
 
           <TabsContent value="companies" className="mt-3">
-            <CompaniesSection />
+            <CompaniesSection focusSettlementId={settlementParam} />
           </TabsContent>
           <TabsContent value="brokers" className="mt-3">
-            <BrokersSection />
+            <BrokersSection focusSettlementId={settlementParam} />
           </TabsContent>
           <TabsContent value="expenses" className="mt-3">
-            <ExpensesSection />
+            <ExpensesSection focusSettlementId={settlementParam} />
           </TabsContent>
         </Tabs>
       </div>
