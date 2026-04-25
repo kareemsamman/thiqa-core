@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { AddSettlementDialog, SettlementKind } from './AddSettlementDialog';
 import { EditSettlementDialog } from './EditSettlementDialog';
+import { QuickIssuanceDialog, IssuanceMode } from './QuickIssuanceDialog';
 import { SettlementRow } from './SettlementsTable';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -64,6 +65,8 @@ export function CompaniesSection() {
   const [addKind, setAddKind] = useState<SettlementKind>('disbursement');
   const [editRow, setEditRow] = useState<SettlementRow | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [issuanceOpen, setIssuanceOpen] = useState(false);
+  const [issuanceMode, setIssuanceMode] = useState<IssuanceMode>('issue');
   // Live overlay of inline edits across the issuances table — owned
   // here so the summary pills + calculation modal can mirror the cell
   // values before the debounced save flushes back. Keyed by row.id.
@@ -389,6 +392,19 @@ export function CompaniesSection() {
               {tab === 'disbursements' ? 'إضافة سند صرف' : 'إضافة سند قبض'}
             </Button>
           )}
+          {(tab === 'issuances' || tab === 'returns' || tab === 'all') && (
+            <Button
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={() => {
+                setIssuanceMode(tab === 'returns' ? 'return' : 'issue');
+                setIssuanceOpen(true);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {tab === 'returns' ? 'إضافة مرتجع يدوي' : 'إضافة إصدار يدوي'}
+            </Button>
+          )}
           <span className="text-xs text-muted-foreground">
             {data.loading ? '...' : `${activeRowCount} ${countLabel}`}
           </span>
@@ -494,6 +510,15 @@ export function CompaniesSection() {
         onOpenChange={setEditOpen}
         table="company_settlements"
         row={editRow}
+        onSaved={() => data.refresh()}
+      />
+
+      <QuickIssuanceDialog
+        open={issuanceOpen}
+        onOpenChange={setIssuanceOpen}
+        defaultMode={issuanceMode}
+        companies={data.companies}
+        brokers={data.brokers}
         onSaved={() => data.refresh()}
       />
     </div>

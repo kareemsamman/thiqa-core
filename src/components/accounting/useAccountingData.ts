@@ -101,6 +101,7 @@ interface RawCompanySettlement {
   bank_code: string | null;
   branch_code: string | null;
   cheque_image_url: string | null;
+  cheque_image_urls: string[] | null;
   status: string;
   refused: boolean | null;
   notes: string | null;
@@ -118,12 +119,22 @@ interface RawBrokerSettlement {
   bank_code: string | null;
   branch_code: string | null;
   cheque_image_url: string | null;
+  cheque_image_urls: string[] | null;
   status: string;
   refused: boolean | null;
   notes: string | null;
   direction: 'we_owe' | 'broker_owes' | null;
   broker_id: string | null;
   brokers: { name: string } | null;
+}
+
+// Hydrates the cheque image array from either the new array column or
+// the legacy single-URL column. Old rows that haven't been edited since
+// the migration only have cheque_image_url; treat that as a single-item
+// array so the list renders the thumbnail.
+function hydrateChequeImages(arr: string[] | null, single: string | null): string[] {
+  if (Array.isArray(arr) && arr.length > 0) return arr;
+  return single ? [single] : [];
 }
 
 /**
@@ -339,7 +350,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
       let csQuery = supabase
         .from('company_settlements')
         .select(
-          'id, settlement_date, total_amount, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, status, refused, notes, direction, company_id, insurance_companies(name, name_ar)',
+          'id, settlement_date, total_amount, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, status, refused, notes, direction, company_id, insurance_companies(name, name_ar)',
         )
         .order('settlement_date', { ascending: false });
       if (agentId) csQuery = csQuery.eq('agent_id', agentId);
@@ -354,7 +365,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         cheque_number: s.cheque_number,
         bank_code: s.bank_code,
         branch_code: s.branch_code,
-        cheque_image_url: s.cheque_image_url,
+        cheque_image_urls: hydrateChequeImages(s.cheque_image_urls, s.cheque_image_url),
         status: s.status,
         refused: s.refused,
         notes: s.notes,
@@ -368,7 +379,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
       let bsQuery = supabase
         .from('broker_settlements')
         .select(
-          'id, settlement_date, total_amount, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, status, refused, notes, direction, broker_id, brokers(name)',
+          'id, settlement_date, total_amount, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, status, refused, notes, direction, broker_id, brokers(name)',
         )
         .order('settlement_date', { ascending: false });
       if (agentId) bsQuery = bsQuery.eq('agent_id', agentId);
@@ -381,7 +392,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         cheque_number: s.cheque_number,
         bank_code: s.bank_code,
         branch_code: s.branch_code,
-        cheque_image_url: s.cheque_image_url,
+        cheque_image_urls: hydrateChequeImages(s.cheque_image_urls, s.cheque_image_url),
         status: s.status,
         refused: s.refused,
         notes: s.notes,

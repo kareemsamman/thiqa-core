@@ -21,7 +21,7 @@ import {
 import { Banknote, FileText, Loader2, Receipt, Wallet } from 'lucide-react';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 import { BankPicker } from '@/components/shared/BankPicker';
-import { CompactImagePicker } from '@/components/shared/CompactImagePicker';
+import { MultiImagePicker } from '@/components/shared/MultiImagePicker';
 import { sanitizeChequeNumber, validateChequeNumber } from '@/lib/chequeUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -61,7 +61,7 @@ interface EditableState {
   cheque_number: string;
   bank_code: string | null;
   branch_code: string | null;
-  cheque_image_url: string | null;
+  cheque_image_urls: string[];
   bank_reference: string;
   notes: string;
 }
@@ -73,7 +73,7 @@ const empty: EditableState = {
   cheque_number: '',
   bank_code: null,
   branch_code: null,
-  cheque_image_url: null,
+  cheque_image_urls: [],
   bank_reference: '',
   notes: '',
 };
@@ -99,7 +99,7 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
       const { data, error } = await supabase
         .from(table)
         .select(
-          'total_amount, settlement_date, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, bank_reference, notes',
+          'total_amount, settlement_date, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, bank_reference, notes',
         )
         .eq('id', row.id)
         .maybeSingle();
@@ -109,6 +109,14 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
           onOpenChange(false);
         } else {
           const d = data as Record<string, unknown>;
+          // Treat the legacy single column as the first element when
+          // the new array column is empty — this keeps old rows visible
+          // until they're edited and migrated to the array.
+          const arr = Array.isArray(d.cheque_image_urls)
+            ? (d.cheque_image_urls as string[])
+            : [];
+          const single = (d.cheque_image_url as string) ?? null;
+          const merged = arr.length > 0 ? arr : single ? [single] : [];
           setState({
             total_amount: Number(d.total_amount ?? 0),
             settlement_date: (d.settlement_date as string) ?? '',
@@ -116,7 +124,7 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
             cheque_number: (d.cheque_number as string) ?? '',
             bank_code: (d.bank_code as string) ?? null,
             branch_code: (d.branch_code as string) ?? null,
-            cheque_image_url: (d.cheque_image_url as string) ?? null,
+            cheque_image_urls: merged,
             bank_reference: (d.bank_reference as string) ?? '',
             notes: (d.notes as string) ?? '',
           });
@@ -153,7 +161,12 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
           cheque_number: state.payment_type === 'cheque' ? state.cheque_number || null : null,
           bank_code: state.payment_type === 'cheque' ? state.bank_code : null,
           branch_code: state.payment_type === 'cheque' ? state.branch_code : null,
-          cheque_image_url: state.payment_type === 'cheque' ? state.cheque_image_url : null,
+          // Mirror first image into the legacy single column so older
+          // viewers (list thumbnail, exports) keep working.
+          cheque_image_url:
+            state.payment_type === 'cheque' ? state.cheque_image_urls[0] ?? null : null,
+          cheque_image_urls:
+            state.payment_type === 'cheque' ? state.cheque_image_urls : [],
           bank_reference:
             state.payment_type === 'bank_transfer' ? state.bank_reference || null : null,
           notes: state.notes || null,
@@ -287,15 +300,17 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <CompactImagePicker
-                      value={state.cheque_image_url}
-                      onChange={(url) => setState({ ...state, cheque_image_url: url })}
+                    <MultiImagePicker
+                      value={state.cheque_image_urls}
+                      onChange={(urls) => setState({ ...state, cheque_image_urls: urls })}
                       entityType="settlement_cheque"
                       entityId={row?.id}
-                      label="صورة الشيك"
+                      label="صور الشيك"
                     />
                     <span>
-                      {state.cheque_image_url ? 'صورة الشيك مرفقة' : 'صورة الشيك (اختياري)'}
+                      {state.cheque_image_urls.length > 0
+                        ? `${state.cheque_image_urls.length} صور مرفقة`
+                        : 'صور الشيك (اختياري)'}
                     </span>
                   </div>
                 </div>

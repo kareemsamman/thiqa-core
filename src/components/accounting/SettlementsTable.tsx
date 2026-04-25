@@ -27,7 +27,10 @@ export interface SettlementRow {
   cheque_number: string | null;
   bank_code: string | null;
   branch_code: string | null;
-  cheque_image_url: string | null;
+  /** Multi-image attachments. Empty array == no images.
+   *  Legacy rows that only have cheque_image_url get hydrated into a
+   *  single-element array by useAccountingData on read. */
+  cheque_image_urls: string[];
   status: string;
   refused: boolean | null;
   notes: string | null;
@@ -140,23 +143,7 @@ export function SettlementsTable({
                   )}
                   {showCol('cheque_image') && (
                     <TableCell className="text-center">
-                      {r.cheque_image_url ? (
-                        <a
-                          href={r.cheque_image_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-block"
-                          title="فتح صورة الشيك"
-                        >
-                          <img
-                            src={r.cheque_image_url}
-                            alt="صورة الشيك"
-                            className="h-8 w-8 rounded border object-cover hover:scale-110 transition-transform"
-                          />
-                        </a>
-                      ) : (
-                        <ImageIcon className="h-3.5 w-3.5 text-muted-foreground/40 mx-auto" />
-                      )}
+                      <ChequeImageCell urls={r.cheque_image_urls} />
                     </TableCell>
                   )}
                   {showDirection && showCol('direction') && (
@@ -248,6 +235,57 @@ export function SettlementsTable({
         </Table>
     </div>
     </TooltipProvider>
+  );
+}
+
+// Renders the cheque-image cell. With one image we show a single clickable
+// thumb; with multiple we show the first thumb stacked over a "+N" badge,
+// and reveal every image on hover via a popover-ish cluster.
+function ChequeImageCell({ urls }: { urls: string[] }) {
+  if (!urls || urls.length === 0) {
+    return <ImageIcon className="h-3.5 w-3.5 text-muted-foreground/40 mx-auto" />;
+  }
+  if (urls.length === 1) {
+    return (
+      <a href={urls[0]} target="_blank" rel="noreferrer" className="inline-block" title="فتح الصورة">
+        <img
+          src={urls[0]}
+          alt="صورة الشيك"
+          className="h-8 w-8 rounded border object-cover hover:scale-110 transition-transform"
+        />
+      </a>
+    );
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <a
+          href={urls[0]}
+          target="_blank"
+          rel="noreferrer"
+          className="relative inline-block"
+          title={`${urls.length} صور`}
+        >
+          <img
+            src={urls[0]}
+            alt="صورة الشيك"
+            className="h-8 w-8 rounded border object-cover hover:scale-110 transition-transform"
+          />
+          <span className="absolute -bottom-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center shadow">
+            +{urls.length - 1}
+          </span>
+        </a>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="p-2">
+        <div className="flex flex-wrap gap-1.5 max-w-[14rem]">
+          {urls.map((u, i) => (
+            <a key={`${u}-${i}`} href={u} target="_blank" rel="noreferrer" title={`صورة ${i + 1}`}>
+              <img src={u} alt={`صورة ${i + 1}`} className="h-12 w-12 rounded border object-cover" />
+            </a>
+          ))}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

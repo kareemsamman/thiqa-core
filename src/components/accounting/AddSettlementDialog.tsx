@@ -38,7 +38,7 @@ import { useAgentContext } from '@/hooks/useAgentContext';
 import { toast } from 'sonner';
 import { CustomerChequeSelector, SelectableCheque } from '@/components/shared/CustomerChequeSelector';
 import { BankPicker } from '@/components/shared/BankPicker';
-import { CompactImagePicker } from '@/components/shared/CompactImagePicker';
+import { MultiImagePicker } from '@/components/shared/MultiImagePicker';
 import { sanitizeChequeNumber, validateChequeNumber } from '@/lib/chequeUtils';
 import { cn } from '@/lib/utils';
 
@@ -75,7 +75,9 @@ interface PaymentLine {
   cheque_due_date?: string;
   /** تاريخ الإصدار — when we wrote the cheque / when money left. */
   cheque_issue_date?: string;
-  cheque_image_url?: string;
+  /** Multi-image attachments — first one is mirrored to cheque_image_url
+   *  on save for backwards compat with old viewers. */
+  cheque_image_urls?: string[];
   /** Bank transfer reference number. */
   bank_reference?: string;
   /** Customer cheque type — picked from the available pool. */
@@ -237,7 +239,7 @@ export function AddSettlementDialog({
       cheque_number: c.cheque_number ? sanitizeChequeNumber(c.cheque_number) : undefined,
       cheque_due_date: c.payment_date || today(),
       cheque_issue_date: issued,
-      cheque_image_url: c.image_url || undefined,
+      cheque_image_urls: c.image_url ? [c.image_url] : [],
       branch_code: c.branch_number || null,
     }));
     setLines((prev) => {
@@ -336,7 +338,9 @@ export function AddSettlementDialog({
           bank_code: line.payment_type === 'cheque' ? line.bank_code ?? null : null,
           branch_code: line.payment_type === 'cheque' ? line.branch_code ?? null : null,
           cheque_image_url:
-            line.payment_type === 'cheque' ? line.cheque_image_url ?? null : null,
+            line.payment_type === 'cheque' ? line.cheque_image_urls?.[0] ?? null : null,
+          cheque_image_urls:
+            line.payment_type === 'cheque' ? line.cheque_image_urls ?? [] : [],
           bank_reference:
             line.payment_type === 'bank_transfer' ? line.bank_reference ?? null : null,
           customer_cheque_ids: customerChequeIds,
@@ -730,7 +734,7 @@ function ChequeLineEditor({
       cheque_number: undefined,
       bank_code: null,
       branch_code: null,
-      cheque_image_url: undefined,
+      cheque_image_urls: [],
       cheque_due_date: undefined,
       cheque_issue_date: undefined,
     });
@@ -855,17 +859,22 @@ function ChequeLineEditor({
         </div>
       </div>
 
-      {/* Compact image picker — small button + thumbnail beside it,
-          tucked at the bottom-left so the card stays dense. */}
+      {/* Multi-image picker — agents asked to attach multiple shots
+          per cheque (front, back, copies). The single-image path is
+          preserved on save by mirroring images[0] into cheque_image_url. */}
       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-        <CompactImagePicker
-          value={line.cheque_image_url}
-          onChange={(url) => onChange({ cheque_image_url: url ?? undefined })}
+        <MultiImagePicker
+          value={line.cheque_image_urls ?? []}
+          onChange={(urls) => onChange({ cheque_image_urls: urls })}
           entityType="settlement_cheque"
           entityId={line.id}
-          label="صورة الشيك"
+          label="صور الشيك"
         />
-        <span>{line.cheque_image_url ? 'صورة الشيك مرفقة' : 'صورة الشيك (اختياري)'}</span>
+        <span>
+          {line.cheque_image_urls && line.cheque_image_urls.length > 0
+            ? `${line.cheque_image_urls.length} صور مرفقة`
+            : 'صور الشيك (اختياري)'}
+        </span>
       </div>
     </div>
   );
