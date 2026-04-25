@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
 import { Filter, X } from 'lucide-react';
 import { MultiSelectFilter } from '@/components/shared/MultiSelectFilter';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
+import { ArabicMonthPicker } from './ArabicMonthPicker';
 import { cn } from '@/lib/utils';
 
 export interface FilterOption {
@@ -175,12 +175,7 @@ export function AccountingFilters({
               </div>
 
               {dateMode === 'month' ? (
-                <Input
-                  type="month"
-                  value={monthInput}
-                  onChange={(e) => setMonth(e.target.value)}
-                  className="h-9 text-sm"
-                />
+                <ArabicMonthPicker value={monthInput} onChange={setMonth} />
               ) : (
                 <div className="grid grid-cols-2 gap-2">
                   <div>

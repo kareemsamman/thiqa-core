@@ -15,9 +15,7 @@ import { ChevronLeft, ChevronRight, Eye, FileText, Layers, Receipt } from 'lucid
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { useTableColumnVisibility } from '@/hooks/useTableColumnVisibility';
 import { useDebouncedAutoSave } from '@/hooks/useDebouncedAutoSave';
-import { ManageColumnsDropdown, ColumnOption } from './ManageColumnsDropdown';
 import { CalculationExplanationModal } from '@/components/reports/CalculationExplanationModal';
 import { PolicyReceiptsDrawer } from './PolicyReceiptsDrawer';
 import { PackageDetailsDrawer } from './PackageDetailsDrawer';
@@ -25,50 +23,6 @@ import { PolicyTypeBadge } from './PolicyTypeBadge';
 import { IssuanceRow, PAYMENT_METHOD_LABELS } from './accountingTypes';
 
 type Mode = 'company' | 'broker';
-
-const COMPANY_COLUMNS: ColumnOption[] = [
-  { key: 'document_number', label: 'رقم المعاملة', required: true },
-  { key: 'receipts', label: 'سندات القبض' },
-  { key: 'client_name', label: 'العميل' },
-  { key: 'client_id_number', label: 'رقم هوية العميل' },
-  { key: 'client_phone', label: 'رقم الهاتف' },
-  { key: 'issue_date', label: 'تاريخ الإصدار' },
-  { key: 'start_date', label: 'بدء التأمين' },
-  { key: 'end_date', label: 'نهاية التأمين' },
-  { key: 'car_number', label: 'رقم السيارة' },
-  { key: 'car_value', label: 'سعر السيارة' },
-  { key: 'payment_method', label: 'طريقة الدفع' },
-  { key: 'company_name', label: 'شركة التأمين' },
-  { key: 'policy_type', label: 'نوع التأمين' },
-  { key: 'payed_for_company', label: 'المستحق للشركة' },
-  { key: 'profit', label: 'الربح / العمولة' },
-  { key: 'insurance_price', label: 'سعر التأمين' },
-  { key: 'actions', label: 'إجراءات', required: true },
-];
-
-const BROKER_COLUMNS: ColumnOption[] = [
-  { key: 'document_number', label: 'رقم المعاملة', required: true },
-  { key: 'receipts', label: 'سندات القبض' },
-  { key: 'client_name', label: 'العميل' },
-  { key: 'client_id_number', label: 'رقم هوية العميل' },
-  { key: 'client_phone', label: 'رقم الهاتف' },
-  { key: 'issue_date', label: 'تاريخ الإصدار' },
-  { key: 'start_date', label: 'بدء التأمين' },
-  { key: 'end_date', label: 'نهاية التأمين' },
-  { key: 'car_number', label: 'رقم السيارة' },
-  { key: 'car_value', label: 'سعر السيارة' },
-  { key: 'payment_method', label: 'طريقة الدفع' },
-  { key: 'company_name', label: 'الوسيط / الشركة' },
-  { key: 'policy_type', label: 'نوع التأمين' },
-  { key: 'broker_buy_price', label: 'سعر الشراء من الوسيط' },
-  { key: 'insurance_price', label: 'سعر البيع للعميل' },
-  { key: 'profit', label: 'الربح' },
-  { key: 'actions', label: 'إجراءات', required: true },
-];
-
-// Default = every column EXCEPT id_number / phone (user wants those off
-// by default per round-2 feedback). The hook persists user toggles.
-const DEFAULT_OFF = new Set(['client_id_number', 'client_phone']);
 
 interface CompanyForCalc {
   id: string;
@@ -81,8 +35,9 @@ interface Props {
   companies: CompanyForCalc[];
   loading: boolean;
   mode: Mode;
+  /** Controlled visibility — section owns the column-visibility state. */
+  visible: string[];
   onRowSaved?: (rowId: string) => void;
-  storageId?: string;
   pageSize?: number;
 }
 
@@ -106,22 +61,10 @@ export function CompanyIssuancesTable({
   companies,
   loading,
   mode,
+  visible,
   onRowSaved,
-  storageId = 'accounting-company-issuances',
   pageSize = 10,
 }: Props) {
-  const COLUMNS = mode === 'broker' ? BROKER_COLUMNS : COMPANY_COLUMNS;
-  const ALL_KEYS = COLUMNS.map((c) => c.key);
-  const DEFAULT_VISIBLE = ALL_KEYS.filter((k) => !DEFAULT_OFF.has(k));
-  // Bump suffix to "v2" so the new schema (document_number + ID/phone)
-  // doesn't inherit a stale list that's missing the required columns.
-  const versionedId = `${storageId}-v2`;
-  const { visible, toggle, reset } = useTableColumnVisibility(
-    versionedId,
-    DEFAULT_VISIBLE,
-    ALL_KEYS,
-  );
-
   const [calcRow, setCalcRow] = useState<IssuanceRow | null>(null);
   const [calcOpen, setCalcOpen] = useState(false);
   const [drawerRow, setDrawerRow] = useState<IssuanceRow | null>(null);
@@ -236,18 +179,6 @@ export function CompanyIssuancesTable({
   return (
     <TooltipProvider delayDuration={250}>
       <div className="space-y-2.5">
-        <div className="flex items-center justify-end gap-2 px-1">
-          <span className="text-xs text-muted-foreground ml-auto">
-            {loading ? '...' : `${rows.length} معاملة`}
-          </span>
-          <ManageColumnsDropdown
-            columns={COLUMNS}
-            visible={visible}
-            onToggle={toggle}
-            onReset={reset}
-          />
-        </div>
-
         <div className="rounded-lg border bg-card">
           <div className="overflow-x-auto">
             <Table>

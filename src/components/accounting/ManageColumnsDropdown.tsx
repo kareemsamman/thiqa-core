@@ -29,7 +29,7 @@ export function ManageColumnsDropdown({ columns, visible, onToggle, onReset }: P
         <Button variant="outline" size="sm" className="gap-2">
           <Columns3 className="h-4 w-4" />
           <span className="hidden sm:inline">إدارة الأعمدة</span>
-          <span className="text-xs text-muted-foreground">({visible.length}/{columns.length})</span>
+          <span className="text-xs text-muted-foreground">{columns.length}/{visible.length}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

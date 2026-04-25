@@ -1,10 +1,8 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowDownRight, ArrowUpRight, Banknote, Building, CreditCard, FileText } from 'lucide-react';
+import { Banknote, Building, CreditCard, FileText } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { useTableColumnVisibility } from '@/hooks/useTableColumnVisibility';
-import { ManageColumnsDropdown, ColumnOption } from './ManageColumnsDropdown';
 import { PAYMENT_METHOD_LABELS } from './accountingTypes';
 
 export interface SettlementRow {
@@ -21,19 +19,6 @@ export interface SettlementRow {
   direction?: 'we_owe' | 'broker_owes' | null; // brokers only
 }
 
-const COLUMNS: ColumnOption[] = [
-  { key: 'date', label: 'التاريخ', required: true },
-  { key: 'entity', label: 'الجهة', required: true },
-  { key: 'amount', label: 'المبلغ', required: true },
-  { key: 'payment_type', label: 'طريقة الدفع' },
-  { key: 'cheque_number', label: 'رقم الشيك' },
-  { key: 'direction', label: 'الاتجاه' },
-  { key: 'status', label: 'الحالة' },
-  { key: 'notes', label: 'ملاحظات' },
-];
-
-const DEFAULT_VISIBLE = COLUMNS.filter((c) => c.key !== 'notes').map((c) => c.key);
-
 interface Props {
   rows: SettlementRow[];
   loading: boolean;
@@ -41,7 +26,8 @@ interface Props {
   voucherKind: 'disbursement' | 'receipt';
   /** Show a Direction column (only meaningful for brokers). */
   showDirection?: boolean;
-  storageId: string;
+  /** Controlled visibility — section owns the column-visibility state. */
+  visible: string[];
   entityLabel: string; // "شركة التأمين" / "الوسيط"
 }
 
@@ -50,32 +36,14 @@ export function SettlementsTable({
   loading,
   voucherKind,
   showDirection = false,
-  storageId,
+  visible,
   entityLabel,
 }: Props) {
-  const defaults = showDirection ? DEFAULT_VISIBLE : DEFAULT_VISIBLE.filter((k) => k !== 'direction');
-  const { visible, toggle, reset } = useTableColumnVisibility(storageId, defaults);
-
   const showCol = (key: string) => visible.includes(key);
-  const KindIcon = voucherKind === 'disbursement' ? ArrowUpRight : ArrowDownRight;
   const kindClass = voucherKind === 'disbursement' ? 'text-orange-600' : 'text-emerald-600';
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-end gap-2 px-1">
-        <span className="text-xs text-muted-foreground ml-auto inline-flex items-center gap-1.5">
-          <KindIcon className={`h-3.5 w-3.5 ${kindClass}`} />
-          {loading ? '...' : `${rows.length} سند`}
-        </span>
-        <ManageColumnsDropdown
-          columns={showDirection ? COLUMNS : COLUMNS.filter((c) => c.key !== 'direction')}
-          visible={visible}
-          onToggle={toggle}
-          onReset={reset}
-        />
-      </div>
-
-      <div className="rounded-lg border bg-card overflow-x-auto">
+    <div className="rounded-lg border bg-card overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40">
@@ -165,7 +133,6 @@ export function SettlementsTable({
             )}
           </TableBody>
         </Table>
-      </div>
     </div>
   );
 }
