@@ -328,7 +328,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
   );
   const { profile, signOut, isAdmin, branchName, isSuperAdmin } = useAuth();
   const { data: siteSettings } = useSiteSettings();
-  const { hasFeature, isThiqaSuperAdmin, agent } = useAgentContext();
+  const { hasFeature, isThiqaSuperAdmin, agent, planInfo } = useAgentContext();
   const { can } = usePermissions();
   const { showUpgradePrompt } = useUpgradePrompt();
 
@@ -791,8 +791,9 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 ? (agent.trial_ends_at ? new Date(agent.trial_ends_at) : (agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null))
                 : (agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null);
               const days = endDate ? Math.max(0, Math.floor((endDate.getTime() - Date.now()) / 86400000)) : null;
-              const trialProgress = isTrial && days !== null ? Math.min(100, ((35 - days) / 35) * 100) : 0;
-              return { isTrial, days, trialProgress };
+              const periodLength = isTrial ? 35 : agent.billing_cycle === 'yearly' ? 365 : 30;
+              const progress = days !== null ? Math.min(100, Math.max(0, ((periodLength - days) / periodLength) * 100)) : 0;
+              return { isTrial, days, progress };
             })();
 
             const triggerOnboarding = () => {
@@ -836,7 +837,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                                 background: "linear-gradient(rgb(69, 94, 187) 0%, rgb(138, 150, 203) 100%), rgba(255, 255, 255, 0.02)",
                               } : undefined}
                             >
-                              {trial.isTrial ? 'تجربة مجانية' : agent.plan === 'pro' ? 'Pro' : 'Basic'}
+                              {trial.isTrial ? 'تجربة مجانية' : (planInfo?.name_ar || planInfo?.name || (agent.plan === 'pro' ? 'Pro' : 'Basic'))}
                             </span>
                             {trial.days !== null && (
                               <span className={cn("text-[10px] font-medium",
@@ -846,12 +847,12 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                               </span>
                             )}
                           </div>
-                          {trial.isTrial && trial.days !== null && (
+                          {trial.days !== null && (
                             <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
                               <div
                                 className="h-full rounded-full transition-all"
                                 style={{
-                                  width: `${trial.trialProgress}%`,
+                                  width: `${trial.progress}%`,
                                   background: trial.days <= 7
                                     ? undefined
                                     : "linear-gradient(rgb(69, 94, 187) 0%, rgb(138, 150, 203) 100%), rgba(255, 255, 255, 0.02)",
@@ -972,8 +973,9 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                 ? (agent.trial_ends_at ? new Date(agent.trial_ends_at) : (agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null))
                 : (agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null);
               const days = endDate ? Math.max(0, Math.floor((endDate.getTime() - Date.now()) / 86400000)) : null;
-              const trialProgress = isTrial && days !== null ? Math.min(100, ((35 - days) / 35) * 100) : 0;
-              return { isTrial, days, trialProgress };
+              const periodLength = isTrial ? 35 : agent.billing_cycle === 'yearly' ? 365 : 30;
+              const progress = days !== null ? Math.min(100, Math.max(0, ((periodLength - days) / periodLength) * 100)) : 0;
+              return { isTrial, days, progress };
             })();
 
             const triggerOnboardingCollapsed = () => {
@@ -1061,7 +1063,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                                   background: "linear-gradient(rgb(69, 94, 187) 0%, rgb(138, 150, 203) 100%), rgba(255, 255, 255, 0.02)",
                                 } : undefined}
                               >
-                                {trial.isTrial ? 'تجربة مجانية' : agent.plan === 'pro' ? 'Pro' : 'Basic'}
+                                {trial.isTrial ? 'تجربة مجانية' : (planInfo?.name_ar || planInfo?.name || (agent.plan === 'pro' ? 'Pro' : 'Basic'))}
                               </span>
                               {trial.days !== null && (
                                 <span className={cn("text-[10px] font-medium",
@@ -1071,12 +1073,12 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                                 </span>
                               )}
                             </div>
-                            {trial.isTrial && trial.days !== null && (
+                            {trial.days !== null && (
                               <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
                                 <div
                                   className="h-full rounded-full transition-all"
                                   style={{
-                                    width: `${trial.trialProgress}%`,
+                                    width: `${trial.progress}%`,
                                     background: trial.days <= 7
                                       ? undefined
                                       : "linear-gradient(rgb(69, 94, 187) 0%, rgb(138, 150, 203) 100%), rgba(255, 255, 255, 0.02)",
