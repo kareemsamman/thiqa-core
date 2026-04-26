@@ -135,27 +135,38 @@ export function CompanyIssuancesTable({
     if (!el) return;
     let raf = 0;
     const update = () => {
-      const isRtl = getComputedStyle(el).direction === 'rtl';
-      const sl = el.scrollLeft;
+      // Direction-agnostic edge detection using bounding rects. Works
+      // for LTR, modern RTL, "reverse" RTL, and "default" RTL — none
+      // of which agree on what scrollLeft means at the edges, but all
+      // agree that DOMRects describe pixels on screen.
+      // atStart = "no content past the right viewport edge"  → the
+      //           right arrow (which reveals right-hidden content) is
+      //           disabled.
+      // atEnd   = "no content past the left viewport edge"   → the
+      //           left arrow is disabled.
       const max = el.scrollWidth - el.clientWidth;
       if (max <= 0) {
-        // No horizontal overflow yet — likely the table hasn't laid
-        // out. Mark both edges true so the arrows hide instead of
-        // showing as enabled-but-broken.
         setScrollEdges({ atStart: true, atEnd: true });
         return;
       }
-      // Modern RTL spec: scrollLeft is 0 at the right edge (start in
-      // RTL reading direction) and -max at the left edge (end). LTR
-      // is the familiar 0..+max.
-      const atStart = isRtl ? sl >= -1 : sl <= 1;
-      const atEnd = isRtl ? sl <= -(max - 1) : sl >= max - 1;
-      setScrollEdges({ atStart, atEnd });
+      const cr = el.getBoundingClientRect();
+      let minLeft = Infinity;
+      let maxRight = -Infinity;
+      for (const child of Array.from(el.children) as HTMLElement[]) {
+        const r = child.getBoundingClientRect();
+        if (r.left < minLeft) minLeft = r.left;
+        if (r.right > maxRight) maxRight = r.right;
+      }
+      if (!Number.isFinite(minLeft) || !Number.isFinite(maxRight)) {
+        setScrollEdges({ atStart: true, atEnd: true });
+        return;
+      }
+      // 1px slack for sub-pixel rendering.
+      setScrollEdges({
+        atStart: maxRight <= cr.right + 1,
+        atEnd: minLeft >= cr.left - 1,
+      });
     };
-    // Defer to the next frame so the measurement happens after the
-    // table layout has settled — without this, the first run during
-    // mount sees scrollWidth === clientWidth and disables both arrows
-    // even when content actually overflows.
     const schedule = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(update);
@@ -172,21 +183,62 @@ export function CompanyIssuancesTable({
     };
   }, [paged.length, visible.length]);
 
+  // Probe-based RTL scroll-model detection. Modern Chrome/Safari/FF
+  // use the "negative" model (scrollLeft in [-max, 0]); older WebKit
+  // used "reverse" (scrollLeft in [0, max], starts at max); some niche
+  // engines use "default" (scrollLeft in [0, max], starts at 0). We
+  // run the probe lazily and cache the result for the lifetime of the
+  // session.
+  type RtlModel = 'ltr' | 'negative' | 'reverse' | 'default';
+  const rtlModelRef = useRef<RtlModel | null>(null);
+  const detectRtlModel = (el: HTMLElement): RtlModel => {
+    if (rtlModelRef.current) return rtlModelRef.current;
+    const computed = getComputedStyle(el).direction;
+    if (computed !== 'rtl') {
+      rtlModelRef.current = 'ltr';
+      return 'ltr';
+    }
+    const probe = document.createElement('div');
+    probe.dir = 'rtl';
+    probe.style.cssText =
+      'position:absolute; top:-9999px; left:-9999px; width:100px; height:1px; overflow:auto; visibility:hidden;';
+    probe.innerHTML = '<div style="width:200px; height:1px;"></div>';
+    document.body.appendChild(probe);
+    let model: RtlModel;
+    if (probe.scrollLeft > 0) {
+      model = 'reverse';
+    } else {
+      probe.scrollLeft = -1;
+      if (probe.scrollLeft < 0) model = 'negative';
+      else model = 'default';
+    }
+    document.body.removeChild(probe);
+    rtlModelRef.current = model;
+    return model;
+  };
+
   const scrollByPage = (dir: 'prev' | 'next') => {
     const el = scrollerRef.current;
     if (!el) return;
     const delta = el.clientWidth * 0.7;
-    const isRtl = getComputedStyle(el).direction === 'rtl';
-    // In LTR, scrollLeft increases when reading forward. In modern
-    // RTL the unified spec keeps scrollLeft in [-max, 0], so going
-    // "next" (visually left, reading direction in Arabic) needs a
-    // negative delta. Older callsites assumed the browser flipped
-    // signs internally — it doesn't, so positive delta would just
-    // clamp at 0 and the arrow appeared dead.
+    const model = detectRtlModel(el);
+    // Map (direction, model) → scrollLeft delta sign. Forward in the
+    // reading order:
+    //   LTR + default-RTL: scrollLeft increases
+    //   negative-RTL + reverse-RTL: scrollLeft decreases
     const forward = dir === 'next';
-    const sign = forward ? 1 : -1;
-    const rtlSign = isRtl ? -1 : 1;
-    el.scrollBy({ left: sign * rtlSign * delta, behavior: 'smooth' });
+    const positiveForward = model === 'ltr' || model === 'default';
+    const sign = (forward ? 1 : -1) * (positiveForward ? 1 : -1);
+    const before = el.scrollLeft;
+    el.scrollBy({ left: sign * delta, behavior: 'smooth' });
+    // Defensive fallback: if the chosen sign was wrong (rare browser
+    // mismatch), the scroll position won't change. Try the opposite
+    // sign on the next frame so the click never feels dead.
+    requestAnimationFrame(() => {
+      if (el.scrollLeft === before) {
+        el.scrollBy({ left: -sign * delta, behavior: 'smooth' });
+      }
+    });
   };
 
   const showCol = (key: string) => visible.includes(key);
