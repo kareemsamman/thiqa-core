@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ChevronLeft,
   CreditCard,
+  Eye,
   FileText,
   ImageIcon,
   Pencil,
@@ -34,6 +35,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { PaymentEditDialog } from '@/components/clients/PaymentEditDialog';
+import { FilePreviewGallery } from '@/components/policies/FilePreviewGallery';
 
 export interface SettlementRow {
   id: string;
@@ -65,6 +67,10 @@ interface ConsumedCheque {
   bank_code: string | null;
   branch_code: string | null;
   cheque_image_url: string | null;
+  /** Every file attached to the cheque — payment_images rows plus the
+   *  legacy cheque_image_url, deduped. Drives the thumbnail badge and
+   *  the FilePreviewGallery opened on click. */
+  files: string[];
   payment_date: string;
   client_name: string | null;
 }
@@ -475,13 +481,28 @@ function ConsumedChequesRow({
         setLoading(false);
         return;
       }
-      const { data: pp } = await supabase
-        .from('policy_payments')
-        .select(
-          'id, amount, payment_date, cheque_number, bank_code, branch_code, cheque_image_url, policies(clients(full_name))',
-        )
-        .in('id', chequeIds);
+      const [{ data: pp }, { data: pi }] = await Promise.all([
+        supabase
+          .from('policy_payments')
+          .select(
+            'id, amount, payment_date, cheque_number, bank_code, branch_code, cheque_image_url, policies(clients(full_name))',
+          )
+          .in('id', chequeIds),
+        supabase
+          .from('payment_images')
+          .select('payment_id, image_url, sort_order')
+          .in('payment_id', chequeIds)
+          .order('sort_order', { ascending: true }),
+      ]);
       if (cancelled) return;
+      // Bucket attachments by payment_id so we can attach them to each
+      // cheque row in one pass.
+      const imagesByPaymentId = new Map<string, string[]>();
+      for (const row of (pi ?? []) as Array<{ payment_id: string; image_url: string }>) {
+        const list = imagesByPaymentId.get(row.payment_id) ?? [];
+        list.push(row.image_url);
+        imagesByPaymentId.set(row.payment_id, list);
+      }
       const rows = ((pp ?? []) as Array<{
         id: string;
         amount: number | null;
@@ -491,16 +512,31 @@ function ConsumedChequesRow({
         branch_code: string | null;
         cheque_image_url: string | null;
         policies?: { clients?: { full_name: string } | null } | null;
-      }>).map((p) => ({
-        id: p.id,
-        amount: Number(p.amount ?? 0),
-        payment_date: p.payment_date,
-        cheque_number: p.cheque_number,
-        bank_code: p.bank_code,
-        branch_code: p.branch_code,
-        cheque_image_url: p.cheque_image_url,
-        client_name: p.policies?.clients?.full_name ?? null,
-      }));
+      }>).map((p) => {
+        // Merge payment_images rows + legacy cheque_image_url, dedup
+        // because old scans tend to write the same URL into both.
+        const seen = new Set<string>();
+        const files: string[] = [];
+        for (const url of imagesByPaymentId.get(p.id) ?? []) {
+          if (seen.has(url)) continue;
+          seen.add(url);
+          files.push(url);
+        }
+        if (p.cheque_image_url && !seen.has(p.cheque_image_url)) {
+          files.push(p.cheque_image_url);
+        }
+        return {
+          id: p.id,
+          amount: Number(p.amount ?? 0),
+          payment_date: p.payment_date,
+          cheque_number: p.cheque_number,
+          bank_code: p.bank_code,
+          branch_code: p.branch_code,
+          cheque_image_url: p.cheque_image_url,
+          files,
+          client_name: p.policies?.clients?.full_name ?? null,
+        };
+      });
       setCheques(rows);
       setLoading(false);
     })();
@@ -576,90 +612,94 @@ function ConsumedChequesRow({
           ) : cheques.length === 0 ? (
             <p className="text-xs text-muted-foreground">لا توجد شيكات مرتبطة.</p>
           ) : (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {cheques.map((c) => {
                 const bank = c.bank_code ? getBank(c.bank_code) : null;
+                const amountColor =
+                  voucherKind === 'disbursement' ? 'text-orange-600' : 'text-emerald-600';
                 return (
                   <div
                     key={c.id}
-                    className="flex items-center gap-3 rounded-md border bg-card px-3 py-2 text-xs"
-                  >
-                    {c.cheque_image_url ? (
-                      <a
-                        href={c.cheque_image_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        title="فتح صورة الشيك"
-                      >
-                        <img
-                          src={c.cheque_image_url}
-                          alt="صورة الشيك"
-                          className="h-10 w-10 rounded border object-cover"
-                        />
-                      </a>
-                    ) : (
-                      <div className="h-10 w-10 rounded border bg-muted/40 flex items-center justify-center">
-                        <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
-                      </div>
+                    className={cn(
+                      'flex items-center gap-4 rounded-lg border bg-card px-3 py-2.5 text-xs shadow-sm transition',
+                      'hover:border-primary/30 hover:shadow-md',
                     )}
-                    <div className="flex flex-col gap-0.5 leading-tight min-w-[140px]">
-                      <span className="text-[10px] text-muted-foreground">رقم الشيك</span>
-                      <span className="font-mono tabular-nums text-foreground" dir="ltr">
+                  >
+                    <ConsumedChequeFiles
+                      paymentId={c.id}
+                      files={c.files}
+                      chequeNumber={c.cheque_number}
+                    />
+                    <div className="flex flex-col gap-0.5 leading-tight min-w-[150px]">
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        رقم الشيك
+                      </span>
+                      <span
+                        className="font-mono tabular-nums text-sm font-semibold text-foreground"
+                        dir="ltr"
+                      >
                         {c.cheque_number || '—'}
                       </span>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         {bank?.nameAr ?? c.bank_code ?? '—'}
                         {c.branch_code && (
-                          <span dir="ltr" className="font-mono px-1 mx-1 rounded bg-muted">
+                          <span
+                            dir="ltr"
+                            className="font-mono px-1 rounded bg-muted text-[10px]"
+                          >
                             {c.branch_code}
                           </span>
                         )}
                       </span>
                     </div>
-                    <div className="flex flex-col gap-0.5 leading-tight">
-                      <span className="text-[10px] text-muted-foreground">العميل</span>
-                      <span>{c.client_name ?? '—'}</span>
+                    <div className="hidden md:block w-px h-9 bg-border" />
+                    <div className="flex flex-col gap-0.5 leading-tight min-w-[110px]">
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        العميل
+                      </span>
+                      <span className="text-sm text-foreground">{c.client_name ?? '—'}</span>
                     </div>
+                    <div className="hidden md:block w-px h-9 bg-border" />
                     <div className="flex flex-col gap-0.5 leading-tight">
-                      <span className="text-[10px] text-muted-foreground">تاريخ الاستحقاق</span>
-                      <span>{fmtDate(c.payment_date)}</span>
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        تاريخ الاستحقاق
+                      </span>
+                      <span className="tabular-nums text-foreground">{fmtDate(c.payment_date)}</span>
                     </div>
-                    <div className="flex flex-col gap-0.5 leading-tight ms-auto">
-                      <span className="text-[10px] text-muted-foreground">المبلغ</span>
-                      <span
-                        className={cn(
-                          'font-semibold tabular-nums',
-                          voucherKind === 'disbursement' ? 'text-orange-600' : 'text-emerald-600',
-                        )}
-                      >
+                    <div className="flex flex-col items-end gap-0.5 leading-tight ms-auto">
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        المبلغ
+                      </span>
+                      <span className={cn('font-bold tabular-nums text-base', amountColor)}>
                         ₪{c.amount.toLocaleString('en-US')}
                       </span>
                     </div>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 hover:bg-slate-200/60"
-                          disabled={loadingEdit === c.id}
-                          onClick={() => openEdit(c.id)}
-                          aria-label="تعديل الشيك"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="whitespace-nowrap">تعديل</TooltipContent>
-                    </Tooltip>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 hover:bg-destructive/10"
-                          disabled={removing === c.id}
-                          aria-label="إزالة الشيك"
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    <div className="flex items-center gap-0.5 ps-2 border-s">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 hover:bg-slate-200/60"
+                            disabled={loadingEdit === c.id}
+                            onClick={() => openEdit(c.id)}
+                            aria-label="تعديل الشيك"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="whitespace-nowrap">تعديل</TooltipContent>
+                      </Tooltip>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 hover:bg-destructive/10"
+                            disabled={removing === c.id}
+                            aria-label="إزالة الشيك"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent dir="rtl">
@@ -681,6 +721,7 @@ function ConsumedChequesRow({
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                    </div>
                   </div>
                 );
               })}
@@ -703,6 +744,98 @@ function ConsumedChequesRow({
         </div>
       </TableCell>
     </TableRow>
+  );
+}
+
+// Thumbnail-with-viewer for a consumed cheque's attached files. Shows
+// the first image as a thumb (or a PDF/file icon when the first file
+// is a PDF), stacks a "+N" badge for additional files, and opens the
+// shared FilePreviewGallery so staff get zoom/download/navigation.
+function ConsumedChequeFiles({
+  paymentId,
+  files,
+  chequeNumber,
+}: {
+  paymentId: string;
+  files: string[];
+  chequeNumber: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState<string | null>(null);
+
+  const mediaFiles = files.map((url, i) => {
+    const isPdf = url.toLowerCase().endsWith('.pdf');
+    const tail = url.split('/').pop() || (isPdf ? `شيك-${chequeNumber ?? ''}.pdf` : `صورة-${i + 1}`);
+    return {
+      id: `${paymentId}-${i}`,
+      original_name: tail,
+      cdn_url: url,
+      mime_type: isPdf ? 'application/pdf' : 'image/jpeg',
+      size: 0,
+      created_at: new Date().toISOString(),
+      entity_type: null,
+    };
+  });
+  const current = mediaFiles.find((m) => m.cdn_url === currentUrl) ?? null;
+
+  if (files.length === 0) {
+    return (
+      <div
+        className="h-12 w-12 rounded-md border border-dashed bg-muted/30 flex items-center justify-center shrink-0"
+        title="لا توجد مرفقات"
+      >
+        <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
+      </div>
+    );
+  }
+
+  const first = files[0];
+  const isFirstPdf = first.toLowerCase().endsWith('.pdf');
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setCurrentUrl(first);
+          setOpen(true);
+        }}
+        className="group relative h-12 w-12 rounded-md border bg-muted overflow-hidden shrink-0 hover:ring-2 hover:ring-primary/40 transition"
+        title={files.length === 1 ? 'عرض المرفق' : `عرض ${files.length} مرفقات`}
+        aria-label="عرض مرفقات الشيك"
+      >
+        {isFirstPdf ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-rose-50">
+            <FileText className="h-5 w-5 text-rose-600" />
+          </div>
+        ) : (
+          <img
+            src={first}
+            alt={`صورة شيك ${chequeNumber ?? ''}`}
+            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+          />
+        )}
+        <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition">
+          <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition" />
+        </span>
+        {files.length > 1 && (
+          <span className="absolute -bottom-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center shadow">
+            +{files.length - 1}
+          </span>
+        )}
+      </button>
+      {open && (
+        <FilePreviewGallery
+          file={current}
+          allFiles={mediaFiles}
+          onClose={() => {
+            setOpen(false);
+            setCurrentUrl(null);
+          }}
+          onNavigate={(f) => setCurrentUrl(f.cdn_url)}
+        />
+      )}
+    </>
   );
 }
 
