@@ -33,6 +33,7 @@ import { getBank } from '@/lib/banks';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { PaymentEditDialog } from '@/components/clients/PaymentEditDialog';
 
 export interface SettlementRow {
   id: string;
@@ -46,6 +47,9 @@ export interface SettlementRow {
    *  Legacy rows that only have cheque_image_url get hydrated into a
    *  single-element array by useAccountingData on read. */
   cheque_image_urls: string[];
+  /** Length of customer_cheque_ids. Drives the "N شيكات — اضغط للعرض"
+   *  summary on the collapsed row when payment_type is customer_cheque. */
+  customer_cheque_count?: number;
   status: string;
   refused: boolean | null;
   notes: string | null;
@@ -228,11 +232,19 @@ export function SettlementsTable({
                   )}
                   {showCol('cheque_number') && (
                     <TableCell className="text-xs">
-                      <ChequeIdent
-                        chequeNumber={r.cheque_number}
-                        bankCode={r.bank_code}
-                        branchCode={r.branch_code}
-                      />
+                      {isCustomerCheque ? (
+                        <CustomerChequeSummary
+                          count={r.customer_cheque_count ?? 0}
+                          isExpanded={isExpanded}
+                          onClick={toggle}
+                        />
+                      ) : (
+                        <ChequeIdent
+                          chequeNumber={r.cheque_number}
+                          bankCode={r.bank_code}
+                          branchCode={r.branch_code}
+                        />
+                      )}
                     </TableCell>
                   )}
                   {showCol('cheque_image') && (
@@ -368,6 +380,67 @@ function ConsumedChequesRow({
   const [settlementTable, setSettlementTable] = useState<
     'company_settlements' | 'broker_settlements' | null
   >(null);
+  // Edit-cheque state — reuses PaymentEditDialog so the form matches
+  // what staff see editing a cheque from the policy timeline or the
+  // /cheques page.
+  const [editPayment, setEditPayment] = useState<PaymentEditRecord | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [loadingEdit, setLoadingEdit] = useState<string | null>(null);
+
+  const openEdit = async (chequeId: string) => {
+    setLoadingEdit(chequeId);
+    try {
+      const { data, error } = await supabase
+        .from('policy_payments')
+        .select(
+          `id, amount, payment_date, payment_type, cheque_number,
+           cheque_date, bank_code, branch_code, cheque_image_url,
+           card_last_four, refused, notes, locked, policy_id,
+           policies!policy_payments_policy_id_fkey(
+             id, policy_type_parent, policy_type_child, insurance_price
+           )`,
+        )
+        .eq('id', chequeId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) {
+        toast.error('تعذر تحميل بيانات الشيك');
+        return;
+      }
+      const raw = data as unknown as RawPaymentForEdit;
+      const policy = Array.isArray(raw.policies) ? raw.policies[0] : raw.policies;
+      setEditPayment({
+        id: raw.id,
+        amount: raw.amount,
+        payment_date: raw.payment_date,
+        payment_type: raw.payment_type,
+        cheque_number: raw.cheque_number,
+        cheque_date: raw.cheque_date,
+        bank_code: raw.bank_code,
+        branch_code: raw.branch_code,
+        cheque_image_url: raw.cheque_image_url,
+        card_last_four: raw.card_last_four,
+        refused: raw.refused,
+        notes: raw.notes,
+        locked: raw.locked,
+        policy_id: raw.policy_id,
+        policy: policy
+          ? {
+              id: policy.id,
+              policy_type_parent: policy.policy_type_parent,
+              policy_type_child: policy.policy_type_child,
+              insurance_price: policy.insurance_price,
+            }
+          : null,
+      });
+      setEditOpen(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'فشل في تحميل الشيك';
+      toast.error(message);
+    } finally {
+      setLoadingEdit(null);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -562,6 +635,21 @@ function ConsumedChequesRow({
                         ₪{c.amount.toLocaleString('en-US')}
                       </span>
                     </div>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 hover:bg-slate-200/60"
+                          disabled={loadingEdit === c.id}
+                          onClick={() => openEdit(c.id)}
+                          aria-label="تعديل الشيك"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="whitespace-nowrap">تعديل</TooltipContent>
+                    </Tooltip>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
@@ -598,9 +686,115 @@ function ConsumedChequesRow({
               })}
             </div>
           )}
+          <PaymentEditDialog
+            open={editOpen}
+            onOpenChange={(o) => {
+              setEditOpen(o);
+              if (!o) setEditPayment(null);
+            }}
+            payment={editPayment}
+            onSuccess={() => {
+              setEditOpen(false);
+              setEditPayment(null);
+              setReloadKey((k) => k + 1);
+              onChanged?.();
+            }}
+          />
         </div>
       </TableCell>
     </TableRow>
+  );
+}
+
+interface PaymentEditRecord {
+  id: string;
+  amount: number;
+  payment_date: string;
+  payment_type: string;
+  cheque_number: string | null;
+  cheque_date: string | null;
+  bank_code: string | null;
+  branch_code: string | null;
+  cheque_image_url: string | null;
+  card_last_four: string | null;
+  refused: boolean | null;
+  notes: string | null;
+  locked: boolean | null;
+  policy_id: string;
+  policy: {
+    id: string;
+    policy_type_parent: string;
+    policy_type_child?: string | null;
+    insurance_price: number;
+  } | null;
+}
+
+interface RawPaymentForEdit {
+  id: string;
+  amount: number;
+  payment_date: string;
+  payment_type: string;
+  cheque_number: string | null;
+  cheque_date: string | null;
+  bank_code: string | null;
+  branch_code: string | null;
+  cheque_image_url: string | null;
+  card_last_four: string | null;
+  refused: boolean | null;
+  notes: string | null;
+  locked: boolean | null;
+  policy_id: string;
+  policies:
+    | {
+        id: string;
+        policy_type_parent: string;
+        policy_type_child: string | null;
+        insurance_price: number;
+      }
+    | Array<{
+        id: string;
+        policy_type_parent: string;
+        policy_type_child: string | null;
+        insurance_price: number;
+      }>
+    | null;
+}
+
+// Compact summary used inside the cheque_number cell on customer_cheque
+// settlement rows. Single cheque → "1 شيك"; multiple → "N شيكات".
+// In both cases the badge is clickable and toggles the accordion so
+// the user can read every cheque number underneath.
+function CustomerChequeSummary({
+  count,
+  isExpanded,
+  onClick,
+}: {
+  count: number;
+  isExpanded: boolean;
+  onClick: () => void;
+}) {
+  if (count === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  const label = count === 1 ? 'شيك واحد' : `${count} شيكات`;
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-primary/40 bg-primary/5 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/10 transition"
+    >
+      <Wallet className="h-3 w-3" />
+      <span>{label}</span>
+      <span className="text-[10px] text-muted-foreground">
+        {isExpanded ? 'إخفاء' : 'اضغط للعرض'}
+      </span>
+      <ChevronDown
+        className={cn('h-3 w-3 transition-transform', isExpanded && 'rotate-180')}
+      />
+    </button>
   );
 }
 

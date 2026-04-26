@@ -102,6 +102,7 @@ interface RawCompanySettlement {
   branch_code: string | null;
   cheque_image_url: string | null;
   cheque_image_urls: string[] | null;
+  customer_cheque_ids: string[] | null;
   status: string;
   refused: boolean | null;
   notes: string | null;
@@ -120,6 +121,7 @@ interface RawBrokerSettlement {
   branch_code: string | null;
   cheque_image_url: string | null;
   cheque_image_urls: string[] | null;
+  customer_cheque_ids: string[] | null;
   status: string;
   refused: boolean | null;
   notes: string | null;
@@ -350,7 +352,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
       let csQuery = supabase
         .from('company_settlements')
         .select(
-          'id, settlement_date, total_amount, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, status, refused, notes, direction, company_id, insurance_companies(name, name_ar)',
+          'id, settlement_date, total_amount, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, customer_cheque_ids, status, refused, notes, direction, company_id, insurance_companies(name, name_ar)',
         )
         .order('settlement_date', { ascending: false });
       if (agentId) csQuery = csQuery.eq('agent_id', agentId);
@@ -366,6 +368,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         bank_code: s.bank_code,
         branch_code: s.branch_code,
         cheque_image_urls: hydrateChequeImages(s.cheque_image_urls, s.cheque_image_url),
+        customer_cheque_count: Array.isArray(s.customer_cheque_ids) ? s.customer_cheque_ids.length : 0,
         status: s.status,
         refused: s.refused,
         notes: s.notes,
@@ -379,7 +382,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
       let bsQuery = supabase
         .from('broker_settlements')
         .select(
-          'id, settlement_date, total_amount, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, status, refused, notes, direction, broker_id, brokers(name)',
+          'id, settlement_date, total_amount, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, customer_cheque_ids, status, refused, notes, direction, broker_id, brokers(name)',
         )
         .order('settlement_date', { ascending: false });
       if (agentId) bsQuery = bsQuery.eq('agent_id', agentId);
@@ -393,6 +396,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         bank_code: s.bank_code,
         branch_code: s.branch_code,
         cheque_image_urls: hydrateChequeImages(s.cheque_image_urls, s.cheque_image_url),
+        customer_cheque_count: Array.isArray(s.customer_cheque_ids) ? s.customer_cheque_ids.length : 0,
         status: s.status,
         refused: s.refused,
         notes: s.notes,
