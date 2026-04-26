@@ -54,6 +54,7 @@ import {
   KeyRound,
   Lock,
   Sparkles,
+  Pencil,
 } from "lucide-react";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { useAgentLimits } from "@/hooks/useAgentLimits";
@@ -78,11 +79,12 @@ interface UserProfile {
   id: string;
   email: string;
   full_name: string | null;
+  phone: string | null;
   status: 'pending' | 'active' | 'blocked' | 'plan_locked';
   created_at: string;
   updated_at: string;
   branch_id: string | null;
-  
+
 }
 
 interface UserRole {
@@ -143,6 +145,88 @@ export default function AdminUsers() {
   // Per-user permissions dialog state. Opens from the "صلاحيات" button
   // on each active-user row.
   const [permissionsUser, setPermissionsUser] = useState<UserWithRole | null>(null);
+
+  // Edit user form state — opens from the "تعديل" button on each
+  // active-user row. Lets an admin update the worker's name, phone,
+  // and (optionally) reset their password without leaving the page.
+  // Password reset goes through the update-user-password edge function
+  // because it requires service-role auth.
+  const [editUser, setEditUser] = useState<UserWithRole | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editNewPassword, setEditNewPassword] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const openEditUser = (user: UserWithRole) => {
+    setEditUser(user);
+    setEditName(user.full_name || "");
+    setEditPhone(user.phone || "");
+    setEditNewPassword("");
+  };
+
+  const closeEditUser = () => {
+    setEditUser(null);
+    setEditName("");
+    setEditPhone("");
+    setEditNewPassword("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editUser) return;
+
+    const phoneDigits = digitsOnly(editPhone.trim());
+    if (phoneDigits && phoneDigits.length !== 10) {
+      toast({ title: "خطأ", description: "رقم الهاتف يجب أن يكون 10 أرقام", variant: "destructive" });
+      return;
+    }
+    const trimmedPassword = editNewPassword.trim();
+    if (trimmedPassword && !isPasswordValid(trimmedPassword)) {
+      toast({
+        title: "كلمة مرور ضعيفة",
+        description: "كلمة المرور يجب أن تحتوي على 8 أحرف، حرف كبير، رقم، ورمز",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const trimmedName = editName.trim();
+      const nameChanged = (trimmedName || null) !== (editUser.full_name || null);
+      const phoneChanged = (phoneDigits || null) !== (editUser.phone || null);
+
+      if (nameChanged || phoneChanged) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            full_name: trimmedName || null,
+            phone: phoneDigits || null,
+          })
+          .eq('id', editUser.id);
+        if (error) throw error;
+      }
+
+      if (trimmedPassword) {
+        const { data, error } = await supabase.functions.invoke('update-user-password', {
+          body: { user_id: editUser.id, new_password: trimmedPassword },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+      }
+
+      toast({ title: "تم الحفظ", description: "تم تحديث بيانات المستخدم بنجاح" });
+      closeEditUser();
+      fetchUsers();
+    } catch (err: unknown) {
+      toast({
+        title: "خطأ",
+        description: err instanceof Error ? err.message : "فشل في حفظ التعديلات",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   // Create user form state
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
@@ -241,7 +325,7 @@ export default function AdminUsers() {
 
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, email, full_name, status, created_at, updated_at, branch_id')
+        .select('id, email, full_name, phone, status, created_at, updated_at, branch_id')
         .eq('agent_id', agentId)
         .order('created_at', { ascending: false });
 
@@ -919,6 +1003,17 @@ export default function AdminUsers() {
                               <Button
                                 size="sm"
                                 variant="outline"
+                                onClick={() => openEditUser(user)}
+                                className="gap-1"
+                                title="تعديل بيانات المستخدم"
+                                disabled={actionLoading === user.id}
+                              >
+                                <Pencil className="h-4 w-4" />
+                                تعديل
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 onClick={() => setPermissionsUser(user)}
                                 className="gap-1"
                                 title="تعديل صلاحيات المستخدم"
@@ -1106,6 +1201,64 @@ export default function AdminUsers() {
         onOpenChange={(open) => !open && setPermissionsUser(null)}
         onSaved={fetchUsers}
       />
+
+      {/* Edit User Sheet */}
+      <Sheet open={!!editUser} onOpenChange={(open) => !open && !savingEdit && closeEditUser()}>
+        <SheetContent side="left" className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>تعديل بيانات المستخدم</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-4 mt-6">
+            <div className="space-y-2">
+              <Label>البريد الإلكتروني</Label>
+              <Input value={editUser?.email || ''} disabled dir="ltr" />
+            </div>
+            <div className="space-y-2">
+              <Label>الاسم الكامل</Label>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="مثال: أحمد محمد"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>الهاتف</Label>
+              <Input
+                value={editPhone}
+                onChange={(e) => setEditPhone(digitsOnly(e.target.value).slice(0, 10))}
+                placeholder="0501234567"
+                dir="ltr"
+                inputMode="numeric"
+                maxLength={10}
+              />
+              <p className="text-xs text-muted-foreground">10 أرقام بدون رموز أو مسافات</p>
+            </div>
+            <div className="space-y-2 pt-2 border-t">
+              <Label>كلمة مرور جديدة</Label>
+              <Input
+                value={editNewPassword}
+                onChange={(e) => setEditNewPassword(e.target.value)}
+                placeholder="اتركه فارغاً للإبقاء على كلمة المرور الحالية"
+                dir="ltr"
+                type="password"
+                autoComplete="new-password"
+              />
+              <p className="text-xs text-muted-foreground">
+                إذا أردت تغيير كلمة المرور، يجب أن تحتوي على 8 أحرف، حرف كبير، رقم، ورمز
+              </p>
+            </div>
+            <div className="flex gap-2 pt-4">
+              <Button onClick={handleSaveEdit} disabled={savingEdit} className="flex-1">
+                {savingEdit ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+                حفظ التعديلات
+              </Button>
+              <Button variant="outline" onClick={closeEditUser} disabled={savingEdit}>
+                إلغاء
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Create User Sheet */}
       <Sheet open={createSheetOpen} onOpenChange={setCreateSheetOpen}>

@@ -47,13 +47,15 @@ export function LockedBranchSelect({
   const { loading: limitsLoading, branches: branchLimit } = useAgentLimits();
   const { showUpgradePrompt } = useUpgradePrompt();
 
-  // Lock while any plan data is still loading so the Select doesn't
-  // render briefly as unlocked before the limit check kicks in. Once
+  // While plan data is still loading, render a disabled Select — no
+  // lock styling, no upgrade prompt. We don't yet know whether this
+  // agent is single-branch or not, so flashing the amber lock would
+  // mislead any agent who's actually on a multi-branch plan. Once
   // loaded, lock only when the plan caps branches at exactly 1.
   // Thiqa super admins always pass.
   const stillLoading = contextLoading || limitsLoading;
   const locked =
-    !isThiqaSuperAdmin && (stillLoading || branchLimit.effective === 1);
+    !stillLoading && !isThiqaSuperAdmin && branchLimit.effective === 1;
 
   if (locked) {
     const selected =
@@ -95,7 +97,7 @@ export function LockedBranchSelect({
   }
 
   return (
-    <Select value={value || ''} onValueChange={onValueChange} disabled={disabled}>
+    <Select value={value || ''} onValueChange={onValueChange} disabled={disabled || stillLoading}>
       <SelectTrigger className={triggerClassName}>
         <SelectValue placeholder={placeholder || 'اختر الفرع'} />
       </SelectTrigger>
