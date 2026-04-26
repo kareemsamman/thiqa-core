@@ -130,20 +130,40 @@ export function CompanyIssuancesTable({
   const safePage = Math.min(page, totalPages);
   const paged = rows.slice((safePage - 1) * pageSize, safePage * pageSize);
 
+  // The shadcn <Table> component nests the actual <table> inside its
+  // own div.overflow-x-auto. That nested div ends up being the real
+  // scroll container — `scrollerRef` (the StickyHorizontalScroll
+  // bottom) has nothing to scroll because the table wrapper is w-full.
+  // Descend to whatever child actually overflows so both edge
+  // detection and the arrow buttons target the right element.
+  const findRealScroller = (root: HTMLElement | null): HTMLElement | null => {
+    if (!root) return null;
+    if (root.scrollWidth > root.clientWidth + 1) return root;
+    const queue: HTMLElement[] = Array.from(root.children) as HTMLElement[];
+    while (queue.length) {
+      const node = queue.shift()!;
+      if (node.scrollWidth > node.clientWidth + 1) return node;
+      queue.push(...(Array.from(node.children) as HTMLElement[]));
+    }
+    return root;
+  };
+
   useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
+    const outer = scrollerRef.current;
+    if (!outer) return;
     let raf = 0;
+    let bound: HTMLElement | null = null;
     const update = () => {
+      const el = findRealScroller(outer);
+      bound = el;
+      if (!el) {
+        setScrollEdges({ atStart: true, atEnd: true });
+        return;
+      }
       // Direction-agnostic edge detection using bounding rects. Works
       // for LTR, modern RTL, "reverse" RTL, and "default" RTL — none
       // of which agree on what scrollLeft means at the edges, but all
       // agree that DOMRects describe pixels on screen.
-      // atStart = "no content past the right viewport edge"  → the
-      //           right arrow (which reveals right-hidden content) is
-      //           disabled.
-      // atEnd   = "no content past the left viewport edge"   → the
-      //           left arrow is disabled.
       const max = el.scrollWidth - el.clientWidth;
       if (max <= 0) {
         setScrollEdges({ atStart: true, atEnd: true });
@@ -161,7 +181,8 @@ export function CompanyIssuancesTable({
         setScrollEdges({ atStart: true, atEnd: true });
         return;
       }
-      // 1px slack for sub-pixel rendering.
+      // atStart = "no content past the right viewport edge" → right
+      //           arrow disabled. atEnd = same on the left.
       setScrollEdges({
         atStart: maxRight <= cr.right + 1,
         atEnd: minLeft >= cr.left - 1,
@@ -169,16 +190,24 @@ export function CompanyIssuancesTable({
     };
     const schedule = () => {
       cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(update);
+      raf = requestAnimationFrame(() => {
+        update();
+        // Rebind the scroll listener if the actual scroll element
+        // changed (DOM mutations can swap which node carries the
+        // overflow).
+        if (bound) {
+          bound.removeEventListener('scroll', schedule);
+          bound.addEventListener('scroll', schedule, { passive: true });
+        }
+      });
     };
     schedule();
-    el.addEventListener('scroll', update, { passive: true });
     const obs = new ResizeObserver(schedule);
-    obs.observe(el);
-    Array.from(el.children).forEach((c) => obs.observe(c));
+    obs.observe(outer);
+    Array.from(outer.children).forEach((c) => obs.observe(c));
     return () => {
       cancelAnimationFrame(raf);
-      el.removeEventListener('scroll', update);
+      if (bound) bound.removeEventListener('scroll', schedule);
       obs.disconnect();
     };
   }, [paged.length, visible.length]);
@@ -218,7 +247,7 @@ export function CompanyIssuancesTable({
   };
 
   const scrollByPage = (dir: 'prev' | 'next') => {
-    const el = scrollerRef.current;
+    const el = findRealScroller(scrollerRef.current);
     if (!el) return;
     const delta = el.clientWidth * 0.7;
     const model = detectRtlModel(el);
