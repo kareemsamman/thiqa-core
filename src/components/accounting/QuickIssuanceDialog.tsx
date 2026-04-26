@@ -154,6 +154,12 @@ export function QuickIssuanceDialog({
 
     setSaving(true);
     try {
+      // Stamp the creator so the policy reports page can show "أنشأ"
+      // — without it, manual issuances came in with NULL
+      // created_by_admin_id and the report column rendered "-" for
+      // every row added through this dialog.
+      const { data: { user } } = await supabase.auth.getUser();
+
       const insertPayload: Record<string, unknown> = {
         company_id: form.company_id || null,
         broker_id: form.broker_id || null,
@@ -175,6 +181,7 @@ export function QuickIssuanceDialog({
           : 0,
         notes: form.notes || null,
         cancelled: form.mode === 'return',
+        created_by_admin_id: user?.id ?? null,
       };
 
       const { error } = await supabase.from('policies').insert(insertPayload as never);
