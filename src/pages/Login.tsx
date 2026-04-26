@@ -113,6 +113,13 @@ export default function Login() {
   const navigate = useNavigate();
   const { user, isActive, isSuperAdmin, loading: authLoading, refreshProfile } = useAuth();
   const { refetchAgentContext } = useAgentContext();
+  // Tracks the user.id we've already redirected for. The login useEffect
+  // depends on user / isActive / isSuperAdmin / authLoading, all of which
+  // change *during* checkAndSetupUser (refreshProfile flips isAdmin →
+  // isActive). Without this guard the effect re-fires after setup, the
+  // OAuth branch is skipped because profile.agent_id now exists, and
+  // the fall-through navigates to "/" → Landing fallback → /subscription.
+  const handledUserIdRef = useRef<string | null>(null);
 
   const location = useLocation();
 
@@ -192,6 +199,13 @@ export default function Login() {
         navigate('/thiqa', { replace: true });
         return;
       }
+
+      // Guard: only run the redirect/setup flow once per user. If the
+      // OAuth setup races flip isActive mid-flight, the effect would
+      // otherwise re-enter and fall through to navigate("/"), which
+      // bounces to /subscription via Landing's fallback.
+      if (handledUserIdRef.current === user.id) return;
+      handledUserIdRef.current = user.id;
 
       const checkAndSetupUser = async () => {
         try {
