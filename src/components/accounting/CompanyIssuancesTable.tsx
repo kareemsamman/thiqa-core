@@ -133,20 +133,40 @@ export function CompanyIssuancesTable({
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
+    let raf = 0;
     const update = () => {
-      const distance = Math.abs(el.scrollLeft);
+      const isRtl = getComputedStyle(el).direction === 'rtl';
+      const sl = el.scrollLeft;
       const max = el.scrollWidth - el.clientWidth;
-      setScrollEdges({
-        atStart: distance < 1,
-        atEnd: max <= 0 || distance >= max - 1,
-      });
+      if (max <= 0) {
+        // No horizontal overflow yet — likely the table hasn't laid
+        // out. Mark both edges true so the arrows hide instead of
+        // showing as enabled-but-broken.
+        setScrollEdges({ atStart: true, atEnd: true });
+        return;
+      }
+      // Modern RTL spec: scrollLeft is 0 at the right edge (start in
+      // RTL reading direction) and -max at the left edge (end). LTR
+      // is the familiar 0..+max.
+      const atStart = isRtl ? sl >= -1 : sl <= 1;
+      const atEnd = isRtl ? sl <= -(max - 1) : sl >= max - 1;
+      setScrollEdges({ atStart, atEnd });
     };
-    update();
+    // Defer to the next frame so the measurement happens after the
+    // table layout has settled — without this, the first run during
+    // mount sees scrollWidth === clientWidth and disables both arrows
+    // even when content actually overflows.
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(update);
+    };
+    schedule();
     el.addEventListener('scroll', update, { passive: true });
-    const obs = new ResizeObserver(update);
+    const obs = new ResizeObserver(schedule);
     obs.observe(el);
     Array.from(el.children).forEach((c) => obs.observe(c));
     return () => {
+      cancelAnimationFrame(raf);
       el.removeEventListener('scroll', update);
       obs.disconnect();
     };
@@ -156,9 +176,17 @@ export function CompanyIssuancesTable({
     const el = scrollerRef.current;
     if (!el) return;
     const delta = el.clientWidth * 0.7;
-    // `prev` jumps the visible content one screen back, `next` one
-    // forward — browser handles the LTR/RTL sign mapping internally.
-    el.scrollBy({ left: dir === 'prev' ? -delta : delta, behavior: 'smooth' });
+    const isRtl = getComputedStyle(el).direction === 'rtl';
+    // In LTR, scrollLeft increases when reading forward. In modern
+    // RTL the unified spec keeps scrollLeft in [-max, 0], so going
+    // "next" (visually left, reading direction in Arabic) needs a
+    // negative delta. Older callsites assumed the browser flipped
+    // signs internally — it doesn't, so positive delta would just
+    // clamp at 0 and the arrow appeared dead.
+    const forward = dir === 'next';
+    const sign = forward ? 1 : -1;
+    const rtlSign = isRtl ? -1 : 1;
+    el.scrollBy({ left: sign * rtlSign * delta, behavior: 'smooth' });
   };
 
   const showCol = (key: string) => visible.includes(key);

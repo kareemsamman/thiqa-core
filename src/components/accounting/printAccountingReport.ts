@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { IssuanceRow } from './accountingTypes';
 import type { SettlementRow } from './SettlementsTable';
-import { POLICY_TYPE_DISPLAY, PAYMENT_METHOD_LABELS } from './accountingTypes';
+import { policyTypeLabel, PAYMENT_METHOD_LABELS } from './accountingTypes';
 
 type StatTone = 'primary' | 'destructive' | 'success' | 'amber' | 'emerald';
 
@@ -129,13 +129,12 @@ const SETTLEMENT_COLUMNS: ReportPayload['columns'] = [
 function issuanceRows(rows: IssuanceRow[]): ReportPayload['rows'] {
   return rows.map((r, i) => {
     const main = r.main;
-    const company = main.company_name ?? '';
     return {
       idx: i + 1,
       document_number: r.document_number ?? '',
       client_name: r.client_name ?? '',
-      company_name: company,
-      policy_type: POLICY_TYPE_DISPLAY[main.policy_type_parent] ?? main.policy_type_parent ?? '',
+      company_name: main.company_name ?? '',
+      policy_type: policyTypeLabel(main.policy_type_parent, main.policy_type_child),
       issue_date: fmtDate(main.issue_date ?? main.start_date),
       insurance_price: fmtMoney(r.insurance_price),
       payed_for_company: fmtMoney(r.payed_for_company),
@@ -148,13 +147,12 @@ function issuanceRows(rows: IssuanceRow[]): ReportPayload['rows'] {
 function brokerIssuanceRows(rows: IssuanceRow[]): ReportPayload['rows'] {
   return rows.map((r, i) => {
     const main = r.main;
-    const company = main.company_name ?? '';
     return {
       idx: i + 1,
       document_number: r.document_number ?? '',
       client_name: r.client_name ?? '',
-      company_name: company,
-      policy_type: POLICY_TYPE_DISPLAY[main.policy_type_parent] ?? main.policy_type_parent ?? '',
+      company_name: main.company_name ?? '',
+      policy_type: policyTypeLabel(main.policy_type_parent, main.policy_type_child),
       issue_date: fmtDate(main.issue_date ?? main.start_date),
       broker_buy_price: fmtMoney(r.broker_buy_price),
       insurance_price: fmtMoney(r.insurance_price),
