@@ -63,7 +63,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check if an agent already exists with this email (e.g. created by super admin)
+    // Look up any existing agent with this email. We only attach the
+    // new Google user to it if it was pre-created by a super admin
+    // (no agent_users row yet) — otherwise the email already belongs
+    // to a real tenant and signing in with Google would silently
+    // hijack it. register-agent aborts in the same situation; this
+    // path now mirrors that behavior.
     const { data: existingAgent } = await adminClient
       .from("agents")
       .select("id")
@@ -73,9 +78,24 @@ Deno.serve(async (req) => {
     let agentId: string;
 
     if (existingAgent) {
+      const { count: ownerCount } = await adminClient
+        .from("agent_users")
+        .select("user_id", { count: "exact", head: true })
+        .eq("agent_id", existingAgent.id);
+
+      if ((ownerCount ?? 0) > 0) {
+        return new Response(
+          JSON.stringify({
+            error: "هذا البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول.",
+          }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       agentId = existingAgent.id;
     } else {
-      // Create new agent with 35-day free trial
+      // Brand-new tenant — match the manual signup path (free_trial
+      // plan + 35-day trial markers) so useAgentContext.isTrial picks
+      // them up correctly and the right feature flags get seeded.
       const trialEnd = new Date();
       trialEnd.setDate(trialEnd.getDate() + 35);
 
@@ -85,9 +105,10 @@ Deno.serve(async (req) => {
           name: fullName,
           name_ar: fullName,
           email: userEmail,
-          plan: "basic",
-          subscription_status: "active",
-          subscription_expires_at: trialEnd.toISOString(),
+          plan: "free_trial",
+          subscription_status: "trial",
+          trial_ends_at: trialEnd.toISOString(),
+          subscription_started_at: new Date().toISOString(),
           monthly_price: 0,
         })
         .select("id")
