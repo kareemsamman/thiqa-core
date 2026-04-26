@@ -841,17 +841,26 @@ export default function Receipts() {
       }
       if (searchQuery) filterBits.push(`بحث: "${searchQuery}"`);
 
-      const rows = receipts.map((r, i) => ({
-        idx: i + 1,
-        receipt_number: r.receipt_number ?? "",
-        receipt_date: formatDate(r.receipt_date),
-        client_name: r.client_name,
-        car_number: r.car_number ?? "",
-        payment_method: paymentLabelShort(r.payment_method),
-        cheque_number: r.cheque_number ?? "",
-        notes: r.notes ?? "",
-        amount: fmtMoney(r.amount),
-      }));
+      const rows = receipts.map((r, i) => {
+        // PostgREST may shape the FK join as object or single-element
+        // array depending on server version, so normalize.
+        const rawPolicy = (r as { policy?: unknown }).policy;
+        const policy = Array.isArray(rawPolicy)
+          ? (rawPolicy[0] as { document_number?: string | null } | undefined)
+          : (rawPolicy as { document_number?: string | null } | null | undefined);
+        return {
+          idx: i + 1,
+          document_number: policy?.document_number ?? "",
+          receipt_number: r.receipt_number ?? "",
+          receipt_date: formatDate(r.receipt_date),
+          client_name: r.client_name,
+          car_number: r.car_number ?? "",
+          payment_method: paymentLabelShort(r.payment_method),
+          cheque_number: r.cheque_number ?? "",
+          notes: r.notes ?? "",
+          amount: fmtMoney(r.amount),
+        };
+      });
 
       await printAccountingReport({
         title: "تقرير الإيصالات",
@@ -865,6 +874,7 @@ export default function Receipts() {
         ],
         columns: [
           { key: "idx", label: "#", align: "center" },
+          { key: "document_number", label: "رقم المعاملة", align: "right" },
           { key: "receipt_number", label: "رقم السند", align: "right" },
           { key: "receipt_date", label: "التاريخ", align: "right" },
           { key: "client_name", label: "العميل", align: "right" },
