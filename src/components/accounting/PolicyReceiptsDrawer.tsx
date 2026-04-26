@@ -1,13 +1,26 @@
 import { useEffect, useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Banknote, FileText, Building, CreditCard, Wallet, type LucideIcon } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Banknote,
+  Building,
+  CreditCard,
+  FileText,
+  Loader2,
+  Printer,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { format } from 'date-fns';
 
 interface Receipt {
   id: string;
+  receipt_number: string | null;
   amount: number;
   payment_date: string;
   payment_type: string;
@@ -45,6 +58,9 @@ export function PolicyReceiptsDrawer({
 }: Props) {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(false);
+  // `printingId` is the receipt id (or 'all') currently being generated,
+  // so we can disable + show a spinner only on the row that's active.
+  const [printingId, setPrintingId] = useState<string | null>(null);
 
   // Re-fetch only when the *set* of ids changes, not on every render.
   const idsKey = policyIds.join(',');
@@ -55,7 +71,7 @@ export function PolicyReceiptsDrawer({
     (async () => {
       const { data } = await supabase
         .from('policy_payments')
-        .select('id, amount, payment_date, payment_type, cheque_number, refused, notes')
+        .select('id, receipt_number, amount, payment_date, payment_type, cheque_number, refused, notes')
         .in('policy_id', policyIds)
         .order('payment_date', { ascending: false });
       if (!cancelled) {
@@ -73,9 +89,52 @@ export function PolicyReceiptsDrawer({
     .filter((r) => !r.refused)
     .reduce((sum, r) => sum + Number(r.amount || 0), 0);
 
+  // Calls the same edge function the client-details payment row uses,
+  // so the printed سند is identical regardless of which surface kicked
+  // it off. Bulk endpoint is used when more than one receipt is on the
+  // policy so staff can print everything in one shot.
+  const handlePrint = async (paymentId: string) => {
+    setPrintingId(paymentId);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-payment-receipt', {
+        body: { payment_id: paymentId },
+      });
+      if (error) throw error;
+      const url = data?.receipt_url;
+      if (url) window.open(url, '_blank');
+      else toast.error('لم يتم العثور على رابط السند');
+    } catch (e) {
+      console.error('Print receipt error:', e);
+      toast.error('فشل في توليد السند');
+    } finally {
+      setPrintingId(null);
+    }
+  };
+
+  const handlePrintAll = async () => {
+    if (receipts.length === 0) return;
+    setPrintingId('all');
+    try {
+      const ids = receipts.map((r) => r.id);
+      const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
+        body: { payment_ids: ids },
+      });
+      if (error) throw error;
+      const url = data?.receipt_url;
+      if (url) window.open(url, '_blank');
+      else toast.error('لم يتم العثور على رابط السندات');
+    } catch (e) {
+      console.error('Print all receipts error:', e);
+      toast.error('فشل في توليد السندات');
+    } finally {
+      setPrintingId(null);
+    }
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" dir="rtl" className="w-full sm:max-w-md overflow-y-auto">
+        <TooltipProvider delayDuration={200}>
         <SheetHeader className="space-y-1 text-right">
           <SheetTitle>سندات القبض</SheetTitle>
           <p className="text-xs text-muted-foreground">
@@ -93,18 +152,36 @@ export function PolicyReceiptsDrawer({
             </div>
           ) : (
             <>
-              <div className="rounded-lg border bg-muted/30 px-4 py-3 flex items-center justify-between">
+              <div className="rounded-lg border bg-muted/30 px-4 py-3 flex items-center justify-between gap-3">
                 <span className="text-sm text-muted-foreground">
                   {receipts.length} سند {receipts.some((r) => r.refused) ? '(تشمل مرفوضة)' : ''}
                 </span>
-                <span className="text-lg font-bold tabular-nums">
-                  ₪{total.toLocaleString('en-US')}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold tabular-nums">
+                    ₪{total.toLocaleString('en-US')}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1.5"
+                    disabled={printingId === 'all'}
+                    onClick={handlePrintAll}
+                  >
+                    {printingId === 'all' ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Printer className="h-3.5 w-3.5" />
+                    )}
+                    طباعة الكل
+                  </Button>
+                </div>
               </div>
 
               {receipts.map((r) => {
                 const meta = PAYMENT_TYPE_META[r.payment_type] ?? PAYMENT_TYPE_META.cash;
                 const Icon = meta.Icon;
+                const isPrinting = printingId === r.id;
                 return (
                   <div
                     key={r.id}
@@ -120,7 +197,16 @@ export function PolicyReceiptsDrawer({
                           ₪{Number(r.amount).toLocaleString('en-US')}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
+                        {r.receipt_number && (
+                          <span
+                            className="font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary tabular-nums"
+                            dir="ltr"
+                            title="رقم السند"
+                          >
+                            {r.receipt_number}
+                          </span>
+                        )}
                         <span>{format(new Date(r.payment_date), 'dd/MM/yyyy')}</span>
                         {r.cheque_number && <span>#{r.cheque_number}</span>}
                         {r.refused && (
@@ -133,12 +219,35 @@ export function PolicyReceiptsDrawer({
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.notes}</p>
                       )}
                     </div>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 shrink-0"
+                          disabled={isPrinting}
+                          onClick={() => handlePrint(r.id)}
+                          aria-label="طباعة السند"
+                        >
+                          {isPrinting ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Printer className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="whitespace-nowrap">
+                        طباعة السند
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                 );
               })}
             </>
           )}
         </div>
+        </TooltipProvider>
       </SheetContent>
     </Sheet>
   );
