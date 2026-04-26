@@ -149,37 +149,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
-    
+    // Track which auth user we've already loaded the profile for. Used
+    // to suppress the redundant profile refetch that supabase fires on
+    // every TOKEN_REFRESHED — those events arrive whenever the tab
+    // regains visibility (or every ~1h on a long-lived tab) and have
+    // the same user.id we already have in state. Without this guard,
+    // every Alt-Tab back into the app sets profileLoading=true, every
+    // dependent useEffect re-runs, in-flight forms get unmounted, and
+    // the app flashes its loading screen while the user's local state
+    // disappears.
+    let loadedUserId: string | null = null;
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (!isMounted) return;
 
-        setSession(session);
-        setUser(session?.user ?? null);
+        const nextUser = session?.user ?? null;
+        const sameUser = nextUser?.id && nextUser.id === loadedUserId;
 
-        if (session?.user && (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY')) {
+        // Always keep session fresh (the access_token rotated) but
+        // only swap out the user object reference when identity
+        // actually changed. Holding a stable reference keeps every
+        // downstream useEffect that depends on `user` from re-running
+        // on token refreshes.
+        setSession(session);
+        if (!sameUser) {
+          setUser(nextUser);
+        }
+
+        if (nextUser && (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY')) {
           sessionStorage.setItem(SESSION_KEY, 'true');
         }
 
-        // Defer profile fetch with setTimeout to avoid deadlock
-        if (session?.user) {
+        // TOKEN_REFRESHED for the same user: nothing to load. Profile,
+        // role, branch, etc. are already in state.
+        if (event === 'TOKEN_REFRESHED' && sameUser) {
+          setLoading(false);
+          return;
+        }
+
+        if (nextUser) {
+          loadedUserId = nextUser.id;
+          // Defer profile fetch with setTimeout to avoid deadlock
           setTimeout(() => {
             if (isMounted) {
-              fetchUserProfile(session.user.id, session.user.email).then(p => {
+              fetchUserProfile(nextUser.id, nextUser.email).then(p => {
                 if (isMounted) setProfile(p);
               });
             }
           }, 0);
         } else {
+          loadedUserId = null;
           setProfile(null);
           setIsAdmin(false);
           setIsSuperAdmin(false);
           setBranchName(null);
           setProfileLoading(false);
-
-          // No hard redirect needed — ProtectedRoute handles navigation
-          // when user becomes null (both same-tab and cross-tab logouts)
         }
 
         setLoading(false);
@@ -189,18 +215,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // THEN check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return;
-      
+
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
+        loadedUserId = session.user.id;
         fetchUserProfile(session.user.id, session.user.email).then(p => {
           if (isMounted) setProfile(p);
         });
       } else {
         setProfileLoading(false);
       }
-      
+
       setLoading(false);
     });
 
