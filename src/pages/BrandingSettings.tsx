@@ -39,8 +39,28 @@ function ImageUploadField({
 
     setUploading(true);
     try {
+      // The branding bucket's RLS policy requires uploads to live
+      // under the caller's `{agent_id}/...` folder, so we resolve the
+      // current user's agent_id first and use it as the path prefix.
+      // Without this, every upload returns "new row violates row-level
+      // security policy" and the toast just says "failed to upload".
+      const { data: { user } } = await supabase.auth.getUser();
+      let agentId: string | null = null;
+      if (user) {
+        const { data: au } = await supabase
+          .from("agent_users")
+          .select("agent_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        agentId = au?.agent_id ?? null;
+      }
+      if (!agentId) {
+        toast.error("تعذر تحديد الوكالة. حاول إعادة تسجيل الدخول.");
+        return;
+      }
+
       const ext = file.name.split(".").pop();
-      const path = `${crypto.randomUUID()}.${ext}`;
+      const path = `${agentId}/${crypto.randomUUID()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from("branding")
