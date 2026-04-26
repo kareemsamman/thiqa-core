@@ -72,6 +72,7 @@ import {
   type ReceiptGroupView,
   type ReceiptRow,
 } from "@/components/receipts/ReceiptGroupDetailsDialog";
+import { printAccountingReport } from "@/components/accounting/printAccountingReport";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -813,6 +814,75 @@ export default function Receipts() {
     [receipts]
   );
 
+  // ─── Print all (active filter set) ─────────────────────────────
+  //
+  // Builds the same accounting-style branded report used on /accounting
+  // — agent logo, KPI strip, zebra-striped table — out of whatever the
+  // user can currently see (filtered + searched). Calls the shared
+  // generate-accounting-report edge function so the design and pipeline
+  // match exactly.
+
+  const [printingAll, setPrintingAll] = useState(false);
+  const handlePrintAll = async () => {
+    setPrintingAll(true);
+    try {
+      const fmtMoney = (n: number) =>
+        `₪${Math.round(n).toLocaleString("en-US")}`;
+      const cashTotal = receipts.filter((r) => r.payment_method === "cash").reduce((s, r) => s + r.amount, 0);
+      const chequeTotal = receipts.filter((r) => r.payment_method === "cheque").reduce((s, r) => s + r.amount, 0);
+      const otherTotal = receipts
+        .filter((r) => r.payment_method !== "cash" && r.payment_method !== "cheque")
+        .reduce((s, r) => s + r.amount, 0);
+
+      const filterBits: string[] = [];
+      if (dateFrom || dateTo) filterBits.push(`التاريخ: ${dateFrom || "—"} → ${dateTo || "—"}`);
+      if (paymentMethodFilter !== "all") {
+        filterBits.push(`طريقة الدفع: ${paymentLabelShort(paymentMethodFilter)}`);
+      }
+      if (searchQuery) filterBits.push(`بحث: "${searchQuery}"`);
+
+      const rows = receipts.map((r, i) => ({
+        idx: i + 1,
+        receipt_number: r.receipt_number ?? "",
+        receipt_date: formatDate(r.receipt_date),
+        client_name: r.client_name,
+        car_number: r.car_number ?? "",
+        payment_method: paymentLabelShort(r.payment_method),
+        cheque_number: r.cheque_number ?? "",
+        notes: r.notes ?? "",
+        amount: fmtMoney(r.amount),
+      }));
+
+      await printAccountingReport({
+        title: "تقرير الإيصالات",
+        subtitle: filterBits.length > 0 ? filterBits.join(" · ") : undefined,
+        stats: [
+          { label: "عدد الإيصالات", value: String(receipts.length), tone: "primary" },
+          { label: "المجموع", value: fmtMoney(totalAmount), tone: "emerald" },
+          { label: "نقدي", value: fmtMoney(cashTotal), tone: "success" },
+          { label: "شيك", value: fmtMoney(chequeTotal), tone: "amber" },
+          { label: "تحويل / فيزا", value: fmtMoney(otherTotal), tone: "primary" },
+        ],
+        columns: [
+          { key: "idx", label: "#", align: "center" },
+          { key: "receipt_number", label: "رقم السند", align: "right" },
+          { key: "receipt_date", label: "التاريخ", align: "right" },
+          { key: "client_name", label: "العميل", align: "right" },
+          { key: "car_number", label: "رقم السيارة", align: "right" },
+          { key: "payment_method", label: "طريقة الدفع", align: "right" },
+          { key: "cheque_number", label: "رقم الشيك", align: "right" },
+          { key: "notes", label: "ملاحظات", align: "right" },
+          { key: "amount", label: "المبلغ", align: "right" },
+        ],
+        rows,
+        total_key: "amount",
+        total_label: "إجمالي الإيصالات",
+      });
+    } finally {
+      setPrintingAll(false);
+    }
+  };
+
   // ─── Render ────────────────────────────────────────────────────
 
   return (
@@ -833,6 +903,21 @@ export default function Receipts() {
             >
               <Plus className="h-4 w-4" />
               إضافة إيصال
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              disabled={printingAll || loading || receipts.length === 0}
+              onClick={handlePrintAll}
+              title="طباعة كل الإيصالات حسب الفلتر الحالي"
+            >
+              {printingAll ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Printer className="h-4 w-4" />
+              )}
+              طباعة الكل
             </Button>
           </div>
 
