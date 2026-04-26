@@ -189,7 +189,14 @@ Deno.serve(async (req) => {
       const { data: smtpRows } = await adminClient
         .from("thiqa_platform_settings")
         .select("setting_key, setting_value")
-        .in("setting_key", ["smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_sender_name"]);
+        .in("setting_key", [
+          "smtp_host",
+          "smtp_port",
+          "smtp_user",
+          "smtp_password",
+          "smtp_sender_name",
+          "new_agent_notification_email",
+        ]);
 
       const smtp: Record<string, string> = {};
       (smtpRows || []).forEach((r: any) => { smtp[r.setting_key] = r.setting_value || ""; });
@@ -224,14 +231,12 @@ Deno.serve(async (req) => {
           html: htmlContent,
         });
 
-        const { data: superAdmins } = await adminClient
-          .from("thiqa_super_admins")
-          .select("email");
-        const adminEmails = (superAdmins || [])
-          .map((sa: any) => sa.email)
-          .filter((e: string) => e && e.includes("@"));
-
-        if (adminEmails.length > 0) {
+        // Notification recipient is the dedicated support mailbox
+        // pulled from thiqa_platform_settings, not the platform-admin
+        // list. Keeps "who logs in as super admin" decoupled from
+        // "who gets new-agent emails".
+        const notifyEmail = (smtp.new_agent_notification_email || "").trim();
+        if (notifyEmail.includes("@")) {
           const adminHtml = buildEmailHtml({
             body: newAgentAdminNotifyBody(fullName, userEmail, null),
             footerText: "إشعار تلقائي من منصة ثقة للتأمين.",
@@ -239,7 +244,7 @@ Deno.serve(async (req) => {
 
           await transporter.sendMail({
             from: `"${smtp.smtp_sender_name || "Thiqa Insurance"}" <${smtpUser}>`,
-            to: adminEmails.join(","),
+            to: notifyEmail,
             subject: "=?UTF-8?B?" + btoa(unescape(encodeURIComponent("وكيل جديد سجّل في المنصة (Google) 🆕"))) + "?=",
             text: `وكيل جديد: ${fullName} - ${userEmail} (تسجيل عبر Google)`,
             html: adminHtml,
