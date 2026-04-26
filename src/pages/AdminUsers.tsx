@@ -398,12 +398,16 @@ export default function AdminUsers() {
   const handleBlockUser = async (userId: string) => {
     setActionLoading(userId);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .update({ status: 'blocked' })
-        .eq('id', userId);
+        .eq('id', userId)
+        .select('id');
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('لم يتم تحديث الحالة. تأكد من صلاحياتك.');
+      }
 
       toast({
         title: "تم الحظر",
@@ -435,12 +439,20 @@ export default function AdminUsers() {
     }
     setActionLoading(userId);
     try {
-      const { error } = await supabase
+      // Select the updated row back so we can detect when RLS silently
+      // filters the update to zero rows — Supabase doesn't return an
+      // error in that case, and without this check the UI would lie
+      // and show a success toast.
+      const { data, error } = await supabase
         .from('profiles')
         .update({ status: 'active' })
-        .eq('id', userId);
+        .eq('id', userId)
+        .select('id');
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('لم يتم تحديث الحالة. تأكد من صلاحياتك.');
+      }
 
       toast({
         title: "تم إلغاء الحظر",
