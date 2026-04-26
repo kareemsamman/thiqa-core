@@ -954,9 +954,15 @@ function SideScrollArrow({
   return (
     <div
       aria-hidden={disabled}
+      // Pinned just inside the table edge with a high z-index so the
+      // chevron always floats above row content (previous "-right-3"
+      // / "-left-3" placement leaked the button outside the card and
+      // got clipped by ancestor overflow). The wrapper itself stays
+      // pointer-events-none so it doesn't eat clicks on table cells —
+      // only the inner button is interactive.
       className={cn(
-        'absolute top-0 bottom-0 w-8 pointer-events-none hidden md:flex items-start',
-        side === 'right' ? '-right-3' : '-left-3',
+        'absolute top-0 bottom-0 w-9 pointer-events-none hidden md:flex items-start z-30',
+        side === 'right' ? 'right-1' : 'left-1',
       )}
     >
       <button
@@ -965,9 +971,9 @@ function SideScrollArrow({
         disabled={disabled}
         aria-label={side === 'right' ? 'تمرير لليمين' : 'تمرير لليسار'}
         className={cn(
-          'sticky top-[45vh] mx-auto pointer-events-auto h-8 w-8 rounded-full bg-card border shadow-md',
+          'sticky top-[45vh] mx-auto pointer-events-auto h-9 w-9 rounded-full bg-card/95 backdrop-blur border shadow-lg',
           'flex items-center justify-center text-foreground transition',
-          'hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none',
+          'hover:bg-muted hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none',
         )}
       >
         <Icon className="h-4 w-4" />
