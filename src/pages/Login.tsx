@@ -7,6 +7,7 @@ import { Loader2, ExternalLink, AlertCircle, ArrowRight, Eye, EyeOff, UserPlus, 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useAgentContext } from "@/hooks/useAgentContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
@@ -111,6 +112,7 @@ export default function Login() {
   const [isInIframe, setIsInIframe] = useState(false);
   const navigate = useNavigate();
   const { user, isActive, isSuperAdmin, loading: authLoading, refreshProfile } = useAuth();
+  const { refetchAgentContext } = useAgentContext();
 
   const location = useLocation();
 
@@ -217,13 +219,17 @@ export default function Login() {
                 return;
               }
               // After setup-oauth-user has inserted profile / agent_users
-              // / user_roles, the local auth context is still holding the
-              // pre-setup snapshot — isAdmin=false, no agent_id, etc.
-              // refreshProfile re-pulls from Supabase so the next render
-              // already knows this is an admin. Without this, navigating
-              // to "/" or "/dashboard" would race the new permissions and
-              // bounce the user to /subscription as a fallback.
-              await refreshProfile();
+              // / user_roles / agent_feature_flags, the local React
+              // contexts are still holding their pre-setup snapshots:
+              //   - useAuth: isAdmin=false, no agent_id
+              //   - useAgentContext: empty agent / no features (its
+              //     realtime channel only listens to UPDATEs)
+              // Refresh both before navigating, otherwise the
+              // PermissionRoute on /dashboard reads hasFeature(
+              // 'dashboard')=false and bounces to /subscription, which
+              // is what the user saw as a blank page for ~10 seconds
+              // until the contexts caught up on their own.
+              await Promise.all([refreshProfile(), refetchAgentContext()]);
               toast.success(setupData?.message || "تم إعداد حسابك بنجاح!");
               navigate('/dashboard', { replace: true });
               return;

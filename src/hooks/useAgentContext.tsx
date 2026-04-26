@@ -56,6 +56,12 @@ interface AgentContextType {
   hasFeature: (featureKey: string) => boolean;
   startImpersonation: (agentId: string) => void;
   stopImpersonation: () => void;
+  /** Force a refetch of agent + plan + feature flags. Realtime channels
+   *  pick up UPDATEs automatically, but flows that *insert* the agent
+   *  (e.g. fresh OAuth signup) need to call this manually so the
+   *  PermissionRoute / Sidebar see the new tenant without a hard
+   *  refresh. */
+  refetchAgentContext: () => Promise<void>;
 }
 
 const AgentContext = createContext<AgentContextType | undefined>(undefined);
@@ -177,6 +183,26 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Resolves the current user's agent_id then primes the full agent
+  // context. Exposed via `refetchAgentContext` below so signup flows
+  // that *insert* the tenant (Google OAuth) can prime React state
+  // instead of waiting for the realtime channels (UPDATE-only) or a
+  // hard refresh.
+  const fetchForAgentUser = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    const { data: agentUser } = await supabase
+      .from('agent_users')
+      .select('agent_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (!agentUser) {
+      setLoading(false);
+      return;
+    }
+    await loadAgentContext(agentUser.agent_id, false);
+  }, [user, loadAgentContext]);
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -203,22 +229,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     }
 
     // Regular agent user
-    const fetchForAgentUser = async () => {
-      const { data: agentUser } = await supabase
-        .from('agent_users')
-        .select('agent_id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!agentUser) {
-        setLoading(false);
-        return;
-      }
-      await loadAgentContext(agentUser.agent_id, false);
-    };
-
     fetchForAgentUser();
-  }, [user, authLoading, isSuperAdmin, impersonatedAgentId, loadAgentContext]);
+  }, [user, authLoading, isSuperAdmin, impersonatedAgentId, loadAgentContext, fetchForAgentUser]);
 
   // Live-refresh agent context whenever Thiqa admin edits the plan,
   // the agent's row, or the agent's per-feature overrides. Without
@@ -313,6 +325,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       hasFeature,
       startImpersonation,
       stopImpersonation,
+      refetchAgentContext: fetchForAgentUser,
     }}>
       {children}
     </AgentContext.Provider>
