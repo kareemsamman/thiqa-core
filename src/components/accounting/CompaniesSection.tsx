@@ -7,7 +7,9 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   FileText,
+  Loader2,
   Plus,
+  Printer,
   RotateCcw,
   LayoutGrid,
   Search,
@@ -42,6 +44,11 @@ import {
   PAYMENT_METHOD_LABELS,
   applyOverlay,
 } from './accountingTypes';
+import {
+  buildAccountingReportPayload,
+  buildCompanyStats,
+  printAccountingReport,
+} from './printAccountingReport';
 
 type SubTab = 'all' | 'issuances' | 'returns' | 'disbursements' | 'receipts';
 
@@ -276,6 +283,39 @@ export function CompaniesSection({ focusSettlementId }: CompaniesSectionProps = 
       : companyReceipts.length;
   const countLabel = isSettlementTab ? 'سند' : 'معاملة';
 
+  const [printing, setPrinting] = useState(false);
+  const handlePrint = async () => {
+    setPrinting(true);
+    try {
+      // Pick the row set the user is currently looking at — same arrays
+      // that feed the active TabsContent below.
+      const issuanceList =
+        tab === 'all' ? issuancesAll : tab === 'issuances' ? issuancesActive : tab === 'returns' ? returns : undefined;
+      const settlementList =
+        tab === 'disbursements' ? companySettlements : tab === 'receipts' ? companyReceipts : undefined;
+
+      const filterBits: string[] = [];
+      if (filters.dateFrom || filters.dateTo) {
+        filterBits.push(`التاريخ: ${filters.dateFrom || '—'} → ${filters.dateTo || '—'}`);
+      }
+      if (search) filterBits.push(`بحث: "${search}"`);
+
+      const payload = buildAccountingReportPayload({
+        ctx: {
+          section: 'companies',
+          tab,
+          filterSummary: filterBits.length > 0 ? filterBits.join(' · ') : undefined,
+        },
+        stats: buildCompanyStats(totals),
+        issuances: issuanceList,
+        settlements: settlementList,
+      });
+      await printAccountingReport(payload);
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   return (
     <div className="space-y-2.5">
       {/* Compact summary strip — single horizontal row of pills.
@@ -428,6 +468,21 @@ export function CompaniesSection({ focusSettlementId }: CompaniesSectionProps = 
           <span className="text-xs text-muted-foreground">
             {data.loading ? '...' : `${activeRowCount} ${countLabel}`}
           </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
+            disabled={printing || data.loading || activeRowCount === 0}
+            onClick={handlePrint}
+            title="طباعة الجدول"
+          >
+            {printing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Printer className="h-3.5 w-3.5" />
+            )}
+            <span className="hidden sm:inline">طباعة</span>
+          </Button>
           <ManageColumnsDropdown
             columns={activeColumns}
             visible={activeState.visible}
