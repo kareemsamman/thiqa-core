@@ -110,7 +110,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
   const navigate = useNavigate();
-  const { user, isActive, isSuperAdmin, loading: authLoading } = useAuth();
+  const { user, isActive, isSuperAdmin, loading: authLoading, refreshProfile } = useAuth();
 
   const location = useLocation();
 
@@ -216,9 +216,16 @@ export default function Login() {
                 navigate('/thiqa', { replace: true });
                 return;
               }
-              // Refresh auth to pick up the new profile
+              // After setup-oauth-user has inserted profile / agent_users
+              // / user_roles, the local auth context is still holding the
+              // pre-setup snapshot — isAdmin=false, no agent_id, etc.
+              // refreshProfile re-pulls from Supabase so the next render
+              // already knows this is an admin. Without this, navigating
+              // to "/" or "/dashboard" would race the new permissions and
+              // bounce the user to /subscription as a fallback.
+              await refreshProfile();
               toast.success(setupData?.message || "تم إعداد حسابك بنجاح!");
-              navigate('/', { replace: true });
+              navigate('/dashboard', { replace: true });
               return;
             }
           }
