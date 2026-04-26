@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import nodemailer from "https://esm.sh/nodemailer@6.9.16";
 import { buildEmailHtml, welcomeAgentEmailBody, newAgentAdminNotifyBody } from "../_shared/email-template.ts";
+import { performSeed } from "../_shared/seed-agent-data.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -184,7 +185,19 @@ Deno.serve(async (req) => {
       if (authErr) console.error("Auth settings init error:", authErr);
     });
 
-    // Send welcome email + notify super admins (non-blocking)
+    // Auto-seed starter data (insurance categories, road services,
+    // accident fee services, sample companies + pricing). Without
+    // this, brand-new Google tenants land with an empty "نوع التأمين"
+    // dropdown when they try to add a policy. Mirrors register-agent.
+    // Non-blocking — if it fails we still want signup to succeed.
+    try {
+      const seeded = await performSeed(adminClient, agentId);
+      console.log(`Auto-seeded agent ${agentId}:`, seeded);
+    } catch (seedErr) {
+      console.error("Auto-seed error:", seedErr);
+    }
+
+    // Send welcome email + notify support inbox (non-blocking)
     try {
       const { data: smtpRows } = await adminClient
         .from("thiqa_platform_settings")
