@@ -212,62 +212,21 @@ export function CompanyIssuancesTable({
     };
   }, [paged.length, visible.length]);
 
-  // Probe-based RTL scroll-model detection. Modern Chrome/Safari/FF
-  // use the "negative" model (scrollLeft in [-max, 0]); older WebKit
-  // used "reverse" (scrollLeft in [0, max], starts at max); some niche
-  // engines use "default" (scrollLeft in [0, max], starts at 0). We
-  // run the probe lazily and cache the result for the lifetime of the
-  // session.
-  type RtlModel = 'ltr' | 'negative' | 'reverse' | 'default';
-  const rtlModelRef = useRef<RtlModel | null>(null);
-  const detectRtlModel = (el: HTMLElement): RtlModel => {
-    if (rtlModelRef.current) return rtlModelRef.current;
-    const computed = getComputedStyle(el).direction;
-    if (computed !== 'rtl') {
-      rtlModelRef.current = 'ltr';
-      return 'ltr';
-    }
-    const probe = document.createElement('div');
-    probe.dir = 'rtl';
-    probe.style.cssText =
-      'position:absolute; top:-9999px; left:-9999px; width:100px; height:1px; overflow:auto; visibility:hidden;';
-    probe.innerHTML = '<div style="width:200px; height:1px;"></div>';
-    document.body.appendChild(probe);
-    let model: RtlModel;
-    if (probe.scrollLeft > 0) {
-      model = 'reverse';
-    } else {
-      probe.scrollLeft = -1;
-      if (probe.scrollLeft < 0) model = 'negative';
-      else model = 'default';
-    }
-    document.body.removeChild(probe);
-    rtlModelRef.current = model;
-    return model;
-  };
-
   const scrollByPage = (dir: 'prev' | 'next') => {
     const el = findRealScroller(scrollerRef.current);
     if (!el) return;
     const delta = el.clientWidth * 0.7;
-    const model = detectRtlModel(el);
-    // Map (direction, model) → scrollLeft delta sign. Forward in the
-    // reading order:
-    //   LTR + default-RTL: scrollLeft increases
-    //   negative-RTL + reverse-RTL: scrollLeft decreases
-    const forward = dir === 'next';
-    const positiveForward = model === 'ltr' || model === 'default';
-    const sign = (forward ? 1 : -1) * (positiveForward ? 1 : -1);
-    const before = el.scrollLeft;
+    // Browser convention is consistent across LTR and every RTL
+    // scroll model: scrollLeft += X always pans the viewport right
+    // (revealing right-hidden content); scrollLeft -= X pans left.
+    // What changes between models is only the valid *range* of
+    // scrollLeft, not the sign convention. So we don't need any
+    // model detection — the right-side arrow ("prev") wants to
+    // reveal right content (+delta), the left-side arrow ("next")
+    // wants to reveal left content (-delta). The browser clamps at
+    // edges automatically.
+    const sign = dir === 'prev' ? 1 : -1;
     el.scrollBy({ left: sign * delta, behavior: 'smooth' });
-    // Defensive fallback: if the chosen sign was wrong (rare browser
-    // mismatch), the scroll position won't change. Try the opposite
-    // sign on the next frame so the click never feels dead.
-    requestAnimationFrame(() => {
-      if (el.scrollLeft === before) {
-        el.scrollBy({ left: -sign * delta, behavior: 'smooth' });
-      }
-    });
   };
 
   const showCol = (key: string) => visible.includes(key);
