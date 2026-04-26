@@ -822,7 +822,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                       <p className="truncate text-[11.5px] text-slate-500 text-right mt-0.5" dir="ltr">
                         {profile?.email}
                       </p>
-                      {trial && agent && (
+                      {isAdmin && trial && agent && (
                         <div className="mt-2 space-y-1.5">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span
@@ -876,7 +876,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         <span className="flex-1 text-right">الملف الشخصي</span>
                       </button>
 
-                      {!isThiqaSuperAdmin && (
+                      {isAdmin && !isThiqaSuperAdmin && (
                         <button
                           type="button"
                           onClick={() => { setUserMenuOpen(false); navigate('/subscription'); }}
@@ -1048,7 +1048,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         <p className="truncate text-[11.5px] text-slate-500 text-right mt-0.5" dir="ltr">
                           {profile?.email}
                         </p>
-                        {trial && agent && (
+                        {isAdmin && trial && agent && (
                           <div className="mt-2 space-y-1.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span
@@ -1102,7 +1102,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                           <span className="flex-1 text-right">الملف الشخصي</span>
                         </button>
 
-                        {!isThiqaSuperAdmin && (
+                        {isAdmin && !isThiqaSuperAdmin && (
                           <button
                             type="button"
                             onClick={() => { setUserMenuOpen(false); navigate('/subscription'); }}
@@ -1391,8 +1391,9 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
         )}
 
         {/* Account & help — mirrors the desktop profile dropdown so mobile
-            users can reach the same links without the profile menu. */}
-        {!query && !isThiqaSuperAdmin && (
+            users can reach the same links without the profile menu.
+            Admin-only: workers don't get a settings/subscription path. */}
+        {!query && !isThiqaSuperAdmin && isAdmin && (
           <div className="mb-3">
             <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
               <UserCircle className="h-3 w-3" weight="regular" />

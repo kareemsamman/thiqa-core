@@ -375,6 +375,41 @@ export default function Subscription() {
 
   if (!agent) return null;
 
+  // Workers should never see plan/billing/usage data — that's
+  // admin-only. Render a friendly "talk to your admin" view.
+  // PermissionRoute redirects permission-denied users here, so we
+  // can't just block the route; we have to gate the content.
+  if (!isAdmin) {
+    return (
+      <MainLayout>
+        <Header title="الإعدادات" subtitle="" />
+        <div className="p-6 max-w-xl mx-auto" dir="rtl">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-xl bg-muted text-muted-foreground flex items-center justify-center shrink-0">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">الإعدادات والاشتراك</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    إدارة الاشتراك والإعدادات متاحة لمدير الوكالة فقط
+                  </p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                إذا كنت تحتاج إلى صلاحية إضافية أو معلومات عن باقة الاشتراك،
+                يرجى التواصل مع مدير الوكالة لديك.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </MainLayout>
+    );
+  }
+
   // For trial users, find the Pro plan to compare features when picking Basic
   const proPlan = plans.find(p => p.plan_key === "pro");
   const confirmPlan = confirmDialog?.plan;

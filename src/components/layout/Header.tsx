@@ -12,6 +12,7 @@ import { navigationGroups } from "./Sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { useAgentLimits } from "@/hooks/useAgentLimits";
+import { usePermissions, type PermissionKey } from "@/hooks/usePermissions";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
 import { useRecentClient } from "@/hooks/useRecentClient";
@@ -38,6 +39,7 @@ export function Header({ title, subtitle }: HeaderProps) {
   const navigate = useNavigate();
   const { isAdmin, isSuperAdmin } = useAuth();
   const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
+  const { can } = usePermissions();
   const { openWizard } = usePolicyWizardController();
   const { recentClient } = useRecentClient();
   const { policies: policiesLimit, loading: limitsLoading } = useAgentLimits();
@@ -91,9 +93,13 @@ export function Header({ title, subtitle }: HeaderProps) {
       if (item.superAdminOnly && !isSuperAdmin) return false;
       if (item.adminOnly && !isAdmin) return false;
       if (item.featureKey && !hasFeature(item.featureKey)) return false;
+      // Per-user permission gate. Sidebar already honors this; the
+      // header tab strip needs to mirror it or workers can still see
+      // (and click) tabs for pages the admin revoked from them.
+      if (item.permissionKey && !can(item.permissionKey as PermissionKey)) return false;
       return true;
     });
-  }, [location.pathname, isAdmin, isSuperAdmin, isThiqaSuperAdmin, hasFeature]);
+  }, [location.pathname, isAdmin, isSuperAdmin, isThiqaSuperAdmin, hasFeature, can]);
 
   const isTabActive = (href: string) =>
     location.pathname === href || location.pathname.startsWith(href + "/");
