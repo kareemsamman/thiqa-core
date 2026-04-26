@@ -153,6 +153,7 @@ export default function AdminUsers() {
   // because it requires service-role auth.
   const [editUser, setEditUser] = useState<UserWithRole | null>(null);
   const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editNewPassword, setEditNewPassword] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
@@ -160,6 +161,7 @@ export default function AdminUsers() {
   const openEditUser = (user: UserWithRole) => {
     setEditUser(user);
     setEditName(user.full_name || "");
+    setEditEmail(user.email || "");
     setEditPhone(user.phone || "");
     setEditNewPassword("");
   };
@@ -167,12 +169,22 @@ export default function AdminUsers() {
   const closeEditUser = () => {
     setEditUser(null);
     setEditName("");
+    setEditEmail("");
     setEditPhone("");
     setEditNewPassword("");
   };
 
   const handleSaveEdit = async () => {
     if (!editUser) return;
+
+    const trimmedEmail = editEmail.trim().toLowerCase();
+    const emailChanged = trimmedEmail !== (editUser.email || "").toLowerCase();
+    if (emailChanged) {
+      if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+        toast({ title: "خطأ", description: "يرجى إدخال بريد إلكتروني صحيح", variant: "destructive" });
+        return;
+      }
+    }
 
     const phoneDigits = digitsOnly(editPhone.trim());
     if (phoneDigits && phoneDigits.length !== 10) {
@@ -206,10 +218,17 @@ export default function AdminUsers() {
         if (error) throw error;
       }
 
-      if (trimmedPassword) {
-        const { data, error } = await supabase.functions.invoke('update-user-password', {
-          body: { user_id: editUser.id, new_password: trimmedPassword },
-        });
+      // Email and password both go through the edge function — it
+      // owns the agent-admin auth check and is the only place with
+      // service-role access to auth.users. Send them in one call when
+      // both changed so we only round-trip once.
+      if (emailChanged || trimmedPassword) {
+        const body: { user_id: string; new_email?: string; new_password?: string } = {
+          user_id: editUser.id,
+        };
+        if (emailChanged) body.new_email = trimmedEmail;
+        if (trimmedPassword) body.new_password = trimmedPassword;
+        const { data, error } = await supabase.functions.invoke('update-user-password', { body });
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
       }
@@ -1211,7 +1230,17 @@ export default function AdminUsers() {
           <div className="space-y-4 mt-6">
             <div className="space-y-2">
               <Label>البريد الإلكتروني</Label>
-              <Input value={editUser?.email || ''} disabled dir="ltr" />
+              <Input
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="user@example.com"
+                dir="ltr"
+                type="email"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                تغيير البريد الإلكتروني سيُحدّث بيانات تسجيل الدخول لهذا المستخدم
+              </p>
             </div>
             <div className="space-y-2">
               <Label>الاسم الكامل</Label>

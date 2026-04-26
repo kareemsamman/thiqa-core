@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceKey);
 
-    const { user_id, new_password, confirm_email } = await req.json();
+    const { user_id, new_password, new_email, confirm_email } = await req.json();
 
     if (!user_id) throw new Error("Missing user_id");
 
@@ -96,6 +96,36 @@ Deno.serve(async (req) => {
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Email change. Updates auth.users.email and mirrors to profiles.
+    // email_confirm:true skips Supabase's confirmation email — the
+    // admin is making this change on the user's behalf, so we treat
+    // the new address as already verified.
+    if (typeof new_email === "string" && new_email.trim()) {
+      const trimmedEmail = new_email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+        throw new Error("صيغة البريد الإلكتروني غير صحيحة");
+      }
+      const { error: emailError } = await adminClient.auth.admin.updateUserById(user_id, {
+        email: trimmedEmail,
+        email_confirm: true,
+      });
+      if (emailError) throw emailError;
+      const { error: profileEmailError } = await adminClient
+        .from("profiles")
+        .update({ email: trimmedEmail, email_confirmed: true })
+        .eq("id", user_id);
+      if (profileEmailError) throw profileEmailError;
+
+      // If only email was provided, return now. Otherwise fall through
+      // to also process the password update in the same call.
+      if (!new_password) {
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     if (!new_password) throw new Error("Missing new_password");
