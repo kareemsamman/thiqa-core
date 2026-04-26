@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -122,6 +122,12 @@ export function PaymentEditDialog({
   const [loadingImages, setLoadingImages] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
+  // Image upload/delete commits to payment_images immediately, so the
+  // change is already in the DB before the user clicks Save (or even if
+  // they cancel). Track that here so we can fire onSuccess when the
+  // dialog closes — otherwise the parent list keeps showing the stale
+  // "no image" thumbnail until a manual refresh.
+  const attachmentsDirtyRef = useRef(false);
 
   const fetchAttachedImages = async (paymentId: string) => {
     setLoadingImages(true);
@@ -155,11 +161,24 @@ export function PaymentEditDialog({
         notes: payment.notes || '',
       });
       fetchAttachedImages(payment.id);
+      attachmentsDirtyRef.current = false;
     } else {
       setAttachedImages([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payment?.id]);
+
+  // Wraps the parent's onOpenChange so that — if attachments were
+  // modified — we tell the parent to refresh on the way out. Save and
+  // delete already invoke onSuccess explicitly; this covers the case
+  // where the user only uploaded/deleted images and then closed.
+  const handleOpenChange = (next: boolean) => {
+    if (!next && attachmentsDirtyRef.current) {
+      attachmentsDirtyRef.current = false;
+      onSuccess();
+    }
+    onOpenChange(next);
+  };
 
   const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!payment) return;
@@ -207,6 +226,7 @@ export function PaymentEditDialog({
         if (insertError) throw insertError;
         if (inserted) {
           setAttachedImages((prev) => [...prev, inserted as any]);
+          attachmentsDirtyRef.current = true;
         }
       }
       toast.success('تم رفع الملف');
@@ -227,6 +247,7 @@ export function PaymentEditDialog({
         .eq('id', imageId);
       if (error) throw error;
       setAttachedImages((prev) => prev.filter((img) => img.id !== imageId));
+      attachmentsDirtyRef.current = true;
       toast.success('تم حذف الملف');
     } catch (err: any) {
       console.error('[PaymentEditDialog] delete image error:', err);
@@ -289,6 +310,7 @@ export function PaymentEditDialog({
       if (error) throw error;
 
       toast.success('تم تعديل الدفعة بنجاح');
+      attachmentsDirtyRef.current = false;
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
@@ -310,6 +332,7 @@ export function PaymentEditDialog({
       if (error) throw error;
       toast.success('تم حذف الدفعة');
       setDeleteConfirmOpen(false);
+      attachmentsDirtyRef.current = false;
       onSuccess();
       onOpenChange(false);
     } catch (e: any) {
@@ -327,7 +350,7 @@ export function PaymentEditDialog({
   const paymentTypeLabel = isLocked && formData.payment_type === 'visa' ? 'فيزا خارجي' : (paymentTypeLabels[formData.payment_type] || formData.payment_type);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       {/* Width reduced from max-w-4xl → max-w-2xl: the form only needs
           ~600px to render comfortably, the wider size left a huge
           empty band on the sides. `hideCloseButton` on DialogContent
@@ -375,7 +398,7 @@ export function PaymentEditDialog({
               </div>
               <Button
                 size="icon"
-                onClick={() => onOpenChange(false)}
+                onClick={() => handleOpenChange(false)}
                 className="h-9 w-9 bg-white/10 hover:bg-white/20 text-white border-0 shrink-0"
                 aria-label="إغلاق"
               >
@@ -630,7 +653,7 @@ export function PaymentEditDialog({
             <div />
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving || deleting}>
+            <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={saving || deleting}>
               إلغاء
             </Button>
             <Button onClick={handleSave} disabled={saving || deleting}>
