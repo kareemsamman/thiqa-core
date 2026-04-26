@@ -2,83 +2,61 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useAgentContext } from './useAgentContext';
+import { navigationGroups } from '@/components/layout/navigation';
 
 /**
- * Every permission key used by the app, in one place so the editor
- * UI, Sidebar, and PermissionRoute all reference the same source of
- * truth. Grouped by sidebar section for the editor's layout.
+ * Permission groups for the per-user editor (UserPermissionsDialog +
+ * DefaultEmployeePermissionsCard). Derived at module-load time from
+ * the same `navigationGroups` array the sidebar renders, so:
+ *   - any nav item with a permissionKey shows up in the editor
+ *   - hidden / removed nav items disappear from the editor
+ *     (no more dead checkboxes for routes that no longer exist)
+ *   - new nav items pick up an editor row automatically
  *
- * Convention:
- *   page.<slug>     — page / route access
- *   view_financial  — special: hides all profit/commission/debt
- *                     numbers across every page (one flag, not
- *                     per-page, per the product decision).
+ * The Thiqa super-admin group and items without a permissionKey are
+ * skipped — they're not user-grantable. Empty groups are dropped.
+ *
+ * The "خاص" (special) group is appended manually for the cross-cut
+ * permissions that don't correspond to a single page (view_financial
+ * hides profit/commission/debt numbers across every page).
+ *
+ * Shape kept intentionally identical to the previous static export so
+ * PermissionMatrix.tsx and the dialogs don't need to change.
  */
-export const PERMISSION_GROUPS = [
-  {
-    label: 'العمل اليومي',
-    keys: [
-      ['page.dashboard', 'الرئيسية'],
-      ['page.tasks', 'المهام'],
-      ['page.activity', 'سجل النشاط'],
-      ['page.notifications', 'التنبيهات'],
-      ['page.policy_reports', 'تقارير المعاملات والتجديدات'],
-      ['page.clients', 'العملاء'],
-      ['page.cars', 'السيارات'],
-      ['page.policies', 'البوالص'],
-      ['page.accidents', 'بلاغات الحوادث'],
-      ['page.leads', 'رسائل WhatsApp'],
-      ['page.contacts', 'جهات الاتصال'],
-      ['page.media', 'الوسائط'],
-      ['page.form_templates', 'الملفات'],
-      ['page.repair_claims', 'المطالبات'],
-    ],
-  },
-  {
-    label: 'الإدارة والمالية',
-    keys: [
-      ['page.brokers', 'الوسطاء'],
-      ['page.companies', 'الشركات'],
-      ['page.accounting', 'المحاسبة'],
-      ['page.cheques', 'الشيكات'],
-      ['page.debt_tracking', 'متابعة الديون'],
-      ['page.receipts', 'الإيصالات'],
-      ['page.financial_reports', 'التقارير المالية'],
-      ['page.company_settlement', 'تسوية الشركات'],
-      ['page.elzami_costs', 'تقرير تكاليف الالتزام'],
-      ['page.correspondence', 'المراسلات'],
-      ['page.marketing_sms', 'SMS تسويقية'],
-      ['page.sms_history', 'سجل الرسائل'],
-      ['page.customer_signatures', 'توقيعات العملاء'],
-    ],
-  },
-  {
-    label: 'إعدادات الوكيل',
-    keys: [
-      ['page.users', 'المستخدمون'],
-      ['page.branches', 'الفروع'],
-      ['page.road_services', 'خدمات الطريق'],
-      ['page.accident_fees', 'إعفاء رسوم الحادث'],
-      ['page.branding', 'العلامة التجارية'],
-      ['page.sms_settings', 'إعدادات SMS'],
-      ['page.auth_settings', 'إعدادات المصادقة'],
-      ['page.payment_settings', 'إعدادات الدفع'],
-      ['page.invoice_templates', 'قوالب الفواتير'],
-      ['page.insurance_categories', 'فئات التأمين'],
-      ['page.database_migration', 'هجرة البيانات / استيراد'],
-    ],
-  },
-  {
+type PermissionGroup = {
+  label: string;
+  keys: ReadonlyArray<readonly [string, string]>;
+};
+
+function buildPermissionGroups(): PermissionGroup[] {
+  const groups: PermissionGroup[] = [];
+  for (const navGroup of navigationGroups) {
+    if (navGroup.items.some((i) => i.thiqaSuperAdminOnly)) continue;
+    const keys: Array<readonly [string, string]> = [];
+    for (const item of navGroup.items) {
+      if (!item.permissionKey) continue;
+      if (item.thiqaSuperAdminOnly || item.superAdminOnly) continue;
+      keys.push([item.permissionKey, item.name] as const);
+    }
+    if (keys.length > 0) {
+      groups.push({ label: navGroup.name, keys });
+    }
+  }
+  // Special, non-page permissions appended at the end.
+  groups.push({
     label: 'خاص',
     keys: [
-      ['view_financial', 'عرض الأرقام المالية (أرباح / عمولات / ديون)'],
+      ['view_financial', 'عرض الأرقام المالية (أرباح / عمولات / ديون)'] as const,
     ],
-  },
-] as const;
+  });
+  return groups;
+}
 
-export type PermissionKey =
-  | (typeof PERMISSION_GROUPS)[number]['keys'][number][0]
-  | string; // allow unknown keys so we can return false safely
+export const PERMISSION_GROUPS: PermissionGroup[] = buildPermissionGroups();
+
+// Permissions are looked up by string everywhere, and unknown keys
+// safely return false in `can()`. No need for a static union type.
+export type PermissionKey = string;
 
 /**
  * Hook returning the current user's permission resolver.

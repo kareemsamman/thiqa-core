@@ -24,7 +24,7 @@ interface ProfileEditDrawerProps {
 }
 
 export function ProfileEditDrawer({ open, onOpenChange }: ProfileEditDrawerProps) {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile, isAdmin } = useAuth();
   const { agent, isThiqaSuperAdmin } = useAgentContext();
   const navigate = useNavigate();
 
@@ -195,8 +195,9 @@ export function ProfileEditDrawer({ open, onOpenChange }: ProfileEditDrawerProps
           )}
         </div>
 
-        {/* Subscription / trial status — mirrors the inner subscription page */}
-        {!isThiqaSuperAdmin && sub && agent && (
+        {/* Subscription / trial status — mirrors the inner subscription page.
+            Admin-only: workers shouldn't see plan name or expiration. */}
+        {isAdmin && !isThiqaSuperAdmin && sub && agent && (
           <button
             type="button"
             onClick={goToSubscription}

@@ -1,5 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { UpgradePromptDialog, LimitResource } from './UpgradePromptDialog';
+import { useAuth } from '@/hooks/useAuth';
 
 interface UpgradePromptState {
   // Quota-limit variant (e.g. hit the user cap, policy cap)
@@ -76,11 +78,23 @@ export function parseLimitError(error: unknown):
 export function UpgradePromptProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<UpgradePromptState | null>(null);
+  const { isAdmin, isSuperAdmin } = useAuth();
 
+  // Workers can't upgrade plans or buy quota — only the agent admin
+  // can. So when a worker hits a locked feature / quota, swap the
+  // marketing dialog for a brief toast directing them to the admin.
+  // This catches every call site (Sidebar lock buttons, dashboard
+  // widgets, ThaqibWidget, BottomToolbar, the LIMIT_EXCEEDED error
+  // handler, the global window event…) at the bottleneck so we don't
+  // have to guard each individually.
   const showUpgradePrompt = useCallback((params: UpgradePromptState) => {
+    if (!isAdmin && !isSuperAdmin) {
+      toast.info('هذه الميزة غير متوفرة في باقتك. تواصل مع مدير الوكالة لترقية الباقة.');
+      return;
+    }
     setState(params);
     setOpen(true);
-  }, []);
+  }, [isAdmin, isSuperAdmin]);
 
   // Let non-React code (edge-function error helpers, toast actions, etc.)
   // open the dialog by dispatching a `thiqa:open-upgrade-dialog` window
