@@ -286,7 +286,12 @@ export function SettlementsTable({
                   {showActions && (
                     <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-0.5">
-                        {onEdit && (
+                        {/* Customer-cheque vouchers are edited by managing
+                            their constituent cheques inside the accordion
+                            (the EditSettlementDialog can't reassign them
+                            anyway), so the row-level edit button is hidden
+                            to avoid leading staff into a dead end. */}
+                        {onEdit && !isCustomerCheque && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
@@ -321,8 +326,16 @@ export function SettlementsTable({
                               <AlertDialogHeader>
                                 <AlertDialogTitle>حذف السند؟</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  سيتم حذف السند نهائياً. إذا كان السند يخصم شيكات عميل،
-                                  سيتم إعادة تلك الشيكات إلى الحالة "قيد الانتظار".
+                                  {isCustomerCheque ? (
+                                    <>
+                                      سيتم حذف السند نهائياً وإزالة جميع شيكات العميل المرتبطة
+                                      به ({r.customer_cheque_count ?? 0} شيك). الشيكات تبقى موجودة
+                                      في صفحة الشيكات وتعود إلى الحالة "قيد الانتظار" ليُعاد
+                                      استخدامها في سند آخر.
+                                    </>
+                                  ) : (
+                                    'سيتم حذف السند نهائياً.'
+                                  )}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -800,27 +813,31 @@ function ConsumedChequeFiles({
           setCurrentUrl(first);
           setOpen(true);
         }}
-        className="group relative h-12 w-12 rounded-md border bg-muted overflow-hidden shrink-0 hover:ring-2 hover:ring-primary/40 transition"
+        className="group relative h-12 w-12 shrink-0"
         title={files.length === 1 ? 'عرض المرفق' : `عرض ${files.length} مرفقات`}
         aria-label="عرض مرفقات الشيك"
       >
-        {isFirstPdf ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-rose-50">
-            <FileText className="h-5 w-5 text-rose-600" />
-          </div>
-        ) : (
-          <img
-            src={first}
-            alt={`صورة شيك ${chequeNumber ?? ''}`}
-            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-          />
-        )}
-        <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition">
-          <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition" />
-        </span>
+        {/* Inner wrapper handles overflow + rounded corners so the +N
+            count badge can sit outside the clip area and stay visible. */}
+        <div className="absolute inset-0 rounded-md border bg-muted overflow-hidden group-hover:ring-2 group-hover:ring-primary/40 transition">
+          {isFirstPdf ? (
+            <div className="h-full w-full flex items-center justify-center bg-rose-50">
+              <FileText className="h-5 w-5 text-rose-600" />
+            </div>
+          ) : (
+            <img
+              src={first}
+              alt={`صورة شيك ${chequeNumber ?? ''}`}
+              className="h-full w-full object-cover transition-transform group-hover:scale-105"
+            />
+          )}
+          <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition">
+            <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition" />
+          </span>
+        </div>
         {files.length > 1 && (
-          <span className="absolute -bottom-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center shadow">
-            +{files.length - 1}
+          <span className="absolute -top-1.5 -left-1.5 h-5 min-w-5 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center shadow ring-2 ring-card">
+            {files.length}
           </span>
         )}
       </button>
