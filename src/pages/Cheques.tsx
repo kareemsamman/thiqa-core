@@ -1083,22 +1083,32 @@ export default function Cheques() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuItem
-                disabled={loadingPaymentEdit}
-                onClick={() => openPaymentEditFor(cheque)}
-              >
-                <Pencil className="h-4 w-4 ml-2" />
-                تعديل الدفعة
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setSelectedPolicyId(cheque.policy_id);
-                  setPolicyDrawerOpen(true);
-                }}
-              >
-                <ExternalLink className="h-4 w-4 ml-2" />
-                عرض المعاملة
-              </DropdownMenuItem>
+              {/* "تعديل الدفعة" + "عرض المعاملة" only make sense for
+                  customer cheques — they query policy_payments by id
+                  and read policy_id, neither of which exist on the
+                  synthetic outgoing rows pulled from *_settlements /
+                  expenses. Hiding them avoids the "فشل في تحميل" toast
+                  staff hit when trying to edit an outgoing cheque. */}
+              {(cheque.source === 'customer' || !cheque.source) && (
+                <>
+                  <DropdownMenuItem
+                    disabled={loadingPaymentEdit}
+                    onClick={() => openPaymentEditFor(cheque)}
+                  >
+                    <Pencil className="h-4 w-4 ml-2" />
+                    تعديل الدفعة
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedPolicyId(cheque.policy_id);
+                      setPolicyDrawerOpen(true);
+                    }}
+                  >
+                    <ExternalLink className="h-4 w-4 ml-2" />
+                    عرض المعاملة
+                  </DropdownMenuItem>
+                </>
+              )}
               {cheque.cheque_status !== 'cashed' &&
                 cheque.cheque_status !== 'returned' &&
                 cheque.cheque_status !== 'transferred_out' && (
