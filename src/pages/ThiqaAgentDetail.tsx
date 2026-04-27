@@ -24,6 +24,7 @@ import {
   ShoppingCart, Tag,
 } from "lucide-react";
 import { AgentAddonsManager } from "@/components/thiqa/AgentAddonsManager";
+import { SubscriptionStateTester } from "@/components/thiqa/SubscriptionStateTester";
 import { AgentDiscountManager } from "@/components/thiqa/AgentDiscountManager";
 import { AgentLimitOverrides } from "@/components/thiqa/AgentLimitOverrides";
 import { SmsProviderConfig, type SmsProviderChoice } from "@/components/sms/SmsProviderConfig";
@@ -1052,6 +1053,19 @@ export default function ThiqaAgentDetail() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Subscription state simulator — for QA / demo. Writes
+                directly to agents.subscription_status / dates so the
+                agent's app reflects the change instantly via the
+                existing realtime listener in useAgentContext. */}
+            <div className="mt-6">
+              <SubscriptionStateTester
+                agent={agent}
+                onUpdated={(patch) =>
+                  setAgent((prev) => (prev ? { ...prev, ...patch } : prev))
+                }
+              />
+            </div>
           </TabsContent>
 
           {/* ═══════════ USERS TAB ═══════════ */}
