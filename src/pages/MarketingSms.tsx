@@ -512,32 +512,37 @@ export default function MarketingSms() {
                     </p>
                   </div>
 
-                  <div className="flex gap-2">
+                  {/* Mobile: 3-up grid so the three action buttons
+                      share their row equally and never overflow off
+                      the card edge. Desktop: original inline flex. */}
+                  <div className="grid grid-cols-3 gap-2 sm:flex">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       onClick={insertLink}
+                      className="w-full sm:w-auto px-2 sm:px-3"
                     >
-                      <Link className="h-4 w-4 ml-1" />
-                      إضافة رابط
+                      <Link className="h-4 w-4 ml-1 shrink-0" />
+                      <span className="truncate">إضافة رابط</span>
                     </Button>
-                    
-                    <label className="cursor-pointer">
+
+                    <label className="cursor-pointer w-full sm:w-auto">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         disabled={isUploading}
                         asChild
+                        className="w-full sm:w-auto px-2 sm:px-3"
                       >
                         <span>
                           {isUploading ? (
-                            <Loader2 className="h-4 w-4 ml-1 animate-spin" />
+                            <Loader2 className="h-4 w-4 ml-1 animate-spin shrink-0" />
                           ) : (
-                            <Image className="h-4 w-4 ml-1" />
+                            <Image className="h-4 w-4 ml-1 shrink-0" />
                           )}
-                          رفع صورة
+                          <span className="truncate">رفع صورة</span>
                         </span>
                       </Button>
                       <input
@@ -548,21 +553,22 @@ export default function MarketingSms() {
                       />
                     </label>
 
-                    <label className="cursor-pointer">
+                    <label className="cursor-pointer w-full sm:w-auto">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         disabled={isUploading}
                         asChild
+                        className="w-full sm:w-auto px-2 sm:px-3"
                       >
                         <span>
                           {isUploading ? (
-                            <Loader2 className="h-4 w-4 ml-1 animate-spin" />
+                            <Loader2 className="h-4 w-4 ml-1 animate-spin shrink-0" />
                           ) : (
-                            <Video className="h-4 w-4 ml-1" />
+                            <Video className="h-4 w-4 ml-1 shrink-0" />
                           )}
-                          رفع فيديو
+                          <span className="truncate">رفع فيديو</span>
                         </span>
                       </Button>
                       <input
