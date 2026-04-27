@@ -209,6 +209,16 @@ export default function Subscription() {
   const [plans, setPlans] = useState<PlanData[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [unbilledOverages, setUnbilledOverages] = useState<UnbilledOverage[]>([]);
+  // Active monthly addons (extra_user, extra_branch, extra_ai, extra_sms,
+  // extra_marketing_sms). One-time addons aren't billed recurrently so
+  // they shouldn't show in the "next bill" preview. The next-bill card
+  // multiplies quantity × unit_price and adds them to the running total.
+  const [activeAddons, setActiveAddons] = useState<Array<{
+    id: string;
+    addon_type: string;
+    quantity: number;
+    unit_price: number;
+  }>>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [loadingPayments, setLoadingPayments] = useState(true);
   const [changingPlan, setChangingPlan] = useState(false);
@@ -244,7 +254,8 @@ export default function Subscription() {
     (async () => {
       setLoadingPayments(true);
       try {
-        const [paymentsRes, overagesRes] = await Promise.all([
+        const today = new Date().toISOString().slice(0, 10);
+        const [paymentsRes, overagesRes, addonsRes] = await Promise.all([
           supabase
             .from("agent_subscription_payments")
             .select("id, amount, plan, payment_date, notes, created_at, receipt_url")
@@ -257,9 +268,22 @@ export default function Subscription() {
             .eq("agent_id", agentId)
             .eq("billed", false)
             .order("created_at", { ascending: false }),
+          // Active monthly addons that will recur on the next bill.
+          // One-time addons (onboarding, data_migration) are filtered
+          // out — those are charged on the bill they were approved
+          // against, not on every cycle.
+          supabase
+            .from("agent_addons")
+            .select("id, addon_type, quantity, unit_price")
+            .eq("agent_id", agentId)
+            .eq("status", "active")
+            .eq("billing_cycle", "monthly")
+            .lte("starts_at", today)
+            .or(`ends_at.is.null,ends_at.gte.${today}`),
         ]);
         if (paymentsRes.data) setPayments(paymentsRes.data);
         if (overagesRes.data) setUnbilledOverages(overagesRes.data as any);
+        if (addonsRes.data) setActiveAddons(addonsRes.data as any);
       } catch { /* silent */ } finally { setLoadingPayments(false); }
     })();
   }, [agentId]);
@@ -634,16 +658,38 @@ export default function Subscription() {
 
               // Nothing useful to show if we can't resolve any base price
               // (e.g. custom plan awaiting quote). Hide the card entirely.
-              if (basePrice <= 0 && unbilledOverages.length === 0) return null;
+              if (basePrice <= 0 && unbilledOverages.length === 0 && activeAddons.length === 0) return null;
 
               const extrasTotal = unbilledOverages.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
-              const nextTotal = basePrice + extrasTotal;
+              // Recurring monthly addons. Each row's quantity × unit_price
+              // is added to the next bill — without this the breakdown
+              // dropped extras like "extra_user (₪30/month)" from both
+              // the running total and the row list.
+              const addonsMonthlyTotal = activeAddons.reduce(
+                (sum, a) => sum + (Number(a.quantity) || 0) * (Number(a.unit_price) || 0),
+                0,
+              );
+              const nextTotal = basePrice + extrasTotal + addonsMonthlyTotal;
               const smsExtras = unbilledOverages.filter(o => o.usage_type === 'sms');
               const aiExtras = unbilledOverages.filter(o => o.usage_type === 'ai_chat');
               const smsCount = smsExtras.reduce((s, o) => s + o.extra_count, 0);
               const smsTotal = smsExtras.reduce((s, o) => s + Number(o.total_amount), 0);
               const aiCount = aiExtras.reduce((s, o) => s + o.extra_count, 0);
               const aiTotal = aiExtras.reduce((s, o) => s + Number(o.total_amount), 0);
+
+              // Arabic labels for the addon row — mirrors LABEL_AR in the
+              // request-addon-purchase edge function so requests, the
+              // /thiqa admin view, and this preview all read the same.
+              const addonLabel = (type: string): string => {
+                switch (type) {
+                  case 'extra_user':         return 'مستخدم إضافي';
+                  case 'extra_branch':       return 'فرع إضافي';
+                  case 'extra_ai':           return 'باقة AI';
+                  case 'extra_sms':          return 'باقة SMS';
+                  case 'extra_marketing_sms':return 'باقة SMS تسويقية';
+                  default:                   return type;
+                }
+              };
 
               const subtitle = sub?.isTrial
                 ? (agent.pending_plan
@@ -753,6 +799,29 @@ export default function Subscription() {
                           ₪{basePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
+
+                      {/* Recurring monthly addons. One row per active
+                          addon so the agent can see exactly what each
+                          extra contributes (e.g., extra_user × 1 = ₪30). */}
+                      {activeAddons.map((a) => {
+                        const lineTotal = Number(a.quantity) * Number(a.unit_price);
+                        return (
+                          <div key={a.id} className="flex items-center justify-between py-2.5 border-b">
+                            <div className="flex items-center gap-2">
+                              <Plus className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <p className="text-sm font-medium">{addonLabel(a.addon_type)}</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {a.quantity} × ₪{Number(a.unit_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / شهر
+                                </p>
+                              </div>
+                            </div>
+                            <span className="font-semibold tabular-nums">
+                              +₪{lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        );
+                      })}
 
                       {/* SMS overage row */}
                       {smsCount > 0 && (

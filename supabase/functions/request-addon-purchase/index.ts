@@ -204,20 +204,26 @@ Deno.serve(async (req) => {
       return json({ error: insertError?.message || "Failed to create request" }, 500);
     }
 
-    // Notify super admins by email. Don't block the success response on
-    // email failures — the row is already committed.
+    // Notify the dedicated support mailbox by email. Don't block the
+    // success response on email failures — the row is already committed.
+    // Recipient lives in thiqa_platform_settings.addon_purchase_notification_email
+    // so the Thiqa team can reroute it without a redeploy. Falls back to
+    // support@getthiqa.com when the key isn't seeded yet.
     try {
       const { data: agent } = await adminClient
         .from("agents")
         .select("name, name_ar, email, phone")
         .eq("id", profile.agent_id)
         .maybeSingle();
-      const { data: superAdmins } = await adminClient
-        .from("thiqa_super_admins")
-        .select("email, name");
-      const recipients = (superAdmins || [])
-        .map((s: any) => String(s.email || "").trim())
-        .filter((e: string) => e && e.includes("@") && !e.endsWith("@phone.local"));
+
+      const { data: notifSetting } = await adminClient
+        .from("thiqa_platform_settings")
+        .select("setting_value")
+        .eq("setting_key", "addon_purchase_notification_email")
+        .maybeSingle();
+      const notifEmail = String(notifSetting?.setting_value || "").trim() ||
+        "support@getthiqa.com";
+      const recipients = notifEmail.includes("@") ? [notifEmail] : [];
 
       if (recipients.length > 0) {
         const smtp = await getSmtpSettings(adminClient);
