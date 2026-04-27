@@ -154,14 +154,19 @@ export default function SubscriptionExpired() {
             </div>
 
             {/* Sign out — promoted from a faded ghost link to a clearly
-                visible outline button with destructive accent. Stays
-                visually subordinate to the upgrade CTA but is impossible
-                to miss when the user actually wants to leave. */}
+                visible outline button with destructive accent. /subscription-
+                expired is a bare public route with no auth guard, so a
+                bare signOut() leaves the user stranded on the same page;
+                we have to push to /login ourselves. Hard reload so any
+                remaining auth context drops with the navigation. */}
             <div className="pt-4 border-t border-border/60 flex justify-center">
               <Button
                 variant="outline"
                 size="lg"
-                onClick={() => signOut()}
+                onClick={async () => {
+                  await signOut();
+                  window.location.href = '/login';
+                }}
                 className="gap-2 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50 font-semibold"
               >
                 <LogOut className="h-4 w-4" />
