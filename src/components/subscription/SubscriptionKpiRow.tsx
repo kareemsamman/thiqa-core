@@ -75,7 +75,7 @@ function KpiTile({
         {loading ? (
           <Skeleton className="h-8 w-32" />
         ) : (
-          <div className="text-2xl font-extrabold text-foreground ltr-nums leading-tight">{children}</div>
+          <div className="text-2xl font-extrabold text-foreground leading-tight">{children}</div>
         )}
         {footer && (
           <div className="text-[11px] font-medium text-muted-foreground/90 pt-1 border-t border-foreground/5">
