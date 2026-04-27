@@ -392,19 +392,48 @@ async function fetchContextData(
           return q;
         };
 
-        const { count: totalPolicies } = await applyFilters(
-          supabase.from("policies").select("id", { count: "exact", head: true })
+        // Count *transactions*, not raw policy rows — a "package"
+        // (إلزامي + شامل + خدمات طريق sold together) shares one
+        // group_id and counts as ONE معاملة, matching how the
+        // dashboard ("الحزم تُحتسب معاملة واحدة") and useAgentLimits
+        // count them. We pull id+group_id without head:true and dedupe
+        // client-side; cheap for any realistic volume.
+        const { data: idRows } = await applyFilters(
+          supabase.from("policies").select("id, group_id")
         );
+        const distinctTxIds = new Set(
+          (idRows ?? []).map((r: any) => r.group_id ?? r.id),
+        );
+        const totalPolicies = distinctTxIds.size;
 
         const selectFields = isAdmin
-          ? "policy_number, policy_type_parent, insurance_price, profit, payed_for_company, office_commission, start_date, end_date, cancelled, clients(full_name), cars(car_number), insurance_companies(name_ar)"
-          : "policy_number, policy_type_parent, insurance_price, start_date, end_date, cancelled, clients(full_name), cars(car_number), insurance_companies(name_ar)";
+          ? "id, group_id, policy_number, policy_type_parent, insurance_price, profit, payed_for_company, office_commission, start_date, end_date, cancelled, clients(full_name), cars(car_number), insurance_companies(name_ar)"
+          : "id, group_id, policy_number, policy_type_parent, insurance_price, start_date, end_date, cancelled, clients(full_name), cars(car_number), insurance_companies(name_ar)";
 
+        // Fetch up to limit*3 raw rows so we can collapse packages and
+        // still end up with `limit` distinct transactions to show.
         const query = applyFilters(
-          supabase.from("policies").select(selectFields).order("created_at", { ascending: false }).limit(limit)
+          supabase.from("policies").select(selectFields).order("created_at", { ascending: false }).limit(limit * 3)
         );
 
-        const { data } = await query;
+        const { data: rawRows } = await query;
+        // Group rows by transaction id, keep the first as primary,
+        // accumulate the full type list. Don't break early — a group
+        // can have its rows interleaved with other groups in the
+        // result, so we'd miss types if we stopped at limit groups.
+        const txMap = new Map<string, { primary: any; types: string[] }>();
+        for (const r of (rawRows ?? [])) {
+          const txId = r.group_id ?? r.id;
+          if (!txMap.has(txId)) {
+            txMap.set(txId, { primary: r, types: [] });
+          }
+          txMap.get(txId)!.types.push(r.policy_type_parent);
+        }
+        const data = Array.from(txMap.values()).slice(0, limit).map(g => ({
+          ...g.primary,
+          _types: g.types,
+          _isPackage: g.types.length > 1,
+        }));
         if (data && data.length > 0) {
           const typeLabels: Record<string, string> = {
             ELZAMI: "إلزامي", THIRD_FULL: "شامل", ROAD_SERVICE: "خدمة طريق",
@@ -418,20 +447,31 @@ async function fetchContextData(
           const scopeSuffix = scopeBits.length > 0 ? ` (${scopeBits.join(' — ')})` : '';
 
           if (intent.isAggregate) {
-            const totalPrice = data.reduce((s: number, p: any) => s + (p.insurance_price || 0), 0);
-            let summary = `[ملخص المعاملات${scopeSuffix}]\nالعدد: ${totalPolicies ?? data.length} معاملة | مجموع الأسعار (للعينة ${data.length}): ₪${totalPrice.toLocaleString()}`;
-            if (isAdmin) {
-              const totalProfit = data.reduce((s: number, p: any) => s + (p.profit || 0), 0);
-              summary += ` | ربح العينة: ₪${totalProfit.toLocaleString()}`;
+            // Distinct-transactions count is authoritative; price sum
+            // covers ALL fetched rows so packaged policies aren't
+            // double-counted in the count but their prices still show.
+            let summary = `[ملخص المعاملات${scopeSuffix}]\nالعدد: ${totalPolicies} معاملة (الحزم تُحتسب معاملة واحدة)`;
+            if (rawRows && rawRows.length > 0) {
+              const sumPrice = (rawRows as any[]).reduce((s, p) => s + (p.insurance_price || 0), 0);
+              summary += ` | مجموع الأسعار: ₪${sumPrice.toLocaleString()}`;
+              if (isAdmin) {
+                const sumProfit = (rawRows as any[]).reduce((s, p) => s + (p.profit || 0), 0);
+                summary += ` | الربح: ₪${sumProfit.toLocaleString()}`;
+              }
             }
             parts.push(summary);
           } else {
             const header = (totalPolicies || 0) > limit
-              ? `[معاملات${scopeSuffix} - عرض ${data.length} من أصل ${totalPolicies}]`
-              : `[معاملات${scopeSuffix} - ${data.length} نتيجة]`;
+              ? `[معاملات${scopeSuffix} - عرض ${data.length} من أصل ${totalPolicies} (الحزم تُحتسب معاملة واحدة)]`
+              : `[معاملات${scopeSuffix} - ${data.length} معاملة (الحزم تُحتسب معاملة واحدة)]`;
             parts.push(header + '\n' +
               data.map((p: any, i: number) => {
-                let line = `${i + 1}. ${(p.clients as any)?.full_name || '-'} | ${typeLabels[p.policy_type_parent] || p.policy_type_parent} | ${(p.insurance_companies as any)?.name_ar || '-'} | ₪${p.insurance_price || 0} | ${p.start_date} → ${p.end_date}`;
+                // Show all types in the package on one line, then
+                // common metadata (client, company, dates).
+                const typesStr = (p._types || [p.policy_type_parent])
+                  .map((t: string) => typeLabels[t] || t)
+                  .join(' + ');
+                let line = `${i + 1}. ${(p.clients as any)?.full_name || '-'} | ${typesStr}${p._isPackage ? ' 📦 حزمة' : ''} | ${(p.insurance_companies as any)?.name_ar || '-'} | ₪${p.insurance_price || 0} | ${p.start_date} → ${p.end_date}`;
                 if (isAdmin && p.profit !== undefined) line += ` | ربح: ₪${p.profit || 0}`;
                 if (p.cancelled) line += " | ❌ ملغاة";
                 return line;
