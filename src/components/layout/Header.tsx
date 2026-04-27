@@ -310,13 +310,17 @@ export function Header({ title, subtitle }: HeaderProps) {
         onOpenChange={setCheatsheetOpen}
       />
 
-      {/* Mobile header - title row + tabs strip */}
-      <div className="md:hidden mb-4">
-        <div className="flex items-center justify-between gap-2 px-1 pb-2">
+      {/* Mobile header - title row + tabs strip. Vertical rhythm:
+          MainLayout's pt-[4.5rem] provides 16px under the fixed mobile
+          bar; this block adds pt-2 on top for an extra breathing
+          beat, pb-4 between title and tabs, and mb-5 below the whole
+          block before page content begins. */}
+      <div className="md:hidden pt-2 mb-5">
+        <div className="flex items-center justify-between gap-3 px-1 pb-4">
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-semibold text-foreground truncate">{title}</h1>
+            <h1 className="text-xl font-bold text-foreground truncate leading-tight">{title}</h1>
             {subtitle && (
-              <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+              <p className="text-[13px] text-muted-foreground truncate mt-0.5">{subtitle}</p>
             )}
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
