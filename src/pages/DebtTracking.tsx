@@ -404,10 +404,22 @@ export default function DebtTracking() {
         policiesByClient.set(row.client_id, list);
       }
 
-      const hydrated = baseClients.map((c) => ({
-        ...c,
-        policies: policiesByClient.get(c.client_id) || [],
-      }));
+      // Reset policies_count from the actual rows we got back. The RPC's
+      // policies_count counts every active non-broker policy for the
+      // client; the table only shows policies whose remaining > 0 (the
+      // ones that contribute to the debt). Using the RPC count would
+      // print "6 معاملة" on the badge while the expanded table only
+      // lists the 2 with debt — which is what users were seeing. The
+      // policies array we built from report_debt_policies_for_clients
+      // is the source of truth for "how many show up here".
+      const hydrated = baseClients.map((c) => {
+        const policies = policiesByClient.get(c.client_id) || [];
+        return {
+          ...c,
+          policies,
+          policies_count: policies.length,
+        };
+      });
 
       setExpandedClients(new Set());
       setClients(hydrated);
