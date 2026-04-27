@@ -2,19 +2,33 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ShieldX, Mail, LogOut, Loader2, Lock } from "lucide-react";
+import { ShieldX, Mail, Phone, LogOut, Loader2, Lock } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+
+interface AgentContact {
+  agent_name: string | null;
+  email: string | null;
+  phone: string | null;
+}
 
 export default function NoAccess() {
   const { user, profile, signOut, loading, isActive } = useAuth();
   const navigate = useNavigate();
   const [signingOut, setSigningOut] = useState(false);
-  const [adminEmails, setAdminEmails] = useState<string[]>([]);
+  // Contact info comes from the locked user's OWN agency (agents.email
+  // / phone), not from Thiqa platform admins. The lockout reason is
+  // always something the agent owner has to fix (upgrade plan, free a
+  // user seat) so showing them platform support emails just sent the
+  // worker bouncing.
+  const [agentContact, setAgentContact] = useState<AgentContact | null>(null);
 
   useEffect(() => {
-    supabase.rpc("get_admin_contact_emails").then(({ data }) => {
-      if (data) setAdminEmails(data.map((r: { email: string }) => r.email));
+    supabase.rpc("get_my_agent_admin_contact").then(({ data }) => {
+      if (data && data.length > 0) {
+        const row = data[0] as AgentContact;
+        setAgentContact(row);
+      }
     });
   }, []);
 
@@ -93,12 +107,32 @@ export default function NoAccess() {
                 ? "للتواصل مع مدير الوكالة:"
                 : "إذا كنت تعتقد أن هذا خطأ، يرجى التواصل مع:"}
             </p>
-            {adminEmails.length > 0 ? (
-              adminEmails.map((e) => (
-                <p key={e} className="text-sm font-medium text-primary text-center">
-                  <bdi>{e}</bdi>
-                </p>
-              ))
+            {agentContact?.email || agentContact?.phone ? (
+              <div className="rounded-lg border bg-secondary/40 p-3 space-y-2">
+                {agentContact.agent_name && (
+                  <p className="text-sm font-semibold text-foreground text-center">
+                    <bdi>{agentContact.agent_name}</bdi>
+                  </p>
+                )}
+                {agentContact.email && (
+                  <a
+                    href={`mailto:${agentContact.email}`}
+                    className="flex items-center justify-center gap-2 text-sm font-medium text-primary hover:underline"
+                  >
+                    <Mail className="h-4 w-4" />
+                    <bdi>{agentContact.email}</bdi>
+                  </a>
+                )}
+                {agentContact.phone && (
+                  <a
+                    href={`tel:${agentContact.phone}`}
+                    className="flex items-center justify-center gap-2 text-sm font-medium text-primary hover:underline"
+                  >
+                    <Phone className="h-4 w-4" />
+                    <bdi dir="ltr">{agentContact.phone}</bdi>
+                  </a>
+                )}
+              </div>
             ) : (
               <p className="text-sm font-medium text-primary text-center">
                 <bdi>الدعم الفني</bdi>

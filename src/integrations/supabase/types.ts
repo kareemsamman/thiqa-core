@@ -6572,6 +6572,14 @@ export type Database = {
           email: string
         }[]
       }
+      get_my_agent_admin_contact: {
+        Args: never
+        Returns: {
+          agent_name: string | null
+          email: string | null
+          phone: string | null
+        }[]
+      }
       get_agent_effective_limit: {
         Args: { p_agent_id: string; p_resource: string }
         Returns: {
