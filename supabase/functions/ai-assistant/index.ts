@@ -222,6 +222,56 @@ function classifyIntent(message: string): IntentResult {
   return { tables: [...new Set(tables)], searchTerms, isAggregate, isFinancial };
 }
 
+// ─── Date-range + ownership scope helpers ───
+// Pulled out of fetchContextData so policies / payments / accidents
+// can all share the same logic — without this, "كم معاملة اليوم" was
+// counting every policy ever issued because the count query ignored
+// the date keyword in the user message.
+function detectDateRange(msg: string): { fromIso?: string; toIso?: string; label: string } | null {
+  const now = new Date();
+  const startOfDay = (d: Date) => {
+    const x = new Date(d); x.setHours(0, 0, 0, 0); return x;
+  };
+  if (/اليوم|today/i.test(msg)) {
+    return { fromIso: startOfDay(now).toISOString(), label: "اليوم" };
+  }
+  if (/أمس|امس|البارحة|yesterday/i.test(msg)) {
+    const yest = new Date(now); yest.setDate(yest.getDate() - 1);
+    return {
+      fromIso: startOfDay(yest).toISOString(),
+      toIso: startOfDay(now).toISOString(),
+      label: "أمس",
+    };
+  }
+  if (/هذا الأسبوع|الأسبوع الحالي|this week/i.test(msg)) {
+    const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
+    return { fromIso: startOfDay(weekAgo).toISOString(), label: "آخر 7 أيام" };
+  }
+  if (/هذا الشهر|الشهر الحالي|this month/i.test(msg)) {
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { fromIso: monthStart.toISOString(), label: "هذا الشهر" };
+  }
+  if (/هذه السنة|السنة الحالية|this year/i.test(msg)) {
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    return { fromIso: yearStart.toISOString(), label: "هذه السنة" };
+  }
+  // ISO date directly in message: 2026-04-27 etc.
+  const iso = msg.match(/\d{4}-\d{2}-\d{2}/);
+  if (iso) {
+    const day = new Date(iso[0]); day.setHours(0, 0, 0, 0);
+    const next = new Date(day); next.setDate(next.getDate() + 1);
+    return { fromIso: day.toISOString(), toIso: next.toISOString(), label: iso[0] };
+  }
+  return null;
+}
+
+// Detects "did I do" / "my" framing — user wants results scoped to
+// themselves, not the whole agency. Triggers a created_by filter on
+// policies so workers asking "كم معاملة عملت اليوم" get THEIR count.
+function isOwnershipQuery(msg: string): boolean {
+  return /\bأنا\b|عملتها|عملت|سويتها|سويت|خاصتي|تبعي|الخاصة بي|مالي/.test(msg);
+}
+
 // ─── Data retrieval ───
 async function fetchContextData(
   supabase: any,
@@ -322,29 +372,37 @@ async function fetchContextData(
       }
 
       if (table === "policies") {
-        const { count: totalPolicies } = await supabase.from("policies")
-          .select("id", { count: "exact", head: true })
-          .eq("agent_id", agentId)
-          .is("deleted_at", null);
+        const dateRange = detectDateRange(userMessage);
+        const mineOnly = isOwnershipQuery(userMessage);
+
+        // Build filters once and apply to BOTH the count query and
+        // the data query so "كم معاملة عملت اليوم" gives the right
+        // scoped number, not the agency's lifetime count.
+        const applyFilters = (q: any) => {
+          q = q.eq("agent_id", agentId).is("deleted_at", null);
+          if (branchId && !isAdmin) q = q.eq("branch_id", branchId);
+          if (mineOnly) q = q.eq("created_by_admin_id", userId);
+          if (dateRange?.fromIso) q = q.gte("created_at", dateRange.fromIso);
+          if (dateRange?.toIso) q = q.lt("created_at", dateRange.toIso);
+          if (/تنتهي|انتهاء|منتهية/.test(userMessage)) {
+            const now = new Date();
+            const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            q = q.lte("end_date", monthEnd.toISOString()).gte("end_date", now.toISOString()).eq("cancelled", false);
+          }
+          return q;
+        };
+
+        const { count: totalPolicies } = await applyFilters(
+          supabase.from("policies").select("id", { count: "exact", head: true })
+        );
 
         const selectFields = isAdmin
           ? "policy_number, policy_type_parent, insurance_price, profit, payed_for_company, office_commission, start_date, end_date, cancelled, clients(full_name), cars(car_number), insurance_companies(name_ar)"
           : "policy_number, policy_type_parent, insurance_price, start_date, end_date, cancelled, clients(full_name), cars(car_number), insurance_companies(name_ar)";
 
-        let query = supabase.from("policies")
-          .select(selectFields)
-          .eq("agent_id", agentId)
-          .is("deleted_at", null)
-          .order("created_at", { ascending: false })
-          .limit(limit);
-
-        if (branchId && !isAdmin) query = query.eq("branch_id", branchId);
-
-        if (/تنتهي|انتهاء|منتهية/.test(userMessage)) {
-          const now = new Date();
-          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-          query = query.lte("end_date", monthEnd.toISOString()).gte("end_date", now.toISOString()).eq("cancelled", false);
-        }
+        const query = applyFilters(
+          supabase.from("policies").select(selectFields).order("created_at", { ascending: false }).limit(limit)
+        );
 
         const { data } = await query;
         if (data && data.length > 0) {
@@ -353,9 +411,15 @@ async function fetchContextData(
             ACCIDENT_FEE_EXEMPTION: "إعفاء رسوم", HEALTH: "صحي", LIFE: "حياة",
           };
 
+          // Scope label so the AI knows the filter applied
+          const scopeBits: string[] = [];
+          if (dateRange) scopeBits.push(dateRange.label);
+          if (mineOnly) scopeBits.push("التي أصدرتها");
+          const scopeSuffix = scopeBits.length > 0 ? ` (${scopeBits.join(' — ')})` : '';
+
           if (intent.isAggregate) {
             const totalPrice = data.reduce((s: number, p: any) => s + (p.insurance_price || 0), 0);
-            let summary = `[ملخص المعاملات]\nإجمالي في النظام: ${totalPolicies} معاملة | مجموع أسعار العينة (${data.length}): ₪${totalPrice.toLocaleString()}`;
+            let summary = `[ملخص المعاملات${scopeSuffix}]\nالعدد: ${totalPolicies ?? data.length} معاملة | مجموع الأسعار (للعينة ${data.length}): ₪${totalPrice.toLocaleString()}`;
             if (isAdmin) {
               const totalProfit = data.reduce((s: number, p: any) => s + (p.profit || 0), 0);
               summary += ` | ربح العينة: ₪${totalProfit.toLocaleString()}`;
@@ -363,8 +427,8 @@ async function fetchContextData(
             parts.push(summary);
           } else {
             const header = (totalPolicies || 0) > limit
-              ? `[معاملات - عرض ${data.length} من أصل ${totalPolicies} | لرؤية الجميع → صفحة المعاملات]`
-              : `[معاملات - ${data.length} نتيجة]`;
+              ? `[معاملات${scopeSuffix} - عرض ${data.length} من أصل ${totalPolicies}]`
+              : `[معاملات${scopeSuffix} - ${data.length} نتيجة]`;
             parts.push(header + '\n' +
               data.map((p: any, i: number) => {
                 let line = `${i + 1}. ${(p.clients as any)?.full_name || '-'} | ${typeLabels[p.policy_type_parent] || p.policy_type_parent} | ${(p.insurance_companies as any)?.name_ar || '-'} | ₪${p.insurance_price || 0} | ${p.start_date} → ${p.end_date}`;
@@ -381,22 +445,28 @@ async function fetchContextData(
         // policy. Use the inner-join trick on policies!inner to push
         // the branch filter down into the relation, so workers don't
         // see payments tied to other branches' policies.
+        const dateRange = detectDateRange(userMessage);
         const select = branchId && !isAdmin
           ? "amount, payment_type, payment_date, policies!inner(clients(full_name), policy_number, branch_id)"
           : "amount, payment_type, payment_date, policies(clients(full_name), policy_number)";
 
-        let countQ = supabase.from("policy_payments")
-          .select(branchId && !isAdmin ? "id, policies!inner(branch_id)" : "id", { count: "exact", head: true })
-          .eq("agent_id", agentId);
-        if (branchId && !isAdmin) countQ = countQ.eq("policies.branch_id", branchId);
-        const { count: totalPayments } = await countQ;
+        const applyPayFilters = (q: any) => {
+          q = q.eq("agent_id", agentId);
+          if (branchId && !isAdmin) q = q.eq("policies.branch_id", branchId);
+          // payment_date is a DATE column — fromIso/toIso ISO strings work
+          // because PostgREST accepts both date and timestamp comparisons.
+          if (dateRange?.fromIso) q = q.gte("payment_date", dateRange.fromIso.slice(0, 10));
+          if (dateRange?.toIso) q = q.lt("payment_date", dateRange.toIso.slice(0, 10));
+          return q;
+        };
 
-        let pQuery = supabase.from("policy_payments")
-          .select(select)
-          .eq("agent_id", agentId)
-          .order("payment_date", { ascending: false })
-          .limit(limit);
-        if (branchId && !isAdmin) pQuery = pQuery.eq("policies.branch_id", branchId);
+        const { count: totalPayments } = await applyPayFilters(
+          supabase.from("policy_payments").select(branchId && !isAdmin ? "id, policies!inner(branch_id)" : "id", { count: "exact", head: true })
+        );
+
+        const pQuery = applyPayFilters(
+          supabase.from("policy_payments").select(select).order("payment_date", { ascending: false }).limit(limit)
+        );
         const { data } = await pQuery;
 
         if (data && data.length > 0) {
@@ -454,6 +524,7 @@ async function fetchContextData(
       }
 
       if (table === "accidents") {
+        const dateRange = detectDateRange(userMessage);
         let query = supabase.from("accident_reports")
           .select("report_number, accident_date, status, clients(full_name), insurance_companies(name_ar)")
           .eq("agent_id", agentId)
@@ -461,6 +532,8 @@ async function fetchContextData(
           .limit(limit);
 
         if (branchId && !isAdmin) query = query.eq("branch_id", branchId);
+        if (dateRange?.fromIso) query = query.gte("accident_date", dateRange.fromIso.slice(0, 10));
+        if (dateRange?.toIso) query = query.lt("accident_date", dateRange.toIso.slice(0, 10));
 
         const { data } = await query;
         if (data && data.length > 0) {
