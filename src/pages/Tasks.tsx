@@ -113,69 +113,74 @@ export default function Tasks() {
           </Button>
         </div>
 
-        {/* Stats Summary Banner — mobile uses a 2-col grid with smaller
-            icons so the four stats sit cleanly in pairs; the Progress
-            bar gets `order-last col-span-2` on mobile so it always sits
-            on its own row at the bottom. From sm+, the layout falls
-            back to the original flex-wrap row with Progress in its
-            original position. */}
+        {/* Stats Summary Banner. Mobile: each stat is its own white
+            tile with a soft violet border so the gradient parent reads
+            as a frame, not as flat dead space. The grid uses
+            `auto-fit minmax(150px, 1fr)` so when an odd number of
+            stats falls into the last row, the surviving item grows to
+            fill the row instead of leaving an empty cell. Progress bar
+            gets `order-last` on mobile so it always sits at the bottom
+            and reads as a separate "summary" band. From sm+, all the
+            tile chrome (bg/border/padding) drops via `sm:bg-transparent
+            sm:border-0 sm:p-0`, restoring the original flat flex-wrap
+            row with no visual change. */}
         <Card className="bg-gradient-to-l from-violet-50 to-background border-violet-200/50">
-          <CardContent className="py-4">
-            <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
+          <CardContent className="p-3 sm:py-4">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
               {/* مهامي المعلقة */}
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="flex items-center gap-3 rounded-xl bg-white/70 border border-violet-100/80 px-3 py-3 min-w-0 sm:bg-transparent sm:border-0 sm:p-0">
                 <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600 shrink-0">
                   <Clock className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xl sm:text-2xl font-bold ltr-nums leading-tight">{myPendingCount}</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground truncate">مهامي المعلقة</p>
+                  <p className="text-2xl font-bold ltr-nums leading-tight">{myPendingCount}</p>
+                  <p className="text-[12px] sm:text-sm text-muted-foreground truncate">مهامي المعلقة</p>
                 </div>
               </div>
 
               {/* مهامي المنجزة */}
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="flex items-center gap-3 rounded-xl bg-white/70 border border-violet-100/80 px-3 py-3 min-w-0 sm:bg-transparent sm:border-0 sm:p-0">
                 <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-green-100 text-green-600 shrink-0">
                   <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xl sm:text-2xl font-bold ltr-nums leading-tight">{myCompletedCount}</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground truncate">أنجزتها اليوم</p>
+                  <p className="text-2xl font-bold ltr-nums leading-tight">{myCompletedCount}</p>
+                  <p className="text-[12px] sm:text-sm text-muted-foreground truncate">أنجزتها اليوم</p>
                 </div>
-              </div>
-
-              {/* Progress */}
-              <div className="order-last col-span-2 sm:order-none sm:col-span-1 sm:flex-1 sm:min-w-[150px] sm:max-w-[200px]">
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-muted-foreground">إنجازي</span>
-                  <span className="font-medium ltr-nums">{completionPercentage}%</span>
-                </div>
-                <Progress value={completionPercentage} className="h-2" />
               </div>
 
               {/* المهام للآخرين */}
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="flex items-center gap-3 rounded-xl bg-white/70 border border-violet-100/80 px-3 py-3 min-w-0 sm:bg-transparent sm:border-0 sm:p-0">
                 <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-violet-100 text-violet-600 shrink-0">
                   <Users className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xl sm:text-2xl font-bold ltr-nums leading-tight">{createdForOthersCount}</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground truncate">أنشأتها للآخرين</p>
+                  <p className="text-2xl font-bold ltr-nums leading-tight">{createdForOthersCount}</p>
+                  <p className="text-[12px] sm:text-sm text-muted-foreground truncate">أنشأتها للآخرين</p>
                 </div>
               </div>
 
               {/* متأخرة */}
               {stats.overdue > 0 && (
-                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="flex items-center gap-3 rounded-xl bg-white/70 border border-violet-100/80 px-3 py-3 min-w-0 sm:bg-transparent sm:border-0 sm:p-0">
                   <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-red-100 text-red-600 shrink-0">
                     <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xl sm:text-2xl font-bold ltr-nums leading-tight">{stats.overdue}</p>
-                    <p className="text-xs sm:text-sm text-muted-foreground truncate">متأخرة</p>
+                    <p className="text-2xl font-bold ltr-nums leading-tight">{stats.overdue}</p>
+                    <p className="text-[12px] sm:text-sm text-muted-foreground truncate">متأخرة</p>
                   </div>
                 </div>
               )}
+
+              {/* Progress — last on mobile, inline on sm+. */}
+              <div className="order-last rounded-xl bg-white/70 border border-violet-100/80 px-3 py-3 sm:order-none sm:bg-transparent sm:border-0 sm:p-0 sm:flex-1 sm:min-w-[150px] sm:max-w-[200px]">
+                <div className="flex justify-between text-sm mb-1.5">
+                  <span className="text-muted-foreground">إنجازي</span>
+                  <span className="font-medium ltr-nums">{completionPercentage}%</span>
+                </div>
+                <Progress value={completionPercentage} className="h-2" />
+              </div>
             </div>
           </CardContent>
         </Card>
