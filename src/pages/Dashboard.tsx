@@ -32,7 +32,7 @@ export default function Dashboard() {
         subtitle={`مرحباً بك، ${profile?.full_name || "مستخدم"}`}
       />
 
-      <div className="p-4 md:p-6 space-y-5" dir="rtl">
+      <div className="md:p-6 space-y-5" dir="rtl">
         {/* Global period pills */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <PeriodPills value={period} onChange={setPeriod} />
