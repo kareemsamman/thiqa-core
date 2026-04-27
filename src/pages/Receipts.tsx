@@ -449,13 +449,18 @@ export default function Receipts() {
     if (!agentId) return;
     setLoading(true);
     try {
+      // Sort by created_at DESC first, so the receipt that was just
+      // entered surfaces at the top even if the user back-dated it.
+      // receipt_date is the document's "as of" date (often a few days
+      // in the past for paperwork catch-up) and shouldn't be the
+      // primary key for "newest first" — created_at is.
       let query = (supabase as any)
         .from("receipts")
         .select("*, policy:policies(id, document_number, group_id)")
         .eq("agent_id", agentId)
         .eq("receipt_type", activeTab)
-        .order("receipt_date", { ascending: false })
         .order("created_at", { ascending: false })
+        .order("receipt_date", { ascending: false })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
       // Date filters
