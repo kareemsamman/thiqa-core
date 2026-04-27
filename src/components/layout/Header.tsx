@@ -169,7 +169,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             line at the title block's left edge — in RTL that reads as
             a divider "after the logo", separating the page title from
             the center-tabs zone the user is about to enter. */}
-        <div className="min-w-0 shrink overflow-hidden max-w-[28%] border-l border-border/70 pl-4">
+        <div className="min-w-0 shrink overflow-hidden max-w-[18%] xl:max-w-[22%] border-l border-border/70 pl-4">
           <h1 className="text-xl font-semibold text-foreground truncate">{title}</h1>
           {subtitle && (
             <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
