@@ -1,11 +1,27 @@
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Pause, Phone, MessageCircle, ArrowRight, Building2 } from "lucide-react";
+import { AlertTriangle, Pause, Phone, MessageCircle, ArrowRight, Building2, LogOut } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { PlanLadder } from "@/components/pricing/PlanLadder";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import thiqaLogoIcon from "@/assets/thiqa-logo-icon.svg";
+
+// Defaults match the values seeded in the support_contact_settings
+// migration — used as a fallback if the settings query hasn't loaded
+// yet, so the UI doesn't flash with empty CTAs.
+const DEFAULT_SUPPORT_WHATSAPP = "972525143581";
+const DEFAULT_SUPPORT_PHONE = "0525143581";
+
+function formatPhoneForDisplay(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return raw;
+}
 
 /**
  * Lockout page shown when ProtectedRoute determines the agent's
@@ -31,6 +47,24 @@ export default function SubscriptionExpired() {
 
   const isPaused = isSubscriptionPaused;
   const isCancelled = agent?.subscription_status === "cancelled";
+
+  // Pull WhatsApp + phone numbers from thiqa_platform_settings so a
+  // platform admin can update support contact info without a code deploy.
+  // Falls back to the seeded defaults to avoid an empty-CTA flash.
+  const { data: contact } = useQuery({
+    queryKey: ["thiqa-support-contact"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("thiqa_platform_settings")
+        .select("setting_key, setting_value")
+        .in("setting_key", ["support_whatsapp", "support_phone"]);
+      const map: Record<string, string> = {};
+      (data || []).forEach((r) => { map[r.setting_key] = r.setting_value || ""; });
+      return map;
+    },
+  });
+  const whatsapp = contact?.support_whatsapp || DEFAULT_SUPPORT_WHATSAPP;
+  const phone = contact?.support_phone || DEFAULT_SUPPORT_PHONE;
 
   const handleExitImpersonation = () => {
     stopImpersonation();
@@ -102,26 +136,38 @@ export default function SubscriptionExpired() {
             <PlanLadder onPlanChanged={handlePlanChanged} />
           )}
 
-          {/* Contact + Sign out */}
-          <div className="text-center space-y-4">
+          {/* Contact CTAs */}
+          <div className="text-center space-y-6">
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <a href="https://wa.me/972525143581" target="_blank" rel="noopener noreferrer">
+              <a href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener noreferrer">
                 <Button className="bg-green-600 hover:bg-green-700 text-white gap-2">
                   <MessageCircle className="h-4 w-4" />
                   تواصل مع إدارة ثقة
                 </Button>
               </a>
-              <a href="tel:0525143581">
+              <a href={`tel:${phone}`}>
                 <Button variant="outline" className="gap-2">
                   <Phone className="h-4 w-4" />
-                  <span dir="ltr">052-514-3581</span>
+                  <span dir="ltr">{formatPhoneForDisplay(phone)}</span>
                 </Button>
               </a>
             </div>
 
-            <Button variant="ghost" onClick={() => signOut()} className="text-muted-foreground">
-              تسجيل الخروج
-            </Button>
+            {/* Sign out — promoted from a faded ghost link to a clearly
+                visible outline button with destructive accent. Stays
+                visually subordinate to the upgrade CTA but is impossible
+                to miss when the user actually wants to leave. */}
+            <div className="pt-4 border-t border-border/60 flex justify-center">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => signOut()}
+                className="gap-2 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50 font-semibold"
+              >
+                <LogOut className="h-4 w-4" />
+                تسجيل الخروج
+              </Button>
+            </div>
           </div>
         </div>
       </div>

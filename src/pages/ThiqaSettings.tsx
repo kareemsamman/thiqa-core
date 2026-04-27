@@ -15,7 +15,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Settings, Mail, Save, Loader2, Eye, EyeOff, Shield, Send, CheckCircle2, XCircle, HardDrive, CreditCard, Plus, Trash2, GripVertical, Pencil, Bot, Users } from "lucide-react";
+import { Settings, Mail, Save, Loader2, Eye, EyeOff, Shield, Send, CheckCircle2, XCircle, HardDrive, CreditCard, Plus, Trash2, GripVertical, Pencil, Bot, Users, MessageCircle, Phone } from "lucide-react";
 import { SmsProviderConfig, type SmsProviderChoice } from "@/components/sms/SmsProviderConfig";
 
 function useThiqaPlatformSettings() {
@@ -53,6 +53,111 @@ function useSuperAdmins() {
       return (data || []) as SuperAdmin[];
     },
   });
+}
+
+function SupportContactCard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: settings, isLoading } = useThiqaPlatformSettings();
+  const [whatsapp, setWhatsapp] = useState("");
+  const [phone, setPhone] = useState("");
+
+  useEffect(() => {
+    if (settings) {
+      setWhatsapp(settings.support_whatsapp || "");
+      setPhone(settings.support_phone || "");
+    }
+  }, [settings]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const rows = [
+        { setting_key: "support_whatsapp", setting_value: whatsapp.trim() },
+        { setting_key: "support_phone", setting_value: phone.trim() },
+      ];
+      for (const row of rows) {
+        const { error } = await supabase
+          .from("thiqa_platform_settings")
+          .upsert(
+            { ...row, updated_at: new Date().toISOString() },
+            { onConflict: "setting_key" },
+          );
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["thiqa-platform-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["thiqa-support-contact"] });
+      toast({ title: "تم الحفظ", description: "تم تحديث بيانات التواصل بنجاح" });
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل في حفظ بيانات التواصل", variant: "destructive" });
+    },
+  });
+
+  if (isLoading) return <Skeleton className="h-32 w-full" />;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MessageCircle className="h-5 w-5" />
+          بيانات التواصل مع الدعم
+        </CardTitle>
+        <CardDescription>
+          الأرقام المعروضة على شاشة انتهاء الاشتراك وأي شاشة دعم أخرى. تغيير أي رقم ينعكس فوراً بدون إعادة نشر التطبيق.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor="support_whatsapp" className="flex items-center gap-1.5">
+            <MessageCircle className="h-3.5 w-3.5" />
+            رقم واتساب (مع رمز الدولة، بدون +)
+          </Label>
+          <Input
+            id="support_whatsapp"
+            value={whatsapp}
+            onChange={(e) => setWhatsapp(e.target.value)}
+            placeholder="972525143581"
+            dir="ltr"
+            className="ltr-input"
+          />
+          <p className="text-xs text-muted-foreground">
+            يُستخدم في رابط <code dir="ltr">wa.me/{whatsapp || "972525143581"}</code>
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="support_phone" className="flex items-center gap-1.5">
+            <Phone className="h-3.5 w-3.5" />
+            رقم الاتصال المعروض (تنسيق محلي)
+          </Label>
+          <Input
+            id="support_phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="0525143581"
+            dir="ltr"
+            className="ltr-input"
+          />
+          <p className="text-xs text-muted-foreground">
+            هذا الرقم يظهر للزائر ويُستخدم في رابط <code dir="ltr">tel:</code> عند الضغط.
+          </p>
+        </div>
+
+        <div className="flex justify-end pt-4 border-t">
+          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? (
+              <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 ml-2" />
+            )}
+            حفظ بيانات التواصل
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function GeneralSettingsTab() {
@@ -128,6 +233,8 @@ function GeneralSettingsTab() {
 
   return (
     <div className="space-y-4">
+      <SupportContactCard />
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

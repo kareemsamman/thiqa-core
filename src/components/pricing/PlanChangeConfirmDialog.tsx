@@ -250,44 +250,52 @@ export function PlanChangeConfirmDialog({
     <Dialog open={open} onOpenChange={(v) => !submitting && onOpenChange(v)}>
       <DialogContent
         hideCloseButton
-        className="w-[92vw] max-w-[560px] max-h-[92vh] overflow-hidden flex flex-col p-0 gap-0 border-0 shadow-2xl"
+        className="w-[92vw] max-w-[560px] max-h-[92vh] overflow-hidden flex flex-col p-0 gap-0 border-0 shadow-2xl rounded-2xl"
         dir="rtl"
       >
-        <DialogClose className="absolute top-4 left-4 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white ring-1 ring-white/30 backdrop-blur-sm transition-all hover:bg-white/30 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white">
+        {/* Refined header — replaces the candy gradient with a clean
+            white card. Eyebrow + plan-name hero + price band keeps the
+            visual hierarchy the gradient was hiding. Close button stays
+            top-left, neutral on the white background. */}
+        <DialogClose className="absolute top-4 left-4 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition-all hover:bg-slate-200 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/40">
           <X className="h-4 w-4" weight="bold" />
           <span className="sr-only">إغلاق</span>
         </DialogClose>
 
-        <DialogHeader className="relative px-6 md:px-8 pt-7 pb-5 overflow-hidden border-b">
+        <DialogHeader className="relative px-6 md:px-8 pt-7 pb-5 bg-white border-b border-slate-200">
+          {/* Subtle accent strip — replaces the loud gradient with a
+              tasteful color cue. Switches palette on the success state. */}
           <div
-            className="absolute inset-0"
-            style={{
-              background:
-                'linear-gradient(120deg, #3b2fd8 0%, #6a3bd1 28%, #c93fa8 58%, #ed6a44 85%, #f5a548 100%)',
-            }}
+            className={cn(
+              'absolute top-0 inset-x-0 h-1',
+              successState ? 'bg-gradient-to-r from-emerald-400 to-cyan-400' : 'bg-gradient-to-r from-primary to-primary/60',
+            )}
           />
-          <div className="relative pl-12">
+          <div className="pl-12">
             {!successState ? (
               <>
-                <DialogTitle className="text-xl md:text-2xl font-bold text-white mb-1 drop-shadow-sm">
+                <p className="text-[11px] uppercase tracking-[0.18em] font-semibold text-primary/70 mb-1.5">
                   تأكيد تغيير الحزمة
+                </p>
+                <DialogTitle className="text-2xl md:text-[26px] font-extrabold text-slate-900 mb-1 leading-tight">
+                  {targetPlan.name_ar || targetPlan.name}
                 </DialogTitle>
-                <DialogDescription className="text-sm text-white/90 drop-shadow-sm">
-                  التحويل إلى{' '}
-                  <span className="font-bold">{targetPlan.name_ar || targetPlan.name}</span>
+                <DialogDescription className="text-sm text-slate-500">
+                  راجع التفاصيل أدناه ثم اضغط تأكيد.
                 </DialogDescription>
               </>
             ) : (
               <>
-                <DialogTitle className="text-xl md:text-2xl font-bold text-white mb-1 drop-shadow-sm">
-                  {successState.switchMode === 'after_trial'
-                    ? 'تم حفظ اختيارك!'
-                    : 'تم تفعيل الحزمة الجديدة!'}
+                <p className="text-[11px] uppercase tracking-[0.18em] font-semibold text-emerald-600 mb-1.5">
+                  {successState.switchMode === 'after_trial' ? 'تم حفظ اختيارك' : 'تم التفعيل'}
+                </p>
+                <DialogTitle className="text-2xl md:text-[26px] font-extrabold text-slate-900 mb-1 leading-tight">
+                  {targetPlan.name_ar || targetPlan.name}
                 </DialogTitle>
-                <DialogDescription className="text-sm text-white/90 drop-shadow-sm">
+                <DialogDescription className="text-sm text-slate-500">
                   {successState.switchMode === 'after_trial'
-                    ? `ستبدأ ${targetPlan.name_ar || targetPlan.name} بعد انتهاء التجربة.`
-                    : `أنت الآن على ${targetPlan.name_ar || targetPlan.name}.`}
+                    ? 'ستبدأ هذه الحزمة تلقائياً عند انتهاء التجربة.'
+                    : 'كل الميزات الجديدة متاحة فوراً.'}
                 </DialogDescription>
               </>
             )}
@@ -295,89 +303,90 @@ export function PlanChangeConfirmDialog({
         </DialogHeader>
 
         {!successState ? (
-          <div className="flex-1 overflow-y-auto px-6 md:px-7 py-5 bg-slate-50/50 space-y-4">
-            {/* Monthly / yearly toggle */}
-            <div className="flex gap-2 p-1 rounded-xl bg-white ring-1 ring-slate-200">
-              <button
-                type="button"
-                onClick={() => setCycle('monthly')}
-                className={cn(
-                  'flex-1 py-2 rounded-lg text-sm font-semibold transition-all',
-                  cycle === 'monthly'
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                شهري
-              </button>
-              <button
-                type="button"
-                onClick={() => setCycle('yearly')}
-                className={cn(
-                  'flex-1 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-1.5',
-                  cycle === 'yearly'
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                سنوي
-                {yearlySavings > 0 && (
-                  <span
-                    className={cn(
-                      'text-[10px] px-1.5 py-0.5 rounded-full font-bold',
-                      cycle === 'yearly'
-                        ? 'bg-white/20 text-white'
-                        : 'bg-emerald-500/15 text-emerald-700',
-                    )}
-                  >
+          <div className="flex-1 overflow-y-auto px-6 md:px-8 py-6 bg-slate-50/60 space-y-5">
+            {/* Price hero — the visual anchor of the dialog. The plan
+                name lives in the header; here we let the number speak. */}
+            <div className="rounded-2xl bg-white ring-1 ring-slate-200 px-5 py-5 shadow-sm">
+              <div className="flex items-end justify-between gap-3 mb-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider font-semibold text-slate-400 mb-1">
+                    السعر
+                  </p>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-4xl font-extrabold text-slate-900 tabular-nums leading-none">
+                      ₪{cyclePrice.toLocaleString('en')}
+                    </span>
+                    <span className="text-sm font-medium text-slate-500">
+                      / {cycle === 'yearly' ? 'سنة' : 'شهر'}
+                    </span>
+                  </div>
+                </div>
+                {cycle === 'yearly' && yearlySavings > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold ring-1 ring-emerald-200">
                     وفّر ₪{yearlySavings.toLocaleString('en')}
                   </span>
                 )}
-              </button>
+              </div>
+
+              {/* Slim cycle toggle inside the price card */}
+              <div className="flex gap-1 p-1 rounded-lg bg-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setCycle('monthly')}
+                  className={cn(
+                    'flex-1 py-1.5 rounded-md text-xs font-semibold transition-all',
+                    cycle === 'monthly'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700',
+                  )}
+                >
+                  شهري
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCycle('yearly')}
+                  className={cn(
+                    'flex-1 py-1.5 rounded-md text-xs font-semibold transition-all',
+                    cycle === 'yearly'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700',
+                  )}
+                >
+                  سنوي
+                </button>
+              </div>
             </div>
 
-            {/* Compact from → to summary */}
-            <div className="flex items-center gap-2 justify-between rounded-xl bg-white ring-1 ring-slate-200 p-3">
-              <div className="flex-1 min-w-0 text-right">
-                <p className="text-[11px] text-muted-foreground">من</p>
-                <p className="text-sm font-semibold truncate">
-                  {planInfo?.name_ar || planInfo?.name || agent?.plan || '—'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  ₪{currentMonthlyPrice.toLocaleString('en')} / شهر
-                </p>
-              </div>
-              <ArrowLeft className="h-4 w-4 text-primary shrink-0" weight="bold" />
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-[11px] text-muted-foreground">إلى</p>
-                <p className="text-sm font-semibold truncate text-primary">
-                  {targetPlan.name_ar || targetPlan.name}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  ₪{cyclePrice.toLocaleString('en')} / {cycle === 'yearly' ? 'سنة' : 'شهر'}
-                </p>
-              </div>
+            {/* Slim from → to row — secondary info, kept light */}
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-slate-500 truncate">
+                {planInfo?.name_ar || planInfo?.name || agent?.plan || '—'}
+              </span>
+              <ArrowLeft className="h-3.5 w-3.5 text-primary shrink-0" weight="bold" />
+              <span className="font-semibold text-slate-900 truncate">
+                {targetPlan.name_ar || targetPlan.name}
+              </span>
             </div>
 
-            {/* Billing summary — one focused box */}
+            {/* Billing summary — clean inset, no colored box */}
             {billing && (
-              <div className="rounded-xl bg-primary/5 ring-1 ring-primary/15 p-4">
-                <p className="text-sm font-bold mb-2 flex items-center gap-1.5 text-primary">
-                  <CalendarBlank className="h-4 w-4" weight="fill" />
+              <div className="rounded-2xl bg-white ring-1 ring-slate-200 px-5 py-4">
+                <p className="text-xs font-bold mb-2 flex items-center gap-1.5 text-slate-500 uppercase tracking-wider">
+                  <CalendarBlank className="h-3.5 w-3.5" weight="fill" />
                   متى وكم ستدفع؟
                 </p>
                 <BillingExplanation billing={billing} />
               </div>
             )}
 
-            {/* Privacy policy checkbox */}
-            <label className="flex items-start gap-3 rounded-xl bg-white ring-1 ring-slate-200 p-3.5 cursor-pointer transition-colors hover:bg-slate-50">
+            {/* Privacy policy checkbox — minimal */}
+            <label className="flex items-start gap-3 cursor-pointer">
               <Checkbox
                 checked={privacyAccepted}
                 onCheckedChange={(v) => setPrivacyAccepted(v === true)}
                 className="mt-0.5"
               />
-              <span className="text-sm text-slate-700 leading-relaxed">
+              <span className="text-xs text-slate-600 leading-relaxed">
                 أوافق على{' '}
                 <a
                   href="/terms"
@@ -433,23 +442,33 @@ export function PlanChangeConfirmDialog({
           </div>
         )}
 
-        <div className="px-6 py-4 border-t bg-white flex items-center justify-end gap-2 flex-wrap">
+        <div className="px-6 md:px-8 py-4 border-t border-slate-200 bg-white flex items-center justify-between gap-3">
           {!successState ? (
             <>
-              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+              <Button
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                disabled={submitting}
+                className="text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+              >
                 إلغاء
               </Button>
               <Button
                 onClick={handleConfirm}
                 disabled={!privacyAccepted || submitting}
-                className="gap-2"
+                size="lg"
+                className="gap-2 px-6 font-bold shadow-md hover:shadow-lg transition-shadow"
               >
-                <TrendUp className="h-4 w-4" />
-                {submitting ? 'جارٍ التأكيد...' : 'تأكيد'}
+                <TrendUp className="h-4 w-4" weight="bold" />
+                {submitting ? 'جارٍ التأكيد...' : 'تأكيد التغيير'}
               </Button>
             </>
           ) : (
-            <Button onClick={() => onOpenChange(false)} className="gap-2">
+            <Button
+              onClick={() => onOpenChange(false)}
+              size="lg"
+              className="gap-2 mr-auto px-6 font-bold"
+            >
               <CheckCircle className="h-4 w-4" weight="fill" />
               تم
             </Button>
