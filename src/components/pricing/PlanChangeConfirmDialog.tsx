@@ -287,13 +287,20 @@ export function PlanChangeConfirmDialog({
             'relative px-6 md:px-8 pt-6 pb-6 overflow-hidden',
             successState
               ? 'bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800'
-              : 'bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800',
+              // Brand-purple gradient. #4158b0 is the anchor the user
+              // picked; the gradient lightens it toward the top-right
+              // and deepens it toward the bottom-left so the panel
+              // reads as dimensional rather than flat. (--primary in
+              // this app is near-black, so we can't reuse the design
+              // token here without losing the purple identity.)
+              : 'bg-gradient-to-br from-[#5468c4] via-[#4158b0] to-[#2a3878]',
           )}
         >
-          {/* Soft brand-color glow in the corner — adds depth without
-              the candy-gradient look. */}
+          {/* Soft highlight glow in the top-right — picks up the
+              lighter end of the gradient so the corner glows instead
+              of fading flat. */}
           {!successState && (
-            <div className="absolute -top-12 -right-12 h-40 w-40 rounded-full bg-primary/30 blur-3xl pointer-events-none" />
+            <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-[#8a9adf]/35 blur-3xl pointer-events-none" />
           )}
 
           <div className="relative">
