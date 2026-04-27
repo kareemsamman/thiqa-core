@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,8 +30,10 @@ interface Branch {
   policy_count?: number;
 }
 
+// Access is gated by <PermissionRoute permission="page.branches"> at
+// the route level — admins bypass automatically, workers need the
+// permission granted from the editor. No in-page guard needed.
 export default function BranchManagement() {
-  const { isAdmin } = useAuth();
   const { agentId } = useAgentContext();
   const { handleLimitError, showUpgradePrompt } = useUpgradePrompt();
   const { branches: branchLimit, loading: limitsLoading, refetch: refetchLimits } = useAgentLimits();
@@ -201,8 +202,6 @@ export default function BranchManagement() {
       setDeleting(false);
     }
   };
-
-  if (!isAdmin) return null;
 
   return (
     <MainLayout>

@@ -8,7 +8,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Search, Edit, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { RoadServiceDrawer } from '@/components/road-services/RoadServiceDrawer';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
@@ -36,8 +35,11 @@ const CAR_TYPE_LABELS: Record<CarType, string> = {
   tjeraup4: 'تجاري أكثر من 4 طن',
 };
 
+// Access is gated by <PermissionRoute permission="page.road_services"
+// feature="road_services"> at the route level — admins bypass; workers
+// need both the permission grant and the agent's plan to include the
+// feature. No in-page guard needed.
 export default function RoadServices() {
-  const { isAdmin } = useAuth();
   const [services, setServices] = useState<RoadService[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -120,16 +122,6 @@ export default function RoadServices() {
     setEditingService(null);
     fetchServices();
   };
-
-  if (!isAdmin) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">غير مصرح لك بالوصول لهذه الصفحة</p>
-        </div>
-      </MainLayout>
-    );
-  }
 
   return (
     <MainLayout>

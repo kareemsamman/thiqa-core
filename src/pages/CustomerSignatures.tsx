@@ -37,7 +37,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { Navigate } from "react-router-dom";
 
 interface ClientSignature {
   id: string;
@@ -50,7 +49,9 @@ interface ClientSignature {
 
 export default function CustomerSignatures() {
   const { toast } = useToast();
-  const { isAdmin, loading: authLoading } = useAuth();
+  // Access is gated by <PermissionRoute permission="page.customer_signatures">
+  // at the route level — admins bypass, workers need the permission grant.
+  const { loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<ClientSignature[]>([]);
   const [search, setSearch] = useState("");
@@ -166,10 +167,6 @@ export default function CustomerSignatures() {
         </div>
       </MainLayout>
     );
-  }
-
-  if (!isAdmin) {
-    return <Navigate to="/dashboard" replace />;
   }
 
   return (

@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Building2, Users, Receipt } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
 import { CompaniesSection } from '@/components/accounting/CompaniesSection';
 import { BrokersSection } from '@/components/accounting/BrokersSection';
 import { ExpensesSection } from '@/components/accounting/ExpensesSection';
@@ -12,8 +11,11 @@ import { RecalcProfitsButton } from '@/components/dashboard/RecalcProfitsButton'
 
 type MainTab = 'companies' | 'brokers' | 'expenses';
 
+// Access is gated by <PermissionRoute permission="page.accounting"
+// feature="accounting"> at the route level — admins bypass; workers
+// need both the permission grant and the agent's plan to include
+// accounting. No in-page guard needed.
 export default function Accounting() {
-  const { isAdmin } = useAuth();
   const [searchParams] = useSearchParams();
   const initialTab: MainTab =
     searchParams.get('tab') === 'brokers'
@@ -31,8 +33,6 @@ export default function Accounting() {
   useEffect(() => {
     setTab(initialTab);
   }, [initialTab]);
-
-  if (!isAdmin) return <Navigate to="/" replace />;
 
   return (
     <MainLayout>

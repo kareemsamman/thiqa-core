@@ -17,7 +17,6 @@ import {
 import { Plus, Search, Settings, Building2, Truck, Shield } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/useAuth';
 import { CompanyDrawer } from '@/components/companies/CompanyDrawer';
 import { PricingRulesDrawer } from '@/components/companies/PricingRulesDrawer';
 import { RoadServicePricingDrawer } from '@/components/companies/RoadServicePricingDrawer';
@@ -35,7 +34,9 @@ const POLICY_TYPES = [
 
 export default function Companies() {
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  // Access is gated by <PermissionRoute permission="page.companies"> at
+  // the route level — admins bypass automatically, workers need the
+  // permission granted from the editor. No in-page guard needed.
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -128,20 +129,6 @@ export default function Companies() {
     fetchCompanies();
     handleDrawerClose();
   };
-
-  if (!isAdmin) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center space-y-4">
-            <Building2 className="h-16 w-16 mx-auto text-muted-foreground" />
-            <h2 className="text-xl font-semibold">غير مصرح</h2>
-            <p className="text-muted-foreground">هذه الصفحة متاحة للمسؤولين فقط</p>
-          </div>
-        </div>
-      </MainLayout>
-    );
-  }
 
   return (
     <MainLayout>
