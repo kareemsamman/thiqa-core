@@ -1101,7 +1101,13 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
   const { profile, signOut, isAdmin, branchName, isSuperAdmin } = useAuth();
   const { data: siteSettings } = useSiteSettings();
   const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
+  const { showUpgradePrompt } = useUpgradePrompt();
 
+  // Mirror the desktop sidebar's two-stage filter: hide items the user
+  // has no permission for (they shouldn't know they exist), but keep
+  // plan-locked items visible with a lock chip so the user can see
+  // what's behind the next tier. Tapping a locked item opens the
+  // upgrade dialog instead of routing into a redirect.
   const filteredGroups = useMemo(() => {
     return navigationGroups
       .filter(group => {
@@ -1111,14 +1117,18 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
       })
       .map(group => ({
         ...group,
-        items: group.items.filter(item => {
-          if (isThiqaSuperAdmin) return true;
-          if (item.thiqaSuperAdminOnly && !isThiqaSuperAdmin) return false;
-          if (item.superAdminOnly && !isSuperAdmin) return false;
-          if (item.adminOnly && !isAdmin) return false;
-          if (item.featureKey && !hasFeature(item.featureKey)) return false;
-          return true;
-        }),
+        items: group.items
+          .filter(item => {
+            if (isThiqaSuperAdmin) return true;
+            if (item.thiqaSuperAdminOnly && !isThiqaSuperAdmin) return false;
+            if (item.superAdminOnly && !isSuperAdmin) return false;
+            if (item.adminOnly && !isAdmin) return false;
+            return true;
+          })
+          .map(item => ({
+            ...item,
+            locked: !isThiqaSuperAdmin && !!item.featureKey && !hasFeature(item.featureKey),
+          })),
       }))
       .filter(group => group.items.length > 0);
   }, [isAdmin, isSuperAdmin, isThiqaSuperAdmin, hasFeature]);
@@ -1234,6 +1244,37 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
                   {group.items.map((item) => {
                     const isActiveRoute = location.pathname === item.href;
                     const ItemIcon = item.icon;
+
+                    if (item.locked) {
+                      return (
+                        <button
+                          key={item.name}
+                          type="button"
+                          onClick={() => {
+                            showUpgradePrompt({
+                              featureLabel: item.name,
+                              featureKey: item.featureKey,
+                            });
+                          }}
+                          className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors text-right text-violet-700 hover:text-violet-900 bg-gradient-to-l from-violet-50 via-fuchsia-50 to-amber-50/70 hover:from-violet-100 hover:via-fuchsia-100 hover:to-amber-100"
+                        >
+                          <div className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 bg-white/60 text-violet-700">
+                            <ItemIcon className="h-4 w-4" />
+                          </div>
+                          <span className="flex-1 truncate">{item.name}</span>
+                          <span
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-md shrink-0 shadow-sm ring-1 ring-white/40"
+                            style={{
+                              background:
+                                'linear-gradient(135deg, #6a3bd1 0%, #c93fa8 55%, #ed6a44 100%)',
+                            }}
+                          >
+                            <Lock className="h-3 w-3 text-white" weight="fill" />
+                          </span>
+                        </button>
+                      );
+                    }
+
                     return (
                       <NavLink
                         key={item.name}
