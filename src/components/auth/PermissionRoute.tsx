@@ -32,7 +32,7 @@ interface PermissionRouteProps {
  */
 export function PermissionRoute({ permission, feature, children }: PermissionRouteProps) {
   const { user, loading, profileLoading, profile, isActive, isSuperAdmin } = useAuth();
-  const { isImpersonating, hasFeature, loading: agentLoading } = useAgentContext();
+  const { isImpersonating, hasFeature, isSubscriptionActive, loading: agentLoading } = useAgentContext();
   const { can, loading: permsLoading } = usePermissions();
 
   const needsProfileLoading = user && !isSuperAdmin && profileLoading && !profile;
@@ -53,6 +53,21 @@ export function PermissionRoute({ permission, feature, children }: PermissionRou
 
   if (!isActive) {
     return <Navigate to="/no-access" replace />;
+  }
+
+  // Subscription gate. Mirrors ProtectedRoute — without this the
+  // lockout never fires on /dashboard, /tasks, /clients, etc., because
+  // every agent-facing route is wrapped in PermissionRoute (not
+  // ProtectedRoute). Result before this gate: an agent whose trial
+  // ended saw the sidebar badge flip to "منتهي" but kept browsing
+  // the app, never bounced to /subscription-expired, never saw the
+  // upgrade picker. The (!isSuperAdmin || isImpersonating) shape is
+  // intentional — outside impersonation a super admin still bypasses
+  // (they live in /thiqa anyway), but during impersonation they get
+  // the same redirect the agent would so the lockout is testable
+  // from the Thiqa admin without logging in as the agent separately.
+  if ((!isSuperAdmin || isImpersonating) && !isSubscriptionActive) {
+    return <Navigate to="/subscription-expired" replace />;
   }
 
   // Redirect locked/unpermitted agents to /subscription (always
