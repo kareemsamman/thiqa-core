@@ -9,6 +9,8 @@ import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
 import { useAgentLimits } from "@/hooks/useAgentLimits";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { BottomToolbarInlineSearch } from "./BottomToolbarInlineSearch";
+import { HeaderDraftsButton } from "./HeaderDraftsButton";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export function BottomToolbar() {
   const navigate = useNavigate();
@@ -17,6 +19,11 @@ export function BottomToolbar() {
   const { openWizard } = usePolicyWizardController();
   const { policies: policiesLimit, loading: limitsLoading } = useAgentLimits();
   const { showUpgradePrompt } = useUpgradePrompt();
+  // Mobile owns the drafts button here; desktop owns it inside the
+  // header cluster. Gating with the JS check (not just `md:hidden`
+  // CSS) keeps both copies from mounting at once and racing the
+  // minimize→dock flight animation in HeaderDraftsButton.
+  const isMobile = useIsMobile();
   // Only commit to the locked variant once limits have loaded — otherwise
   // we flash the amber lock on agents who are perfectly within quota.
   // During hydration the unlocked variant renders with disabled=true so
@@ -171,6 +178,12 @@ export function BottomToolbar() {
               <FileText className="h-4 w-4 sm:hidden" />
             </Button>
           )}
+
+          {/* Minimized policy-wizard drafts. Self-hides when zero, so
+              the toolbar stays compact until the user actually parks a
+              wizard. Mobile-only mount — the desktop header owns the
+              same button at md+ widths. */}
+          {isMobile && <HeaderDraftsButton className="h-9 w-9 bg-secondary/40" />}
 
           {/* Separator */}
           <div className="h-6 w-px bg-border/50" />

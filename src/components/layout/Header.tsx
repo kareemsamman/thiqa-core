@@ -17,6 +17,7 @@ import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
 import { useRecentClient } from "@/hooks/useRecentClient";
 import { useShortcutAction } from "@/hooks/useShortcutAction";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface HeaderProps {
   title: string;
@@ -52,6 +53,11 @@ export function Header({ title, subtitle }: HeaderProps) {
   // their plan.
   const policiesLocked = !limitsLoading && policiesLimit.exceeded;
   const activeTabRef = useRef<HTMLButtonElement | null>(null);
+  // Drafts UI is mounted in exactly one place: header on desktop,
+  // BottomToolbar on mobile. Mounting both at once would race the
+  // minimize→dock flight animation (whichever effect runs first
+  // consumes the dock origin and the other plays the fallback pop).
+  const isMobile = useIsMobile();
 
   const isOnClientProfilePage = /^\/clients\/[^/]+/.test(location.pathname);
 
@@ -273,7 +279,7 @@ export function Header({ title, subtitle }: HeaderProps) {
               visual break "before the icons" in the cluster. */}
           <div className="h-7 w-px bg-border/70 mx-1" aria-hidden="true" />
 
-          <HeaderDraftsButton />
+          {!isMobile && <HeaderDraftsButton />}
 
           {/* Keyboard cheatsheet button — sits in the header cluster so
               staff can always find their shortcuts from one click, no
