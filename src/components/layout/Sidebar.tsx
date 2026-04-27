@@ -479,12 +479,16 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                             }}
                             className={cn(
                               "group/locked w-full flex items-center gap-3 px-3 py-2 text-[13.5px] font-semibold rounded-[0.2rem] transition-colors",
-                              "text-violet-700 hover:text-violet-900",
-                              "bg-gradient-to-l from-violet-50 via-fuchsia-50 to-amber-50/70 hover:from-violet-100 hover:via-fuchsia-100 hover:to-amber-100",
+                              // Brand-purple wash to match the upgrade
+                              // dialogs (#4158b0). Subtle tint at rest,
+                              // a touch deeper on hover so it still
+                              // reads as interactive.
+                              "text-[#3b4f9e] hover:text-[#2a3878]",
+                              "bg-gradient-to-l from-[#5468c4]/10 via-[#4158b0]/[0.08] to-[#5468c4]/10 hover:from-[#5468c4]/20 hover:via-[#4158b0]/15 hover:to-[#5468c4]/20",
                             )}
                           >
                             <item.icon
-                              className="h-[16px] w-[16px] flex-shrink-0 text-violet-600"
+                              className="h-[16px] w-[16px] flex-shrink-0 text-[#4158b0]"
                               weight="regular"
                             />
                             <span className="flex-1 text-right">{item.name}</span>
@@ -492,7 +496,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                               className="inline-flex h-5 w-5 items-center justify-center rounded-md shrink-0 shadow-sm ring-1 ring-white/40 transition-transform group-hover/locked:scale-110"
                               style={{
                                 background:
-                                  'linear-gradient(135deg, #6a3bd1 0%, #c93fa8 55%, #ed6a44 100%)',
+                                  'linear-gradient(135deg, #5468c4 0%, #4158b0 50%, #2a3878 100%)',
                               }}
                             >
                               <Lock className="h-3 w-3 text-white" weight="fill" />
@@ -606,13 +610,18 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                           style={{ ['--i' as any]: idx }}
                           className={cn(
                             "nav-leaf group/locked relative w-full flex items-center py-2 text-[13.5px] font-semibold transition-all duration-150 rounded-md cursor-pointer",
-                            "text-violet-700 hover:text-violet-900",
-                            "bg-gradient-to-l from-violet-50 via-fuchsia-50 to-amber-50/70 hover:from-violet-100 hover:via-fuchsia-100 hover:to-amber-100",
+                            // Brand-purple wash matching the upgrade
+                            // dialogs (#4158b0) — replaces the old
+                            // violet→fuchsia→amber candy gradient so
+                            // every "upgrade-needed" surface in the
+                            // app shares one identity.
+                            "text-[#3b4f9e] hover:text-[#2a3878]",
+                            "bg-gradient-to-l from-[#5468c4]/10 via-[#4158b0]/[0.08] to-[#5468c4]/10 hover:from-[#5468c4]/20 hover:via-[#4158b0]/15 hover:to-[#5468c4]/20",
                           )}
                         >
                           <span
                             aria-hidden="true"
-                            className="pointer-events-none absolute w-px bg-fuchsia-200 z-10"
+                            className="pointer-events-none absolute w-px bg-[#5468c4]/30 z-10"
                             style={{ insetInlineStart: '17px', top: '-1px', bottom: '-1px' }}
                           />
                           <span
@@ -624,7 +633,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                               className="inline-flex h-5 w-5 items-center justify-center rounded-md shrink-0 shadow-sm ring-1 ring-white/40 transition-transform group-hover/locked:scale-110"
                               style={{
                                 background:
-                                  'linear-gradient(135deg, #6a3bd1 0%, #c93fa8 55%, #ed6a44 100%)',
+                                  'linear-gradient(135deg, #5468c4 0%, #4158b0 50%, #2a3878 100%)',
                               }}
                             >
                               <Lock className="h-3 w-3 text-white" weight="fill" />
