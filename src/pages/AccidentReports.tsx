@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -38,6 +39,7 @@ import {
 } from "lucide-react";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { AccidentReportWizard } from "@/components/accident-reports/AccidentReportWizard";
+import { AgentBranchFilter } from "@/components/shared/AgentBranchFilter";
 
 interface AccidentReport {
   id: string;
@@ -106,6 +108,8 @@ export default function AccidentReports() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [companyFilter, setCompanyFilter] = useState<string>("all");
+  // Page-level branch filter (global admins only via AgentBranchFilter).
+  const [branchFilter, setBranchFilter] = useState<string | null>(null);
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -157,6 +161,12 @@ export default function AccidentReports() {
         query = query.eq("company_id", companyFilter);
       }
 
+      // Branch filter (global admins only). accident_reports.branch_id
+      // mirrors the parent policy's branch via the existing trigger.
+      if (branchFilter) {
+        query = query.eq("branch_id", branchFilter);
+      }
+
       // Pagination
       const from = (page - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
@@ -175,7 +185,7 @@ export default function AccidentReports() {
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, search, statusFilter, companyFilter, page, toast]);
+  }, [isAdmin, search, statusFilter, companyFilter, branchFilter, page, toast]);
 
   useEffect(() => {
     fetchCompanies();
@@ -229,11 +239,14 @@ export default function AccidentReports() {
       />
 
       <div className="md:p-6 space-y-6" dir="rtl">
-        {/* Filters — search + filters pinned to the right (start of the
-            RTL row), the بلاغ جديد CTA pinned to the very left. */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2 flex-1 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
+        {/* Filters — mobile-first stack: every control is its own
+            full-width row on phones, and the بلاغ جديد CTA gets its
+            own full-width row at the bottom. From sm+, falls back to
+            the original single-row layout (search/filters on the
+            right, action button pinned left). */}
+        <div className="space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-3">
+          <div className="space-y-3 sm:space-y-0 sm:flex sm:items-center sm:gap-2 sm:flex-1 sm:flex-wrap">
+            <div className="relative w-full sm:flex-1 sm:min-w-[200px]">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="بحث بالعميل، رقم السيارة، رقم المعاملة..."
@@ -247,7 +260,7 @@ export default function AccidentReports() {
             </div>
 
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-full sm:w-[150px]">
                 <SelectValue placeholder="الحالة" />
               </SelectTrigger>
               <SelectContent>
@@ -261,7 +274,7 @@ export default function AccidentReports() {
             </Select>
 
             <Select value={companyFilter} onValueChange={(v) => { setCompanyFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="شركة التأمين" />
               </SelectTrigger>
               <SelectContent>
@@ -271,15 +284,111 @@ export default function AccidentReports() {
                 ))}
               </SelectContent>
             </Select>
+
+            <AgentBranchFilter
+              value={branchFilter}
+              onChange={(v) => { setBranchFilter(v); setPage(1); }}
+            />
           </div>
-          <Button size="sm" onClick={() => setWizardOpen(true)} className="gap-2">
+          <Button size="sm" onClick={() => setWizardOpen(true)} className="gap-2 w-full sm:w-auto">
             <Plus className="h-4 w-4" />
             بلاغ جديد
           </Button>
         </div>
 
-        {/* Table */}
-        <div className="rounded-lg border bg-card">
+        {/* Mobile card list — replaces the 8-column table on phones.
+            Each report is a tappable Card with all key info stacked. */}
+        <div className="md:hidden space-y-3">
+          {loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <Card key={i} className="p-4 space-y-2">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-4 w-40" />
+              </Card>
+            ))
+          ) : reports.length === 0 ? (
+            <Card className="p-8 text-center text-sm text-muted-foreground">
+              لا توجد بلاغات حوادث
+            </Card>
+          ) : (
+            reports.map((report) => (
+              <Card
+                key={report.id}
+                className="p-4 cursor-pointer hover:bg-muted/40 transition-colors"
+                onClick={() => navigate(`/policies/${report.policies.id}/accident/${report.id}`)}
+              >
+                {/* Header: client name + status badge */}
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-base leading-tight truncate">{report.clients.full_name}</p>
+                    {report.clients.file_number && (
+                      <p className="text-xs text-muted-foreground mt-0.5">#{report.clients.file_number}</p>
+                    )}
+                  </div>
+                  <Badge className={`${statusColors[report.status]} shrink-0`}>
+                    {statusLabels[report.status]}
+                  </Badge>
+                </div>
+
+                {/* Detail rows */}
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Calendar className="h-4 w-4 shrink-0" />
+                    <span>{formatDate(report.accident_date)}</span>
+                  </div>
+                  {report.cars?.car_number && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <FileText className="h-4 w-4 shrink-0" />
+                      <span className="ltr-nums">رقم السيارة: {report.cars.car_number}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span className="ltr-nums">معاملة #{report.policies.document_number || report.policies.policy_number || "—"}</span>
+                  </div>
+                  {report.insurance_companies && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Building2 className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{report.insurance_companies.name_ar || report.insurance_companies.name}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer: created-by + action buttons */}
+                <div className="mt-3 pt-3 border-t flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-xs text-muted-foreground truncate min-w-0">
+                    بواسطة: {report.profiles?.full_name || report.profiles?.email?.split("@")[0] || "—"}
+                  </span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => navigate(`/policies/${report.policies.id}/accident/${report.id}`)}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        setDeletingReportId(report.id);
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+
+        {/* Table — desktop only. Mobile uses the card list above. */}
+        <div className="hidden md:block rounded-lg border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
