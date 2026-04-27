@@ -1021,7 +1021,15 @@ export default function ThiqaAgentDetail() {
                     <Select value={agent.subscription_status} onValueChange={v => setAgent({...agent, subscription_status: v})}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="trial">تجربة مجانية</SelectItem>
+                        {/* "trial" is derived from the plan dropdown
+                            (selecting the free_trial plan auto-sets
+                            status='trial'), so we don't expose it as a
+                            manually pickable status. Render it only
+                            when the agent's current value is already
+                            'trial' so the trigger isn't blank. */}
+                        {agent.subscription_status === 'trial' && (
+                          <SelectItem value="trial">تجربة مجانية</SelectItem>
+                        )}
                         <SelectItem value="active">فعال</SelectItem>
                         <SelectItem value="paused">متوقف مؤقتاً</SelectItem>
                         <SelectItem value="suspended">معلّق</SelectItem>
