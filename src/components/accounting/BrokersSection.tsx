@@ -67,9 +67,12 @@ const SETTLEMENT_DEFAULT_VISIBLE = SETTLEMENT_KEYS.filter((k) => !SETTLEMENT_DEF
 
 interface BrokersSectionProps {
   focusSettlementId?: string | null;
+  /** Page-level branch filter (global admins only). null = no extra
+   *  filter — caller's natural RLS scope still applies. */
+  branchId?: string | null;
 }
 
-export function BrokersSection({ focusSettlementId }: BrokersSectionProps = {}) {
+export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionProps = {}) {
   const [tab, setTab] = useState<SubTab>('all');
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -89,7 +92,7 @@ export function BrokersSection({ focusSettlementId }: BrokersSectionProps = {}) 
     paymentMethods: [],
   });
 
-  const data = useAccountingData(filters);
+  const data = useAccountingData(filters, branchId);
 
   useEffect(() => {
     if (!focusSettlementId) return;

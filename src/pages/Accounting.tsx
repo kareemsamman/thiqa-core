@@ -8,6 +8,7 @@ import { CompaniesSection } from '@/components/accounting/CompaniesSection';
 import { BrokersSection } from '@/components/accounting/BrokersSection';
 import { ExpensesSection } from '@/components/accounting/ExpensesSection';
 import { RecalcProfitsButton } from '@/components/dashboard/RecalcProfitsButton';
+import { AgentBranchFilter } from '@/components/shared/AgentBranchFilter';
 
 type MainTab = 'companies' | 'brokers' | 'expenses';
 
@@ -24,6 +25,9 @@ export default function Accounting() {
       ? 'expenses'
       : 'companies';
   const [tab, setTab] = useState<MainTab>(initialTab);
+  // Page-level branch filter — applies to all three sub-tabs. Global
+  // admins only; AgentBranchFilter hides itself for branch-scoped users.
+  const [branchId, setBranchId] = useState<string | null>(null);
   // Settlement id passed in via ?settlement=… — sections read this
   // to scroll their corresponding row into view + highlight it.
   const settlementParam = searchParams.get('settlement');
@@ -58,17 +62,20 @@ export default function Accounting() {
                 المصاريف
               </TabsTrigger>
             </TabsList>
-            <RecalcProfitsButton />
+            <div className="flex items-center gap-2">
+              <AgentBranchFilter value={branchId} onChange={setBranchId} />
+              <RecalcProfitsButton />
+            </div>
           </div>
 
           <TabsContent value="companies" className="mt-3">
-            <CompaniesSection focusSettlementId={settlementParam} />
+            <CompaniesSection focusSettlementId={settlementParam} branchId={branchId} />
           </TabsContent>
           <TabsContent value="brokers" className="mt-3">
-            <BrokersSection focusSettlementId={settlementParam} />
+            <BrokersSection focusSettlementId={settlementParam} branchId={branchId} />
           </TabsContent>
           <TabsContent value="expenses" className="mt-3">
-            <ExpensesSection focusSettlementId={settlementParam} />
+            <ExpensesSection focusSettlementId={settlementParam} branchId={branchId} />
           </TabsContent>
         </Tabs>
       </div>

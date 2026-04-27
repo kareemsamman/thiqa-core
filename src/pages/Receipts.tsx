@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
+import { AgentBranchFilter } from "@/components/shared/AgentBranchFilter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -410,6 +411,8 @@ export default function Receipts() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [paymentMethodFilter, setPaymentMethodFilter] = useState("all");
+  // Page-level branch filter — global admins only.
+  const [branchFilter, setBranchFilter] = useState<string | null>(null);
 
   // Pagination
   const [page, setPage] = useState(0);
@@ -468,6 +471,13 @@ export default function Receipts() {
         query = query.eq("payment_method", paymentMethodFilter);
       }
 
+      // Branch filter (global admins). receipts.branch_id is auto-set
+      // from the parent policy by the existing trigger; filtering here
+      // narrows the receipts list to that branch's rows.
+      if (branchFilter) {
+        query = query.eq("branch_id", branchFilter);
+      }
+
       // Search filter (client_name or car_number)
       if (searchQuery.trim()) {
         const term = searchQuery.trim();
@@ -492,7 +502,7 @@ export default function Receipts() {
     } finally {
       setLoading(false);
     }
-  }, [agentId, activeTab, page, dateFrom, dateTo, paymentMethodFilter, searchQuery]);
+  }, [agentId, activeTab, page, dateFrom, dateTo, paymentMethodFilter, branchFilter, searchQuery]);
 
   useEffect(() => {
     if (!agentLoading && agentId) {
@@ -503,7 +513,7 @@ export default function Receipts() {
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
-  }, [activeTab, dateFrom, dateTo, paymentMethodFilter, searchQuery]);
+  }, [activeTab, dateFrom, dateTo, paymentMethodFilter, branchFilter, searchQuery]);
 
   // ─── Grouping ──────────────────────────────────────────────────
   //
@@ -985,6 +995,12 @@ export default function Receipts() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                {/* Branch filter — global admins only. Sits below the
+                    main filter row so the four-column grid stays even
+                    when the dropdown is hidden for branch-scoped users. */}
+                <div className="mt-3 flex justify-end">
+                  <AgentBranchFilter value={branchFilter} onChange={setBranchFilter} />
                 </div>
               </CardContent>
             </Card>

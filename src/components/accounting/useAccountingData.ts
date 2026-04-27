@@ -147,7 +147,10 @@ function hydrateChequeImages(arr: string[] | null, single: string | null): strin
  * so toggling a filter doesn't re-hit the network. The dataset for an
  * agent is small (a few thousand rows max), so this is fine.
  */
-export function useAccountingData(filters: AccountingFiltersValue): UseAccountingDataReturn {
+export function useAccountingData(
+  filters: AccountingFiltersValue,
+  branchId?: string | null,
+): UseAccountingDataReturn {
   const { agentId } = useAgentContext();
 
   const [loading, setLoading] = useState(true);
@@ -192,6 +195,12 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         .order('issue_date', { ascending: false, nullsFirst: false });
 
       if (agentId) policyQuery = policyQuery.eq('agent_id', agentId);
+      // Page-level branch filter from AgentBranchFilter (global admins
+      // only). Workers / branch admins are already scoped by RLS, so
+      // skipping the .eq when branchId is null/undefined matches their
+      // natural visibility. policies / settlements / expenses all carry
+      // branch_id, so the same one-liner applies to each block below.
+      if (branchId) policyQuery = policyQuery.eq('branch_id', branchId);
 
       const { data: policyData } = await policyQuery;
       const policyRows = (policyData ?? []) as unknown as RawPolicy[];
@@ -356,6 +365,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         )
         .order('settlement_date', { ascending: false });
       if (agentId) csQuery = csQuery.eq('agent_id', agentId);
+      if (branchId) csQuery = csQuery.eq('branch_id', branchId);
       const { data: csData } = await csQuery;
       const csRows: (SettlementRow & { direction: 'outgoing' | 'incoming' })[] = (
         (csData ?? []) as unknown as RawCompanySettlement[]
@@ -386,6 +396,7 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
         )
         .order('settlement_date', { ascending: false });
       if (agentId) bsQuery = bsQuery.eq('agent_id', agentId);
+      if (branchId) bsQuery = bsQuery.eq('branch_id', branchId);
       const { data: bsData } = await bsQuery;
       const bsRows: SettlementRow[] = ((bsData ?? []) as unknown as RawBrokerSettlement[]).map((s) => ({
         id: s.id,
@@ -410,12 +421,13 @@ export function useAccountingData(filters: AccountingFiltersValue): UseAccountin
       //    rows are required to apply the date filter client-side.
       let exQuery = supabase.from('expenses').select('expense_date, amount');
       if (agentId) exQuery = exQuery.eq('agent_id', agentId);
+      if (branchId) exQuery = exQuery.eq('branch_id', branchId);
       const { data: exData } = await exQuery;
       setExpenses((exData ?? []) as RawExpense[]);
     } finally {
       setLoading(false);
     }
-  }, [agentId]);
+  }, [agentId, branchId]);
 
   useEffect(() => {
     fetchAll();

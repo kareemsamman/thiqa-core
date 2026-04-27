@@ -70,9 +70,12 @@ interface CompaniesSectionProps {
    *  matching settlement, switches to the right sub-tab, and the
    *  table scrolls + highlights the row. */
   focusSettlementId?: string | null;
+  /** Page-level branch filter (global admins only). null = no extra
+   *  filter — caller's natural RLS scope still applies. */
+  branchId?: string | null;
 }
 
-export function CompaniesSection({ focusSettlementId }: CompaniesSectionProps = {}) {
+export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSectionProps = {}) {
   const [tab, setTab] = useState<SubTab>('all');
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -95,7 +98,7 @@ export function CompaniesSection({ focusSettlementId }: CompaniesSectionProps = 
     paymentMethods: [],
   });
 
-  const data = useAccountingData(filters);
+  const data = useAccountingData(filters, branchId);
 
   // Auto-switch sub-tab when a deep-link points at a specific settlement
   // — disbursement rows live under the disbursements tab, receipts under

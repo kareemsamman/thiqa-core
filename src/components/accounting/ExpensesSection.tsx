@@ -52,9 +52,12 @@ interface ExpensesSectionProps {
   /** Deep-link target — when matched, the matching row scrolls into
    *  view and gets a brief highlight. */
   focusSettlementId?: string | null;
+  /** Page-level branch filter (global admins only). null = no extra
+   *  filter — caller's natural RLS scope still applies. */
+  branchId?: string | null;
 }
 
-export function ExpensesSection({ focusSettlementId }: ExpensesSectionProps = {}) {
+export function ExpensesSection({ focusSettlementId, branchId }: ExpensesSectionProps = {}) {
   const { agentId } = useAgentContext();
 
   const [rows, setRows] = useState<ExpenseRow[]>([]);
@@ -80,6 +83,7 @@ export function ExpensesSection({ focusSettlementId }: ExpensesSectionProps = {}
       .select('id, expense_date, amount, category, description, contact_name, payment_method, notes')
       .order('expense_date', { ascending: false });
     if (agentId) q = q.eq('agent_id', agentId);
+    if (branchId) q = q.eq('branch_id', branchId);
     const { data } = await q;
     // Drop the [مبيعات]-prefixed rows — those belong to the legacy
     // sales tab, not "office expenses".
@@ -88,7 +92,7 @@ export function ExpensesSection({ focusSettlementId }: ExpensesSectionProps = {}
     );
     setRows(filtered);
     setLoading(false);
-  }, [agentId]);
+  }, [agentId, branchId]);
 
   useEffect(() => {
     fetchExpenses();

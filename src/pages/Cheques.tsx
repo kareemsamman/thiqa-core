@@ -65,6 +65,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSmsLock } from "@/hooks/useSmsLock";
 import { Lock } from "@phosphor-icons/react";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
+import { AgentBranchFilter } from "@/components/shared/AgentBranchFilter";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH, getEffectiveChequeStatus, isChequeOverdue } from "@/lib/chequeUtils";
 import { AddCustomerChequeModal } from "@/components/cheques/AddCustomerChequeModal";
 import { PaymentEditDialog } from "@/components/clients/PaymentEditDialog";
@@ -153,6 +154,8 @@ export default function Cheques() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  // Page-level branch filter — global admins only.
+  const [filterBranch, setFilterBranch] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<string>("customer");
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [dueTodayOnly, setDueTodayOnly] = useState(false);
@@ -478,6 +481,13 @@ export default function Cheques() {
         query = query.eq('cheque_status', statusFilter);
       }
 
+      if (filterBranch) {
+        // policy_payments.branch_id is auto-set from the parent policy
+        // by the existing trigger; filtering here narrows the cheque
+        // list to that branch's payments.
+        query = query.eq('branch_id', filterBranch);
+      }
+
       if (overdueOnly) {
         const today = new Date().toISOString().split('T')[0];
         query = query.lt('payment_date', today).neq('cheque_status', 'cashed');
@@ -619,7 +629,7 @@ export default function Cheques() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, statusFilter, overdueOnly, dueTodayOnly, searchQuery, toast]);
+  }, [currentPage, statusFilter, overdueOnly, dueTodayOnly, searchQuery, filterBranch, toast]);
 
   useEffect(() => { fetchSummaryStats(); }, [fetchSummaryStats]);
   useEffect(() => { fetchCheques(); }, [fetchCheques]);
@@ -1362,6 +1372,11 @@ export default function Cheques() {
                     <SelectItem value="transferred_out">تم استخدامه</SelectItem>
                   </SelectContent>
                 </Select>
+                <AgentBranchFilter
+                  value={filterBranch}
+                  onChange={(v) => { setFilterBranch(v); setCurrentPage(1); }}
+                />
+
                 <Button
                   variant={dueTodayOnly ? "default" : "outline"}
                   size="sm"
