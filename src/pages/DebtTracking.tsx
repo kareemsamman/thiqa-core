@@ -662,11 +662,16 @@ export default function DebtTracking() {
           </Card>
         </div>
 
-        {/* Filters */}
+        {/* Filters. Mobile: every group stacks as its own row; period
+            pills wrap to a 4-up grid so they fill the row evenly; the
+            branch filter inherits its new w-full sm:w-44 default;
+            تحديث + إرسال للكل sit side-by-side as 50/50 buttons.
+            Desktop reverts to the original `flex flex-wrap items-center`
+            via `sm:flex sm:flex-wrap sm:items-center sm:gap-4`. */}
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-wrap gap-4 items-center">
-              <div className="flex-1 min-w-[200px] max-w-md">
+          <CardContent className="p-3 sm:pt-6 sm:px-6">
+            <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:gap-4 sm:items-center">
+              <div className="w-full sm:flex-1 sm:min-w-[200px] sm:max-w-md">
                 <div className="relative">
                   <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -678,7 +683,7 @@ export default function DebtTracking() {
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="grid grid-cols-4 gap-2 sm:flex sm:gap-2">
                 <Button
                   variant={filterDays === null ? "gradient" : "outline"}
                   size="sm"
@@ -711,22 +716,25 @@ export default function DebtTracking() {
               </div>
 
               {/* Branch filter — global admins only. Hides itself for
-                  branch-scoped users (their branch is fixed by RLS). */}
+                  branch-scoped users (their branch is fixed by RLS).
+                  Default w-full sm:w-44 from AgentBranchFilter. */}
               <AgentBranchFilter value={filterBranch} onChange={setFilterBranch} />
 
-              <Button variant="outline" onClick={fetchDebtData}>
-                <RefreshCw className="h-4 w-4 ml-2" />
-                تحديث
-              </Button>
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2">
+                <Button variant="outline" onClick={fetchDebtData}>
+                  <RefreshCw className="h-4 w-4 ml-2" />
+                  تحديث
+                </Button>
 
-              <Button
-                variant="gradient"
-                onClick={() => setBulkSmsDialogOpen(true)}
-                disabled={summary.totalClients === 0}
-              >
-                <SendHorizonal className="h-4 w-4 ml-2" />
-                إرسال للكل ({summary.totalClients})
-              </Button>
+                <Button
+                  variant="gradient"
+                  onClick={() => setBulkSmsDialogOpen(true)}
+                  disabled={summary.totalClients === 0}
+                >
+                  <SendHorizonal className="h-4 w-4 ml-2" />
+                  إرسال للكل ({summary.totalClients})
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

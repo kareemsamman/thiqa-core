@@ -65,7 +65,7 @@ export function AgentBranchFilter({
       onValueChange={(v) => onChange(v === 'all' ? null : v)}
     >
       <SelectTrigger
-        className={cn('w-44 gap-2', triggerClassName)}
+        className={cn('w-full sm:w-44 gap-2', triggerClassName)}
         title="تصفية حسب الفرع"
       >
         <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
