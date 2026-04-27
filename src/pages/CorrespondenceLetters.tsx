@@ -242,7 +242,7 @@ export default function CorrespondenceLetters() {
         subtitle="إدارة المراسلات الرسمية"
       />
 
-      <div className="container mx-auto py-6 space-y-6">
+      <div className="container mx-auto md:py-6 space-y-4 md:space-y-6">
         <Card>
           <CardHeader className="p-3 sm:p-6">
             {/* Mobile: every group stacks full-width; status pills
@@ -280,7 +280,7 @@ export default function CorrespondenceLetters() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 sm:p-6">
             {loading ? (
               <div className="space-y-3">
                 {[...Array(5)].map((_, i) => (
@@ -293,29 +293,28 @@ export default function CorrespondenceLetters() {
                 <p className="text-sm">لا توجد رسائل</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>العنوان</TableHead>
-                    <TableHead className="hidden md:table-cell">المستلم</TableHead>
-                    <TableHead>الحالة</TableHead>
-                    <TableHead className="hidden md:table-cell">التاريخ</TableHead>
-                    <TableHead className="w-[100px]">إجراءات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <>
+                {/* Mobile card list — replaces the table on phones.
+                    Each letter is a self-contained card with title +
+                    status, recipient + date metadata, and the same
+                    actions menu on the end. */}
+                <div className="md:hidden space-y-3">
                   {filteredLetters.map((letter) => (
-                    <TableRow key={letter.id}>
-                      <TableCell className="font-medium">{letter.title}</TableCell>
-                      <TableCell className="hidden md:table-cell">{letter.recipient_name}</TableCell>
-                      <TableCell>{getStatusBadge(letter.status)}</TableCell>
-                      <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
-                        {format(new Date(letter.created_at), 'dd/MM/yyyy', { locale: ar })}
-                      </TableCell>
-                      <TableCell>
+                    <Card key={letter.id} className="p-3 hover:bg-muted/40 transition-colors">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <p className="font-semibold text-base leading-tight truncate flex-1 min-w-0">{letter.title}</p>
+                        <div className="shrink-0">{getStatusBadge(letter.status)}</div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap min-w-0">
+                          <span className="truncate">{letter.recipient_name}</span>
+                          <span className="shrink-0 ltr-nums">
+                            {format(new Date(letter.created_at), 'dd/MM/yyyy', { locale: ar })}
+                          </span>
+                        </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -328,7 +327,7 @@ export default function CorrespondenceLetters() {
                               <Edit className="h-4 w-4 ml-2" />
                               تعديل
                             </DropdownMenuItem>
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={() => handleGenerateAndPrint(letter)}
                               disabled={generatingId === letter.id}
                             >
@@ -349,7 +348,7 @@ export default function CorrespondenceLetters() {
                                 فتح الرابط
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={() => confirmDelete(letter.id)}
                               className="text-destructive"
                             >
@@ -358,11 +357,85 @@ export default function CorrespondenceLetters() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                    </Card>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+
+                {/* Desktop table */}
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>العنوان</TableHead>
+                        <TableHead>المستلم</TableHead>
+                        <TableHead>الحالة</TableHead>
+                        <TableHead>التاريخ</TableHead>
+                        <TableHead className="w-[100px]">إجراءات</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredLetters.map((letter) => (
+                        <TableRow key={letter.id}>
+                          <TableCell className="font-medium">{letter.title}</TableCell>
+                          <TableCell>{letter.recipient_name}</TableCell>
+                          <TableCell>{getStatusBadge(letter.status)}</TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {format(new Date(letter.created_at), 'dd/MM/yyyy', { locale: ar })}
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handlePreview(letter)}>
+                                  <Eye className="h-4 w-4 ml-2" />
+                                  معاينة
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleEdit(letter)}>
+                                  <Edit className="h-4 w-4 ml-2" />
+                                  تعديل
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleGenerateAndPrint(letter)}
+                                  disabled={generatingId === letter.id}
+                                >
+                                  {generatingId === letter.id ? (
+                                    <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                                  ) : (
+                                    <Printer className="h-4 w-4 ml-2" />
+                                  )}
+                                  طباعة
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleSendSms(letter)}>
+                                  <Send className="h-4 w-4 ml-2" />
+                                  إرسال SMS
+                                </DropdownMenuItem>
+                                {letter.generated_url && (
+                                  <DropdownMenuItem onClick={() => handleViewExternal(letter)}>
+                                    <ExternalLink className="h-4 w-4 ml-2" />
+                                    فتح الرابط
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  onClick={() => confirmDelete(letter.id)}
+                                  className="text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4 ml-2" />
+                                  حذف
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
