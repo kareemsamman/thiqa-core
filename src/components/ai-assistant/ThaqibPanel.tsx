@@ -237,7 +237,7 @@ export function ThaqibPanel({ open, onClose }: ThaqibPanelProps) {
 
         {loading && (
           <div className="flex gap-2 mb-3">
-            <div className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 mt-1" style={{ background: '#122143' }}>
+            <div className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 mt-1 bg-black">
               <Bot className="h-3.5 w-3.5 text-white" />
             </div>
             <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">

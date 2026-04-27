@@ -50,7 +50,7 @@ export function ThaqibInput({ onSend, loading }: ThaqibInputProps) {
         className={cn(
           "h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition-all",
           text.trim() && !loading
-            ? "bg-[#122143] text-white hover:bg-[#1a3260]"
+            ? "bg-black text-white hover:bg-neutral-800"
             : "bg-muted text-muted-foreground"
         )}
       >

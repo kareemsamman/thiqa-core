@@ -13,7 +13,7 @@ export function ThaqibMessage({ role, content }: ThaqibMessageProps) {
     <div className={cn("flex gap-2 mb-3", isUser ? "flex-row-reverse" : "flex-row")}>
       <div className={cn(
         "h-7 w-7 rounded-full flex items-center justify-center shrink-0 mt-1",
-        isUser ? "bg-primary/10 text-primary" : "bg-[#122143] text-white"
+        isUser ? "bg-primary/10 text-primary" : "bg-black text-white"
       )}>
         {isUser ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
       </div>
