@@ -263,7 +263,11 @@ export default function AdminUsers() {
     setNewUserPassword("");
     setNewUserPhone("");
     setNewUserRole("worker");
-    setNewUserBranch(branches.length > 0 ? branches[0].id : "");
+    // 'all' = no branch_id (user sees every branch). The admin can
+    // pick a specific branch from the dropdown to scope the new
+    // user. Defaulting to 'all' avoids silently locking new users
+    // to whichever branch happened to be first in the list.
+    setNewUserBranch('all');
   };
 
   const handleCreateUser = async () => {
@@ -295,8 +299,11 @@ export default function AdminUsers() {
       toast({ title: "خطأ", description: "رقم الهاتف يجب أن يكون 10 أرقام", variant: "destructive" });
       return;
     }
+    // 'all' = NULL branch_id (user sees every branch); a specific
+    // UUID = scope to that branch. Either is valid; only an empty /
+    // "none" value is invalid.
     if (branches.length > 0 && (!newUserBranch || newUserBranch === "none")) {
-      toast({ title: "خطأ", description: "يرجى اختيار فرع للمستخدم", variant: "destructive" });
+      toast({ title: "خطأ", description: "يرجى اختيار الفرع للمستخدم", variant: "destructive" });
       return;
     }
 
@@ -310,7 +317,10 @@ export default function AdminUsers() {
           phone: phoneDigits || null,
           agent_id: agentId,
           role: newUserRole,
-          branch_id: newUserBranch && newUserBranch !== 'none' ? newUserBranch : null,
+          branch_id:
+            newUserBranch && newUserBranch !== 'none' && newUserBranch !== 'all'
+              ? newUserBranch
+              : null,
         },
       });
       if (error) throw error;
@@ -1348,7 +1358,11 @@ export default function AdminUsers() {
                   onValueChange={setNewUserBranch}
                   branches={branches}
                   placeholder="اختر الفرع"
+                  allOption={{ value: 'all', label: 'جميع الفروع' }}
                 />
+                <p className="text-xs text-muted-foreground">
+                  اختر فرعاً محدداً ليرى المستخدم بياناته فقط، أو "جميع الفروع" ليرى بيانات الوكالة كاملة. ينطبق على المدير والموظف.
+                </p>
               </div>
             )}
             <div className="flex gap-2 pt-4">
