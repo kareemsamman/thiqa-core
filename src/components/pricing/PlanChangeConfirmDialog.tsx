@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Dialog,
   DialogClose,
@@ -11,10 +11,14 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   ArrowLeft,
+  Buildings,
   CalendarBlank,
+  ChatCircle,
   CheckCircle,
+  Lightning,
   Sparkle,
   TrendUp,
+  Users,
   X,
 } from '@phosphor-icons/react';
 import { supabase } from '@/integrations/supabase/client';
@@ -250,137 +254,179 @@ export function PlanChangeConfirmDialog({
     <Dialog open={open} onOpenChange={(v) => !submitting && onOpenChange(v)}>
       <DialogContent
         hideCloseButton
-        className="w-[92vw] max-w-[560px] max-h-[92vh] overflow-hidden flex flex-col p-0 gap-0 border-0 shadow-2xl rounded-2xl"
+        className="w-[92vw] max-w-[540px] max-h-[92vh] overflow-hidden flex flex-col p-0 gap-0 border-0 shadow-2xl rounded-2xl"
         dir="rtl"
       >
-        {/* Refined header — replaces the candy gradient with a clean
-            white card. Eyebrow + plan-name hero + price band keeps the
-            visual hierarchy the gradient was hiding. Close button stays
-            top-left, neutral on the white background. */}
-        <DialogClose className="absolute top-4 left-4 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition-all hover:bg-slate-200 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/40">
-          <X className="h-4 w-4" weight="bold" />
+        {/* Premium dark header — slate-900 with a subtle primary glow.
+            Plan name + price live together as the visual hero. Close
+            button is white-on-translucent so it reads against the dark. */}
+        <DialogClose className="absolute top-4 left-4 z-30 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/80 backdrop-blur transition-all hover:bg-white/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/40">
+          <X className="h-3.5 w-3.5" weight="bold" />
           <span className="sr-only">إغلاق</span>
         </DialogClose>
 
-        <DialogHeader className="relative px-6 md:px-8 pt-7 pb-5 bg-white border-b border-slate-200">
-          {/* Subtle accent strip — replaces the loud gradient with a
-              tasteful color cue. Switches palette on the success state. */}
-          <div
-            className={cn(
-              'absolute top-0 inset-x-0 h-1',
-              successState ? 'bg-gradient-to-r from-emerald-400 to-cyan-400' : 'bg-gradient-to-r from-primary to-primary/60',
-            )}
-          />
-          <div className="pl-12">
+        <DialogHeader
+          className={cn(
+            'relative px-6 md:px-8 pt-6 pb-6 overflow-hidden',
+            successState
+              ? 'bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800'
+              : 'bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800',
+          )}
+        >
+          {/* Soft brand-color glow in the corner — adds depth without
+              the candy-gradient look. */}
+          {!successState && (
+            <div className="absolute -top-12 -right-12 h-40 w-40 rounded-full bg-primary/30 blur-3xl pointer-events-none" />
+          )}
+
+          <div className="relative">
             {!successState ? (
               <>
-                <p className="text-[11px] uppercase tracking-[0.18em] font-semibold text-primary/70 mb-1.5">
+                <p className="text-[10px] uppercase tracking-[0.22em] font-bold text-white/60 mb-2">
                   تأكيد تغيير الحزمة
                 </p>
-                <DialogTitle className="text-2xl md:text-[26px] font-extrabold text-slate-900 mb-1 leading-tight">
+                <DialogTitle className="text-3xl md:text-[32px] font-extrabold text-white mb-3 leading-tight">
                   {targetPlan.name_ar || targetPlan.name}
                 </DialogTitle>
-                <DialogDescription className="text-sm text-slate-500">
-                  راجع التفاصيل أدناه ثم اضغط تأكيد.
-                </DialogDescription>
+
+                {/* Price hero in header — confident, big, with cycle
+                    toggle inline and savings badge when relevant. */}
+                <div className="flex items-end justify-between gap-3">
+                  <div className="flex items-baseline gap-1.5 text-white">
+                    <span className="text-[15px] font-medium text-white/60">₪</span>
+                    <span className="text-4xl md:text-[40px] font-extrabold tabular-nums leading-none">
+                      {cyclePrice.toLocaleString('en')}
+                    </span>
+                    <span className="text-sm font-medium text-white/60">
+                      / {cycle === 'yearly' ? 'سنة' : 'شهر'}
+                    </span>
+                  </div>
+                  {cycle === 'yearly' && yearlySavings > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-bold ring-1 ring-emerald-400/40">
+                      <Sparkle className="h-3 w-3" weight="fill" />
+                      وفّر ₪{yearlySavings.toLocaleString('en')}
+                    </span>
+                  )}
+                </div>
+
+                {/* Cycle toggle — subtle pill, white-on-glass */}
+                <div className="mt-4 inline-flex gap-1 p-1 rounded-lg bg-white/10 backdrop-blur ring-1 ring-white/15">
+                  <button
+                    type="button"
+                    onClick={() => setCycle('monthly')}
+                    className={cn(
+                      'px-4 py-1.5 rounded-md text-xs font-semibold transition-all',
+                      cycle === 'monthly'
+                        ? 'bg-white text-slate-900 shadow'
+                        : 'text-white/70 hover:text-white',
+                    )}
+                  >
+                    شهري
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCycle('yearly')}
+                    className={cn(
+                      'px-4 py-1.5 rounded-md text-xs font-semibold transition-all',
+                      cycle === 'yearly'
+                        ? 'bg-white text-slate-900 shadow'
+                        : 'text-white/70 hover:text-white',
+                    )}
+                  >
+                    سنوي
+                  </button>
+                </div>
               </>
             ) : (
-              <>
-                <p className="text-[11px] uppercase tracking-[0.18em] font-semibold text-emerald-600 mb-1.5">
+              <div className="text-center">
+                <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/30 mb-3">
+                  <CheckCircle className="h-8 w-8 text-white" weight="fill" />
+                </div>
+                <p className="text-[10px] uppercase tracking-[0.22em] font-bold text-white/70 mb-2">
                   {successState.switchMode === 'after_trial' ? 'تم حفظ اختيارك' : 'تم التفعيل'}
                 </p>
-                <DialogTitle className="text-2xl md:text-[26px] font-extrabold text-slate-900 mb-1 leading-tight">
+                <DialogTitle className="text-3xl font-extrabold text-white mb-1 leading-tight">
                   {targetPlan.name_ar || targetPlan.name}
                 </DialogTitle>
-                <DialogDescription className="text-sm text-slate-500">
+                <DialogDescription className="text-sm text-white/80">
                   {successState.switchMode === 'after_trial'
                     ? 'ستبدأ هذه الحزمة تلقائياً عند انتهاء التجربة.'
                     : 'كل الميزات الجديدة متاحة فوراً.'}
                 </DialogDescription>
-              </>
+              </div>
             )}
           </div>
         </DialogHeader>
 
         {!successState ? (
-          <div className="flex-1 overflow-y-auto px-6 md:px-8 py-6 bg-slate-50/60 space-y-5">
-            {/* Price hero — the visual anchor of the dialog. The plan
-                name lives in the header; here we let the number speak. */}
-            <div className="rounded-2xl bg-white ring-1 ring-slate-200 px-5 py-5 shadow-sm">
-              <div className="flex items-end justify-between gap-3 mb-4">
-                <div>
-                  <p className="text-[11px] uppercase tracking-wider font-semibold text-slate-400 mb-1">
-                    السعر
-                  </p>
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-4xl font-extrabold text-slate-900 tabular-nums leading-none">
-                      ₪{cyclePrice.toLocaleString('en')}
-                    </span>
-                    <span className="text-sm font-medium text-slate-500">
-                      / {cycle === 'yearly' ? 'سنة' : 'شهر'}
-                    </span>
-                  </div>
-                </div>
-                {cycle === 'yearly' && yearlySavings > 0 && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold ring-1 ring-emerald-200">
-                    وفّر ₪{yearlySavings.toLocaleString('en')}
-                  </span>
-                )}
-              </div>
-
-              {/* Slim cycle toggle inside the price card */}
-              <div className="flex gap-1 p-1 rounded-lg bg-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setCycle('monthly')}
-                  className={cn(
-                    'flex-1 py-1.5 rounded-md text-xs font-semibold transition-all',
-                    cycle === 'monthly'
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700',
-                  )}
-                >
-                  شهري
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCycle('yearly')}
-                  className={cn(
-                    'flex-1 py-1.5 rounded-md text-xs font-semibold transition-all',
-                    cycle === 'yearly'
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700',
-                  )}
-                >
-                  سنوي
-                </button>
+          <div className="flex-1 overflow-y-auto px-6 md:px-7 py-5 bg-slate-50 space-y-4">
+            {/* "ما تحصل عليه" — quick stat row anchoring the dialog
+                with concrete value. Uses plan limits straight from
+                targetPlan, so an admin editing a plan sees this update
+                immediately. */}
+            <div className="rounded-xl bg-white ring-1 ring-slate-200 p-4">
+              <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-slate-400 mb-3">
+                ما تحصل عليه
+              </p>
+              <div className="grid grid-cols-4 gap-3">
+                <PlanStat
+                  icon={<Users className="h-4 w-4" weight="duotone" />}
+                  value={targetPlan.users_limit == null ? '∞' : String(targetPlan.users_limit)}
+                  label="مستخدم"
+                />
+                <PlanStat
+                  icon={<Buildings className="h-4 w-4" weight="duotone" />}
+                  value={targetPlan.branches_limit == null ? '∞' : String(targetPlan.branches_limit)}
+                  label="فرع"
+                />
+                <PlanStat
+                  icon={<ChatCircle className="h-4 w-4" weight="duotone" />}
+                  value={targetPlan.sms_limit === 0 ? '—' : targetPlan.sms_limit.toLocaleString('en')}
+                  label="SMS / شهر"
+                />
+                <PlanStat
+                  icon={<Lightning className="h-4 w-4" weight="duotone" />}
+                  value={targetPlan.ai_limit === 0 ? '—' : targetPlan.ai_limit.toLocaleString('en')}
+                  label="AI / شهر"
+                />
               </div>
             </div>
 
-            {/* Slim from → to row — secondary info, kept light */}
-            <div className="flex items-center gap-3 text-sm">
-              <span className="text-slate-500 truncate">
-                {planInfo?.name_ar || planInfo?.name || agent?.plan || '—'}
-              </span>
-              <ArrowLeft className="h-3.5 w-3.5 text-primary shrink-0" weight="bold" />
-              <span className="font-semibold text-slate-900 truncate">
-                {targetPlan.name_ar || targetPlan.name}
-              </span>
-            </div>
-
-            {/* Billing summary — clean inset, no colored box */}
-            {billing && (
-              <div className="rounded-2xl bg-white ring-1 ring-slate-200 px-5 py-4">
-                <p className="text-xs font-bold mb-2 flex items-center gap-1.5 text-slate-500 uppercase tracking-wider">
-                  <CalendarBlank className="h-3.5 w-3.5" weight="fill" />
-                  متى وكم ستدفع؟
-                </p>
-                <BillingExplanation billing={billing} />
+            {/* Plan transition line — only when we have a real current
+                plan to show. Avoids the awkward "—" the screenshot
+                surfaced when planInfo wasn't resolved yet. */}
+            {(planInfo?.name_ar || planInfo?.name) && (
+              <div className="flex items-center justify-center gap-2.5 text-xs text-slate-500">
+                <span>الحزمة الحالية:</span>
+                <span className="font-semibold text-slate-700">
+                  {planInfo.name_ar || planInfo.name}
+                </span>
+                <ArrowLeft className="h-3 w-3 text-primary" weight="bold" />
+                <span className="font-bold text-primary">
+                  {targetPlan.name_ar || targetPlan.name}
+                </span>
               </div>
             )}
 
-            {/* Privacy policy checkbox — minimal */}
-            <label className="flex items-start gap-3 cursor-pointer">
+            {/* Billing summary — primary-tinted card, the actual money
+                question. */}
+            {billing && (
+              <div className="rounded-xl bg-primary/5 ring-1 ring-primary/15 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-primary">
+                    <CalendarBlank className="h-4 w-4" weight="fill" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-900">متى وكم ستدفع</p>
+                </div>
+                <div className="pr-9">
+                  <BillingExplanation billing={billing} />
+                </div>
+              </div>
+            )}
+
+            {/* Privacy policy — proper card with checkbox and clear
+                acknowledgement. */}
+            <label className="flex items-start gap-3 rounded-xl bg-white ring-1 ring-slate-200 p-3.5 cursor-pointer transition-all hover:ring-primary/30 hover:bg-primary/[0.02]">
               <Checkbox
                 checked={privacyAccepted}
                 onCheckedChange={(v) => setPrivacyAccepted(v === true)}
@@ -405,38 +451,20 @@ export function PlanChangeConfirmDialog({
                 >
                   سياسة الخصوصية
                 </a>
-                وعلى شروط الفوترة أعلاه.
+                وعلى شروط الفوترة المعروضة أعلاه.
               </span>
             </label>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto px-6 py-9 bg-slate-50/50 flex flex-col items-center text-center">
-            <div className="relative">
-              <div
-                className="h-20 w-20 rounded-full flex items-center justify-center shadow-[0_12px_32px_-12px_rgba(16,185,129,0.5)]"
-                style={{
-                  background: 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)',
-                }}
-              >
-                <CheckCircle className="h-10 w-10 text-white" weight="fill" />
-              </div>
-              <Sparkle
-                className="absolute -top-1 -right-1 h-5 w-5 text-amber-400 animate-pulse"
-                weight="fill"
-              />
-              <Sparkle
-                className="absolute -bottom-1 -left-2 h-4 w-4 text-fuchsia-400 animate-pulse"
-                weight="fill"
-              />
-            </div>
-            <p className="mt-5 text-base font-bold text-slate-900">
+          <div className="flex-1 overflow-y-auto px-6 py-7 bg-slate-50 text-center">
+            <p className="text-sm text-slate-700 font-medium">
               {successState.switchMode === 'after_trial'
-                ? `سيتم التحويل تلقائياً عند انتهاء التجربة`
-                : `كل الميزات الجديدة متاحة فوراً`}
+                ? 'تم تأكيد اختيارك. سنبدأ الفوترة تلقائياً عند انتهاء التجربة المجانية.'
+                : 'تم تفعيل الحزمة الجديدة وكل ميزاتها متاحة الآن.'}
             </p>
             {successState.emailSent && (
-              <p className="mt-2 text-xs text-slate-500">
-                تم إرسال نسخة من التفاصيل إلى فريق دعم ثقة.
+              <p className="mt-3 text-xs text-slate-500">
+                أُرسلت نسخة من تفاصيل التغيير إلى فريق دعم ثقة.
               </p>
             )}
           </div>
@@ -476,6 +504,28 @@ export function PlanChangeConfirmDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PlanStat({
+  icon,
+  value,
+  label,
+}: {
+  icon: ReactNode;
+  value: string;
+  label: string;
+}) {
+  return (
+    <div className="text-center">
+      <div className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-primary/10 text-primary mb-1.5">
+        {icon}
+      </div>
+      <div className="text-base font-extrabold text-slate-900 tabular-nums leading-tight">
+        {value}
+      </div>
+      <div className="text-[10px] text-slate-500 leading-tight mt-0.5">{label}</div>
+    </div>
   );
 }
 
