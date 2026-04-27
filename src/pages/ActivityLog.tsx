@@ -487,12 +487,15 @@ export default function ActivityLog() {
       />
 
       <div className="md:p-6 space-y-6">
-        {/* Filters */}
+        {/* Filters. Mobile layout stacks each control on its own row
+            (`space-y-3`) with full-width controls and short inline
+            labels for the date inputs; desktop falls back to the
+            original `flex-wrap` row via `sm:flex sm:flex-wrap`. */}
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-wrap gap-4">
+          <CardContent className="p-3 sm:p-6">
+            <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:gap-4">
               {/* Search */}
-              <div className="relative flex-1 min-w-[200px]">
+              <div className="relative sm:flex-1 sm:min-w-[200px]">
                 <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="بحث بالاسم، رقم الملف، رقم السيارة..."
@@ -502,9 +505,10 @@ export default function ActivityLog() {
                 />
               </div>
 
-              {/* Date From */}
-              <div className="flex items-center gap-1">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">من:</span>
+              {/* Date From — fixed-width label so "من" / "إلى" align
+                  vertically as a clean column on mobile. */}
+              <div className="flex items-center gap-2 sm:gap-1">
+                <span className="text-sm text-muted-foreground shrink-0 w-8 sm:w-auto">من</span>
                 <ArabicDatePicker
                   value={dateFrom}
                   onChange={setDateFrom}
@@ -514,8 +518,8 @@ export default function ActivityLog() {
               </div>
 
               {/* Date To */}
-              <div className="flex items-center gap-1">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">إلى:</span>
+              <div className="flex items-center gap-2 sm:gap-1">
+                <span className="text-sm text-muted-foreground shrink-0 w-8 sm:w-auto">إلى</span>
                 <ArabicDatePicker
                   value={dateTo}
                   onChange={setDateTo}
@@ -526,7 +530,7 @@ export default function ActivityLog() {
 
               {/* Type Filter */}
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-full sm:w-[150px]">
                   <Filter className="h-4 w-4 ml-2" />
                   <SelectValue placeholder="النوع" />
                 </SelectTrigger>
@@ -543,15 +547,19 @@ export default function ActivityLog() {
 
               {/* Clear Filters */}
               {hasActiveFilters && (
-                <Button variant="ghost" onClick={clearFilters} className="text-muted-foreground">
+                <Button
+                  variant="ghost"
+                  onClick={clearFilters}
+                  className="w-full sm:w-auto text-muted-foreground"
+                >
                   مسح الفلاتر
                 </Button>
               )}
             </div>
 
             {/* Results Summary */}
-            <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-              <span>
+            <div className="mt-4 pt-3 border-t flex items-center justify-between gap-3 text-sm flex-wrap">
+              <span className="text-muted-foreground">
                 عرض {displayedActivities.length} من {filteredActivities.length} نتيجة
               </span>
               {(typeFilter === "payment" || typeFilter === "all") && paymentTotal > 0 && (
