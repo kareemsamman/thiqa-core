@@ -104,7 +104,7 @@ export default function Tasks() {
         subtitle="إدارة وتتبع المهام اليومية"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Toolbar */}
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={() => setDrawerOpen(true)} className="gap-2">
@@ -113,34 +113,39 @@ export default function Tasks() {
           </Button>
         </div>
 
-        {/* Stats Summary Banner */}
+        {/* Stats Summary Banner — mobile uses a 2-col grid with smaller
+            icons so the four stats sit cleanly in pairs; the Progress
+            bar gets `order-last col-span-2` on mobile so it always sits
+            on its own row at the bottom. From sm+, the layout falls
+            back to the original flex-wrap row with Progress in its
+            original position. */}
         <Card className="bg-gradient-to-l from-violet-50 to-background border-violet-200/50">
           <CardContent className="py-4">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
               {/* مهامي المعلقة */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
-                  <Clock className="h-6 w-6" />
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600 shrink-0">
+                  <Clock className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold ltr-nums">{myPendingCount}</p>
-                  <p className="text-sm text-muted-foreground">مهامي المعلقة</p>
+                <div className="min-w-0">
+                  <p className="text-xl sm:text-2xl font-bold ltr-nums leading-tight">{myPendingCount}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground truncate">مهامي المعلقة</p>
                 </div>
               </div>
 
               {/* مهامي المنجزة */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-100 text-green-600">
-                  <CheckCircle2 className="h-6 w-6" />
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-green-100 text-green-600 shrink-0">
+                  <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold ltr-nums">{myCompletedCount}</p>
-                  <p className="text-sm text-muted-foreground">أنجزتها اليوم</p>
+                <div className="min-w-0">
+                  <p className="text-xl sm:text-2xl font-bold ltr-nums leading-tight">{myCompletedCount}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground truncate">أنجزتها اليوم</p>
                 </div>
               </div>
 
               {/* Progress */}
-              <div className="flex-1 min-w-[150px] max-w-[200px]">
+              <div className="order-last col-span-2 sm:order-none sm:col-span-1 sm:flex-1 sm:min-w-[150px] sm:max-w-[200px]">
                 <div className="flex justify-between text-sm mb-1">
                   <span className="text-muted-foreground">إنجازي</span>
                   <span className="font-medium ltr-nums">{completionPercentage}%</span>
@@ -149,25 +154,25 @@ export default function Tasks() {
               </div>
 
               {/* المهام للآخرين */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
-                  <Users className="h-6 w-6" />
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-violet-100 text-violet-600 shrink-0">
+                  <Users className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold ltr-nums">{createdForOthersCount}</p>
-                  <p className="text-sm text-muted-foreground">أنشأتها للآخرين</p>
+                <div className="min-w-0">
+                  <p className="text-xl sm:text-2xl font-bold ltr-nums leading-tight">{createdForOthersCount}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground truncate">أنشأتها للآخرين</p>
                 </div>
               </div>
 
               {/* متأخرة */}
               {stats.overdue > 0 && (
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-100 text-red-600">
-                    <AlertTriangle className="h-6 w-6" />
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                  <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-red-100 text-red-600 shrink-0">
+                    <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6" />
                   </div>
-                  <div>
-                    <p className="text-2xl font-bold ltr-nums">{stats.overdue}</p>
-                    <p className="text-sm text-muted-foreground">متأخرة</p>
+                  <div className="min-w-0">
+                    <p className="text-xl sm:text-2xl font-bold ltr-nums leading-tight">{stats.overdue}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">متأخرة</p>
                   </div>
                 </div>
               )}

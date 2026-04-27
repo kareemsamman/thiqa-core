@@ -329,7 +329,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                 title="تجاوزت حد المعاملات — اضغط للترقية"
               >
                 <Lock className="h-4 w-4" />
-                <span className="hidden sm:inline">معاملة جديدة</span>
+                <span>معاملة جديدة</span>
               </Button>
             ) : (
               <Button
@@ -338,16 +338,15 @@ export function Header({ title, subtitle }: HeaderProps) {
                 size="sm"
                 className="h-9 px-3 rounded-full gap-2 bg-foreground text-background hover:bg-foreground/90"
               >
-                <Plus className="h-4 w-4 sm:hidden" />
-                <FileText className="h-4 w-4 hidden sm:inline" />
-                <span className="hidden sm:inline">معاملة جديدة</span>
+                <Plus className="h-4 w-4" />
+                <span>معاملة جديدة</span>
               </Button>
             )}
           </div>
         </div>
 
         {siblingTabs.length > 0 && (
-          <nav className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-2 -mx-1 px-1">
+          <nav className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-4 -mx-1 px-1">
             {siblingTabs.map((tab) => {
               const active = isTabActive(tab.href);
               return (

@@ -24,7 +24,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
-      <main className={`min-h-screen transition-all duration-300 px-2 py-3 pt-[3.75rem] md:pt-6 md:p-6 ${sidebarMargin} ${isThiqaSuperAdmin ? 'pb-6' : 'pb-40 md:pb-6'} ${isImpersonating ? 'mt-10' : ''}`}>
+      <main className={`min-h-screen transition-all duration-300 px-2 py-3 pt-[4.5rem] md:pt-6 md:p-6 ${sidebarMargin} ${isThiqaSuperAdmin ? 'pb-6' : 'pb-40 md:pb-6'} ${isImpersonating ? 'mt-10' : ''}`}>
         <div className="max-w-full">{children}</div>
       </main>
     </div>

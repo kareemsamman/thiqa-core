@@ -158,8 +158,7 @@ export function BottomToolbar() {
               title="تجاوزت حد المعاملات — اضغط للترقية"
             >
               <Lock className="h-4 w-4" />
-              <span className="hidden sm:inline">معاملة جديدة</span>
-              <Sparkles className="h-3.5 w-3.5 opacity-70 hidden sm:inline" />
+              <span>معاملة جديدة</span>
             </Button>
           ) : (
             <Button
@@ -174,8 +173,7 @@ export function BottomToolbar() {
               size="sm"
             >
               <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">معاملة جديدة</span>
-              <FileText className="h-4 w-4 sm:hidden" />
+              <span>معاملة جديدة</span>
             </Button>
           )}
 
