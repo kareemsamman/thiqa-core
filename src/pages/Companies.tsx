@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -138,10 +139,12 @@ export default function Companies() {
       />
 
       <div className="md:p-6 space-y-6">
-        {/* Actions Bar — search + filter pinned to the right (start of the
-            row in RTL), the إضافة شركة CTA pinned to the very left. */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2 flex-1 max-w-2xl">
+        {/* Actions Bar. Mobile: stacks vertically with full-width
+            controls and a full-width primary CTA at the bottom. From
+            sm+, falls back to the original single-row layout with
+            search/filter on the right and the add button on the left. */}
+        <div className="space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-3">
+          <div className="flex items-center gap-2 sm:flex-1 sm:max-w-2xl">
             <div className="relative flex-1">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -152,7 +155,7 @@ export default function Companies() {
               />
             </div>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-32 sm:w-48 shrink-0">
                 <SelectValue placeholder="جميع الأنواع" />
               </SelectTrigger>
               <SelectContent>
@@ -163,14 +166,115 @@ export default function Companies() {
               </SelectContent>
             </Select>
           </div>
-          <Button size="sm" onClick={handleAddCompany} className="gap-2">
+          <Button size="sm" onClick={handleAddCompany} className="gap-2 w-full sm:w-auto">
             <Plus className="h-4 w-4" />
             إضافة شركة
           </Button>
         </div>
 
-        {/* Companies Table */}
-        <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+        {/* Mobile card list — replaces the table on phones where 6
+            columns of company data don't fit. Each company is its own
+            tappable card with status, names, type pills, commission,
+            and inline action buttons. */}
+        <div className="md:hidden space-y-3">
+          {loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <Card key={i} className="p-4 space-y-2">
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-6 w-32" />
+              </Card>
+            ))
+          ) : companies.length === 0 ? (
+            <Card className="p-8 text-center text-sm text-muted-foreground">
+              لا توجد شركات تأمين
+            </Card>
+          ) : (
+            companies.map((company) => (
+              <Card
+                key={company.id}
+                className="p-4 cursor-pointer hover:bg-muted/40 transition-colors"
+                onClick={() => handleEditCompany(company)}
+              >
+                {/* Header: names + status */}
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="flex items-start gap-2 flex-1 min-w-0">
+                    <div className="h-8 w-1 rounded-full bg-primary/60 shrink-0 mt-0.5" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-base leading-tight truncate">{company.name_ar || '-'}</h3>
+                      {company.name && (
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">{company.name}</p>
+                      )}
+                    </div>
+                  </div>
+                  <Badge variant={company.active ? 'default' : 'secondary'} className="shrink-0">
+                    {company.active ? 'نشط' : 'غير نشط'}
+                  </Badge>
+                </div>
+
+                {/* Type pills */}
+                {company.category_parent && company.category_parent.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {company.category_parent.map((type) => (
+                      <Badge key={type} variant="outline" className="text-xs">
+                        {POLICY_TYPES.find(t => t.value === type)?.label || type}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                {/* Commission (ELZAMI only) */}
+                {company.category_parent?.includes('ELZAMI') && (
+                  <div className="flex items-center justify-between text-sm pt-2 border-t mb-3">
+                    <span className="text-muted-foreground">العمولة</span>
+                    <span className={`font-semibold ltr-nums ${(company.elzami_commission || 0) < 0 ? 'text-destructive' : 'text-success'}`}>
+                      ₪{(company.elzami_commission || 0).toLocaleString('en-US')}
+                    </span>
+                  </div>
+                )}
+
+                {/* Actions — flex-1 each so they share the row evenly. */}
+                <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 min-w-[120px] gap-1.5 text-xs h-9"
+                    onClick={() => handleManagePricing(company)}
+                  >
+                    <Settings className="h-3.5 w-3.5" />
+                    قواعد التسعير
+                  </Button>
+                  {company.category_parent?.includes('ROAD_SERVICE') && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 min-w-[120px] gap-1.5 text-xs h-9"
+                      onClick={() => handleManageRoadServicePricing(company)}
+                    >
+                      <Truck className="h-3.5 w-3.5" />
+                      خدمات الطريق
+                    </Button>
+                  )}
+                  {company.category_parent?.includes('ROAD_SERVICE') && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 min-w-[120px] gap-1.5 text-xs h-9"
+                      onClick={() => handleManageAccidentFeePricing(company)}
+                    >
+                      <Shield className="h-3.5 w-3.5" />
+                      إعفاء الحادث
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+
+        {/* Companies Table — desktop only. Mobile uses the card list
+            above instead since a 6-column table doesn't fit on phones. */}
+        <div className="hidden md:block overflow-hidden rounded-lg border bg-card shadow-sm">
           <div className="flex items-center justify-between border-b bg-muted/30 px-5 py-3">
             <div className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-primary" />
