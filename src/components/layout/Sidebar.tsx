@@ -784,7 +784,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
               </div>
               <p className="text-right">
                 <span className="text-xl font-extrabold text-slate-900 tabular-nums">
-                  {daysLeft}
+                  {used}
                 </span>
                 <span className="text-xs font-medium text-slate-500 mx-1">
                   / {TRIAL_LENGTH} يوم
