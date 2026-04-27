@@ -17,24 +17,6 @@ interface ManualReminderRequest {
   sms_type?: string;
 }
 
-// Helper to get policy type label in Arabic
-const POLICY_TYPE_LABELS: Record<string, string> = {
-  'ELZAMI': 'إلزامي',
-  'THIRD_FULL': 'ثالث/شامل',
-  'THIRD_ONLY': 'طرف ثالث',
-  'ROAD_SERVICE': 'خدمات طريق',
-  'ACCIDENT_FEE_EXEMPTION': 'إعفاء رسوم',
-};
-
-const getPolicyTypeLabel = (parent: string | null, child: string | null): string => {
-  if (!parent) return 'معاملة';
-  const parentLabel = POLICY_TYPE_LABELS[parent] || parent;
-  if (child && parent === 'THIRD_FULL') {
-    return child === 'FULL' ? 'شامل' : child === 'THIRD' ? 'ثالث' : parentLabel;
-  }
-  return parentLabel;
-};
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -52,7 +34,6 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Verify user
@@ -65,30 +46,6 @@ Deno.serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Raw-fetch RPC helper that forwards the caller's JWT straight to
-    // PostgREST. We avoid creating a second supabase-js client with
-    // `global.headers.Authorization` because that path runs gotrue-js
-    // JWT decoding locally, which blows up on ES256-signed tokens
-    // with "Unsupported JWT algorithm ES256". Postgrest + the auth
-    // server handle ES256 natively, so going through raw fetch is
-    // safe.
-    const rpcAsCaller = async (fn: string, params: Record<string, unknown>) => {
-      const resp = await fetch(`${supabaseUrl}/rest/v1/rpc/${fn}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(params),
-      });
-      if (!resp.ok) {
-        const body = await resp.text();
-        throw new Error(`rpc ${fn} failed (${resp.status}): ${body}`);
-      }
-      return resp.json();
-    };
 
     // Check if user is active
     const { data: profile } = await supabase
@@ -214,108 +171,16 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Fetch policy details for this client. Raw-fetch with the
-      // caller's JWT so auth.uid() is populated inside the RPC
-      // (is_active_user / can_access_branch gate on it).
-      let policies: any[] = [];
-      try {
-        const rpcData = await rpcAsCaller('report_debt_policies_for_clients', {
-          p_client_ids: [client_id],
-        });
-        policies = Array.isArray(rpcData) ? rpcData : [];
-      } catch (err) {
-        console.error('report_debt_policies_for_clients failed:', err);
-      }
-
-      // Build policy lines (max 5 to keep SMS short). Group by group_id so
-      // packages appear as a single combined entry, ELZAMI is hidden unless
-      // it has office_commission, and the commission is surfaced as a "+
-      // عمولة مكتب" suffix instead of a standalone line.
-      type DebtPolicy = {
-        policy_type_parent: string;
-        policy_type_child: string | null;
-        car_number: string | null;
-        insurance_price: number;
-        office_commission: number;
-        paid: number;
-        group_id: string | null;
-      };
-      const allPolicies: DebtPolicy[] = (policies || []).map((p: any) => ({
-        policy_type_parent: p.policy_type_parent,
-        policy_type_child: p.policy_type_child,
-        car_number: p.car_number,
-        insurance_price: Number(p.insurance_price) || 0,
-        office_commission: Number(p.office_commission) || 0,
-        paid: Number(p.paid) || 0,
-        group_id: p.group_id,
-      }));
-
-      const groups = new Map<string, DebtPolicy[]>();
-      const standalone: DebtPolicy[] = [];
-      for (const p of allPolicies) {
-        if (p.group_id) {
-          const list = groups.get(p.group_id) || [];
-          list.push(p);
-          groups.set(p.group_id, list);
-        } else {
-          standalone.push(p);
-        }
-      }
-
-      const lines: string[] = [];
-
-      // Package lines
-      for (const items of groups.values()) {
-        const nonElzami = items.filter((i) => i.policy_type_parent !== 'ELZAMI');
-        const elzami = items.filter((i) => i.policy_type_parent === 'ELZAMI');
-        const nonElzamiPrice = nonElzami.reduce((s, i) => s + i.insurance_price + i.office_commission, 0);
-        const elzamiCommission = elzami.reduce((s, i) => s + i.office_commission, 0);
-        const nonElzamiPaid = nonElzami.reduce((s, i) => s + i.paid, 0);
-        const elzamiPaidTowardCommission = elzami.reduce(
-          (s, i) => s + Math.max(0, i.paid - i.insurance_price),
-          0,
-        );
-        const price = nonElzamiPrice + elzamiCommission;
-        const paid = nonElzamiPaid + elzamiPaidTowardCommission;
-        const remaining = Math.round(Math.max(0, price - paid));
-        if (remaining <= 0) continue;
-        const labels = nonElzami
-          .map((i) => getPolicyTypeLabel(i.policy_type_parent, i.policy_type_child))
-          .filter(Boolean)
-          .join(' + ');
-        const combined = labels + (elzamiCommission > 0 ? ' + عمولة مكتب' : '');
-        const car = items[0].car_number || '';
-        lines.push(`• ${combined}${car ? ` - ${car}` : ''} - ₪${remaining.toLocaleString('en-US')}`);
-      }
-
-      // Standalone lines (skip bare ELZAMI with no commission)
-      for (const p of standalone) {
-        const isElzami = p.policy_type_parent === 'ELZAMI';
-        const commission = p.office_commission || 0;
-        if (isElzami && commission === 0) continue;
-        const price = isElzami ? commission : p.insurance_price + commission;
-        const remaining = Math.round(Math.max(0, price - p.paid));
-        if (remaining <= 0) continue;
-        const typeLabel = isElzami
-          ? 'عمولة مكتب'
-          : getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child) +
-            (commission > 0 ? ' + عمولة مكتب' : '');
-        const car = p.car_number || '';
-        lines.push(`• ${typeLabel}${car ? ` - ${car}` : ''} - ₪${remaining.toLocaleString('en-US')}`);
-      }
-
-      const policyLines = lines.slice(0, 5).join('\n');
-
-      // Build policy section only if there are policies with remaining balance
-      const policySection = policyLines.length > 0 
-        ? `\n\nالمعاملات:\n${policyLines}` 
-        : '';
-
       // Build the debt-reminder body. The shared footer (applied below)
-      // covers owner name + phones, so we no longer hand-stitch branding here.
-      finalMessage = `مرحباً ${client.full_name}،
-
-عليك تسديد المبلغ: ₪${totalRemaining.toLocaleString('en-US')}${policySection}`;
+      // covers owner name + phones. Per-policy breakdown intentionally
+      // dropped — staff asked for a short customer-friendly nudge over
+      // an itemized invoice. The closing line and footer give the
+      // customer enough context to identify who's contacting them and
+      // act on it without re-deriving every policy from the SMS body.
+      finalMessage =
+        `مرحباً ${client.full_name}،\n\n` +
+        `عليك تسديد المبلغ: ₪${totalRemaining.toLocaleString('en-US')}\n\n` +
+        `يرجى التواصل معنا للتسوية.`;
     }
 
     // Append the shared agent footer to every reminder — custom message

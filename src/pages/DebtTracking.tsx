@@ -26,6 +26,7 @@ import { DebtPaymentModal } from "@/components/debt/DebtPaymentModal";
 import { ClientNotesPopover } from "@/components/clients/ClientNotesPopover";
 import { useAuth } from "@/hooks/useAuth";
 import { useSmsLock } from "@/hooks/useSmsLock";
+import { useSiteSettings } from "@/hooks/useSiteSettings";
 
 interface ClientDebt {
   client_id: string;
@@ -249,6 +250,21 @@ export default function DebtTracking() {
   const { toast } = useToast();
   const { profile } = useAuth();
   const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade, guardSend: guardSmsSend } = useSmsLock();
+  const { data: siteSettings } = useSiteSettings();
+  // Footer for outbound debt messages — mirrors the SMS footer the
+  // edge function appends (owner name + invoice phones from
+  // site_settings). Built once per render; appended to every WhatsApp
+  // / SMS body so the customer always sees who's contacting them.
+  const debtMessageFooter = useMemo(() => {
+    const lines: string[] = [];
+    const owner = (siteSettings?.owner_name || '').trim();
+    if (owner) lines.push(owner);
+    const phones = (siteSettings?.invoice_phones || [])
+      .map((p) => (p || '').trim())
+      .filter(Boolean);
+    if (phones.length > 0) lines.push(phones.join(' | '));
+    return lines.length > 0 ? `\n\n${lines.join('\n')}` : '';
+  }, [siteSettings?.owner_name, siteSettings?.invoice_phones]);
 
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<ClientDebt[]>([]);
@@ -545,26 +561,15 @@ export default function DebtTracking() {
     }
     phone = phone.replace('+', '');
 
-    // Build policy details by aggregating into package rows so packages
-    // appear as a single line and ELZAMI commission is surfaced inline.
-    const rows = aggregateDebtRows(client.policies);
-    const policyDetails = rows
-      .slice(0, 5)
-      .map((r) => {
-        const car = r.carNumber || '';
-        const remaining = Math.round(r.remaining);
-        return `• ${r.typeLabel}${car ? ` - ${car}` : ''} - ₪${remaining.toLocaleString('en-US')}`;
-      })
-      .join('\n');
-
-    const message = `مرحباً ${client.client_name}،
-
-عليك تسديد المبلغ: ${client.total_remaining.toLocaleString('en-US')} شيكل
-
-المعاملات:
-${policyDetails}
-
-يرجى التواصل معنا للتسوية.`;
+    // Per-policy breakdown intentionally dropped — staff asked for a
+    // short message that reads like a customer-friendly nudge instead
+    // of an itemized invoice. The agent footer (owner + phones) is
+    // appended so the customer can identify who's reaching out.
+    const message =
+      `مرحباً ${client.client_name}،\n\n` +
+      `عليك تسديد المبلغ: ${client.total_remaining.toLocaleString('en-US')} شيكل\n\n` +
+      `يرجى التواصل معنا للتسوية.` +
+      debtMessageFooter;
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
   };
 

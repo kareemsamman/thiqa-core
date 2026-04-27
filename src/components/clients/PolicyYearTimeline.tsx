@@ -52,6 +52,7 @@ import { toastFunctionError } from '@/lib/functionError';
 import { useSmsLock } from '@/hooks/useSmsLock';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface PolicyRecord {
   id: string;
@@ -251,7 +252,19 @@ export function PolicyYearTimeline({
   onRenewPackage,
 }: PolicyYearTimelineProps) {
   const { isAdmin, isSuperAdmin } = useAuth();
-  
+  const { can } = usePermissions();
+  // Profit / commission / debt numbers are gated by the cross-cut
+  // view_financial flag (admins always pass). Computed once here and
+  // passed down so PolicyPackageCard doesn't need to re-subscribe.
+  const canSeeFinancials = isAdmin || isSuperAdmin || can('view_financial');
+
+  // O(1) policy lookup so getPackagePaymentStatus can sum profit per
+  // package without re-walking the policies array on every render.
+  const policyById = useMemo(
+    () => new Map(policies.map((p) => [p.id, p])),
+    [policies],
+  );
+
   // Use external data if provided (from ClientDetails), otherwise use internal state
   const hasExternalData = externalPaymentInfo !== undefined;
   const [internalPaymentInfo, setInternalPaymentInfo] = useState<PaymentInfo>({});
@@ -871,17 +884,19 @@ export function PolicyYearTimeline({
   const getPackagePaymentStatus = (pkg: PolicyPackage) => {
     // Sum total paid across all package policies
     let totalPaid = 0;
-    
+    let profit = 0;
+
     pkg.allPolicyIds.forEach(id => {
       totalPaid += paymentInfo[id]?.paid || 0;
+      profit += policyById.get(id)?.profit || 0;
     });
-    
+
     // Calculate remaining as package total - all payments
     // This is the correct way for packages (same as drawer)
     const remaining = Math.max(0, pkg.totalPrice - totalPaid);
     const isPaid = remaining <= 0 && pkg.totalPrice > 0;
-    
-    return { totalPaid, remaining, isPaid };
+
+    return { totalPaid, remaining, isPaid, profit };
   };
 
   if (policies.length === 0) {
@@ -987,6 +1002,7 @@ export function PolicyYearTimeline({
                         onEditPackage={onEditPackage}
                         isSuperAdmin={isSuperAdmin}
                         isAdmin={isAdmin}
+                        canSeeFinancials={canSeeFinancials}
                         isEditingNotes={editingNotesId === mainPolicy?.id}
                         editedNotesValue={editedNotesValue}
                         savingNotes={savingNotes}
@@ -1103,6 +1119,7 @@ function PolicyPackageCard({
   onEditPackage,
   isSuperAdmin,
   isAdmin,
+  canSeeFinancials,
   isEditingNotes,
   editedNotesValue,
   savingNotes,
@@ -1123,7 +1140,7 @@ function PolicyPackageCard({
    *  + financial-adjustment note underneath it. Populated by the parent
    *  PolicyYearTimeline from policy_transfers. */
   transferAdjustments: Record<string, TransferAdjustment>;
-  paymentStatus: { totalPaid: number; remaining: number; isPaid: boolean };
+  paymentStatus: { totalPaid: number; remaining: number; isPaid: boolean; profit: number };
   accidentCount?: number;
   childrenCount?: number;
   clientPhone?: string | null;
@@ -1145,6 +1162,11 @@ function PolicyPackageCard({
   onEditPackage?: (groupId: string) => void;
   isSuperAdmin?: boolean;
   isAdmin?: boolean;
+  /** True when the viewer is allowed to see profit / commission /
+   *  debt numbers — admin/super admin always pass; workers need the
+   *  view_financial cross-cut permission. Drives whether the profit
+   *  column is rendered in the totals footer. */
+  canSeeFinancials?: boolean;
   isEditingNotes?: boolean;
   editedNotesValue?: string;
   savingNotes?: boolean;
@@ -1896,6 +1918,19 @@ function PolicyPackageCard({
                         ₪{paymentStatus.remaining.toLocaleString('en-US')}
                       </span>
                     </div>
+                    {canSeeFinancials && (
+                      <div className="flex flex-col text-xs items-end text-left">
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">الربح</span>
+                        <span className={cn(
+                          "font-bold ltr-nums",
+                          paymentStatus.profit > 0 ? "text-emerald-700 dark:text-emerald-400"
+                          : paymentStatus.profit < 0 ? "text-red-700 dark:text-red-400"
+                          : "text-muted-foreground",
+                        )}>
+                          ₪{paymentStatus.profit.toLocaleString('en-US')}
+                        </span>
+                      </div>
+                    )}
                   </>
                 )}
               </button>
@@ -1959,6 +1994,19 @@ function PolicyPackageCard({
                         ₪{paymentStatus.remaining.toLocaleString('en-US')}
                       </span>
                     </div>
+                    {canSeeFinancials && (
+                      <div className="flex flex-col text-xs items-end text-left">
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">الربح</span>
+                        <span className={cn(
+                          "font-bold ltr-nums",
+                          paymentStatus.profit > 0 ? "text-emerald-700 dark:text-emerald-400"
+                          : paymentStatus.profit < 0 ? "text-red-700 dark:text-red-400"
+                          : "text-muted-foreground",
+                        )}>
+                          ₪{paymentStatus.profit.toLocaleString('en-US')}
+                        </span>
+                      </div>
+                    )}
                   </>
                 )}
               </button>
