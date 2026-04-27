@@ -303,7 +303,7 @@ export default function FinancialReports() {
         subtitle="محفظة Thiqa الموحدة"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Toolbar */}
         <div className="flex items-center justify-end gap-2">
           <Button

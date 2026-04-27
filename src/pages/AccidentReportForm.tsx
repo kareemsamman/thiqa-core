@@ -462,7 +462,7 @@ export default function AccidentReportForm() {
   if (loading) {
     return (
       <MainLayout>
-        <div className="p-6 space-y-4">
+        <div className="md:p-6 space-y-4">
           <Skeleton className="h-10 w-64" />
           <Skeleton className="h-32 w-full" />
           <Skeleton className="h-64 w-full" />
@@ -474,7 +474,7 @@ export default function AccidentReportForm() {
   if (!policy) {
     return (
       <MainLayout>
-        <div className="p-6 text-center">
+        <div className="md:p-6 text-center">
           <p className="text-muted-foreground">لم يتم العثور على المعاملة</p>
           <Button variant="outline" className="mt-4" onClick={() => navigate("/accidents")}>
             <ArrowRight className="h-4 w-4 ml-2" />

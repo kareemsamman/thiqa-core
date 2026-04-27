@@ -409,7 +409,7 @@ export default function SmsSettings() {
     <MainLayout>
       <Header title="إعدادات SMS" subtitle="إدارة خدمة الرسائل النصية" />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         <Tabs defaultValue="settings" dir="rtl">
           <TabsList className="grid w-full max-w-xl grid-cols-4">
             <TabsTrigger value="settings" className="gap-2">

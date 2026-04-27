@@ -151,7 +151,7 @@ export default function PaymentSettings() {
   if (loading) {
     return (
       <MainLayout>
-        <div className="p-6 space-y-6">
+        <div className="md:p-6 space-y-6">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-[400px] w-full" />
         </div>
@@ -161,7 +161,7 @@ export default function PaymentSettings() {
 
   return (
     <MainLayout>
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary/10 rounded-lg">

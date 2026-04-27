@@ -374,7 +374,7 @@ export default function Media() {
         subtitle="إدارة الصور والملفات"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Filters Bar — upload action pinned to the far-left end of
             the row via the last-child position, so it lands at the
             visual left edge under RTL. */}

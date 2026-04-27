@@ -355,10 +355,10 @@ export function Header({ title, subtitle }: HeaderProps) {
                   type="button"
                   onClick={() => navigate(tab.href)}
                   className={cn(
-                    "h-9 px-4 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 flex-shrink-0",
+                    "h-8 px-3.5 rounded-full text-[13px] whitespace-nowrap transition-all duration-200 flex-shrink-0",
                     active
-                      ? "bg-foreground text-background shadow-sm"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary",
+                      ? "bg-primary/10 text-primary font-semibold ring-1 ring-primary/15"
+                      : "text-muted-foreground font-medium hover:text-foreground hover:bg-secondary/70",
                   )}
                 >
                   {tab.name}

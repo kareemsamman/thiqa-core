@@ -596,7 +596,7 @@ export default function DebtTracking() {
     <MainLayout>
       <Header title="متابعة الديون" subtitle="إدارة المبالغ المستحقة وإرسال التذكيرات" />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">

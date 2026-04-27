@@ -455,7 +455,7 @@ export default function FormTemplateEditor() {
   if (loading) {
     return (
       <MainLayout>
-        <div className="p-6 space-y-4" dir="rtl">
+        <div className="md:p-6 space-y-4" dir="rtl">
           <Skeleton className="h-10 w-64" />
           <Skeleton className="h-[600px]" />
         </div>

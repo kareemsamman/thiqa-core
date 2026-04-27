@@ -247,7 +247,7 @@ export default function BrandingSettings() {
   if (isLoading) {
     return (
       <MainLayout>
-        <div className="p-6 space-y-4">
+        <div className="md:p-6 space-y-4">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-64 w-full" />
         </div>
@@ -262,7 +262,7 @@ export default function BrandingSettings() {
         subtitle="تخصيص شعار الموقع، العنوان، الوصف، ونص صفحة التوقيع"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         <Tabs defaultValue="branding" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto gap-1 p-1">
             <TabsTrigger value="branding" className="gap-2 py-2.5">

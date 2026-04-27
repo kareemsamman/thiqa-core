@@ -130,7 +130,7 @@ export default function RoadServices() {
         subtitle="إدارة كتالوج خدمات الطريق"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Toolbar */}
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={handleAdd} className="gap-2">

@@ -241,7 +241,7 @@ export default function Cars() {
         subtitle="إدارة قاعدة بيانات المركبات"
       />
 
-      <div className="p-6 space-y-4">
+      <div className="md:p-6 space-y-4">
         {/* Toolbar */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative flex-1 max-w-md">

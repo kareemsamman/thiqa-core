@@ -251,7 +251,7 @@ export default function Brokers() {
     if (viewingLoading && !viewingBroker) {
       return (
         <MainLayout>
-          <div className="p-6 space-y-4">
+          <div className="md:p-6 space-y-4">
             <Skeleton className="h-14 w-full" />
             <Skeleton className="h-40 w-full" />
           </div>
@@ -309,7 +309,7 @@ export default function Brokers() {
         subtitle="إدارة الوسطاء والعمولات"
       />
 
-      <div className="p-6 space-y-4">
+      <div className="md:p-6 space-y-4">
         {/* Toolbar */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative flex-1 max-w-md">

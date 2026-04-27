@@ -459,7 +459,7 @@ export default function AccidentTemplateMapper() {
   if (loading) {
     return (
       <MainLayout>
-        <div className="p-6 space-y-6" dir="rtl">
+        <div className="md:p-6 space-y-6" dir="rtl">
           <Skeleton className="h-10 w-48" />
           <div className="grid grid-cols-4 gap-4">
             <Skeleton className="h-[600px]" />

@@ -758,7 +758,7 @@ export default function CompanySettlementDetail() {
         subtitle="عرض جميع المعاملات وتفاصيل الحسابات"
       />
 
-      <div className="p-6 space-y-6 print:p-0">
+      <div className="md:p-6 space-y-6 print:p-0">
         {/* Back button and Wallet access */}
         <div className="flex items-center justify-between flex-wrap gap-4 print:hidden">
           <Button

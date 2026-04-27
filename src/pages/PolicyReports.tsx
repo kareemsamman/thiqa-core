@@ -960,7 +960,7 @@ export default function PolicyReports() {
         subtitle="متابعة المعاملات المنشأة والتجديدات"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className={cn(
             "grid w-full max-w-lg",

@@ -1167,7 +1167,7 @@ export default function Cheques() {
     <MainLayout>
       <Header title="الشيكات" subtitle="إدارة ومتابعة الشيكات" />
 
-      <div className="p-6 space-y-4">
+      <div className="md:p-6 space-y-4">
         {/* Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           {/* Due today — clickable to toggle the filter. Staff asked

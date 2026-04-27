@@ -444,7 +444,7 @@ export default function CompanyWallet() {
   if (loading) {
     return (
       <MainLayout>
-        <div className="p-6 space-y-6" dir="rtl">
+        <div className="md:p-6 space-y-6" dir="rtl">
           <Skeleton className="h-8 w-48" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Skeleton className="h-32" />
@@ -458,7 +458,7 @@ export default function CompanyWallet() {
 
   return (
     <MainLayout>
-      <div className="p-6 space-y-6" dir="rtl">
+      <div className="md:p-6 space-y-6" dir="rtl">
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">

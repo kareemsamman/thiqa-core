@@ -256,7 +256,7 @@ export default function RepairClaimDetail() {
   if (claimLoading) {
     return (
       <MainLayout>
-        <div className="p-6 space-y-4">
+        <div className="md:p-6 space-y-4">
           <Skeleton className="h-12 w-64" />
           <Skeleton className="h-64 w-full" />
         </div>
@@ -267,7 +267,7 @@ export default function RepairClaimDetail() {
   if (!claim) {
     return (
       <MainLayout>
-        <div className="p-6 text-center text-muted-foreground">
+        <div className="md:p-6 text-center text-muted-foreground">
           المطالبة غير موجودة
         </div>
       </MainLayout>
@@ -298,7 +298,7 @@ export default function RepairClaimDetail() {
         </div>
       </div>
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Info */}
           <div className="lg:col-span-2 space-y-6">

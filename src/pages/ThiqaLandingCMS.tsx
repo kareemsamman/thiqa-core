@@ -186,7 +186,7 @@ export default function ThiqaLandingCMS() {
   if (isLoading) {
     return (
       <MainLayout>
-        <div className="p-6 space-y-4">
+        <div className="md:p-6 space-y-4">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-96 w-full" />
         </div>

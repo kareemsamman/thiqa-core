@@ -405,7 +405,7 @@ export default function CompanySettlement() {
         subtitle="ملخص المبالغ المستحقة للشركات والأرباح"
       />
 
-      <div className="p-6 space-y-6 print:p-0" dir="rtl">
+      <div className="md:p-6 space-y-6 print:p-0" dir="rtl">
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="print:hidden">
           <TabsList>

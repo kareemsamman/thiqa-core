@@ -117,7 +117,7 @@ export default function AccidentFeeServices() {
         subtitle="إدارة كتالوج خدمات إعفاء رسوم الحادث"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Toolbar */}
         <div className="flex items-center justify-between gap-2">
           <div className="relative flex-1 max-w-md">

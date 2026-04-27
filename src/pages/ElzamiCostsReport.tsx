@@ -127,7 +127,7 @@ export default function ElzamiCostsReport() {
         subtitle="عمولات شركات التأمين على بوالص الإلزامي"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Filters */}
         <Card>
           <CardHeader className="pb-4">

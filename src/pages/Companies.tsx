@@ -137,7 +137,7 @@ export default function Companies() {
         subtitle="إدارة شركات التأمين وقواعد التسعير"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Actions Bar — search + filter pinned to the right (start of the
             row in RTL), the إضافة شركة CTA pinned to the very left. */}
         <div className="flex items-center justify-between gap-3 flex-wrap">

@@ -172,7 +172,7 @@ export default function SmsHistory() {
     <MainLayout>
       <Header title="سجل الرسائل النصية" subtitle="عرض جميع الرسائل المرسلة" />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="rounded-lg border bg-card p-4">

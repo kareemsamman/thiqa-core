@@ -705,7 +705,7 @@ export default function AdminUsers() {
         subtitle="إدارة المستخدمين والصلاحيات"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Toolbar */}
         <div className="flex items-center justify-between gap-2">
           {userLocked ? (

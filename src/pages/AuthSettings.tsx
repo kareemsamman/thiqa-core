@@ -203,7 +203,7 @@ export default function AuthSettings() {
   if (authLoading || loading) {
     return (
       <MainLayout>
-        <div className="p-6 space-y-6">
+        <div className="md:p-6 space-y-6">
           <Skeleton className="h-10 w-64" />
           <Skeleton className="h-96 w-full" />
         </div>
@@ -213,7 +213,7 @@ export default function AuthSettings() {
 
   return (
     <MainLayout>
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">إعدادات المصادقة</h1>

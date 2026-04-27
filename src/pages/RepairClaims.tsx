@@ -202,7 +202,7 @@ export default function RepairClaims() {
         subtitle="تتبع تصليحات السيارات والملفات"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Filters — search on the right (start), status chips in the
             middle, primary "إضافة مطالبة" action pinned to the far-left
             end of the row. */}

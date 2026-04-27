@@ -486,7 +486,7 @@ export default function ActivityLog() {
         subtitle="تتبع جميع النشاطات والعمليات في النظام"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Filters */}
         <Card>
           <CardContent className="pt-6">

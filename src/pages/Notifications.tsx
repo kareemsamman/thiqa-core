@@ -198,7 +198,7 @@ export default function Notifications() {
         subtitle="جميع التنبيهات والإشعارات"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* New since last visit banner */}
         {showBanner && newSinceLastSeen > 0 && (
           <NewSinceLastVisitBanner

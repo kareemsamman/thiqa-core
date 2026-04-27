@@ -383,7 +383,7 @@ export default function Subscription() {
     return (
       <MainLayout>
         <Header title="الإعدادات" subtitle="" />
-        <div className="p-6 max-w-xl mx-auto" dir="rtl">
+        <div className="md:p-6 max-w-xl mx-auto" dir="rtl">
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">

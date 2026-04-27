@@ -206,7 +206,7 @@ export default function BusinessContacts() {
         subtitle="دليل الهاتف للمخمنين والكراجات وشركات التأمين"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="md:p-6 space-y-6">
         {/* Search and Filter Bar */}
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">

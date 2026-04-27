@@ -228,7 +228,7 @@ export default function AccidentReports() {
         subtitle="إدارة ومتابعة بلاغات الحوادث المرتبطة بالمعاملات"
       />
 
-      <div className="p-6 space-y-6" dir="rtl">
+      <div className="md:p-6 space-y-6" dir="rtl">
         {/* Filters — search + filters pinned to the right (start of the
             RTL row), the بلاغ جديد CTA pinned to the very left. */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
