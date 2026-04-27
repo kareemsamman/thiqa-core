@@ -65,19 +65,23 @@ function KpiTile({
   const t = TONE[tone];
   return (
     <Card className={cn('p-5 rounded-2xl border shadow-sm', t.card)}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1.5 min-w-0 flex-1">
-          <p className="text-xs font-medium text-muted-foreground truncate">{title}</p>
-          {loading ? (
-            <Skeleton className="h-7 w-24" />
-          ) : (
-            <div className="text-2xl font-bold text-foreground ltr-nums leading-tight">{children}</div>
-          )}
-          {footer && <div className="text-[11px] text-muted-foreground pt-0.5">{footer}</div>}
-        </div>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <p className="text-[11px] font-bold tracking-[0.04em] text-foreground/70 truncate">{title}</p>
         <div className={cn('rounded-xl p-2.5 shrink-0', t.iconBox)}>
           <Icon className={cn('h-5 w-5', t.iconColor)} />
         </div>
+      </div>
+      <div className="space-y-2">
+        {loading ? (
+          <Skeleton className="h-8 w-32" />
+        ) : (
+          <div className="text-2xl font-extrabold text-foreground ltr-nums leading-tight">{children}</div>
+        )}
+        {footer && (
+          <div className="text-[11px] font-medium text-muted-foreground/90 pt-1 border-t border-foreground/5">
+            {footer}
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -199,16 +203,21 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
   return (
     <div className="grid gap-4 grid-cols-2 xl:grid-cols-4">
       {/* Tile 1 — current status / plan */}
-      <KpiTile title="حالة الاشتراك" icon={StatusIcon} tone={statusTone} loading={loading}>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-lg font-bold leading-tight">{statusLabel}</span>
-        </div>
-        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-          <Badge variant="outline" className="text-[10px] font-medium">{planLabel}</Badge>
-          {planInfo.badge && (
-            <Badge className="text-[10px] bg-primary/90">{planInfo.badge}</Badge>
-          )}
-        </div>
+      <KpiTile
+        title="حالة الاشتراك"
+        icon={StatusIcon}
+        tone={statusTone}
+        loading={loading}
+        footer={
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Badge variant="outline" className="text-[10px] font-semibold">{planLabel}</Badge>
+            {planInfo.badge && (
+              <Badge className="text-[10px] bg-primary/90 hover:bg-primary/90">{planInfo.badge}</Badge>
+            )}
+          </div>
+        }
+      >
+        <span className="text-xl">{statusLabel}</span>
       </KpiTile>
 
       {/* Tile 2 — period countdown */}
@@ -219,12 +228,12 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
         loading={loading}
         footer={
           endDate ? (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[10px] tabular-nums">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[10px] tabular-nums font-semibold">
                 <span>{Math.round(progress)}% منتهية</span>
-                <span>{periodLengthDays} يوم</span>
+                <span className="text-muted-foreground/80">من {periodLengthDays} يوم</span>
               </div>
-              <div className="h-1 w-full overflow-hidden rounded-full bg-foreground/10">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
                 <div
                   className={cn(
                     'h-full transition-all',
@@ -238,10 +247,10 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
         }
       >
         {daysRemaining !== null ? (
-          <span className="tabular-nums">
-            {daysRemaining}
-            <span className="text-sm font-medium text-muted-foreground mr-1">يوم</span>
-          </span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="tabular-nums">{daysRemaining}</span>
+            <span className="text-sm font-semibold text-muted-foreground">يوم</span>
+          </div>
         ) : (
           <span className="text-base text-muted-foreground">—</span>
         )}
@@ -262,11 +271,11 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
           ) : null
         }
       >
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-baseline gap-2 flex-wrap">
           <span className="tabular-nums">₪{effectivePrice.toLocaleString()}</span>
-          <span className="text-xs font-medium text-muted-foreground">/شهر</span>
+          <span className="text-sm font-semibold text-muted-foreground">شهرياً</span>
           {hasDiscount && (
-            <span className="text-xs font-medium text-muted-foreground line-through">
+            <span className="text-sm font-semibold text-muted-foreground/70 line-through">
               ₪{planInfo.monthly_price.toLocaleString()}
             </span>
           )}
@@ -289,7 +298,7 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
       >
         <div className="flex items-baseline gap-2">
           <span className="tabular-nums">₪{addonsTotal.toLocaleString()}</span>
-          {addonsCount > 0 && <span className="text-xs font-medium text-muted-foreground">/شهر</span>}
+          {addonsCount > 0 && <span className="text-sm font-semibold text-muted-foreground">شهرياً</span>}
         </div>
       </KpiTile>
     </div>
