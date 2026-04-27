@@ -6692,7 +6692,7 @@ export type Database = {
         }[]
       }
       get_tasks_with_users_and_pending: {
-        Args: { target_date: string }
+        Args: { target_date: string; p_branch_id?: string | null }
         Returns: {
           assigned_to: string
           assignee_email: string

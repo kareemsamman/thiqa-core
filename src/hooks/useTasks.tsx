@@ -34,7 +34,7 @@ export interface CreateTaskInput {
   branch_id?: string | null;
 }
 
-export function useTasks(selectedDate?: Date) {
+export function useTasks(selectedDate?: Date, branchFilter?: string | null) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -42,13 +42,14 @@ export function useTasks(selectedDate?: Date) {
 
   // Fetch tasks for selected date + overdue pending tasks from previous days
   const { data: tasks = [], isLoading, refetch } = useQuery({
-    queryKey: ['tasks', dateStr, user?.id],
+    queryKey: ['tasks', dateStr, user?.id, branchFilter ?? null],
     queryFn: async () => {
       if (!user?.id) return [];
-      
+
       // Use new RPC that includes pending tasks from previous days
       const { data, error } = await supabase.rpc('get_tasks_with_users_and_pending', {
-        target_date: dateStr
+        target_date: dateStr,
+        p_branch_id: branchFilter || undefined,
       });
 
       if (error) throw error;

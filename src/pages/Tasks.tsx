@@ -30,6 +30,7 @@ import { useTasks, Task } from "@/hooks/useTasks";
 import { useAuth } from "@/hooks/useAuth";
 import { TaskDrawer } from "@/components/tasks/TaskDrawer";
 import { TaskCard } from "@/components/tasks/TaskCard";
+import { AgentBranchFilter } from "@/components/shared/AgentBranchFilter";
 import { cn } from "@/lib/utils";
 
 type FilterTab = 'my-tasks' | 'created-by-me' | 'all';
@@ -40,6 +41,11 @@ export default function Tasks() {
   const [filterTab, setFilterTab] = useState<FilterTab>('my-tasks');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  // Page-level branch filter — admin-only. Workers are pinned to
+  // their own branch by RLS, so the dropdown's value is ignored
+  // for them anyway. AgentBranchFilter renders nothing when the
+  // user has no admin scope, so wiring it unconditionally is safe.
+  const [branchFilter, setBranchFilter] = useState<string | null>(null);
 
   const {
     tasks,
@@ -49,7 +55,7 @@ export default function Tasks() {
     completeTask,
     deleteTask,
     isCreating,
-  } = useTasks(selectedDate);
+  } = useTasks(selectedDate, branchFilter);
 
   // Calculate stats for badges and banner
   const myTasks = tasks.filter(t => t.assigned_to === user?.id);
@@ -106,11 +112,14 @@ export default function Tasks() {
 
       <div className="md:p-6 space-y-6">
         {/* Toolbar */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button size="sm" onClick={() => setDrawerOpen(true)} className="gap-2">
             <Plus className="h-4 w-4" />
             مهمة جديدة
           </Button>
+          <div className="ms-auto">
+            <AgentBranchFilter value={branchFilter} onChange={setBranchFilter} />
+          </div>
         </div>
 
         {/* Stats Summary Banner. Mobile: each stat is its own white
