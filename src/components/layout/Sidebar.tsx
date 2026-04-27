@@ -72,7 +72,7 @@ import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
-import { Lock } from "@phosphor-icons/react";
+import { Lock, Sparkle } from "@phosphor-icons/react";
 import thiqaLogo from "@/assets/thiqa-logo-full.svg";
 import { useSidebarState } from "@/hooks/useSidebarState";
 
@@ -728,6 +728,90 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
           </Button>
         </div>
       )}
+
+      {/* Trial countdown card — only on the expanded sidebar for an
+          agent admin who's still on the free trial. Sits above the
+          user section so it's always visible without competing for
+          nav real-estate, and uses the brand-purple lock palette so
+          it reads as part of the same "upgrade-needed" surface as
+          the locked nav leaves and the upgrade dialogs. Clicking
+          opens the upgrade popup keyed to no specific feature — the
+          user's hitting it from the global nav, not from a blocked
+          action, so the popup just shows the plan ladder. */}
+      {!collapsed && !isThiqaSuperAdmin && isAdmin && agent && (() => {
+        const isTrial = agent.subscription_status === 'trial' ||
+          (agent.monthly_price === 0 && agent.subscription_status === 'active');
+        if (!isTrial) return null;
+
+        // Free trial is 35 days end-to-end; trial_ends_at is the
+        // anchor (set on registration). Falls back to
+        // subscription_expires_at for legacy rows that pre-date the
+        // dedicated trial_ends_at column.
+        const TRIAL_LENGTH = 35;
+        const endDate = agent.trial_ends_at
+          ? new Date(agent.trial_ends_at)
+          : agent.subscription_expires_at
+            ? new Date(agent.subscription_expires_at)
+            : null;
+        if (!endDate) return null;
+        const daysLeft = Math.max(
+          0,
+          Math.ceil((endDate.getTime() - Date.now()) / 86400000),
+        );
+        const used = Math.min(TRIAL_LENGTH, Math.max(0, TRIAL_LENGTH - daysLeft));
+        const progress = (used / TRIAL_LENGTH) * 100;
+
+        return (
+          <div className="px-3 pb-3 pt-2">
+            <div className="rounded-2xl border border-[#5468c4]/25 bg-gradient-to-b from-[#5468c4]/8 via-[#4158b0]/5 to-white p-3.5 shadow-sm">
+              <div
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-sm mb-2.5"
+                style={{
+                  background:
+                    'linear-gradient(135deg, #5468c4 0%, #4158b0 50%, #2a3878 100%)',
+                }}
+              >
+                <Lock className="h-4 w-4" weight="fill" />
+              </div>
+              <p className="text-right">
+                <span className="text-xl font-extrabold text-slate-900 tabular-nums">
+                  {daysLeft}
+                </span>
+                <span className="text-xs font-medium text-slate-500 mx-1">
+                  / {TRIAL_LENGTH} يوم
+                </span>
+              </p>
+              <p className="text-[11.5px] text-slate-600 leading-relaxed mt-1 mb-2.5">
+                اشترك الآن لفتح كل ميزات النظام بعد انتهاء التجربة.
+              </p>
+              {/* Slim progress bar — used / total. Brand-purple fill
+                  so it ties back to the lock chip above. */}
+              <div className="h-1 w-full bg-slate-200/70 rounded-full overflow-hidden mb-2.5">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${progress}%`,
+                    background:
+                      'linear-gradient(90deg, #5468c4 0%, #4158b0 100%)',
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => showUpgradePrompt({})}
+                className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-full text-xs font-bold text-white shadow-sm hover:shadow-md transition-shadow"
+                style={{
+                  background:
+                    'linear-gradient(135deg, #5468c4 0%, #4158b0 50%, #2a3878 100%)',
+                }}
+              >
+                <Sparkle className="h-3.5 w-3.5" weight="fill" />
+                ترقية الباقة
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* User section.
           Expanded sidebar: an inline Collapsible that opens UPWARD
