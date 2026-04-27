@@ -744,49 +744,51 @@ export default function AdminUsers() {
           </Button>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="rounded-lg border bg-card p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-warning/10">
-                <Clock className="h-5 w-5 text-warning" />
+        {/* Stats Cards. Mobile: 2-col grid with smaller icons + tighter
+            padding so all four stats fit in two rows instead of one
+            stat per row. Desktop: original 4-col layout. */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-4">
+          <div className="rounded-lg border bg-card p-3 md:p-4">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 rounded-lg bg-warning/10 shrink-0">
+                <Clock className="h-4 w-4 md:h-5 md:w-5 text-warning" />
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">بانتظار الموافقة</p>
-                <p className="text-2xl font-bold">{pendingUsers.length}</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-lg border bg-card p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-success/10">
-                <CheckCircle className="h-5 w-5 text-success" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">مستخدمون نشطون</p>
-                <p className="text-2xl font-bold">{activeUsers.length}</p>
+              <div className="min-w-0">
+                <p className="text-xs md:text-sm text-muted-foreground truncate">بانتظار الموافقة</p>
+                <p className="text-xl md:text-2xl font-bold ltr-nums leading-tight">{pendingUsers.length}</p>
               </div>
             </div>
           </div>
-          <div className="rounded-lg border bg-card p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-destructive/10">
-                <XCircle className="h-5 w-5 text-destructive" />
+          <div className="rounded-lg border bg-card p-3 md:p-4">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 rounded-lg bg-success/10 shrink-0">
+                <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-success" />
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">محظورون</p>
-                <p className="text-2xl font-bold">{blockedUsers.length}</p>
+              <div className="min-w-0">
+                <p className="text-xs md:text-sm text-muted-foreground truncate">مستخدمون نشطون</p>
+                <p className="text-xl md:text-2xl font-bold ltr-nums leading-tight">{activeUsers.length}</p>
               </div>
             </div>
           </div>
-          <div className="rounded-lg border bg-card p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <User className="h-5 w-5 text-primary" />
+          <div className="rounded-lg border bg-card p-3 md:p-4">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 rounded-lg bg-destructive/10 shrink-0">
+                <XCircle className="h-4 w-4 md:h-5 md:w-5 text-destructive" />
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">إجمالي المستخدمين</p>
-                <p className="text-2xl font-bold">{users.length}</p>
+              <div className="min-w-0">
+                <p className="text-xs md:text-sm text-muted-foreground truncate">محظورون</p>
+                <p className="text-xl md:text-2xl font-bold ltr-nums leading-tight">{blockedUsers.length}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg border bg-card p-3 md:p-4">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="p-1.5 md:p-2 rounded-lg bg-primary/10 shrink-0">
+                <User className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs md:text-sm text-muted-foreground truncate">إجمالي المستخدمين</p>
+                <p className="text-xl md:text-2xl font-bold ltr-nums leading-tight">{users.length}</p>
               </div>
             </div>
           </div>
