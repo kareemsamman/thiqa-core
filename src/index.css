@@ -29,6 +29,18 @@ html {
   --tw-translate-x: -0.125rem; /* equals -translate-x-0.5 */
 }
 
+/* iOS Safari auto-zooms into any focused form control whose computed
+   font-size is < 16px. Force ≥16px on phones so focusing an input no
+   longer triggers a page zoom-in that the user has to manually undo. */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  textarea,
+  select,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
+}
+
 @layer base {
   :root {
     /* Light theme - Professional blue-indigo */
