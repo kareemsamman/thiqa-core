@@ -952,6 +952,137 @@ export default function AdminUsers() {
                   <p>لا يوجد مستخدمون نشطون</p>
                 </div>
               ) : (
+                <>
+                  {/* Mobile card list — replaces the 5-col table on
+                      phones. Each user is a self-contained card with
+                      name + email header, full-width branch/role
+                      selects, and action buttons stacked below. */}
+                  <div className="md:hidden divide-y">
+                    {activeUsers.map((user) => {
+                      const isPlanLocked = user.status === 'plan_locked';
+                      return (
+                        <div
+                          key={user.id}
+                          className={`p-3 space-y-3 ${isPlanLocked ? 'bg-amber-500/5' : ''}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                {isPlanLocked && (
+                                  <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                )}
+                                <p className={`font-semibold truncate ${isPlanLocked ? 'text-muted-foreground' : ''}`}>
+                                  {user.full_name || 'غير محدد'}
+                                </p>
+                              </div>
+                              <p className={`text-xs mt-0.5 ${isPlanLocked ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
+                                <bdi>{user.email}</bdi>
+                              </p>
+                              {isPlanLocked && (
+                                <div className="mt-1.5">{getStatusBadge('plan_locked')}</div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <p className="text-[11px] text-muted-foreground mb-1">الفرع</p>
+                              <LockedBranchSelect
+                                value={user.branch_id || 'all'}
+                                onValueChange={(value) => handleChangeBranch(user.id, value === 'all' ? null : value)}
+                                branches={branches}
+                                placeholder="اختر الفرع"
+                                triggerClassName="w-full"
+                                allOption={{ value: 'all', label: 'جميع الفروع' }}
+                                disabled={actionLoading === user.id || isProtectedSuperAdmin(user) || isPlanLocked}
+                              />
+                            </div>
+                            <div>
+                              <p className="text-[11px] text-muted-foreground mb-1">الدور</p>
+                              <Select
+                                value={user.role || 'worker'}
+                                onValueChange={(value: 'admin' | 'worker') =>
+                                  handleChangeRole(user.id, value)
+                                }
+                                disabled={actionLoading === user.id || isProtectedSuperAdmin(user) || isPlanLocked}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="worker">موظف</SelectItem>
+                                  <SelectItem value="admin">مدير</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          {isPlanLocked ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                              onClick={() => showUpgradePrompt({ resource: 'users' })}
+                            >
+                              <Sparkles className="h-4 w-4" />
+                              ترقية الباقة
+                            </Button>
+                          ) : !isProtectedSuperAdmin(user) ? (
+                            <div className="grid grid-cols-3 gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openEditUser(user)}
+                                className="gap-1"
+                                disabled={actionLoading === user.id}
+                              >
+                                <Pencil className="h-4 w-4" />
+                                تعديل
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setPermissionsUser(user)}
+                                className="gap-1"
+                              >
+                                <ShieldCheck className="h-4 w-4" />
+                                صلاحيات
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => setConfirmDialog({
+                                  open: true,
+                                  userId: user.id,
+                                  action: 'block',
+                                  userName: user.full_name || user.email,
+                                })}
+                                disabled={actionLoading === user.id}
+                                className="gap-1"
+                              >
+                                {actionLoading === user.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <UserX className="h-4 w-4" />
+                                    حظر
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          ) : (
+                            <Badge variant="outline" className="bg-primary/10 text-primary w-full justify-center py-1.5">
+                              <Shield className="h-3 w-3 ml-1" />
+                              مدير النظام
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1085,6 +1216,8 @@ export default function AdminUsers() {
                     })}
                   </TableBody>
                 </Table>
+                  </div>
+                </>
               )}
             </div>
           </TabsContent>
