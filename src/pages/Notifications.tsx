@@ -207,28 +207,35 @@ export default function Notifications() {
           />
         )}
 
-        {/* Search and Filters */}
-        <Card className="p-4">
-          <div className="flex flex-wrap gap-3 items-center">
-            {unreadCount > 0 && (
-              <Button size="sm" onClick={markAllAsRead} className="gap-2">
-                <CheckCheck className="h-4 w-4" />
-                قراءة الكل
-              </Button>
-            )}
-            {notifications.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setDeleteAllOpen(true)}
-                className="gap-2 text-destructive hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-                حذف الكل
-              </Button>
-            )}
+        {/* Search and Filters. Action buttons get their own row at the
+            top so they don't fight the filter controls for horizontal
+            space on mobile; below them, filters stack vertically on
+            phones and revert to flex-wrap on sm+. */}
+        <Card className="p-3 sm:p-4">
+          {(unreadCount > 0 || notifications.length > 0) && (
+            <div className="flex flex-wrap gap-2 mb-3 sm:mb-4">
+              {unreadCount > 0 && (
+                <Button size="sm" onClick={markAllAsRead} className="gap-2 flex-1 sm:flex-none">
+                  <CheckCheck className="h-4 w-4" />
+                  قراءة الكل
+                </Button>
+              )}
+              {notifications.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDeleteAllOpen(true)}
+                  className="gap-2 flex-1 sm:flex-none text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  حذف الكل
+                </Button>
+              )}
+            </div>
+          )}
 
-            <div className="relative flex-1 min-w-[200px]">
+          <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+            <div className="relative w-full sm:flex-1 sm:min-w-[200px]">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="بحث في الإشعارات..."
@@ -239,7 +246,7 @@ export default function Notifications() {
             </div>
 
             <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-full sm:w-[140px]">
                 <Filter className="h-4 w-4 ml-2 text-muted-foreground" />
                 <SelectValue placeholder="النوع" />
               </SelectTrigger>
@@ -254,7 +261,7 @@ export default function Notifications() {
             </Select>
 
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-full sm:w-[140px]">
                 <SelectValue placeholder="الحالة" />
               </SelectTrigger>
               <SelectContent>
@@ -273,6 +280,7 @@ export default function Notifications() {
                   setTypeFilter('all');
                   setStatusFilter('all');
                 }}
+                className="w-full sm:w-auto"
               >
                 مسح الفلاتر
               </Button>
