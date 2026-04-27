@@ -4,12 +4,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Global breathing room at the bottom of every page so the last row of
-   content (cards, tables, forms) never butts up against the viewport
-   edge or the bottom browser chrome on mobile. */
-#root {
-  margin-bottom: 5rem;
-}
+/* Bottom breathing room is owned by each page's layout — MainLayout
+   carries its own pb-6 / pb-40 mobile, marketing pages have their
+   own footer padding. A global #root margin-bottom would push the
+   document past the viewport on full-screen pages (Login, NoAccess,
+   SubscriptionExpired) that use min-h-[100dvh], so we don't add one
+   here. */
 
 /* Smooth anchor scroll for same-page navigation (e.g. nav info-center
    items scrolling to #features, #demo, etc). */
