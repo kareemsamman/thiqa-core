@@ -36,7 +36,11 @@ const DrawerContent = React.forwardRef<
       )}
       {...props}
     >
-      <div className="mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted" />
+      {/* iOS-style grabber bar — shorter and slimmer than the default
+          shadcn handle so it reads as the standard "swipe down" affordance
+          users know from native bottom sheets. Sits above the content so
+          you can't miss the touch-target. */}
+      <div className="mx-auto mt-2.5 mb-1 h-1.5 w-12 rounded-full bg-zinc-300 dark:bg-zinc-600" />
       {children}
     </DrawerPrimitive.Content>
   </DrawerPortal>

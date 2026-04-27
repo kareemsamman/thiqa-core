@@ -1335,9 +1335,9 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
                               featureKey: item.featureKey,
                             });
                           }}
-                          className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors text-right text-violet-700 hover:text-violet-900 bg-gradient-to-l from-violet-50 via-fuchsia-50 to-amber-50/70 hover:from-violet-100 hover:via-fuchsia-100 hover:to-amber-100"
+                          className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors text-right text-[#3b4f9e] hover:text-[#2a3878] bg-gradient-to-l from-[#5468c4]/10 via-[#4158b0]/[0.08] to-[#5468c4]/10 hover:from-[#5468c4]/20 hover:via-[#4158b0]/15 hover:to-[#5468c4]/20"
                         >
-                          <div className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 bg-white/60 text-violet-700">
+                          <div className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 bg-white/60 text-[#4158b0]">
                             <ItemIcon className="h-4 w-4" />
                           </div>
                           <span className="flex-1 truncate">{item.name}</span>
@@ -1345,7 +1345,7 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
                             className="inline-flex h-5 w-5 items-center justify-center rounded-md shrink-0 shadow-sm ring-1 ring-white/40"
                             style={{
                               background:
-                                'linear-gradient(135deg, #6a3bd1 0%, #c93fa8 55%, #ed6a44 100%)',
+                                'linear-gradient(135deg, #5468c4 0%, #4158b0 50%, #2a3878 100%)',
                             }}
                           >
                             <Lock className="h-3 w-3 text-white" weight="fill" />

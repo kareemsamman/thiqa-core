@@ -3,10 +3,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building2, Plus, Pencil, Trash2, Save, Loader2, Star, ArrowRight } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Save, Loader2, Star, ArrowRight, Lock, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAgentContext } from "@/hooks/useAgentContext";
+import { useAgentLimits } from "@/hooks/useAgentLimits";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
+import { cn } from "@/lib/utils";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import {
   BranchFormFields,
@@ -20,6 +23,10 @@ interface BranchRow {
   name_ar: string | null;
   is_active: boolean;
   is_default: boolean;
+  // status comes through when the agent has plan_locked branches sitting
+  // over-limit. We treat plan_locked rows as read-only in the dialog so
+  // the agent admin can't edit them without first freeing capacity.
+  status?: string | null;
 }
 
 interface BranchQuickFormDialogProps {
@@ -43,6 +50,8 @@ export function BranchQuickFormDialog({
   initialForm,
 }: BranchQuickFormDialogProps) {
   const { agentId } = useAgentContext();
+  const { branches: branchLimit, loading: limitsLoading } = useAgentLimits();
+  const { showUpgradePrompt } = useUpgradePrompt();
   const [branches, setBranches] = useState<BranchRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -50,13 +59,18 @@ export function BranchQuickFormDialog({
   const [deleting, setDeleting] = useState(false);
   const [mode, setMode] = useState<Mode>({ kind: "list" });
   const [form, setForm] = useState<BranchFormValue>(emptyBranchForm);
+  // True when the plan + addons can't accept another branch. Used to
+  // swap the "فرع جديد" button for a brand-purple lock chip that opens
+  // the upgrade prompt instead of the create form — same pattern as the
+  // /admin/branches toolbar.
+  const branchLocked = !limitsLoading && branchLimit.exceeded;
 
   const fetchBranches = useCallback(async () => {
     if (!agentId) return;
     setLoading(true);
     const { data, error } = await supabase
       .from("branches")
-      .select("id, name, name_ar, is_active, is_default")
+      .select("id, name, name_ar, is_active, is_default, status")
       .eq("agent_id", agentId)
       .order("created_at");
     setLoading(false);
@@ -190,10 +204,30 @@ export function BranchQuickFormDialog({
           {showList && (
             <div className="space-y-3">
               <div className="flex justify-end">
-                <Button onClick={openCreate} size="sm" className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  فرع جديد
-                </Button>
+                {branchLocked ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      showUpgradePrompt({
+                        resource: 'branches',
+                        current: branchLimit.used,
+                        limit: branchLimit.effective ?? 0,
+                      })
+                    }
+                    className="gap-2 border-[#5468c4]/40 text-[#3b4f9e] hover:bg-[#5468c4]/10 hover:text-[#2a3878]"
+                  >
+                    <Lock className="h-4 w-4" />
+                    فرع جديد
+                    <Sparkles className="h-3.5 w-3.5 opacity-70" />
+                  </Button>
+                ) : (
+                  <Button onClick={openCreate} size="sm" className="gap-2" disabled={limitsLoading}>
+                    <Plus className="h-4 w-4" />
+                    فرع جديد
+                  </Button>
+                )}
               </div>
 
               {loading ? (
@@ -208,50 +242,97 @@ export function BranchQuickFormDialog({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {branches.map((branch) => (
-                    <div
-                      key={branch.id}
-                      className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-card"
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="font-medium truncate">
-                          {branch.name_ar || branch.name}
-                        </span>
-                        {branch.is_default && (
-                          <Badge className="bg-amber-100 text-amber-800 gap-1 text-xs">
-                            <Star className="h-3 w-3 fill-current" />
-                            افتراضي
-                          </Badge>
+                  {branches.map((branch) => {
+                    const isLocked = branch.status === 'plan_locked';
+                    return (
+                      <div
+                        key={branch.id}
+                        className={cn(
+                          "flex items-center justify-between gap-3 p-3 rounded-lg border",
+                          isLocked
+                            ? "border-[#5468c4]/25 bg-gradient-to-l from-[#5468c4]/8 via-[#4158b0]/5 to-[#5468c4]/8"
+                            : "bg-card",
                         )}
-                        {!branch.is_active && (
-                          <Badge variant="secondary" className="text-xs">
-                            غير فعال
-                          </Badge>
-                        )}
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          {isLocked ? (
+                            <Lock className="h-4 w-4 text-[#4158b0] shrink-0" />
+                          ) : (
+                            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                          )}
+                          <span
+                            className={cn(
+                              "font-medium truncate",
+                              isLocked && "text-muted-foreground",
+                            )}
+                          >
+                            {branch.name_ar || branch.name}
+                          </span>
+                          {branch.is_default && (
+                            <Badge className="bg-amber-100 text-amber-800 gap-1 text-xs">
+                              <Star className="h-3 w-3 fill-current" />
+                              افتراضي
+                            </Badge>
+                          )}
+                          {isLocked && (
+                            <Badge
+                              variant="outline"
+                              className="bg-[#4158b0]/10 text-[#3b4f9e] border-[#5468c4]/30 gap-1 text-xs"
+                            >
+                              <Lock className="h-3 w-3" />
+                              مقفل
+                            </Badge>
+                          )}
+                          {!branch.is_active && !isLocked && (
+                            <Badge variant="secondary" className="text-xs">
+                              غير فعال
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {isLocked ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1 text-xs border-[#5468c4]/40 text-[#3b4f9e] hover:bg-[#5468c4]/10 hover:text-[#2a3878]"
+                              onClick={() =>
+                                showUpgradePrompt({
+                                  resource: 'branches',
+                                  current: branchLimit.used,
+                                  limit: branchLimit.effective ?? 0,
+                                })
+                              }
+                            >
+                              <Sparkles className="h-3.5 w-3.5" />
+                              ترقية
+                            </Button>
+                          ) : (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => openEdit(branch)}
+                                title="تعديل"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={() => setDeleteId(branch.id)}
+                                title="حذف"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => openEdit(branch)}
-                          title="تعديل"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => setDeleteId(branch.id)}
-                          title="حذف"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

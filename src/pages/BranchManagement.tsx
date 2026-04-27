@@ -224,7 +224,7 @@ export default function BranchManagement() {
                   limit: branchLimit.effective ?? 0,
                 })
               }
-              className="gap-2 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+              className="gap-2 border-[#5468c4]/40 text-[#3b4f9e] hover:bg-[#5468c4]/10 hover:text-[#2a3878]"
             >
               <Lock className="h-4 w-4" />
               فرع جديد
@@ -247,8 +247,8 @@ export default function BranchManagement() {
         </div>
 
         {branches.some((b) => b.status === 'plan_locked') && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
-            <Lock className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <div className="rounded-lg border border-[#5468c4]/30 bg-gradient-to-l from-[#5468c4]/8 via-[#4158b0]/5 to-[#5468c4]/8 px-4 py-3 flex items-start gap-3">
+            <Lock className="h-5 w-5 text-[#4158b0] mt-0.5 shrink-0" />
             <div className="flex-1 text-sm">
               <p className="font-medium text-foreground">
                 {branches.filter((b) => b.status === 'plan_locked').length} فرع مقفل بسبب تجاوز حد الباقة
@@ -260,7 +260,7 @@ export default function BranchManagement() {
             <Button
               size="sm"
               variant="outline"
-              className="gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+              className="gap-1 border-[#5468c4]/40 text-[#3b4f9e] hover:bg-[#5468c4]/10 hover:text-[#2a3878]"
               onClick={() =>
                 showUpgradePrompt({
                   resource: 'branches',
@@ -300,7 +300,7 @@ export default function BranchManagement() {
                 key={branch.id}
                 className={cn(
                   'shadow-sm',
-                  isLocked && 'border-amber-500/30 bg-amber-500/5',
+                  isLocked && 'border-[#5468c4]/25 bg-gradient-to-l from-[#5468c4]/8 via-[#4158b0]/5 to-[#5468c4]/8',
                 )}
               >
                 <CardContent className="py-4 flex items-center justify-between gap-4">
@@ -309,7 +309,7 @@ export default function BranchManagement() {
                       className={cn(
                         'h-10 w-10 rounded-xl flex items-center justify-center shrink-0',
                         isLocked
-                          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                          ? 'bg-[#4158b0]/10 text-[#4158b0]'
                           : 'bg-primary/10 text-primary',
                       )}
                     >
@@ -332,7 +332,7 @@ export default function BranchManagement() {
                         {isLocked && (
                           <Badge
                             variant="outline"
-                            className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 gap-1 text-xs"
+                            className="bg-[#4158b0]/10 text-[#3b4f9e] border-[#5468c4]/30 gap-1 text-xs"
                           >
                             <Lock className="h-3 w-3" />
                             مقفل — تجاوز حد الباقة
@@ -354,7 +354,7 @@ export default function BranchManagement() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                        className="gap-1 border-[#5468c4]/40 text-[#3b4f9e] hover:bg-[#5468c4]/10 hover:text-[#2a3878]"
                         onClick={() =>
                           showUpgradePrompt({
                             resource: 'branches',
