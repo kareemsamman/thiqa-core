@@ -20,6 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { AgentBranchFilter } from '@/components/shared/AgentBranchFilter';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -69,6 +70,8 @@ export default function CorrespondenceLetters() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  // Page-level branch filter — global admins only.
+  const [branchFilter, setBranchFilter] = useState<string | null>(null);
   
   // Drawer & Modal states
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -82,16 +85,22 @@ export default function CorrespondenceLetters() {
 
   useEffect(() => {
     fetchLetters();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchFilter]);
 
   async function fetchLetters() {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('correspondence_letters')
         .select('*')
         .order('created_at', { ascending: false });
 
+      if (branchFilter) {
+        query = query.eq('branch_id', branchFilter);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       setLetters(data || []);
     } catch (error) {
@@ -262,6 +271,7 @@ export default function CorrespondenceLetters() {
                   </Button>
                 ))}
               </div>
+              <AgentBranchFilter value={branchFilter} onChange={setBranchFilter} />
               <Button onClick={handleCreate} className="gap-2 sm:mr-auto">
                 <Plus className="h-4 w-4" />
                 رسالة جديدة

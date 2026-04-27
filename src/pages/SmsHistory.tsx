@@ -1,6 +1,7 @@
 import { useState, useEffect, Fragment } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
+import { AgentBranchFilter } from "@/components/shared/AgentBranchFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +76,8 @@ export default function SmsHistory() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  // Page-level branch filter — global admins only.
+  const [branchFilter, setBranchFilter] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -94,7 +97,7 @@ export default function SmsHistory() {
 
   useEffect(() => {
     fetchLogs();
-  }, [typeFilter, statusFilter, page]);
+  }, [typeFilter, statusFilter, branchFilter, page]);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -114,6 +117,9 @@ export default function SmsHistory() {
       }
       if (statusFilter !== "all") {
         query = query.eq("status", statusFilter);
+      }
+      if (branchFilter) {
+        query = query.eq("branch_id", branchFilter);
       }
 
       const { data, error } = await query;
@@ -266,6 +272,11 @@ export default function SmsHistory() {
                   <SelectItem value="failed">فشل</SelectItem>
                 </SelectContent>
               </Select>
+
+              <AgentBranchFilter
+                value={branchFilter}
+                onChange={(v) => { setBranchFilter(v); setPage(0); }}
+              />
 
               <Button variant="outline" onClick={fetchLogs}>
                 <RefreshCw className="h-4 w-4 ml-2" />

@@ -25,6 +25,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatDistanceToNow, startOfDay, endOfDay, isWithinInterval, parseISO } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
+import { AgentBranchFilter } from "@/components/shared/AgentBranchFilter";
 import {
   Select,
   SelectContent,
@@ -120,7 +121,12 @@ const typeColors: Record<string, string> = {
 
 export default function ActivityLog() {
   const { profile } = useAuth();
-  const branchId = profile?.branch_id;
+  // Branch-scoped users (workers / branch admins) are pinned to their
+  // own branch_id. Global admins see everything by default; the
+  // AgentBranchFilter dropdown lets them narrow to one branch.
+  // Effective filter = profile.branch_id (if set) ?? UI selection.
+  const [adminBranchPick, setAdminBranchPick] = useState<string | null>(null);
+  const branchId = profile?.branch_id ?? adminBranchPick;
 
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState<string>("");
@@ -544,6 +550,14 @@ export default function ActivityLog() {
                   <SelectItem value="car">السيارات</SelectItem>
                 </SelectContent>
               </Select>
+
+              {/* Branch filter — global admins only. Branch-scoped users
+                  are pinned to their own branch via profile.branch_id
+                  (component hides itself for them). */}
+              <AgentBranchFilter
+                value={adminBranchPick}
+                onChange={setAdminBranchPick}
+              />
 
               {/* Clear Filters */}
               {hasActiveFilters && (

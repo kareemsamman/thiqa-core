@@ -37,6 +37,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { AgentBranchFilter } from "@/components/shared/AgentBranchFilter";
 
 interface ClientSignature {
   id: string;
@@ -56,23 +57,31 @@ export default function CustomerSignatures() {
   const [clients, setClients] = useState<ClientSignature[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "signed" | "not_signed">("all");
+  // Page-level branch filter — global admins only.
+  const [branchFilter, setBranchFilter] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewName, setPreviewName] = useState<string>("");
 
   useEffect(() => {
     fetchClients();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchFilter]);
 
   const fetchClients = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("clients")
         .select("id, full_name, id_number, phone_number, signature_url, created_at")
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
+      if (branchFilter) {
+        query = query.eq("branch_id", branchFilter);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       setClients(data || []);
     } catch (error) {
@@ -252,6 +261,7 @@ export default function CustomerSignatures() {
               <SelectItem value="not_signed">لم يوقّعوا ({notSignedCount})</SelectItem>
             </SelectContent>
           </Select>
+          <AgentBranchFilter value={branchFilter} onChange={setBranchFilter} />
         </div>
 
         {/* Table */}

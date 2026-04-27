@@ -57,6 +57,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { AgentBranchFilter } from '@/components/shared/AgentBranchFilter';
 
 interface MediaFile {
   id: string;
@@ -135,6 +136,8 @@ export default function Media() {
   const [entityFilter, setEntityFilter] = useState<string>('all');
   const [yearFilter, setYearFilter] = useState<string>('all');
   const [monthFilter, setMonthFilter] = useState<string>('all');
+  // Page-level branch filter — global admins only.
+  const [branchFilter, setBranchFilter] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
@@ -245,6 +248,10 @@ export default function Media() {
         query = query.eq('entity_type', entityFilter);
       }
 
+      if (branchFilter) {
+        query = query.eq('branch_id', branchFilter);
+      }
+
       // Year/Month filter
       if (yearFilter !== 'all') {
         const year = parseInt(yearFilter);
@@ -276,7 +283,7 @@ export default function Media() {
 
   useEffect(() => {
     fetchFiles();
-  }, [page, searchQuery, typeFilter, entityFilter, yearFilter, monthFilter]);
+  }, [page, searchQuery, typeFilter, entityFilter, yearFilter, monthFilter, branchFilter]);
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -430,8 +437,8 @@ export default function Media() {
             </SelectContent>
           </Select>
 
-          <Select 
-            value={monthFilter} 
+          <Select
+            value={monthFilter}
             onValueChange={(v) => { setMonthFilter(v); setPage(0); }}
             disabled={yearFilter === 'all'}
           >
@@ -450,6 +457,11 @@ export default function Media() {
               })}
             </SelectContent>
           </Select>
+
+          <AgentBranchFilter
+            value={branchFilter}
+            onChange={(v) => { setBranchFilter(v); setPage(0); }}
+          />
 
           <div className="flex border border-border rounded-lg overflow-hidden">
             <Button

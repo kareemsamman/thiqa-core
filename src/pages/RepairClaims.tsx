@@ -16,6 +16,7 @@ import { format } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 import { RepairClaimDrawer } from "@/components/claims/RepairClaimDrawer";
+import { AgentBranchFilter } from "@/components/shared/AgentBranchFilter";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -70,6 +71,8 @@ export default function RepairClaims() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ClaimStatus | "all">("all");
+  // Page-level branch filter — global admins only.
+  const [branchFilter, setBranchFilter] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedClaim, setSelectedClaim] = useState<RepairClaim | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -77,7 +80,7 @@ export default function RepairClaims() {
 
   // Fetch claims with relations
   const { data: claims, isLoading } = useQuery({
-    queryKey: ["repair-claims", statusFilter],
+    queryKey: ["repair-claims", statusFilter, branchFilter],
     queryFn: async () => {
       let query = supabase
         .from("repair_claims")
@@ -91,6 +94,10 @@ export default function RepairClaims() {
 
       if (statusFilter !== "all") {
         query = query.eq("status", statusFilter);
+      }
+
+      if (branchFilter) {
+        query = query.eq("branch_id", branchFilter);
       }
 
       const { data, error } = await query;
@@ -239,6 +246,8 @@ export default function RepairClaims() {
               </Button>
             ))}
           </div>
+
+          <AgentBranchFilter value={branchFilter} onChange={setBranchFilter} />
 
           <Button
             onClick={() => handleOpenDrawer()}

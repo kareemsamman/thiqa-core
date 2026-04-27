@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
+import { AgentBranchFilter } from '@/components/shared/AgentBranchFilter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -79,6 +80,8 @@ export default function MarketingSms() {
   // Campaign history state
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(false);
+  // Branch filter for the history tab — global admins only.
+  const [historyBranchFilter, setHistoryBranchFilter] = useState<string | null>(null);
   
   // Campaign details modal
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
@@ -114,7 +117,8 @@ export default function MarketingSms() {
     if (activeTab === 'history') {
       fetchCampaigns();
     }
-  }, [activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, historyBranchFilter]);
 
   async function fetchClients() {
     setIsLoadingClients(true);
@@ -158,12 +162,17 @@ export default function MarketingSms() {
   async function fetchCampaigns() {
     setIsLoadingCampaigns(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('marketing_sms_campaigns')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(200);
 
+      if (historyBranchFilter) {
+        query = query.eq('branch_id', historyBranchFilter);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       setCampaigns(data || []);
     } catch (error) {
@@ -713,6 +722,14 @@ export default function MarketingSms() {
           </TabsContent>
 
           <TabsContent value="history" className="space-y-6">
+            {/* Branch filter for the campaign history — global admins
+                only. Refetches campaigns when changed. */}
+            <div className="flex justify-end">
+              <AgentBranchFilter
+                value={historyBranchFilter}
+                onChange={setHistoryBranchFilter}
+              />
+            </div>
             {/* Roll-up stats across the loaded campaigns page. Gives the
                 admin a single glance at how many campaigns ran and how
                 their delivery looked without opening each one. */}
