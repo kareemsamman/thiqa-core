@@ -1001,10 +1001,10 @@ export default function PolicyReports() {
           {/* Created Policies Tab */}
           <TabsContent value="created" className="space-y-4 mt-6">
             {/* Filters */}
-            <Card className="p-4">
-              <div className="flex flex-wrap items-center gap-3">
+            <Card className="p-3 sm:p-4">
+              <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
                 <Select value={createdDatePreset} onValueChange={(v) => { setCreatedDatePreset(v); setCreatedPage(0); }}>
-                  <SelectTrigger className="w-[150px]">
+                  <SelectTrigger className="w-full sm:w-[150px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1062,7 +1062,7 @@ export default function PolicyReports() {
                 {/* Created By filter - Admin only */}
                 {isAdmin && (
                   <Select value={createdByFilter} onValueChange={(v) => { setCreatedByFilter(v); setCreatedPage(0); }}>
-                    <SelectTrigger className="w-[160px]">
+                    <SelectTrigger className="w-full sm:w-[160px]">
                       <SelectValue placeholder="أنشأه" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1075,7 +1075,7 @@ export default function PolicyReports() {
                 )}
 
                 <Select value={createdPolicyTypeFilter} onValueChange={(v) => { setCreatedPolicyTypeFilter(v); setCreatedPage(0); }}>
-                  <SelectTrigger className="w-[140px]">
+                  <SelectTrigger className="w-full sm:w-[140px]">
                     <SelectValue placeholder="النوع" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1087,7 +1087,7 @@ export default function PolicyReports() {
                 </Select>
 
                 <Select value={createdCompanyFilter} onValueChange={(v) => { setCreatedCompanyFilter(v); setCreatedPage(0); }}>
-                  <SelectTrigger className="w-[160px]">
+                  <SelectTrigger className="w-full sm:w-[160px]">
                     <SelectValue placeholder="الشركة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1098,7 +1098,7 @@ export default function PolicyReports() {
                   </SelectContent>
                 </Select>
 
-                <div className="relative flex-1 min-w-[200px]">
+                <div className="relative w-full sm:flex-1 sm:min-w-[200px]">
                   <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="بحث بالاسم، الهاتف، الهوية، رقم الملف، رقم السيارة..."
@@ -1452,8 +1452,8 @@ export default function PolicyReports() {
             )}
 
             {/* Filters */}
-            <Card className="p-4">
-              <div className="flex flex-wrap items-center gap-3">
+            <Card className="p-3 sm:p-4">
+              <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground shrink-0">الشهر:</span>
                   <ArabicDatePicker
@@ -1468,7 +1468,7 @@ export default function PolicyReports() {
                 </div>
 
                 <Select value={renewalsDaysFilter} onValueChange={(v) => { setRenewalsDaysFilter(v); setRenewalsPage(0); }}>
-                  <SelectTrigger className="w-[160px]">
+                  <SelectTrigger className="w-full sm:w-[160px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1480,7 +1480,7 @@ export default function PolicyReports() {
                 </Select>
 
                 <Select value={renewalsPolicyTypeFilter} onValueChange={(v) => { setRenewalsPolicyTypeFilter(v); setRenewalsPage(0); }}>
-                  <SelectTrigger className="w-[140px]">
+                  <SelectTrigger className="w-full sm:w-[140px]">
                     <SelectValue placeholder="النوع" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1492,7 +1492,7 @@ export default function PolicyReports() {
                 </Select>
 
                 <Select value={renewalsCreatedByFilter} onValueChange={(v) => { setRenewalsCreatedByFilter(v); setRenewalsPage(0); }}>
-                  <SelectTrigger className="w-[160px]">
+                  <SelectTrigger className="w-full sm:w-[160px]">
                     <SelectValue placeholder="أنشأه" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1503,7 +1503,7 @@ export default function PolicyReports() {
                   </SelectContent>
                 </Select>
 
-                <div className="relative flex-1 min-w-[200px]">
+                <div className="relative w-full sm:flex-1 sm:min-w-[200px]">
                   <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="بحث..."
@@ -1513,7 +1513,7 @@ export default function PolicyReports() {
                   />
                 </div>
 
-                <div className="flex gap-2 mr-auto">
+                <div className="flex flex-wrap gap-2 sm:mr-auto">
                   {/* مساعد التجديد — guided walkthrough of every client
                       whose policies expire this month, posting to the
                       renewal_followups table. */}
@@ -1986,8 +1986,8 @@ export default function PolicyReports() {
           {/* Renewed Clients Tab */}
           <TabsContent value="renewed" className="space-y-4 mt-6">
             {/* Filters */}
-            <Card className="p-4">
-              <div className="flex flex-wrap items-center gap-3">
+            <Card className="p-3 sm:p-4">
+              <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground shrink-0">الشهر:</span>
                   <ArabicDatePicker
@@ -2002,7 +2002,7 @@ export default function PolicyReports() {
                 </div>
 
                 <Select value={renewedPolicyTypeFilter} onValueChange={(v) => { setRenewedPolicyTypeFilter(v); setRenewedPage(0); }}>
-                  <SelectTrigger className="w-[140px]">
+                  <SelectTrigger className="w-full sm:w-[140px]">
                     <SelectValue placeholder="النوع" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2014,7 +2014,7 @@ export default function PolicyReports() {
                 </Select>
 
                 <Select value={renewedCreatedByFilter} onValueChange={(v) => { setRenewedCreatedByFilter(v); setRenewedPage(0); }}>
-                  <SelectTrigger className="w-[160px]">
+                  <SelectTrigger className="w-full sm:w-[160px]">
                     <SelectValue placeholder="أنشأه" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2025,7 +2025,7 @@ export default function PolicyReports() {
                   </SelectContent>
                 </Select>
 
-                <div className="relative flex-1 min-w-[200px]">
+                <div className="relative w-full sm:flex-1 sm:min-w-[200px]">
                   <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="بحث..."
