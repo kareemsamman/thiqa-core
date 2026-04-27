@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Pause, Phone, MessageCircle, ArrowRight, Building2, LogOut } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -42,11 +43,22 @@ function formatPhoneForDisplay(raw: string): string {
  */
 export default function SubscriptionExpired() {
   const { signOut } = useAuth();
-  const { agent, isSubscriptionPaused, isImpersonating, impersonatedAgent, stopImpersonation } = useAgentContext();
+  const { agent, isSubscriptionActive, isSubscriptionPaused, isImpersonating, impersonatedAgent, stopImpersonation, loading: agentLoading } = useAgentContext();
   const navigate = useNavigate();
 
   const isPaused = isSubscriptionPaused;
   const isCancelled = agent?.subscription_status === "cancelled";
+
+  // If the agent's subscription was reactivated (e.g. Thiqa admin
+  // un-paused or extended it) and the user lands here on refresh,
+  // bounce them straight to /dashboard. Wait for the agent context
+  // to finish loading first so we don't redirect on stale state.
+  useEffect(() => {
+    if (agentLoading) return;
+    if (isSubscriptionActive) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [agentLoading, isSubscriptionActive, navigate]);
 
   // Pull WhatsApp + phone numbers from thiqa_platform_settings so a
   // platform admin can update support contact info without a code deploy.
