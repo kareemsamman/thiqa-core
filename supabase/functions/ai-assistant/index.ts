@@ -178,6 +178,31 @@ function classifyIntent(message: string): IntentResult {
     tables.push("policies", "payments");
   }
 
+  // Task intent
+  if (/مهمة|مهام|تذكير|تذكيرات|أعمال اليوم|todo/.test(msg)) {
+    tables.push("tasks");
+  }
+
+  // Contacts intent (business contacts: lawyers, garages, surveyors)
+  if (/جهة اتصال|جهات اتصال|جهات الاتصال|محامي|ورشة|مقدر/.test(msg)) {
+    tables.push("contacts");
+  }
+
+  // Receipts intent
+  if (/إيصال|إيصالات|سند قبض|سندات قبض/.test(msg)) {
+    tables.push("receipts");
+  }
+
+  // Claims intent
+  if (/مطالبة|مطالبات|تصليح|إصلاح/.test(msg)) {
+    tables.push("claims");
+  }
+
+  // Leads intent
+  if (/ليد|ليدز|عميل محتمل|عملاء محتملين|متابعة عملاء/.test(msg)) {
+    tables.push("leads");
+  }
+
   // Financial intent
   if (/ربح|أرباح|عمولة|عمولات|خسارة|دفع للشركة|تسوية|مالي|إيرادات/.test(msg)) {
     isFinancial = true;
@@ -204,7 +229,8 @@ async function fetchContextData(
   intent: IntentResult,
   isAdmin: boolean,
   branchId: string | null,
-  userMessage: string
+  userMessage: string,
+  userId: string
 ): Promise<string> {
   const parts: string[] = [];
   const limit = 20;
@@ -466,6 +492,133 @@ async function fetchContextData(
             ).join('\n'));
         }
       }
+
+      if (table === "tasks") {
+        // Default scope: tasks assigned to the current user, ordered by
+        // due date, pending first. If the message mentions "اليوم" we
+        // filter to today's date. Admins still see only their own
+        // assigned tasks here — "tasks for X" requires explicit search.
+        const today = new Date().toISOString().slice(0, 10);
+        const isToday = /اليوم|today/.test(userMessage);
+
+        let query = supabase.from("tasks")
+          .select("title, description, due_date, due_time, status, assigned_to")
+          .eq("agent_id", agentId)
+          .eq("assigned_to", userId)
+          .order("due_date", { ascending: true })
+          .limit(limit);
+
+        if (isToday) {
+          query = query.eq("due_date", today);
+        } else {
+          query = query.neq("status", "completed");
+        }
+
+        const { data } = await query;
+        if (data && data.length > 0) {
+          const statusLabels: Record<string, string> = {
+            pending: "قيد التنفيذ", in_progress: "قيد التنفيذ", completed: "مكتملة",
+          };
+          parts.push(`[مهامك ${isToday ? 'اليوم' : 'القادمة'} - ${data.length}]\n` +
+            data.map((t: any, i: number) =>
+              `${i + 1}. ${t.title} | ${t.due_date} ${t.due_time || ''} | ${statusLabels[t.status] || t.status}${t.description ? ` — ${t.description.slice(0, 60)}` : ''}`
+            ).join('\n'));
+        } else {
+          parts.push(isToday ? "[لا توجد مهام لك اليوم]" : "[لا توجد مهام مفتوحة لك]");
+        }
+      }
+
+      if (table === "contacts") {
+        // business_contacts has no branch_id — agent-wide directory.
+        let query = supabase.from("business_contacts")
+          .select("name, phone, email, category, notes")
+          .eq("agent_id", agentId)
+          .order("name", { ascending: true })
+          .limit(limit);
+
+        if (searchText.length > 2 && !intent.isAggregate) {
+          query = query.or(`name.ilike.%${searchText}%,phone.ilike.%${searchText}%,category.ilike.%${searchText}%`);
+        } else if (intent.searchTerms.length > 0) {
+          const term = intent.searchTerms[0];
+          query = query.or(`name.ilike.%${term}%,phone.ilike.%${term}%`);
+        }
+
+        const { data } = await query;
+        if (data && data.length > 0) {
+          parts.push(`[جهات الاتصال - ${data.length}]\n` +
+            data.map((c: any, i: number) =>
+              `${i + 1}. ${c.name}${c.category ? ` (${c.category})` : ''} | هاتف: ${c.phone || '-'}${c.email ? ` | ${c.email}` : ''}`
+            ).join('\n'));
+        }
+      }
+
+      if (table === "receipts") {
+        let query = supabase.from("receipts")
+          .select("receipt_number, amount, payment_method, receipt_date, client_name, car_number")
+          .eq("agent_id", agentId)
+          .order("receipt_date", { ascending: false })
+          .limit(limit);
+        if (branchId && !isAdmin) query = query.eq("branch_id", branchId);
+
+        const { data } = await query;
+        if (data && data.length > 0) {
+          if (intent.isAggregate) {
+            const total = data.reduce((s: number, r: any) => s + (r.amount || 0), 0);
+            parts.push(`[ملخص الإيصالات]\nالعينة: ${data.length} إيصال | المجموع: ₪${total.toLocaleString()}`);
+          } else {
+            parts.push(`[إيصالات - ${data.length}]\n` +
+              data.map((r: any, i: number) =>
+                `${i + 1}. إيصال #${r.receipt_number} | ₪${r.amount} | ${r.payment_method || '-'} | ${r.receipt_date} | ${r.client_name || '-'}`
+              ).join('\n'));
+          }
+        }
+      }
+
+      if (table === "claims") {
+        // repair_claims has no branch_id directly; rely on agent_id.
+        let query = supabase.from("repair_claims")
+          .select("claim_number, garage_name, total_amount, status, accident_date, clients(full_name), insurance_companies(name_ar)")
+          .eq("agent_id", agentId)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        const { data } = await query;
+        if (data && data.length > 0) {
+          const statusLabels: Record<string, string> = {
+            pending: "قيد المراجعة", approved: "مقبولة", rejected: "مرفوضة", completed: "مكتملة",
+          };
+          parts.push(`[المطالبات - ${data.length}]\n` +
+            data.map((c: any, i: number) =>
+              `${i + 1}. ${c.claim_number || '-'} | ${(c.clients as any)?.full_name || '-'} | ${c.garage_name} | ${(c.insurance_companies as any)?.name_ar || '-'} | ₪${c.total_amount || 0} | ${statusLabels[c.status || ''] || c.status || '-'}`
+            ).join('\n'));
+        }
+      }
+
+      if (table === "leads") {
+        // Leads aren't branch-scoped in the schema — surface them all
+        // to anyone who has the leads feature enabled (route guard
+        // already enforces feature access; here we just hand over data).
+        let query = supabase.from("leads")
+          .select("customer_name, phone, status, total_price, car_manufacturer, car_model, requires_callback")
+          .eq("agent_id", agentId)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        if (searchText.length > 2 && !intent.isAggregate) {
+          query = query.or(`customer_name.ilike.%${searchText}%,phone.ilike.%${searchText}%`);
+        }
+
+        const { data } = await query;
+        if (data && data.length > 0) {
+          const statusLabels: Record<string, string> = {
+            new: "جديد", contacted: "تم التواصل", converted: "تحوّل لعميل", lost: "مفقود",
+          };
+          parts.push(`[ليدز - ${data.length}]\n` +
+            data.map((l: any, i: number) =>
+              `${i + 1}. ${l.customer_name || '-'} | ${l.phone} | ${l.car_manufacturer || ''} ${l.car_model || ''} | ₪${l.total_price || 0} | ${statusLabels[l.status || ''] || l.status || '-'}${l.requires_callback ? ' | 📞 يحتاج اتصال' : ''}`
+            ).join('\n'));
+        }
+      }
     } catch (e) {
       console.error(`[ai-assistant] Error fetching ${table}:`, e);
     }
@@ -590,7 +743,7 @@ Deno.serve(async (req) => {
     // Classify intent and fetch data
     const intent = classifyIntent(message);
     console.log(`[ai-assistant] Agent: ${agentId}, Role: ${isAdmin ? 'admin' : 'worker'}, Intent: ${JSON.stringify(intent.tables)}`);
-    const contextData = await fetchContextData(adminClient, agentId, intent, isAdmin, branchId, message);
+    const contextData = await fetchContextData(adminClient, agentId, intent, isAdmin, branchId, message, user.id);
     console.log(`[ai-assistant] Context data length: ${contextData.length}`);
 
     // Fetch global custom prompt
