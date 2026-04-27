@@ -118,9 +118,9 @@ export default function AccidentFeeServices() {
       />
 
       <div className="md:p-6 space-y-6">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="relative flex-1 max-w-md">
+        {/* Toolbar — search and CTA stack on mobile, inline on sm+. */}
+        <div className="space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-2">
+          <div className="relative w-full sm:flex-1 sm:max-w-md">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="بحث عن خدمة..."
@@ -129,14 +129,55 @@ export default function AccidentFeeServices() {
               className="pr-10"
             />
           </div>
-          <Button onClick={handleAdd} className="gap-2">
+          <Button onClick={handleAdd} className="gap-2 w-full sm:w-auto">
             <Plus className="h-4 w-4" />
             إضافة خدمة
           </Button>
         </div>
 
-        {/* Table */}
-        <div className="rounded-lg border bg-card">
+        {/* Mobile card list */}
+        <div className="md:hidden space-y-2">
+          {loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="rounded-lg border bg-card p-3 space-y-2">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-48" />
+              </div>
+            ))
+          ) : services.length === 0 ? (
+            <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
+              لا توجد خدمات مضافة
+            </div>
+          ) : (
+            services.map((service) => (
+              <div key={service.id} className="rounded-lg border bg-card p-3">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <p className="font-semibold flex-1 min-w-0">{service.name_ar || service.name}</p>
+                  <Badge variant={service.active ? 'default' : 'secondary'} className="shrink-0">
+                    {service.active ? 'فعال' : 'معطل'}
+                  </Badge>
+                </div>
+                {service.description && (
+                  <p className="text-sm text-muted-foreground mb-3">{service.description}</p>
+                )}
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-xs text-muted-foreground">الترتيب: {service.sort_order}</span>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(service)}>
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(service)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden md:block rounded-lg border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
