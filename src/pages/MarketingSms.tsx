@@ -465,7 +465,7 @@ export default function MarketingSms() {
         subtitle="الحملات التسويقية بالرسائل القصيرة"
       />
 
-      <div className="container mx-auto py-6 space-y-6">
+      <div className="container mx-auto md:py-6 space-y-4 md:space-y-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-2 max-w-md">
             <TabsTrigger value="compose" className="flex items-center gap-2">
@@ -478,17 +478,17 @@ export default function MarketingSms() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="compose" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <TabsContent value="compose" className="space-y-4 md:space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
               {/* Message Composer */}
               <Card>
-                <CardHeader>
+                <CardHeader className="p-3 sm:p-6">
                   <CardTitle className="flex items-center gap-2">
                     <Send className="h-5 w-5" />
                     نص الرسالة
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 p-3 pt-0 sm:p-6 sm:pt-0">
                   <div>
                     <label className="text-sm font-medium mb-2 block">عنوان الحملة</label>
                     <Input
@@ -639,13 +639,13 @@ export default function MarketingSms() {
 
               {/* Customer Selection */}
               <Card>
-                <CardHeader>
+                <CardHeader className="p-3 sm:p-6">
                   <CardTitle className="flex items-center gap-2">
                     <Users className="h-5 w-5" />
                     اختيار العملاء
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 p-3 pt-0 sm:p-6 sm:pt-0">
                   <div className="relative">
                     <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input

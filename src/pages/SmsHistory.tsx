@@ -235,9 +235,9 @@ export default function SmsHistory() {
               فلترة
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-4">
-              <div className="flex-1 min-w-[200px]">
+          <CardContent className="p-3 sm:p-6">
+            <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:gap-4">
+              <div className="w-full sm:flex-1 sm:min-w-[200px]">
                 <div className="relative">
                   <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -250,7 +250,7 @@ export default function SmsHistory() {
               </div>
 
               <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(0); }}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="نوع الرسالة" />
                 </SelectTrigger>
                 <SelectContent>
@@ -262,7 +262,7 @@ export default function SmsHistory() {
               </Select>
 
               <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="الحالة" />
                 </SelectTrigger>
                 <SelectContent>
@@ -278,7 +278,7 @@ export default function SmsHistory() {
                 onChange={(v) => { setBranchFilter(v); setPage(0); }}
               />
 
-              <Button variant="outline" onClick={fetchLogs}>
+              <Button variant="outline" onClick={fetchLogs} className="w-full sm:w-auto">
                 <RefreshCw className="h-4 w-4 ml-2" />
                 تحديث
               </Button>
@@ -309,12 +309,12 @@ export default function SmsHistory() {
                     <TableRow>
                       <TableHead className="w-8" />
                       <TableHead className="text-right">العميل</TableHead>
-                      <TableHead className="text-right">الهاتف</TableHead>
+                      <TableHead className="hidden md:table-cell text-right">الهاتف</TableHead>
                       <TableHead className="text-right">النوع</TableHead>
-                      <TableHead className="text-right">المعاملة</TableHead>
+                      <TableHead className="hidden md:table-cell text-right">المعاملة</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
-                      <TableHead className="text-right">تاريخ الإرسال</TableHead>
-                      <TableHead className="text-right max-w-xs">الرسالة</TableHead>
+                      <TableHead className="hidden md:table-cell text-right">تاريخ الإرسال</TableHead>
+                      <TableHead className="hidden md:table-cell text-right max-w-xs">الرسالة</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -358,7 +358,7 @@ export default function SmsHistory() {
                               <TableCell className="font-medium">
                                 {log.clients?.full_name || "-"}
                               </TableCell>
-                              <TableCell className="text-left">
+                              <TableCell className="hidden md:table-cell text-left">
                                 <bdi>{log.phone_number}</bdi>
                               </TableCell>
                               <TableCell>
@@ -369,7 +369,7 @@ export default function SmsHistory() {
                                   {SMS_TYPE_LABELS[log.sms_type] || log.sms_type}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-xs">
+                              <TableCell className="hidden md:table-cell text-xs">
                                 {docLabel ? (
                                   <button
                                     type="button"
@@ -400,10 +400,10 @@ export default function SmsHistory() {
                                   </p>
                                 )}
                               </TableCell>
-                              <TableCell className="text-muted-foreground">
+                              <TableCell className="hidden md:table-cell text-muted-foreground">
                                 {formatDate(log.sent_at || log.created_at)}
                               </TableCell>
-                              <TableCell className="max-w-xs">
+                              <TableCell className="hidden md:table-cell max-w-xs">
                                 <div className="flex items-start gap-2">
                                   <p className="text-sm text-muted-foreground line-clamp-2 flex-1" title={log.message}>
                                     {previewMessage(log.message) || (
