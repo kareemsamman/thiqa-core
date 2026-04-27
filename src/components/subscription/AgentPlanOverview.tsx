@@ -223,6 +223,8 @@ export function UsageRow({
   );
 }
 
+export type AgentPlanOverviewSection = 'summary' | 'active-addons' | 'catalog';
+
 /**
  * Agent-facing summary of their plan — the view that matches the
  * pricing model (plan + discount + addons + per-resource usage).
@@ -233,8 +235,20 @@ export function UsageRow({
  * request-addon-purchase edge function. The resulting row is a
  * pending_approval record the Thiqa admin approves from the agent
  * detail page, plus an email notification.
+ *
+ * The redesigned /subscription page renders this with `sections`
+ * trimmed to just the addons sections (the plan summary moved into
+ * a top-of-page KPI row), so callers can pick which slices they
+ * want to surface in their layout.
  */
-export function AgentPlanOverview() {
+export function AgentPlanOverview({
+  sections = ['summary', 'active-addons', 'catalog'],
+}: {
+  sections?: AgentPlanOverviewSection[];
+} = {}) {
+  const showSummary = sections.includes('summary');
+  const showActiveAddons = sections.includes('active-addons');
+  const showCatalog = sections.includes('catalog');
   const { agent, planInfo } = useAgentContext();
   const { toast } = useToast();
   const [discount, setDiscount] = useState<ActiveDiscount | null>(null);
@@ -403,6 +417,7 @@ export function AgentPlanOverview() {
   return (
     <div className="space-y-4">
       {/* Plan + effective price card */}
+      {showSummary && (
       <Card>
         <CardContent className="p-6">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
@@ -491,8 +506,10 @@ export function AgentPlanOverview() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Active addons */}
+      {showActiveAddons && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -549,6 +566,7 @@ export function AgentPlanOverview() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Available addon catalog — self-serve request flow. Clicking
           "اشترِ" opens a confirmation dialog, and confirming posts to
@@ -556,6 +574,7 @@ export function AgentPlanOverview() {
           Thiqa super admins. The catalog prices live in
           thiqa_platform_settings so Thiqa can change them without a
           code deploy. */}
+      {showCatalog && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -618,6 +637,7 @@ export function AgentPlanOverview() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Purchase confirmation dialog */}
       <Dialog

@@ -15,9 +15,11 @@ import {
   Crown, CreditCard, Calendar, Clock, AlertTriangle, Check, X, MessageCircle,
   Sparkles, ShieldCheck, Pause, Info, ArrowUp, ArrowDown,
   Rocket, Shield, Trash2, XCircle, Loader2, Settings, BarChart3, Receipt, UserCog, Plus, ChevronDown,
+  ShoppingCart,
 } from "lucide-react";
 import { AddQuotaDialog, type OverageUsageType } from "@/components/subscription/AddQuotaDialog";
 import { AgentPlanOverview, UsageRow } from "@/components/subscription/AgentPlanOverview";
+import { SubscriptionKpiRow } from "@/components/subscription/SubscriptionKpiRow";
 import { useAgentLimits } from "@/hooks/useAgentLimits";
 import { PlanLadder } from "@/components/pricing/PlanLadder";
 import { format } from "date-fns";
@@ -442,7 +444,7 @@ export default function Subscription() {
   return (
     <MainLayout>
       <Header title="الإعدادات" subtitle="اشتراكك، استخدامك للخدمات، ومدفوعاتك السابقة" />
-      <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto" dir="rtl">
+      <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto" dir="rtl">
         {/* In-page header: icon + title + contact button */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
@@ -465,34 +467,58 @@ export default function Subscription() {
           </a>
         </div>
 
+        {/* KPI cards row — the trial/period state, plan price, and
+            active addons total surface above the tabs so the agent
+            sees their subscription health at a glance regardless of
+            which tab they're on. */}
+        <SubscriptionKpiRow nowTick={nowTick} />
+
         {/* Tabs */}
         <Tabs defaultValue="plan" dir="rtl" className="w-full">
-          <TabsList className="w-full justify-start bg-muted/50 p-1 h-auto flex-nowrap overflow-x-auto sm:flex-wrap">
-            <TabsTrigger value="plan" className="gap-1.5 shrink-0 whitespace-nowrap">
+          <TabsList className="w-full h-auto flex flex-wrap justify-start gap-1.5 bg-muted/40 p-1.5 rounded-xl border">
+            <TabsTrigger
+              value="plan"
+              className="gap-2 shrink-0 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-md"
+            >
               <Crown className="h-4 w-4" />
               الخطة والاشتراك
             </TabsTrigger>
-            <TabsTrigger value="usage" className="gap-1.5 shrink-0 whitespace-nowrap">
+            <TabsTrigger
+              value="extras"
+              className="gap-2 shrink-0 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-md"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              الإضافات
+            </TabsTrigger>
+            <TabsTrigger
+              value="usage"
+              className="gap-2 shrink-0 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-md"
+            >
               <BarChart3 className="h-4 w-4" />
               الاستخدام
             </TabsTrigger>
-            <TabsTrigger value="payments" className="gap-1.5 shrink-0 whitespace-nowrap">
+            <TabsTrigger
+              value="payments"
+              className="gap-2 shrink-0 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-md"
+            >
               <Receipt className="h-4 w-4" />
-              المدفوعات ({payments.length})
+              المدفوعات
+              {payments.length > 0 && (
+                <span className="text-[10px] font-bold rounded-full bg-primary/10 text-primary px-2 py-0.5">
+                  {payments.length}
+                </span>
+              )}
             </TabsTrigger>
-            <TabsTrigger value="account" className="gap-1.5 shrink-0 whitespace-nowrap">
+            <TabsTrigger
+              value="account"
+              className="gap-2 shrink-0 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-md"
+            >
               <UserCog className="h-4 w-4" />
               الحساب
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="plan" className="mt-5 space-y-5">
-        {/* ═══ New pricing-model overview — plan, effective price
-            (with active discount if any), usage bars vs effective
-            limits, and active addons. Sits on top of the older
-            status + plan-picker cards below so the existing flows
-            keep working. */}
-        <AgentPlanOverview />
 
         {/* ═══ Current Status Card ═══ */}
         {!sub ? <Skeleton className="h-48 w-full rounded-xl" /> : (
@@ -633,6 +659,13 @@ export default function Subscription() {
           <PlanLadder />
         </div>
 
+          </TabsContent>
+
+          {/* ═══ Extras Tab ═══ Active addons + buy-more catalog. Both
+              sections share the AgentPlanOverview component so the
+              purchase dialog + pending-approval state stay in one place. */}
+          <TabsContent value="extras" className="mt-5 space-y-5">
+            <AgentPlanOverview sections={['active-addons', 'catalog']} />
           </TabsContent>
 
           {/* ═══ Usage Tab ═══ */}
