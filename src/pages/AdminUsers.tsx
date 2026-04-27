@@ -591,6 +591,43 @@ export default function AdminUsers() {
     }
   };
 
+  const handleUnlockUser = async (userId: string) => {
+    // Manual unlock for plan_locked users — calls the SECURITY DEFINER
+    // RPC which flips status to 'active' under elevated privileges,
+    // letting the existing enforce_user_limit trigger validate
+    // capacity. If capacity isn't available (e.g., the admin clicked
+    // unlock without an addon) the trigger raises LIMIT_EXCEEDED and
+    // we open the upgrade dialog instead of just showing a toast.
+    setActionLoading(userId);
+    try {
+      const { error } = await supabase.rpc('unlock_plan_locked_user', {
+        p_user_id: userId,
+      });
+      if (error) throw error;
+
+      toast({
+        title: 'تم فتح المستخدم',
+        description: 'يمكن للمستخدم تسجيل الدخول الآن',
+      });
+
+      fetchUsers();
+      refetchLimits();
+    } catch (error: any) {
+      if (handleLimitError(error)) {
+        // Upgrade dialog opened by the provider — nothing else to do.
+      } else {
+        console.error('Error unlocking user:', error);
+        toast({
+          title: 'خطأ',
+          description: error?.message || 'فشل في فتح المستخدم',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleChangeRole = async (userId: string, newRole: 'admin' | 'worker') => {
     setActionLoading(userId);
     try {
@@ -929,7 +966,7 @@ export default function AdminUsers() {
                     {planLockedCount} مستخدم مقفل بسبب تجاوز حد الباقة
                   </p>
                   <p className="text-muted-foreground text-xs mt-0.5">
-                    هؤلاء المستخدمون لا يستطيعون تسجيل الدخول. قم بترقية الباقة أو أضف مستخدمين إضافيين لفتحهم تلقائياً.
+                    هؤلاء المستخدمون لا يستطيعون تسجيل الدخول. عند توفر مقعد إضافي (ترقية الباقة أو شراء مستخدم إضافي) اضغط "فتح" بجانب المستخدم الذي تريد فتحه.
                   </p>
                 </div>
                 <Button
@@ -1018,15 +1055,31 @@ export default function AdminUsers() {
                           </div>
 
                           {isPlanLocked ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="w-full gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
-                              onClick={() => showUpgradePrompt({ resource: 'users' })}
-                            >
-                              <Sparkles className="h-4 w-4" />
-                              ترقية الباقة
-                            </Button>
+                            <div className="grid grid-cols-2 gap-2">
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="w-full gap-1"
+                                onClick={() => handleUnlockUser(user.id)}
+                                disabled={
+                                  actionLoading === user.id ||
+                                  limitsLoading ||
+                                  userLimit.exceeded
+                                }
+                              >
+                                <Lock className="h-4 w-4" />
+                                فتح
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                                onClick={() => showUpgradePrompt({ resource: 'users' })}
+                              >
+                                <Sparkles className="h-4 w-4" />
+                                ترقية الباقة
+                              </Button>
+                            </div>
                           ) : !isProtectedSuperAdmin(user) ? (
                             <div className="grid grid-cols-3 gap-2">
                               <Button
@@ -1151,15 +1204,41 @@ export default function AdminUsers() {
                         </TableCell>
                         <TableCell>
                           {isPlanLocked ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
-                              onClick={() => showUpgradePrompt({ resource: 'users' })}
-                            >
-                              <Sparkles className="h-4 w-4" />
-                              ترقية الباقة
-                            </Button>
+                            <div className="flex gap-2">
+                              {/* Unlock button — only enabled when an
+                                  addon (or plan upgrade) has freed a
+                                  seat. !userLimit.exceeded means the
+                                  effective limit > current active
+                                  users, so this row can be promoted. */}
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="gap-1"
+                                onClick={() => handleUnlockUser(user.id)}
+                                disabled={
+                                  actionLoading === user.id ||
+                                  limitsLoading ||
+                                  userLimit.exceeded
+                                }
+                                title={
+                                  userLimit.exceeded
+                                    ? 'لا توجد مقاعد متاحة — رقّ الباقة أو اشترِ مستخدماً إضافياً'
+                                    : 'فتح هذا المستخدم باستخدام المقعد المتاح'
+                                }
+                              >
+                                <Lock className="h-4 w-4" />
+                                فتح
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                                onClick={() => showUpgradePrompt({ resource: 'users' })}
+                              >
+                                <Sparkles className="h-4 w-4" />
+                                ترقية الباقة
+                              </Button>
+                            </div>
                           ) : !isProtectedSuperAdmin(user) ? (
                             <div className="flex gap-2">
                               <Button

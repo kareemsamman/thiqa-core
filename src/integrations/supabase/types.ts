@@ -7230,6 +7230,10 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      unlock_plan_locked_user: {
+        Args: { p_user_id: string }
+        Returns: string
+      }
       user_belongs_to_agent: {
         Args: { _agent_id: string; _user_id: string }
         Returns: boolean
