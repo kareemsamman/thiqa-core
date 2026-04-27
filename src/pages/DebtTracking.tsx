@@ -763,92 +763,102 @@ export default function DebtTracking() {
               <div className="space-y-2">
                 {clients.map((client) => (
                   <div key={client.client_id} className="border rounded-lg overflow-hidden">
-                    {/* Client Row */}
+                    {/* Client Row. Mobile structure:
+                        Row 1: chevron + name/phone | notes + badge + amount
+                        Row 2: 3 equal-width action buttons (تسديد / WA / تذكير)
+                       Desktop: single inline row, identical to before — the
+                       action wrapper drops `w-full` via `sm:w-auto` so it
+                       shares the line with the metadata group; the period
+                       gap above also collapses (`sm:mt-0`). */}
                     <div
-                      className="flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                      className="p-3 sm:p-4 bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
                       onClick={() => toggleExpanded(client.client_id)}
                     >
-                      <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          {expandedClients.has(client.client_id) ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <div>
-                          <p 
-                            className="font-medium text-primary cursor-pointer hover:underline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.location.href = `/clients/${client.client_id}`;
-                            }}
-                          >
-                            {client.client_name}
-                          </p>
-                          <p className="text-sm text-muted-foreground flex items-center gap-2">
-                            <Phone className="h-3 w-3" />
-                            {client.phone_number || "لا يوجد رقم"}
-                          </p>
+                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                        <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                            {expandedClients.has(client.client_id) ? (
+                              <ChevronUp className="h-4 w-4" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="font-medium text-primary cursor-pointer hover:underline truncate"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.location.href = `/clients/${client.client_id}`;
+                              }}
+                            >
+                              {client.client_name}
+                            </p>
+                            <p className="text-sm text-muted-foreground flex items-center gap-2 truncate">
+                              <Phone className="h-3 w-3 shrink-0" />
+                              <span className="truncate ltr-nums">{client.phone_number || "لا يوجد رقم"}</span>
+                            </p>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center gap-3">
-                        {/* Notes Popover */}
-                        <ClientNotesPopover
-                          clientId={client.client_id}
-                          clientName={client.client_name}
-                          branchId={profile?.branch_id}
-                        />
-                        <Badge variant="outline">{client.policies_count} معاملة</Badge>
-                        <div className="text-left min-w-[100px]">
-                          <p className="font-bold text-lg text-destructive">
+                        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                          {/* Notes Popover */}
+                          <ClientNotesPopover
+                            clientId={client.client_id}
+                            clientName={client.client_name}
+                            branchId={profile?.branch_id}
+                          />
+                          <Badge variant="outline" className="shrink-0">{client.policies_count} معاملة</Badge>
+                          <p className="font-bold text-base sm:text-lg text-destructive ltr-nums whitespace-nowrap">
                             {formatCurrency(client.total_remaining)}
                           </p>
                         </div>
-                        <Button
-                          variant="gradient"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openPaymentModal(client);
-                          }}
+
+                        {/* Action buttons. Mobile: full-width row 2 with
+                            three flex-1 buttons sharing it. Desktop:
+                            inline at end of row 1 via `sm:w-auto`. */}
+                        <div
+                          className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <Wallet className="h-4 w-4 ml-2" />
-                          تسديد المبلغ
-                        </Button>
-                        {client.phone_number ? (
-                          <a
-                            href={getWhatsAppUrl(client) || '#'}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium border bg-transparent h-9 rounded-md px-3 text-green-600 border-green-600 hover:bg-green-50 transition-all"
+                          <Button
+                            variant="gradient"
+                            size="sm"
+                            className="flex-1 sm:flex-none"
+                            onClick={() => openPaymentModal(client)}
                           >
-                            <MessageCircle className="h-4 w-4" />
-                          </a>
-                        ) : (
+                            <Wallet className="h-4 w-4 ml-2" />
+                            تسديد المبلغ
+                          </Button>
+                          {client.phone_number ? (
+                            <a
+                              href={getWhatsAppUrl(client) || '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium border bg-transparent h-9 rounded-md px-3 text-green-600 border-green-600 hover:bg-green-50 transition-all flex-1 sm:flex-none"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </a>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled
+                              className="text-green-600 border-green-600 flex-1 sm:flex-none"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled
-                            className="text-green-600 border-green-600"
+                            className="flex-1 sm:flex-none"
+                            onClick={() => openSmsDialog(client)}
+                            disabled={!client.phone_number}
                           >
-                            <MessageCircle className="h-4 w-4" />
+                            <Send className="h-4 w-4 ml-2" />
+                            تذكير
                           </Button>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openSmsDialog(client);
-                          }}
-                          disabled={!client.phone_number}
-                        >
-                          <Send className="h-4 w-4 ml-2" />
-                          تذكير
-                        </Button>
+                        </div>
                       </div>
                     </div>
 
