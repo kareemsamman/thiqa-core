@@ -591,26 +591,30 @@ export default function ActivityLog() {
               const Icon = typeIcons[activity.type];
               return (
                 <Card key={activity.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="py-4">
-                    <div className="flex items-start gap-4">
-                      {/* Icon */}
-                      <div className={cn("rounded-lg p-2.5", typeColors[activity.type])}>
-                        <Icon className="h-5 w-5" />
+                  <CardContent className="p-3 sm:px-6 sm:py-4">
+                    <div className="flex items-start gap-3 sm:gap-4">
+                      {/* Icon — smaller on mobile so the content area
+                          gets every available pixel of width. */}
+                      <div className={cn("rounded-lg p-2 sm:p-2.5 shrink-0", typeColors[activity.type])}>
+                        <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
                       </div>
 
                       {/* Content */}
                       <div className="flex-1 min-w-0 space-y-1.5">
-                        {/* Header Row */}
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-2 flex-wrap">
+                        {/* Header row. `items-start` keeps the timestamp
+                            aligned to the title's first line even when
+                            the action+badge group wraps onto two rows
+                            on mobile. */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0">
                             <span className="font-semibold text-foreground">{activity.action}</span>
                             {activity.createdBy && (
-                              <Badge variant="outline" className="text-xs">
+                              <Badge variant="outline" className="text-[11px] h-5 px-2">
                                 بواسطة {activity.createdBy}
                               </Badge>
                             )}
                           </div>
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          <span className="text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap shrink-0 pt-0.5">
                             {formatDistanceToNow(new Date(activity.created_at), {
                               addSuffix: true,
                               locale: ar,
@@ -618,13 +622,17 @@ export default function ActivityLog() {
                           </span>
                         </div>
 
-                        {/* Details */}
+                        {/* Details — every detail row is icon-aligned-
+                            to-top so trailing badges (price, payment
+                            type) wrap onto a clean second line via
+                            `flex-wrap` on the inner content wrapper,
+                            instead of floating mid-row. */}
                         <div className="text-sm space-y-1">
                           {/* Client Info */}
                           {activity.details.client_name && (
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Users className="h-3.5 w-3.5" />
-                              <span>
+                            <div className="flex items-start gap-2 text-muted-foreground">
+                              <Users className="h-3.5 w-3.5 mt-1 shrink-0" />
+                              <span className="min-w-0">
                                 {activity.details.client_name}
                                 {activity.details.client_file_number && (
                                   <span className="text-xs mr-1">
@@ -637,7 +645,7 @@ export default function ActivityLog() {
 
                           {/* Payment specific */}
                           {activity.type === "payment" && (
-                            <div className="flex items-center gap-3 flex-wrap">
+                            <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
                               <span className="font-semibold text-success">
                                 ₪{(activity.details.amount || 0).toLocaleString()}
                               </span>
@@ -664,27 +672,29 @@ export default function ActivityLog() {
 
                           {/* Policy/Insurance Info */}
                           {(activity.details.policy_type || activity.details.company_name) && (
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <FileText className="h-3.5 w-3.5" />
-                              <span>
-                                {activity.details.policy_type}
-                                {activity.details.company_name && (
-                                  <span className="mr-1">→ {activity.details.company_name}</span>
+                            <div className="flex items-start gap-2 text-muted-foreground">
+                              <FileText className="h-3.5 w-3.5 mt-1 shrink-0" />
+                              <div className="flex-1 min-w-0 flex items-center gap-x-2 gap-y-1 flex-wrap">
+                                <span>
+                                  {activity.details.policy_type}
+                                  {activity.details.company_name && (
+                                    <span className="mr-1">→ {activity.details.company_name}</span>
+                                  )}
+                                </span>
+                                {activity.details.insurance_price && activity.type === "policy" && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    ₪{activity.details.insurance_price.toLocaleString()}
+                                  </Badge>
                                 )}
-                              </span>
-                              {activity.details.insurance_price && activity.type === "policy" && (
-                                <Badge variant="secondary" className="text-xs">
-                                  ₪{activity.details.insurance_price.toLocaleString()}
-                                </Badge>
-                              )}
+                              </div>
                             </div>
                           )}
 
                           {/* Car Info (hidden for transfer — shown in dedicated row below) */}
                           {activity.details.car_number && activity.type !== "transfer" && (
                             <div className="flex items-center gap-2 text-muted-foreground">
-                              <Car className="h-3.5 w-3.5" />
-                              <span>{activity.details.car_number}</span>
+                              <Car className="h-3.5 w-3.5 shrink-0" />
+                              <span className="ltr-nums">{activity.details.car_number}</span>
                             </div>
                           )}
 
