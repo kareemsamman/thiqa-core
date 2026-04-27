@@ -65,6 +65,7 @@ import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
+import { AgentBranchFilter } from '@/components/shared/AgentBranchFilter';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAgentContext } from '@/hooks/useAgentContext';
@@ -287,6 +288,10 @@ export default function PolicyReports() {
   const [createdDatePreset, setCreatedDatePreset] = useState('today');
   const [createdFromDate, setCreatedFromDate] = useState<string>('');
   const [createdToDate, setCreatedToDate] = useState<string>('');
+  // Page-level branch filter — applies to every tab on this page (created /
+  // renewals / renewed). Global admins only; component hides itself for
+  // branch-scoped users. null = no extra filter.
+  const [pageBranchId, setPageBranchId] = useState<string | null>(null);
   const [createdByFilter, setCreatedByFilter] = useState<string>('all');
   const [createdPolicyTypeFilter, setCreatedPolicyTypeFilter] = useState<string>('all');
   const [createdCompanyFilter, setCreatedCompanyFilter] = useState<string>('all');
@@ -461,8 +466,9 @@ export default function PolicyReports() {
         p_company_id: createdCompanyFilter !== 'all' ? createdCompanyFilter : null,
         p_search: createdSearch || null,
         p_page_size: PAGE_SIZE,
-        p_page: createdPage + 1 // 1-indexed
-      });
+        p_page: createdPage + 1, // 1-indexed
+        p_branch_id: pageBranchId,
+      } as never);
 
       if (error) throw error;
       setCreatedPolicies((data as CreatedPolicy[]) || []);
@@ -513,15 +519,17 @@ export default function PolicyReports() {
           p_created_by: renewalsCreatedByFilter !== 'all' ? renewalsCreatedByFilter : null,
           p_search: renewalsSearch || null,
           p_page_size: PAGE_SIZE,
-          p_page: renewalsPage + 1 // 1-indexed
-        }),
+          p_page: renewalsPage + 1, // 1-indexed
+          p_branch_id: pageBranchId,
+        } as never),
         // Pass the same filters to summary so numbers always match
         supabase.rpc('report_renewals_summary', {
           p_end_month: renewalsMonth ? `${renewalsMonth}-01` : null,
           p_policy_type: renewalsPolicyTypeFilter !== 'all' ? renewalsPolicyTypeFilter : null,
           p_created_by: renewalsCreatedByFilter !== 'all' ? renewalsCreatedByFilter : null,
-          p_search: renewalsSearch || null
-        })
+          p_search: renewalsSearch || null,
+          p_branch_id: pageBranchId,
+        } as never)
       ]);
 
       if (renewalsRes.error) throw renewalsRes.error;
@@ -670,13 +678,13 @@ export default function PolicyReports() {
     if (activeTab === 'created') {
       fetchCreatedPolicies();
     }
-  }, [activeTab, createdPage, createdDatePreset, createdFromDate, createdToDate, createdByFilter, createdPolicyTypeFilter, createdCompanyFilter, createdSearch]);
+  }, [activeTab, createdPage, createdDatePreset, createdFromDate, createdToDate, createdByFilter, createdPolicyTypeFilter, createdCompanyFilter, createdSearch, pageBranchId]);
 
   useEffect(() => {
     if (activeTab === 'renewals') {
       fetchRenewals();
     }
-  }, [activeTab, renewalsPage, renewalsMonth, renewalsDaysFilter, renewalsPolicyTypeFilter, renewalsCreatedByFilter, renewalsSearch]);
+  }, [activeTab, renewalsPage, renewalsMonth, renewalsDaysFilter, renewalsPolicyTypeFilter, renewalsCreatedByFilter, renewalsSearch, pageBranchId]);
 
   // Sub-tab data fetchers — declined list comes from renewal_followups,
   // the tam-altajdid list reuses fetchRenewedClients with the renewals
@@ -709,8 +717,9 @@ export default function PolicyReports() {
         p_created_by: renewedCreatedByFilter !== 'all' ? renewedCreatedByFilter : null,
         p_search: renewedSearch || null,
         p_limit: PAGE_SIZE,
-        p_offset: renewedPage * PAGE_SIZE
-      });
+        p_offset: renewedPage * PAGE_SIZE,
+        p_branch_id: pageBranchId,
+      } as never);
 
       if (error) throw error;
       const clientData = (data as unknown as RenewedClient[]) || [];
@@ -728,7 +737,7 @@ export default function PolicyReports() {
     if (activeTab === 'renewed') {
       fetchRenewedClients();
     }
-  }, [activeTab, renewedPage, renewedMonth, renewedPolicyTypeFilter, renewedCreatedByFilter, renewedSearch]);
+  }, [activeTab, renewedPage, renewedMonth, renewedPolicyTypeFilter, renewedCreatedByFilter, renewedSearch, pageBranchId]);
 
   // Update renewal status for all policies of a client
   const handleUpdateStatus = async () => {
@@ -962,27 +971,32 @@ export default function PolicyReports() {
 
       <div className="md:p-6 space-y-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className={cn(
-            "grid w-full max-w-lg",
-            canUseRenewals ? "grid-cols-3" : "grid-cols-1",
-          )}>
-            <TabsTrigger value="created" className="gap-2">
-              <FileText className="h-4 w-4" />
-              المعاملات المنشأة
-            </TabsTrigger>
-            {canUseRenewals && (
-              <TabsTrigger value="renewals" className="gap-2">
-                <RefreshCw className="h-4 w-4" />
-                التجديدات
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <TabsList className={cn(
+              "grid w-full max-w-lg",
+              canUseRenewals ? "grid-cols-3" : "grid-cols-1",
+            )}>
+              <TabsTrigger value="created" className="gap-2">
+                <FileText className="h-4 w-4" />
+                المعاملات المنشأة
               </TabsTrigger>
-            )}
-            {canUseRenewals && (
-              <TabsTrigger value="renewed" className="gap-2">
-                <CheckCircle className="h-4 w-4" />
-                تم التجديد
-              </TabsTrigger>
-            )}
-          </TabsList>
+              {canUseRenewals && (
+                <TabsTrigger value="renewals" className="gap-2">
+                  <RefreshCw className="h-4 w-4" />
+                  التجديدات
+                </TabsTrigger>
+              )}
+              {canUseRenewals && (
+                <TabsTrigger value="renewed" className="gap-2">
+                  <CheckCircle className="h-4 w-4" />
+                  تم التجديد
+                </TabsTrigger>
+              )}
+            </TabsList>
+            {/* Page-level branch filter — applies to all three tabs.
+                Global admins only. */}
+            <AgentBranchFilter value={pageBranchId} onChange={setPageBranchId} />
+          </div>
 
           {/* Created Policies Tab */}
           <TabsContent value="created" className="space-y-4 mt-6">

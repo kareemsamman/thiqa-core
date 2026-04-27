@@ -27,6 +27,7 @@ import { ClientNotesPopover } from "@/components/clients/ClientNotesPopover";
 import { useAuth } from "@/hooks/useAuth";
 import { useSmsLock } from "@/hooks/useSmsLock";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
+import { AgentBranchFilter } from "@/components/shared/AgentBranchFilter";
 
 interface ClientDebt {
   client_id: string;
@@ -277,6 +278,9 @@ export default function DebtTracking() {
   const [selectedPolicyId, setSelectedPolicyId] = useState<string | null>(null);
   const [policyDrawerOpen, setPolicyDrawerOpen] = useState(false);
   const [filterDays, setFilterDays] = useState<number | null>(null);
+  // Branch filter — global admins only (component hides itself for
+  // branch-scoped users). null = no extra filter.
+  const [filterBranch, setFilterBranch] = useState<string | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentClient, setPaymentClient] = useState<ClientDebt | null>(null);
 
@@ -306,12 +310,12 @@ export default function DebtTracking() {
 
   useEffect(() => {
     setPageIndex(0);
-  }, [debouncedSearch, filterDays]);
+  }, [debouncedSearch, filterDays, filterBranch]);
 
   useEffect(() => {
     fetchDebtData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, filterDays, pageIndex]);
+  }, [debouncedSearch, filterDays, filterBranch, pageIndex]);
 
   const fetchDebtData = async () => {
     setLoading(true);
@@ -323,7 +327,8 @@ export default function DebtTracking() {
           p_filter_days: filterDays,
           p_limit: pageSize,
           p_offset: pageIndex * pageSize,
-        },
+          p_branch_id: filterBranch,
+        } as never,
       );
 
       if (clientError) throw clientError;
@@ -349,7 +354,8 @@ export default function DebtTracking() {
       const summaryPromise = supabase.rpc("report_client_debts_summary", {
         p_search: debouncedSearch || null,
         p_filter_days: filterDays,
-      });
+        p_branch_id: filterBranch,
+      } as never);
 
       const policiesPromise = clientIds.length
         ? supabase.rpc("report_debt_policies_for_clients", {
@@ -703,6 +709,10 @@ export default function DebtTracking() {
                   منتهية
                 </Button>
               </div>
+
+              {/* Branch filter — global admins only. Hides itself for
+                  branch-scoped users (their branch is fixed by RLS). */}
+              <AgentBranchFilter value={filterBranch} onChange={setFilterBranch} />
 
               <Button variant="outline" onClick={fetchDebtData}>
                 <RefreshCw className="h-4 w-4 ml-2" />
