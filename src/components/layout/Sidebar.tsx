@@ -730,15 +730,20 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
       )}
 
       {/* Trial countdown card — only on the expanded sidebar for an
-          agent admin who's still on the free trial. Sits above the
-          user section so it's always visible without competing for
-          nav real-estate, and uses the brand-purple lock palette so
-          it reads as part of the same "upgrade-needed" surface as
-          the locked nav leaves and the upgrade dialogs. Clicking
-          opens the upgrade popup keyed to no specific feature — the
-          user's hitting it from the global nav, not from a blocked
-          action, so the popup just shows the plan ladder. */}
-      {!collapsed && !isThiqaSuperAdmin && isAdmin && agent && (() => {
+          agent admin who's still on the free trial AND no nav group
+          is currently expanded. Sits above the user section so it's
+          always visible without competing for nav real-estate, and
+          uses the brand-purple lock palette so it reads as part of
+          the same "upgrade-needed" surface as the locked nav leaves
+          and the upgrade dialogs. Clicking opens the upgrade popup
+          keyed to no specific feature — the user's hitting it from
+          the global nav, not from a blocked action, so the popup
+          just shows the plan ladder.
+          We hide the card the moment any nav group is opened so the
+          expanded group's items can use the vertical space without
+          the card competing for the bottom of the rail. */}
+      {!collapsed && !isThiqaSuperAdmin && isAdmin && agent &&
+       !Object.values(openGroups).some(Boolean) && (() => {
         const isTrial = agent.subscription_status === 'trial' ||
           (agent.monthly_price === 0 && agent.subscription_status === 'active');
         if (!isTrial) return null;
@@ -747,6 +752,10 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
         // anchor (set on registration). Falls back to
         // subscription_expires_at for legacy rows that pre-date the
         // dedicated trial_ends_at column.
+        // Math.floor matches every other surface that displays
+        // remaining trial days (settings page, user-menu badge), so
+        // the card and those readouts always agree to within 0 days
+        // — no more "card says 30, settings says 29" off-by-one.
         const TRIAL_LENGTH = 35;
         const endDate = agent.trial_ends_at
           ? new Date(agent.trial_ends_at)
@@ -756,7 +765,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
         if (!endDate) return null;
         const daysLeft = Math.max(
           0,
-          Math.ceil((endDate.getTime() - Date.now()) / 86400000),
+          Math.floor((endDate.getTime() - Date.now()) / 86400000),
         );
         const used = Math.min(TRIAL_LENGTH, Math.max(0, TRIAL_LENGTH - daysLeft));
         const progress = (used / TRIAL_LENGTH) * 100;
