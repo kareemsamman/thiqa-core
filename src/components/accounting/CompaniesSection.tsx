@@ -327,7 +327,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
           Hover any pill for a breakdown of how the number was computed
           (respects the active filter set). */}
       <TooltipProvider delayDuration={150}>
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 rounded-lg border bg-card p-3 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:p-0 sm:px-3 sm:py-2">
           <SummaryPill
             label="إجمالي سعر التأمين"
             value={fmt(totals.insuranceSum)}
@@ -431,7 +431,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
           </TabsList>
         </Tabs>
 
-        <div className="flex items-center gap-2 mr-auto">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:mr-auto">
           <div className="relative w-full sm:w-80 md:w-96">
             <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <Input
