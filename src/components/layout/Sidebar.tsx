@@ -379,28 +379,58 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             // FULL-HEIGHT flyout panel positioned to the visual LEFT
             // of the rail (mirrors the Untitled UI reference where
             // hovering a group icon expands the panel). Clicking the
-            // button navigates to the group's first item so touch /
-            // keyboard users still have a working path.
+            // group icon navigates to the first UNLOCKED item — if
+            // every item in the group is locked we fall through to
+            // the upgrade popup keyed to the first item, matching how
+            // locked leaves behave in the expanded sidebar.
             const isActiveGroup = isGroupActive(group);
             const GroupIcon = group.icon;
-            const firstItem = group.items[0];
+            const firstUnlocked = group.items.find(
+              (i) => !(i as typeof i & { locked?: boolean }).locked,
+            );
+            const allLocked = !firstUnlocked;
+            const firstItem = firstUnlocked ?? group.items[0];
+
+            // Common visual for the trigger so NavLink and button
+            // variants render identically.
+            const triggerClass = cn(
+              "flex items-center justify-center rounded-[0.4rem] h-11 w-11 mx-auto transition-colors duration-150 relative",
+              isActiveGroup
+                ? "bg-slate-900 text-white"
+                : "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
+            );
+            const triggerChild = (
+              <GroupIcon className="h-[22px] w-[22px]" weight={isActiveGroup ? "bold" : "regular"} />
+            );
+
             return (
               <HoverCard key={group.name} openDelay={100} closeDelay={150}>
                 <HoverCardTrigger asChild>
-                  <NavLink
-                    to={firstItem.href}
-                    ref={isActiveGroup ? activeNavLinkRef : undefined}
-                    onClick={handleNavClick}
-                    title={group.name}
-                    className={cn(
-                      "flex items-center justify-center rounded-[0.4rem] h-11 w-11 mx-auto transition-colors duration-150 relative",
-                      isActiveGroup
-                        ? "bg-slate-900 text-white"
-                        : "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
-                    )}
-                  >
-                    <GroupIcon className="h-[22px] w-[22px]" weight={isActiveGroup ? "bold" : "regular"} />
-                  </NavLink>
+                  {allLocked ? (
+                    <button
+                      type="button"
+                      title={group.name}
+                      className={triggerClass}
+                      onClick={() => {
+                        showUpgradePrompt({
+                          featureLabel: firstItem.name,
+                          featureKey: firstItem.featureKey,
+                        });
+                      }}
+                    >
+                      {triggerChild}
+                    </button>
+                  ) : (
+                    <NavLink
+                      to={firstItem.href}
+                      ref={isActiveGroup ? activeNavLinkRef : undefined}
+                      onClick={handleNavClick}
+                      title={group.name}
+                      className={triggerClass}
+                    >
+                      {triggerChild}
+                    </NavLink>
+                  )}
                 </HoverCardTrigger>
                 <HoverCardContent
                   side="left"
@@ -427,10 +457,50 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                       {group.name}
                     </span>
                   </div>
-                  {/* Items list */}
+                  {/* Items list — locked items render with the same
+                      violet lock-chip treatment as the expanded
+                      sidebar so the user sees what their plan is
+                      missing instead of a silent navigate-then-redirect. */}
                   <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
                     {group.items.map((item) => {
                       const isActive = matchesPath(item.href);
+                      const itemLocked = (item as typeof item & { locked?: boolean }).locked;
+
+                      if (itemLocked) {
+                        return (
+                          <button
+                            key={item.name}
+                            type="button"
+                            onClick={() => {
+                              showUpgradePrompt({
+                                featureLabel: item.name,
+                                featureKey: item.featureKey,
+                              });
+                            }}
+                            className={cn(
+                              "group/locked w-full flex items-center gap-3 px-3 py-2 text-[13.5px] font-semibold rounded-[0.2rem] transition-colors",
+                              "text-violet-700 hover:text-violet-900",
+                              "bg-gradient-to-l from-violet-50 via-fuchsia-50 to-amber-50/70 hover:from-violet-100 hover:via-fuchsia-100 hover:to-amber-100",
+                            )}
+                          >
+                            <item.icon
+                              className="h-[16px] w-[16px] flex-shrink-0 text-violet-600"
+                              weight="regular"
+                            />
+                            <span className="flex-1 text-right">{item.name}</span>
+                            <span
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-md shrink-0 shadow-sm ring-1 ring-white/40 transition-transform group-hover/locked:scale-110"
+                              style={{
+                                background:
+                                  'linear-gradient(135deg, #6a3bd1 0%, #c93fa8 55%, #ed6a44 100%)',
+                              }}
+                            >
+                              <Lock className="h-3 w-3 text-white" weight="fill" />
+                            </span>
+                          </button>
+                        );
+                      }
+
                       return (
                         <NavLink
                           key={item.name}
