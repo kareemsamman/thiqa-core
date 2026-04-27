@@ -244,12 +244,14 @@ export default function CorrespondenceLetters() {
 
       <div className="container mx-auto py-6 space-y-6">
         <Card>
-          <CardHeader>
-            {/* Layout: search stretches on the right, filters in the
-                middle, primary action button pinned to the far left
-                (end of the flex row in RTL). */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-              <div className="relative flex-1">
+          <CardHeader className="p-3 sm:p-6">
+            {/* Mobile: every group stacks full-width; status pills
+                share their row as a 3-up segmented control; primary
+                "رسالة جديدة" CTA gets its own full-width row at the
+                bottom. Desktop: original single-row layout via
+                `sm:flex sm:items-center sm:gap-3`. */}
+            <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-row sm:gap-3 sm:items-center">
+              <div className="relative w-full sm:flex-1">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="بحث بالعنوان أو المستلم..."
@@ -258,7 +260,7 @@ export default function CorrespondenceLetters() {
                   className="pr-10"
                 />
               </div>
-              <div className="flex gap-1 rounded-md border bg-muted/40 p-1">
+              <div className="grid grid-cols-3 gap-1 rounded-md border bg-muted/40 p-1 sm:flex">
                 {['all', 'draft', 'sent'].map((status) => (
                   <Button
                     key={status}
@@ -272,7 +274,7 @@ export default function CorrespondenceLetters() {
                 ))}
               </div>
               <AgentBranchFilter value={branchFilter} onChange={setBranchFilter} />
-              <Button onClick={handleCreate} className="gap-2 sm:mr-auto">
+              <Button onClick={handleCreate} className="gap-2 w-full sm:w-auto sm:mr-auto">
                 <Plus className="h-4 w-4" />
                 رسالة جديدة
               </Button>
@@ -295,9 +297,9 @@ export default function CorrespondenceLetters() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>العنوان</TableHead>
-                    <TableHead>المستلم</TableHead>
+                    <TableHead className="hidden md:table-cell">المستلم</TableHead>
                     <TableHead>الحالة</TableHead>
-                    <TableHead>التاريخ</TableHead>
+                    <TableHead className="hidden md:table-cell">التاريخ</TableHead>
                     <TableHead className="w-[100px]">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -305,9 +307,9 @@ export default function CorrespondenceLetters() {
                   {filteredLetters.map((letter) => (
                     <TableRow key={letter.id}>
                       <TableCell className="font-medium">{letter.title}</TableCell>
-                      <TableCell>{letter.recipient_name}</TableCell>
+                      <TableCell className="hidden md:table-cell">{letter.recipient_name}</TableCell>
                       <TableCell>{getStatusBadge(letter.status)}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
+                      <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
                         {format(new Date(letter.created_at), 'dd/MM/yyyy', { locale: ar })}
                       </TableCell>
                       <TableCell>

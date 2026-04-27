@@ -645,8 +645,10 @@ export default function FormTemplates() {
           ))}
         </div>
 
-        {/* Toolbar */}
-        <div className="flex items-center gap-2">
+        {/* Toolbar. Drag-and-drop hint hidden on mobile (the gesture
+            doesn't apply on phones anyway) so the action buttons get
+            the full row. */}
+        <div className="flex items-center gap-2 flex-wrap">
           <Button size="sm" onClick={() => setNewFolderOpen(true)} className="gap-2">
             <FolderPlus className="h-4 w-4" />
             مجلد جديد
@@ -657,7 +659,7 @@ export default function FormTemplates() {
               رفع ملف
             </Button>
           )}
-          <span className="text-xs text-muted-foreground flex items-center gap-1.5 mr-auto">
+          <span className="hidden sm:flex text-xs text-muted-foreground items-center gap-1.5 sm:mr-auto">
             <FolderUp className="h-3.5 w-3.5" />
             اسحب مجلداً من جهازك إلى هنا للرفع مع الحفاظ على بنية المجلدات
           </span>
@@ -690,7 +692,7 @@ export default function FormTemplates() {
                   <TableHead className="text-right w-12"></TableHead>
                   <TableHead className="text-right">الاسم</TableHead>
                   <TableHead className="text-right w-24">النوع</TableHead>
-                  <TableHead className="text-right w-36">التاريخ</TableHead>
+                  <TableHead className="hidden md:table-cell text-right w-36">التاريخ</TableHead>
                   <TableHead className="text-right w-20">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
@@ -712,7 +714,7 @@ export default function FormTemplates() {
                       {folder.name}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">مجلد</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
+                    <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
                       {format(new Date(folder.created_at), "yyyy-MM-dd")}
                     </TableCell>
                     <TableCell>
@@ -763,7 +765,7 @@ export default function FormTemplates() {
                     <TableCell className="text-muted-foreground text-sm">
                       {file.file_type === "pdf" ? "PDF" : "صورة"}
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
+                    <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
                       {format(new Date(file.created_at), "yyyy-MM-dd")}
                     </TableCell>
                     <TableCell>
