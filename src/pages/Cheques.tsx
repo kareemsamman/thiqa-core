@@ -1348,9 +1348,15 @@ export default function Cheques() {
           </TabsContent>
 
           <TabsContent value="list" className="mt-4 space-y-4">
-            {/* Toolbar */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="relative flex-1 max-w-md">
+            {/* Toolbar. Mobile: every control gets its own full-width
+                row, with the date-toggle pills (اليوم فقط / متأخرة)
+                and the expand/collapse pair sharing rows as 2-col
+                grids. The primary "إضافة شيكات لعميل" CTA also goes
+                full-width on mobile. Desktop preserves the original
+                inline cluster via `sm:flex sm:items-center sm:gap-2
+                sm:flex-wrap`. */}
+            <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="relative w-full sm:flex-1 sm:max-w-md">
                 <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="بحث بالعميل، رقم الشيك، أو رقم الهاتف..."
@@ -1359,9 +1365,9 @@ export default function Cheques() {
                   className="pr-9"
                 />
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-2 sm:flex-wrap">
                 <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
-                  <SelectTrigger className="w-[130px]">
+                  <SelectTrigger className="w-full sm:w-[130px]">
                     <SelectValue placeholder="الحالة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1377,41 +1383,46 @@ export default function Cheques() {
                   onChange={(v) => { setFilterBranch(v); setCurrentPage(1); }}
                 />
 
-                <Button
-                  variant={dueTodayOnly ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => {
-                    setDueTodayOnly((v) => !v);
-                    if (!dueTodayOnly) setOverdueOnly(false);
-                    setCurrentPage(1);
-                  }}
-                  className={dueTodayOnly ? "bg-primary text-primary-foreground" : ""}
-                >
-                  <Calendar className="ml-1 h-4 w-4" />
-                  اليوم فقط
-                </Button>
-                <Button
-                  variant={overdueOnly ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => {
-                    setOverdueOnly((v) => !v);
-                    if (!overdueOnly) setDueTodayOnly(false);
-                    setCurrentPage(1);
-                  }}
-                >
-                  <AlertCircle className="ml-1 h-4 w-4" />
-                  متأخرة
-                </Button>
+                {/* Date-toggle pills: 2-col grid on mobile so they
+                    sit as equal-width tiles, inline on sm+. */}
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2">
+                  <Button
+                    variant={dueTodayOnly ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      setDueTodayOnly((v) => !v);
+                      if (!dueTodayOnly) setOverdueOnly(false);
+                      setCurrentPage(1);
+                    }}
+                    className={dueTodayOnly ? "bg-primary text-primary-foreground" : ""}
+                  >
+                    <Calendar className="ml-1 h-4 w-4" />
+                    اليوم فقط
+                  </Button>
+                  <Button
+                    variant={overdueOnly ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      setOverdueOnly((v) => !v);
+                      if (!overdueOnly) setDueTodayOnly(false);
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <AlertCircle className="ml-1 h-4 w-4" />
+                    متأخرة
+                  </Button>
+                </div>
+
                 <Button
                   variant="default"
                   size="sm"
                   onClick={() => setAddChequeModalOpen(true)}
-                  className="gap-1"
+                  className="gap-1 w-full sm:w-auto"
                 >
                   <Plus className="h-4 w-4" />
                   إضافة شيكات لعميل
                 </Button>
-                <div className="flex gap-1">
+                <div className="grid grid-cols-2 gap-1 sm:flex sm:gap-1">
                   <Button variant="outline" size="sm" onClick={expandAll}>توسيع الكل</Button>
                   <Button variant="outline" size="sm" onClick={collapseAll}>طي الكل</Button>
                 </div>
