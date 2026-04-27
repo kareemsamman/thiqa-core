@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
+import { usePermissions, type PermissionKey } from "@/hooks/usePermissions";
+import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -18,6 +20,8 @@ import {
   ListChecks,
   Loader2,
   MapPin,
+  Lock,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,6 +32,17 @@ interface OnboardingStep {
   icon: React.ReactNode;
   targetRoute: string;
   emoji: string;
+  /** Plan feature this step's destination needs. If the agent's plan
+   *  doesn't include it, the step is locked + clicking opens the
+   *  upgrade popup instead of navigating. Mirrors the gates on the
+   *  destination's <PermissionRoute> in App.tsx so the onboarding
+   *  can't be used as a back-door around them. */
+  featureKey?: string;
+  /** Per-user permission for the destination. Mirrors the destination's
+   *  <PermissionRoute permission="..."> attribute. The wizard is
+   *  admin-only and admins bypass permissions, so today this is a
+   *  no-op safety net — kept so a future tightening propagates here. */
+  permissionKey?: PermissionKey;
 }
 
 const ONBOARDING_STEPS: OnboardingStep[] = [
@@ -38,6 +53,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     icon: <Palette className="h-5 w-5" />,
     targetRoute: "/admin/branding",
     emoji: "🎨",
+    permissionKey: "page.branding",
   },
   {
     id: "branches",
@@ -46,6 +62,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     icon: <MapPin className="h-5 w-5" />,
     targetRoute: "/admin/branches",
     emoji: "📍",
+    permissionKey: "page.branches",
   },
   {
     id: "companies",
@@ -54,6 +71,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     icon: <Building2 className="h-5 w-5" />,
     targetRoute: "/companies",
     emoji: "🏢",
+    permissionKey: "page.companies",
   },
   {
     id: "users",
@@ -62,6 +80,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     icon: <Users className="h-5 w-5" />,
     targetRoute: "/admin/users",
     emoji: "👥",
+    permissionKey: "page.users",
   },
   {
     id: "clients",
@@ -70,6 +89,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     icon: <Car className="h-5 w-5" />,
     targetRoute: "/clients",
     emoji: "🚗",
+    permissionKey: "page.clients",
   },
   {
     id: "policies",
@@ -123,8 +143,24 @@ async function detectCompletedSteps(agentId: string): Promise<Set<string>> {
 
 export function OnboardingWizard() {
   const { user, isAdmin } = useAuth();
-  const { agentId } = useAgentContext();
+  const { agentId, hasFeature, isThiqaSuperAdmin } = useAgentContext();
+  const { can } = usePermissions();
+  const { showUpgradePrompt } = useUpgradePrompt();
   const navigate = useNavigate();
+
+  // True when the step's destination is reachable by THIS agent. Two
+  // gates, mirroring how App.tsx wraps each route:
+  //   1. featureKey → plan must include it (impersonating super admin
+  //      bypasses, same as PermissionRoute).
+  //   2. permissionKey → user-level grant. Admins bypass, so this is
+  //      only relevant if a future tightening makes onboarding visible
+  //      to non-admins.
+  const isStepUnlocked = (step: OnboardingStep) => {
+    if (isThiqaSuperAdmin) return true;
+    if (step.featureKey && !hasFeature(step.featureKey)) return false;
+    if (step.permissionKey && !can(step.permissionKey)) return false;
+    return true;
+  };
   const [visible, setVisible] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [ready, setReady] = useState(false);
@@ -201,9 +237,30 @@ export function OnboardingWizard() {
   };
 
   const handleGoToStep = (step: OnboardingStep) => {
+    // Defensive double-check: even though the locked-step button uses a
+    // separate handler, this protects against any future caller that
+    // might forget to gate. If somehow we receive a locked step here,
+    // bounce to the upgrade popup instead of navigating.
+    if (!isStepUnlocked(step)) {
+      showUpgradePrompt({
+        featureLabel: step.title,
+        featureKey: step.featureKey,
+      });
+      return;
+    }
     setVisible(false);
     setManualOpen(false);
     navigate(step.targetRoute);
+  };
+
+  const handleLockedStepClick = (step: OnboardingStep) => {
+    // The wizard stays open behind the upgrade popup so the user can
+    // pick another step after dismissing. Same pattern as the locked
+    // nav leaves in the sidebar.
+    showUpgradePrompt({
+      featureLabel: step.title,
+      featureKey: step.featureKey,
+    });
   };
 
   const handleSeedData = async () => {
@@ -285,6 +342,48 @@ export function OnboardingWizard() {
         <div className="px-4 py-3 space-y-1.5 max-h-[50vh] overflow-y-auto">
           {ONBOARDING_STEPS.map((step) => {
             const isDone = completedSteps.has(step.id);
+            const isLocked = !isStepUnlocked(step);
+
+            // Locked variant — brand-purple wash + lock chip,
+            // matching the sidebar leaves and the branch list.
+            // Click opens the upgrade popup instead of navigating
+            // (so the wizard can never be a back-door around plan
+            // gates on the destination route). "Done" badge wins
+            // visually if both apply, since the user has already
+            // completed this step on a previous plan.
+            if (isLocked && !isDone) {
+              return (
+                <button
+                  key={step.id}
+                  onClick={() => handleLockedStepClick(step)}
+                  className="group/locked w-full flex items-center gap-3 p-3 rounded-xl text-right transition-all duration-200 active:scale-[0.98] border border-[#5468c4]/25 bg-gradient-to-l from-[#5468c4]/10 via-[#4158b0]/[0.08] to-[#5468c4]/10 hover:from-[#5468c4]/20 hover:via-[#4158b0]/15 hover:to-[#5468c4]/20"
+                >
+                  <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-white/60 text-[#4158b0]">
+                    <span className="text-lg">{step.emoji}</span>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-[#3b4f9e]">
+                      {step.title}
+                    </p>
+                    <p className="text-xs truncate text-[#3b4f9e]/70">
+                      مفتوح بعد ترقية الباقة
+                    </p>
+                  </div>
+
+                  <span
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-md shrink-0 shadow-sm ring-1 ring-white/40 transition-transform group-hover/locked:scale-110"
+                    style={{
+                      background:
+                        'linear-gradient(135deg, #5468c4 0%, #4158b0 50%, #2a3878 100%)',
+                    }}
+                  >
+                    <Lock className="h-3.5 w-3.5 text-white" />
+                  </span>
+                </button>
+              );
+            }
+
             return (
               <button
                 key={step.id}
