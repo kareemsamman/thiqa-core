@@ -237,7 +237,24 @@ export function PlanChangeConfirmDialog({
           billing_cycle: cycle,
         },
       });
-      if (error) throw error;
+      // supabase-js wraps non-2xx responses in `error` and discards the
+      // body — meaning our edge function's Arabic error messages get
+      // hidden behind a generic "Edge Function returned a non-2xx
+      // status code". Try to read the JSON off `error.context` to
+      // recover the real reason before falling back.
+      if (error) {
+        let serverMessage: string | null = null;
+        try {
+          const ctx = (error as any)?.context;
+          if (ctx && typeof ctx.json === 'function') {
+            const parsed = await ctx.json();
+            if (parsed?.error) serverMessage = String(parsed.error);
+          }
+        } catch {
+          // ignore — we'll surface the generic message below
+        }
+        throw new Error(serverMessage || error.message || 'فشل في تغيير الحزمة');
+      }
       if (!data?.success) throw new Error(data?.error || 'فشل في تغيير الحزمة');
       setSuccessState({
         switchMode: data.switch_mode,
@@ -288,6 +305,9 @@ export function PlanChangeConfirmDialog({
                 <DialogTitle className="text-3xl md:text-[32px] font-extrabold text-white mb-3 leading-tight">
                   {targetPlan.name_ar || targetPlan.name}
                 </DialogTitle>
+                <DialogDescription className="sr-only">
+                  تأكيد التحويل إلى حزمة {targetPlan.name_ar || targetPlan.name}.
+                </DialogDescription>
 
                 {/* Price hero in header — confident, big, with cycle
                     toggle inline and savings badge when relevant. */}

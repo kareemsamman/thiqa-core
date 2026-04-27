@@ -107,8 +107,18 @@ Deno.serve(async (req) => {
       .eq("plan_key", agent.plan)
       .maybeSingle();
 
-    const isTrial = agent.subscription_status === "trial" ||
+    // "Looks like a trial" semantically — covers status='trial' and the
+    // legacy active+0price shape. But only defer the switch to trial-end
+    // when the trial is *actually still running*. An agent whose
+    // trial_ends_at is already in the past landed on /subscription-
+    // expired and is asking to be reactivated NOW, so writing
+    // pending_plan would do nothing (the sync trigger only fires on
+    // plan UPDATE) and they'd stay locked out.
+    const looksLikeTrial = agent.subscription_status === "trial" ||
       (Number(agent.monthly_price) === 0 && agent.subscription_status === "active");
+    const trialEnd = agent.trial_ends_at ? new Date(agent.trial_ends_at) : null;
+    const trialStillRunning = trialEnd ? trialEnd > new Date() : false;
+    const isTrial = looksLikeTrial && trialStillRunning;
     const switchMode: "immediate" | "after_trial" = isTrial ? "after_trial" : "immediate";
 
     // Yearly pricing falls back to monthly_price × 12 if the plan
@@ -125,9 +135,14 @@ Deno.serve(async (req) => {
     const sameTarget =
       agent.plan === targetPlan.plan_key && currentCycle === billingCycle;
 
-    // Don't no-op silently — if they're already on this plan + cycle
-    // combo, surface a clear error.
-    if (!isTrial && sameTarget) {
+    // "Already on this plan" guard — only fire when the agent has a
+    // genuinely active paid subscription. Expired/paused/cancelled
+    // agents picking the same plan are renewing, not no-op'ing, and
+    // need to fall through to the immediate update path so the trigger
+    // re-activates them.
+    const isCurrentlyPaying =
+      agent.subscription_status === "active" && Number(agent.monthly_price ?? 0) > 0;
+    if (isCurrentlyPaying && sameTarget) {
       throw new Error("أنت بالفعل على هذه الحزمة");
     }
     if (isTrial && agent.pending_plan === targetPlan.plan_key && currentCycle === billingCycle) {
