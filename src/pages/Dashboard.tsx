@@ -3,6 +3,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { AgentBranchFilter } from "@/components/shared/AgentBranchFilter";
 
 import { PeriodPills, DashboardPeriod, getPeriodRange } from "@/components/dashboard/PeriodPills";
 import { KpiRow } from "@/components/dashboard/KpiRow";
@@ -24,6 +25,10 @@ export default function Dashboard() {
 
   const [period, setPeriod] = useState<DashboardPeriod>("today");
   const range = useMemo(() => getPeriodRange(period), [period]);
+  // Branch filter — global admins only (the AgentBranchFilter component
+  // hides itself for branch-scoped users). null = no extra filter, the
+  // user's natural scope still applies.
+  const [branchId, setBranchId] = useState<string | null>(null);
 
   return (
     <MainLayout>
@@ -33,37 +38,40 @@ export default function Dashboard() {
       />
 
       <div className="md:p-6 space-y-5" dir="rtl">
-        {/* Global period pills */}
+        {/* Global period pills + branch filter (admin-only) */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <PeriodPills value={period} onChange={setPeriod} />
+          <div className="flex items-center gap-3 flex-wrap">
+            <PeriodPills value={period} onChange={setPeriod} />
+            <AgentBranchFilter value={branchId} onChange={setBranchId} />
+          </div>
           <p className="text-xs text-muted-foreground">
             البيانات بالفترة المحددة · الحزم تُحتسب معاملة واحدة
           </p>
         </div>
 
         {/* KPI row */}
-        <KpiRow range={range} canViewFinancial={canViewFinancial} />
+        <KpiRow range={range} branchId={branchId} canViewFinancial={canViewFinancial} />
 
         {/* Income vs Expense + Policies donut */}
         {canViewFinancial ? (
           <div className="grid gap-4 grid-cols-1 xl:grid-cols-3">
             <div className="xl:col-span-2">
-              <IncomeExpenseChart range={range} period={period} />
+              <IncomeExpenseChart range={range} period={period} branchId={branchId} />
             </div>
             <div>
-              <PoliciesDonut range={range} />
+              <PoliciesDonut range={range} branchId={branchId} />
             </div>
           </div>
         ) : (
-          <PoliciesDonut range={range} />
+          <PoliciesDonut range={range} branchId={branchId} />
         )}
 
         {/* Client debt buckets — full width */}
-        {canViewFinancial && <DebtBuckets range={range} />}
+        {canViewFinancial && <DebtBuckets range={range} branchId={branchId} />}
 
         {/* Top companies + Follow-ups */}
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-          {canViewFinancial && <TopCompanies range={range} />}
+          {canViewFinancial && <TopCompanies range={range} branchId={branchId} />}
           <FollowUpsCard />
         </div>
 

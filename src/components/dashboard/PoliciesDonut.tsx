@@ -19,7 +19,13 @@ const COLORS = {
   cancelled: "hsl(220 9% 65%)",
 };
 
-export function PoliciesDonut({ range }: { range: PeriodRange }) {
+export function PoliciesDonut({
+  range,
+  branchId,
+}: {
+  range: PeriodRange;
+  branchId?: string | null;
+}) {
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -30,7 +36,7 @@ export function PoliciesDonut({ range }: { range: PeriodRange }) {
       try {
         const { data: rows, error } = await (supabase.rpc as any)(
           "dashboard_policies_overview_range",
-          { p_start_date: range.start, p_end_date: range.end }
+          { p_start_date: range.start, p_end_date: range.end, p_branch_id: branchId ?? null }
         );
         if (error) throw error;
         if (cancelled) return;
@@ -49,7 +55,7 @@ export function PoliciesDonut({ range }: { range: PeriodRange }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [range.start, range.end]);
+  }, [range.start, range.end, branchId]);
 
   const chartData = [
     { name: "سارية", value: data?.active_count ?? 0, color: COLORS.active },

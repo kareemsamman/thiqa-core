@@ -24,7 +24,13 @@ const BAR_COLORS = [
   "hsl(0 84% 60%)",
 ];
 
-export function TopCompanies({ range }: { range: PeriodRange }) {
+export function TopCompanies({
+  range,
+  branchId,
+}: {
+  range: PeriodRange;
+  branchId?: string | null;
+}) {
   const navigate = useNavigate();
   const { hasFeature } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
@@ -40,6 +46,7 @@ export function TopCompanies({ range }: { range: PeriodRange }) {
           p_start_date: range.start,
           p_end_date: range.end,
           p_limit: 5,
+          p_branch_id: branchId ?? null,
         });
         if (error) throw error;
         if (cancelled) return;
@@ -65,7 +72,7 @@ export function TopCompanies({ range }: { range: PeriodRange }) {
       cancelled = true;
       window.removeEventListener("thiqa:policy-created", handler);
     };
-  }, [range.start, range.end]);
+  }, [range.start, range.end, branchId]);
 
   const max = Math.max(1, ...rows.map((r) => Math.abs(r.total_profit)));
   const canAccounting = hasFeature("accounting");

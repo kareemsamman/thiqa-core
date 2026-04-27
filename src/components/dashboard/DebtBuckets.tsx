@@ -41,7 +41,13 @@ const CFG: Record<BucketKey, { label: string; color: string; track: string }> = 
 
 const ORDER: BucketKey[] = ["overdue_60", "overdue_30", "current", "paid"];
 
-export function DebtBuckets({ range }: { range: PeriodRange }) {
+export function DebtBuckets({
+  range,
+  branchId,
+}: {
+  range: PeriodRange;
+  branchId?: string | null;
+}) {
   const navigate = useNavigate();
   const { hasFeature } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
@@ -55,7 +61,7 @@ export function DebtBuckets({ range }: { range: PeriodRange }) {
       try {
         const { data, error } = await (supabase.rpc as any)(
           "dashboard_client_debt_buckets_range",
-          { p_start_date: range.start, p_end_date: range.end }
+          { p_start_date: range.start, p_end_date: range.end, p_branch_id: branchId ?? null }
         );
         if (error) throw error;
         if (cancelled) return;
@@ -80,7 +86,7 @@ export function DebtBuckets({ range }: { range: PeriodRange }) {
       cancelled = true;
       window.removeEventListener("thiqa:policy-created", handler);
     };
-  }, [range.start, range.end]);
+  }, [range.start, range.end, branchId]);
 
   const byKey = new Map(rows.map((r) => [r.bucket, r]));
   const maxAmount = Math.max(

@@ -67,9 +67,14 @@ interface Kpis {
 
 export function KpiRow({
   range,
+  branchId,
   canViewFinancial,
 }: {
   range: PeriodRange;
+  /** Optional branch filter from the page-level AgentBranchFilter
+   *  (global admins only). null = no extra filter — caller's natural
+   *  scope still applies. */
+  branchId?: string | null;
   canViewFinancial: boolean;
 }) {
   const [data, setData] = useState<Kpis | null>(null);
@@ -83,6 +88,7 @@ export function KpiRow({
         const { data: rows, error } = await (supabase.rpc as any)("dashboard_kpis_v2", {
           p_start_date: range.start,
           p_end_date: range.end,
+          p_branch_id: branchId ?? null,
         });
         if (error) throw error;
         if (cancelled) return;
@@ -101,7 +107,7 @@ export function KpiRow({
       }
     })();
     return () => { cancelled = true; };
-  }, [range.start, range.end]);
+  }, [range.start, range.end, branchId]);
 
   return (
     <div className="grid gap-4 grid-cols-2 xl:grid-cols-4">

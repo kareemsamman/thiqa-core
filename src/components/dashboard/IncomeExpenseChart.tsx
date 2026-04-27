@@ -27,9 +27,11 @@ const PERIOD_LABEL: Record<DashboardPeriod, string> = {
 export function IncomeExpenseChart({
   range,
   period,
+  branchId,
 }: {
   range: PeriodRange;
   period: DashboardPeriod;
+  branchId?: string | null;
 }) {
   const navigate = useNavigate();
   const { hasFeature } = useAgentContext();
@@ -45,6 +47,7 @@ export function IncomeExpenseChart({
       try {
         const { data, error } = await (supabase.rpc as any)("dashboard_income_expense_monthly", {
           p_months: 6,
+          p_branch_id: branchId ?? null,
         });
         if (error) throw error;
         if (cancelled) return;
@@ -63,7 +66,7 @@ export function IncomeExpenseChart({
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [branchId]);
 
   // Period-scoped totals (track the period pill)
   useEffect(() => {
@@ -73,6 +76,7 @@ export function IncomeExpenseChart({
         const { data, error } = await (supabase.rpc as any)("dashboard_income_expense_totals", {
           p_start_date: range.start,
           p_end_date: range.end,
+          p_branch_id: branchId ?? null,
         });
         if (error) throw error;
         if (cancelled) return;
@@ -86,7 +90,7 @@ export function IncomeExpenseChart({
       }
     })();
     return () => { cancelled = true; };
-  }, [range.start, range.end]);
+  }, [range.start, range.end, branchId]);
 
   const canAccounting = hasFeature("accounting");
 
