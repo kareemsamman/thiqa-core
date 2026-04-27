@@ -209,6 +209,12 @@ function classifyIntent(message: string): IntentResult {
     tables.push("policies");
   }
 
+  // Accounting intent — companies/brokers balances, expenses, owed amounts
+  if (/محاسبة|حساب|رصيد|مستحق|بده|بدها|مصاري|تطالب|تسويات|مدفوع للشركة|دفع للوسيط|مصاريف/.test(msg)) {
+    isFinancial = true;
+    tables.push("accounting");
+  }
+
   // Aggregate intent
   if (/كم|عدد|مجموع|إجمالي|إحصائيات|إحصاء|متوسط|أكثر|أقل|ملخص/.test(msg)) {
     isAggregate = true;
@@ -227,41 +233,83 @@ function classifyIntent(message: string): IntentResult {
 // can all share the same logic — without this, "كم معاملة اليوم" was
 // counting every policy ever issued because the count query ignored
 // the date keyword in the user message.
-function detectDateRange(msg: string): { fromIso?: string; toIso?: string; label: string } | null {
-  const now = new Date();
-  const startOfDay = (d: Date) => {
-    const x = new Date(d); x.setHours(0, 0, 0, 0); return x;
+
+// All date math runs in Asia/Jerusalem so "today" matches what the
+// agent sees in the dashboard — Deno edge functions run in UTC, so a
+// naive new Date()/setHours(0,0,0,0) here gave UTC midnight, which is
+// 02:00 or 03:00 Israel time. Result: policies created right after
+// local midnight got dropped from "اليوم" while the dashboard counted
+// them. We now compute Israel-local YYYY-MM-DD then convert to a UTC
+// ISO timestamp at Israel midnight so PostgREST comparisons line up
+// with how the user (and the dashboard) think about dates.
+const APP_TZ = "Asia/Jerusalem";
+
+function israelDate(d: Date = new Date()): string {
+  // en-CA gives "YYYY-MM-DD", which is what we want.
+  return new Intl.DateTimeFormat("en-CA", { timeZone: APP_TZ }).format(d);
+}
+
+function israelTzOffsetHours(dateIso: string): number {
+  // Israel switches between IST (+02:00) and IDT (+03:00). Determine
+  // the offset for a given date by comparing UTC noon to the Israel
+  // hour at the same instant — saves us from hard-coding DST rules.
+  const probe = new Date(`${dateIso}T12:00:00Z`);
+  const hour = parseInt(
+    probe.toLocaleString("en-US", { timeZone: APP_TZ, hour: "numeric", hour12: false }),
+    10,
+  );
+  return hour - 12;
+}
+
+function israelMidnightUtcIso(dateIso: string): string {
+  const offset = israelTzOffsetHours(dateIso);
+  const sign = offset >= 0 ? "+" : "-";
+  const tz = `${sign}${String(Math.abs(offset)).padStart(2, "0")}:00`;
+  return new Date(`${dateIso}T00:00:00${tz}`).toISOString();
+}
+
+function addDays(dateIso: string, days: number): string {
+  const d = new Date(`${dateIso}T12:00:00Z`); // noon avoids DST edge cases
+  d.setUTCDate(d.getUTCDate() + days);
+  return israelDate(d);
+}
+
+interface DateRange {
+  // Use fromIso/toIso for `timestamptz` columns (created_at).
+  fromIso?: string;
+  toIso?: string;
+  // Use fromDate/toDate for plain `date` columns (payment_date,
+  // accident_date) — they're already in Israel-local YYYY-MM-DD so
+  // PostgREST sends them as-is and Postgres compares exact dates.
+  fromDate?: string;
+  toDate?: string;
+  label: string;
+}
+
+function buildRange(fromDateIso: string, toDateIso: string | null, label: string): DateRange {
+  return {
+    fromIso: israelMidnightUtcIso(fromDateIso),
+    toIso: toDateIso ? israelMidnightUtcIso(toDateIso) : undefined,
+    fromDate: fromDateIso,
+    toDate: toDateIso ?? undefined,
+    label,
   };
-  if (/اليوم|today/i.test(msg)) {
-    return { fromIso: startOfDay(now).toISOString(), label: "اليوم" };
-  }
-  if (/أمس|امس|البارحة|yesterday/i.test(msg)) {
-    const yest = new Date(now); yest.setDate(yest.getDate() - 1);
-    return {
-      fromIso: startOfDay(yest).toISOString(),
-      toIso: startOfDay(now).toISOString(),
-      label: "أمس",
-    };
-  }
-  if (/هذا الأسبوع|الأسبوع الحالي|this week/i.test(msg)) {
-    const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
-    return { fromIso: startOfDay(weekAgo).toISOString(), label: "آخر 7 أيام" };
-  }
+}
+
+function detectDateRange(msg: string): DateRange | null {
+  const today = israelDate();
+
+  if (/اليوم|today/i.test(msg)) return buildRange(today, addDays(today, 1), "اليوم");
+  if (/أمس|امس|البارحة|yesterday/i.test(msg)) return buildRange(addDays(today, -1), today, "أمس");
+  if (/هذا الأسبوع|الأسبوع الحالي|this week/i.test(msg)) return buildRange(addDays(today, -7), null, "آخر 7 أيام");
   if (/هذا الشهر|الشهر الحالي|this month/i.test(msg)) {
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { fromIso: monthStart.toISOString(), label: "هذا الشهر" };
+    return buildRange(`${today.slice(0, 7)}-01`, null, "هذا الشهر");
   }
   if (/هذه السنة|السنة الحالية|this year/i.test(msg)) {
-    const yearStart = new Date(now.getFullYear(), 0, 1);
-    return { fromIso: yearStart.toISOString(), label: "هذه السنة" };
+    return buildRange(`${today.slice(0, 4)}-01-01`, null, "هذه السنة");
   }
-  // ISO date directly in message: 2026-04-27 etc.
   const iso = msg.match(/\d{4}-\d{2}-\d{2}/);
-  if (iso) {
-    const day = new Date(iso[0]); day.setHours(0, 0, 0, 0);
-    const next = new Date(day); next.setDate(next.getDate() + 1);
-    return { fromIso: day.toISOString(), toIso: next.toISOString(), label: iso[0] };
-  }
+  if (iso) return buildRange(iso[0], addDays(iso[0], 1), iso[0]);
   return null;
 }
 
@@ -495,8 +543,8 @@ async function fetchContextData(
           if (branchId && !isAdmin) q = q.eq("policies.branch_id", branchId);
           // payment_date is a DATE column — fromIso/toIso ISO strings work
           // because PostgREST accepts both date and timestamp comparisons.
-          if (dateRange?.fromIso) q = q.gte("payment_date", dateRange.fromIso.slice(0, 10));
-          if (dateRange?.toIso) q = q.lt("payment_date", dateRange.toIso.slice(0, 10));
+          if (dateRange?.fromDate) q = q.gte("payment_date", dateRange.fromDate);
+          if (dateRange?.toDate) q = q.lt("payment_date", dateRange.toDate);
           return q;
         };
 
@@ -572,8 +620,8 @@ async function fetchContextData(
           .limit(limit);
 
         if (branchId && !isAdmin) query = query.eq("branch_id", branchId);
-        if (dateRange?.fromIso) query = query.gte("accident_date", dateRange.fromIso.slice(0, 10));
-        if (dateRange?.toIso) query = query.lt("accident_date", dateRange.toIso.slice(0, 10));
+        if (dateRange?.fromDate) query = query.gte("accident_date", dateRange.fromDate);
+        if (dateRange?.toDate) query = query.lt("accident_date", dateRange.toDate);
 
         const { data } = await query;
         if (data && data.length > 0) {
@@ -705,6 +753,111 @@ async function fetchContextData(
               `${i + 1}. ${c.claim_number || '-'} | ${(c.clients as any)?.full_name || '-'} | ${c.garage_name} | ${(c.insurance_companies as any)?.name_ar || '-'} | ₪${c.total_amount || 0} | ${statusLabels[c.status || ''] || c.status || '-'}`
             ).join('\n'));
         }
+      }
+
+      if (table === "accounting" && isAdmin) {
+        // Unified accounting snapshot — mirrors the /accounting page's
+        // CompaniesSection + BrokersSection + ExpensesSection. Admin
+        // gate is enforced here AND at the route level (PermissionRoute
+        // permission="page.accounting"), so workers never reach this
+        // branch even if they manage to phrase a financial question.
+        const dateRange = detectDateRange(userMessage);
+
+        // 1. Per-company balance: SUM(payed_for_company) on policies
+        //    minus SUM(outgoing settlements) plus SUM(incoming settlements).
+        let polQ = supabase.from("policies")
+          .select("company_id, payed_for_company, insurance_companies(name_ar, name)")
+          .eq("agent_id", agentId)
+          .is("deleted_at", null)
+          .not("company_id", "is", null);
+        if (branchId && !isAdmin) polQ = polQ.eq("branch_id", branchId);
+        if (dateRange?.fromIso) polQ = polQ.gte("created_at", dateRange.fromIso);
+        if (dateRange?.toIso) polQ = polQ.lt("created_at", dateRange.toIso);
+        const { data: polRows } = await polQ;
+
+        let csQ = supabase.from("company_settlements")
+          .select("company_id, total_amount, direction, insurance_companies(name_ar, name)")
+          .eq("agent_id", agentId);
+        if (branchId && !isAdmin) csQ = csQ.eq("branch_id", branchId);
+        if (dateRange?.fromDate) csQ = csQ.gte("settlement_date", dateRange.fromDate);
+        if (dateRange?.toDate) csQ = csQ.lt("settlement_date", dateRange.toDate);
+        const { data: csRows } = await csQ;
+
+        type CompanyAgg = { name: string; owed: number; paid: number; received: number };
+        const byCompany = new Map<string, CompanyAgg>();
+        for (const r of (polRows ?? []) as any[]) {
+          const id = r.company_id; if (!id) continue;
+          const name = (r.insurance_companies?.name_ar) || (r.insurance_companies?.name) || "—";
+          const cur = byCompany.get(id) ?? { name, owed: 0, paid: 0, received: 0 };
+          cur.owed += Number(r.payed_for_company ?? 0);
+          byCompany.set(id, cur);
+        }
+        for (const r of (csRows ?? []) as any[]) {
+          const id = r.company_id; if (!id) continue;
+          const name = (r.insurance_companies?.name_ar) || (r.insurance_companies?.name) || "—";
+          const cur = byCompany.get(id) ?? { name, owed: 0, paid: 0, received: 0 };
+          if (r.direction === "incoming") cur.received += Number(r.total_amount ?? 0);
+          else cur.paid += Number(r.total_amount ?? 0);
+          byCompany.set(id, cur);
+        }
+
+        const companyLines: string[] = [];
+        let totalNetOwed = 0;
+        for (const [, c] of byCompany) {
+          const net = c.owed - c.paid + c.received; // positive = we still owe them
+          totalNetOwed += net;
+          companyLines.push(
+            `- ${c.name}: مستحق عليها ₪${c.owed.toLocaleString()} | دفعنا ₪${c.paid.toLocaleString()} | استلمنا ₪${c.received.toLocaleString()} | الرصيد: ₪${net.toLocaleString()}${net > 0 ? ' (نحن مدينون)' : net < 0 ? ' (الشركة مدينة)' : ''}`
+          );
+        }
+
+        // 2. Per-broker balance from broker_settlements
+        let bsQ = supabase.from("broker_settlements")
+          .select("broker_id, total_amount, direction, brokers(name)")
+          .eq("agent_id", agentId);
+        if (branchId && !isAdmin) bsQ = bsQ.eq("branch_id", branchId);
+        if (dateRange?.fromDate) bsQ = bsQ.gte("settlement_date", dateRange.fromDate);
+        if (dateRange?.toDate) bsQ = bsQ.lt("settlement_date", dateRange.toDate);
+        const { data: bsRows } = await bsQ;
+
+        type BrokerAgg = { name: string; weOwe: number; brokerOwes: number };
+        const byBroker = new Map<string, BrokerAgg>();
+        for (const r of (bsRows ?? []) as any[]) {
+          const id = r.broker_id; if (!id) continue;
+          const name = r.brokers?.name || "—";
+          const cur = byBroker.get(id) ?? { name, weOwe: 0, brokerOwes: 0 };
+          if (r.direction === "we_owe") cur.weOwe += Number(r.total_amount ?? 0);
+          else if (r.direction === "broker_owes") cur.brokerOwes += Number(r.total_amount ?? 0);
+          byBroker.set(id, cur);
+        }
+        const brokerLines: string[] = [];
+        for (const [, b] of byBroker) {
+          const net = b.weOwe - b.brokerOwes;
+          brokerLines.push(
+            `- ${b.name}: نحن ندفع ₪${b.weOwe.toLocaleString()} | يدفع لنا ₪${b.brokerOwes.toLocaleString()} | الرصيد: ₪${net.toLocaleString()}${net > 0 ? ' (نحن ندين له)' : net < 0 ? ' (يدين لنا)' : ''}`
+          );
+        }
+
+        // 3. Expenses total
+        let exQ = supabase.from("expenses").select("amount").eq("agent_id", agentId);
+        if (branchId && !isAdmin) exQ = exQ.eq("branch_id", branchId);
+        if (dateRange?.fromDate) exQ = exQ.gte("expense_date", dateRange.fromDate);
+        if (dateRange?.toDate) exQ = exQ.lt("expense_date", dateRange.toDate);
+        const { data: exRows } = await exQ;
+        const expensesTotal = (exRows ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+
+        const scope = dateRange ? ` (${dateRange.label})` : '';
+        const sections = [`[المحاسبة${scope}]`];
+        if (companyLines.length > 0) {
+          sections.push(`شركات التأمين (إجمالي صافي مستحق علينا: ₪${totalNetOwed.toLocaleString()}):`);
+          sections.push(...companyLines);
+        }
+        if (brokerLines.length > 0) {
+          sections.push(`الوسطاء:`);
+          sections.push(...brokerLines);
+        }
+        sections.push(`المصاريف: ₪${expensesTotal.toLocaleString()}`);
+        parts.push(sections.join('\n'));
       }
 
       if (table === "leads") {
