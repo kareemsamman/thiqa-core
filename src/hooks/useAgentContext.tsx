@@ -267,7 +267,13 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const expiresAt = agent?.subscription_expires_at ? new Date(agent.subscription_expires_at) : null;
   const now = new Date();
 
-  const isSubscriptionActive = isThiqaSuperAdmin || isImpersonating || !agent ||
+  // Super admin bypass is gated by `!isImpersonating` so that when a
+  // Thiqa super admin enters impersonation mode this flag reflects the
+  // AGENT's real state — that's what makes the trial-expired / unpaid
+  // lockout testable from the Thiqa admin without logging in as the
+  // agent in a separate browser. Outside impersonation the super admin
+  // still bypasses (they live in /thiqa anyway).
+  const isSubscriptionActive = (isThiqaSuperAdmin && !isImpersonating) || !agent ||
     (subscriptionStatus === 'trial' && trialEndsAt && trialEndsAt > now) ||
     (subscriptionStatus === 'active' && (!expiresAt || expiresAt > now));
   const isSubscriptionPaused = subscriptionStatus === 'paused' || subscriptionStatus === 'suspended';

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { AlertTriangle, Pause, Phone, Crown, Check, MessageCircle, Zap, Shield, Rocket, Star, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { AlertTriangle, Pause, Phone, Crown, Check, MessageCircle, Zap, Shield, Rocket, Star, Loader2, ArrowRight, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,13 +29,23 @@ const PLAN_ICONS: Record<string, typeof Rocket> = {
 
 export default function SubscriptionExpired() {
   const { signOut } = useAuth();
-  const { agent, agentId, isSubscriptionPaused } = useAgentContext();
+  const { agent, agentId, isSubscriptionPaused, isImpersonating, impersonatedAgent, stopImpersonation } = useAgentContext();
+  const navigate = useNavigate();
   const [plans, setPlans] = useState<PlanData[]>([]);
   const [loading, setLoading] = useState(true);
   const [choosing, setChoosing] = useState(false);
 
   const isPaused = isSubscriptionPaused;
   const isCancelled = agent?.subscription_status === "cancelled";
+
+  // When a Thiqa super admin lands here while impersonating an agent,
+  // AppChrome doesn't render (this page is in PUBLIC_PATH_PREFIXES so
+  // the impersonation banner is suppressed). Render a localized exit
+  // banner here so the super admin can always get back to /thiqa.
+  const handleExitImpersonation = () => {
+    stopImpersonation();
+    navigate('/thiqa');
+  };
 
   useEffect(() => {
     (async () => {
@@ -84,7 +95,27 @@ export default function SubscriptionExpired() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-muted/40 to-background flex items-center justify-center p-4" dir="rtl">
+    <div className="min-h-screen bg-gradient-to-br from-muted/40 to-background flex flex-col" dir="rtl">
+      {isImpersonating && impersonatedAgent && (
+        <div className="bg-primary text-primary-foreground py-2 px-4 flex items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-2 text-sm">
+            <Building2 className="h-4 w-4" />
+            <span>أنت تتصفح نظام الوكيل:</span>
+            <span className="font-bold">{impersonatedAgent.name_ar || impersonatedAgent.name}</span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs border-white/40 text-white hover:bg-white/10 gap-1"
+            onClick={handleExitImpersonation}
+          >
+            <ArrowRight className="h-3 w-3" />
+            العودة للوحة ثقة
+          </Button>
+        </div>
+      )}
+
+      <div className="flex-1 flex items-center justify-center p-4">
       <div className="max-w-4xl w-full space-y-8">
         {/* Header */}
         <div className="text-center space-y-4">
@@ -188,6 +219,7 @@ export default function SubscriptionExpired() {
             تسجيل الخروج
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );

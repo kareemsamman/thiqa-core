@@ -69,8 +69,14 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/no-access" replace />;
   }
 
-  // Subscription expired or paused → redirect (super admins bypass)
-  if (!isSuperAdmin && !isSubscriptionActive) {
+  // Subscription expired or paused → redirect.
+  // Super admins normally bypass, BUT when they're impersonating an
+  // agent they should see exactly what the agent sees — including the
+  // lockout. Without this, you can't QA the expired-trial UX without
+  // logging in as the agent separately. The exit-impersonation banner
+  // is rendered inside SubscriptionExpired so the super admin can
+  // always get back to /thiqa.
+  if ((!isSuperAdmin || isImpersonating) && !isSubscriptionActive) {
     return <Navigate to="/subscription-expired" replace />;
   }
 
