@@ -273,9 +273,36 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   // lockout testable from the Thiqa admin without logging in as the
   // agent in a separate browser. Outside impersonation the super admin
   // still bypasses (they live in /thiqa anyway).
-  const isSubscriptionActive = (isThiqaSuperAdmin && !isImpersonating) || !agent ||
-    (subscriptionStatus === 'trial' && trialEndsAt && trialEndsAt > now) ||
-    (subscriptionStatus === 'active' && (!expiresAt || expiresAt > now));
+  //
+  // "Free period" can show up two ways depending on how the agent was
+  // created:
+  //   * subscription_status='trial'  with trial_ends_at
+  //   * subscription_status='active' with monthly_price=0 + trial_ends_at
+  //     (this is the shape the sidebar badge labels as "تجربة مجانية")
+  // Both expire when trial_ends_at passes. Without this branch the
+  // 'active'-with-zero-price case slipped through the paid-expiry
+  // clause below (no expires set → treated as forever-active) and the
+  // agent never got bounced to /subscription-expired even though their
+  // trial badge already showed "منتهي".
+  //
+  // A truly permanent free agent (Thiqa-granted complimentary) has
+  // monthly_price=0 with NO trial_ends_at — that case stays active
+  // forever, matching the old behavior.
+  const isInFreePeriod =
+    subscriptionStatus === 'trial' ||
+    (subscriptionStatus === 'active' && (agent?.monthly_price ?? 0) === 0);
+  const freeStillActive =
+    isInFreePeriod && (!trialEndsAt || trialEndsAt > now);
+  const paidStillActive =
+    subscriptionStatus === 'active' &&
+    (agent?.monthly_price ?? 0) > 0 &&
+    (!expiresAt || expiresAt > now);
+
+  const isSubscriptionActive =
+    (isThiqaSuperAdmin && !isImpersonating) ||
+    !agent ||
+    freeStillActive ||
+    paidStillActive;
   const isSubscriptionPaused = subscriptionStatus === 'paused' || subscriptionStatus === 'suspended';
 
   const hasFeature = (featureKey: string): boolean => {
