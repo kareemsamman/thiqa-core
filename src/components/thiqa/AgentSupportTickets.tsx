@@ -43,8 +43,9 @@ const STATUS_TONE: Record<TicketRow["status"], string> = {
  * Per-agent support ticket list embedded inside ThiqaAgentDetail.
  * Mirrors the global inbox layout but pre-scoped to one agent_id, so
  * the admin doesn't have to filter manually when they're already
- * looking at a specific agent. Click-through goes to /support/:ticketId
- * which super-admins can read and reply on (with the status changer).
+ * looking at a specific agent. Click-through goes to the admin-side
+ * /thiqa/support/:ticketId path so the super-admin route guard
+ * doesn't bounce the user back to /thiqa.
  */
 export function AgentSupportTickets({ agentId }: { agentId: string }) {
   const navigate = useNavigate();
@@ -123,7 +124,7 @@ export function AgentSupportTickets({ agentId }: { agentId: string }) {
               return (
                 <div
                   key={t.id}
-                  onClick={() => navigate(`/support/${t.id}`)}
+                  onClick={() => navigate(`/thiqa/support/${t.id}`)}
                   className="p-3 rounded-xl border bg-background hover:bg-muted/30 hover:border-primary/30 cursor-pointer transition-all"
                 >
                   <div className="flex items-center gap-2 flex-wrap">

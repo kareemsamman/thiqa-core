@@ -588,6 +588,11 @@ const App = () => (
                   <Support />
                 </ProtectedRoute>
               } />
+              {/* Admin-side ticket detail: same TicketThread component
+                  but lives under /thiqa/* so super-admins (who are
+                  fenced into /thiqa by ProtectedRoute) can actually
+                  open a ticket without being bounced back. */}
+              <Route path="/thiqa/support/:ticketId" element={<ThiqaAdminRoute><Support /></ThiqaAdminRoute>} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

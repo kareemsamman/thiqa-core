@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { format } from "date-fns";
 import { ArrowRight, LifeBuoy, Loader2, Paperclip, Plus, Send, X, Image as ImageIcon, Video, FileText, Download, ShieldCheck } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -415,7 +415,9 @@ function CreateTicketDialog({
 // ─────────────────────────────────────────────────────────────────
 function TicketThread({ ticketId }: { ticketId: string }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isSuperAdmin } = useAuth();
+  const fromAdmin = location.pathname.startsWith("/thiqa");
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [attachmentsByMessage, setAttachmentsByMessage] = useState<Record<string, Attachment[]>>({});
@@ -579,12 +581,11 @@ function TicketThread({ ticketId }: { ticketId: string }) {
     toast.success("تم تحديث الحالة");
   };
 
-  // Where the back button goes depends on how the admin landed
-  // here. Super-admins jumping from the global inbox or an agent
-  // detail tab want to go back there, not to /support (which is
-  // the agent-side list). Use document.referrer to keep it simple
-  // — fall back to /support otherwise.
-  const backTarget = isSuperAdmin ? (document.referrer.includes("/thiqa") ? -1 : "/thiqa/support") : "/support";
+  // Back target follows the route the user is actually on. Super-admins
+  // open tickets via /thiqa/support/:id (admin path) — they go back to
+  // the global inbox. Agent-side users use /support/:id and go back to
+  // their own list.
+  const backTarget = fromAdmin ? "/thiqa/support" : "/support";
 
   return (
     <MainLayout>
@@ -595,7 +596,7 @@ function TicketThread({ ticketId }: { ticketId: string }) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => typeof backTarget === "number" ? navigate(backTarget) : navigate(backTarget)}
+            onClick={() => navigate(backTarget)}
             className="gap-1.5"
           >
             <ArrowRight className="h-4 w-4" />

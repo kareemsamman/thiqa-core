@@ -36,21 +36,31 @@ interface SmtpSettings {
   user: string;
   password: string;
   senderName: string;
+  fromEmail: string;
 }
 
 async function getSmtpSettings(adminClient: any): Promise<SmtpSettings> {
   const { data } = await adminClient
     .from("thiqa_platform_settings")
     .select("setting_key, setting_value")
-    .in("setting_key", ["smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_sender_name"]);
+    .in("setting_key", ["smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_sender_name", "smtp_from_email"]);
   const map: Record<string, string> = {};
   (data || []).forEach((r: any) => { map[r.setting_key] = r.setting_value || ""; });
+  const user = map.smtp_user || Deno.env.get("THIQA_SMTP_USER") || "";
   return {
     host: map.smtp_host || Deno.env.get("THIQA_SMTP_HOST") || "smtp.hostinger.com",
     port: parseInt(map.smtp_port || Deno.env.get("THIQA_SMTP_PORT") || "465", 10),
-    user: map.smtp_user || Deno.env.get("THIQA_SMTP_USER") || "",
+    user,
     password: map.smtp_password || Deno.env.get("THIQA_SMTP_PASSWORD") || "",
     senderName: map.smtp_sender_name || "Thiqa Support",
+    // From-address must differ from any recipient or Gmail/Outlook
+    // collapses the thread into "Note to self". The support inbox is
+    // both the SMTP login and a recipient, so the From defaults to a
+    // sibling alias (no-reply@) on the same domain. Override via the
+    // smtp_from_email platform setting if needed.
+    fromEmail: map.smtp_from_email
+      || Deno.env.get("THIQA_SMTP_FROM_EMAIL")
+      || (user.includes("@") ? `no-reply@${user.split("@")[1]}` : user),
   };
 }
 
@@ -356,7 +366,9 @@ Deno.serve(async (req) => {
     });
 
     await transporter.sendMail({
-      from: `"${smtp.senderName}" <${smtp.user}>`,
+      from: `"${smtp.senderName}" <${smtp.fromEmail}>`,
+      // Replies should land in the support inbox, not the no-reply alias.
+      replyTo: smtp.user,
       to: plan.to.join(", "),
       subject: plan.subject,
       text: `${plan.intro}\n\nرقم التذكرة: ${ticket.ticket_number}\nالوكيل: ${agentName}\nالموضوع: ${ticket.subject}\n${latestMessage ? `\n${latestMessage}\n` : ""}\nرابط التذكرة: ${link}`,
