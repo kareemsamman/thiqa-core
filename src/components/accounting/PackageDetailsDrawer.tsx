@@ -22,13 +22,13 @@ interface Props {
   onSubPolicySaved?: (subPolicyId: string, patch: SubPatch) => void;
 }
 
-type SubPatch = {
+interface SubPatch {
   insurance_price?: number;
   payed_for_company?: number;
   profit?: number;
   office_commission?: number;
   broker_buy_price?: number;
-} & Record<string, unknown>;
+}
 
 export function PackageDetailsDrawer({ open, onOpenChange, row, mode, onSubPolicySaved }: Props) {
   // Per-sub-policy local edits, used so the drawer reflects what the
