@@ -147,6 +147,7 @@ export const navigationGroups: NavGroup[] = [
       { name: "الوكلاء", href: "/thiqa/agents", icon: Buildings, thiqaSuperAdminOnly: true },
       { name: "سجل المدفوعات", href: "/thiqa/payments", icon: CreditCard, thiqaSuperAdminOnly: true },
       { name: "إعلانات النظام", href: "/thiqa/announcements", icon: Megaphone, thiqaSuperAdminOnly: true },
+      { name: "الدعم", href: "/thiqa/support", icon: Headset, thiqaSuperAdminOnly: true },
       { name: "إعدادات المنصة", href: "/thiqa/settings", icon: Gear, thiqaSuperAdminOnly: true },
       { name: "تحليلات الموقع", href: "/thiqa/analytics", icon: ChartBar, thiqaSuperAdminOnly: true },
     ],

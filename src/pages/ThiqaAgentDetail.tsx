@@ -22,7 +22,9 @@ import {
   MessageSquare, Palette, Users, Shield, Phone, Mail, Image, Bot,
   Upload, Trash2, Eye, EyeOff, Plus, UserPlus, UserMinus, CalendarIcon,
   ShoppingCart, Tag, Copy, CheckCircle2, XCircle, BarChart3, Database,
+  LifeBuoy,
 } from "lucide-react";
+import { AgentSupportTickets } from "@/components/thiqa/AgentSupportTickets";
 import { ThiqaAgentSearch } from "@/components/thiqa/ThiqaAgentSearch";
 import { Search } from "lucide-react";
 import { AgentAddonsManager } from "@/components/thiqa/AgentAddonsManager";
@@ -1241,6 +1243,7 @@ export default function ThiqaAgentDetail() {
                 { v: 'addons', icon: ShoppingCart, label: 'الإضافات' },
                 { v: 'discounts', icon: Tag, label: 'الخصومات' },
                 { v: 'payments', icon: CreditCard, label: 'المدفوعات' },
+                { v: 'support', icon: LifeBuoy, label: 'الدعم' },
                 { v: 'import', icon: Upload, label: 'استيراد بيانات' },
                 { v: 'stats', icon: BarChart3, label: 'إحصائيات' },
               ].map(({ v, icon: Icon, label }) => (
@@ -2020,6 +2023,11 @@ export default function ThiqaAgentDetail() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ═══════════ SUPPORT TAB ═══════════ */}
+          <TabsContent value="support" className="space-y-4">
+            <AgentSupportTickets agentId={agentId!} />
           </TabsContent>
 
           {/* ═══════════ IMPORT TAB ═══════════ */}

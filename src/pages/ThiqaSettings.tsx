@@ -16,7 +16,8 @@ import type { Json } from "@/integrations/supabase/types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Settings, Mail, Save, Loader2, Eye, EyeOff, Shield, Send, CheckCircle2, XCircle, HardDrive, CreditCard, Plus, Trash2, GripVertical, Pencil, Bot, Users, MessageCircle, Phone } from "lucide-react";
+import { Settings, Mail, Save, Loader2, Eye, EyeOff, Shield, Send, CheckCircle2, XCircle, HardDrive, CreditCard, Plus, Trash2, GripVertical, Pencil, Bot, Users, MessageCircle, Phone, LifeBuoy } from "lucide-react";
+import { SupportCategoriesTab } from "@/components/thiqa/SupportCategoriesTab";
 import { SmsProviderConfig, type SmsProviderChoice } from "@/components/sms/SmsProviderConfig";
 
 function useThiqaPlatformSettings() {
@@ -1696,6 +1697,10 @@ export default function ThiqaSettings() {
               <Settings className="h-4 w-4" />
               إعدادات الوكلاء
             </TabsTrigger>
+            <TabsTrigger value="support-categories" className="gap-2">
+              <LifeBuoy className="h-4 w-4" />
+              فئات الدعم
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="general">
@@ -1720,6 +1725,9 @@ export default function ThiqaSettings() {
 
           <TabsContent value="agent-defaults">
             <AgentDefaultsTab />
+          </TabsContent>
+          <TabsContent value="support-categories">
+            <SupportCategoriesTab />
           </TabsContent>
         </Tabs>
         </div>

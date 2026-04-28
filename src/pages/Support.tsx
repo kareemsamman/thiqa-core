@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { format } from "date-fns";
-import { ArrowRight, LifeBuoy, Loader2, Paperclip, Plus, Send, X, Image as ImageIcon, Video, FileText, Download } from "lucide-react";
+import { ArrowRight, LifeBuoy, Loader2, Paperclip, Plus, Send, X, Image as ImageIcon, Video, FileText, Download, ShieldCheck } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -421,7 +421,7 @@ function CreateTicketDialog({
 // ─────────────────────────────────────────────────────────────────
 function TicketThread({ ticketId }: { ticketId: string }) {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [attachmentsByMessage, setAttachmentsByMessage] = useState<Record<string, Attachment[]>>({});
@@ -567,19 +567,65 @@ function TicketThread({ ticketId }: { ticketId: string }) {
 
   const closed = ticket.status === "done" || ticket.status === "cancelled";
 
+  const updateStatus = async (newStatus: Ticket["status"]) => {
+    if (!ticket) return;
+    const { error } = await supabase
+      .from("support_tickets")
+      .update({ status: newStatus })
+      .eq("id", ticket.id);
+    if (error) {
+      toast.error("تعذّر تحديث الحالة");
+      return;
+    }
+    setTicket({ ...ticket, status: newStatus });
+    // Notify the requester via SMTP that their ticket moved.
+    supabase.functions.invoke("support-notify", {
+      body: { ticket_id: ticket.id, event: "status_changed", new_status: newStatus },
+    }).catch(() => {});
+    toast.success("تم تحديث الحالة");
+  };
+
+  // Where the back button goes depends on how the admin landed
+  // here. Super-admins jumping from the global inbox or an agent
+  // detail tab want to go back there, not to /support (which is
+  // the agent-side list). Use document.referrer to keep it simple
+  // — fall back to /support otherwise.
+  const backTarget = isSuperAdmin ? (document.referrer.includes("/thiqa") ? -1 : "/thiqa/support") : "/support";
+
   return (
     <MainLayout>
       <Header title={`تذكرة ${ticket.ticket_number}`} subtitle={ticket.subject} />
 
       <div className="md:p-6 space-y-4" dir="rtl">
         <div className="flex items-center gap-3 flex-wrap">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/support")} className="gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => typeof backTarget === "number" ? navigate(backTarget) : navigate(backTarget)}
+            className="gap-1.5"
+          >
             <ArrowRight className="h-4 w-4" />
-            رجوع لقائمة التذاكر
+            رجوع
           </Button>
           <Badge variant="outline" className={cn("font-medium", STATUS_TONE[ticket.status])}>
             {STATUS_LABEL[ticket.status]}
           </Badge>
+          {isSuperAdmin && (
+            <div className="flex items-center gap-2 mr-auto">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <Select value={ticket.status} onValueChange={(v) => updateStatus(v as Ticket["status"])}>
+                <SelectTrigger className="h-8 w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">{STATUS_LABEL.open}</SelectItem>
+                  <SelectItem value="in_progress">{STATUS_LABEL.in_progress}</SelectItem>
+                  <SelectItem value="done">{STATUS_LABEL.done}</SelectItem>
+                  <SelectItem value="cancelled">{STATUS_LABEL.cancelled}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         <Card className="rounded-2xl shadow-sm">
@@ -623,7 +669,7 @@ function TicketThread({ ticketId }: { ticketId: string }) {
           </CardContent>
         </Card>
 
-        {closed ? (
+        {closed && !isSuperAdmin ? (
           <Card className="rounded-2xl border-dashed">
             <CardContent className="p-4 text-sm text-muted-foreground text-center">
               هذه التذكرة {STATUS_LABEL[ticket.status]}. افتح تذكرة جديدة إذا احتجت لمزيد من المساعدة.

@@ -97,6 +97,7 @@ const ThiqaDashboard = lazy(() => import("./pages/ThiqaDashboard"));
 const ThiqaSettings = lazy(() => import("./pages/ThiqaSettings"));
 const ThiqaLandingCMS = lazy(() => import("./pages/ThiqaLandingCMS"));
 const ThiqaAnalytics = lazy(() => import("./pages/ThiqaAnalytics"));
+const ThiqaSupport = lazy(() => import("./pages/ThiqaSupport"));
 const Landing = lazy(() => import("./pages/Landing"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const Pricing = lazy(() => import("./pages/Pricing"));
@@ -296,6 +297,7 @@ const App = () => (
               <Route path="/thiqa/settings" element={<ThiqaAdminRoute><ThiqaSettings /></ThiqaAdminRoute>} />
               <Route path="/thiqa/landing-cms" element={<ThiqaAdminRoute><ThiqaLandingCMS /></ThiqaAdminRoute>} />
               <Route path="/thiqa/analytics" element={<ThiqaAdminRoute><ThiqaAnalytics /></ThiqaAdminRoute>} />
+              <Route path="/thiqa/support" element={<ThiqaAdminRoute><ThiqaSupport /></ThiqaAdminRoute>} />
               <Route path="/" element={<Landing />} />
               <Route path="/dashboard" element={
                 <PermissionRoute permission="page.dashboard" feature="dashboard">
