@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Search, Building2, Activity, Clock, AlertCircle, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInCalendarDays } from "date-fns";
 import { cn } from "@/lib/utils";
 
 interface Agent {
@@ -47,7 +47,7 @@ function activityChip(lastActivityAt: string | null | undefined) {
   if (!lastActivityAt) {
     return { label: "لم يدخل أبداً", className: "bg-red-500/10 border-red-500/40 text-red-700 dark:text-red-300" };
   }
-  const days = differenceInDays(new Date(), new Date(lastActivityAt));
+  const days = differenceInCalendarDays(new Date(), new Date(lastActivityAt));
   let label: string;
   if (days <= 0) label = "اليوم";
   else if (days === 1) label = "أمس";
@@ -67,7 +67,7 @@ function activityChip(lastActivityAt: string | null | undefined) {
 
 function isDormant(lastActivityAt: string | null | undefined) {
   if (!lastActivityAt) return false;
-  return differenceInDays(new Date(), new Date(lastActivityAt)) > 30;
+  return differenceInCalendarDays(new Date(), new Date(lastActivityAt)) > 30;
 }
 
 export default function ThiqaAgents() {
@@ -148,7 +148,7 @@ export default function ThiqaAgents() {
         never += 1;
         return;
       }
-      const d = differenceInDays(new Date(), new Date(a.last_activity_at));
+      const d = differenceInCalendarDays(new Date(), new Date(a.last_activity_at));
       if (d <= 7) active += 1;
       else if (d > 30) dormant += 1;
     });
@@ -166,7 +166,7 @@ export default function ThiqaAgents() {
       if (activityFilter === "all") return true;
       if (activityFilter === "never") return !a.last_activity_at;
       if (activityFilter === "active") {
-        return a.last_activity_at && differenceInDays(new Date(), new Date(a.last_activity_at)) <= 7;
+        return a.last_activity_at && differenceInCalendarDays(new Date(), new Date(a.last_activity_at)) <= 7;
       }
       if (activityFilter === "dormant") return isDormant(a.last_activity_at);
       return true;
@@ -191,7 +191,7 @@ export default function ThiqaAgents() {
     return <StatusBadge status={agent.subscription_status} />;
   };
 
-  const isNew = (createdAt: string) => differenceInDays(new Date(), new Date(createdAt)) <= 7;
+  const isNew = (createdAt: string) => differenceInCalendarDays(new Date(), new Date(createdAt)) <= 7;
 
   return (
     <MainLayout>
