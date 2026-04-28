@@ -25,6 +25,7 @@ import {
   LifeBuoy,
 } from "lucide-react";
 import { AgentSupportTickets } from "@/components/thiqa/AgentSupportTickets";
+import { AgentUsageStats } from "@/components/thiqa/AgentUsageStats";
 import { ThiqaAgentSearch } from "@/components/thiqa/ThiqaAgentSearch";
 import { Search } from "lucide-react";
 import { AgentAddonsManager } from "@/components/thiqa/AgentAddonsManager";
@@ -105,7 +106,7 @@ export default function ThiqaAgentDetail() {
   const [payments, setPayments] = useState<any[]>([]);
   const [unbilledOverages, setUnbilledOverages] = useState<any[]>([]);
   const [includeOveragesInPayment, setIncludeOveragesInPayment] = useState(false);
-  const [dbPlans, setDbPlans] = useState<{plan_key: string; name: string; monthly_price: number; yearly_price: number | null}[]>([]);
+  const [dbPlans, setDbPlans] = useState<{plan_key: string; name: string; name_ar: string | null; monthly_price: number; yearly_price: number | null}[]>([]);
   const [agentStats, setAgentStats] = useState<{clients: number; cars: number; policies: number} | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [agentUsers, setAgentUsers] = useState<any[]>([]);
@@ -184,7 +185,7 @@ export default function ThiqaAgentDetail() {
         supabase.from('site_settings').select('*').eq('agent_id', agentId!).maybeSingle(),
         supabase.from('user_roles').select('user_id, role').eq('agent_id', agentId!),
         supabase.from('branches').select('id, name, name_ar').eq('agent_id', agentId!),
-        supabase.from('subscription_plans').select('plan_key, name, monthly_price, yearly_price').eq('is_active', true).order('sort_order'),
+        supabase.from('subscription_plans').select('plan_key, name, name_ar, monthly_price, yearly_price').eq('is_active', true).order('sort_order'),
         supabase
           .from('agent_usage_overages' as any)
           .select('id, usage_type, extra_count, unit_price, total_amount, created_at')
@@ -1173,7 +1174,10 @@ export default function ThiqaAgentDetail() {
                     {agent.subscription_status === 'trial' ? 'تجربة مجانية' : agent.subscription_status === 'active' ? (agent.monthly_price === 0 ? 'تجربة مجانية' : 'فعال') : agent.subscription_status === 'paused' ? 'متوقف مؤقتاً' : agent.subscription_status === 'suspended' ? 'معلّق' : agent.subscription_status === 'cancelled' ? 'ملغي' : 'منتهي'}
                   </Badge>
                   <Badge variant="outline" className="text-[10px] md:text-xs">
-                    {dbPlans.find(p => p.plan_key === agent.plan)?.name || agent.plan}
+                    {(() => {
+                      const p = dbPlans.find((p) => p.plan_key === agent.plan);
+                      return p?.name_ar || p?.name || agent.plan;
+                    })()}
                   </Badge>
                   {agent.subscription_status !== 'trial' && agent.monthly_price !== 0 && (
                     <Badge variant="outline" className={cn("text-[10px] md:text-xs", agent.billing_cycle === 'yearly' && "bg-blue-500/10 border-blue-500/40 text-blue-700 dark:text-blue-300")}>
@@ -1296,7 +1300,7 @@ export default function ThiqaAgentDetail() {
                             const yearly = p.yearly_price ?? p.monthly_price * 12;
                             return (
                               <SelectItem key={p.plan_key} value={p.plan_key}>
-                                {p.name} — ₪{p.monthly_price}/شهر · ₪{yearly}/سنة
+                                {p.name_ar || p.name} — ₪{p.monthly_price}/شهر · ₪{yearly}/سنة
                               </SelectItem>
                             );
                           }) : (
@@ -2151,44 +2155,7 @@ export default function ThiqaAgentDetail() {
 
           {/* ═══════════ STATS TAB ═══════════ */}
           <TabsContent value="stats">
-            {/* Usage limits are edited on the main tab via AgentLimitOverrides,
-                which writes to agents.*_limit_override — the source both the
-                DB triggers and the edge functions read. The old editor that
-                used to live here wrote to agent_usage_limits, a leftover
-                table that no longer drives enforcement. */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />إحصائيات الوكيل</CardTitle>
-                <CardDescription>عدد العملاء والسيارات والمعاملات المسجلة</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {statsLoading ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {[1,2,3].map(i => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
-                  </div>
-                ) : agentStats ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card className="border-2 text-center p-6">
-                      <Users className="h-8 w-8 mx-auto mb-2 text-primary" />
-                      <p className="text-3xl font-bold">{agentStats.clients.toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground mt-1">عملاء</p>
-                    </Card>
-                    <Card className="border-2 text-center p-6">
-                      <Building2 className="h-8 w-8 mx-auto mb-2 text-primary" />
-                      <p className="text-3xl font-bold">{agentStats.cars.toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground mt-1">سيارات</p>
-                    </Card>
-                    <Card className="border-2 text-center p-6">
-                      <Shield className="h-8 w-8 mx-auto mb-2 text-primary" />
-                      <p className="text-3xl font-bold">{agentStats.policies.toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground mt-1">معاملات تأمين</p>
-                    </Card>
-                  </div>
-                ) : (
-                  <p className="text-center text-muted-foreground py-8">لا توجد بيانات</p>
-                )}
-              </CardContent>
-            </Card>
+            <AgentUsageStats agentId={agentId!} />
           </TabsContent>
         </Tabs>
       </div>
