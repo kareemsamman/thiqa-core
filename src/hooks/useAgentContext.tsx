@@ -46,6 +46,11 @@ interface AgentContextType {
   agentId: string | null;
   agent: AgentInfo | null;
   planInfo: PlanInfo | null;
+  /** Plan info for agent.pending_plan when set — same shape as
+   *  planInfo. Loaded so trial agents with an upcoming upgrade can
+   *  preview the post-trial limits / features without us needing a
+   *  second round-trip on the /subscription page. */
+  pendingPlanInfo: PlanInfo | null;
   agentFeatures: Record<string, boolean>;
   loading: boolean;
   isSubscriptionActive: boolean;
@@ -79,6 +84,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const [agent, setAgent] = useState<AgentInfo | null>(null);
   const [agentFeatures, setAgentFeatures] = useState<Record<string, boolean>>({});
   const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null);
+  const [pendingPlanInfo, setPendingPlanInfo] = useState<PlanInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [impersonatedAgentId, setImpersonatedAgentId] = useState<string | null>(
     () => sessionStorage.getItem(IMPERSONATION_KEY)
@@ -101,6 +107,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     setAgent(null);
     setAgentFeatures({});
     setPlanInfo(null);
+    setPendingPlanInfo(null);
   }, []);
 
   // Shared loader — fetches agent + plan + feature flags for a given
@@ -135,30 +142,51 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             .eq('is_active', true)
             .maybeSingle();
 
-          if (planRow) {
-            const rawDefaults = planRow.default_features as unknown;
+          const mapPlanRow = (row: any): PlanInfo => {
+            const rawDefaults = row.default_features as unknown;
             const defaults =
               typeof rawDefaults === 'string'
                 ? JSON.parse(rawDefaults)
                 : (rawDefaults as Record<string, boolean> | null) ?? {};
-            setPlanInfo({
-              plan_key: planRow.plan_key,
-              name: planRow.name,
-              name_ar: planRow.name_ar,
-              badge: planRow.badge,
-              monthly_price: Number(planRow.monthly_price),
-              yearly_price: planRow.yearly_price !== null ? Number(planRow.yearly_price) : null,
-              users_limit: planRow.users_limit,
-              branches_limit: planRow.branches_limit,
-              policies_limit: planRow.policies_limit,
-              sms_limit: planRow.sms_limit,
-              marketing_sms_limit: planRow.marketing_sms_limit,
-              ai_limit: planRow.ai_limit,
-              support_sla_hours: planRow.support_sla_hours,
+            return {
+              plan_key: row.plan_key,
+              name: row.name,
+              name_ar: row.name_ar,
+              badge: row.badge,
+              monthly_price: Number(row.monthly_price),
+              yearly_price: row.yearly_price !== null ? Number(row.yearly_price) : null,
+              users_limit: row.users_limit,
+              branches_limit: row.branches_limit,
+              policies_limit: row.policies_limit,
+              sms_limit: row.sms_limit,
+              marketing_sms_limit: row.marketing_sms_limit,
+              ai_limit: row.ai_limit,
+              support_sla_hours: row.support_sla_hours,
               default_features: defaults,
-            });
+            };
+          };
+
+          setPlanInfo(planRow ? mapPlanRow(planRow) : null);
+
+          // Also load the pending plan when set — typical case is a
+          // free_trial agent who picked Pro for after the trial. We
+          // expose pendingPlanInfo so the /subscription page can show
+          // both "current limits" and "upcoming limits" without doing
+          // its own lookup. Skip if pending equals current (no real
+          // pending change) or if it's missing.
+          if (
+            agentData.pending_plan &&
+            agentData.pending_plan !== agentData.plan
+          ) {
+            const { data: pendingRow } = await supabase
+              .from('subscription_plans')
+              .select('plan_key, name, name_ar, badge, monthly_price, yearly_price, users_limit, branches_limit, policies_limit, sms_limit, marketing_sms_limit, ai_limit, support_sla_hours, default_features')
+              .eq('plan_key', agentData.pending_plan)
+              .eq('is_active', true)
+              .maybeSingle();
+            setPendingPlanInfo(pendingRow ? mapPlanRow(pendingRow) : null);
           } else {
-            setPlanInfo(null);
+            setPendingPlanInfo(null);
           }
         }
 
@@ -348,6 +376,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       agentId,
       agent,
       planInfo,
+      pendingPlanInfo,
       agentFeatures,
       loading,
       isSubscriptionActive,

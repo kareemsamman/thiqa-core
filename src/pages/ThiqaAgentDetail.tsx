@@ -102,6 +102,7 @@ export default function ThiqaAgentDetail() {
   const [savingSection, setSavingSection] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
+  const [paymentDiscount, setPaymentDiscount] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserName, setNewUserName] = useState("");
@@ -503,13 +504,39 @@ export default function ThiqaAgentDetail() {
       .eq('agent_id', agent.id)
       .eq('status', 'active');
 
+    // Look up an active discount whose date window covers the
+    // payment_date so we can attach the audit FK without making the
+    // admin paste the discount id manually. If multiple match, the
+    // one with the latest starts_at wins (most recently negotiated).
+    const paymentDateStr = format(paymentDate, 'yyyy-MM-dd');
+    let activeDiscountId: string | null = null;
+    const { data: discountRows } = await supabase
+      .from('agent_discounts')
+      .select('id, starts_at, ends_at')
+      .eq('agent_id', agent.id)
+      .lte('starts_at', paymentDateStr)
+      .gte('ends_at', paymentDateStr)
+      .order('starts_at', { ascending: false })
+      .limit(1);
+    if (discountRows && discountRows.length > 0) {
+      activeDiscountId = discountRows[0].id as string;
+    }
+
+    const discountAmount = Number(paymentDiscount) || 0;
+
     const { data: inserted, error } = await supabase.from('agent_subscription_payments').insert({
       agent_id: agent.id, amount: parseFloat(paymentAmount), plan: agent.plan,
-      payment_date: format(paymentDate, 'yyyy-MM-dd'),
+      payment_date: paymentDateStr,
       period_start: format(periodStart, 'yyyy-MM-dd'),
       period_end: format(periodEnd, 'yyyy-MM-dd'),
       received_by: user?.id, notes: paymentNotes || null,
       status: 'active',
+      // Audit fields — discount_id is auto-resolved from the active
+      // window; admin types the savings amount directly so historical
+      // reports stay correct even if the discount row gets edited or
+      // the plan price changes later.
+      discount_id: activeDiscountId,
+      discount_amount: discountAmount,
     } as any).select('id').single();
 
     // Kick off the PDF invoice generation in the background — this
@@ -549,7 +576,7 @@ export default function ThiqaAgentDetail() {
       setAgent(prev => prev ? { ...prev, subscription_expires_at: new Date(periodEndStr).toISOString(), subscription_status: 'active' } : null);
 
       toast.success('تم تسجيل الدفعة');
-      setPaymentAmount(""); setPaymentNotes(""); setPaymentDate(new Date());
+      setPaymentAmount(""); setPaymentNotes(""); setPaymentDiscount(""); setPaymentDate(new Date());
       setIncludeOveragesInPayment(false);
       const d = new Date(); setPeriodStart(d); const e = new Date(d); e.setMonth(e.getMonth() + 1); setPeriodEnd(e);
       fetchAll();
@@ -1709,10 +1736,23 @@ export default function ThiqaAgentDetail() {
                 <CardTitle className="flex items-center gap-2"><CreditCard className="h-5 w-5" />سجل المدفوعات</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
                   <div>
                     <Label>المبلغ (₪)</Label>
                     <Input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder={`${agent.monthly_price || 300}`} />
+                  </div>
+                  <div>
+                    <Label className="flex items-center gap-1">
+                      الخصم (₪)
+                      <span className="text-[10px] text-muted-foreground">— اختياري</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      value={paymentDiscount}
+                      onChange={e => setPaymentDiscount(e.target.value)}
+                      placeholder="0"
+                      title="مقدار الخصم المطبّق على هذه الدفعة. يُحفظ كسجل تدقيقي حتى لو تم تعديل الخصم لاحقاً."
+                    />
                   </div>
                   <div>
                     <Label>من تاريخ</Label>
