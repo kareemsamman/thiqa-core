@@ -724,7 +724,7 @@ async function findExistingCheque(
 ): Promise<string | null> {
   if (!chequeNumber || chequeNumber.length < 4) return null;
   const matchBank = <T,>(p: PromiseLike<T>) => p;
-  const eqBank = (q: ReturnType<typeof supabase.from>) =>
+  const eqBank = (q: any) =>
     bankCode ? q.eq('bank_code', bankCode) : q.is('bank_code', null);
   const [{ data: cs }, { data: bs }, { data: ex }, { data: pp }] = await Promise.all([
     matchBank(
