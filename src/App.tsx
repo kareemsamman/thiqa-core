@@ -88,6 +88,7 @@ const ActivityLog = lazy(() => import("./pages/ActivityLog"));
 const BrandingSettings = lazy(() => import("./pages/BrandingSettings"));
 const SubscriptionExpired = lazy(() => import("./pages/SubscriptionExpired"));
 const Subscription = lazy(() => import("./pages/Subscription"));
+const Support = lazy(() => import("./pages/Support"));
 const ThiqaAgents = lazy(() => import("./pages/ThiqaAgents"));
 const ThiqaAgentDetail = lazy(() => import("./pages/ThiqaAgentDetail"));
 const ThiqaCreateAgent = lazy(() => import("./pages/ThiqaCreateAgent"));
@@ -571,6 +572,18 @@ const App = () => (
               <Route path="/subscription" element={
                 <ProtectedRoute>
                   <Subscription />
+                </ProtectedRoute>
+              } />
+              {/* Support — open to every authenticated agent user.
+                  No permission gate so even a worker can flag a bug. */}
+              <Route path="/support" element={
+                <ProtectedRoute>
+                  <Support />
+                </ProtectedRoute>
+              } />
+              <Route path="/support/:ticketId" element={
+                <ProtectedRoute>
+                  <Support />
                 </ProtectedRoute>
               } />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

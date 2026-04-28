@@ -31,6 +31,7 @@ import {
   Gear,
   Palette,
   Crown,
+  Headset,
 } from "@phosphor-icons/react";
 
 export interface NavItem {
@@ -131,6 +132,11 @@ export const navigationGroups: NavGroup[] = [
       { name: "خدمات الطريق", href: "/admin/road-services", icon: Truck, featureKey: 'road_services', permissionKey: 'page.road_services' },
       { name: "إعفاء رسوم الحادث", href: "/admin/accident-fee-services", icon: Shield, featureKey: 'accident_fees', permissionKey: 'page.accident_fees' },
       { name: "العلامة التجارية", href: "/admin/branding", icon: Palette, permissionKey: 'page.branding' },
+      // Support — open to every authenticated agent user. No
+      // permissionKey gate: even a worker should be able to flag a
+      // bug. Admin still sees every ticket their team opens via the
+      // visibility rule in support_tickets RLS.
+      { name: "الدعم", href: "/support", icon: Headset },
     ],
   },
   {
