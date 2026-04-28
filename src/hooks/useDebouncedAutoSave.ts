@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
  * Call `schedule(rowId, patch)` and the patch will be merged with any
  * pending patch for the same row, then flushed after `delayMs`.
  */
-export function useDebouncedAutoSave<T extends Record<string, unknown>>(
+export function useDebouncedAutoSave<T extends object>(
   save: (rowId: string, patch: Partial<T>) => Promise<void> | void,
   delayMs = 500,
 ) {
