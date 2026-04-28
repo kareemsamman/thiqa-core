@@ -337,24 +337,21 @@ export default function Subscription() {
     if (!agent || !agentId) return;
     setChangingPlan(true);
     try {
-      if (sub?.isTrial) {
-        const { error } = await supabase.from("agents").update({
-          pending_plan: targetPlan.plan_key,
-        }).eq("id", agentId);
-        if (error) throw error;
-        toast.success(`تم اختيار خطة ${targetPlan.name}. ستبدأ بعد انتهاء الفترة التجريبية.`);
-      } else {
-        const isUpgrade = targetPlan.monthly_price > (agent.monthly_price || 0);
-        const { error } = await supabase.from("agents").update({
-          plan: targetPlan.plan_key,
-          monthly_price: targetPlan.monthly_price,
-        }).eq("id", agentId);
-        if (error) throw error;
-        toast.success(isUpgrade
+      // Always switch immediately. The sync_agent_plan_transition trigger
+      // handles the trial → paid cascade (status, monthly_price,
+      // trial_ends_at, subscription_started_at/expires_at) when `plan` updates.
+      const isUpgrade = targetPlan.monthly_price > (agent.monthly_price || 0);
+      const { error } = await supabase.from("agents").update({
+        plan: targetPlan.plan_key,
+        monthly_price: targetPlan.monthly_price,
+      }).eq("id", agentId);
+      if (error) throw error;
+      toast.success(sub?.isTrial
+        ? `تم تفعيل خطة ${targetPlan.name} فوراً.`
+        : isUpgrade
           ? `تمت الترقية إلى خطة ${targetPlan.name} بنجاح!`
           : `تم التحويل إلى خطة ${targetPlan.name}.`
-        );
-      }
+      );
       window.location.reload();
     } catch (e: any) {
       toast.error(e.message || "فشل في تغيير الخطة");
@@ -598,12 +595,6 @@ export default function Subscription() {
                         <span className="font-medium">{Math.round(sub.trialProgress)}% منتهية</span>
                         <span>اليوم 35</span>
                       </div>
-                      {agent.pending_plan && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 pt-1">
-                          <Info className="h-3.5 w-3.5" />
-                          تم اختيار خطة {agent.pending_plan === "pro" ? "Pro" : "Basic"} — ستبدأ تلقائياً بعد انتهاء التجربة
-                        </p>
-                      )}
                     </div>
                   )}
 
@@ -648,11 +639,11 @@ export default function Subscription() {
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-bold">
-              {sub?.isTrial ? "اختر خطتك بعد انتهاء التجربة" : "الخطط المتاحة"}
+              {sub?.isTrial ? "اختر خطتك" : "الخطط المتاحة"}
             </h2>
             <p className="text-sm text-muted-foreground">
               {sub?.isTrial
-                ? "الحزمة التي تختارها تُفعَّل تلقائياً عند انتهاء التجربة."
+                ? "اختيارك يُفعِّل الحزمة فوراً وينهي الفترة التجريبية."
                 : "قارن بين الحزم واختر ما يناسب احتياجاتك."}
             </p>
           </div>
@@ -675,19 +666,14 @@ export default function Subscription() {
 
           {/* ═══ Payments Tab ═══ */}
           <TabsContent value="payments" className="mt-5 space-y-5">
-            {/* Next billing summary — visible for both trial and paying
-                agents. For trial agents we use the pending plan (if chosen)
-                or fall back to the currently selected plan to preview what
-                the first real bill will look like once the trial ends. */}
+            {/* Next billing summary — paid agents only. Trial agents have
+                no recurring billing scheduled (the trial → paid switch is
+                immediate, not deferred), so the card stays hidden until
+                they actually activate a plan. */}
             {(() => {
-              // Resolve the plan this agent will be billed under next.
-              const billingPlanKey = sub?.isTrial
-                ? (agent.pending_plan || agent.plan)
-                : agent.plan;
+              const billingPlanKey = agent.plan;
               const billingPlan = plans.find(p => p.plan_key === billingPlanKey);
-              const basePrice = sub?.isTrial
-                ? (billingPlan?.monthly_price ?? 0)
-                : (agent.monthly_price || 0);
+              const basePrice = agent.monthly_price || 0;
 
               // Nothing useful to show if we can't resolve any base price
               // (e.g. custom plan awaiting quote). Hide the card entirely.
@@ -724,11 +710,7 @@ export default function Subscription() {
                 }
               };
 
-              const subtitle = sub?.isTrial
-                ? (agent.pending_plan
-                    ? `أول فاتورة بعد انتهاء التجربة — خطة ${billingPlan?.name || agent.pending_plan}`
-                    : "معاينة تقديرية لأول فاتورة بعد انتهاء التجربة. غيّر خطتك من تبويب \"الخطة والاشتراك\".")
-                : "تفاصيل ما سيُحسب عليك في الفاتورة القادمة";
+              const subtitle = "تفاصيل ما سيُحسب عليك في الفاتورة القادمة";
 
               // The date we expect the agent to be charged on: trial end for
               // trial agents, otherwise the subscription expiry (end of the

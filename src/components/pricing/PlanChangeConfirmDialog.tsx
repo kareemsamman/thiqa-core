@@ -78,7 +78,7 @@ function computeNextBillingDate(
 }
 
 interface Billing {
-  kind: 'trial' | 'upgrade' | 'downgrade' | 'same_price';
+  kind: 'trial_activate' | 'upgrade' | 'downgrade' | 'same_price';
   startDate: Date;
   /** The positive or negative prorated amount applied on the next invoice. */
   proratedAmount: number;
@@ -93,7 +93,8 @@ interface Billing {
 /**
  * Work out what (if anything) to charge for this switch.
  *
- * Trial users → nothing now, plan starts + billing begins on trialEndsAt.
+ * Trial users → activate immediately, charge the full new cycle now, next
+ * billing anchored one cycle from today.
  * Paid agents mid-cycle → compute the daily price delta × days remaining
  * until the next billing anchor, apply that to the next invoice. Upgrades
  * add a pro-rated charge, downgrades add a credit.
@@ -126,13 +127,20 @@ function computeBilling(
   const cyclePrice = targetCycle === 'yearly' ? yearlyPrice : newMonthlyPrice;
 
   if (isTrial) {
-    const trialEnd = agent.trial_ends_at ? new Date(agent.trial_ends_at) : null;
-    const start = trialEnd && trialEnd > today ? trialEnd : today;
+    // Trial → paid switches activate immediately. The next billing date is
+    // one full cycle from today (the sync trigger sets
+    // subscription_expires_at to now() + 1 month for monthly switches).
+    const nextBilling = new Date(today);
+    if (targetCycle === 'yearly') {
+      nextBilling.setFullYear(nextBilling.getFullYear() + 1);
+    } else {
+      nextBilling.setMonth(nextBilling.getMonth() + 1);
+    }
     return {
-      kind: 'trial',
-      startDate: start,
-      proratedAmount: 0,
-      daysRemaining: Math.max(0, Math.floor((start.getTime() - today.getTime()) / 86400000)),
+      kind: 'trial_activate',
+      startDate: nextBilling,
+      proratedAmount: Math.round(cyclePrice),
+      daysRemaining: targetCycle === 'yearly' ? 365 : 30,
       cyclePrice,
       cycle: targetCycle,
     };
@@ -200,7 +208,6 @@ export function PlanChangeConfirmDialog({
   const [submitting, setSubmitting] = useState(false);
   const [cycle, setCycle] = useState<BillingCycle>(initialCycle);
   const [successState, setSuccessState] = useState<null | {
-    switchMode: 'immediate' | 'after_trial';
     emailSent: boolean;
   }>(null);
 
@@ -257,7 +264,6 @@ export function PlanChangeConfirmDialog({
       }
       if (!data?.success) throw new Error(data?.error || 'فشل في تغيير الحزمة');
       setSuccessState({
-        switchMode: data.switch_mode,
         emailSent: !!data.email_sent,
       });
       onSuccess?.();
@@ -370,15 +376,13 @@ export function PlanChangeConfirmDialog({
                   <CheckCircle className="h-8 w-8 text-white" weight="fill" />
                 </div>
                 <p className="text-[10px] uppercase tracking-[0.22em] font-bold text-white/70 mb-2">
-                  {successState.switchMode === 'after_trial' ? 'تم حفظ اختيارك' : 'تم التفعيل'}
+                  تم التفعيل
                 </p>
                 <DialogTitle className="text-3xl font-extrabold text-white mb-1 leading-tight">
                   {targetPlan.name_ar || targetPlan.name}
                 </DialogTitle>
                 <DialogDescription className="text-sm text-white/80">
-                  {successState.switchMode === 'after_trial'
-                    ? 'ستبدأ هذه الحزمة تلقائياً عند انتهاء التجربة.'
-                    : 'كل الميزات الجديدة متاحة فوراً.'}
+                  كل الميزات الجديدة متاحة فوراً.
                 </DialogDescription>
               </div>
             )}
@@ -485,9 +489,7 @@ export function PlanChangeConfirmDialog({
         ) : (
           <div className="flex-1 overflow-y-auto px-6 py-7 bg-slate-50 text-center">
             <p className="text-sm text-slate-700 font-medium">
-              {successState.switchMode === 'after_trial'
-                ? 'تم تأكيد اختيارك. سنبدأ الفوترة تلقائياً عند انتهاء التجربة المجانية.'
-                : 'تم تفعيل الحزمة الجديدة وكل ميزاتها متاحة الآن.'}
+              تم تفعيل الحزمة الجديدة وكل ميزاتها متاحة الآن.
             </p>
             {successState.emailSent && (
               <p className="mt-3 text-xs text-slate-500">
@@ -561,16 +563,16 @@ function BillingExplanation({ billing }: { billing: Billing }) {
   const amountStr = (n: number) => `₪${Math.abs(n).toLocaleString('en')}`;
   const cycleLabel = billing.cycle === 'yearly' ? 'سنة' : 'شهر';
 
-  if (billing.kind === 'trial') {
+  if (billing.kind === 'trial_activate') {
     return (
       <div className="space-y-1.5">
         <p className="text-sm text-slate-800">
-          ستبدأ الفوترة تلقائياً في{' '}
-          <span className="font-bold text-primary">{date}</span> بسعر{' '}
-          <span className="font-bold tabular-nums">{amountStr(billing.cyclePrice)}</span> / {cycleLabel}.
+          سيتم تفعيل الحزمة فوراً وستنتهي الفترة التجريبية الآن. ستُحتسب{' '}
+          <span className="font-bold tabular-nums text-primary">{amountStr(billing.cyclePrice)}</span>{' '}
+          على فاتورتك الأولى.
         </p>
         <p className="text-xs text-muted-foreground">
-          لن يتم خصم أي مبلغ منك حتى ذلك التاريخ.
+          الفاتورة القادمة بتاريخ <span className="font-bold">{date}</span>.
         </p>
       </div>
     );

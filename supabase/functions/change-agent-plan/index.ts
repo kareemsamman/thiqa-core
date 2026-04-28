@@ -5,9 +5,10 @@
  * subscription page. Responsibilities:
  *   1. Validate the request (authenticated user, privacy accepted, target
  *      plan exists and is active).
- *   2. Decide switch_mode: a trial agent's selection writes to
- *      `agents.pending_plan` so the switch happens at trial end; a paid
- *      agent's selection updates `agents.plan` + `monthly_price` immediately.
+ *   2. Update `agents.plan` + `monthly_price` immediately. The
+ *      sync_agent_plan_transition trigger handles the rest of the cascade —
+ *      including the trial → paid transition (subscription_status → 'active',
+ *      trial_ends_at → NULL, subscription_started_at/expires_at, etc.).
  *   3. Insert a row into `plan_change_events` for audit + the /thiqa/plan-changes
  *      admin view.
  *   4. Email support@getthiqa.com with the change details so the Thiqa
@@ -107,19 +108,11 @@ Deno.serve(async (req) => {
       .eq("plan_key", agent.plan)
       .maybeSingle();
 
-    // "Looks like a trial" semantically — covers status='trial' and the
-    // legacy active+0price shape. But only defer the switch to trial-end
-    // when the trial is *actually still running*. An agent whose
-    // trial_ends_at is already in the past landed on /subscription-
-    // expired and is asking to be reactivated NOW, so writing
-    // pending_plan would do nothing (the sync trigger only fires on
-    // plan UPDATE) and they'd stay locked out.
-    const looksLikeTrial = agent.subscription_status === "trial" ||
-      (Number(agent.monthly_price) === 0 && agent.subscription_status === "active");
-    const trialEnd = agent.trial_ends_at ? new Date(agent.trial_ends_at) : null;
-    const trialStillRunning = trialEnd ? trialEnd > new Date() : false;
-    const isTrial = looksLikeTrial && trialStillRunning;
-    const switchMode: "immediate" | "after_trial" = isTrial ? "after_trial" : "immediate";
+    // Every plan change activates immediately. A trial agent picking a paid
+    // plan ends their trial right now — the sync trigger flips
+    // subscription_status, clears trial_ends_at, and sets
+    // subscription_started_at/expires_at when `plan` updates.
+    const switchMode = "immediate" as const;
 
     // Yearly pricing falls back to monthly_price × 12 if the plan
     // doesn't declare a yearly_price — that way a yearly toggle on
@@ -145,24 +138,12 @@ Deno.serve(async (req) => {
     if (isCurrentlyPaying && sameTarget) {
       throw new Error("أنت بالفعل على هذه الحزمة");
     }
-    if (isTrial && agent.pending_plan === targetPlan.plan_key && currentCycle === billingCycle) {
-      throw new Error("هذه الحزمة مُختارة بالفعل كخطة ما بعد التجربة");
-    }
 
     // Apply the switch. `monthly_price` stays stored as the monthly
     // rate even on yearly plans so the per-month displays elsewhere
     // (AgentPlanOverview etc.) keep working; yearly subscribers pay
     // monthly_price × 12 upfront at renewal instead.
-    if (switchMode === "after_trial") {
-      const { error: updErr } = await adminClient
-        .from("agents")
-        .update({
-          pending_plan: targetPlan.plan_key,
-          billing_cycle: billingCycle,
-        })
-        .eq("id", agent.id);
-      if (updErr) throw new Error(updErr.message);
-    } else {
+    {
       const { error: updErr } = await adminClient
         .from("agents")
         .update({
@@ -206,9 +187,7 @@ Deno.serve(async (req) => {
         auth: { user: smtp.user, pass: smtp.password },
       });
 
-      const modeLabel = switchMode === "after_trial"
-        ? "تفعيل بعد انتهاء الفترة التجريبية"
-        : "تفعيل فوري";
+      const modeLabel = "تفعيل فوري";
 
       const cycleLabelAr = billingCycle === "yearly" ? "سنوي" : "شهري";
       const newTotalAr =
