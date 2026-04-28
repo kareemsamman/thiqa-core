@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ThiqaHeader } from "@/components/thiqa/ThiqaHeader";
+import { PlanBadge } from "@/components/thiqa/labels";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -260,9 +261,7 @@ export default function ThiqaPayments() {
                           {p.agents?.email || '—'}
                         </td>
                         <td className="p-3">
-                          <Badge variant={p.plan === 'pro' ? 'default' : 'secondary'} className="text-xs">
-                            {p.plan}
-                          </Badge>
+                          <PlanBadge plan={p.plan} className="text-xs" />
                         </td>
                         <td className="p-3 font-semibold">₪{p.amount?.toLocaleString()}</td>
                         <td className="p-3 text-xs">

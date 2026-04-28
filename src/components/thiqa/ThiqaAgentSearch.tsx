@@ -9,8 +9,8 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { PlanBadge, StatusBadge } from "./labels";
 
 interface AgentRow {
   id: string;
@@ -36,33 +36,6 @@ function normalize(input: string): string {
     .trim();
 }
 
-const PLAN_LABEL_AR: Record<string, string> = {
-  free_trial: "تجريبي",
-  basic: "أساسي",
-  pro: "متقدم",
-  ultimate: "أعلى",
-};
-
-const STATUS_LABEL_AR: Record<string, string> = {
-  active: "فعال",
-  trial: "تجريبي",
-  expired: "منتهي",
-  suspended: "معلّق",
-  paused: "متوقف",
-  cancelled: "ملغى",
-};
-
-function planLabel(plan: string): string {
-  return PLAN_LABEL_AR[plan] ?? plan;
-}
-
-function statusBadge(status: string) {
-  const label = STATUS_LABEL_AR[status] ?? status;
-  if (status === "active") return <Badge className="bg-green-600 text-[10px]">{label}</Badge>;
-  if (status === "trial") return <Badge className="bg-amber-500 text-[10px]">{label}</Badge>;
-  if (status === "suspended" || status === "paused") return <Badge variant="destructive" className="text-[10px]">{label}</Badge>;
-  return <Badge variant="secondary" className="text-[10px]">{label}</Badge>;
-}
 
 export function ThiqaAgentSearch({ open, onOpenChange }: ThiqaAgentSearchProps) {
   const navigate = useNavigate();
@@ -145,10 +118,8 @@ export function ThiqaAgentSearch({ open, onOpenChange }: ThiqaAgentSearchProps) 
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <Badge variant="outline" className="text-[10px]">
-                      {planLabel(a.plan)}
-                    </Badge>
-                    {statusBadge(a.subscription_status)}
+                    <PlanBadge plan={a.plan} className="text-[10px]" />
+                    <StatusBadge status={a.subscription_status} className="text-[10px]" />
                   </div>
                 </CommandItem>
               ))}

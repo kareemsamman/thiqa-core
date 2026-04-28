@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ThiqaHeader } from "@/components/thiqa/ThiqaHeader";
+import { PlanBadge, StatusBadge, planLabel } from "@/components/thiqa/labels";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -210,38 +211,54 @@ export default function ThiqaDashboard() {
         {/* Expiring Soon — 90-day window, includes trial subscriptions */}
         {expiringSoon.length > 0 && (
           <Card className="rounded-2xl border-amber-500/40 bg-amber-500/5 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2 text-amber-600 dark:text-amber-400">
-                <Clock className="h-5 w-5" />
-                اشتراكات تنتهي خلال 90 يوماً ({expiringSoon.length})
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                <div className="h-8 w-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
+                  <Clock className="h-4 w-4" />
+                </div>
+                <span>اشتراكات تنتهي خلال 90 يوماً</span>
+                <Badge variant="outline" className="bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-400 mr-1">
+                  {expiringSoon.length}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
                 {expiringSoon.map(agent => {
                   const daysLeft = differenceInDays(new Date(agent.subscription_expires_at!), new Date());
-                  const tone =
-                    daysLeft <= 7 ? "destructive" :
-                    daysLeft <= 30 ? "default" :
-                    "secondary";
+                  // Stay on the amber palette for the whole card so the
+                  // day-counter chip doesn't read as a disconnected
+                  // black pill. ≤7 escalates to red, ≤30 stays amber,
+                  // beyond that fades to a soft outline.
+                  const chipClass =
+                    daysLeft <= 7
+                      ? "bg-red-500/10 border-red-500/40 text-red-700 dark:text-red-300"
+                      : daysLeft <= 30
+                        ? "bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-300"
+                        : "bg-background border-border text-muted-foreground";
                   return (
                     <div
                       key={agent.id}
-                      className="flex items-center justify-between p-2 rounded-lg bg-background/80 cursor-pointer hover:bg-muted/50 transition-colors"
+                      className="flex items-center justify-between p-3 rounded-xl bg-background/70 border border-amber-500/20 cursor-pointer hover:bg-background hover:border-amber-500/40 transition-all"
                       onClick={() => navigate(`/thiqa/agents/${agent.id}`)}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                           <Building2 className="h-4 w-4 text-primary" />
                         </div>
-                        <div>
-                          <span className="font-medium">{agent.name_ar || agent.name}</span>
-                          <span className="text-xs text-muted-foreground mr-2">{agent.email}</span>
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{agent.name_ar || agent.name}</div>
+                          <div className="text-xs text-muted-foreground truncate">{agent.email}</div>
                         </div>
                       </div>
-                      <Badge variant={tone as "destructive" | "default" | "secondary"}>
-                        {daysLeft} يوم متبقي
-                      </Badge>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-muted-foreground hidden sm:inline ltr-nums">
+                          {format(new Date(agent.subscription_expires_at!), "dd/MM/yyyy")}
+                        </span>
+                        <Badge variant="outline" className={cn("font-medium", chipClass)}>
+                          {daysLeft} يوم متبقي
+                        </Badge>
+                      </div>
                     </div>
                   );
                 })}
@@ -278,20 +295,8 @@ export default function ThiqaDashboard() {
                         onClick={() => navigate(`/thiqa/agents/${agent.id}`)}
                       >
                         <td className="p-3 font-medium">{agent.name_ar || agent.name}</td>
-                        <td className="p-3">
-                          <Badge variant={agent.plan === "pro" ? "default" : "outline"} className={agent.plan === "pro" ? "bg-primary" : ""}>
-                            {agent.plan === "pro" ? "Pro" : "Basic"}
-                          </Badge>
-                        </td>
-                        <td className="p-3">
-                          {agent.subscription_status === "active" ? (
-                            <Badge className="bg-green-600 text-xs">فعال</Badge>
-                          ) : agent.subscription_status === "suspended" ? (
-                            <Badge variant="destructive" className="text-xs">معلّق</Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-xs">منتهي</Badge>
-                          )}
-                        </td>
+                        <td className="p-3"><PlanBadge plan={agent.plan} className="text-xs" /></td>
+                        <td className="p-3"><StatusBadge status={agent.subscription_status} className="text-xs" /></td>
                         <td className="p-3 text-muted-foreground text-xs">
                           {agent.subscription_expires_at
                             ? format(new Date(agent.subscription_expires_at), "dd/MM/yyyy")
@@ -337,7 +342,7 @@ export default function ThiqaDashboard() {
                           <td className="p-3 font-medium">{p.agents?.name_ar || p.agents?.name || "—"}</td>
                           <td className="p-3 font-medium text-green-600">₪{p.amount}</td>
                           <td className="p-3">
-                            <Badge variant="outline" className="text-xs">{p.plan}</Badge>
+                            <Badge variant="outline" className="text-xs">{planLabel(p.plan)}</Badge>
                           </td>
                         </tr>
                       ))}

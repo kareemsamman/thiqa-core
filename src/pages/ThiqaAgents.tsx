@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ThiqaHeader } from "@/components/thiqa/ThiqaHeader";
+import { PlanBadge, StatusBadge } from "@/components/thiqa/labels";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,24 +71,11 @@ export default function ThiqaAgents() {
     (a.name_ar && a.name_ar.includes(search))
   );
 
-  const statusBadge = (agent: Agent) => {
+  const renderStatus = (agent: Agent) => {
     if (!agent.email_confirmed) {
       return <Badge variant="outline" className="border-amber-500 text-amber-600">غير مفعّل</Badge>;
     }
-    switch (agent.subscription_status) {
-      case 'active': return <Badge className="bg-green-600">فعال</Badge>;
-      case 'suspended': return <Badge variant="destructive">معلّق</Badge>;
-      case 'expired': return <Badge variant="secondary">منتهي</Badge>;
-      default: return <Badge variant="outline">{agent.subscription_status}</Badge>;
-    }
-  };
-
-  const planBadge = (plan: string) => {
-    switch (plan) {
-      case 'pro': return <Badge className="bg-primary">Pro</Badge>;
-      case 'basic': return <Badge variant="outline">Basic</Badge>;
-      default: return <Badge variant="outline">{plan}</Badge>;
-    }
+    return <StatusBadge status={agent.subscription_status} />;
   };
 
   return (
@@ -139,8 +127,8 @@ export default function ThiqaAgents() {
                       <div className="text-xs text-muted-foreground truncate">{agent.email}</div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                       {statusBadge(agent)}
-                      {planBadge(agent.plan)}
+                       {renderStatus(agent)}
+                      <PlanBadge plan={agent.plan} />
                     </div>
                   </div>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t text-xs text-muted-foreground">
@@ -186,8 +174,8 @@ export default function ThiqaAgents() {
                         </div>
                       </td>
                       <td className="p-3 text-muted-foreground">{agent.email}</td>
-                      <td className="p-3">{planBadge(agent.plan)}</td>
-                      <td className="p-3">{statusBadge(agent)}</td>
+                      <td className="p-3"><PlanBadge plan={agent.plan} /></td>
+                      <td className="p-3">{renderStatus(agent)}</td>
                       <td className="p-3 text-muted-foreground">
                         {agent.subscription_expires_at 
                           ? format(new Date(agent.subscription_expires_at), 'dd/MM/yyyy')
