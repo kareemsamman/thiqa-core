@@ -436,7 +436,14 @@ export default function ThiqaAgentDetail() {
         if (!protectedStates.includes(agent.subscription_status)) {
           patch.subscription_status = 'active';
           if (!agent.subscription_expires_at) {
-            const e = new Date(); e.setMonth(e.getMonth() + 1);
+            // One full cycle out from today — a year for yearly
+            // subscribers, a month otherwise.
+            const e = new Date();
+            if (agent.billing_cycle === 'yearly') {
+              e.setFullYear(e.getFullYear() + 1);
+            } else {
+              e.setMonth(e.getMonth() + 1);
+            }
             patch.subscription_expires_at = e.toISOString();
           }
         }
@@ -488,14 +495,21 @@ export default function ThiqaAgentDetail() {
     if (!agent) return;
     const cur = agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : new Date();
     const newExp = new Date(cur);
-    newExp.setMonth(newExp.getMonth() + 1);
+    // Extend by one full billing cycle: a year for yearly subscribers,
+    // a month otherwise. Without this a yearly subscriber's "extend"
+    // button only added a month when the agent paid for a full year.
+    if (agent.billing_cycle === 'yearly') {
+      newExp.setFullYear(newExp.getFullYear() + 1);
+    } else {
+      newExp.setMonth(newExp.getMonth() + 1);
+    }
     const { error } = await supabase.from('agents').update({
       subscription_expires_at: newExp.toISOString(),
       subscription_status: 'active',
       updated_at: new Date().toISOString(),
     }).eq('id', agent.id);
     if (!error) {
-      toast.success('تم تمديد الاشتراك شهر');
+      toast.success(agent.billing_cycle === 'yearly' ? 'تم تمديد الاشتراك سنة' : 'تم تمديد الاشتراك شهر');
       setAgent(prev => prev ? { ...prev, subscription_expires_at: newExp.toISOString(), subscription_status: 'active' } : null);
     }
   };
@@ -1067,7 +1081,14 @@ export default function ThiqaAgentDetail() {
                 <Badge className={cn("text-[10px] md:text-xs", agent.subscription_status === 'active' ? 'bg-green-600' : agent.subscription_status === 'paused' ? 'bg-yellow-500' : 'bg-destructive')}>
                   {agent.subscription_status === 'trial' ? 'تجربة مجانية' : agent.subscription_status === 'active' ? (agent.monthly_price === 0 ? 'تجربة مجانية' : 'فعال') : agent.subscription_status === 'paused' ? 'متوقف مؤقتاً' : agent.subscription_status === 'suspended' ? 'معلّق' : agent.subscription_status === 'cancelled' ? 'ملغي' : 'منتهي'}
                 </Badge>
-                <Badge variant="outline" className="text-[10px] md:text-xs">{agent.plan === 'pro' ? 'Pro' : 'Basic'}</Badge>
+                <Badge variant="outline" className="text-[10px] md:text-xs">
+                  {dbPlans.find(p => p.plan_key === agent.plan)?.name || agent.plan}
+                </Badge>
+                {agent.subscription_status !== 'trial' && agent.monthly_price !== 0 && (
+                  <Badge variant="outline" className="text-[10px] md:text-xs">
+                    {agent.billing_cycle === 'yearly' ? 'سنوي' : 'شهري'}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -1214,7 +1235,9 @@ export default function ThiqaAgentDetail() {
                     {saving ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
                     حفظ التغييرات
                   </Button>
-                  <Button variant="outline" onClick={extendSubscription}>تمديد شهر واحد</Button>
+                  <Button variant="outline" onClick={extendSubscription}>
+                    {agent.billing_cycle === 'yearly' ? 'تمديد سنة كاملة' : 'تمديد شهر واحد'}
+                  </Button>
                   <Button
                     variant="outline"
                     onClick={handleResyncSubscription}
@@ -1731,7 +1754,8 @@ export default function ThiqaAgentDetail() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          const base = parseFloat(paymentAmount) || (agent.monthly_price || 0);
+                          const cycleBase = (agent.monthly_price || 0) * (agent.billing_cycle === 'yearly' ? 12 : 1);
+                          const base = parseFloat(paymentAmount) || cycleBase;
                           setPaymentAmount((base + total).toFixed(2));
                           setIncludeOveragesInPayment(true);
                           toast.success("تم إضافة المبلغ إلى الدفعة — اضغط تسجيل الدفعة لإتمامها");
@@ -1761,7 +1785,7 @@ export default function ThiqaAgentDetail() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
                   <div>
                     <Label>المبلغ (₪)</Label>
-                    <Input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder={`${agent.monthly_price || 300}`} />
+                    <Input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder={`${(agent.monthly_price || 300) * (agent.billing_cycle === 'yearly' ? 12 : 1)}`} />
                   </div>
                   <div>
                     <Label className="flex items-center gap-1">
