@@ -1061,27 +1061,6 @@ export default function ThiqaAgentDetail() {
     }
   };
 
-  if (loading) {
-    return <MainLayout><div className="space-y-4 p-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-64 w-full" /></div></MainLayout>;
-  }
-  if (!agent) {
-    return <MainLayout><div className="p-8 text-center text-muted-foreground">الوكيل غير موجود</div></MainLayout>;
-  }
-
-  const initSms = () => smsSettings || { provider: '', sms_user: '', sms_token: '', sms_source: '', htd_id: '', htd_sender: '', is_enabled: false };
-  const initAuth = () => authSettings || {
-    email_otp_enabled: false, sms_otp_enabled: false,
-    smtp_host: '', smtp_port: 465, smtp_user: '', smtp_password: '',
-    sms_019_user: '', sms_019_token: '', sms_019_source: '',
-    ippbx_enabled: false, ippbx_token_id: '',
-  };
-  const initPay = () => paymentSettings || {
-    terminal_name: '', api_password: '', is_enabled: false,
-    test_mode: true, sandbox_terminal_name: 'demo5964',
-    success_url: '', fail_url: '', notify_url: '',
-  };
-  const initSite = () => siteSettings || { site_title: '', site_description: '', logo_url: null, favicon_url: null, og_image_url: null };
-
   // Has the agent been paid for the current calendar month? Looks for
   // any subscription payment whose [period_start, period_end] window
   // overlaps the current month. Yearly payments naturally light this
@@ -1089,6 +1068,12 @@ export default function ThiqaAgentDetail() {
   // of "paid" indicator), and monthly payments do so only for the
   // month they cover — exactly the "did he pay this month / last
   // month" answer the admin wants at a glance.
+  //
+  // IMPORTANT: this hook MUST stay above the early `loading` / `!agent`
+  // returns below — React's hooks rule forbids conditional invocation,
+  // and putting useMemo after those returns means the hook count
+  // changes between the loading and loaded renders, which crashes the
+  // component into a blank screen.
   const paidThisMonth = useMemo(() => {
     if (!payments || payments.length === 0) return false;
     const now = new Date();
@@ -1111,6 +1096,27 @@ export default function ThiqaAgentDetail() {
       toast.error("تعذّر النسخ");
     }
   };
+
+  if (loading) {
+    return <MainLayout><div className="space-y-4 p-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-64 w-full" /></div></MainLayout>;
+  }
+  if (!agent) {
+    return <MainLayout><div className="p-8 text-center text-muted-foreground">الوكيل غير موجود</div></MainLayout>;
+  }
+
+  const initSms = () => smsSettings || { provider: '', sms_user: '', sms_token: '', sms_source: '', htd_id: '', htd_sender: '', is_enabled: false };
+  const initAuth = () => authSettings || {
+    email_otp_enabled: false, sms_otp_enabled: false,
+    smtp_host: '', smtp_port: 465, smtp_user: '', smtp_password: '',
+    sms_019_user: '', sms_019_token: '', sms_019_source: '',
+    ippbx_enabled: false, ippbx_token_id: '',
+  };
+  const initPay = () => paymentSettings || {
+    terminal_name: '', api_password: '', is_enabled: false,
+    test_mode: true, sandbox_terminal_name: 'demo5964',
+    success_url: '', fail_url: '', notify_url: '',
+  };
+  const initSite = () => siteSettings || { site_title: '', site_description: '', logo_url: null, favicon_url: null, og_image_url: null };
 
   return (
     <MainLayout>
