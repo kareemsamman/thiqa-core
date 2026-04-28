@@ -6,10 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { supabase as supabaseTyped } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-
-const supabase = supabaseTyped as any;
 
 interface CategoryRow {
   id: string;

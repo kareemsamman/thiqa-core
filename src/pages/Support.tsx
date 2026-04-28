@@ -13,13 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { supabase as supabaseTyped } from "@/integrations/supabase/client";
-
-// Alias to `any` so the new support_* tables are reachable before
-// supabase types are regenerated. Once `supabase gen types` has been
-// run after applying migration 20260428150000, this can collapse back
-// to a plain re-export.
-const supabase = supabaseTyped as any;
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { cn } from "@/lib/utils";

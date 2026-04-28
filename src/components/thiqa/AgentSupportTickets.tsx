@@ -6,10 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { supabase as supabaseTyped } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-
-const supabase = supabaseTyped as any;
 
 interface TicketRow {
   id: string;

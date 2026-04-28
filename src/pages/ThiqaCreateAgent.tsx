@@ -40,7 +40,10 @@ export default function ThiqaCreateAgent() {
     }
     setSaving(true);
 
-    // 1. Create agent
+    // 1. Create agent. Cast through `any` because supabase types
+    // don't see the BEFORE INSERT trigger that fills agents.short_code,
+    // so the generated Insert type insists on us supplying it even
+    // though the DB does it for us.
     const { data: agent, error } = await supabase
       .from('agents')
       .insert({
@@ -51,7 +54,7 @@ export default function ThiqaCreateAgent() {
         subscription_status: 'active',
         subscription_expires_at: new Date(Date.now() + (form.plan === 'free_trial' ? 35 : 30) * 24 * 60 * 60 * 1000).toISOString(),
         notes: form.notes || null,
-      })
+      } as any)
       .select().single();
 
     if (error || !agent) {

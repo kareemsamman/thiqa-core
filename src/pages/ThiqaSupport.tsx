@@ -8,10 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { supabase as supabaseTyped } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-
-const supabase = supabaseTyped as any;
 
 interface TicketRow {
   id: string;
@@ -89,7 +87,7 @@ export default function ThiqaSupport() {
       );
 
       const [aRes, cRes] = await Promise.all([
-        supabaseTyped.from("agents").select("id, name, name_ar, short_code").in("id", agentIds),
+        supabase.from("agents").select("id, name, name_ar, short_code").in("id", agentIds),
         catIds.length > 0
           ? supabase.from("support_categories").select("id, name_ar, parent_id").in("id", catIds)
           : Promise.resolve({ data: [] }),

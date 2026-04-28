@@ -7,10 +7,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { supabase as supabaseTyped } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-
-const supabase = supabaseTyped as any;
 
 interface PlanLimits {
   users_limit: number | null;
@@ -133,7 +131,7 @@ export function AgentUsageStats({ agentId }: { agentId: string }) {
 
       let plan: PlanLimits = { users_limit: null, branches_limit: null, policies_limit: null, sms_limit: null, marketing_sms_limit: null, ai_limit: null };
       if (planKey) {
-        const { data: pData } = await supabaseTyped
+        const { data: pData } = await supabase
           .from("subscription_plans")
           .select("users_limit, branches_limit, policies_limit, sms_limit, marketing_sms_limit, ai_limit")
           .eq("plan_key", planKey)

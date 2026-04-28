@@ -913,6 +913,8 @@ export type Database = {
           agent_id: string
           amount: number
           created_at: string | null
+          discount_amount: number
+          discount_id: string | null
           id: string
           notes: string | null
           payment_date: string
@@ -927,6 +929,8 @@ export type Database = {
           agent_id: string
           amount: number
           created_at?: string | null
+          discount_amount?: number
+          discount_id?: string | null
           id?: string
           notes?: string | null
           payment_date?: string
@@ -941,6 +945,8 @@ export type Database = {
           agent_id?: string
           amount?: number
           created_at?: string | null
+          discount_amount?: number
+          discount_id?: string | null
           id?: string
           notes?: string | null
           payment_date?: string
@@ -957,6 +963,13 @@ export type Database = {
             columns: ["agent_id"]
             isOneToOne: false
             referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_subscription_payments_discount_id_fkey"
+            columns: ["discount_id"]
+            isOneToOne: false
+            referencedRelation: "agent_discounts"
             referencedColumns: ["id"]
           },
         ]
@@ -1154,6 +1167,7 @@ export type Database = {
           phone: string | null
           plan: string
           policies_limit_override: number | null
+          short_code: string
           sms_limit_override: number | null
           subscription_expires_at: string | null
           subscription_started_at: string | null
@@ -1183,6 +1197,7 @@ export type Database = {
           phone?: string | null
           plan?: string
           policies_limit_override?: number | null
+          short_code: string
           sms_limit_override?: number | null
           subscription_expires_at?: string | null
           subscription_started_at?: string | null
@@ -1212,6 +1227,7 @@ export type Database = {
           phone?: string | null
           plan?: string
           policies_limit_override?: number | null
+          short_code?: string
           sms_limit_override?: number | null
           subscription_expires_at?: string | null
           subscription_started_at?: string | null
@@ -1627,12 +1643,15 @@ export type Database = {
       broker_settlements: {
         Row: {
           agent_id: string | null
+          bank_code: string | null
           bank_reference: string | null
+          branch_code: string | null
           branch_id: string | null
           broker_id: string
           card_expiry: string | null
           card_last_four: string | null
           cheque_image_url: string | null
+          cheque_image_urls: string[] | null
           cheque_number: string | null
           created_at: string
           created_by_admin_id: string | null
@@ -1654,12 +1673,15 @@ export type Database = {
         }
         Insert: {
           agent_id?: string | null
+          bank_code?: string | null
           bank_reference?: string | null
+          branch_code?: string | null
           branch_id?: string | null
           broker_id: string
           card_expiry?: string | null
           card_last_four?: string | null
           cheque_image_url?: string | null
+          cheque_image_urls?: string[] | null
           cheque_number?: string | null
           created_at?: string
           created_by_admin_id?: string | null
@@ -1681,12 +1703,15 @@ export type Database = {
         }
         Update: {
           agent_id?: string | null
+          bank_code?: string | null
           bank_reference?: string | null
+          branch_code?: string | null
           branch_id?: string | null
           broker_id?: string
           card_expiry?: string | null
           card_last_four?: string | null
           cheque_image_url?: string | null
+          cheque_image_urls?: string[] | null
           cheque_number?: string | null
           created_at?: string
           created_by_admin_id?: string | null
@@ -2560,11 +2585,13 @@ export type Database = {
           card_expiry: string | null
           card_last_four: string | null
           cheque_image_url: string | null
+          cheque_image_urls: string[] | null
           cheque_number: string | null
           company_id: string
           created_at: string
           created_by_admin_id: string | null
           customer_cheque_ids: Json | null
+          direction: string
           id: string
           notes: string | null
           payment_type: string
@@ -2584,11 +2611,13 @@ export type Database = {
           card_expiry?: string | null
           card_last_four?: string | null
           cheque_image_url?: string | null
+          cheque_image_urls?: string[] | null
           cheque_number?: string | null
           company_id: string
           created_at?: string
           created_by_admin_id?: string | null
           customer_cheque_ids?: Json | null
+          direction?: string
           id?: string
           notes?: string | null
           payment_type?: string
@@ -2608,11 +2637,13 @@ export type Database = {
           card_expiry?: string | null
           card_last_four?: string | null
           cheque_image_url?: string | null
+          cheque_image_urls?: string[] | null
           cheque_number?: string | null
           company_id?: string
           created_at?: string
           created_by_admin_id?: string | null
           customer_cheque_ids?: Json | null
+          direction?: string
           id?: string
           notes?: string | null
           payment_type?: string
@@ -2921,13 +2952,21 @@ export type Database = {
         Row: {
           agent_id: string | null
           amount: number
+          bank_code: string | null
+          bank_reference: string | null
+          branch_code: string | null
           branch_id: string | null
           broker_id: string | null
           category: string
+          cheque_image_url: string | null
+          cheque_image_urls: string[] | null
+          cheque_number: string | null
+          cheque_status: string | null
           company_id: string | null
           contact_name: string | null
           created_at: string
           created_by_admin_id: string | null
+          customer_cheque_ids: Json | null
           description: string | null
           entity_type: string | null
           expense_date: string
@@ -2942,13 +2981,21 @@ export type Database = {
         Insert: {
           agent_id?: string | null
           amount: number
+          bank_code?: string | null
+          bank_reference?: string | null
+          branch_code?: string | null
           branch_id?: string | null
           broker_id?: string | null
           category: string
+          cheque_image_url?: string | null
+          cheque_image_urls?: string[] | null
+          cheque_number?: string | null
+          cheque_status?: string | null
           company_id?: string | null
           contact_name?: string | null
           created_at?: string
           created_by_admin_id?: string | null
+          customer_cheque_ids?: Json | null
           description?: string | null
           entity_type?: string | null
           expense_date?: string
@@ -2963,13 +3010,21 @@ export type Database = {
         Update: {
           agent_id?: string | null
           amount?: number
+          bank_code?: string | null
+          bank_reference?: string | null
+          branch_code?: string | null
           branch_id?: string | null
           broker_id?: string | null
           category?: string
+          cheque_image_url?: string | null
+          cheque_image_urls?: string[] | null
+          cheque_number?: string | null
+          cheque_status?: string | null
           company_id?: string | null
           contact_name?: string | null
           created_at?: string
           created_by_admin_id?: string | null
+          customer_cheque_ids?: Json | null
           description?: string | null
           entity_type?: string | null
           expense_date?: string
@@ -6023,6 +6078,181 @@ export type Database = {
         }
         Relationships: []
       }
+      support_attachments: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          message_id: string
+          mime_type: string | null
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          message_id: string
+          mime_type?: string | null
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          message_id?: string
+          mime_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_attachments_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "support_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_categories: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name_ar: string
+          name_en: string | null
+          parent_id: string | null
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name_ar: string
+          name_en?: string | null
+          parent_id?: string | null
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name_ar?: string
+          name_en?: string | null
+          parent_id?: string | null
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "support_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_messages: {
+        Row: {
+          author_user_id: string
+          body: string
+          created_at: string
+          id: string
+          is_admin_reply: boolean
+          ticket_id: string
+        }
+        Insert: {
+          author_user_id: string
+          body: string
+          created_at?: string
+          id?: string
+          is_admin_reply?: boolean
+          ticket_id: string
+        }
+        Update: {
+          author_user_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          is_admin_reply?: boolean
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_tickets: {
+        Row: {
+          agent_id: string
+          category_id: string | null
+          closed_at: string | null
+          created_at: string
+          created_by_user_id: string
+          id: string
+          status: string
+          subcategory_id: string | null
+          subject: string
+          ticket_number: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          category_id?: string | null
+          closed_at?: string | null
+          created_at?: string
+          created_by_user_id: string
+          id?: string
+          status?: string
+          subcategory_id?: string | null
+          subject: string
+          ticket_number?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          category_id?: string | null
+          closed_at?: string | null
+          created_at?: string
+          created_by_user_id?: string
+          id?: string
+          status?: string
+          subcategory_id?: string | null
+          subject?: string
+          ticket_number?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_tickets_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "support_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_tickets_subcategory_id_fkey"
+            columns: ["subcategory_id"]
+            isOneToOne: false
+            referencedRelation: "support_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           agent_id: string | null
@@ -6414,6 +6644,7 @@ export type Database = {
         Args: { _branch_id: string; _user_id: string }
         Returns: boolean
       }
+      can_see_all_branches: { Args: never; Returns: boolean }
       can_view_financials: { Args: { _user_id: string }; Returns: boolean }
       can_view_login_attempt: {
         Args: { _attempt_user_id: string }
@@ -6421,6 +6652,10 @@ export type Database = {
       }
       can_view_login_attempt_agent: {
         Args: { _attempt_agent_id: string; _attempt_user_id: string }
+        Returns: boolean
+      }
+      can_view_support_ticket: {
+        Args: { _ticket_agent_id: string; _ticket_creator: string }
         Returns: boolean
       }
       can_view_user_session: {
@@ -6438,7 +6673,7 @@ export type Database = {
         }[]
       }
       dashboard_client_debt_buckets_range: {
-        Args: { p_end_date: string; p_start_date: string }
+        Args: { p_branch_id?: string; p_end_date: string; p_start_date: string }
         Returns: {
           amount: number
           bucket: string
@@ -6467,7 +6702,7 @@ export type Database = {
         }[]
       }
       dashboard_income_expense_monthly: {
-        Args: { p_months?: number }
+        Args: { p_branch_id?: string; p_months?: number }
         Returns: {
           expense: number
           income: number
@@ -6475,7 +6710,7 @@ export type Database = {
         }[]
       }
       dashboard_income_expense_totals: {
-        Args: { p_end_date: string; p_start_date: string }
+        Args: { p_branch_id?: string; p_end_date: string; p_start_date: string }
         Returns: {
           expense: number
           income: number
@@ -6486,7 +6721,7 @@ export type Database = {
         Returns: number
       }
       dashboard_kpis_v2: {
-        Args: { p_end_date: string; p_start_date: string }
+        Args: { p_branch_id?: string; p_end_date: string; p_start_date: string }
         Returns: {
           cars_insured: number
           period_profit: number
@@ -6504,7 +6739,7 @@ export type Database = {
         }[]
       }
       dashboard_policies_overview_range: {
-        Args: { p_end_date: string; p_start_date: string }
+        Args: { p_branch_id?: string; p_end_date: string; p_start_date: string }
         Returns: {
           active_count: number
           cancelled_count: number
@@ -6513,7 +6748,12 @@ export type Database = {
         }[]
       }
       dashboard_top_companies: {
-        Args: { p_end_date: string; p_limit?: number; p_start_date: string }
+        Args: {
+          p_branch_id?: string
+          p_end_date: string
+          p_limit?: number
+          p_start_date: string
+        }
         Returns: {
           company_id: string
           company_name: string
@@ -6544,6 +6784,7 @@ export type Database = {
         }[]
       }
       fix_service_policies_company: { Args: never; Returns: Json }
+      generate_agent_short_code: { Args: never; Returns: string }
       generate_file_number: { Args: never; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
       get_ab_balance: {
@@ -6570,14 +6811,6 @@ export type Database = {
         Args: never
         Returns: {
           email: string
-        }[]
-      }
-      get_my_agent_admin_contact: {
-        Args: never
-        Returns: {
-          agent_name: string | null
-          email: string | null
-          phone: string | null
         }[]
       }
       get_agent_effective_limit: {
@@ -6673,7 +6906,16 @@ export type Database = {
           total_payable: number
         }[]
       }
+      get_my_agent_admin_contact: {
+        Args: never
+        Returns: {
+          agent_name: string
+          email: string
+          phone: string
+        }[]
+      }
       get_my_agent_id: { Args: never; Returns: string }
+      get_my_branch_id: { Args: never; Returns: string }
       get_tasks_with_users: {
         Args: { target_date: string }
         Returns: {
@@ -6700,7 +6942,7 @@ export type Database = {
         }[]
       }
       get_tasks_with_users_and_pending: {
-        Args: { target_date: string; p_branch_id?: string | null }
+        Args: { p_branch_id?: string; target_date: string }
         Returns: {
           assigned_to: string
           assignee_email: string
@@ -6757,6 +6999,7 @@ export type Database = {
       }
       is_active_user: { Args: { _user_id: string }; Returns: boolean }
       is_agent_active: { Args: { _user_id: string }; Returns: boolean }
+      is_my_agent_admin: { Args: never; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       list_pbx_extensions_safe: {
         Args: never
@@ -6801,6 +7044,7 @@ export type Database = {
           }
         | {
             Args: {
+              p_branch_id?: string
               p_filter_days?: number
               p_limit?: number
               p_offset?: number
@@ -6830,7 +7074,11 @@ export type Database = {
             }[]
           }
         | {
-            Args: { p_filter_days?: number; p_search?: string }
+            Args: {
+              p_branch_id?: string
+              p_filter_days?: number
+              p_search?: string
+            }
             Returns: {
               total_clients: number
               total_remaining: number
@@ -6907,6 +7155,7 @@ export type Database = {
           }
       report_created_policies: {
         Args: {
+          p_branch_id?: string
           p_company_id?: string
           p_created_by?: string
           p_end_date: string
@@ -7033,6 +7282,7 @@ export type Database = {
           }
         | {
             Args: {
+              p_branch_id?: string
               p_created_by?: string
               p_end_date?: string
               p_page?: number
@@ -7173,6 +7423,7 @@ export type Database = {
       }
       report_renewals_summary: {
         Args: {
+          p_branch_id?: string
           p_created_by?: string
           p_end_month?: string
           p_policy_type?: string
@@ -7192,6 +7443,7 @@ export type Database = {
       }
       report_renewed_clients: {
         Args: {
+          p_branch_id?: string
           p_created_by?: string
           p_end_month?: string
           p_limit?: number
@@ -7230,10 +7482,7 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
-      unlock_plan_locked_user: {
-        Args: { p_user_id: string }
-        Returns: string
-      }
+      unlock_plan_locked_user: { Args: { p_user_id: string }; Returns: string }
       user_belongs_to_agent: {
         Args: { _agent_id: string; _user_id: string }
         Returns: boolean
