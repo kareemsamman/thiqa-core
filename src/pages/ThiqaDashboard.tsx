@@ -153,8 +153,22 @@ export default function ThiqaDashboard() {
   const totalMonthlyRevenue = agents
     .filter(a => a.subscription_status === "active" && (a.monthly_price ?? 0) > 0)
     .reduce((sum, a) => sum + (a.monthly_price ?? 0), 0);
-  const proAgents = agents.filter(a => a.plan === "pro").length;
-  const basicAgents = agents.filter(a => a.plan === "basic").length;
+
+  // Plan-tier breakdown for the totals card. Hardcoding Pro/Basic was
+  // wrong on two fronts: the canonical plan keys are now
+  // entry/basic/professional/ultimate (legacy `pro` is gone), and
+  // free_trial agents don't fit either bucket. Build a sorted list of
+  // non-zero tiers using the same Arabic labels the rest of the app
+  // shows.
+  const PLAN_TIER_ORDER = ["ultimate", "professional", "pro", "basic", "entry", "free_trial"] as const;
+  const planCounts = agents.reduce<Record<string, number>>((acc, a) => {
+    const k = a.plan || "free_trial";
+    acc[k] = (acc[k] ?? 0) + 1;
+    return acc;
+  }, {});
+  const planBreakdown = PLAN_TIER_ORDER
+    .filter(k => (planCounts[k] ?? 0) > 0)
+    .map(k => ({ label: `${planLabel(k)}: ${planCounts[k]}` }));
 
   if (loading) {
     return (
@@ -185,7 +199,7 @@ export default function ThiqaDashboard() {
             value={totalAgents.toLocaleString("en-US")}
             icon={Building2}
             tone="primary"
-            badges={[{ label: `Pro: ${proAgents}` }, { label: `Basic: ${basicAgents}` }]}
+            badges={planBreakdown}
             onClick={() => navigate("/thiqa/agents")}
           />
           <KpiTile
