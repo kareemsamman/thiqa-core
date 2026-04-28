@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { AgentSupportTickets } from "@/components/thiqa/AgentSupportTickets";
 import { AgentUsageStats } from "@/components/thiqa/AgentUsageStats";
+import { AGENT_FEATURES, AGENT_FEATURE_GROUPS } from "@/components/thiqa/agentFeatures";
 import { ThiqaAgentSearch } from "@/components/thiqa/ThiqaAgentSearch";
 import { Search } from "lucide-react";
 import { AgentAddonsManager } from "@/components/thiqa/AgentAddonsManager";
@@ -40,27 +41,9 @@ import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { DateInputPicker } from "@/components/shared/DateInputPicker";
 
-// ─── Feature flags ───
-const ALL_FEATURES = [
-  { key: 'sms', label: 'إرسال SMS', description: 'إرسال رسائل نصية للعملاء' },
-  { key: 'financial_reports', label: 'التقارير المالية', description: 'عرض التقارير المالية' },
-  { key: 'broker_wallet', label: 'محفظة الوسطاء', description: 'إدارة محفظة الوسطاء' },
-  { key: 'company_settlement', label: 'تسويات الشركات', description: 'تقارير تسويات شركات التأمين' },
-  { key: 'cheques', label: 'الشيكات', description: 'إدارة الشيكات' },
-  { key: 'leads', label: 'Whatsapp Leads', description: 'عملاء الواتساب المحتملين' },
-  { key: 'accident_reports', label: 'بلاغات الحوادث', description: 'إدارة بلاغات الحوادث' },
-  { key: 'repair_claims', label: 'المطالبات', description: 'إدارة مطالبات التصليح' },
-  { key: 'marketing_sms', label: 'SMS تسويقية', description: 'حملات SMS تسويقية' },
-  { key: 'road_services', label: 'خدمات الطريق', description: 'إدارة خدمات الطريق' },
-  { key: 'accident_fees', label: 'رسوم الحوادث', description: 'إعفاء رسوم الحادث' },
-  { key: 'correspondence', label: 'الترويسات', description: 'إدارة المراسلات' },
-  { key: 'visa_payment', label: 'دفع بالفيزا', description: 'السماح بالدفع عبر بطاقة ائتمان (فيزا)' },
-  { key: 'receipts', label: 'الإيصالات', description: 'نظام إدارة الإيصالات وطباعتها' },
-  { key: 'accounting', label: 'المحاسبة', description: 'دفتر محاسبة موحد' },
-  { key: 'renewal_reports', label: 'تقارير التجديد', description: 'متابعة تجديد المعاملات' },
-  { key: 'ai_assistant', label: 'المساعد الذكي (ثاقب)', description: 'مساعد AI للاستعلام عن بيانات النظام' },
-  { key: 'ippbx', label: 'Click2Call / PBX', description: 'الاتصال عبر المقسم' },
-];
+// Feature catalog moved to ./agentFeatures.ts so it can be reused
+// from the plan defaults editor and stays the single source of
+// truth for "what features exist in the app."
 
 interface AgentDetail {
   id: string;
@@ -106,7 +89,7 @@ export default function ThiqaAgentDetail() {
   const [payments, setPayments] = useState<any[]>([]);
   const [unbilledOverages, setUnbilledOverages] = useState<any[]>([]);
   const [includeOveragesInPayment, setIncludeOveragesInPayment] = useState(false);
-  const [dbPlans, setDbPlans] = useState<{plan_key: string; name: string; name_ar: string | null; monthly_price: number; yearly_price: number | null}[]>([]);
+  const [dbPlans, setDbPlans] = useState<{plan_key: string; name: string; name_ar: string | null; monthly_price: number; yearly_price: number | null; default_features: Record<string, boolean> | null}[]>([]);
   const [agentStats, setAgentStats] = useState<{clients: number; cars: number; policies: number} | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [agentUsers, setAgentUsers] = useState<any[]>([]);
@@ -185,7 +168,7 @@ export default function ThiqaAgentDetail() {
         supabase.from('site_settings').select('*').eq('agent_id', agentId!).maybeSingle(),
         supabase.from('user_roles').select('user_id, role').eq('agent_id', agentId!),
         supabase.from('branches').select('id, name, name_ar').eq('agent_id', agentId!),
-        supabase.from('subscription_plans').select('plan_key, name, name_ar, monthly_price, yearly_price').eq('is_active', true).order('sort_order'),
+        supabase.from('subscription_plans').select('plan_key, name, name_ar, monthly_price, yearly_price, default_features').eq('is_active', true).order('sort_order'),
         supabase
           .from('agent_usage_overages' as any)
           .select('id, usage_type, extra_count, unit_price, total_amount, created_at')
@@ -228,7 +211,7 @@ export default function ThiqaAgentDetail() {
       if (rolesRes.data) rolesRes.data.forEach((r: any) => { rm[r.user_id] = r.role; });
       setUserRoles(rm);
       if (branchRes.data) setBranches(branchRes.data);
-      if (plansRes.data && plansRes.data.length > 0) setDbPlans(plansRes.data);
+      if (plansRes.data && plansRes.data.length > 0) setDbPlans(plansRes.data as any);
       setUnbilledOverages(((overagesRes.data as any) || []));
       // Fetch stats in background
       fetchAgentStats();
@@ -1749,7 +1732,7 @@ export default function ThiqaAgentDetail() {
                   <div>
                     <CardTitle>ميزات الوكيل</CardTitle>
                     <CardDescription>
-                      تحكم بالميزات المتاحة لهذا الوكيل. إذا كانت الإعدادات لا تتطابق مع باقة <strong>{agent.plan}</strong> الحالية، استخدم زر إعادة الضبط.
+                      تحكم بالميزات المتاحة لهذا الوكيل. إذا كانت الإعدادات لا تتطابق مع باقة <strong>{(() => { const p = dbPlans.find((p) => p.plan_key === agent.plan); return p?.name_ar || p?.name || agent.plan; })()}</strong> الحالية، استخدم زر إعادة الضبط.
                     </CardDescription>
                   </div>
                   <Button
@@ -1768,21 +1751,61 @@ export default function ThiqaAgentDetail() {
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {ALL_FEATURES.map(feature => {
-                    const isEnabled = features[feature.key] ?? (agent.plan === 'pro');
+              <CardContent className="space-y-5">
+                {/* Show feature toggles grouped by category. Each row
+                    surfaces three things: the feature's plan default
+                    (so an admin can tell what the toggle reverts to
+                    when you click "إعادة ضبط على الباقة"), the
+                    current effective state (the switch), and a
+                    "خارج الباقة" hint when the override differs from
+                    plan default — that's the most common bug source
+                    when an agent reports a feature missing. */}
+                {(() => {
+                  const planDefaults = (dbPlans.find((p) => p.plan_key === agent.plan)?.default_features) || {};
+                  return AGENT_FEATURE_GROUPS.map((group) => {
+                    const items = AGENT_FEATURES.filter((f) => f.group === group);
+                    if (items.length === 0) return null;
                     return (
-                      <div key={feature.key} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div>
-                          <div className="font-medium text-sm">{feature.label}</div>
-                          <div className="text-xs text-muted-foreground">{feature.description}</div>
+                      <div key={group} className="space-y-2">
+                        <h3 className="text-sm font-semibold text-muted-foreground px-1">{group}</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {items.map((feature) => {
+                            const planEnabled = planDefaults[feature.key] === true;
+                            const currentEnabled = features[feature.key] ?? planEnabled;
+                            const overridden = features[feature.key] !== undefined && features[feature.key] !== planEnabled;
+                            return (
+                              <div
+                                key={feature.key}
+                                className={cn(
+                                  "flex items-start justify-between gap-3 p-3 rounded-xl border bg-background transition-colors",
+                                  overridden && "border-amber-500/40 bg-amber-500/5",
+                                )}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-medium text-sm">{feature.label}</span>
+                                    {planEnabled ? (
+                                      <Badge variant="outline" className="text-[9px] bg-primary/10 border-primary/30 text-primary">من الباقة</Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-[9px] text-muted-foreground">غير مضمّنة في الباقة</Badge>
+                                    )}
+                                    {overridden && (
+                                      <Badge variant="outline" className="text-[9px] bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300">
+                                        مخصّص
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground mt-0.5">{feature.description}</div>
+                                </div>
+                                <Switch checked={currentEnabled} onCheckedChange={(v) => toggleFeature(feature.key, v)} />
+                              </div>
+                            );
+                          })}
                         </div>
-                        <Switch checked={isEnabled} onCheckedChange={v => toggleFeature(feature.key, v)} />
                       </div>
                     );
-                  })}
-                </div>
+                  });
+                })()}
               </CardContent>
             </Card>
 
