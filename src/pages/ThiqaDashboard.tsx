@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ThiqaHeader } from "@/components/thiqa/ThiqaHeader";
-import { PlanBadge, StatusBadge, planLabel } from "@/components/thiqa/labels";
+import { PlanBadge, StatusBadge, planLabel, PriceCell } from "@/components/thiqa/labels";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -94,6 +94,7 @@ interface Agent {
   subscription_status: string;
   subscription_expires_at: string | null;
   monthly_price: number | null;
+  billing_cycle: "monthly" | "yearly" | null;
   created_at: string;
 }
 
@@ -298,7 +299,7 @@ export default function ThiqaDashboard() {
                       <th className="text-right p-3 font-medium">الخطة</th>
                       <th className="text-right p-3 font-medium">الحالة</th>
                       <th className="text-right p-3 font-medium">الانتهاء</th>
-                      <th className="text-right p-3 font-medium">₪/شهر</th>
+                      <th className="text-right p-3 font-medium">السعر</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -316,9 +317,7 @@ export default function ThiqaDashboard() {
                             ? format(new Date(agent.subscription_expires_at), "dd/MM/yyyy")
                             : "—"}
                         </td>
-                        <td className="p-3 font-medium">
-                          {(agent.monthly_price ?? 0) > 0 ? `₪${agent.monthly_price}` : "مجاني"}
-                        </td>
+                        <td className="p-3"><PriceCell monthlyPrice={agent.monthly_price} billingCycle={agent.billing_cycle} /></td>
                       </tr>
                     ))}
                   </tbody>

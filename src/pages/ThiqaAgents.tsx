@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ThiqaHeader } from "@/components/thiqa/ThiqaHeader";
-import { PlanBadge, StatusBadge } from "@/components/thiqa/labels";
+import { PlanBadge, StatusBadge, PriceCell } from "@/components/thiqa/labels";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ interface Agent {
   subscription_status: string;
   subscription_expires_at: string | null;
   monthly_price: number | null;
+  billing_cycle: "monthly" | "yearly" | null;
   created_at: string;
   email_confirmed?: boolean;
   /** Max last_seen_at across the agent's whole team. null = nobody on
@@ -339,9 +340,7 @@ export default function ThiqaAgents() {
                         <Badge variant="outline" className={cn("font-medium", chip.className)}>
                           {chip.label}
                         </Badge>
-                        <span className="font-medium text-foreground">
-                          {agent.monthly_price ? `₪${agent.monthly_price}` : "—"}
-                        </span>
+                        <PriceCell monthlyPrice={agent.monthly_price} billingCycle={agent.billing_cycle} />
                       </div>
                     </div>
                   );
@@ -413,7 +412,7 @@ export default function ThiqaAgents() {
                               ? format(new Date(agent.subscription_expires_at), "dd/MM/yyyy")
                               : "—"}
                           </td>
-                          <td className="p-3 font-medium">{agent.monthly_price ? `₪${agent.monthly_price}` : "—"}</td>
+                          <td className="p-3"><PriceCell monthlyPrice={agent.monthly_price} billingCycle={agent.billing_cycle} /></td>
                         </tr>
                       );
                     })}

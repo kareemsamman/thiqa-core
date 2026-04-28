@@ -67,3 +67,33 @@ export function StatusBadge({ status, className }: { status: string | null | und
   if (k === "suspended" || k === "paused") return <Badge variant="destructive" className={className}>{label}</Badge>;
   return <Badge variant="secondary" className={className}>{label}</Badge>;
 }
+
+// Price + cycle in one cell. Yearly customers see the actual annual
+// charge (monthly_price × 12) so it's obvious at a glance they're on
+// the long cycle — the cell on its own used to read like a monthly
+// number whether they paid 12× that or not.
+export function PriceCell({
+  monthlyPrice,
+  billingCycle,
+}: {
+  monthlyPrice: number | null | undefined;
+  billingCycle: "monthly" | "yearly" | null | undefined;
+}) {
+  if (!monthlyPrice) return <span className="text-muted-foreground">مجاني</span>;
+  if (billingCycle === "yearly") {
+    return (
+      <div className="flex flex-col items-start gap-0.5">
+        <span className="font-medium ltr-nums">₪{(monthlyPrice * 12).toLocaleString("en-US")}</span>
+        <Badge variant="outline" className="text-[9px] bg-blue-500/10 border-blue-500/40 text-blue-700 dark:text-blue-300">
+          سنوي
+        </Badge>
+      </div>
+    );
+  }
+  return (
+    <span className="font-medium ltr-nums">
+      ₪{monthlyPrice.toLocaleString("en-US")}
+      <span className="text-muted-foreground text-xs">/شهر</span>
+    </span>
+  );
+}
