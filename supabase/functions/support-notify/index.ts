@@ -66,7 +66,7 @@ async function getSupportEmail(adminClient: any): Promise<string> {
 }
 
 function getAppBaseUrl(): string {
-  return Deno.env.get("APP_BASE_URL") || "https://app.thiqacrm.com";
+  return Deno.env.get("APP_BASE_URL") || "https://getthiqa.com";
 }
 
 const STATUS_LABEL_AR: Record<string, string> = {
@@ -361,6 +361,11 @@ Deno.serve(async (req) => {
       subject: plan.subject,
       text: `${plan.intro}\n\nرقم التذكرة: ${ticket.ticket_number}\nالوكيل: ${agentName}\nالموضوع: ${ticket.subject}\n${latestMessage ? `\n${latestMessage}\n` : ""}\nرابط التذكرة: ${link}`,
       html,
+      // Mark every support email as high-priority so it surfaces with
+      // the red "!" / Importance: High flag in Outlook / Gmail / etc.
+      // nodemailer's `priority: 'high'` shorthand sets X-Priority: 1,
+      // X-MSMail-Priority: High, and Importance: high in one go.
+      priority: "high",
     });
 
     return new Response(JSON.stringify({ ok: true, sent: plan.to.length }), {
