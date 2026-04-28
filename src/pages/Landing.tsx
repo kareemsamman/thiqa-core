@@ -1,11 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
-import { useAuth } from "@/hooks/useAuth";
-import { useAgentContext } from "@/hooks/useAgentContext";
-import { usePermissions } from "@/hooks/usePermissions";
-import { getFirstAccessibleRoute } from "@/components/layout/Sidebar";
-import { LoadingScreen } from "@/components/shared/LoadingScreen";
 import { Button } from "@/components/ui/button";
 import {
   ChevronLeft, ChevronUp, ChevronDown, CheckCircle, Star, ArrowLeft, Play, X, Check,
@@ -364,31 +359,13 @@ const featureTabs = [
 ];
 
 export default function Landing() {
-  // Logged-in agents should never see the public marketing page —
-  // bounce them back into the app so a locked-route redirect (or any
-  // stray "/" nav) doesn't dump them on the pricing site.
-  const { user, loading: authLoading, isSuperAdmin } = useAuth();
-  const { hasFeature, isThiqaSuperAdmin, loading: agentLoading } = useAgentContext();
-  const { can, loading: permsLoading } = usePermissions();
-
-  if (!authLoading && user) {
-    if (isSuperAdmin) {
-      return <Navigate to="/thiqa/agents" replace />;
-    }
-    // Wait for feature + permission data before picking a landing
-    // route — otherwise hasFeature/can return false and we'd always
-    // fall through to /subscription on first paint.
-    if (agentLoading || permsLoading) {
-      return <LoadingScreen />;
-    }
-    // If dashboard (or whichever page is first in the sidebar) is
-    // locked on this plan, walk the nav and pick the first page the
-    // agent can actually open. Fallback to /subscription when nothing
-    // is accessible — same as PermissionRoute's own fallback.
-    const target =
-      getFirstAccessibleRoute(hasFeature, can, isThiqaSuperAdmin) ?? "/subscription";
-    return <Navigate to={target} replace />;
-  }
+  // Public marketing page — renders the same content for everyone,
+  // logged-in or not. Was previously gated behind a "bounce logged-in
+  // users" redirect, but that prevented agents from ever reading the
+  // pricing/feature copy after signup, which they sometimes need to
+  // share with clients or check what their plan covers. The Login
+  // page handles its own "if already logged in, send me to the app"
+  // behavior, so this component doesn't need to.
   return <LandingContent />;
 }
 

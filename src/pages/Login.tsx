@@ -262,14 +262,22 @@ export default function Login() {
           }
 
           if (emailConfirmed || isActive) {
-            navigate('/', { replace: true });
+            // Land directly on the agent dashboard. Previously this
+            // navigated to "/", relying on Landing's "bounce
+            // logged-in users" redirect to pick the right page —
+            // that bounce was removed so agents can read the public
+            // marketing site after signup, so we route to /dashboard
+            // explicitly here. PermissionRoute on /dashboard handles
+            // the locked-on-this-plan case and forwards to
+            // /subscription as a fallback.
+            navigate('/dashboard', { replace: true });
           } else {
             navigate('/no-access', { replace: true });
           }
         } catch (err) {
           console.error('[Login] checkAndSetupUser error:', err);
           if (isActive) {
-            navigate('/', { replace: true });
+            navigate('/dashboard', { replace: true });
           } else {
             navigate('/no-access', { replace: true });
           }
