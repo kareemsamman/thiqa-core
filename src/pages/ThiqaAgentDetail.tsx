@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,7 +21,7 @@ import {
   ArrowRight, Save, CreditCard, Settings, Loader2, Building2,
   MessageSquare, Palette, Users, Shield, Phone, Mail, Image, Bot,
   Upload, Trash2, Eye, EyeOff, Plus, UserPlus, UserMinus, CalendarIcon,
-  ShoppingCart, Tag,
+  ShoppingCart, Tag, Copy, CheckCircle2, XCircle, BarChart3, Database,
 } from "lucide-react";
 import { ThiqaAgentSearch } from "@/components/thiqa/ThiqaAgentSearch";
 import { Search } from "lucide-react";
@@ -61,6 +61,7 @@ const ALL_FEATURES = [
 
 interface AgentDetail {
   id: string;
+  short_code: string | null;
   name: string;
   name_ar: string | null;
   email: string;
@@ -191,8 +192,16 @@ export default function ThiqaAgentDetail() {
       ]);
 
       if (agentRes.data) {
-        setAgent(agentRes.data as AgentDetail);
-        setOriginalPlan((agentRes.data as AgentDetail).plan);
+        // Cast via `unknown` because supabase's generated row type is
+        // a superset of AgentDetail (DB has many extra columns we
+        // don't need here) and TS rejects the direct cast as
+        // "neither type sufficiently overlaps". Recently-added
+        // columns like `short_code` aren't in the generated types
+        // yet either — they'll appear after the migration is pushed
+        // and types are regenerated.
+        const a = agentRes.data as unknown as AgentDetail;
+        setAgent(a);
+        setOriginalPlan(a.plan);
       }
       const featureMap: Record<string, boolean> = {};
       if (flagsRes.data) flagsRes.data.forEach((f: any) => { featureMap[f.feature_key] = f.enabled; });
@@ -1073,80 +1082,171 @@ export default function ThiqaAgentDetail() {
   };
   const initSite = () => siteSettings || { site_title: '', site_description: '', logo_url: null, favicon_url: null, og_image_url: null };
 
+  // Has the agent been paid for the current calendar month? Looks for
+  // any subscription payment whose [period_start, period_end] window
+  // overlaps the current month. Yearly payments naturally light this
+  // up for every month their period covers (single payment, 12 months
+  // of "paid" indicator), and monthly payments do so only for the
+  // month they cover — exactly the "did he pay this month / last
+  // month" answer the admin wants at a glance.
+  const paidThisMonth = useMemo(() => {
+    if (!payments || payments.length === 0) return false;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    return payments.some((p: any) => {
+      const ps = p.period_start ? new Date(p.period_start) : (p.payment_date ? new Date(p.payment_date) : null);
+      const pe = p.period_end ? new Date(p.period_end) : ps;
+      if (!ps || !pe) return false;
+      return ps <= monthEnd && pe >= monthStart;
+    });
+  }, [payments]);
+
+  const copyShortCode = async () => {
+    if (!agent?.short_code) return;
+    try {
+      await navigator.clipboard.writeText(agent.short_code);
+      toast.success("تم نسخ كود الوكيل");
+    } catch {
+      toast.error("تعذّر النسخ");
+    }
+  };
+
   return (
     <MainLayout>
       <div className="space-y-4 md:space-y-6 overflow-x-hidden p-4 md:p-6" dir="rtl">
-        {/* Header */}
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2 md:gap-3">
-            <Button variant="ghost" size="icon" className="flex-shrink-0" onClick={() => navigate('/thiqa/agents')}>
-              <ArrowRight className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="flex-shrink-0"
-              onClick={() => setSearchOpen(true)}
-              aria-label="بحث عن وكيل"
-              title="بحث عن وكيل (Ctrl+K)"
-            >
-              <Search className="h-5 w-5" />
-            </Button>
-            {agent.logo_url ? (
-              <img src={agent.logo_url} alt="" className="h-10 w-10 md:h-12 md:w-12 rounded-lg object-contain border flex-shrink-0" />
-            ) : (
-              <div className="h-10 w-10 md:h-12 md:w-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Building2 className="h-5 w-5 md:h-6 md:w-6 text-primary" />
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <h1 className="text-lg md:text-2xl font-bold truncate">{agent.name_ar || agent.name}</h1>
-              <div className="flex flex-wrap items-center gap-1 md:gap-2 text-xs md:text-sm text-muted-foreground">
-                <span className="truncate max-w-[150px] md:max-w-none">{agent.email}</span>
-                <Badge className={cn("text-[10px] md:text-xs", agent.subscription_status === 'active' ? 'bg-green-600' : agent.subscription_status === 'paused' ? 'bg-yellow-500' : 'bg-destructive')}>
-                  {agent.subscription_status === 'trial' ? 'تجربة مجانية' : agent.subscription_status === 'active' ? (agent.monthly_price === 0 ? 'تجربة مجانية' : 'فعال') : agent.subscription_status === 'paused' ? 'متوقف مؤقتاً' : agent.subscription_status === 'suspended' ? 'معلّق' : agent.subscription_status === 'cancelled' ? 'ملغي' : 'منتهي'}
-                </Badge>
-                <Badge variant="outline" className="text-[10px] md:text-xs">
-                  {dbPlans.find(p => p.plan_key === agent.plan)?.name || agent.plan}
-                </Badge>
-                {agent.subscription_status !== 'trial' && agent.monthly_price !== 0 && (
-                  <Badge variant="outline" className="text-[10px] md:text-xs">
-                    {agent.billing_cycle === 'yearly' ? 'سنوي' : 'شهري'}
+        {/* Header — rounded-2xl card matching the dashboard aesthetic.
+            Identity row on the right (back/search + logo + name +
+            badges + short code), action row on the left (enter as
+            agent, delete). The whole block sits on a soft tinted card
+            so it reads as the "agent context" frame for everything
+            below. */}
+        <div className="rounded-2xl border bg-card/50 p-4 md:p-5 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0">
+              <Button variant="ghost" size="icon" className="flex-shrink-0 h-9 w-9" onClick={() => navigate('/thiqa/agents')} title="رجوع">
+                <ArrowRight className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="flex-shrink-0 h-9 w-9"
+                onClick={() => setSearchOpen(true)}
+                aria-label="بحث عن وكيل"
+                title="بحث عن وكيل (Ctrl+K)"
+              >
+                <Search className="h-5 w-5" />
+              </Button>
+              {agent.logo_url ? (
+                <img src={agent.logo_url} alt="" className="h-12 w-12 md:h-14 md:w-14 rounded-xl object-contain border bg-background flex-shrink-0" />
+              ) : (
+                <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Building2 className="h-6 w-6 md:h-7 md:w-7 text-primary" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-lg md:text-2xl font-bold truncate">{agent.name_ar || agent.name}</h1>
+                  {agent.short_code && (
+                    <button
+                      type="button"
+                      onClick={copyShortCode}
+                      className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-border/60 bg-muted/40 hover:bg-muted text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors ltr-nums"
+                      title="انقر لنسخ كود الوكيل"
+                    >
+                      <Copy className="h-3 w-3" />
+                      {agent.short_code}
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 md:gap-2 mt-1 text-xs md:text-sm text-muted-foreground">
+                  <span className="truncate max-w-[150px] md:max-w-none">{agent.email}</span>
+                  <Badge className={cn("text-[10px] md:text-xs", agent.subscription_status === 'active' ? 'bg-green-600' : agent.subscription_status === 'paused' ? 'bg-yellow-500' : 'bg-destructive')}>
+                    {agent.subscription_status === 'trial' ? 'تجربة مجانية' : agent.subscription_status === 'active' ? (agent.monthly_price === 0 ? 'تجربة مجانية' : 'فعال') : agent.subscription_status === 'paused' ? 'متوقف مؤقتاً' : agent.subscription_status === 'suspended' ? 'معلّق' : agent.subscription_status === 'cancelled' ? 'ملغي' : 'منتهي'}
                   </Badge>
-                )}
+                  <Badge variant="outline" className="text-[10px] md:text-xs">
+                    {dbPlans.find(p => p.plan_key === agent.plan)?.name || agent.plan}
+                  </Badge>
+                  {agent.subscription_status !== 'trial' && agent.monthly_price !== 0 && (
+                    <Badge variant="outline" className={cn("text-[10px] md:text-xs", agent.billing_cycle === 'yearly' && "bg-blue-500/10 border-blue-500/40 text-blue-700 dark:text-blue-300")}>
+                      {agent.billing_cycle === 'yearly' ? 'سنوي' : 'شهري'}
+                    </Badge>
+                  )}
+                  {/* Paid-this-month chip — green when this month is
+                      covered by some payment's [period_start, period_end],
+                      red otherwise. Trial agents are skipped because
+                      "paid" doesn't apply to them. */}
+                  {agent.subscription_status !== 'trial' && agent.monthly_price !== 0 && (
+                    paidThisMonth ? (
+                      <Badge variant="outline" className="gap-1 text-[10px] md:text-xs bg-green-500/10 border-green-500/40 text-green-700 dark:text-green-300">
+                        <CheckCircle2 className="h-3 w-3" />
+                        دفع الشهر الحالي
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="gap-1 text-[10px] md:text-xs bg-red-500/10 border-red-500/40 text-red-700 dark:text-red-300">
+                        <XCircle className="h-3 w-3" />
+                        لم يدفع الشهر الحالي
+                      </Badge>
+                    )
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button size="sm" className="text-xs" onClick={() => {
-              startImpersonation(agentId!);
-              navigate('/');
-            }}>
-              <Building2 className="h-3.5 w-3.5 ml-1" />
-              الدخول للنظام
-            </Button>
-            <Button variant="destructive" size="sm" className="text-xs" onClick={() => setDeleteAgentOpen(true)}>
-              <Trash2 className="h-3.5 w-3.5 ml-1" />
-              حذف الوكيل
-            </Button>
+            <div className="flex gap-2 flex-wrap shrink-0">
+              <Button
+                onClick={() => {
+                  startImpersonation(agentId!);
+                  // Land on the agent's own dashboard, not the public
+                  // landing page (`/` resolves to <Landing /> which
+                  // bounced super-admins out of the agent context they
+                  // just entered).
+                  navigate('/dashboard');
+                }}
+                className="h-10 rounded-full gap-2 bg-foreground text-background hover:bg-foreground/90 shadow-sm"
+              >
+                <Building2 className="h-4 w-4" />
+                الدخول للنظام
+              </Button>
+              <Button variant="destructive" onClick={() => setDeleteAgentOpen(true)} className="h-10 rounded-full gap-2">
+                <Trash2 className="h-4 w-4" />
+                حذف الوكيل
+              </Button>
+            </div>
           </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-            <TabsList className="inline-flex h-auto gap-1 w-max md:w-auto md:flex-wrap">
-              <TabsTrigger value="info" className="text-xs md:text-sm px-2 md:px-3"><Settings className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />معلومات</TabsTrigger>
-              <TabsTrigger value="users" className="text-xs md:text-sm px-2 md:px-3"><Users className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />المستخدمون</TabsTrigger>
-              <TabsTrigger value="branding" className="text-xs md:text-sm px-2 md:px-3"><Palette className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />العلامة</TabsTrigger>
-              <TabsTrigger value="sms" className="text-xs md:text-sm px-2 md:px-3"><MessageSquare className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />SMS</TabsTrigger>
-              <TabsTrigger value="auth" className="text-xs md:text-sm px-2 md:px-3"><Shield className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />المصادقة</TabsTrigger>
-              <TabsTrigger value="tranzila" className="text-xs md:text-sm px-2 md:px-3"><CreditCard className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />Tranzila</TabsTrigger>
-              <TabsTrigger value="features" className="text-xs md:text-sm px-2 md:px-3"><Settings className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />الميزات</TabsTrigger>
-              <TabsTrigger value="addons" className="text-xs md:text-sm px-2 md:px-3"><ShoppingCart className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />الإضافات</TabsTrigger>
-              <TabsTrigger value="discounts" className="text-xs md:text-sm px-2 md:px-3"><Tag className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />الخصومات</TabsTrigger>
-              <TabsTrigger value="payments" className="text-xs md:text-sm px-2 md:px-3"><CreditCard className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />المدفوعات</TabsTrigger>
-              <TabsTrigger value="import" className="text-xs md:text-sm px-2 md:px-3"><Upload className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />استيراد بيانات</TabsTrigger>
-              <TabsTrigger value="stats" className="text-xs md:text-sm px-2 md:px-3"><Building2 className="h-3.5 w-3.5 md:h-4 md:w-4 ml-1" />إحصائيات</TabsTrigger>
+          {/* Pill-bar tabs with horizontal scroll and the same rounded
+              shell as the dashboard's filter chips. The default
+              shadcn TabsList uses `bg-muted` which collapses 12
+              triggers into a flat dark band — the explicit
+              transparent/auto styling here lets each pill render
+              independently. */}
+          <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
+            <TabsList className="inline-flex h-auto gap-1.5 w-max md:w-auto md:flex-wrap bg-transparent p-0">
+              {[
+                { v: 'info', icon: Settings, label: 'معلومات' },
+                { v: 'users', icon: Users, label: 'المستخدمون' },
+                { v: 'branding', icon: Palette, label: 'العلامة' },
+                { v: 'sms', icon: MessageSquare, label: 'SMS' },
+                { v: 'auth', icon: Shield, label: 'المصادقة' },
+                { v: 'tranzila', icon: CreditCard, label: 'Tranzila' },
+                { v: 'features', icon: Settings, label: 'الميزات' },
+                { v: 'addons', icon: ShoppingCart, label: 'الإضافات' },
+                { v: 'discounts', icon: Tag, label: 'الخصومات' },
+                { v: 'payments', icon: CreditCard, label: 'المدفوعات' },
+                { v: 'import', icon: Upload, label: 'استيراد بيانات' },
+                { v: 'stats', icon: BarChart3, label: 'إحصائيات' },
+              ].map(({ v, icon: Icon, label }) => (
+                <TabsTrigger
+                  key={v}
+                  value={v}
+                  className="h-9 px-3 rounded-full text-xs md:text-sm gap-1.5 border border-transparent data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-md hover:bg-muted/60 transition-all"
+                >
+                  <Icon className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                  {label}
+                </TabsTrigger>
+              ))}
             </TabsList>
           </div>
 
