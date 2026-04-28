@@ -97,7 +97,7 @@ export default function RepairClaims() {
       }
 
       if (branchFilter) {
-        query = query.eq("branch_id", branchFilter);
+        query = (query as any).eq("branch_id", branchFilter);
       }
 
       const { data, error } = await query;
