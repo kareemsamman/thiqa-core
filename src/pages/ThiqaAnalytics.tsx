@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { ThiqaHeader } from "@/components/thiqa/ThiqaHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -124,26 +125,27 @@ export default function ThiqaAnalytics() {
 
   return (
     <MainLayout>
-    <div className="space-y-6" dir="rtl">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">تحليلات الموقع</h1>
-            <p className="text-sm text-muted-foreground">تتبّع أداء صفحة الهبوط والتسجيل</p>
-          </div>
-          <Select value={range} onValueChange={setRange}>
-            <SelectTrigger className="w-[180px]">
-              <Calendar className="h-4 w-4 ml-2" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">آخر 7 أيام</SelectItem>
-              <SelectItem value="14">آخر 14 يوم</SelectItem>
-              <SelectItem value="30">آخر 30 يوم</SelectItem>
-              <SelectItem value="90">آخر 90 يوم</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+    <div dir="rtl">
+        <ThiqaHeader
+          title="تحليلات الموقع"
+          subtitle="تتبّع أداء صفحة الهبوط والتسجيل"
+          actions={
+            <Select value={range} onValueChange={setRange}>
+              <SelectTrigger className="h-11 rounded-full w-[160px]">
+                <Calendar className="h-4 w-4 ml-2" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">آخر 7 أيام</SelectItem>
+                <SelectItem value="14">آخر 14 يوم</SelectItem>
+                <SelectItem value="30">آخر 30 يوم</SelectItem>
+                <SelectItem value="90">آخر 90 يوم</SelectItem>
+              </SelectContent>
+            </Select>
+          }
+        />
+
+        <div className="space-y-6">
 
         {/* Stat cards */}
         {loading ? (
@@ -253,6 +255,7 @@ export default function ThiqaAnalytics() {
             </CardContent>
           </Card>
         )}
+        </div>
     </div>
     </MainLayout>
   );

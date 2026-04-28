@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { ThiqaHeader } from "@/components/thiqa/ThiqaHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -115,21 +116,19 @@ export default function ThiqaPayments() {
 
   return (
     <MainLayout>
-      <div className="space-y-6" dir="rtl">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <CreditCard className="h-6 w-6 text-primary" />
-              سجل المدفوعات
-            </h1>
-            <p className="text-muted-foreground text-sm">جميع مدفوعات اشتراكات الوكلاء في منصة ثقة</p>
-          </div>
-          <Button variant="outline" size="sm" onClick={exportCsv} className="gap-2 self-start">
-            <Download className="h-4 w-4" />
-            تصدير CSV
-          </Button>
-        </div>
+      <div dir="rtl">
+        <ThiqaHeader
+          title="سجل المدفوعات"
+          subtitle="جميع مدفوعات اشتراكات الوكلاء في منصة ثقة"
+          actions={
+            <Button variant="outline" onClick={exportCsv} className="h-11 rounded-full gap-2">
+              <Download className="h-4 w-4" />
+              تصدير CSV
+            </Button>
+          }
+        />
+
+        <div className="space-y-6">
 
         {/* Stats cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -303,6 +302,7 @@ export default function ThiqaPayments() {
             </div>
           </Card>
         )}
+        </div>
       </div>
     </MainLayout>
   );

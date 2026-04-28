@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { ThiqaAgentSearch } from "@/components/thiqa/ThiqaAgentSearch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Save, Loader2, Type, Image, ExternalLink, ArrowRight } from "lucide-react";
+import { Save, Loader2, Type, Image, ExternalLink, ArrowRight, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type ContentRow = {
@@ -119,6 +120,17 @@ export default function ThiqaLandingCMS() {
   const [localValues, setLocalValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(new Set());
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const { data: rows, isLoading } = useQuery({
     queryKey: ["landing-content-admin"],
@@ -202,6 +214,15 @@ export default function ThiqaLandingCMS() {
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate("/thiqa/settings")}>
               <ArrowRight className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSearchOpen(true)}
+              aria-label="بحث عن وكيل"
+              title="بحث عن وكيل (Ctrl+K)"
+            >
+              <Search className="h-5 w-5" />
             </Button>
             <div>
               <h1 className="text-xl md:text-2xl font-bold">إدارة محتوى Landing و Pricing</h1>
@@ -308,6 +329,8 @@ export default function ThiqaLandingCMS() {
           ))}
         </Tabs>
       </div>
+
+      <ThiqaAgentSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </MainLayout>
   );
 }

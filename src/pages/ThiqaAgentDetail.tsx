@@ -23,6 +23,8 @@ import {
   Upload, Trash2, Eye, EyeOff, Plus, UserPlus, UserMinus, CalendarIcon,
   ShoppingCart, Tag,
 } from "lucide-react";
+import { ThiqaAgentSearch } from "@/components/thiqa/ThiqaAgentSearch";
+import { Search } from "lucide-react";
 import { AgentAddonsManager } from "@/components/thiqa/AgentAddonsManager";
 import { SubscriptionStateTester } from "@/components/thiqa/SubscriptionStateTester";
 import { AgentDiscountManager } from "@/components/thiqa/AgentDiscountManager";
@@ -81,6 +83,19 @@ export default function ThiqaAgentDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { startImpersonation } = useAgentContext();
+  const [searchOpen, setSearchOpen] = useState(false);
+  // Cmd/Ctrl+K opens the global agent search from the detail page so
+  // admins can hop between agents without going back to the list.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [agents_original_plan, setOriginalPlan] = useState<string>("");
   const [features, setFeatures] = useState<Record<string, boolean>>({});
@@ -1066,6 +1081,16 @@ export default function ThiqaAgentDetail() {
           <div className="flex items-center gap-2 md:gap-3">
             <Button variant="ghost" size="icon" className="flex-shrink-0" onClick={() => navigate('/thiqa/agents')}>
               <ArrowRight className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="flex-shrink-0"
+              onClick={() => setSearchOpen(true)}
+              aria-label="بحث عن وكيل"
+              title="بحث عن وكيل (Ctrl+K)"
+            >
+              <Search className="h-5 w-5" />
             </Button>
             {agent.logo_url ? (
               <img src={agent.logo_url} alt="" className="h-10 w-10 md:h-12 md:w-12 rounded-lg object-contain border flex-shrink-0" />
@@ -2156,6 +2181,8 @@ export default function ThiqaAgentDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ThiqaAgentSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </MainLayout>
   );
 }

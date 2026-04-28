@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { ThiqaHeader } from "@/components/thiqa/ThiqaHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1664,16 +1665,10 @@ function AgentDefaultsTab() {
 export default function ThiqaSettings() {
   return (
     <MainLayout>
-      <div className="md:p-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Settings className="h-6 w-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">إعدادات المنصة</h1>
-            <p className="text-muted-foreground">إدارة إعدادات منصة ثقة</p>
-          </div>
-        </div>
+      <div className="md:p-6" dir="rtl">
+        <ThiqaHeader title="إعدادات المنصة" subtitle="إدارة إعدادات منصة ثقة" />
+
+        <div className="space-y-6">
 
         <Tabs defaultValue="general" className="w-full">
           <TabsList>
@@ -1727,6 +1722,7 @@ export default function ThiqaSettings() {
             <AgentDefaultsTab />
           </TabsContent>
         </Tabs>
+        </div>
       </div>
     </MainLayout>
   );

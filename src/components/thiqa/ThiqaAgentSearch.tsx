@@ -36,6 +36,34 @@ function normalize(input: string): string {
     .trim();
 }
 
+const PLAN_LABEL_AR: Record<string, string> = {
+  free_trial: "تجريبي",
+  basic: "أساسي",
+  pro: "متقدم",
+  ultimate: "أعلى",
+};
+
+const STATUS_LABEL_AR: Record<string, string> = {
+  active: "فعال",
+  trial: "تجريبي",
+  expired: "منتهي",
+  suspended: "معلّق",
+  paused: "متوقف",
+  cancelled: "ملغى",
+};
+
+function planLabel(plan: string): string {
+  return PLAN_LABEL_AR[plan] ?? plan;
+}
+
+function statusBadge(status: string) {
+  const label = STATUS_LABEL_AR[status] ?? status;
+  if (status === "active") return <Badge className="bg-green-600 text-[10px]">{label}</Badge>;
+  if (status === "trial") return <Badge className="bg-amber-500 text-[10px]">{label}</Badge>;
+  if (status === "suspended" || status === "paused") return <Badge variant="destructive" className="text-[10px]">{label}</Badge>;
+  return <Badge variant="secondary" className="text-[10px]">{label}</Badge>;
+}
+
 export function ThiqaAgentSearch({ open, onOpenChange }: ThiqaAgentSearchProps) {
   const navigate = useNavigate();
   const [agents, setAgents] = useState<AgentRow[]>([]);
@@ -101,7 +129,10 @@ export function ThiqaAgentSearch({ open, onOpenChange }: ThiqaAgentSearchProps) 
                   // renders, then we control visibility via `filtered`.
                   value={a.id}
                   onSelect={() => select(a.id)}
-                  className="flex items-center gap-3"
+                  // Override the default CommandItem selected styling
+                  // (data-[selected=true]:bg-accent) which renders as
+                  // a stark dark band — use a soft muted hover instead.
+                  className="flex items-center gap-3 data-[selected=true]:bg-muted/60 data-[selected=true]:text-foreground"
                 >
                   <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                     <Building2 className="h-4 w-4 text-primary" />
@@ -114,16 +145,10 @@ export function ThiqaAgentSearch({ open, onOpenChange }: ThiqaAgentSearchProps) 
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <Badge variant="outline" className="text-[10px] uppercase">
-                      {a.plan}
+                    <Badge variant="outline" className="text-[10px]">
+                      {planLabel(a.plan)}
                     </Badge>
-                    {a.subscription_status === "active" ? (
-                      <Badge className="bg-green-600 text-[10px]">فعال</Badge>
-                    ) : a.subscription_status === "suspended" ? (
-                      <Badge variant="destructive" className="text-[10px]">معلّق</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-[10px]">منتهي</Badge>
-                    )}
+                    {statusBadge(a.subscription_status)}
                   </div>
                 </CommandItem>
               ))}

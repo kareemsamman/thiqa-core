@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { ThiqaHeader } from "@/components/thiqa/ThiqaHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,17 +92,19 @@ export default function ThiqaAgents() {
 
   return (
     <MainLayout>
-      <div className="space-y-4 md:space-y-6" dir="rtl">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold">إدارة الوكلاء</h1>
-            <p className="text-xs md:text-sm text-muted-foreground">إدارة وكلاء التأمين المشتركين في منصة ثقة</p>
-          </div>
-          <Button onClick={() => navigate('/thiqa/agents/new')} size="sm" className="w-full sm:w-auto">
-            <Plus className="h-4 w-4 ml-2" />
-            وكيل جديد
-          </Button>
-        </div>
+      <div dir="rtl">
+        <ThiqaHeader
+          title="إدارة الوكلاء"
+          subtitle="إدارة وكلاء التأمين المشتركين في منصة ثقة"
+          actions={
+            <Button onClick={() => navigate('/thiqa/agents/new')} className="h-11 rounded-full gap-2">
+              <Plus className="h-4 w-4" />
+              وكيل جديد
+            </Button>
+          }
+        />
+
+        <div className="space-y-4 md:space-y-6">
 
         <div className="relative max-w-full sm:max-w-sm">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -205,6 +208,7 @@ export default function ThiqaAgents() {
             </div>
           </>
         )}
+        </div>
       </div>
     </MainLayout>
   );

@@ -135,11 +135,20 @@ export default function ThiqaDashboard() {
   const totalAgents = agents.length;
   const activeAgents = agents.filter(a => a.subscription_status === "active").length;
   const expiredAgents = agents.filter(a => a.subscription_status === "expired" || a.subscription_status === "suspended").length;
-  const expiringWithin30 = agents.filter(a => {
-    if (a.subscription_status !== "active" || !a.subscription_expires_at) return false;
-    const days = differenceInDays(new Date(a.subscription_expires_at), new Date());
-    return days >= 0 && days <= 30;
-  });
+  // Window is 90 days so paying agents on annual cycles also surface
+  // here (a 30-day window only catches monthly renewals). Trial
+  // subscriptions are included so onboarding agents about to lapse
+  // are visible on the same panel as paying ones.
+  const expiringSoon = agents
+    .filter(a => {
+      if (a.subscription_status !== "active" && a.subscription_status !== "trial") return false;
+      if (!a.subscription_expires_at) return false;
+      const days = differenceInDays(new Date(a.subscription_expires_at), new Date());
+      return days >= 0 && days <= 90;
+    })
+    .sort((a, b) =>
+      new Date(a.subscription_expires_at!).getTime() - new Date(b.subscription_expires_at!).getTime(),
+    );
   const totalMonthlyRevenue = agents
     .filter(a => a.subscription_status === "active" && (a.monthly_price ?? 0) > 0)
     .reduce((sum, a) => sum + (a.monthly_price ?? 0), 0);
@@ -198,19 +207,23 @@ export default function ThiqaDashboard() {
           />
         </div>
 
-        {/* Expiring Soon */}
-        {expiringWithin30.length > 0 && (
+        {/* Expiring Soon — 90-day window, includes trial subscriptions */}
+        {expiringSoon.length > 0 && (
           <Card className="rounded-2xl border-amber-500/40 bg-amber-500/5 shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2 text-amber-600 dark:text-amber-400">
                 <Clock className="h-5 w-5" />
-                اشتراكات تنتهي خلال 30 يوماً ({expiringWithin30.length})
+                اشتراكات تنتهي خلال 90 يوماً ({expiringSoon.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {expiringWithin30.map(agent => {
+                {expiringSoon.map(agent => {
                   const daysLeft = differenceInDays(new Date(agent.subscription_expires_at!), new Date());
+                  const tone =
+                    daysLeft <= 7 ? "destructive" :
+                    daysLeft <= 30 ? "default" :
+                    "secondary";
                   return (
                     <div
                       key={agent.id}
@@ -226,7 +239,7 @@ export default function ThiqaDashboard() {
                           <span className="text-xs text-muted-foreground mr-2">{agent.email}</span>
                         </div>
                       </div>
-                      <Badge variant={daysLeft <= 7 ? "destructive" : "secondary"}>
+                      <Badge variant={tone as "destructive" | "default" | "secondary"}>
                         {daysLeft} يوم متبقي
                       </Badge>
                     </div>

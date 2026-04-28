@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { ThiqaAgentSearch } from "@/components/thiqa/ThiqaAgentSearch";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, Loader2, Building2, CheckCircle2 } from "lucide-react";
+import { ArrowRight, Loader2, Building2, CheckCircle2, Search } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
 const DEFAULT_BASIC_FEATURES = ['sms', 'financial_reports', 'broker_wallet', 'company_settlement', 'cheques', 'marketing_sms'];
@@ -17,6 +18,17 @@ const BLOCKED_BASIC = new Set(['sms', 'financial_reports', 'broker_wallet', 'com
 export default function ThiqaCreateAgent() {
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
   const [form, setForm] = useState({
     name: '', name_ar: '', email: '', phone: '', plan: 'free_trial', notes: '',
   });
@@ -94,6 +106,15 @@ export default function ThiqaCreateAgent() {
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate('/thiqa/agents')}>
             <ArrowRight className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSearchOpen(true)}
+            aria-label="بحث عن وكيل"
+            title="بحث عن وكيل (Ctrl+K)"
+          >
+            <Search className="h-5 w-5" />
           </Button>
           <h1 className="text-2xl font-bold">وكيل تأمين جديد</h1>
         </div>
@@ -176,6 +197,8 @@ export default function ThiqaCreateAgent() {
           </CardContent>
         </Card>
       </div>
+
+      <ThiqaAgentSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </MainLayout>
   );
 }
