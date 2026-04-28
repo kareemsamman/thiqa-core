@@ -339,14 +339,8 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
         {!collapsed && (
           <>
             <div className="flex items-center gap-2">
-              {isThiqaSuperAdmin ? (
-                <img src={thiqaLogo} alt="Thiqa" className="rounded-lg object-contain" />
-              ) : (
-                <>
-                  <img src="https://thiqacrm.b-cdn.net/Group%201000011517.png" alt="Thiqa" className="h-9 w-9 rounded-lg object-contain" />
-                  <span className="text-base font-semibold text-slate-900">Thiqa</span>
-                </>
-              )}
+              <img src="https://thiqacrm.b-cdn.net/Group%201000011517.png" alt="Thiqa" className="h-9 w-9 rounded-lg object-contain" />
+              <span className="text-base font-semibold text-slate-900">Thiqa</span>
             </div>
             {onCollapse && (
               <button
