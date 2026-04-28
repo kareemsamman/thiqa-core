@@ -367,7 +367,7 @@ export function useAccountingData(
       if (agentId) csQuery = csQuery.eq('agent_id', agentId);
       if (branchId) csQuery = csQuery.eq('branch_id', branchId);
       const { data: csData } = await csQuery;
-      const csRows: (SettlementRow & { direction: 'outgoing' | 'incoming' })[] = (
+      const csRows: (Omit<SettlementRow, 'direction'> & { direction: 'outgoing' | 'incoming' })[] = (
         (csData ?? []) as unknown as RawCompanySettlement[]
       ).map((s) => ({
         id: s.id,
