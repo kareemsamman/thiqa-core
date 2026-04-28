@@ -150,6 +150,64 @@ export function AgentAddonsManager({ agentId }: AgentAddonsManagerProps) {
   };
 
   const handleSave = async () => {
+    // Client-side guards on dates + quantity + price. The DB doesn't
+    // enforce any of this today (no CHECK constraints), so without
+    // these gates an admin could create addons with end<start, past
+    // start dates, or zero quantity — every one of which has bitten
+    // the limits engine before.
+    const today = new Date().toISOString().slice(0, 10);
+    if (!form.starts_at) {
+      toast({ title: 'خطأ', description: 'تاريخ البداية مطلوب', variant: 'destructive' });
+      return;
+    }
+    if (form.starts_at < today) {
+      toast({
+        title: 'تاريخ البداية في الماضي',
+        description: 'لا يمكن أن يبدأ الإضافة قبل اليوم. عدّل التاريخ أو اضبط على اليوم.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (form.ends_at && form.ends_at <= form.starts_at) {
+      toast({
+        title: 'تاريخ نهاية غير صالح',
+        description: 'تاريخ النهاية يجب أن يكون بعد تاريخ البداية.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!Number.isFinite(form.quantity) || form.quantity < 1) {
+      toast({ title: 'خطأ', description: 'الكمية يجب أن تكون 1 أو أكثر', variant: 'destructive' });
+      return;
+    }
+    if (!Number.isFinite(form.unit_price) || form.unit_price < 0) {
+      toast({ title: 'خطأ', description: 'السعر يجب أن يكون رقماً غير سالب', variant: 'destructive' });
+      return;
+    }
+
+    // Soft overlap check — recurring addons of the same type with
+    // overlapping date windows usually mean the admin forgot to
+    // cancel the old one. Warn instead of blocking, because there
+    // are legitimate scenarios (different quantity tiers, manual
+    // proration, etc.) where overlap is intentional.
+    if (form.billing_cycle === 'monthly') {
+      const newStart = form.starts_at;
+      const newEnd = form.ends_at || '9999-12-31';
+      const overlapping = addons.find((a) =>
+        a.status === 'active' &&
+        a.addon_type === form.addon_type &&
+        a.billing_cycle === 'monthly' &&
+        a.starts_at <= newEnd &&
+        (a.ends_at ?? '9999-12-31') >= newStart,
+      );
+      if (overlapping) {
+        const confirmed = window.confirm(
+          `يوجد إضافة فعّالة من نفس النوع (${labelFor(form.addon_type)}) تتداخل مع هذه الفترة.\n\nالإضافة الموجودة: ${overlapping.starts_at} → ${overlapping.ends_at ?? 'بدون نهاية'}\nالإضافة الجديدة: ${newStart} → ${form.ends_at || 'بدون نهاية'}\n\nالاستمرار سيؤدي لاحتساب كلتا الإضافتين معاً. متابعة؟`,
+        );
+        if (!confirmed) return;
+      }
+    }
+
     setSaving(true);
     try {
       const { error } = await supabase.from('agent_addons').insert({

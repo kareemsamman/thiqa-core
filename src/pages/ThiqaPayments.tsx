@@ -12,6 +12,7 @@ import { Search, CreditCard, TrendingUp, Users, Calendar, Download } from "lucid
 
 export default function ThiqaPayments() {
   const [payments, setPayments] = useState<any[]>([]);
+  const [plans, setPlans] = useState<{ plan_key: string; name: string; name_ar: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [planFilter, setPlanFilter] = useState("all");
@@ -19,7 +20,20 @@ export default function ThiqaPayments() {
 
   useEffect(() => {
     fetchPayments();
+    fetchPlans();
   }, []);
+
+  // Pull plan list dynamically — was hardcoded "pro"/"basic" which
+  // hid every agent on the new entry/professional/ultimate tiers
+  // from the filter (and 100% of free_trial agents).
+  const fetchPlans = async () => {
+    const { data } = await supabase
+      .from("subscription_plans")
+      .select("plan_key, name, name_ar")
+      .eq("is_active", true)
+      .order("sort_order");
+    if (data) setPlans(data as any);
+  };
 
   const fetchPayments = async () => {
     setLoading(true);
@@ -28,7 +42,7 @@ export default function ThiqaPayments() {
       .select('*, agents(name, name_ar, email, plan, subscription_status)')
       .order('payment_date', { ascending: false })
       .limit(500);
-    
+
     if (data) setPayments(data);
     setLoading(false);
   };
@@ -190,8 +204,13 @@ export default function ThiqaPayments() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">كل الخطط</SelectItem>
-              <SelectItem value="pro">Pro</SelectItem>
-              <SelectItem value="basic">Basic</SelectItem>
+              {plans
+                .filter((p) => p.plan_key !== 'free_trial')
+                .map((p) => (
+                  <SelectItem key={p.plan_key} value={p.plan_key}>
+                    {p.name_ar || p.name}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
           <Select value={monthFilter} onValueChange={setMonthFilter}>

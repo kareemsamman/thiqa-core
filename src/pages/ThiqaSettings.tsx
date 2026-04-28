@@ -1203,19 +1203,37 @@ function PlansSettingsTab() {
               <div className="space-y-3">
                 <Label className="text-base font-semibold">الميزات المفعّلة تلقائياً لهذه الخطة</Label>
                 <p className="text-xs text-muted-foreground">عند اشتراك وكيل في هذه الخطة، سيتم تفعيل الميزات المحددة تلقائياً</p>
+                {/* Render the union of SYSTEM_FEATURES (the curated list
+                    with proper Arabic labels) AND any extra keys
+                    already stored in this plan's default_features.
+                    Without this, a plan that has a feature key not in
+                    SYSTEM_FEATURES (e.g. added by a migration after
+                    SYSTEM_FEATURES was last updated) would silently
+                    disappear from the UI — admin couldn't see it,
+                    couldn't toggle it off, and saving would still
+                    keep the stale value. Now everything round-trips. */}
                 <div className="grid grid-cols-2 gap-2">
-                  {SYSTEM_FEATURES.map(feat => (
-                    <div key={feat.key} className="flex items-center justify-between p-2 border rounded-lg">
-                      <span className="text-sm">{feat.label}</span>
-                      <Switch
-                        checked={editPlan.default_features[feat.key] ?? false}
-                        onCheckedChange={(v) => setEditPlan({
-                          ...editPlan,
-                          default_features: { ...editPlan.default_features, [feat.key]: v }
-                        })}
-                      />
-                    </div>
-                  ))}
+                  {(() => {
+                    const knownKeys = new Set(SYSTEM_FEATURES.map(f => f.key));
+                    const extraKeys = Object.keys(editPlan.default_features || {})
+                      .filter(k => !knownKeys.has(k));
+                    const merged = [
+                      ...SYSTEM_FEATURES,
+                      ...extraKeys.map(k => ({ key: k, label: `${k} (غير معرّفة)` })),
+                    ];
+                    return merged.map(feat => (
+                      <div key={feat.key} className="flex items-center justify-between p-2 border rounded-lg">
+                        <span className="text-sm">{feat.label}</span>
+                        <Switch
+                          checked={editPlan.default_features[feat.key] ?? false}
+                          onCheckedChange={(v) => setEditPlan({
+                            ...editPlan,
+                            default_features: { ...editPlan.default_features, [feat.key]: v }
+                          })}
+                        />
+                      </div>
+                    ));
+                  })()}
                 </div>
               </div>
             </div>

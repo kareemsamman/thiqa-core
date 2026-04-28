@@ -41,6 +41,7 @@ type AgentSubscriptionFields = {
   trial_ends_at: string | null;
   cancelled_at: string | null;
   monthly_price: number | null;
+  pending_plan: string | null;
 };
 
 interface SubscriptionStateTesterProps {
@@ -169,12 +170,18 @@ const ACTIONS: ActionConfig[] = [
     variant: 'default',
     isApplicable: () => true,
     patch: (a) => {
+      // Restore = clean slate. Also clear pending_plan, otherwise an
+      // agent that was paused mid-trial with a pending paid plan
+      // would come back from "restore" still carrying the pending
+      // upgrade — which then fires on next trial expiry instead of
+      // the admin's expectation of "back to normal".
       if (a.plan === 'free_trial') {
         return {
           subscription_status: 'trial',
           trial_ends_at: isoPlusDays(35),
           subscription_expires_at: null,
           cancelled_at: null,
+          pending_plan: null,
         };
       }
       return {
@@ -182,6 +189,7 @@ const ACTIONS: ActionConfig[] = [
         subscription_expires_at: isoPlusMonths(1),
         trial_ends_at: null,
         cancelled_at: null,
+        pending_plan: null,
       };
     },
     confirmTitle: 'إعادة الوكيل إلى وضع فعّال',

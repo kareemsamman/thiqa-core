@@ -388,6 +388,94 @@ export default function ThiqaAgentDetail() {
     }
   };
 
+  // ─── Subscription resync ───
+  // One-click recovery for "zombie" subscription state — happens when
+  // either the client-side reconcile in saveAgent or the DB trigger
+  // sync_trial_paid_transitions has dropped a step, leaving e.g. an
+  // agent on plan='basic' but subscription_status='trial'. Fixing it
+  // by hand requires touching 4 columns; admins almost never get it
+  // right, so this button does it in one shot. Idempotent.
+  const [resyncing, setResyncing] = useState(false);
+  const handleResyncSubscription = async () => {
+    if (!agent) return;
+    setResyncing(true);
+    try {
+      const { data: planRow } = await supabase
+        .from('subscription_plans')
+        .select('monthly_price')
+        .eq('plan_key', agent.plan)
+        .maybeSingle();
+      const planPrice = Number(planRow?.monthly_price ?? 0);
+
+      const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+
+      if (agent.plan === 'free_trial') {
+        // Trial invariants: status must be 'trial', price 0, expires
+        // null, trial_ends_at must exist (default 35d if missing).
+        patch.subscription_status = 'trial';
+        patch.monthly_price = 0;
+        patch.subscription_expires_at = null;
+        if (!agent.trial_ends_at) {
+          const t = new Date(); t.setDate(t.getDate() + 35);
+          patch.trial_ends_at = t.toISOString();
+        }
+      } else {
+        // Paid invariants: monthly_price aligned to plan, trial_ends_at
+        // null, status snapped to 'active' UNLESS admin has deliberately
+        // paused/cancelled/expired (those are valid terminal states).
+        patch.monthly_price = planPrice;
+        patch.trial_ends_at = null;
+        const protectedStates = ['paused', 'suspended', 'cancelled', 'expired'];
+        if (!protectedStates.includes(agent.subscription_status)) {
+          patch.subscription_status = 'active';
+          if (!agent.subscription_expires_at) {
+            const e = new Date(); e.setMonth(e.getMonth() + 1);
+            patch.subscription_expires_at = e.toISOString();
+          }
+        }
+      }
+
+      // Clear stale pending_plan if it equals the current plan — a
+      // pending_plan that already came true is just noise.
+      if (agent.pending_plan && agent.pending_plan === agent.plan) {
+        patch.pending_plan = null;
+      }
+
+      const { error } = await supabase.from('agents').update(patch).eq('id', agent.id);
+      if (error) throw error;
+      setAgent(prev => prev ? { ...prev, ...patch } : prev);
+      toast.success('تمت إعادة مزامنة حالة الاشتراك');
+    } catch (err: any) {
+      toast.error('فشل في إعادة المزامنة: ' + (err?.message ?? ''));
+    } finally {
+      setResyncing(false);
+    }
+  };
+
+  // ─── Pending plan clobber warning ───
+  // If the admin changed the plan dropdown while a pending_plan is
+  // already set, saving will silently overwrite the pending one. Show
+  // a confirm dialog so the admin sees what's being lost.
+  const [pendingPlanWarn, setPendingPlanWarn] = useState<{
+    fromPlan: string; toPlan: string; pending: string;
+  } | null>(null);
+  const handleSaveClick = () => {
+    if (!agent) return;
+    if (
+      agent.pending_plan &&
+      agent.pending_plan !== agent.plan &&
+      agent.plan !== agents_original_plan
+    ) {
+      setPendingPlanWarn({
+        fromPlan: agents_original_plan,
+        toPlan: agent.plan,
+        pending: agent.pending_plan,
+      });
+      return;
+    }
+    saveAgent();
+  };
+
   // ─── Extend subscription ───
   const extendSubscription = async () => {
     if (!agent) return;
@@ -1003,11 +1091,24 @@ export default function ThiqaAgentDetail() {
                     }}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {dbPlans.length > 0 ? dbPlans.map(p => (
-                          <SelectItem key={p.plan_key} value={p.plan_key}>
-                            {p.name} — ₪{p.monthly_price}/شهر
-                          </SelectItem>
-                        )) : (
+                        {/* Hide free_trial from the picker unless the
+                            agent is already on it. Setting an active
+                            paid agent back to free_trial silently zeroes
+                            their price and flips status to 'trial',
+                            which is almost never what Thiqa admin
+                            actually intends — and the existing
+                            saveAgent() reconcile path can't tell the
+                            difference between a real "demote to trial"
+                            and an accidental click. Easier to remove
+                            the option than to add a confirmation modal
+                            that admin will eventually click through. */}
+                        {dbPlans.length > 0 ? dbPlans
+                          .filter(p => p.plan_key !== 'free_trial' || agent.plan === 'free_trial')
+                          .map(p => (
+                            <SelectItem key={p.plan_key} value={p.plan_key}>
+                              {p.name} — ₪{p.monthly_price}/شهر
+                            </SelectItem>
+                          )) : (
                           <>
                             <SelectItem value="basic">Basic — ₪300/شهر</SelectItem>
                             <SelectItem value="pro">Pro — ₪500/شهر</SelectItem>
@@ -1052,13 +1153,64 @@ export default function ThiqaAgentDetail() {
                   </div>
                 </div>
                 <div><Label>ملاحظات</Label><Textarea value={agent.notes || ''} onChange={e => setAgent({...agent, notes: e.target.value})} /></div>
-                <div className="flex gap-3 pt-2">
-                  <Button onClick={saveAgent} disabled={saving}>
+
+                {agent.pending_plan && agent.pending_plan !== agent.plan && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                    <strong>ترقية معلّقة:</strong> هذا الوكيل سيتحول تلقائياً إلى خطة <code>{agent.pending_plan}</code> عند انتهاء التجربة. تغيير الخطة يدوياً سيلغي هذه الترقية.
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-3 pt-2">
+                  <Button onClick={handleSaveClick} disabled={saving}>
                     {saving ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
                     حفظ التغييرات
                   </Button>
                   <Button variant="outline" onClick={extendSubscription}>تمديد شهر واحد</Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleResyncSubscription}
+                    disabled={resyncing}
+                    className="gap-2"
+                    title="يحاذي حالة الاشتراك مع الخطة الحالية: السعر الشهري، تاريخ الانتهاء، وحالة 'فعال/تجريبي' — يستخدم لإصلاح الحالات غير المتوافقة"
+                  >
+                    {resyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    إعادة مزامنة الاشتراك
+                  </Button>
                 </div>
+
+                {/* Pending-plan clobber confirmation. Triggered from
+                    handleSaveClick when the admin changed the plan
+                    dropdown while a pending_plan is set — silently
+                    discarding it bit us before. */}
+                <Dialog open={!!pendingPlanWarn} onOpenChange={(o) => { if (!o) setPendingPlanWarn(null); }}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>إلغاء الترقية المعلّقة؟</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-2 text-sm">
+                      <p>هذا الوكيل عنده ترقية معلّقة:</p>
+                      <ul className="list-disc pr-5 space-y-1">
+                        <li>الخطة الحالية: <code>{pendingPlanWarn?.fromPlan}</code></li>
+                        <li>الترقية المعلّقة: <code>{pendingPlanWarn?.pending}</code></li>
+                        <li>الخطة الجديدة المختارة: <code>{pendingPlanWarn?.toPlan}</code></li>
+                      </ul>
+                      <p>الحفظ سيلغي الترقية المعلّقة <code>{pendingPlanWarn?.pending}</code> ويطبّق <code>{pendingPlanWarn?.toPlan}</code> فوراً. متابعة؟</p>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setPendingPlanWarn(null)}>
+                        إلغاء
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setPendingPlanWarn(null);
+                          saveAgent();
+                        }}
+                      >
+                        نعم، احفظ والغِ الترقية المعلّقة
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </CardContent>
             </Card>
 
