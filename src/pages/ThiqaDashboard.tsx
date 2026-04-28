@@ -1,14 +1,87 @@
 import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { ThiqaHeader } from "@/components/thiqa/ThiqaHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Building2, Users, CreditCard, AlertTriangle, CheckCircle, Clock, TrendingUp } from "lucide-react";
+import { Building2, AlertTriangle, CheckCircle, Clock, TrendingUp, LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format, differenceInDays } from "date-fns";
+import { cn } from "@/lib/utils";
+
+type KpiTone = "primary" | "success" | "destructive" | "amber";
+
+const KPI_TONE: Record<KpiTone, { card: string; iconBox: string; iconColor: string; value: string }> = {
+  primary: {
+    card: "bg-primary/5 border-primary/15",
+    iconBox: "bg-primary/10",
+    iconColor: "text-primary",
+    value: "text-foreground",
+  },
+  success: {
+    card: "bg-success/5 border-success/15",
+    iconBox: "bg-success/10",
+    iconColor: "text-success",
+    value: "text-success",
+  },
+  destructive: {
+    card: "bg-destructive/5 border-destructive/15",
+    iconBox: "bg-destructive/10",
+    iconColor: "text-destructive",
+    value: "text-destructive",
+  },
+  amber: {
+    card: "bg-amber-500/5 border-amber-500/15",
+    iconBox: "bg-amber-500/10",
+    iconColor: "text-amber-600 dark:text-amber-400",
+    value: "text-amber-600 dark:text-amber-400",
+  },
+};
+
+interface KpiTileProps {
+  title: string;
+  value: string;
+  icon: LucideIcon;
+  tone: KpiTone;
+  badges?: { label: string }[];
+  onClick?: () => void;
+}
+
+function KpiTile({ title, value, icon: Icon, tone, badges, onClick }: KpiTileProps) {
+  const t = KPI_TONE[tone];
+  return (
+    <Card
+      onClick={onClick}
+      className={cn(
+        "p-5 rounded-2xl border shadow-sm transition-all",
+        t.card,
+        onClick && "cursor-pointer hover:shadow-md",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-2 min-w-0">
+          <p className="text-sm font-medium text-muted-foreground truncate">{title}</p>
+          <p className={cn("text-2xl font-bold ltr-nums", t.value)}>{value}</p>
+          {badges && badges.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {badges.map((b) => (
+                <Badge key={b.label} variant="outline" className="text-[10px] bg-background/60">
+                  {b.label}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className={cn("rounded-xl p-3 shrink-0", t.iconBox)}>
+          <Icon className={cn("h-5 w-5", t.iconColor)} />
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 interface Agent {
   id: string;
@@ -76,12 +149,14 @@ export default function ThiqaDashboard() {
   if (loading) {
     return (
       <MainLayout>
-        <div className="space-y-6 p-2" dir="rtl">
-          <Skeleton className="h-10 w-64" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28" />)}
+        <div dir="rtl">
+          <ThiqaHeader title="لوحة تحكم ثقة" subtitle="نظرة عامة على جميع الوكلاء والاشتراكات" />
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+            </div>
+            <Skeleton className="h-64 w-full rounded-2xl" />
           </div>
-          <Skeleton className="h-64 w-full" />
         </div>
       </MainLayout>
     );
@@ -89,72 +164,45 @@ export default function ThiqaDashboard() {
 
   return (
     <MainLayout>
-      <div className="space-y-6" dir="rtl">
-        <div>
-          <h1 className="text-2xl font-bold">لوحة تحكم ثقة</h1>
-          <p className="text-muted-foreground">نظرة عامة على جميع الوكلاء والاشتراكات</p>
-        </div>
+      <div dir="rtl">
+        <ThiqaHeader title="لوحة تحكم ثقة" subtitle="نظرة عامة على جميع الوكلاء والاشتراكات" />
 
-        {/* Stats Cards */}
+        <div className="space-y-6">
+        {/* KPI tiles */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/thiqa/agents")}>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <Building2 className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">إجمالي الوكلاء</p>
-                <p className="text-2xl font-bold">{totalAgents}</p>
-                <div className="flex gap-2 mt-1">
-                  <Badge variant="outline" className="text-xs">Pro: {proAgents}</Badge>
-                  <Badge variant="outline" className="text-xs">Basic: {basicAgents}</Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">وكلاء فعالين</p>
-                <p className="text-2xl font-bold text-green-600">{activeAgents}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
-                <AlertTriangle className="h-6 w-6 text-destructive" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">منتهي / معلّق</p>
-                <p className="text-2xl font-bold text-destructive">{expiredAgents}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <TrendingUp className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">الإيرادات الشهرية</p>
-                <p className="text-2xl font-bold">₪{totalMonthlyRevenue.toLocaleString()}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <KpiTile
+            title="إجمالي الوكلاء"
+            value={totalAgents.toLocaleString("en-US")}
+            icon={Building2}
+            tone="primary"
+            badges={[{ label: `Pro: ${proAgents}` }, { label: `Basic: ${basicAgents}` }]}
+            onClick={() => navigate("/thiqa/agents")}
+          />
+          <KpiTile
+            title="وكلاء فعالين"
+            value={activeAgents.toLocaleString("en-US")}
+            icon={CheckCircle}
+            tone="success"
+          />
+          <KpiTile
+            title="منتهي / معلّق"
+            value={expiredAgents.toLocaleString("en-US")}
+            icon={AlertTriangle}
+            tone="destructive"
+          />
+          <KpiTile
+            title="الإيرادات الشهرية"
+            value={`₪${totalMonthlyRevenue.toLocaleString("en-US")}`}
+            icon={TrendingUp}
+            tone="amber"
+          />
         </div>
 
         {/* Expiring Soon */}
         {expiringWithin30.length > 0 && (
-          <Card className="border-warning/50 bg-warning/5">
+          <Card className="rounded-2xl border-amber-500/40 bg-amber-500/5 shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2 text-warning">
+              <CardTitle className="text-base flex items-center gap-2 text-amber-600 dark:text-amber-400">
                 <Clock className="h-5 w-5" />
                 اشتراكات تنتهي خلال 30 يوماً ({expiringWithin30.length})
               </CardTitle>
@@ -192,7 +240,7 @@ export default function ThiqaDashboard() {
         {/* Two columns: Agents overview + Recent payments */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Agents subscription status */}
-          <Card>
+          <Card className="rounded-2xl shadow-sm">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-base">حالة اشتراك الوكلاء</CardTitle>
               <Button variant="ghost" size="sm" onClick={() => navigate("/thiqa/agents")}>عرض الكل</Button>
@@ -248,7 +296,7 @@ export default function ThiqaDashboard() {
           </Card>
 
           {/* Recent payments */}
-          <Card>
+          <Card className="rounded-2xl shadow-sm">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-base">آخر المدفوعات</CardTitle>
               <Button variant="ghost" size="sm" onClick={() => navigate("/thiqa/payments")}>عرض الكل</Button>
@@ -286,6 +334,7 @@ export default function ThiqaDashboard() {
               </div>
             </CardContent>
           </Card>
+        </div>
         </div>
       </div>
     </MainLayout>
