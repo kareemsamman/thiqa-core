@@ -10,7 +10,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { supabase } from "@/integrations/supabase/client";
-import { PlanBadge, StatusBadge } from "./labels";
+import { PlanBadge, StatusBadge, planLabel, statusLabel } from "./labels";
 
 interface AgentRow {
   id: string;
@@ -94,35 +94,43 @@ export function ThiqaAgentSearch({ open, onOpenChange }: ThiqaAgentSearchProps) 
           <>
             <CommandEmpty>لا توجد نتائج</CommandEmpty>
             <CommandGroup heading={`الوكلاء (${filtered.length})`}>
-              {filtered.map((a) => (
-                <CommandItem
-                  key={a.id}
-                  // cmdk's built-in filter would also fight our custom
-                  // one — give every item a unique value so it always
-                  // renders, then we control visibility via `filtered`.
-                  value={a.id}
-                  onSelect={() => select(a.id)}
-                  // Override the default CommandItem selected styling
-                  // (data-[selected=true]:bg-accent) which renders as
-                  // a stark dark band — use a soft muted hover instead.
-                  className="flex items-center gap-3 data-[selected=true]:bg-muted/60 data-[selected=true]:text-foreground"
-                >
-                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <Building2 className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{a.name_ar || a.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {a.email}
-                      {a.phone ? ` · ${a.phone}` : ""}
+              {filtered.map((a) => {
+                // free_trial+trial would render the same "تجريبي" twice
+                // — drop the status when its label collapses onto the
+                // plan label. Keeps both visible whenever they actually
+                // convey different info (e.g. basic+trial, professional+suspended).
+                const showStatus =
+                  statusLabel(a.subscription_status) !== planLabel(a.plan);
+                return (
+                  <CommandItem
+                    key={a.id}
+                    // cmdk's built-in filter would also fight our custom
+                    // one — give every item a unique value so it always
+                    // renders, then we control visibility via `filtered`.
+                    value={a.id}
+                    onSelect={() => select(a.id)}
+                    // Override the default CommandItem selected styling
+                    // (data-[selected=true]:bg-accent) which renders as
+                    // a stark dark band — use a soft muted hover instead.
+                    className="flex items-center gap-3 data-[selected=true]:bg-muted/60 data-[selected=true]:text-foreground"
+                  >
+                    <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <Building2 className="h-4 w-4 text-primary" />
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <PlanBadge plan={a.plan} className="text-[10px]" />
-                    <StatusBadge status={a.subscription_status} className="text-[10px]" />
-                  </div>
-                </CommandItem>
-              ))}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{a.name_ar || a.name}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {a.email}
+                        {a.phone ? ` · ${a.phone}` : ""}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <PlanBadge plan={a.plan} className="text-[10px]" />
+                      {showStatus && <StatusBadge status={a.subscription_status} className="text-[10px]" />}
+                    </div>
+                  </CommandItem>
+                );
+              })}
             </CommandGroup>
           </>
         )}

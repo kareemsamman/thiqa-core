@@ -5,12 +5,24 @@ import { Badge } from "@/components/ui/badge";
 // plan came from outside our known set so we never display an empty
 // badge.
 
+// Canonical Arabic names mirror the subscription_plans seed
+// (supabase/migrations/20260422000000_pricing_packages_foundation.sql).
+// Keep in lockstep so admin labels match the names users see in the
+// pricing/subscription pages.
+//   entry        → الأساس
+//   basic        → البيسك
+//   professional → المحترف
+//   ultimate     → الشامل
+// `pro` is the legacy key that was renamed to `professional`; it maps
+// to the same label so historical agents still display correctly.
 export const PLAN_LABEL_AR: Record<string, string> = {
   free_trial: "تجريبي",
   trial: "تجريبي",
-  basic: "أساسي",
-  pro: "متقدم",
-  ultimate: "أعلى",
+  entry: "الأساس",
+  basic: "البيسك",
+  pro: "المحترف",
+  professional: "المحترف",
+  ultimate: "الشامل",
 };
 
 export const STATUS_LABEL_AR: Record<string, string> = {
@@ -37,10 +49,11 @@ interface BadgeOpts {
 }
 
 export function PlanBadge({ plan, className }: { plan: string | null | undefined } & BadgeOpts) {
-  // Pro / Ultimate get the filled primary look so they read as the
-  // higher tiers at a glance; Basic / trial stay as outline pills.
+  // Higher tiers (Professional, Ultimate, legacy Pro) get the filled
+  // primary look so they read as paid plans at a glance; Entry / Basic
+  // / trial stay as outline pills.
   const k = plan ?? "";
-  if (k === "pro" || k === "ultimate") {
+  if (k === "pro" || k === "professional" || k === "ultimate") {
     return <Badge className={`bg-primary ${className ?? ""}`}>{planLabel(k)}</Badge>;
   }
   return <Badge variant="outline" className={className}>{planLabel(k)}</Badge>;
