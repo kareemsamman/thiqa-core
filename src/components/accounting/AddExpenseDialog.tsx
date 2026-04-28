@@ -723,11 +723,9 @@ async function findExistingCheque(
   bankCode: string | null,
 ): Promise<string | null> {
   if (!chequeNumber || chequeNumber.length < 4) return null;
-  const matchBank = <T,>(p: PromiseLike<T>) => p;
-  const eqBank = (q: ReturnType<typeof supabase.from>) =>
+  const eqBank = (q: any): any =>
     bankCode ? q.eq('bank_code', bankCode) : q.is('bank_code', null);
   const [{ data: cs }, { data: bs }, { data: ex }, { data: pp }] = await Promise.all([
-    matchBank(
       eqBank(
         supabase
           .from('company_settlements')
@@ -735,8 +733,6 @@ async function findExistingCheque(
           .eq('cheque_number', chequeNumber)
           .limit(1),
       ),
-    ),
-    matchBank(
       eqBank(
         supabase
           .from('broker_settlements')
@@ -744,8 +740,6 @@ async function findExistingCheque(
           .eq('cheque_number', chequeNumber)
           .limit(1),
       ),
-    ),
-    matchBank(
       eqBank(
         supabase
           .from('expenses')
@@ -753,8 +747,6 @@ async function findExistingCheque(
           .eq('cheque_number', chequeNumber)
           .limit(1),
       ),
-    ),
-    matchBank(
       eqBank(
         supabase
           .from('policy_payments')
@@ -762,7 +754,6 @@ async function findExistingCheque(
           .eq('cheque_number', chequeNumber)
           .limit(1),
       ),
-    ),
   ]);
   if (cs && cs.length) return `سند صرف شركة بتاريخ ${cs[0].settlement_date}`;
   if (bs && bs.length) return `سند وسيط بتاريخ ${bs[0].settlement_date}`;

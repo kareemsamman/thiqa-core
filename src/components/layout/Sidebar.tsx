@@ -86,7 +86,7 @@ export {
   type NavItem,
   type NavGroup,
 } from "./navigation";
-import { navigationGroups, type NavGroup } from "./navigation";
+import { navigationGroups, type NavGroup, type NavItem } from "./navigation";
 
 // Persist the nav scroll across both route navigations (Sidebar
 // remounts because MainLayout wraps every page) AND full-page refreshes.

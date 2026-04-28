@@ -57,7 +57,7 @@ export interface SettlementRow {
   notes: string | null;
   entity_id: string | null; // company_id or broker_id
   entity_name: string | null; // company or broker name
-  direction?: 'we_owe' | 'broker_owes' | null; // brokers only
+  direction?: 'we_owe' | 'broker_owes' | 'incoming' | 'outgoing' | null;
 }
 
 interface ConsumedCheque {
