@@ -25,6 +25,7 @@ import { PlanLadder } from "@/components/pricing/PlanLadder";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { getCycleAmount, getCycleLabels } from "@/lib/billingCycle";
 
 interface PlanData {
   id: string;
@@ -673,7 +674,10 @@ export default function Subscription() {
             {(() => {
               const billingPlanKey = agent.plan;
               const billingPlan = plans.find(p => p.plan_key === billingPlanKey);
-              const basePrice = agent.monthly_price || 0;
+              const cycleLabels = getCycleLabels(agent.billing_cycle);
+              // Yearly subscribers pay monthly_price × 12 in one shot per
+              // year. Monthly subscribers pay the per-month rate.
+              const basePrice = getCycleAmount(agent.monthly_price || 0, agent.billing_cycle);
 
               // Nothing useful to show if we can't resolve any base price
               // (e.g. custom plan awaiting quote). Hide the card entirely.
@@ -806,7 +810,7 @@ export default function Subscription() {
                               خطة {billingPlan?.name || (billingPlanKey === "pro" ? "Pro" : billingPlanKey === "basic" ? "Basic" : billingPlanKey)}
                             </p>
                             <p className="text-[10px] text-muted-foreground">
-                              {sub?.isTrial ? "اشتراك شهري — يبدأ بعد انتهاء التجربة" : "اشتراك شهري"}
+                              {cycleLabels.subscriptionLabel}
                             </p>
                           </div>
                         </div>

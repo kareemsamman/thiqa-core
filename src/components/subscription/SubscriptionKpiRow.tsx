@@ -16,6 +16,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { cn } from '@/lib/utils';
+import { getCycleAmount, getCycleLabels } from '@/lib/billingCycle';
 
 type Tone = 'primary' | 'amber' | 'success' | 'destructive' | 'blue';
 
@@ -158,7 +159,8 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
   const daysRemaining = endDate ? Math.floor(msRemaining / 86400000) : null;
   const isExpired = endDate ? endDate.getTime() <= now.getTime() : false;
 
-  const periodLengthDays = isTrial ? 35 : agent.billing_cycle === 'yearly' ? 365 : 30;
+  const cycleLabels = getCycleLabels(agent.billing_cycle);
+  const periodLengthDays = isTrial ? 35 : cycleLabels.periodDays;
   const progress = endDate
     ? Math.min(100, Math.max(0, ((periodLengthDays * 86400000 - msRemaining) / (periodLengthDays * 86400000)) * 100))
     : 0;
@@ -189,8 +191,11 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
     : 'اشتراك فعّال';
   const planLabel = planInfo.name_ar || planInfo.name;
 
-  // Tile 3 — effective monthly price
-  const effectivePrice = discount?.discounted_price ?? planInfo.monthly_price;
+  // Tile 3 — effective price for the agent's billing cycle. Yearly
+  // subscribers see the full annual amount; monthly the per-month rate.
+  const effectiveMonthly = discount?.discounted_price ?? planInfo.monthly_price;
+  const effectivePrice = getCycleAmount(effectiveMonthly, agent.billing_cycle);
+  const planFullPrice = getCycleAmount(planInfo.monthly_price, agent.billing_cycle);
   const hasDiscount = discount !== null && discount.discounted_price !== planInfo.monthly_price;
 
   // Tile 4 — addons monthly total
@@ -256,9 +261,9 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
         )}
       </KpiTile>
 
-      {/* Tile 3 — monthly price */}
+      {/* Tile 3 — cycle price (yearly subscribers see annual total) */}
       <KpiTile
-        title={isTrial ? 'السعر بعد التجربة' : 'التكلفة الشهرية'}
+        title={isTrial ? 'السعر بعد التجربة' : cycleLabels.costTitle}
         icon={CreditCard}
         tone="primary"
         loading={loading}
@@ -266,17 +271,17 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
           hasDiscount && discount ? (
             <span className="inline-flex items-center gap-1 text-emerald-700">
               <Tag className="h-3 w-3" />
-              خصم ساري — وفّر ₪{(planInfo.monthly_price - discount.discounted_price).toLocaleString()}
+              خصم ساري — وفّر ₪{getCycleAmount(planInfo.monthly_price - discount.discounted_price, agent.billing_cycle).toLocaleString()}
             </span>
           ) : null
         }
       >
         <div className="flex items-baseline gap-2 flex-wrap">
           <span className="tabular-nums">₪{effectivePrice.toLocaleString()}</span>
-          <span className="text-sm font-semibold text-muted-foreground">شهرياً</span>
+          <span className="text-sm font-semibold text-muted-foreground">{cycleLabels.adverb}</span>
           {hasDiscount && (
             <span className="text-sm font-semibold text-muted-foreground/70 line-through">
-              ₪{planInfo.monthly_price.toLocaleString()}
+              ₪{planFullPrice.toLocaleString()}
             </span>
           )}
         </div>

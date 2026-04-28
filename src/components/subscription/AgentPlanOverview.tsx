@@ -35,6 +35,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { arDZ as ar } from 'date-fns/locale';
+import { getCycleAmount, getCycleLabels } from '@/lib/billingCycle';
 
 interface ActiveDiscount {
   discounted_price: number;
@@ -352,7 +353,10 @@ export function AgentPlanOverview({
     return <Skeleton className="h-64 w-full rounded-xl" />;
   }
 
-  const effectivePrice = discount?.discounted_price ?? planInfo.monthly_price;
+  const effectiveMonthly = discount?.discounted_price ?? planInfo.monthly_price;
+  const cycleLabels = getCycleLabels(agent.billing_cycle);
+  const effectivePrice = getCycleAmount(effectiveMonthly, agent.billing_cycle);
+  const planFullPrice = getCycleAmount(planInfo.monthly_price, agent.billing_cycle);
   const discountApplied = discount !== null;
 
   const recurringAddonsTotal = addons
@@ -439,14 +443,14 @@ export function AgentPlanOverview({
                         ₪{effectivePrice}
                       </span>
                       <span className="text-lg text-muted-foreground line-through">
-                        ₪{planInfo.monthly_price}
+                        ₪{planFullPrice}
                       </span>
-                      <span className="text-sm text-muted-foreground">/ شهر</span>
+                      <span className="text-sm text-muted-foreground">{cycleLabels.suffix}</span>
                     </>
                   ) : (
                     <>
-                      <span className="text-3xl font-bold text-primary">₪{planInfo.monthly_price}</span>
-                      <span className="text-sm text-muted-foreground">/ شهر</span>
+                      <span className="text-3xl font-bold text-primary">₪{planFullPrice}</span>
+                      <span className="text-sm text-muted-foreground">{cycleLabels.suffix}</span>
                     </>
                   )}
                   {recurringAddonsTotal > 0 && (

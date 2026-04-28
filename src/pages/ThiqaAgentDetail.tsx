@@ -70,6 +70,7 @@ interface AgentDetail {
   subscription_started_at: string | null;
   trial_ends_at: string | null;
   monthly_price: number | null;
+  billing_cycle: 'monthly' | 'yearly' | null;
   pending_plan: string | null;
   cancelled_at: string | null;
   notes: string | null;
@@ -86,7 +87,7 @@ export default function ThiqaAgentDetail() {
   const [payments, setPayments] = useState<any[]>([]);
   const [unbilledOverages, setUnbilledOverages] = useState<any[]>([]);
   const [includeOveragesInPayment, setIncludeOveragesInPayment] = useState(false);
-  const [dbPlans, setDbPlans] = useState<{plan_key: string; name: string; monthly_price: number}[]>([]);
+  const [dbPlans, setDbPlans] = useState<{plan_key: string; name: string; monthly_price: number; yearly_price: number | null}[]>([]);
   const [agentStats, setAgentStats] = useState<{clients: number; cars: number; policies: number} | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [agentUsers, setAgentUsers] = useState<any[]>([]);
@@ -165,7 +166,7 @@ export default function ThiqaAgentDetail() {
         supabase.from('site_settings').select('*').eq('agent_id', agentId!).maybeSingle(),
         supabase.from('user_roles').select('user_id, role').eq('agent_id', agentId!),
         supabase.from('branches').select('id, name, name_ar').eq('agent_id', agentId!),
-        supabase.from('subscription_plans').select('plan_key, name, monthly_price').eq('is_active', true).order('sort_order'),
+        supabase.from('subscription_plans').select('plan_key, name, monthly_price, yearly_price').eq('is_active', true).order('sort_order'),
         supabase
           .from('agent_usage_overages' as any)
           .select('id, usage_type, extra_count, unit_price, total_amount, created_at')
@@ -253,6 +254,7 @@ export default function ThiqaAgentDetail() {
       subscription_status: agent.subscription_status,
       subscription_expires_at: agent.subscription_expires_at,
       monthly_price: agent.monthly_price,
+      billing_cycle: agent.billing_cycle,
       notes: agent.notes,
       updated_at: new Date().toISOString(),
     };
@@ -265,9 +267,13 @@ export default function ThiqaAgentDetail() {
         .maybeSingle();
       const targetPrice = Number(targetPlan?.monthly_price ?? 0);
       const nowIso = new Date().toISOString();
-      const oneMonth = new Date();
-      oneMonth.setMonth(oneMonth.getMonth() + 1);
-      const oneMonthIso = oneMonth.toISOString();
+      const cyclePeriod = new Date();
+      if (agent.billing_cycle === 'yearly') {
+        cyclePeriod.setFullYear(cyclePeriod.getFullYear() + 1);
+      } else {
+        cyclePeriod.setMonth(cyclePeriod.getMonth() + 1);
+      }
+      const oneMonthIso = cyclePeriod.toISOString();
 
       if (newPlan === 'free_trial') {
         // paid → free_trial
@@ -1131,11 +1137,14 @@ export default function ThiqaAgentDetail() {
                             that admin will eventually click through. */}
                         {dbPlans.length > 0 ? dbPlans
                           .filter(p => p.plan_key !== 'free_trial' || agent.plan === 'free_trial')
-                          .map(p => (
-                            <SelectItem key={p.plan_key} value={p.plan_key}>
-                              {p.name} — ₪{p.monthly_price}/شهر
-                            </SelectItem>
-                          )) : (
+                          .map(p => {
+                            const yearly = p.yearly_price ?? p.monthly_price * 12;
+                            return (
+                              <SelectItem key={p.plan_key} value={p.plan_key}>
+                                {p.name} — ₪{p.monthly_price}/شهر · ₪{yearly}/سنة
+                              </SelectItem>
+                            );
+                          }) : (
                           <>
                             <SelectItem value="basic">Basic — ₪300/شهر</SelectItem>
                             <SelectItem value="pro">Pro — ₪500/شهر</SelectItem>
@@ -1177,6 +1186,19 @@ export default function ThiqaAgentDetail() {
                   <div>
                     <Label>السعر الشهري</Label>
                     <Input type="number" value={agent.monthly_price || ''} onChange={e => setAgent({...agent, monthly_price: parseFloat(e.target.value) || null})} />
+                  </div>
+                  <div>
+                    <Label>دورة الفوترة</Label>
+                    <Select
+                      value={agent.billing_cycle ?? 'monthly'}
+                      onValueChange={v => setAgent({...agent, billing_cycle: v as 'monthly' | 'yearly'})}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">شهري</SelectItem>
+                        <SelectItem value="yearly">سنوي</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div><Label>ملاحظات</Label><Textarea value={agent.notes || ''} onChange={e => setAgent({...agent, notes: e.target.value})} /></div>

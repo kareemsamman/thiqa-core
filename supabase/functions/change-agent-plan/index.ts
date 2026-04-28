@@ -194,10 +194,18 @@ Deno.serve(async (req) => {
         billingCycle === "yearly"
           ? `${fmtPrice(yearlyPrice)} / سنة`
           : `${fmtPrice(Number(targetPlan.monthly_price))} / شهر`;
+      // Show the agent's previous price as the actual amount they were
+      // billed per cycle — yearly subscribers paid monthly_price × 12 in
+      // one shot, not monthly_price every month.
+      const fromMonthly = Number(agent.monthly_price ?? 0);
+      const fromTotalAr =
+        currentCycle === "yearly"
+          ? `${fmtPrice(fromMonthly * 12)} / سنة`
+          : `${fmtPrice(fromMonthly)} / شهر`;
 
       const rows = [
         ["الوكالة", `${agent.name_ar || agent.name} (${agent.email})`],
-        ["من", `${currentPlan?.name_ar || currentPlan?.name || agent.plan} — ${fmtPrice(Number(agent.monthly_price ?? 0))} / شهر (${currentCycle === "yearly" ? "سنوي" : "شهري"})`],
+        ["من", `${currentPlan?.name_ar || currentPlan?.name || agent.plan} — ${fromTotalAr} (${currentCycle === "yearly" ? "سنوي" : "شهري"})`],
         ["إلى", `${targetPlan.name_ar || targetPlan.name} — ${newTotalAr}`],
         ["دورة الفوترة", cycleLabelAr],
         ["نوع التحويل", modeLabel],
