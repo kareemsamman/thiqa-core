@@ -607,11 +607,14 @@ export default function Subscription() {
                   )}
 
                   {/* Stats for paid plans */}
-                  {!sub.isTrial && (
+                  {!sub.isTrial && (() => {
+                    const stats = getCycleLabels(agent.billing_cycle);
+                    const cycleAmount = getCycleAmount(agent.monthly_price ?? 0, agent.billing_cycle);
+                    return (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                       <div className="space-y-0.5">
-                        <p className="text-xs text-muted-foreground flex items-center gap-1"><CreditCard className="h-3.5 w-3.5" />السعر الشهري</p>
-                        <p className="text-lg font-bold">₪{agent.monthly_price?.toLocaleString() ?? 0}</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1"><CreditCard className="h-3.5 w-3.5" />{stats.priceTitle}</p>
+                        <p className="text-lg font-bold">₪{cycleAmount.toLocaleString()}</p>
                       </div>
                       {sub.expiresAt && (
                         <div className="space-y-0.5">
@@ -626,7 +629,8 @@ export default function Subscription() {
                         </div>
                       )}
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
             </CardContent>
@@ -675,6 +679,7 @@ export default function Subscription() {
               const billingPlanKey = agent.plan;
               const billingPlan = plans.find(p => p.plan_key === billingPlanKey);
               const cycleLabels = getCycleLabels(agent.billing_cycle);
+              const isYearly = cycleLabels.isYearly;
               // Yearly subscribers pay monthly_price × 12 in one shot per
               // year. Monthly subscribers pay the per-month rate.
               const basePrice = getCycleAmount(agent.monthly_price || 0, agent.billing_cycle);
@@ -692,7 +697,11 @@ export default function Subscription() {
                 (sum, a) => sum + (Number(a.quantity) || 0) * (Number(a.unit_price) || 0),
                 0,
               );
-              const nextTotal = basePrice + extrasTotal + addonsMonthlyTotal;
+              const monthlyExtrasTotal = addonsMonthlyTotal + extrasTotal;
+              // Monthly subscribers see one bundled bill: base + addons + overages.
+              // Yearly subscribers split into two: base once a year, addons +
+              // overages once a month.
+              const nextTotal = isYearly ? basePrice : basePrice + monthlyExtrasTotal;
               const smsExtras = unbilledOverages.filter(o => o.usage_type === 'sms');
               const aiExtras = unbilledOverages.filter(o => o.usage_type === 'ai_chat');
               const smsCount = smsExtras.reduce((s, o) => s + o.extra_count, 0);
@@ -714,14 +723,35 @@ export default function Subscription() {
                 }
               };
 
-              const subtitle = "تفاصيل ما سيُحسب عليك في الفاتورة القادمة";
+              const subtitle = isYearly
+                ? "اشتراكك سنوي للأساسية. الإضافات والاستهلاك تُفوتَر شهرياً بشكل منفصل."
+                : "تفاصيل ما سيُحسب عليك في الفاتورة القادمة";
 
               // The date we expect the agent to be charged on: trial end for
               // trial agents, otherwise the subscription expiry (end of the
-              // current billing cycle).
+              // current billing cycle). For yearly subscribers this is the
+              // YEARLY base bill date — addons/overages have their own
+              // monthly date computed below.
               const billingDate: Date | null = sub?.isTrial
                 ? (sub.trialEnd ?? null)
                 : (sub?.expiresAt ?? (agent.subscription_expires_at ? new Date(agent.subscription_expires_at) : null));
+
+              // Yearly-only: when the monthly invoice (addons + overages)
+              // is due. Anchor on the day of subscription_started_at and
+              // pick the next future occurrence.
+              const monthlyBillingDate: Date | null = (() => {
+                if (!isYearly) return null;
+                const startedAt = agent.subscription_started_at
+                  ? new Date(agent.subscription_started_at)
+                  : null;
+                const today = new Date();
+                const day = startedAt ? startedAt.getDate() : today.getDate();
+                const next = new Date(today.getFullYear(), today.getMonth(), day);
+                if (next.getTime() <= today.getTime()) {
+                  next.setMonth(next.getMonth() + 1);
+                }
+                return next;
+              })();
 
               // Arabic month names so we don't have to add a date-fns locale
               // dependency just for this one display.
@@ -737,7 +767,12 @@ export default function Subscription() {
                 ? Math.max(0, Math.ceil((billingDate.getTime() - Date.now()) / 86400000))
                 : null;
 
+              const monthlyDaysUntil = monthlyBillingDate
+                ? Math.max(0, Math.ceil((monthlyBillingDate.getTime() - Date.now()) / 86400000))
+                : null;
+
               return (
+                <>
                 <Card className="overflow-hidden shadow-sm border-primary/20">
                   <div className="h-1 w-full bg-primary" />
                   <CardContent className="p-5 md:p-6 space-y-5">
@@ -748,7 +783,9 @@ export default function Subscription() {
                         </div>
                         <div>
                           <h3 className="text-lg font-bold">
-                            {sub?.isTrial ? "فاتورتك الأولى المتوقعة" : "الفاتورة القادمة"}
+                            {sub?.isTrial ? "فاتورتك الأولى المتوقعة"
+                              : isYearly ? "الفاتورة السنوية القادمة"
+                              : "الفاتورة القادمة"}
                           </h3>
                           <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
                             {subtitle}
@@ -776,7 +813,9 @@ export default function Subscription() {
                             </div>
                             <div>
                               <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-                                {sub?.isTrial ? "تاريخ أول فاتورة" : "تاريخ الفاتورة القادمة"}
+                                {sub?.isTrial ? "تاريخ أول فاتورة"
+                                  : isYearly ? "تاريخ الفاتورة السنوية"
+                                  : "تاريخ الفاتورة القادمة"}
                               </p>
                               <p className="text-2xl sm:text-3xl font-extrabold text-foreground mt-0.5">
                                 {formatBillingDate(billingDate)}
@@ -819,10 +858,10 @@ export default function Subscription() {
                         </span>
                       </div>
 
-                      {/* Recurring monthly addons. One row per active
-                          addon so the agent can see exactly what each
-                          extra contributes (e.g., extra_user × 1 = ₪30). */}
-                      {activeAddons.map((a) => {
+                      {/* Monthly subscribers see addons + overages bundled
+                          into the same bill as the base. Yearly subscribers
+                          see them on the separate monthly card below. */}
+                      {!isYearly && activeAddons.map((a) => {
                         const lineTotal = Number(a.quantity) * Number(a.unit_price);
                         return (
                           <div key={a.id} className="flex items-center justify-between py-2.5 border-b">
@@ -842,8 +881,7 @@ export default function Subscription() {
                         );
                       })}
 
-                      {/* SMS overage row */}
-                      {smsCount > 0 && (
+                      {!isYearly && smsCount > 0 && (
                         <div className="flex items-center justify-between py-2.5 border-b">
                           <div className="flex items-center gap-2">
                             <MessageCircle className="h-4 w-4 text-muted-foreground" />
@@ -860,8 +898,7 @@ export default function Subscription() {
                         </div>
                       )}
 
-                      {/* AI overage row */}
-                      {aiCount > 0 && (
+                      {!isYearly && aiCount > 0 && (
                         <div className="flex items-center justify-between py-2.5 border-b">
                           <div className="flex items-center gap-2">
                             <Sparkles className="h-4 w-4 text-muted-foreground" />
@@ -887,8 +924,10 @@ export default function Subscription() {
                       </div>
                     </div>
 
-                    {/* Per-purchase details, collapsed below a header */}
-                    {unbilledOverages.length > 0 && (
+                    {/* Per-purchase details, collapsed below a header.
+                        Hidden on the yearly base card — the overage detail
+                        belongs with the monthly card below it. */}
+                    {!isYearly && unbilledOverages.length > 0 && (
                       <details className="group rounded-lg border bg-muted/20 p-3">
                         <summary className="cursor-pointer text-xs font-medium text-muted-foreground flex items-center justify-between">
                           <span>تفاصيل عمليات الشراء ({unbilledOverages.length})</span>
@@ -934,6 +973,170 @@ export default function Subscription() {
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Yearly subscribers — second card for the recurring
+                    monthly bill (addons + this month's overages). Only
+                    rendered when there's actually something to show. */}
+                {isYearly && monthlyExtrasTotal > 0 && (
+                  <Card className="overflow-hidden shadow-sm border-amber-300/40">
+                    <div className="h-1 w-full bg-amber-400" />
+                    <CardContent className="p-5 md:p-6 space-y-5">
+                      <div className="flex items-start justify-between gap-4 flex-wrap">
+                        <div className="flex items-center gap-3">
+                          <div className="h-11 w-11 rounded-xl bg-amber-500/10 text-amber-700 flex items-center justify-center">
+                            <Receipt className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold">الفاتورة الشهرية القادمة</h3>
+                            <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
+                              الإضافات والاستهلاك الزائد تُفوتَر شهرياً بشكل مستقل عن الاشتراك السنوي.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-left">
+                          <p className="text-[10px] text-muted-foreground">الإجمالي المتوقع</p>
+                          <p className="text-3xl font-bold text-amber-700 tabular-nums">
+                            ₪{monthlyExtrasTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      </div>
+
+                      {monthlyBillingDate && (
+                        <div className="rounded-2xl bg-gradient-to-l from-amber-500/10 via-amber-500/5 to-transparent border border-amber-300/30 p-4 sm:p-5">
+                          <div className="flex items-center justify-between gap-4 flex-wrap">
+                            <div className="flex items-center gap-3">
+                              <div className="h-12 w-12 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20">
+                                <Calendar className="h-6 w-6" />
+                              </div>
+                              <div>
+                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                                  تاريخ الفاتورة الشهرية
+                                </p>
+                                <p className="text-2xl sm:text-3xl font-extrabold text-foreground mt-0.5">
+                                  {formatBillingDate(monthlyBillingDate)}
+                                </p>
+                              </div>
+                            </div>
+                            {monthlyDaysUntil !== null && (
+                              <div className="text-left shrink-0">
+                                <p className="text-[11px] text-muted-foreground">متبقي</p>
+                                <p className={cn(
+                                  "text-xl sm:text-2xl font-bold tabular-nums",
+                                  monthlyDaysUntil <= 7 ? "text-destructive" :
+                                  monthlyDaysUntil <= 14 ? "text-amber-600" :
+                                  "text-amber-700"
+                                )}>
+                                  {monthlyDaysUntil} يوم
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-2.5">
+                        {activeAddons.map((a) => {
+                          const lineTotal = Number(a.quantity) * Number(a.unit_price);
+                          return (
+                            <div key={a.id} className="flex items-center justify-between py-2.5 border-b">
+                              <div className="flex items-center gap-2">
+                                <Plus className="h-4 w-4 text-muted-foreground" />
+                                <div>
+                                  <p className="text-sm font-medium">{addonLabel(a.addon_type)}</p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {a.quantity} × ₪{Number(a.unit_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / شهر
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="font-semibold tabular-nums">
+                                +₪{lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          );
+                        })}
+
+                        {smsCount > 0 && (
+                          <div className="flex items-center justify-between py-2.5 border-b">
+                            <div className="flex items-center gap-2">
+                              <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <p className="text-sm font-medium">رصيد SMS إضافي</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {smsCount.toLocaleString()} رسالة مضافة هذا الشهر
+                                </p>
+                              </div>
+                            </div>
+                            <span className="font-semibold tabular-nums">
+                              +₪{smsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        )}
+
+                        {aiCount > 0 && (
+                          <div className="flex items-center justify-between py-2.5 border-b">
+                            <div className="flex items-center gap-2">
+                              <Sparkles className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <p className="text-sm font-medium">رصيد المساعد الذكي إضافي</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {aiCount.toLocaleString()} محادثة مضافة هذا الشهر
+                                </p>
+                              </div>
+                            </div>
+                            <span className="font-semibold tabular-nums">
+                              +₪{aiTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between pt-3">
+                          <span className="text-base font-bold">الإجمالي</span>
+                          <span className="text-xl font-bold tabular-nums text-amber-700">
+                            ₪{monthlyExtrasTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+
+                      {unbilledOverages.length > 0 && (
+                        <details className="group rounded-lg border bg-muted/20 p-3">
+                          <summary className="cursor-pointer text-xs font-medium text-muted-foreground flex items-center justify-between">
+                            <span>تفاصيل عمليات الشراء ({unbilledOverages.length})</span>
+                            <ChevronDown className="h-3.5 w-3.5 group-open:rotate-180 transition-transform" />
+                          </summary>
+                          <div className="mt-3 space-y-2">
+                            {unbilledOverages.map((o) => (
+                              <div
+                                key={o.id}
+                                className="flex items-center justify-between text-xs py-2 border-b last:border-0"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {o.usage_type === 'sms' ? (
+                                    <MessageCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  ) : (
+                                    <Sparkles className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  )}
+                                  <span className="truncate">
+                                    +{o.extra_count.toLocaleString()} {o.usage_type === 'sms' ? 'رسالة' : 'محادثة'}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    ({format(new Date(o.created_at), "dd/MM")})
+                                  </span>
+                                </div>
+                                <div className="text-muted-foreground tabular-nums shrink-0">
+                                  {o.extra_count} × ₪{Number(o.unit_price).toFixed(2)}
+                                  <span className="mr-2 font-semibold text-foreground">
+                                    = ₪{Number(o.total_amount).toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+                </>
               );
             })()}
 
