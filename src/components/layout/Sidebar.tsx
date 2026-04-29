@@ -1047,17 +1047,17 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="flex w-full items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-slate-100"
+                      className="flex w-full items-center justify-center rounded-lg p-2 transition-colors hover:bg-slate-100"
                     >
                       {profile?.avatar_url ? (
                         <img
                           src={profile.avatar_url}
                           alt={userName}
-                          className="h-11 w-11 rounded-full object-cover ring-2 ring-white flex-shrink-0"
+                          className="h-9 w-9 rounded-full object-cover ring-2 ring-white flex-shrink-0"
                         />
                       ) : (
                         <div
-                          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full shadow-[0_4px_12px_-4px_rgba(69,94,187,0.45)]"
+                          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full shadow-[0_4px_12px_-4px_rgba(69,94,187,0.45)]"
                           style={{
                             background:
                               "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%), rgba(255, 255, 255, 0.02)",
