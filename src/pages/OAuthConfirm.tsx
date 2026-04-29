@@ -45,7 +45,7 @@ function getInitial(name: string): string {
 
 export default function OAuthConfirm() {
   const navigate = useNavigate();
-  const { user, profile, loading: authLoading, signOut, refreshProfile } = useAuth();
+  const { user, profile, loading: authLoading, signOut, refreshProfile, isSuperAdmin } = useAuth();
   const { refetchAgentContext } = useAgentContext();
   const [submitting, setSubmitting] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -75,6 +75,17 @@ export default function OAuthConfirm() {
       navigate("/login", { replace: true });
     }
   }, [authLoading, user, navigate]);
+
+  // Super-admins never need this page — they don't belong to an agent
+  // (so they always look "unset" by the agent_id check) but they're
+  // already fully provisioned. Forward them to /thiqa.
+  useEffect(() => {
+    if (authLoading) return;
+    if (isSuperAdmin) {
+      sessionStorage.removeItem("oauth_intent");
+      navigate("/thiqa", { replace: true });
+    }
+  }, [authLoading, isSuperAdmin, navigate]);
 
   // If the user already has an agent_id, they're not new — skip
   // straight to the dashboard. Covers refreshes after setup completed.

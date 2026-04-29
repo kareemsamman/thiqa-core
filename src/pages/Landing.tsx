@@ -371,7 +371,7 @@ export default function Landing() {
   // the user sees what Google sent us and explicitly confirms account
   // creation, instead of being dumped on the marketing page.
   const navigate = useNavigate();
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, isSuperAdmin } = useAuth();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -385,12 +385,15 @@ export default function Landing() {
 
   useEffect(() => {
     if (authLoading || !user) return;
+    // Super-admins don't belong to an agent, so a missing agent_id
+    // is normal for them — never bounce them through /oauth-confirm.
+    if (isSuperAdmin) return;
     // OAuth user past the hash but still missing their agent — push
     // them into the confirmation page so setup can finish.
     if (!profile?.agent_id) {
       navigate("/oauth-confirm", { replace: true });
     }
-  }, [authLoading, user, profile?.agent_id, navigate]);
+  }, [authLoading, user, profile?.agent_id, isSuperAdmin, navigate]);
 
   return <LandingContent />;
 }
