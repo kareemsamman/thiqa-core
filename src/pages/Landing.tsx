@@ -371,7 +371,7 @@ export default function Landing() {
   // the user sees what Google sent us and explicitly confirms account
   // creation, instead of being dumped on the marketing page.
   const navigate = useNavigate();
-  const { user, profile, loading: authLoading, isSuperAdmin } = useAuth();
+  const { user, profile, loading: authLoading, profileLoading, isSuperAdmin } = useAuth();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -384,7 +384,13 @@ export default function Landing() {
   }, []);
 
   useEffect(() => {
-    if (authLoading || !user) return;
+    // Wait for BOTH auth and profile to settle before deciding to
+    // bounce. profile starts undefined and arrives a tick after auth
+    // resolves — without this guard `!profile?.agent_id` evaluates
+    // true during that gap and we hand the user off to /oauth-confirm,
+    // which then sees the still-resolving auth and forwards to /login.
+    // Net effect: typing `/` while logged in redirected to /login.
+    if (authLoading || profileLoading || !user) return;
     // Super-admins don't belong to an agent, so a missing agent_id
     // is normal for them — never bounce them through /oauth-confirm.
     if (isSuperAdmin) return;
@@ -393,7 +399,7 @@ export default function Landing() {
     if (!profile?.agent_id) {
       navigate("/oauth-confirm", { replace: true });
     }
-  }, [authLoading, user, profile?.agent_id, isSuperAdmin, navigate]);
+  }, [authLoading, profileLoading, user, profile?.agent_id, isSuperAdmin, navigate]);
 
   return <LandingContent />;
 }
