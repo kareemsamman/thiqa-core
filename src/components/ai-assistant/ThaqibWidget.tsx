@@ -23,6 +23,7 @@ const PUBLIC_ROUTE_PREFIXES = [
   "/reset-password",
   "/forgot-password",
   "/no-access",
+  "/oauth-confirm",
   "/subscription-expired",
 ];
 
