@@ -45,7 +45,7 @@ function getInitial(name: string): string {
 
 export default function OAuthConfirm() {
   const navigate = useNavigate();
-  const { user, profile, loading: authLoading, signOut, refreshProfile, isSuperAdmin } = useAuth();
+  const { user, profile, loading: authLoading, profileLoading, signOut, refreshProfile, isSuperAdmin } = useAuth();
   const { refetchAgentContext } = useAgentContext();
   const [submitting, setSubmitting] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -134,7 +134,14 @@ export default function OAuthConfirm() {
     }
   };
 
-  if (authLoading || !user) {
+  // Stay in the loader while:
+  //  - auth or profile is still resolving — otherwise existing users
+  //    (whose agent_id arrives a tick after the page mounts) flash the
+  //    misleading "حسابك غير موجود" message before the agent_id useEffect
+  //    above navigates them to /dashboard;
+  //  - super-admin (handled by separate useEffect, but render-gate too);
+  //  - profile already has agent_id (about to redirect to /dashboard).
+  if (authLoading || profileLoading || !user || isSuperAdmin || profile?.agent_id) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
