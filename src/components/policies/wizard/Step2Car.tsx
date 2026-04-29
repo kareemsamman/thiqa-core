@@ -38,8 +38,8 @@ interface Step2Props {
   setVehicleExtra?: (extra: {
     trim_level: string;
     ownership: string;
-    mileage: string;
-    owners_count: string;
+    engine_displacement: string;
+    transmission: string;
   }) => void;
 }
 
@@ -130,6 +130,29 @@ export function Step2Car({
     return () => clearTimeout(timer);
   }, [newCar.car_number, createNewCar, selectedClient?.id]);
 
+  // Wipe everything fetch-vehicle previously populated, leaving the
+  // user's typed plate intact. Used when a re-fetch returns no data so
+  // the form doesn't keep showing the previous car's details.
+  const clearFetchedVehicleFields = (keptCarNumber: string) => {
+    setNewCar({
+      ...newCar,
+      car_number: keptCarNumber,
+      manufacturer_name: "",
+      model: "",
+      year: "",
+      color: "",
+      license_expiry: "",
+      car_type: "",
+    });
+    setVehicleExtra?.({
+      trim_level: "",
+      ownership: "",
+      engine_displacement: "",
+      transmission: "",
+    });
+    setCarDataFetched(false);
+  };
+
   const fetchCarData = async (carNumber?: string) => {
     const numberToFetch = carNumber || newCar.car_number;
     if (!numberToFetch || numberToFetch.length < 7) {
@@ -142,9 +165,14 @@ export function Step2Car({
         body: { car_number: numberToFetch }
       });
 
-      if (error) throw error;
-
-      if (data.error) {
+      // Treat anything that isn't a clean success the same way: wipe stale
+      // data, drop the "fetched" indicator, and tell the user the lookup
+      // came up empty so they can either retype or fill manually.
+      const noData =
+        !!error || !data || (data as any).error || (data as any).found === false;
+      if (noData) {
+        clearFetchedVehicleFields(numberToFetch);
+        toast({ title: "لم يتم العثور على بيانات السيارة" });
         return;
       }
 
@@ -163,17 +191,17 @@ export function Step2Car({
       setVehicleExtra?.({
         trim_level: vehicleData.trim_level || "",
         ownership: vehicleData.ownership || "",
-        mileage:
-          vehicleData.mileage != null
-            ? Number(vehicleData.mileage).toLocaleString("en-US")
+        engine_displacement:
+          vehicleData.engine_displacement != null
+            ? String(vehicleData.engine_displacement)
             : "",
-        owners_count:
-          vehicleData.owners_count != null ? String(vehicleData.owners_count) : "",
+        transmission: vehicleData.transmission || "",
       });
       setCarDataFetched(true);
       toast({ title: "تم جلب البيانات تلقائياً" });
     } catch {
-      // Silent fail - user can manually enter data
+      clearFetchedVehicleFields(numberToFetch);
+      toast({ title: "لم يتم العثور على بيانات السيارة" });
     } finally {
       setFetchingCarData(false);
     }

@@ -237,9 +237,9 @@ export function PolicyWizard({
   const [vehicleExtra, setVehicleExtra] = useState<{
     trim_level: string;
     ownership: string;
-    mileage: string;
-    owners_count: string;
-  }>({ trim_level: "", ownership: "", mileage: "", owners_count: "" });
+    engine_displacement: string;
+    transmission: string;
+  }>({ trim_level: "", ownership: "", engine_displacement: "", transmission: "" });
   // Programmatic closes (e.g. after a successful save) skip the dirty check.
   const skipCloseConfirmRef = useRef(false);
 
@@ -2116,8 +2116,8 @@ export function PolicyWizard({
                 carNumber: newCar.car_number,
                 trimLevel: vehicleExtra.trim_level,
                 ownership: vehicleExtra.ownership,
-                mileage: vehicleExtra.mileage,
-                ownersCount: vehicleExtra.owners_count,
+                engineDisplacement: vehicleExtra.engine_displacement,
+                transmission: vehicleExtra.transmission,
               }
             : selectedCar
               ? {
