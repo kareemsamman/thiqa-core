@@ -657,14 +657,16 @@ export default function Pricing() {
                     column dividers exactly like the Strain reference. */}
                 <SectionDivider isFirst={isFirst} isLast={isLast} />
 
-                {/* ── Billing toggle (paid plans) or trial info (free) */}
+                {/* ── Billing toggle (paid plans) or trial info (free).
+                    Right-hand text always shows the annual savings —
+                    the actionable hint, mirrored from Strain — instead
+                    of repeating the "monthly" label that already sits
+                    next to the toggle. */}
                 <div className="px-7 md:px-8 py-4 min-h-[64px] flex items-center justify-between">
                   {hasYearly ? (
                     <>
-                      <span className="text-[12px] text-black/55">
-                        {yearly
-                          ? `وفّر ₪${annualSavings} سنوياً`
-                          : "فوترة شهرية"}
+                      <span className="text-[13px] text-black/75 font-medium tabular-nums">
+                        وفّر ₪{annualSavings}
                       </span>
                       <div className="flex items-center gap-2.5">
                         <span className="text-[13px] font-semibold text-black">
