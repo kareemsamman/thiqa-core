@@ -13,6 +13,8 @@ export interface MotCarInfo {
   carNumber?: string;
   trimLevel?: string;
   ownership?: string;
+  mileage?: string;
+  ownersCount?: string;
 }
 
 interface Props {
@@ -54,6 +56,8 @@ export function MotPriceLookupPanel({
       carInfo.carNumber && `رقم السيارة: ${carInfo.carNumber}`,
       carInfo.trimLevel && `مستوى التجهيز: ${carInfo.trimLevel}`,
       carInfo.ownership && `نوع الملكية: ${carInfo.ownership}`,
+      carInfo.mileage && `الكيلومتراج: ${carInfo.mileage}`,
+      carInfo.ownersCount && `عدد الملاك: ${carInfo.ownersCount}`,
     ].filter(Boolean);
     if (parts.length === 0) {
       toast({ title: "لا توجد بيانات سيارة للنسخ", variant: "destructive" });
@@ -173,7 +177,7 @@ export function MotPriceLookupPanel({
                 </a>
               </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <CopyField
                 label="الشركة المصنعة"
                 value={carInfo.manufacturer}
@@ -203,6 +207,16 @@ export function MotPriceLookupPanel({
                 label="نوع الملكية"
                 value={carInfo.ownership || ""}
                 onCopy={(v) => copy("نوع الملكية", v)}
+              />
+              <CopyField
+                label="الكيلومتراج"
+                value={carInfo.mileage || ""}
+                onCopy={(v) => copy("الكيلومتراج", v)}
+              />
+              <CopyField
+                label="عدد الملاك"
+                value={carInfo.ownersCount || ""}
+                onCopy={(v) => copy("عدد الملاك", v)}
               />
             </div>
           </div>

@@ -39,6 +39,13 @@ const DATASETS: DatasetSource[] = [
   { resourceId: 'bf9df4e2-d90d-4c0a-a400-19e15af8e95f', kind: 'motorcycle', label: 'motorcycle' },
 ];
 
+// Vehicle-history datasets used purely for display-only enrichment in
+// the MOT price-lookup panel. Coverage is partial (records start at
+// 2017-01) so plates registered before then with no transfers/tests
+// since simply won't appear — the response just nulls the fields out.
+const HISTORY_MILEAGE_RESOURCE = '56063a99-8a3e-4ff4-912e-5966c0279bad';
+const HISTORY_OWNERSHIP_RESOURCE = 'bb2355dc-9ec7-4f06-9c3f-3344672171da';
+
 interface VehicleData {
   car_number: string;
   manufacturer_name: string | null;
@@ -54,6 +61,8 @@ interface VehicleData {
   // shows these in the MOT price-lookup panel as copy/reference chips.
   trim_level: string | null;
   ownership: string | null;
+  mileage: number | null;
+  owners_count: number | null;
   // New: which dataset answered, useful for the UI to show a hint
   source: DatasetKind | null;
 }
@@ -122,11 +131,19 @@ serve(async (req) => {
 
     console.log(`Fetching vehicle data for: ${cleanedNumber}`);
 
-    // Hit every dataset in parallel. allSettled so a single 5xx from
-    // one dataset can't kill the whole lookup.
-    const settled = await Promise.allSettled(
-      DATASETS.map((ds) => searchDataset(ds, cleanedNumber)),
-    );
+    // Plate-as-int needed for the history datasets, which store
+    // mispar_rechev as a numeric column (the search/q endpoint won't
+    // match a digit string against an int field, so we filter directly).
+    const plateInt = /^\d+$/.test(cleanedNumber) ? parseInt(cleanedNumber, 10) : null;
+
+    // Hit every dataset in parallel — the 4 main registries plus the
+    // 2 history datasets. allSettled so a single 5xx from one dataset
+    // can't kill the whole lookup.
+    const [settled, mileage, ownersCount] = await Promise.all([
+      Promise.allSettled(DATASETS.map((ds) => searchDataset(ds, cleanedNumber))),
+      plateInt !== null ? fetchMileage(plateInt) : Promise.resolve(null),
+      plateInt !== null ? fetchOwnersCount(plateInt) : Promise.resolve(null),
+    ]);
 
     const hits: DatasetHit[] = [];
     for (let i = 0; i < settled.length; i++) {
@@ -179,6 +196,8 @@ serve(async (req) => {
       car_type: mapCarType(winner.kind, licenseType, r),
       trim_level: r.ramat_gimur || null,
       ownership: r.baalut || null,
+      mileage,
+      owners_count: ownersCount,
       source: winner.kind,
     };
 
@@ -201,6 +220,50 @@ serve(async (req) => {
     });
   }
 });
+
+// Last recorded test odometer for this plate, in km. The history
+// dataset only has rows for plates with logged events (color/structure/
+// tire change or annual test record), so this returns null for plates
+// without a matching record. Best-effort enrichment.
+async function fetchMileage(plateInt: number): Promise<number | null> {
+  const filter = encodeURIComponent(JSON.stringify({ mispar_rechev: plateInt }));
+  const url = `${GOV_API_URL}?resource_id=${HISTORY_MILEAGE_RESOURCE}&filters=${filter}&limit=1`;
+  try {
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const records: any[] = data?.result?.records ?? [];
+    if (records.length === 0) return null;
+    const km = records[0].kilometer_test_aharon;
+    if (typeof km === 'number') return km;
+    const parsed = parseInt(String(km), 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+// Number of distinct private-ownership periods (baalut === "פרטי")
+// for this plate. Dealer/lease intermediaries are excluded so the
+// count matches what the MOT mehiron's "מספר בעלים" dropdown expects.
+// Coverage starts 2017-01; pre-2017 history isn't in the dataset.
+async function fetchOwnersCount(plateInt: number): Promise<number | null> {
+  const filter = encodeURIComponent(
+    JSON.stringify({ mispar_rechev: plateInt, baalut: 'פרטי' }),
+  );
+  // limit=0 keeps the response tiny — we only want `total`.
+  const url = `${GOV_API_URL}?resource_id=${HISTORY_OWNERSHIP_RESOURCE}&filters=${filter}&limit=0`;
+  try {
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const total = data?.result?.total;
+    if (typeof total === 'number' && total > 0) return total;
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 // One CKAN datastore lookup. Returns the matching record (exact plate
 // match preferred, otherwise the first row), or null if not found.

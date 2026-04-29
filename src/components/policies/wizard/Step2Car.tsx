@@ -35,7 +35,12 @@ interface Step2Props {
   setCarDataFetched: (fetched: boolean) => void;
   errors: ValidationErrors;
   onOpenMotLookup?: () => void;
-  setVehicleExtra?: (extra: { trim_level: string; ownership: string }) => void;
+  setVehicleExtra?: (extra: {
+    trim_level: string;
+    ownership: string;
+    mileage: string;
+    owners_count: string;
+  }) => void;
 }
 
 export function Step2Car({
@@ -158,6 +163,12 @@ export function Step2Car({
       setVehicleExtra?.({
         trim_level: vehicleData.trim_level || "",
         ownership: vehicleData.ownership || "",
+        mileage:
+          vehicleData.mileage != null
+            ? Number(vehicleData.mileage).toLocaleString("en-US")
+            : "",
+        owners_count:
+          vehicleData.owners_count != null ? String(vehicleData.owners_count) : "",
       });
       setCarDataFetched(true);
       toast({ title: "تم جلب البيانات تلقائياً" });
