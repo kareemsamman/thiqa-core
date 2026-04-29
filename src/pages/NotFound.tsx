@@ -92,7 +92,7 @@ const NotFound = () => {
             <span>الصفحة الرئيسية</span>
           </a>
           <a
-            href="/support"
+            href="/landing/support"
             className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur text-white border border-white/30 text-[15px] font-bold px-9 py-3.5 transition-all hover:bg-white/20 hover:scale-[1.02]"
           >
             <Headphones className="h-4 w-4" />
