@@ -71,13 +71,13 @@ export function MotPriceLookupPanel({
     <>
       {!minimized && (
         <div
-          className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-sm"
+          className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-sm pointer-events-auto"
           onClick={onMinimize}
         />
       )}
       <div
         className={cn(
-          "fixed z-[100] bg-background border shadow-2xl flex flex-col",
+          "fixed z-[100] bg-background border shadow-2xl flex flex-col pointer-events-auto",
           minimized
             ? "bottom-4 left-4 w-[320px] rounded-lg overflow-hidden"
             : "inset-2 sm:inset-4 lg:inset-8 rounded-xl overflow-hidden"
