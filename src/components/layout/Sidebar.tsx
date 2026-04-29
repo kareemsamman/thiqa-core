@@ -1042,12 +1042,12 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
             };
 
             return (
-              <div className="p-3">
+              <div className="p-3 flex justify-center">
                 <Popover open={userMenuOpen} onOpenChange={setUserMenuOpen}>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="flex w-full items-center justify-center rounded-lg p-2 transition-colors hover:bg-slate-100"
+                      className="inline-flex items-center justify-center rounded-full transition-colors hover:bg-slate-100"
                     >
                       {profile?.avatar_url ? (
                         <img
