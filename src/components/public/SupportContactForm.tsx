@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Mail, Clock, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { FAQ_CATEGORIES } from "@/lib/faqContent";
@@ -108,29 +108,88 @@ export function SupportContactForm({ className }: SupportContactFormProps) {
       <div
         id="support"
         className={cn(
-          "max-w-2xl mx-auto py-10 md:py-14 px-6 md:px-10 rounded-3xl bg-white border border-emerald-200/60 shadow-[0_10px_40px_-18px_rgba(15,40,120,0.18)] text-center",
+          "relative max-w-2xl mx-auto px-6 md:px-12 pt-12 md:pt-14 pb-10 md:pb-12 rounded-3xl bg-white border border-black/[0.06] shadow-[0_24px_60px_-28px_rgba(15,40,120,0.22)] text-center overflow-hidden",
           className,
         )}
         role="status"
         aria-live="polite"
       >
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-50 mb-5">
-          <CheckCircle2 className="h-7 w-7 text-emerald-600" strokeWidth={2.4} />
-        </div>
-        <h3 className="text-2xl font-bold text-black mb-2">شكراً لتواصلك معنا 🌟</h3>
-        <p className="text-[15px] text-black/65 leading-relaxed mb-6 max-w-md mx-auto">
-          استلمنا طلبك وسنرد عليك على بريدك الإلكتروني في أقرب وقت ممكن — عادة خلال 24 ساعة في أيام العمل.
-        </p>
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-black/[0.04] text-[13px]">
-          <span className="text-black/55">رقم تذكرتك:</span>
-          <span className="font-bold text-black tabular-nums" dir="ltr">{submitted.ticketNumber}</span>
-        </div>
-        <div className="mt-8">
+        {/* Soft brand-purple top accent — same hue as the pricing
+            hero gradient, so the success card visually belongs to
+            the same product surface. */}
+        <div
+          aria-hidden
+          className="absolute top-0 inset-x-0 h-32 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(60% 100% at 50% 0%, rgba(124,92,255,0.10) 0%, rgba(124,92,255,0) 70%)",
+          }}
+        />
+
+        <div className="relative">
+          {/* Success badge — gradient pill with a soft halo behind. */}
+          <div className="relative inline-flex items-center justify-center mb-6">
+            <span aria-hidden className="absolute inset-0 rounded-full bg-emerald-200/50 blur-2xl" />
+            <span className="relative inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-emerald-50 to-emerald-100 ring-1 ring-emerald-200/70">
+              <CheckCircle2 className="h-8 w-8 text-emerald-600" strokeWidth={2.2} />
+            </span>
+          </div>
+
+          <h3 className="text-[26px] md:text-[28px] font-bold text-black tracking-tight mb-2.5">
+            شكراً لتواصلك معنا
+          </h3>
+          <p className="text-[14.5px] md:text-[15px] text-black/55 leading-relaxed mb-8 max-w-md mx-auto">
+            استلمنا طلبك بنجاح وسنرد عليك على بريدك الإلكتروني في أقرب وقت ممكن.
+          </p>
+
+          {/* Ticket number — solid black card, the one element a user
+              might want to copy/screenshot, so it's the visual anchor. */}
+          <div className="inline-flex flex-col items-center gap-1.5 px-7 md:px-9 py-4 md:py-5 rounded-2xl bg-black text-white mb-8">
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.22em] text-white/55">
+              رقم التذكرة
+            </span>
+            <span
+              className="text-[20px] md:text-[22px] font-extrabold tabular-nums tracking-wider"
+              dir="ltr"
+            >
+              {submitted.ticketNumber}
+            </span>
+          </div>
+
+          {/* Two-tile "what happens next" — keeps the card from
+              feeling empty and answers the obvious questions
+              ("when?" / "how?") without a wall of text. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md mx-auto mb-8 text-right">
+            <div className="flex items-start gap-3 p-3.5 rounded-xl bg-black/[0.025] border border-black/[0.04]">
+              <span className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-white border border-black/[0.06] text-black shrink-0">
+                <Mail className="h-4 w-4" strokeWidth={2.2} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12.5px] font-bold text-black leading-tight mb-0.5">رد على بريدك</p>
+                <p className="text-[11.5px] text-black/50 leading-snug">
+                  سيصلك الرد على نفس البريد المُدخل
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-3.5 rounded-xl bg-black/[0.025] border border-black/[0.04]">
+              <span className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-white border border-black/[0.06] text-black shrink-0">
+                <Clock className="h-4 w-4" strokeWidth={2.2} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12.5px] font-bold text-black leading-tight mb-0.5">خلال 24 ساعة</p>
+                <p className="text-[11.5px] text-black/50 leading-snug">
+                  في أيام العمل — الأحد إلى الخميس
+                </p>
+              </div>
+            </div>
+          </div>
+
           <button
             type="button"
             onClick={() => setSubmitted(null)}
-            className="text-[14px] font-bold text-black hover:opacity-80 transition-opacity"
+            className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full text-[13px] font-bold text-black hover:bg-black/[0.05] transition-colors"
           >
+            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2.5} />
             إرسال طلب آخر
           </button>
         </div>
