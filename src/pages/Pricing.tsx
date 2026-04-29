@@ -583,8 +583,9 @@ export default function Pricing() {
         {/* One shared frame around the whole grid — the cards are
             connected by hairlines, not individual outlined boxes
             (Strain reference). The 12px dots at every line crossing
-            mark each section/column intersection. */}
-        <div className="max-w-6xl mx-auto border border-black/15 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 bg-white/40 backdrop-blur-[2px]">
+            mark each section/column intersection. Four columns on lg
+            so every paid plan lives on one row regardless of count. */}
+        <div className="max-w-7xl mx-auto border border-black/15 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 bg-white/40 backdrop-blur-[2px]">
           {plans.filter((p) => p.plan_key !== 'free_trial').map((plan, idx, arr) => {
             const isPopular = !!plan.badge;
             const isFree = plan.monthly_price === 0;
