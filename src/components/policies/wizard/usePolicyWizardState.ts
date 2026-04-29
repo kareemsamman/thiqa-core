@@ -24,14 +24,20 @@ import type {
 import { User, Car, FileText, CreditCard, Building2 } from "lucide-react";
 import type { ClientChild, NewChildForm } from "@/types/clientChildren";
 
-const DRAFT_KEY_PREFIX = "abcrm:policyWizardDraft:v4";
+// Legacy localStorage prefix — wiped opportunistically on hydrate so
+// stale per-device snapshots from before the DB migration don't ghost
+// onto whoever signs in next. Persistence itself now lives in the
+// policy_wizard_drafts table (form_snapshot column).
+const LEGACY_DRAFT_KEY_PREFIX = "abcrm:policyWizardDraft:v4";
 
-// Build the localStorage key for a given wizard instance. When instanceId
-// is undefined (legacy direct usages of the wizard), persistence is
-// skipped entirely — the controller-driven host always supplies one.
-function draftKeyFor(instanceId: string | undefined): string | null {
-  return instanceId ? `${DRAFT_KEY_PREFIX}:${instanceId}` : null;
-}
+// supabase types haven't been regenerated for policy_wizard_drafts
+// yet, so cast at the boundary.
+const draftsTable = () => (supabase as any).from("policy_wizard_drafts");
+
+// Debounce window for snapshot saves. Cheap-but-not-free DB writes —
+// 600ms is short enough that a refresh after a typing pause is safe,
+// long enough that bursts of state changes coalesce into one write.
+const SNAPSHOT_SAVE_DEBOUNCE_MS = 600;
 
 interface UsePolicyWizardStateProps {
   open: boolean;
@@ -821,119 +827,106 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     }
   }, [steps]);
 
-  // ─── Per-instance draft persistence ──────────────────────────────────
-  // Serialize the form state to localStorage keyed by the wizard instance
-  // id so a page refresh (or closing + reopening the browser) restores the
-  // same client, car, policy fields, payments, etc. the user was editing.
-  // Loading happens once on mount; saving is debounced on every change.
-  const draftKey = draftKeyFor(instanceId);
+  // ─── Per-instance draft persistence (DB-backed) ──────────────────────
+  // Snapshot the wizard form into policy_wizard_drafts.form_snapshot so
+  // the user can resume the same draft on any device. Loading happens
+  // once on mount; saving is debounced because every keystroke would
+  // otherwise hit the DB.
   const hasHydratedRef = useRef(false);
+  const saveTimerRef = useRef<number | null>(null);
 
-  // Load snapshot on mount (once, keyed by instanceId). Primitive fields
-  // are applied synchronously; selectedCategory / selectedClient / selectedCar
-  // are re-fetched asynchronously by id and then the ref flips so the save
-  // effect starts writing again.
+  // Hydrate from DB on mount (once per instanceId). Wipes any legacy
+  // localStorage snapshot we find for the same id since it's now stale.
   useEffect(() => {
-    if (!draftKey) {
+    if (!instanceId) {
       hasHydratedRef.current = true;
       return;
     }
     let cancelled = false;
-    try {
-      const raw = localStorage.getItem(draftKey);
-      if (!raw) {
+    // Best-effort cleanup of pre-DB localStorage snapshots so they
+    // don't accumulate forever.
+    try { localStorage.removeItem(`${LEGACY_DRAFT_KEY_PREFIX}:${instanceId}`); } catch { /* non-fatal */ }
+
+    const applySnap = (snap: Record<string, unknown> | null) => {
+      if (!snap) {
         hasHydratedRef.current = true;
         return;
       }
-      const snap = JSON.parse(raw);
       if (typeof snap.currentStep === "number") setCurrentStep(snap.currentStep);
       if (typeof snap.selectedBranchId === "string") setSelectedBranchId(snap.selectedBranchId);
       if (typeof snap.createNewClient === "boolean") setCreateNewClient(snap.createNewClient);
-      if (snap.newClient) setNewClient(snap.newClient);
-      if (typeof snap.createNewCar === "boolean") setCreateNewCar(snap.createNewCar);
-      if (snap.newCar) setNewCar(snap.newCar);
-      if (snap.policy) setPolicy(snap.policy);
+      if (snap.newClient) setNewClient(snap.newClient as NewClientForm);
+      if (typeof snap.createNewCar === "boolean") setCreateNewCar(snap.createNewCar as boolean);
+      if (snap.newCar) setNewCar(snap.newCar as NewCarForm);
+      if (snap.policy) setPolicy(snap.policy as PolicyForm);
       if (typeof snap.policyBrokerId === "string") setPolicyBrokerId(snap.policyBrokerId);
-      if (snap.brokerDirection) setBrokerDirection(snap.brokerDirection);
+      if (snap.brokerDirection) setBrokerDirection(snap.brokerDirection as 'from_broker' | 'to_broker' | "");
       if (typeof snap.packageMode === "boolean") setPackageMode(snap.packageMode);
-      if (Array.isArray(snap.packageAddons)) setPackageAddons(snap.packageAddons);
-      if (Array.isArray(snap.payments)) setPayments(snap.payments);
-      if (Array.isArray(snap.selectedChildIds)) setSelectedChildIds(snap.selectedChildIds);
-      if (Array.isArray(snap.newChildren)) setNewChildren(snap.newChildren);
+      if (Array.isArray(snap.packageAddons)) setPackageAddons(snap.packageAddons as PackageAddon[]);
+      if (Array.isArray(snap.payments)) setPayments(snap.payments as PaymentLine[]);
+      if (Array.isArray(snap.selectedChildIds)) setSelectedChildIds(snap.selectedChildIds as string[]);
+      if (Array.isArray(snap.newChildren)) setNewChildren(snap.newChildren as NewChildForm[]);
 
       const asyncHydrate = async () => {
         const tasks: Promise<void>[] = [];
         if (snap.selectedCategoryId) {
           tasks.push(
-            Promise.resolve(
-              supabase
-                .from("insurance_categories")
-                .select("*")
-                .eq("id", snap.selectedCategoryId)
-                .maybeSingle()
-                .then(({ data }) => {
-                  if (!cancelled && data) {
-                    setSelectedCategory({
-                      ...(data as any),
-                      mode: (data as any).mode as "FULL" | "LIGHT",
-                    });
-                  }
-                }),
-            ),
+            supabase.from("insurance_categories").select("*").eq("id", snap.selectedCategoryId as string).maybeSingle()
+              .then(({ data }) => {
+                if (!cancelled && data) {
+                  setSelectedCategory({
+                    ...(data as any),
+                    mode: (data as any).mode as "FULL" | "LIGHT",
+                  });
+                }
+              }),
           );
         }
         if (snap.selectedClientId) {
           tasks.push(
-            Promise.resolve(
-              supabase
-                .from("clients")
-                .select(
-                  "id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes",
-                )
-                .eq("id", snap.selectedClientId)
-                .maybeSingle()
-                .then(({ data }) => {
-                  if (!cancelled && data) setSelectedClient(data as Client);
-                }),
-            ),
+            supabase.from("clients")
+              .select("id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes")
+              .eq("id", snap.selectedClientId as string).maybeSingle()
+              .then(({ data }) => { if (!cancelled && data) setSelectedClient(data as Client); }),
           );
         }
         if (snap.selectedCarId) {
           tasks.push(
-            Promise.resolve(
-              supabase
-                .from("cars")
-                .select("*")
-                .eq("id", snap.selectedCarId)
-                .maybeSingle()
-                .then(({ data }) => {
-                  if (!cancelled && data) setSelectedCar(data as CarRecord);
-                }),
-            ),
+            supabase.from("cars").select("*").eq("id", snap.selectedCarId as string).maybeSingle()
+              .then(({ data }) => { if (!cancelled && data) setSelectedCar(data as CarRecord); }),
           );
         }
         await Promise.all(tasks);
         if (!cancelled) hasHydratedRef.current = true;
       };
       asyncHydrate();
-    } catch {
-      hasHydratedRef.current = true;
-    }
-
-    return () => {
-      cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftKey]);
 
-  // Save snapshot on any relevant state change. No debounce — localStorage
-  // writes are cheap (~1ms) and debouncing dropped data when the user
-  // refreshed within the debounce window. React's useEffect dep-diffing
-  // already throttles us to the render cadence, so this runs at most
-  // once per commit.
+    draftsTable()
+      .select("form_snapshot")
+      .eq("id", instanceId)
+      .maybeSingle()
+      .then(({ data, error }: { data: { form_snapshot: Record<string, unknown> | null } | null; error: unknown }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("[PolicyWizardState] hydrate failed:", error);
+          hasHydratedRef.current = true;
+          return;
+        }
+        applySnap(data?.form_snapshot ?? null);
+      });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instanceId]);
+
+  // Save snapshot (debounced). The wizard fires off a lot of state
+  // changes per render cycle — coalesce them into a single write so
+  // we're not hammering the DB.
   useEffect(() => {
-    if (!draftKey || !hasHydratedRef.current) return;
-    try {
+    if (!instanceId || !hasHydratedRef.current) return;
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
       const snap = {
         currentStep,
         selectedBranchId,
@@ -950,18 +943,26 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
         packageMode,
         packageAddons,
         payments: payments.map((p) => {
+          // Drop the cheque_image data URL — it's reattached on save
+          // by the policy submit flow and would otherwise blow up the
+          // snapshot row size.
           const { cheque_image, ...rest } = p as any;
           return rest;
         }),
         selectedChildIds,
         newChildren,
       };
-      localStorage.setItem(draftKey, JSON.stringify(snap));
-    } catch {
-      // ignore quota / parse errors
-    }
+      draftsTable().update({ form_snapshot: snap }).eq("id", instanceId)
+        .then(({ error }: { error: unknown }) => {
+          if (error) console.error("[PolicyWizardState] save snapshot failed:", error);
+        });
+    }, SNAPSHOT_SAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    };
   }, [
-    draftKey,
+    instanceId,
     currentStep,
     selectedBranchId,
     selectedCategory,
@@ -981,14 +982,13 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     newChildren,
   ]);
 
-  // Clear draft (called on explicit close / after save)
+  // Clear draft (called on explicit close / after save). The controller
+  // owns the row's lifecycle (open inserts, close deletes), so this is
+  // a no-op locally — kept for API compatibility with callers that
+  // expect to "discard the in-progress wizard data".
   const clearDraft = useCallback(() => {
-    try {
-      if (draftKey) localStorage.removeItem(draftKey);
-    } catch {
-      // ignore
-    }
-  }, [draftKey]);
+    // The actual row delete happens in usePolicyWizardController.closeInstance.
+  }, []);
 
   return {
     // Core state
