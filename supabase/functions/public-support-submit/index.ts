@@ -64,6 +64,13 @@ function rateLimited(ip: string): boolean {
 
 const EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
+// Some receiving servers reject (or silently drop) raw UTF-8 in
+// subject headers. Encoded-word format is what register-agent uses
+// for the same reason and what Hostinger's relays prefer.
+function encodeMimeSubject(s: string): string {
+  return "=?UTF-8?B?" + btoa(unescape(encodeURIComponent(s))) + "?=";
+}
+
 function escapeHtml(s: string | null | undefined): string {
   if (!s) return "";
   return s
@@ -267,26 +274,41 @@ Deno.serve(async (req) => {
   }
 
   // ── Send emails (notification to support, confirmation to customer).
+  // Each send gets its own try/catch so a customer-side delivery
+  // failure (gmail/outlook spam policies, SPF on a mismatched `from`,
+  // throttling on external recipients) doesn't get masked by a shared
+  // catch — the previous version logged "email send failed" once and
+  // the second message looked like it had been sent.
+  //
+  // The `from` address uses the authenticated SMTP user directly,
+  // matching `register-agent`. Using `smtp_from_email` instead caused
+  // selective failures: internal delivery (support@getthiqa.com on
+  // the same Hostinger inbox) accepted the mismatched envelope, but
+  // external recipients hit SPF rejection.
   const supportEmail = await getPlatformSetting(adminClient, "support_email", "support@getthiqa.com");
   const smtp = await getSmtpSettings(adminClient);
 
   if (smtp.user && smtp.password) {
-    try {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host,
-        port: smtp.port,
-        secure: smtp.port === 465,
-        requireTLS: smtp.port !== 465,
-        auth: { user: smtp.user, pass: smtp.password },
-        tls: { minVersion: "TLSv1.2" },
-      });
+    const transporter = nodemailer.createTransport({
+      host: smtp.host,
+      port: smtp.port,
+      // Port 465 uses implicit TLS; STARTTLS for everything else.
+      secure: smtp.port === 465,
+      requireTLS: smtp.port !== 465,
+      auth: { user: smtp.user, pass: smtp.password },
+      tls: { minVersion: "TLSv1.2" },
+    });
 
-      // Notification to support inbox
+    const fromHeader = `"${smtp.senderName}" <${smtp.user}>`;
+
+    // Notification to support inbox.
+    try {
       await transporter.sendMail({
-        from: `"${smtp.senderName}" <${smtp.fromEmail}>`,
+        from: fromHeader,
         to: supportEmail,
         replyTo: email,
-        subject: `[${ticket.ticket_number}] طلب دعم جديد — ${category}`,
+        subject: encodeMimeSubject(`[${ticket.ticket_number}] طلب دعم جديد — ${category}`),
+        text: `طلب دعم جديد من ${name} (${email}).\nرقم التذكرة: ${ticket.ticket_number}\nالفئة: ${category}`,
         html: buildEmailHtml({
           body: notifyAdminBody({
             ticketNumber: ticket.ticket_number,
@@ -295,21 +317,25 @@ Deno.serve(async (req) => {
           footerText: "اضغط ردّ على هذه الرسالة للتواصل المباشر مع المرسل.",
         }),
       });
+    } catch (e) {
+      console.error("[public-support-submit] admin notification email failed", e);
+    }
 
-      // Confirmation to customer
+    // Confirmation to customer. Wrapped separately so an SPF/relay
+    // rejection here is logged distinctly and never swallowed.
+    try {
       await transporter.sendMail({
-        from: `"${smtp.senderName}" <${smtp.fromEmail}>`,
+        from: fromHeader,
         to: email,
-        subject: `[${ticket.ticket_number}] استلمنا طلبك — Thiqa`,
+        subject: encodeMimeSubject(`[${ticket.ticket_number}] استلمنا طلبك — Thiqa`),
+        text: `أهلاً ${name}،\nوصلنا طلبك بنجاح. رقم التذكرة: ${ticket.ticket_number}.\nسنرد عليك على هذا البريد قريباً.`,
         html: buildEmailHtml({
           body: customerConfirmationBody({ ticketNumber: ticket.ticket_number, name }),
           footerText: "هذه رسالة آلية من نظام دعم Thiqa. سيتم الرد عليك قريباً من فريقنا.",
         }),
       });
     } catch (e) {
-      console.error("[public-support-submit] email send failed", e);
-      // Email failure shouldn't fail the request — the ticket is in
-      // the DB and the support team will see it.
+      console.error("[public-support-submit] customer confirmation email failed", e);
     }
   } else {
     console.warn("[public-support-submit] SMTP not configured; ticket saved without email notification");
