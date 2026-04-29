@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { format } from "date-fns";
-import { ArrowRight, LifeBuoy, Loader2, Paperclip, Plus, Send, X, Image as ImageIcon, Video, FileText, Download, ShieldCheck } from "lucide-react";
+import { format, isSameDay } from "date-fns";
+import { arDZ as ar } from "date-fns/locale";
+import { ArrowRight, LifeBuoy, Loader2, Paperclip, Plus, Send, X, Image as ImageIcon, Video, FileText, Download, ShieldCheck, MessageCircle } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,19 @@ interface Attachment {
   file_name: string;
   file_size: number | null;
   mime_type: string | null;
+}
+
+interface AuthorProfile {
+  full_name: string | null;
+  email: string | null;
+}
+
+function getInitials(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2);
+  return (parts[0][0] || "") + (parts[parts.length - 1][0] || "");
 }
 
 const STATUS_LABEL: Record<Ticket["status"], string> = {
@@ -422,6 +436,7 @@ function TicketThread({ ticketId }: { ticketId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [attachmentsByMessage, setAttachmentsByMessage] = useState<Record<string, Attachment[]>>({});
   const [signedUrlsByPath, setSignedUrlsByPath] = useState<Record<string, string>>({});
+  const [authorsByUserId, setAuthorsByUserId] = useState<Record<string, AuthorProfile>>({});
   const [reply, setReply] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
@@ -464,6 +479,21 @@ function TicketThread({ ticketId }: { ticketId: string }) {
 
     if (msgs.length > 0) {
       const ids = msgs.map((m) => m.id);
+      // Fetch profiles for each unique author so the thread shows real
+      // names instead of the generic "زميل" fallback.
+      const authorIds = Array.from(new Set(msgs.map((m) => m.author_user_id)));
+      supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", authorIds)
+        .then(({ data: profs }) => {
+          const m: Record<string, AuthorProfile> = {};
+          ((profs as any[]) || []).forEach((p) => {
+            m[p.id] = { full_name: p.full_name || null, email: p.email || null };
+          });
+          setAuthorsByUserId(m);
+        });
+
       const { data: atts } = await supabase
         .from("support_attachments")
         .select("*")
@@ -591,75 +621,132 @@ function TicketThread({ ticketId }: { ticketId: string }) {
     <MainLayout>
       <Header title={`تذكرة ${ticket.ticket_number}`} subtitle={ticket.subject} />
 
-      <div className="md:p-6 space-y-4" dir="rtl">
-        <div className="flex items-center gap-3 flex-wrap">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate(backTarget)}
-            className="gap-1.5"
-          >
-            <ArrowRight className="h-4 w-4" />
-            رجوع
-          </Button>
-          <Badge variant="outline" className={cn("font-medium", STATUS_TONE[ticket.status])}>
-            {STATUS_LABEL[ticket.status]}
-          </Badge>
-          {isSuperAdmin && (
-            <div className="flex items-center gap-2 mr-auto">
-              <ShieldCheck className="h-4 w-4 text-primary" />
-              <Select value={ticket.status} onValueChange={(v) => updateStatus(v as Ticket["status"])}>
-                <SelectTrigger className="h-8 w-[160px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="open">{STATUS_LABEL.open}</SelectItem>
-                  <SelectItem value="in_progress">{STATUS_LABEL.in_progress}</SelectItem>
-                  <SelectItem value="done">{STATUS_LABEL.done}</SelectItem>
-                  <SelectItem value="cancelled">{STATUS_LABEL.cancelled}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
-
+      <div className="md:p-6 space-y-4 max-w-4xl mx-auto" dir="rtl">
+        {/* Header card — back, ticket meta, status changer in one block. */}
         <Card className="rounded-2xl shadow-sm">
-          <CardContent className="p-4 md:p-5 space-y-4 max-h-[60vh] overflow-y-auto">
-            {messages.map((m) => {
-              const mine = m.author_user_id === user?.id;
-              const adminSide = m.is_admin_reply;
-              return (
-                <div key={m.id} className={cn("flex", adminSide ? "justify-start" : "justify-end")}>
-                  <div
-                    className={cn(
-                      "max-w-[85%] rounded-2xl px-4 py-3 shadow-sm",
-                      adminSide
-                        ? "bg-primary/5 border border-primary/20"
-                        : mine
-                          ? "bg-foreground text-background"
-                          : "bg-muted/60",
-                    )}
-                  >
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-[10px] font-medium uppercase tracking-wide opacity-70">
-                        {adminSide ? "فريق ثقة" : mine ? "أنت" : "زميل"}
-                      </span>
-                      <span className="text-[10px] opacity-60 ltr-nums">
-                        {format(new Date(m.created_at), "dd/MM HH:mm")}
-                      </span>
-                    </div>
-                    <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.body}</div>
-                    {(attachmentsByMessage[m.id] || []).length > 0 && (
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        {(attachmentsByMessage[m.id] || []).map((a) => (
-                          <AttachmentTile key={a.id} attachment={a} url={signedUrlsByPath[a.file_path]} />
-                        ))}
+          <CardContent className="p-4 flex items-start gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate(backTarget)}
+              className="shrink-0 h-9 w-9"
+              aria-label="رجوع"
+            >
+              <ArrowRight className="h-5 w-5" />
+            </Button>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="font-mono text-xs text-muted-foreground ltr-nums">{ticket.ticket_number}</span>
+                <Badge variant="outline" className={cn("font-medium", STATUS_TONE[ticket.status])}>
+                  {STATUS_LABEL[ticket.status]}
+                </Badge>
+              </div>
+              <div className="font-semibold text-base md:text-lg text-foreground leading-snug">{ticket.subject}</div>
+            </div>
+            {isSuperAdmin && (
+              <div className="shrink-0">
+                <Select value={ticket.status} onValueChange={(v) => updateStatus(v as Ticket["status"])}>
+                  <SelectTrigger className="h-9 w-[170px] gap-2">
+                    <ShieldCheck className="h-4 w-4 text-primary" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="open">{STATUS_LABEL.open}</SelectItem>
+                    <SelectItem value="in_progress">{STATUS_LABEL.in_progress}</SelectItem>
+                    <SelectItem value="done">{STATUS_LABEL.done}</SelectItem>
+                    <SelectItem value="cancelled">{STATUS_LABEL.cancelled}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Thread */}
+        <Card className="rounded-2xl shadow-sm overflow-hidden">
+          <CardContent className="p-4 md:p-6 space-y-5 max-h-[62vh] overflow-y-auto bg-muted/20">
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <MessageCircle className="h-10 w-10 opacity-30 mb-2" />
+                <span className="text-sm">لا توجد رسائل بعد</span>
+              </div>
+            ) : (
+              messages.map((m, idx) => {
+                const mine = m.author_user_id === user?.id;
+                const adminSide = m.is_admin_reply;
+                const author = authorsByUserId[m.author_user_id];
+                const senderName = adminSide
+                  ? "فريق ثقة"
+                  : mine
+                    ? "أنت"
+                    : (author?.full_name || author?.email || "زميل");
+                const prev = idx > 0 ? messages[idx - 1] : null;
+                const showDateSep = !prev || !isSameDay(new Date(prev.created_at), new Date(m.created_at));
+                const initials = adminSide ? "" : getInitials(senderName);
+                const atts = attachmentsByMessage[m.id] || [];
+                return (
+                  <Fragment key={m.id}>
+                    {showDateSep && (
+                      <div className="flex justify-center my-1">
+                        <span className="text-[11px] font-medium text-muted-foreground bg-background border rounded-full px-3 py-1 shadow-sm">
+                          {format(new Date(m.created_at), "EEEE، d MMMM yyyy", { locale: ar })}
+                        </span>
                       </div>
                     )}
-                  </div>
-                </div>
-              );
-            })}
+                    <div className={cn("flex gap-2.5 items-end", adminSide ? "flex-row" : "flex-row-reverse")}>
+                      {/* Avatar */}
+                      <div
+                        className={cn(
+                          "h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 shadow-sm",
+                          adminSide
+                            ? "bg-primary text-primary-foreground"
+                            : mine
+                              ? "bg-foreground text-background"
+                              : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+                        )}
+                        title={senderName}
+                      >
+                        {adminSide ? <ShieldCheck className="h-4 w-4" /> : initials}
+                      </div>
+
+                      {/* Sender meta + bubble */}
+                      <div className={cn("max-w-[78%] flex flex-col gap-1", adminSide ? "items-start" : "items-end")}>
+                        <div className="flex items-center gap-2 px-1">
+                          <span className="text-xs font-semibold text-foreground/85">{senderName}</span>
+                          <span className="text-[10px] text-muted-foreground ltr-nums">
+                            {format(new Date(m.created_at), "HH:mm")}
+                          </span>
+                        </div>
+                        <div
+                          className={cn(
+                            "rounded-2xl px-4 py-2.5 shadow-sm border",
+                            adminSide
+                              ? "bg-primary/8 border-primary/20 rounded-tr-sm"
+                              : mine
+                                ? "bg-foreground text-background border-foreground/10 rounded-tl-sm"
+                                : "bg-background border-border rounded-tl-sm",
+                          )}
+                        >
+                          <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.body}</div>
+                          {atts.length > 0 && (
+                            <div
+                              className={cn(
+                                "mt-2.5 grid gap-2",
+                                atts.length === 1 ? "grid-cols-1 max-w-[280px]" : "grid-cols-2 max-w-[420px]",
+                              )}
+                            >
+                              {atts.map((a) => (
+                                <AttachmentTile key={a.id} attachment={a} url={signedUrlsByPath[a.file_path]} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </Fragment>
+                );
+              })
+            )}
             <div ref={bottomRef} />
           </CardContent>
         </Card>
@@ -672,12 +759,13 @@ function TicketThread({ ticketId }: { ticketId: string }) {
           </Card>
         ) : (
           <Card className="rounded-2xl shadow-sm">
-            <CardContent className="p-4 space-y-3">
+            <CardContent className="p-3 md:p-4 space-y-3">
               <Textarea
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
                 rows={3}
                 placeholder="اكتب ردك..."
+                className="resize-none border-0 focus-visible:ring-0 p-2 text-sm"
               />
               <input
                 ref={fileInputRef}
@@ -693,13 +781,15 @@ function TicketThread({ ticketId }: { ticketId: string }) {
               {files.length > 0 && (
                 <div className="space-y-1">
                   {files.map((f, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs bg-muted/40 rounded-md px-2 py-1">
+                    <div key={i} className="flex items-center gap-2 text-xs bg-muted/40 rounded-md px-2 py-1.5">
                       <FileIcon mime={f.type} />
                       <span className="flex-1 truncate">{f.name}</span>
+                      <span className="text-muted-foreground ltr-nums">{(f.size / 1024).toFixed(0)} KB</span>
                       <button
                         type="button"
                         onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
                         className="text-muted-foreground hover:text-destructive"
+                        aria-label="إزالة"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
@@ -707,14 +797,19 @@ function TicketThread({ ticketId }: { ticketId: string }) {
                   ))}
                 </div>
               )}
-              <div className="flex items-center justify-between gap-2">
-                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-2">
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/60">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="gap-2 text-muted-foreground hover:text-foreground"
+                >
                   <Paperclip className="h-4 w-4" />
                   مرفقات
                 </Button>
-                <Button onClick={sendReply} disabled={sending} className="gap-2">
+                <Button onClick={sendReply} disabled={sending} className="gap-2 rounded-full px-5">
                   {sending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  <Send className="h-4 w-4" />
+                  {!sending && <Send className="h-4 w-4" />}
                   إرسال
                 </Button>
               </div>
@@ -746,15 +841,24 @@ function AttachmentTile({ attachment, url }: { attachment: Attachment; url: stri
     );
   }
   if (isImage) {
+    // object-contain keeps small images at their natural size instead
+    // of stretching a tiny icon to fill 200px tall — the original
+    // object-cover crop made screenshots look broken.
     return (
-      <a href={url} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border bg-background">
-        <img src={url} alt={attachment.file_name} className="w-full h-32 object-cover" />
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block rounded-lg overflow-hidden border bg-muted/30 hover:border-primary/40 transition-colors"
+        title={attachment.file_name}
+      >
+        <img src={url} alt={attachment.file_name} className="w-full max-h-48 object-contain" />
       </a>
     );
   }
   if (isVideo) {
     return (
-      <video controls src={url} className="w-full h-32 object-cover rounded-lg border bg-black" />
+      <video controls src={url} className="w-full max-h-48 rounded-lg border bg-black" />
     );
   }
   return (
@@ -762,7 +866,7 @@ function AttachmentTile({ attachment, url }: { attachment: Attachment; url: stri
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-2 rounded-lg border bg-muted/40 p-2 text-xs hover:bg-muted"
+      className="flex items-center gap-2 rounded-lg border bg-muted/40 p-2 text-xs hover:bg-muted hover:border-primary/40 transition-colors"
     >
       <FileText className="h-4 w-4 text-muted-foreground" />
       <span className="flex-1 truncate">{attachment.file_name}</span>
