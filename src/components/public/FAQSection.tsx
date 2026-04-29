@@ -44,7 +44,7 @@ export function FAQSection() {
   return (
     <section id="faq" className="py-24 md:py-36 relative bg-white">
       <div className="relative max-w-4xl mx-auto px-6">
-        <p className="text-sm text-[#4a6cc7] text-center mb-4 tracking-wide font-semibold">
+        <p className="text-sm text-black text-center mb-4 tracking-wide font-light">
           {ct(content, "faq_label", "أسئلة وأجوبة")}
         </p>
         <h2 className="text-3xl md:text-[2.8rem] font-bold text-center mb-16 text-black">
@@ -99,7 +99,7 @@ export function FAQSection() {
           {ct(content, "faq_more_prompt", "هل لديك أسئلة إضافية؟")}{" "}
           <Link
             to="/register"
-            className="font-bold text-black underline underline-offset-4 decoration-2 decoration-[#4a6cc7] hover:opacity-80 transition-opacity"
+            className="font-bold text-black hover:opacity-80 transition-opacity"
           >
             {ct(content, "faq_more_cta", "تواصل معنا.")}
           </Link>
