@@ -132,7 +132,7 @@ const SUPPORT_ITEMS = [
     title: "تواصل معنا",
     desc: "هل لديك أسئلة؟ تحدّث معنا",
     icon: HelpCircle,
-    href: "mailto:support@getthiqa.com",
+    href: "/faq#support",
     filled: false,
   },
 ];
@@ -820,7 +820,7 @@ export default function Pricing() {
                 title: "الدعم والمساعدة",
                 items: [
                   { label: "عرض توضيحي", href: "mailto:support@getthiqa.com?subject=طلب%20عرض%20توضيحي" },
-                  { label: "تواصل معنا", href: "mailto:support@getthiqa.com" },
+                  { label: "تواصل معنا", href: "/faq#support" },
                 ],
               },
               {

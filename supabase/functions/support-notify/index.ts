@@ -185,18 +185,29 @@ Deno.serve(async (req) => {
     // versions.
     const { data: ticket } = await adminClient
       .from("support_tickets")
-      .select("id, ticket_number, agent_id, subject, status, created_by_user_id, category_id, subcategory_id")
+      .select("id, ticket_number, agent_id, subject, status, created_by_user_id, category_id, subcategory_id, source, contact_name, contact_email")
       .eq("id", ticket_id)
       .maybeSingle();
     if (!ticket) throw new Error("ticket not found");
 
-    const { data: agent } = await adminClient
-      .from("agents")
-      .select("name, name_ar, short_code")
-      .eq("id", ticket.agent_id)
-      .maybeSingle();
-    const agentName = agent?.name_ar || agent?.name || "—";
-    const agentShortCode = (agent as any)?.short_code || null;
+    const isPublicTicket = (ticket as any).source === "public";
+
+    // Public tickets carry no agent record; the "agent name" slot in
+    // the email becomes the public submitter's display name so the
+    // template still reads naturally.
+    let agentName = "—";
+    let agentShortCode: string | null = null;
+    if (isPublicTicket) {
+      agentName = (ticket as any).contact_name || "زائر";
+    } else {
+      const { data: agent } = await adminClient
+        .from("agents")
+        .select("name, name_ar, short_code")
+        .eq("id", ticket.agent_id)
+        .maybeSingle();
+      agentName = agent?.name_ar || agent?.name || "—";
+      agentShortCode = (agent as any)?.short_code || null;
+    }
 
     // Categories — only fetched if present.
     let categoryName: string | null = null;
@@ -240,30 +251,40 @@ Deno.serve(async (req) => {
     // ─── Recipient resolution ───
     const supportEmail = await getSupportEmail(adminClient);
 
-    // Creator email
-    const { data: creatorProfile } = await adminClient
-      .from("profiles")
-      .select("email, full_name")
-      .eq("id", ticket.created_by_user_id)
-      .maybeSingle();
-    const creatorEmail = (creatorProfile as any)?.email || null;
+    // Creator email — for public tickets there's no Supabase user, so
+    // the submitter's email comes from contact_email instead. For
+    // agent tickets we look up the profile as before.
+    let creatorEmail: string | null = null;
+    if (isPublicTicket) {
+      creatorEmail = (ticket as any).contact_email || null;
+    } else {
+      const { data: creatorProfile } = await adminClient
+        .from("profiles")
+        .select("email, full_name")
+        .eq("id", ticket.created_by_user_id)
+        .maybeSingle();
+      creatorEmail = (creatorProfile as any)?.email || null;
+    }
 
     // Agent admins (user_roles role=admin agent_id=...) emails — they
     // get CCed on every event so the agent admin always sees what
-    // their team is reporting and what Thiqa is replying.
-    const { data: roleRows } = await adminClient
-      .from("user_roles")
-      .select("user_id")
-      .eq("agent_id", ticket.agent_id)
-      .eq("role", "admin");
-    const adminUserIds = (roleRows || []).map((r: any) => r.user_id);
+    // their team is reporting and what Thiqa is replying. Public
+    // tickets have no agent_id, so we skip this lookup entirely.
     let agentAdminEmails: string[] = [];
-    if (adminUserIds.length > 0) {
-      const { data: adminProfiles } = await adminClient
-        .from("profiles")
-        .select("email")
-        .in("id", adminUserIds);
-      agentAdminEmails = ((adminProfiles as any[]) || []).map((p) => p.email).filter(Boolean);
+    if (!isPublicTicket && ticket.agent_id) {
+      const { data: roleRows } = await adminClient
+        .from("user_roles")
+        .select("user_id")
+        .eq("agent_id", ticket.agent_id)
+        .eq("role", "admin");
+      const adminUserIds = (roleRows || []).map((r: any) => r.user_id);
+      if (adminUserIds.length > 0) {
+        const { data: adminProfiles } = await adminClient
+          .from("profiles")
+          .select("email")
+          .in("id", adminUserIds);
+        agentAdminEmails = ((adminProfiles as any[]) || []).map((p) => p.email).filter(Boolean);
+      }
     }
 
     // Determine recipients per event.
@@ -339,7 +360,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const link = `${getAppBaseUrl()}/support/${ticket.id}`;
+    // Agent-side ticket lives at /support/{id}; public tickets are
+    // only accessible to super-admin staff at /thiqa/support.
+    const link = isPublicTicket
+      ? `${getAppBaseUrl()}/thiqa/support`
+      : `${getAppBaseUrl()}/support/${ticket.id}`;
     const html = buildEmailHtml({
       body: ticketEmailBody({
         intro: plan.intro,

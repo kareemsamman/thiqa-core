@@ -10,6 +10,7 @@ import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { cn } from "@/lib/utils";
 import { PublicSEO } from "@/components/public/PublicSEO";
 import { FAQ_CATEGORIES, flattenFaq, type FlatFaqItem } from "@/lib/faqContent";
+import { SupportContactForm } from "@/components/public/SupportContactForm";
 
 const INFO_CENTER_ITEMS = [
   { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "/landing#demo" },
@@ -30,7 +31,7 @@ const SUPPORT_ITEMS = [
     title: "تواصل معنا",
     desc: "هل لديك أسئلة؟ تحدّث معنا",
     icon: HelpCircle,
-    href: "mailto:support@getthiqa.com",
+    href: "/faq#support",
     filled: false,
   },
 ];
@@ -539,13 +540,19 @@ export default function FAQ() {
           <p className="mt-16 text-center text-[14px] md:text-[15px] text-black/55">
             لم تجد إجابة سؤالك؟{" "}
             <a
-              href="mailto:support@getthiqa.com"
+              href="#support"
               className="font-bold text-black hover:opacity-80 transition-opacity"
             >
-              تواصل معنا.
+              راسلنا مباشرة.
             </a>
           </p>
         </div>
+      </section>
+
+      {/* ═══ Support contact form ═══ Anchored at #support so the
+          nav's "تواصل معنا" link can scroll directly here. */}
+      <section className="relative z-10 py-16 md:py-24 px-4 md:px-6 bg-black/[0.02] border-t border-black/[0.06]">
+        <SupportContactForm />
       </section>
 
       {/* ═══ Footer — same shape as the pricing/landing footer. */}
@@ -573,7 +580,7 @@ export default function FAQ() {
                 title: "الدعم والمساعدة",
                 items: [
                   { label: "عرض توضيحي", href: "mailto:support@getthiqa.com?subject=طلب%20عرض%20توضيحي" },
-                  { label: "تواصل معنا", href: "mailto:support@getthiqa.com" },
+                  { label: "تواصل معنا", href: "/faq#support" },
                 ],
               },
               {
@@ -731,7 +738,7 @@ function SearchResults({
         <p className="text-[17px] font-bold text-black">"{query}"</p>
         <p className="mt-6 text-[14px] text-black/55">
           جرّب كلمات مختلفة، أو{" "}
-          <a href="mailto:support@getthiqa.com" className="font-bold text-black hover:opacity-80 transition-opacity">
+          <a href="#support" className="font-bold text-black hover:opacity-80 transition-opacity">
             تواصل معنا
           </a>{" "}
           مباشرة.
