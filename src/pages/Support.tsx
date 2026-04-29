@@ -67,7 +67,9 @@ function getInitials(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return "?";
   const parts = trimmed.split(/\s+/).filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 2);
+  // Single word → one big letter (looks better in Arabic where slicing
+  // a name like "علاء" to "عل" reads as a different word).
+  if (parts.length === 1) return parts[0][0];
   return (parts[0][0] || "") + (parts[parts.length - 1][0] || "");
 }
 
@@ -662,77 +664,98 @@ function TicketThread({ ticketId }: { ticketId: string }) {
           </CardContent>
         </Card>
 
-        {/* Thread */}
+        {/* Thread — forum/email style: every message shares a column,
+            with the sender header (avatar + bold name + role badge +
+            time) above the body. Admin replies get a tinted background
+            so they stand out without splitting the column. */}
         <Card className="rounded-2xl shadow-sm overflow-hidden">
-          <CardContent className="p-4 md:p-6 space-y-5 max-h-[62vh] overflow-y-auto bg-muted/20">
+          <CardContent className="p-0 max-h-[64vh] overflow-y-auto">
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                 <MessageCircle className="h-10 w-10 opacity-30 mb-2" />
                 <span className="text-sm">لا توجد رسائل بعد</span>
               </div>
             ) : (
-              messages.map((m, idx) => {
-                const mine = m.author_user_id === user?.id;
-                const adminSide = m.is_admin_reply;
-                const author = authorsByUserId[m.author_user_id];
-                const senderName = adminSide
-                  ? "فريق ثقة"
-                  : mine
-                    ? "أنت"
-                    : (author?.full_name || author?.email || "زميل");
-                const prev = idx > 0 ? messages[idx - 1] : null;
-                const showDateSep = !prev || !isSameDay(new Date(prev.created_at), new Date(m.created_at));
-                const initials = adminSide ? "" : getInitials(senderName);
-                const atts = attachmentsByMessage[m.id] || [];
-                return (
-                  <Fragment key={m.id}>
-                    {showDateSep && (
-                      <div className="flex justify-center my-1">
-                        <span className="text-[11px] font-medium text-muted-foreground bg-background border rounded-full px-3 py-1 shadow-sm">
-                          {format(new Date(m.created_at), "EEEE، d MMMM yyyy", { locale: ar })}
-                        </span>
-                      </div>
-                    )}
-                    <div className={cn("flex gap-2.5 items-end", adminSide ? "flex-row" : "flex-row-reverse")}>
-                      {/* Avatar */}
-                      <div
-                        className={cn(
-                          "h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 shadow-sm",
-                          adminSide
-                            ? "bg-primary text-primary-foreground"
-                            : mine
-                              ? "bg-foreground text-background"
-                              : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-                        )}
-                        title={senderName}
-                      >
-                        {adminSide ? <ShieldCheck className="h-4 w-4" /> : initials}
-                      </div>
-
-                      {/* Sender meta + bubble */}
-                      <div className={cn("max-w-[78%] flex flex-col gap-1", adminSide ? "items-start" : "items-end")}>
-                        <div className="flex items-center gap-2 px-1">
-                          <span className="text-xs font-semibold text-foreground/85">{senderName}</span>
-                          <span className="text-[10px] text-muted-foreground ltr-nums">
-                            {format(new Date(m.created_at), "HH:mm")}
+              <div className="divide-y divide-border/60">
+                {messages.map((m, idx) => {
+                  const mine = m.author_user_id === user?.id;
+                  const adminSide = m.is_admin_reply;
+                  const author = authorsByUserId[m.author_user_id];
+                  const senderName = adminSide
+                    ? "فريق ثقة"
+                    : (author?.full_name || author?.email?.split("@")[0] || "وكيل");
+                  const senderEmail = !adminSide ? author?.email : null;
+                  const prev = idx > 0 ? messages[idx - 1] : null;
+                  const showDateSep = !prev || !isSameDay(new Date(prev.created_at), new Date(m.created_at));
+                  const initials = adminSide ? "" : getInitials(senderName);
+                  const atts = attachmentsByMessage[m.id] || [];
+                  return (
+                    <Fragment key={m.id}>
+                      {showDateSep && (
+                        <div className="flex justify-center bg-muted/30 py-2 border-y border-border/60">
+                          <span className="text-[11px] font-medium text-muted-foreground ltr-nums">
+                            {format(new Date(m.created_at), "EEEE، d MMMM yyyy", { locale: ar })}
                           </span>
                         </div>
+                      )}
+                      <div
+                        className={cn(
+                          "flex gap-3 p-4 md:p-5 transition-colors",
+                          adminSide
+                            ? "bg-primary/5"
+                            : "hover:bg-muted/30",
+                        )}
+                      >
+                        {/* Avatar */}
                         <div
                           className={cn(
-                            "rounded-2xl px-4 py-2.5 shadow-sm border",
+                            "h-10 w-10 md:h-11 md:w-11 rounded-full flex items-center justify-center text-base font-bold shrink-0 shadow-sm",
                             adminSide
-                              ? "bg-primary/8 border-primary/20 rounded-tr-sm"
+                              ? "bg-primary text-primary-foreground"
                               : mine
-                                ? "bg-foreground text-background border-foreground/10 rounded-tl-sm"
-                                : "bg-background border-border rounded-tl-sm",
+                                ? "bg-foreground text-background"
+                                : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30",
                           )}
+                          title={senderName}
                         >
-                          <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.body}</div>
+                          {adminSide ? <ShieldCheck className="h-5 w-5" /> : initials}
+                        </div>
+
+                        {/* Header + body */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                            <span className="font-semibold text-sm md:text-base text-foreground">
+                              {senderName}
+                              {mine && <span className="text-muted-foreground font-normal"> (أنت)</span>}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] h-5 px-1.5 font-medium",
+                                adminSide
+                                  ? "border-primary/40 bg-primary/10 text-primary"
+                                  : "border-emerald-500/40 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300",
+                              )}
+                            >
+                              {adminSide ? "إدارة ثقة" : "وكيل"}
+                            </Badge>
+                            {senderEmail && (
+                              <span className="text-[11px] text-muted-foreground truncate max-w-[200px]" dir="ltr">
+                                {senderEmail}
+                              </span>
+                            )}
+                            <span className="text-[11px] text-muted-foreground ltr-nums sm:mr-auto">
+                              · {format(new Date(m.created_at), "HH:mm")}
+                            </span>
+                          </div>
+                          <div className="whitespace-pre-wrap text-sm md:text-[15px] leading-relaxed text-foreground/90">
+                            {m.body}
+                          </div>
                           {atts.length > 0 && (
                             <div
                               className={cn(
-                                "mt-2.5 grid gap-2",
-                                atts.length === 1 ? "grid-cols-1 max-w-[280px]" : "grid-cols-2 max-w-[420px]",
+                                "mt-3 grid gap-2",
+                                atts.length === 1 ? "grid-cols-1 max-w-[280px]" : "grid-cols-2 max-w-[460px]",
                               )}
                             >
                               {atts.map((a) => (
@@ -742,10 +765,10 @@ function TicketThread({ ticketId }: { ticketId: string }) {
                           )}
                         </div>
                       </div>
-                    </div>
-                  </Fragment>
-                );
-              })
+                    </Fragment>
+                  );
+                })}
+              </div>
             )}
             <div ref={bottomRef} />
           </CardContent>
