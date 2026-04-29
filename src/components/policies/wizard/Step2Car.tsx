@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Car, Plus, AlertCircle, CheckCircle, Loader2, X } from "lucide-react";
+import { Car, Plus, AlertCircle, CheckCircle, Loader2, X, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Client, CarRecord, NewCarForm, ValidationErrors } from "./types";
 import { CAR_TYPES } from "./types";
@@ -34,6 +34,7 @@ interface Step2Props {
   carDataFetched: boolean;
   setCarDataFetched: (fetched: boolean) => void;
   errors: ValidationErrors;
+  onOpenMotLookup?: () => void;
 }
 
 export function Step2Car({
@@ -57,6 +58,7 @@ export function Step2Car({
   carDataFetched,
   setCarDataFetched,
   errors,
+  onOpenMotLookup,
 }: Step2Props) {
   const { toast } = useToast();
 
@@ -406,7 +408,21 @@ export function Step2Car({
                   </Select>
                 </div>
                 <div>
-                  <Label>قيمة السيارة (₪)</Label>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <Label className="m-0">قيمة السيارة (₪)</Label>
+                    {onOpenMotLookup && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={onOpenMotLookup}
+                      >
+                        <Search className="h-3 w-3 ml-1" />
+                        מחירון משרד התחבורה
+                      </Button>
+                    )}
+                  </div>
                   <Input
                     type="number"
                     value={newCar.car_value}

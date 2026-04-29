@@ -31,6 +31,7 @@ import {
   Step2Car,
   Step3PolicyDetails,
   Step4Payments,
+  MotPriceLookupPanel,
 } from "./wizard";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -224,6 +225,11 @@ export function PolicyWizard({
   // Close-confirmation dialog state. Shown when the user tries to dismiss
   // the wizard while it holds any unsaved draft data.
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+
+  // MOT price-lookup panel — stays mounted while open so the iframe (and
+  // any captcha the user already solved) survives minimize/restore.
+  const [motPanelOpen, setMotPanelOpen] = useState(false);
+  const [motPanelMinimized, setMotPanelMinimized] = useState(false);
   // Programmatic closes (e.g. after a successful save) skip the dirty check.
   const skipCloseConfirmRef = useRef(false);
 
@@ -1887,6 +1893,10 @@ export function PolicyWizard({
                 carDataFetched={carDataFetched}
                 setCarDataFetched={setCarDataFetched}
                 errors={errors}
+                onOpenMotLookup={() => {
+                  setMotPanelOpen(true);
+                  setMotPanelMinimized(false);
+                }}
               />
             )}
 
@@ -2080,6 +2090,36 @@ export function PolicyWizard({
           }}
         />
       )}
+
+      {/* MOT price-lookup panel — kept mounted while open so any captcha
+          the user already solved survives minimize/restore. */}
+      <MotPriceLookupPanel
+        open={motPanelOpen}
+        minimized={motPanelMinimized}
+        carInfo={
+          createNewCar
+            ? {
+                manufacturer: newCar.manufacturer_name,
+                model: newCar.model,
+                year: newCar.year,
+                carNumber: newCar.car_number,
+              }
+            : selectedCar
+              ? {
+                  manufacturer: selectedCar.manufacturer_name || "",
+                  model: selectedCar.model || "",
+                  year: selectedCar.year != null ? String(selectedCar.year) : "",
+                  carNumber: selectedCar.car_number,
+                }
+              : { manufacturer: "", model: "", year: "", carNumber: "" }
+        }
+        onMinimize={() => setMotPanelMinimized(true)}
+        onMaximize={() => setMotPanelMinimized(false)}
+        onClose={() => {
+          setMotPanelOpen(false);
+          setMotPanelMinimized(false);
+        }}
+      />
 
       {/* Success Dialog */}
       {showSuccessDialog && successPolicyData && (

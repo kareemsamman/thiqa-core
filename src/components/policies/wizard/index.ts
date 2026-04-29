@@ -11,6 +11,7 @@ export * from './PackageBuilderSection';
 export * from './usePolicyWizardState';
 export * from './Step1BranchTypeClient';
 export * from './Step2Car';
+export * from './MotPriceLookupPanel';
 export * from './Step3PolicyDetails';
 export * from './Step4Payments';
 export * from './PolicyChildrenSelector';
