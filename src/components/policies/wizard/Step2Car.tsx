@@ -35,6 +35,7 @@ interface Step2Props {
   setCarDataFetched: (fetched: boolean) => void;
   errors: ValidationErrors;
   onOpenMotLookup?: () => void;
+  setVehicleExtra?: (extra: { trim_level: string; ownership: string }) => void;
 }
 
 export function Step2Car({
@@ -59,6 +60,7 @@ export function Step2Car({
   setCarDataFetched,
   errors,
   onOpenMotLookup,
+  setVehicleExtra,
 }: Step2Props) {
   const { toast } = useToast();
 
@@ -152,6 +154,10 @@ export function Step2Car({
         color: vehicleData.color || "",
         license_expiry: vehicleData.license_expiry || "",
         car_type: vehicleData.car_type || "car",
+      });
+      setVehicleExtra?.({
+        trim_level: vehicleData.trim_level || "",
+        ownership: vehicleData.ownership || "",
       });
       setCarDataFetched(true);
       toast({ title: "تم جلب البيانات تلقائياً" });

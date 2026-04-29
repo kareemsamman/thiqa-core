@@ -230,6 +230,14 @@ export function PolicyWizard({
   // any captcha the user already solved) survives minimize/restore.
   const [motPanelOpen, setMotPanelOpen] = useState(false);
   const [motPanelMinimized, setMotPanelMinimized] = useState(false);
+
+  // Display-only extras pulled from data.gov.il when fetching by plate.
+  // These are not part of NewCarForm and never get persisted to the cars
+  // table — they exist only to surface as reference chips in the panel.
+  const [vehicleExtra, setVehicleExtra] = useState<{
+    trim_level: string;
+    ownership: string;
+  }>({ trim_level: "", ownership: "" });
   // Programmatic closes (e.g. after a successful save) skip the dirty check.
   const skipCloseConfirmRef = useRef(false);
 
@@ -1897,6 +1905,7 @@ export function PolicyWizard({
                   setMotPanelOpen(true);
                   setMotPanelMinimized(false);
                 }}
+                setVehicleExtra={setVehicleExtra}
               />
             )}
 
@@ -2103,6 +2112,8 @@ export function PolicyWizard({
                 model: newCar.model,
                 year: newCar.year,
                 carNumber: newCar.car_number,
+                trimLevel: vehicleExtra.trim_level,
+                ownership: vehicleExtra.ownership,
               }
             : selectedCar
               ? {

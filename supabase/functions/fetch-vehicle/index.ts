@@ -50,6 +50,10 @@ interface VehicleData {
   license_expiry: string | null;
   last_license: string | null;
   car_type: string | null;
+  // Display-only enrichment (not persisted to the cars table). The wizard
+  // shows these in the MOT price-lookup panel as copy/reference chips.
+  trim_level: string | null;
+  ownership: string | null;
   // New: which dataset answered, useful for the UI to show a hint
   source: DatasetKind | null;
 }
@@ -173,6 +177,8 @@ serve(async (req) => {
       license_expiry: r.tokef_dt || null,
       last_license: r.mivchan_acharon_dt || null,
       car_type: mapCarType(winner.kind, licenseType, r),
+      trim_level: r.ramat_gimur || null,
+      ownership: r.baalut || null,
       source: winner.kind,
     };
 
