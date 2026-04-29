@@ -1,8 +1,7 @@
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAgentContext } from '@/hooks/useAgentContext';
-import { supabase } from '@/integrations/supabase/client';
 import { LoadingScreen } from '@/components/shared/LoadingScreen';
 
 interface ProtectedRouteProps {
@@ -10,58 +9,39 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, loading, profileLoading, profile, isActive, isSuperAdmin, refreshProfile } = useAuth();
-  const { isImpersonating, isSubscriptionActive, isSubscriptionPaused, loading: agentLoading, refetchAgentContext } = useAgentContext();
-  const [oauthSetupState, setOauthSetupState] = useState<'idle' | 'running' | 'done'>('idle');
-  const setupStartedRef = useRef(false);
+  const { user, loading, profileLoading, profile, isActive, isSuperAdmin } = useAuth();
+  const { isImpersonating, isSubscriptionActive, isSubscriptionPaused, loading: agentLoading } = useAgentContext();
 
   const location = useLocation();
 
-  // Detect if this is a Google/OAuth user who needs agent setup
+  // Detect Google/OAuth users who haven't been set up yet — they get
+  // forwarded to /oauth-confirm where they explicitly approve account
+  // creation (and see what data Google sent us). The auto-setup that
+  // used to run here is now handled there instead.
   const isOAuthUser = !!user && (
     user.app_metadata?.providers?.includes('google') ||
     user.app_metadata?.provider === 'google' ||
     (user.user_metadata as any)?.iss === 'https://accounts.google.com'
   );
-  // Need setup if: OAuth user, not super admin, no agent, and done loading
   const needsOAuthSetup = isOAuthUser && !isSuperAdmin && !profile?.agent_id && !loading && !profileLoading;
-
-  // Run setup-oauth-user when needed
-  useEffect(() => {
-    if (!needsOAuthSetup || oauthSetupState !== 'idle' || setupStartedRef.current) return;
-    setupStartedRef.current = true;
-    setOauthSetupState('running');
-
-    supabase.functions.invoke("setup-oauth-user").then(async ({ data, error }) => {
-      if (error) {
-        console.error('[ProtectedRoute] setup-oauth-user error:', error);
-      } else if (data?.success) {
-        // Refresh BOTH the auth profile and the agent context.
-        // setup-oauth-user just inserted profiles + agent_users +
-        // user_roles + agent_feature_flags, but useAgentContext only
-        // listens for UPDATEs, so without a manual refetch the
-        // PermissionRoute on /dashboard reads hasFeature('dashboard')
-        // = false and bounces to /subscription.
-        await Promise.all([refreshProfile(), refetchAgentContext()]);
-      }
-      setOauthSetupState('done');
-    });
-  }, [needsOAuthSetup, oauthSetupState, refreshProfile, refetchAgentContext]);
 
   // Super admin bypasses profile loading requirement
   const needsProfileLoading = user && !isSuperAdmin && profileLoading && !profile;
 
-  // Show loading while: auth loading, profile loading, agent context loading, OR oauth setup running/needed
-  const isSettingUp = oauthSetupState === 'running' || (needsOAuthSetup && oauthSetupState === 'idle');
-  if (loading || needsProfileLoading || isSettingUp || (user && !isSuperAdmin && agentLoading)) {
-    return (
-      <LoadingScreen message={isSettingUp ? "جاري إعداد حسابك..." : "جاري التحميل..."} />
-    );
+  // Show loading while: auth loading, profile loading, or agent context loading
+  if (loading || needsProfileLoading || (user && !isSuperAdmin && agentLoading)) {
+    return <LoadingScreen message="جاري التحميل..." />;
   }
 
   // No user = go to login
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // OAuth user that hasn't been set up yet → /oauth-confirm. Skip the
+  // forwarding when we're already there (the page handles itself).
+  if (needsOAuthSetup && location.pathname !== '/oauth-confirm') {
+    return <Navigate to="/oauth-confirm" replace />;
   }
 
   // Thiqa super admin should stay in Thiqa management routes only (unless impersonating)

@@ -35,6 +35,7 @@ import { ThiqaAdminRoute } from "@/components/auth/ThiqaAdminRoute";
 const Index = lazy(() => import("./pages/Index"));
 const Login = lazy(() => import("./pages/Login"));
 const NoAccess = lazy(() => import("./pages/NoAccess"));
+const OAuthConfirm = lazy(() => import("./pages/OAuthConfirm"));
 const Clients = lazy(() => import("./pages/Clients"));
 const Cars = lazy(() => import("./pages/Cars"));
 const Policies = lazy(() => import("./pages/Policies"));
@@ -282,6 +283,11 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Login />} />
               <Route path="/no-access" element={<NoAccess />} />
+              {/* Post-Google-OAuth landing for users who haven't been
+                  set up yet. Public route — relies on the supabase
+                  session cookie, not on a profile/agent_id, since
+                  setup is exactly what this page is for. */}
+              <Route path="/oauth-confirm" element={<OAuthConfirm />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />

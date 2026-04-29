@@ -213,18 +213,15 @@ export default function Login() {
             .eq('id', user.id)
             .maybeSingle();
 
-          // OAuth user without an agent yet: hand off to /dashboard.
-          // ProtectedRoute there detects the missing agent_id and runs
-          // setup-oauth-user with its own full-screen "جاري إعداد
-          // حسابك..." loader, so we don't toast it on the login form
-          // (which the user found jarring) and we don't risk a
-          // double-setup race when both pages mount at once.
+          // OAuth user without an agent yet: hand off to /oauth-confirm
+          // so the user can see what Google sent us and explicitly
+          // approve account creation, instead of being silently set up.
           if (!profile || !profile.agent_id) {
             const isGoogleUser = user.app_metadata?.providers?.includes('google') ||
               user.app_metadata?.provider === 'google' ||
               (user.user_metadata as any)?.iss === 'https://accounts.google.com';
             if (isGoogleUser) {
-              navigate('/dashboard', { replace: true });
+              navigate('/oauth-confirm', { replace: true });
               return;
             }
           }
@@ -296,14 +293,25 @@ export default function Login() {
     try {
       setLoading(true);
       sessionStorage.setItem('admin_session_active', 'true');
+      // Remember which form the user clicked from. /oauth-confirm uses
+      // this to decide between "we couldn't find your account, want
+      // to register?" (login) vs "confirm these details" (signup).
+      const isSignup = pageView === "signup";
+      sessionStorage.setItem('oauth_intent', isSignup ? 'signup' : 'login');
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        // Land on /dashboard, not /. ProtectedRoute on /dashboard
-        // detects an OAuth user with no agent_id and runs the
-        // setup-oauth-user flow with its own LoadingScreen, so the
-        // user never sees the marketing landing or gets bounced back
-        // to /login mid-setup.
-        options: { redirectTo: `${window.location.origin}/dashboard` },
+        // Land on /oauth-confirm so the user always sees what we
+        // received from Google + confirms account creation, instead
+        // of getting auto-set-up silently. ProtectedRoute and the
+        // Landing-page hash fallback also forward there as backup.
+        options: {
+          redirectTo: `${window.location.origin}/oauth-confirm`,
+          // Force the Google consent screen on signup so first-time
+          // users always see exactly what data Thiqa receives. For
+          // login we let Google skip consent if the user already
+          // approved (so returning users aren't re-prompted).
+          ...(isSignup ? { queryParams: { prompt: 'consent' } } : {}),
+        },
       });
       if (error) {
         sessionStorage.removeItem('admin_session_active');
