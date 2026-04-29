@@ -34,6 +34,13 @@ Deno.serve(async (req) => {
     const userId = user.id;
     const userEmail = (user.email || "").trim().toLowerCase();
     const fullName = user.user_metadata?.full_name || user.user_metadata?.name || userEmail.split("@")[0];
+    // Google's OAuth returns the profile picture under either
+    // avatar_url or picture depending on the provider config; pick
+    // whichever is set so we can mirror it into profiles.avatar_url
+    // for the sidebar / nav avatar.
+    const avatarUrl: string | null = (user.user_metadata as Record<string, unknown> | undefined)?.avatar_url as string
+      || (user.user_metadata as Record<string, unknown> | undefined)?.picture as string
+      || null;
 
     if (!userEmail) throw new Error("البريد الإلكتروني غير متوفر");
 
@@ -127,6 +134,7 @@ Deno.serve(async (req) => {
           id: userId,
           email: userEmail,
           full_name: fullName,
+          avatar_url: avatarUrl,
           status: "active",
           agent_id: agentId,
           email_confirmed: true,

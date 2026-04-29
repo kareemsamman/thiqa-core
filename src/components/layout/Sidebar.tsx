@@ -203,7 +203,14 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
     },
     [location.pathname],
   );
-  const { profile, signOut, isAdmin, branchName, isSuperAdmin } = useAuth();
+  const { user, profile, signOut, isAdmin, branchName, isSuperAdmin } = useAuth();
+  // Avatar source: prefer the profile row (admin can edit it), but fall
+  // back to whatever Google handed us in user_metadata for OAuth users
+  // who haven't been mirrored into profiles.avatar_url yet.
+  const avatarUrl = profile?.avatar_url
+    || (user?.user_metadata as Record<string, unknown> | undefined)?.avatar_url as string | undefined
+    || (user?.user_metadata as Record<string, unknown> | undefined)?.picture as string | undefined
+    || null;
   const { data: siteSettings } = useSiteSettings();
   const { hasFeature, isThiqaSuperAdmin, agent, planInfo } = useAgentContext();
   const { can } = usePermissions();
@@ -966,10 +973,11 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                     type="button"
                     className="w-full flex items-center gap-3 p-3 transition-colors hover:bg-slate-50"
                   >
-                    {profile?.avatar_url ? (
+                    {avatarUrl ? (
                       <img
-                        src={profile.avatar_url}
+                        src={avatarUrl}
                         alt={userName}
+                        referrerPolicy="no-referrer"
                         className="h-9 w-9 rounded-full object-cover ring-2 ring-white flex-shrink-0"
                       />
                     ) : (
@@ -1203,7 +1211,11 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
 // that opens the profile edit drawer, and a hamburger that opens the nav.
 // ============================================================================
 function MobileTopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
-  const { profile, isAdmin } = useAuth();
+  const { user, profile, isAdmin } = useAuth();
+  const avatarUrl = profile?.avatar_url
+    || (user?.user_metadata as Record<string, unknown> | undefined)?.avatar_url as string | undefined
+    || (user?.user_metadata as Record<string, unknown> | undefined)?.picture as string | undefined
+    || null;
   const { data: siteSettings } = useSiteSettings();
   const { isThiqaSuperAdmin } = useAgentContext();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -1230,7 +1242,7 @@ function MobileTopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
             aria-label="الملف الشخصي"
           >
             <Avatar className="h-8 w-8 border border-white/20">
-              {profile?.avatar_url && <AvatarImage src={profile.avatar_url} alt={userName} />}
+              {avatarUrl && <AvatarImage src={avatarUrl} alt={userName} referrerPolicy="no-referrer" />}
               <AvatarFallback className="bg-white/10 text-white text-xs font-semibold">
                 {userInitial}
               </AvatarFallback>
@@ -1264,7 +1276,11 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
   const [query, setQuery] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, signOut, isAdmin, branchName, isSuperAdmin } = useAuth();
+  const { user, profile, signOut, isAdmin, branchName, isSuperAdmin } = useAuth();
+  const avatarUrl = profile?.avatar_url
+    || (user?.user_metadata as Record<string, unknown> | undefined)?.avatar_url as string | undefined
+    || (user?.user_metadata as Record<string, unknown> | undefined)?.picture as string | undefined
+    || null;
   const { data: siteSettings } = useSiteSettings();
   const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
@@ -1362,7 +1378,7 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
         className="flex items-center gap-3 px-4 py-3 border-b hover:bg-muted/40 transition-colors text-right"
       >
         <Avatar className="h-11 w-11 border">
-          {profile?.avatar_url && <AvatarImage src={profile.avatar_url} alt={userName} />}
+          {avatarUrl && <AvatarImage src={avatarUrl} alt={userName} referrerPolicy="no-referrer" />}
           <AvatarFallback className="bg-primary/10 text-primary font-semibold">
             {userInitial}
           </AvatarFallback>

@@ -8,17 +8,32 @@ import {
   useState,
   ReactNode,
 } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 // Persist the list of open/minimized wizard instances across a page
 // refresh so the tab strip in the bottom toolbar survives a reload.
 // Stored in localStorage so drafts also survive closing and reopening
 // the browser tab, not just a single session.
-const INSTANCES_STORAGE_KEY = "abcrm:policyWizardInstances:v1";
+//
+// The key is suffixed by the user_id so two users sharing the same
+// device (or one user signing out and another signing in) don't see
+// each other's parked drafts. A worker should never inherit a manager's
+// minimized policy because they happened to use the same browser.
+const INSTANCES_STORAGE_PREFIX = "abcrm:policyWizardInstances:v2";
 
 // Per-instance form draft key prefix. Kept in sync with the one in
 // usePolicyWizardState so the controller can clean up orphaned drafts
 // when the user closes a tab from the toolbar without opening it first.
 const DRAFT_KEY_PREFIX = "abcrm:policyWizardDraft:v4";
+
+// Legacy unscoped key — wiped on first load of the new code so the
+// "3 minimized" badge from a prior tenant doesn't follow a fresh user.
+const LEGACY_INSTANCES_KEY = "abcrm:policyWizardInstances:v1";
+
+function instancesKeyFor(userId: string | null): string | null {
+  if (!userId) return null;
+  return `${INSTANCES_STORAGE_PREFIX}:${userId}`;
+}
 
 export interface WizardDraftSummary {
   clientName: string;
@@ -76,10 +91,12 @@ function generateId(): string {
   );
 }
 
-function loadPersistedInstances(): WizardInstance[] {
-  if (typeof window === "undefined") return [];
+function loadPersistedInstances(userId: string | null): WizardInstance[] {
+  if (typeof window === "undefined" || !userId) return [];
+  const key = instancesKeyFor(userId);
+  if (!key) return [];
   try {
-    const raw = localStorage.getItem(INSTANCES_STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -101,13 +118,15 @@ function loadPersistedInstances(): WizardInstance[] {
   }
 }
 
-function persistInstances(instances: WizardInstance[]): void {
-  if (typeof window === "undefined") return;
+function persistInstances(userId: string | null, instances: WizardInstance[]): void {
+  if (typeof window === "undefined" || !userId) return;
+  const key = instancesKeyFor(userId);
+  if (!key) return;
   try {
     if (instances.length === 0) {
-      localStorage.removeItem(INSTANCES_STORAGE_KEY);
+      localStorage.removeItem(key);
     } else {
-      localStorage.setItem(INSTANCES_STORAGE_KEY, JSON.stringify(instances));
+      localStorage.setItem(key, JSON.stringify(instances));
     }
   } catch {
     // storage full / disabled — non-fatal
@@ -115,15 +134,41 @@ function persistInstances(instances: WizardInstance[]): void {
 }
 
 export function PolicyWizardControllerProvider({ children }: { children: ReactNode }) {
-  // Rehydrate from sessionStorage on mount so a page refresh doesn't
-  // drop the user's minimized drafts. Everything reloads as "minimized"
-  // (activeId stays null) — the user explicitly clicks a tab to restore.
-  const [instances, setInstances] = useState<WizardInstance[]>(() => loadPersistedInstances());
+  // user.id scopes the localStorage key so two users on the same
+  // device never share each other's minimized drafts. Auth provider
+  // sits above this provider in the App tree, so the hook is always
+  // available.
+  const { user } = useAuth();
+  const userId = user?.id || null;
+
+  // Rehydrate from localStorage on mount AND every time the active user
+  // changes. Everything reloads as "minimized" (activeId stays null) —
+  // the user explicitly clicks a tab to restore.
+  const [instances, setInstances] = useState<WizardInstance[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const lastUserIdRef = useRef<string | null>(null);
+
+  // Wipe the unscoped legacy key once. It belonged to whoever happened
+  // to use the device first under the old code and shows up as a
+  // ghost "3 minimized" badge for every fresh signup until cleared.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try { localStorage.removeItem(LEGACY_INSTANCES_KEY); } catch { /* non-fatal */ }
+  }, []);
+
+  // Reload instances on user change (sign-in / sign-out / account swap).
+  // Drop any open editor when the user changes — the wizard belongs to
+  // the previous identity.
+  useEffect(() => {
+    if (lastUserIdRef.current === userId) return;
+    lastUserIdRef.current = userId;
+    setInstances(loadPersistedInstances(userId));
+    setActiveId(null);
+  }, [userId]);
 
   useEffect(() => {
-    persistInstances(instances);
-  }, [instances]);
+    persistInstances(userId, instances);
+  }, [userId, instances]);
   // Dock origin for the minimize→chip flight animation. Consumed exactly
   // once by the next chip render so it must not drive re-renders itself.
   const dockOriginRef = useRef<DockOrigin | null>(null);
