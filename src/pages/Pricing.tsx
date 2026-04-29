@@ -185,17 +185,18 @@ export default function Pricing() {
 
   return (
     <div
-      className="min-h-screen text-black overflow-x-hidden bg-white relative"
+      className="min-h-screen text-black overflow-x-hidden relative"
       dir="rtl"
-      style={{ fontFamily: "'Cairo', sans-serif" }}
+      style={{
+        fontFamily: "'Cairo', sans-serif",
+        background: "linear-gradient(180deg, #7C5CFF 0%, #B5A6FF 22%, #FFFFFF 55%)",
+      }}
     >
       <PublicSEO
         title="Thiqa | الأسعار والخطط"
         description="خطط أسعار Thiqa لإدارة وكالات التأمين: ابدأ بالخطة المجانية ووسّع حسب حاجة وكالتك. أسعار شفافة، اشتراكات شهرية وسنوية، وبدون التزامات طويلة."
         keywords="أسعار Thiqa, خطط اشتراك Thiqa, تكلفة نظام إدارة التأمين, اشتراك مجاني, خطة احترافية"
       />
-      {/* Page background stays plain white — the Strain-style cards
-          carry the visual weight, not a hero gradient. */}
 
       {/* ═══ Navbar — static light pill, same 3-item structure as the
           landing page. Mobile collapses to login + hamburger + drawer. */}
@@ -535,24 +536,23 @@ export default function Pricing() {
         </aside>
       </div>
 
-      {/* ═══ Pricing Hero — plain white background; copy is dark for
-          contrast on the white page. */}
+      {/* ═══ Pricing Hero — sits on the purple band of the gradient,
+          so copy is white for contrast. */}
       <section className="relative z-10 pt-32 md:pt-40 pb-12 md:pb-16 text-center px-6">
-        <p className="text-sm text-black/55 mb-4 tracking-wide font-medium">
+        <p className="text-sm text-white/75 mb-4 tracking-wide font-medium">
           {ct(content, "pricing_label", "الأسعار")}
         </p>
-        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-black">
+        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-white">
           {ct(content, "pricing_title", "جرّب نظام إدارة وكالات التأمين لمدة 35 يوم مجاناً *")}
         </h1>
-        <p className="text-black/65 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed">
+        <p className="text-white/80 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed">
           {ct(content, "pricing_subtitle", "* جميع الميزات مفتوحة بالكامل — بدون بطاقة ائتمان.")}
         </p>
       </section>
 
-      {/* ═══ Pricing Cards — white on white body, each card has a soft
-          shadow to lift off the page. The card with a `badge` gets a
-          violet pill on top plus a slight ring so the "most popular"
-          option reads instantly. */}
+      {/* ═══ Pricing Cards — Strain-style transparent cards: no
+          background, no border, no shadow. The card with a `badge`
+          only gets the violet pill on top to mark "most popular". */}
       <section className="relative z-10 pb-24 px-4 md:px-6" aria-labelledby="pricing-plans-heading">
         {/* Visually subtle but semantically real H2 — gives the
             document a proper H1 → H2 → H3 outline for crawlers. */}
@@ -582,12 +582,7 @@ export default function Pricing() {
             return (
               <div
                 key={plan.id}
-                className={cn(
-                  "relative rounded-2xl bg-white flex flex-col p-7 md:p-8 transition-all",
-                  isPopular
-                    ? "ring-2 ring-[#7C5CFF] shadow-[0_18px_60px_-18px_rgba(124,92,255,0.35)]"
-                    : "ring-1 ring-black/[0.08] shadow-[0_10px_40px_-18px_rgba(15,40,120,0.18)] hover:ring-black/[0.16]",
-                )}
+                className="relative rounded-2xl flex flex-col p-7 md:p-8 transition-all"
               >
                 {isPopular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 px-3.5 py-1.5 text-[11px] font-bold rounded-full bg-[#7C5CFF] text-white shadow-md whitespace-nowrap">
