@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { useLandingContent, ct } from "@/hooks/useLandingContent";
+import { cn } from "@/lib/utils";
 
 // FAQ data — single source of truth shared by every public surface
 // that renders the accordion (landing page, pricing page) AND the
@@ -37,12 +38,18 @@ export const LANDING_FAQS: { q: string; a: string }[] = [
  * and Landing.tsx reads the same `LANDING_FAQS` export to build its
  * FAQPage JSON-LD, so SEO stays in lock-step with the visible copy.
  */
-export function FAQSection() {
+export function FAQSection({ compact = false }: { compact?: boolean } = {}) {
   const { data: content } = useLandingContent();
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   return (
-    <section id="faq" className="py-24 md:py-36 relative bg-white">
+    <section
+      id="faq"
+      className={cn(
+        "relative bg-white",
+        compact ? "py-12 md:py-16" : "py-24 md:py-36",
+      )}
+    >
       <div className="relative max-w-4xl mx-auto px-6">
         <p className="text-sm text-black text-center mb-4 tracking-wide font-light">
           {ct(content, "faq_label", "أسئلة وأجوبة")}
@@ -98,7 +105,7 @@ export function FAQSection() {
         <p className="mt-12 text-center text-[14px] md:text-[15px] text-black/55">
           {ct(content, "faq_more_prompt", "هل لديك أسئلة إضافية؟")}{" "}
           <Link
-            to="/register"
+            to="/faq#support"
             className="font-bold text-black hover:opacity-80 transition-opacity"
           >
             {ct(content, "faq_more_cta", "تواصل معنا.")}

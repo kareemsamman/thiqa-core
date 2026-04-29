@@ -577,7 +577,7 @@ export default function Pricing() {
           full-width horizontal hairlines, exactly like the reference.
           The card with a `badge` gets a violet "popular" pill above
           the top hairline. */}
-      <section className="relative z-10 pt-12 md:pt-20 pb-24 px-4 md:px-6" aria-labelledby="pricing-plans-heading">
+      <section className="relative z-10 pt-12 md:pt-20 pb-8 md:pb-12 px-4 md:px-6" aria-labelledby="pricing-plans-heading">
         <h2 id="pricing-plans-heading" className="sr-only">
           خطط أسعار Thiqa
         </h2>
@@ -798,8 +798,11 @@ export default function Pricing() {
       </section>
 
       {/* ═══ FAQ ═══ Same component the landing page uses, so editing
-          questions/answers in FAQSection.tsx updates both surfaces. */}
-      <FAQSection />
+          questions/answers in FAQSection.tsx updates both surfaces.
+          `compact` trims the section padding so the FAQ sits tighter
+          under the pricing grid (the landing page keeps the roomier
+          default since it has its own visual rhythm). */}
+      <FAQSection compact />
 
       {/* ═══ Footer — same 4-column desktop grid / mobile accordion
           pattern as the landing page. */}
