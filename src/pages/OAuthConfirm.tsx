@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, Mail, ShieldCheck, UserPlus, AlertCircle, Check } from "lucide-react";
+import { Loader2, LogOut, Mail, ShieldCheck, UserPlus, AlertCircle, Check, ExternalLink } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -219,6 +219,19 @@ export default function OAuthConfirm() {
               <p>
                 ليس لديك حساب في ثقة بهذا البريد بعد. يمكنك إنشاء حساب جديد الآن باستخدام
                 نفس بيانات Google، أو العودة إلى صفحة تسجيل الدخول لتجربة بريد آخر.
+              </p>
+              <p className="text-xs">
+                إذا لم ترغب في المتابعة، يمكنك سحب صلاحيات Google من{" "}
+                <a
+                  href="https://myaccount.google.com/permissions"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-0.5"
+                >
+                  حساب Google
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                .
               </p>
             </div>
           ) : (

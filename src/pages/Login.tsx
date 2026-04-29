@@ -296,7 +296,8 @@ export default function Login() {
       // Remember which form the user clicked from. /oauth-confirm uses
       // this to decide between "we couldn't find your account, want
       // to register?" (login) vs "confirm these details" (signup).
-      sessionStorage.setItem('oauth_intent', pageView === "signup" ? 'signup' : 'login');
+      const isSignup = pageView === "signup";
+      sessionStorage.setItem('oauth_intent', isSignup ? 'signup' : 'login');
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         // Land on /oauth-confirm so the user always sees what we
@@ -305,26 +306,22 @@ export default function Login() {
         // Landing-page hash fallback also forward there as backup.
         options: {
           redirectTo: `${window.location.origin}/oauth-confirm`,
-          // Three prompts on every Google sign-in:
-          //   * select_account — forces Google's account chooser
-          //     instead of the silent "Continue as [name]" greeting
-          //     that appears when the user is already signed into
-          //     Google. Without this, registering a brand-new Thiqa
-          //     account silently uses whichever Google account the
-          //     browser is signed into, which is confusing.
-          //   * consent — forces the "What this app will be able to
-          //     access" screen so the user always sees exactly what
-          //     data Thiqa receives. Google skips it by default for
-          //     any account that previously approved the app.
-          //   * access_type=offline — Google's documented requirement
-          //     for prompt=consent to be honored consistently.
-          // Cost: returning users have to pick their account + click
-          // through consent on every sign-in. Worth it for the
-          // transparency.
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'select_account consent',
-          },
+          // Prompt strategy by intent:
+          //   * Always include select_account — without it, Google
+          //     silently reuses whichever account the browser is
+          //     signed into, which is confusing on a shared device.
+          //   * On signup ALSO force consent — first-time users
+          //     should see Google's "what this app can access" screen
+          //     so the data we receive is explicit. access_type=offline
+          //     is Google's documented requirement for prompt=consent
+          //     to be honored consistently.
+          //   * On login, do NOT force consent — Google will still
+          //     show it the first time a user authorizes the app
+          //     anyway, but returning users get the smooth re-login
+          //     experience they expect.
+          queryParams: isSignup
+            ? { access_type: 'offline', prompt: 'select_account consent' }
+            : { prompt: 'select_account' },
         },
       });
       if (error) {
