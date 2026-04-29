@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { Button } from "@/components/ui/button";
 import {
@@ -360,12 +361,38 @@ const featureTabs = [
 
 export default function Landing() {
   // Public marketing page — renders the same content for everyone,
-  // logged-in or not. Was previously gated behind a "bounce logged-in
-  // users" redirect, but that prevented agents from ever reading the
-  // pricing/feature copy after signup, which they sometimes need to
-  // share with clients or check what their plan covers. The Login
-  // page handles its own "if already logged in, send me to the app"
-  // behavior, so this component doesn't need to.
+  // logged-in or not. Fully-set-up agents can browse here freely (so
+  // they can share pricing copy with clients).
+  //
+  // The one exception is post-Google-OAuth: Supabase falls back to
+  // the Site URL (this page) whenever the redirectTo we asked for
+  // isn't in the project's allowlist, so a brand-new signup lands on
+  // "/" with an #access_token=... hash. We detect that and forward
+  // to /dashboard so ProtectedRoute can run the setup-oauth-user
+  // flow with its full-screen loader instead of dumping the user on
+  // the marketing page.
+  const navigate = useNavigate();
+  const { user, profile, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash.includes("access_token=")) {
+      // Carry the hash across so Supabase's detectSessionInUrl picks
+      // it up on /dashboard. window.location.replace keeps the hash;
+      // react-router navigate would strip it.
+      window.location.replace(`/dashboard${window.location.hash}`);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (authLoading || !user) return;
+    // OAuth user past the hash but still missing their agent — push
+    // them into the protected route so setup can finish.
+    if (!profile?.agent_id) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [authLoading, user, profile?.agent_id, navigate]);
+
   return <LandingContent />;
 }
 
