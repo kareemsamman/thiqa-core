@@ -659,16 +659,14 @@ export default function Pricing() {
                 <SectionDivider isFirst={isFirst} isLast={isLast} />
 
                 {/* ── Billing toggle (paid plans) or trial info (free).
-                    Right-hand text always shows the annual savings —
-                    the actionable hint, mirrored from Strain — instead
-                    of repeating the "monthly" label that already sits
-                    next to the toggle. */}
+                    Toggle group sits on the RIGHT (start in RTL) next
+                    to its label; the per-plan annual savings appears
+                    on the LEFT only when yearly is selected, so users
+                    see the concrete amount they save the moment they
+                    flip the switch. */}
                 <div className="px-7 md:px-8 py-4 min-h-[64px] flex items-center justify-between">
                   {hasYearly ? (
                     <>
-                      <span className="text-[13px] text-black/75 font-medium tabular-nums">
-                        وفّر ₪{annualSavings}
-                      </span>
                       <div className="flex items-center gap-2.5">
                         <span className="text-[13px] font-semibold text-black">
                           {yearly ? "سنوي" : "شهري"}
@@ -693,6 +691,11 @@ export default function Pricing() {
                           />
                         </button>
                       </div>
+                      {yearly && annualSavings > 0 && (
+                        <span className="text-[13px] text-emerald-600 font-semibold tabular-nums">
+                          وفّر ₪{annualSavings}
+                        </span>
+                      )}
                     </>
                   ) : (
                     <span className="text-[13px] text-black/65">
