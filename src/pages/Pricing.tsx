@@ -227,14 +227,15 @@ export default function Pricing() {
         keywords="أسعار Thiqa, خطط اشتراك Thiqa, تكلفة نظام إدارة التأمين, اشتراك مجاني, خطة احترافية"
       />
       {/* Purple gradient band — pinned to the top of the page so it
-          covers the navbar + hero only and fades cleanly into white
-          before the pricing cards begin (Strain reference). */}
+          covers the navbar + hero only and fades into white well
+          above the pricing grid (Strain reference). Kept short so
+          the cards sit cleanly on white, not on tinted purple. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute top-0 inset-x-0 h-[820px]"
+        className="pointer-events-none absolute top-0 inset-x-0 h-[640px]"
         style={{
           background:
-            "linear-gradient(180deg, #6F4FFF 0%, #9D89FF 38%, rgba(255,255,255,0.6) 78%, rgba(255,255,255,0) 100%)",
+            "linear-gradient(180deg, #6F4FFF 0%, #9D89FF 32%, rgba(255,255,255,0.85) 70%, rgba(255,255,255,0) 100%)",
         }}
       />
 
@@ -595,12 +596,12 @@ export default function Pricing() {
           full-width horizontal hairlines, exactly like the reference.
           The card with a `badge` gets a violet "popular" pill above
           the top hairline. */}
-      <section className="relative z-10 pb-24 px-4 md:px-6" aria-labelledby="pricing-plans-heading">
+      <section className="relative z-10 pt-12 md:pt-20 pb-24 px-4 md:px-6" aria-labelledby="pricing-plans-heading">
         <h2 id="pricing-plans-heading" className="sr-only">
           خطط أسعار Thiqa
         </h2>
-        <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12 pt-6">
-          {plans.map((plan) => {
+        <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-7">
+          {plans.filter((p) => p.plan_key !== 'free_trial').map((plan) => {
             const isPopular = !!plan.badge;
             const isFree = plan.monthly_price === 0;
             const yearly = isYearly(plan.plan_key);
@@ -622,19 +623,19 @@ export default function Pricing() {
             const visibleFeatures = includedFeatures.slice(0, VISIBLE_FEATURE_COUNT);
             const hiddenCount = Math.max(0, includedFeatures.length - VISIBLE_FEATURE_COUNT);
             return (
-              <div key={plan.id} className="relative flex flex-col">
+              <div
+                key={plan.id}
+                className="relative flex flex-col rounded-2xl border border-black/15 bg-white/40 backdrop-blur-[2px] px-7 md:px-8"
+              >
                 {isPopular && (
-                  <div className="absolute -top-3 right-0 inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold rounded-full bg-[#7C5CFF] text-white whitespace-nowrap">
+                  <div className="absolute -top-3 right-6 inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold rounded-full bg-[#7C5CFF] text-white whitespace-nowrap">
                     <Sparkles className="h-3 w-3" />
                     {plan.badge}
                   </div>
                 )}
 
-                {/* ── Top hairline */}
-                <div className="border-t border-black/15" />
-
                 {/* ── Header: name, description, price */}
-                <div className="pt-7 pb-6">
+                <div className="pt-8 pb-6">
                   <h3 className="text-2xl font-bold text-black tracking-tight">
                     {plan.name_ar || plan.name}
                   </h3>
@@ -660,8 +661,8 @@ export default function Pricing() {
                   </div>
                 </div>
 
-                {/* ── Hairline */}
-                <div className="border-t border-black/15" />
+                {/* ── Hairline (full-width, runs edge-to-edge) */}
+                <div className="border-t border-black/15 -mx-7 md:-mx-8" />
 
                 {/* ── Billing toggle (paid plans) or trial info (free) */}
                 <div className="py-4 min-h-[56px] flex items-center justify-between">
@@ -704,8 +705,8 @@ export default function Pricing() {
                   )}
                 </div>
 
-                {/* ── Hairline */}
-                <div className="border-t border-black/15" />
+                {/* ── Hairline (full-width, runs edge-to-edge) */}
+                <div className="border-t border-black/15 -mx-7 md:-mx-8" />
 
                 {/* ── CTA — full-width black pill */}
                 <div className="py-5">
@@ -722,7 +723,7 @@ export default function Pricing() {
                 </div>
 
                 {/* ── Feature list (catalog-driven, with icons) */}
-                <div className="pt-2 flex-1">
+                <div className="pt-2 pb-7 flex-1">
                   <p className="font-bold text-[13.5px] text-black mb-4">ماذا تشمل هذه الخطة؟</p>
                   <ul className="space-y-3.5">
                     {visibleFeatures.map((f) => {
