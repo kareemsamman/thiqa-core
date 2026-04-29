@@ -600,8 +600,12 @@ export default function Pricing() {
         <h2 id="pricing-plans-heading" className="sr-only">
           خطط أسعار Thiqa
         </h2>
-        <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-7">
-          {plans.filter((p) => p.plan_key !== 'free_trial').map((plan) => {
+        {/* One shared frame around the whole grid — the cards are
+            connected by hairlines, not individual outlined boxes
+            (Strain reference). The 12px dots at every line crossing
+            mark each section/column intersection. */}
+        <div className="max-w-6xl mx-auto border border-black/15 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 bg-white/40 backdrop-blur-[2px]">
+          {plans.filter((p) => p.plan_key !== 'free_trial').map((plan, idx, arr) => {
             const isPopular = !!plan.badge;
             const isFree = plan.monthly_price === 0;
             const yearly = isYearly(plan.plan_key);
@@ -622,20 +626,32 @@ export default function Pricing() {
               .filter((item) => plan.default_features?.[item.key] === true);
             const visibleFeatures = includedFeatures.slice(0, VISIBLE_FEATURE_COUNT);
             const hiddenCount = Math.max(0, includedFeatures.length - VISIBLE_FEATURE_COUNT);
+            const isFirst = idx === 0;
+            const isLast = idx === arr.length - 1;
             return (
               <div
                 key={plan.id}
-                className="relative flex flex-col rounded-2xl border border-black/15 bg-white/40 backdrop-blur-[2px] px-7 md:px-8"
+                className={cn(
+                  "relative flex flex-col",
+                  // Vertical hairlines BETWEEN cards on lg (RTL: card 1
+                  // is rightmost, so border-r on cards 2+ creates the
+                  // shared dividers without doubling the outer frame).
+                  !isFirst && "lg:border-r lg:border-black/15",
+                  // Horizontal hairlines between stacked cards on
+                  // mobile/tablet — disabled on lg where cards sit
+                  // side-by-side.
+                  !isFirst && "border-t lg:border-t-0 border-black/15",
+                )}
               >
                 {isPopular && (
-                  <div className="absolute -top-3 right-6 inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold rounded-full bg-[#7C5CFF] text-white whitespace-nowrap">
+                  <div className="absolute -top-3 right-6 inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold rounded-full bg-[#7C5CFF] text-white whitespace-nowrap z-10">
                     <Sparkles className="h-3 w-3" />
                     {plan.badge}
                   </div>
                 )}
 
                 {/* ── Header: name, description, price */}
-                <div className="pt-8 pb-6">
+                <div className="px-7 md:px-8 pt-8 pb-6 min-h-[260px]">
                   <h3 className="text-2xl font-bold text-black tracking-tight">
                     {plan.name_ar || plan.name}
                   </h3>
@@ -661,11 +677,14 @@ export default function Pricing() {
                   </div>
                 </div>
 
-                {/* ── Hairline (full-width, runs edge-to-edge) */}
-                <div className="border-t border-black/15 -mx-7 md:-mx-8" />
+                {/* ── Hairline + 12px corner dots at each line crossing.
+                    The dots use CSS pseudo-elements positioned at the
+                    line endpoints, so they sit on top of the vertical
+                    column dividers exactly like the Strain reference. */}
+                <SectionDivider isFirst={isFirst} isLast={isLast} />
 
                 {/* ── Billing toggle (paid plans) or trial info (free) */}
-                <div className="py-4 min-h-[56px] flex items-center justify-between">
+                <div className="px-7 md:px-8 py-4 min-h-[64px] flex items-center justify-between">
                   {hasYearly ? (
                     <>
                       <span className="text-[12px] text-black/55">
@@ -705,11 +724,10 @@ export default function Pricing() {
                   )}
                 </div>
 
-                {/* ── Hairline (full-width, runs edge-to-edge) */}
-                <div className="border-t border-black/15 -mx-7 md:-mx-8" />
+                <SectionDivider isFirst={isFirst} isLast={isLast} />
 
                 {/* ── CTA — full-width black pill */}
-                <div className="py-5">
+                <div className="px-7 md:px-8 py-5">
                   <button
                     type="button"
                     onClick={() => {
@@ -723,7 +741,7 @@ export default function Pricing() {
                 </div>
 
                 {/* ── Feature list (catalog-driven, with icons) */}
-                <div className="pt-2 pb-7 flex-1">
+                <div className="px-7 md:px-8 pt-2 pb-7 flex-1">
                   <p className="font-bold text-[13.5px] text-black mb-4">ماذا تشمل هذه الخطة؟</p>
                   <ul className="space-y-3.5">
                     {visibleFeatures.map((f) => {
@@ -941,6 +959,35 @@ export default function Pricing() {
           />
         </div>
       </footer>
+    </div>
+  );
+}
+
+// 1px hairline that runs across an entire pricing-card cell, with
+// 12px gray dots at each end so the line "snaps" onto the vertical
+// column dividers exactly like the Strain reference. The first/last
+// flags suppress the dot that would land on the outer rounded frame
+// (where there's no vertical divider to land on, so a dot would just
+// look like a stray bump on the rounded corner).
+function SectionDivider({ isFirst, isLast }: { isFirst: boolean; isLast: boolean }) {
+  return (
+    <div className="relative border-t border-black/15">
+      {/* Right-edge dot. In RTL, this is the rightmost end of the line.
+          Hidden on the rightmost (first DOM) card so it doesn't sit
+          on the outer frame. */}
+      {!isFirst && (
+        <span
+          aria-hidden
+          className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-black/15 z-[1]"
+        />
+      )}
+      {/* Left-edge dot. Hidden on the leftmost (last DOM) card. */}
+      {!isLast && (
+        <span
+          aria-hidden
+          className="absolute -top-1.5 -left-1.5 h-3 w-3 rounded-full bg-black/15 z-[1]"
+        />
+      )}
     </div>
   );
 }
