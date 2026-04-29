@@ -1,11 +1,9 @@
-import { Fragment, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { useNavigate } from "react-router-dom";
 import {
   Check, ChevronDown, Menu, X, Play, Sparkles, Star, HelpCircle, MessageSquare,
-  LayoutDashboard, ListChecks, Users, AlertTriangle, Mail, RefreshCw, Bell,
-  Upload, FolderOpen, PenLine, MessageCircle, Megaphone, Bot, TrendingUp,
-  Wallet, Building2, Calculator, Receipt, Banknote, Coins, Wrench,
+  Users, FileText, Mail, Megaphone, Bot, Building2,
   type LucideIcon,
 } from "lucide-react";
 import { useLandingContent, ct } from "@/hooks/useLandingContent";
@@ -14,12 +12,6 @@ import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { cn } from "@/lib/utils";
 import { PublicSEO } from "@/components/public/PublicSEO";
 import { PLAN_FEATURE_CATALOG } from "@/lib/planFeatureCatalog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 interface PlanData {
   id: string;
@@ -30,40 +22,20 @@ interface PlanData {
   monthly_price: number;
   yearly_price: number;
   badge: string | null;
+  users_limit: number | null;
+  branches_limit: number | null;
+  policies_limit: number | null;
+  sms_limit: number;
+  marketing_sms_limit: number;
+  ai_limit: number;
   default_features: Record<string, boolean>;
 }
 
-// Maps feature catalog keys → Lucide icon used in the card list. Keep
-// in sync with PLAN_FEATURE_CATALOG; an unmapped key falls back to a
-// neutral check.
-const FEATURE_ICON: Record<string, LucideIcon> = {
-  dashboard: LayoutDashboard,
-  tasks: ListChecks,
-  contacts: Users,
-  accident_reports: AlertTriangle,
-  correspondence: Mail,
-  renewals: RefreshCw,
-  notifications: Bell,
-  files_upload: Upload,
-  files_explorer: FolderOpen,
-  digital_signatures: PenLine,
-  sms: MessageCircle,
-  marketing_sms: Megaphone,
-  ai_assistant: Bot,
-  financial_reports: TrendingUp,
-  broker_wallet: Wallet,
-  company_settlement: Building2,
-  accounting: Calculator,
-  receipts: Receipt,
-  cheques: Banknote,
-  debt_tracking: Coins,
-  repair_claims: Wrench,
-};
-
-// Number of features visible inside each card before the "compare all"
-// button takes over. Mirrors the Strain layout where the first 8-ish
-// items hint at value, deeper detail lives in the comparison view.
-const VISIBLE_FEATURE_COUNT = 8;
+function formatLimit(limit: number | null | undefined): string {
+  if (limit === null || limit === undefined) return 'غير محدود';
+  if (limit === 0) return '—';
+  return `${limit}`;
+}
 
 // Default-features map used by the fallback plans. Keys come from
 // PLAN_FEATURE_CATALOG; the higher the plan the more flags flip on.
@@ -74,9 +46,9 @@ const fillFeatures = (keys: string[]): Record<string, boolean> => {
   return map;
 };
 
-// Fallback plans if DB fetch fails. default_features mirrors the
-// shape returned by `subscription_plans.default_features` so the
-// rendering path is identical whether data is live or fallback.
+// Fallback plans if DB fetch fails. Limits + default_features mirror
+// `subscription_plans` columns so the rendering path is identical
+// whether data is live or fallback.
 const FALLBACK_PLANS: PlanData[] = [
   {
     id: "free_trial",
@@ -87,6 +59,8 @@ const FALLBACK_PLANS: PlanData[] = [
     monthly_price: 0,
     yearly_price: 0,
     badge: null,
+    users_limit: 1, branches_limit: 1, policies_limit: 10,
+    sms_limit: 0, marketing_sms_limit: 0, ai_limit: 0,
     default_features: fillFeatures(["dashboard", "contacts", "renewals", "notifications"]),
   },
   {
@@ -98,6 +72,8 @@ const FALLBACK_PLANS: PlanData[] = [
     monthly_price: 240,
     yearly_price: 200,
     badge: null,
+    users_limit: 1, branches_limit: 1, policies_limit: 30,
+    sms_limit: 50, marketing_sms_limit: 0, ai_limit: 0,
     default_features: fillFeatures([
       "dashboard", "tasks", "contacts", "renewals", "notifications",
       "files_upload", "files_explorer", "sms", "receipts",
@@ -112,6 +88,8 @@ const FALLBACK_PLANS: PlanData[] = [
     monthly_price: 240,
     yearly_price: 200,
     badge: "الأكثر شعبية",
+    users_limit: 3, branches_limit: 1, policies_limit: 70,
+    sms_limit: 100, marketing_sms_limit: 200, ai_limit: 0,
     default_features: fillFeatures([
       "dashboard", "tasks", "contacts", "accident_reports", "correspondence",
       "renewals", "notifications", "files_upload", "files_explorer",
@@ -128,6 +106,8 @@ const FALLBACK_PLANS: PlanData[] = [
     monthly_price: 240,
     yearly_price: 200,
     badge: null,
+    users_limit: null, branches_limit: 3, policies_limit: null,
+    sms_limit: 200, marketing_sms_limit: 300, ai_limit: 250,
     default_features: fillFeatures(ALL_FEATURE_KEYS),
   },
 ];
@@ -167,10 +147,10 @@ export default function Pricing() {
   const isYearly = (key: string) => !!yearlyByPlan[key];
   const toggleYearly = (key: string) =>
     setYearlyByPlan((s) => ({ ...s, [key]: !s[key] }));
-  // Cross-plan "compare all features" dialog. Opened from any card's
-  // "عرض جميع الميزات" link — shows the full PLAN_FEATURE_CATALOG as
-  // a side-by-side matrix instead of expanding cards individually.
-  const [compareOpen, setCompareOpen] = useState(false);
+  // Shared expand state — clicking "عرض جميع الميزات" on any card
+  // expands every card to reveal the full feature catalog as a
+  // ✓/✗ matrix in-place, exactly like the agent-side PlanLadder.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [plans, setPlans] = useState<PlanData[]>(FALLBACK_PLANS);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSubmenu, setMobileSubmenu] = useState<"info" | "support" | null>(null);
@@ -197,7 +177,7 @@ export default function Pricing() {
       try {
         const { data, error } = await supabase
           .from("subscription_plans")
-          .select("id, plan_key, name, name_ar, description, monthly_price, yearly_price, badge, default_features")
+          .select("id, plan_key, name, name_ar, description, monthly_price, yearly_price, badge, users_limit, branches_limit, policies_limit, sms_limit, marketing_sms_limit, ai_limit, default_features")
           .eq("is_active", true)
           .order("sort_order");
         if (!error && data && data.length > 0) {
@@ -619,13 +599,6 @@ export default function Pricing() {
               : yearly && hasYearly
                 ? yearlyAsMonthly
                 : plan.monthly_price;
-            // Filter the shared feature catalog to just the entries
-            // this plan ships with — same source as the agent-side
-            // PlanLadder / Subscription page.
-            const includedFeatures = PLAN_FEATURE_CATALOG.flatMap((g) => g.items)
-              .filter((item) => plan.default_features?.[item.key] === true);
-            const visibleFeatures = includedFeatures.slice(0, VISIBLE_FEATURE_COUNT);
-            const hiddenCount = Math.max(0, includedFeatures.length - VISIBLE_FEATURE_COUNT);
             const isFirst = idx === 0;
             const isLast = idx === arr.length - 1;
             return (
@@ -740,123 +713,75 @@ export default function Pricing() {
                   </button>
                 </div>
 
-                {/* ── Feature list (catalog-driven, with icons) */}
+                {/* ── Quota rows + in-place "show all features" expand
+                    (same data + UX as the agent PlanLadder). All
+                    cards share `detailsOpen` so toggling one expands
+                    every column for side-by-side comparison. */}
                 <div className="px-7 md:px-8 pt-2 pb-7 flex-1">
                   <p className="font-bold text-[13.5px] text-black mb-4">ماذا تشمل هذه الخطة؟</p>
-                  <ul className="space-y-3.5">
-                    {visibleFeatures.map((f) => {
-                      const Icon = FEATURE_ICON[f.key] ?? Check;
-                      return (
-                        <li key={f.key} className="flex items-center gap-3 text-[13px] text-black/80">
-                          <Icon className="h-[18px] w-[18px] shrink-0 text-black/70" strokeWidth={1.7} />
-                          <span className="flex-1 leading-tight">{f.label}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {hiddenCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setCompareOpen(true)}
-                      className="mt-5 inline-flex items-center gap-1.5 text-[13px] font-bold text-black hover:text-[#7C5CFF] transition-colors"
-                    >
-                      عرض جميع الميزات
-                      <ChevronDown className="h-3.5 w-3.5 -rotate-90" strokeWidth={2.5} />
-                    </button>
+                  <div className="space-y-2.5">
+                    <QuotaRow icon={Users} label="مستخدم" value={formatLimit(plan.users_limit)} />
+                    <QuotaRow icon={Building2} label="فرع" value={formatLimit(plan.branches_limit)} />
+                    <QuotaRow icon={FileText} label="معاملة" value={formatLimit(plan.policies_limit)} />
+                    <QuotaRow icon={Mail} label="SMS / شهر" value={plan.sms_limit ? `${plan.sms_limit}` : '—'} />
+                    <QuotaRow icon={Megaphone} label="SMS تسويقية / شهر" value={plan.marketing_sms_limit ? `${plan.marketing_sms_limit}` : '—'} />
+                    <QuotaRow icon={Bot} label="طلب AI / شهر" value={plan.ai_limit ? `${plan.ai_limit}` : '—'} />
+                  </div>
+
+                  {detailsOpen && (
+                    <div className="mt-4 pt-4 border-t border-black/10 space-y-4">
+                      {PLAN_FEATURE_CATALOG.map((group) => (
+                        <div key={group.group}>
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-black/55 mb-2">
+                            {group.group}
+                          </p>
+                          <ul className="space-y-1.5">
+                            {group.items.map((f) => {
+                              const has = plan.default_features?.[f.key] === true;
+                              return (
+                                <li
+                                  key={f.key}
+                                  className={cn(
+                                    'flex items-center gap-2 text-[13px]',
+                                    has ? 'text-black font-medium' : 'text-black/40',
+                                  )}
+                                >
+                                  {has ? (
+                                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-emerald-500 text-white shrink-0">
+                                      <Check className="h-3 w-3" strokeWidth={3} />
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-black/[0.06] text-black/40 shrink-0">
+                                      <X className="h-3 w-3" strokeWidth={3} />
+                                    </span>
+                                  )}
+                                  <span className="truncate">{f.label}</span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => setDetailsOpen((v) => !v)}
+                    className="mt-5 inline-flex items-center gap-1.5 text-[13px] font-bold text-black hover:text-[#7C5CFF] transition-colors"
+                  >
+                    {detailsOpen ? "إخفاء التفاصيل" : "عرض جميع الميزات"}
+                    <ChevronDown
+                      className={cn("h-3.5 w-3.5 transition-transform", detailsOpen && "rotate-180")}
+                      strokeWidth={2.5}
+                    />
+                  </button>
                 </div>
               </div>
             );
           })}
         </div>
-
-        {/* Page-level "compare all" link below the grid — gives users
-            a way to open the matrix even when no card overflows. */}
-        <div className="max-w-7xl mx-auto mt-12 flex justify-center">
-          <button
-            type="button"
-            onClick={() => setCompareOpen(true)}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-full border border-black/15 text-[13.5px] font-bold text-black hover:bg-black/[0.04] transition-colors"
-          >
-            مقارنة جميع الميزات بين الخطط
-            <ChevronDown className="h-4 w-4 -rotate-90" strokeWidth={2.5} />
-          </button>
-        </div>
       </section>
-
-      {/* ═══ Compare-all dialog — full feature catalog × all plans
-          rendered as a matrix. Pulls from the same data the cards
-          do, so columns/rows stay in lock-step with subscription_plans. */}
-      <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
-        <DialogContent
-          dir="rtl"
-          className="max-w-5xl w-[95vw] max-h-[90vh] overflow-hidden p-0 flex flex-col"
-        >
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-black/[0.08]">
-            <DialogTitle className="text-right text-xl font-bold">
-              مقارنة الميزات بين الخطط
-            </DialogTitle>
-          </DialogHeader>
-          <div className="overflow-auto px-6 pb-6">
-            <table className="w-full border-collapse text-[13px]">
-              <thead className="sticky top-0 bg-white z-10">
-                <tr className="border-b border-black/15">
-                  <th className="py-3 pr-2 text-right font-bold text-black/55 text-[11px] uppercase tracking-wider w-[34%]">
-                    الميزة
-                  </th>
-                  {plans.map((p) => (
-                    <th key={p.id} className="py-3 px-2 text-center font-bold text-black">
-                      <div className="text-[14px]">{p.name_ar || p.name}</div>
-                      <div className="text-[11px] text-black/55 font-medium mt-0.5">
-                        {p.monthly_price === 0 ? "مجاناً" : `₪${p.monthly_price}/شهر`}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {PLAN_FEATURE_CATALOG.map((group) => (
-                  <Fragment key={group.group}>
-                    <tr>
-                      <td
-                        colSpan={1 + plans.length}
-                        className="pt-5 pb-2 pr-2 text-right text-[11px] font-bold uppercase tracking-wider text-[#7C5CFF]"
-                      >
-                        {group.group}
-                      </td>
-                    </tr>
-                    {group.items.map((item) => {
-                      const Icon = FEATURE_ICON[item.key] ?? Check;
-                      return (
-                        <tr key={item.key} className="border-t border-black/[0.06]">
-                          <td className="py-2.5 pr-2 text-right text-black/80">
-                            <span className="inline-flex items-center gap-2.5">
-                              <Icon className="h-4 w-4 shrink-0 text-black/55" strokeWidth={1.7} />
-                              {item.label}
-                            </span>
-                          </td>
-                          {plans.map((p) => {
-                            const has = p.default_features?.[item.key] === true;
-                            return (
-                              <td key={p.id} className="py-2.5 px-2 text-center">
-                                {has ? (
-                                  <Check className="h-4 w-4 mx-auto text-[#7C5CFF]" strokeWidth={3} />
-                                ) : (
-                                  <X className="h-4 w-4 mx-auto text-black/20" strokeWidth={2} />
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* ═══ Footer — same 4-column desktop grid / mobile accordion
           pattern as the landing page. */}
@@ -959,6 +884,31 @@ export default function Pricing() {
           />
         </div>
       </footer>
+    </div>
+  );
+}
+
+// One quota line inside a pricing card (مستخدم / فرع / معاملة / SMS / …).
+// Same shape and visual weight as the agent-side PlanLadder QuotaRow
+// so users moving between the public pricing page and the in-app
+// plan ladder see the same structure.
+function QuotaRow({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+}) {
+  const isEmpty = value === '—';
+  return (
+    <div className={cn("flex items-center justify-between gap-2", isEmpty && "opacity-50")}>
+      <div className="flex items-center gap-2 text-black/65 min-w-0">
+        <Icon className="h-4 w-4 shrink-0 opacity-70" strokeWidth={1.7} />
+        <span className="truncate text-[13px]">{label}</span>
+      </div>
+      <span className="font-semibold tabular-nums text-black text-[13px]">{value}</span>
     </div>
   );
 }
