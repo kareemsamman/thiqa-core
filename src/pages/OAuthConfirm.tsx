@@ -171,8 +171,11 @@ export default function OAuthConfirm() {
             <span>تم تسجيل الدخول عبر Google</span>
           </div>
 
-          {/* Profile preview */}
-          <div className="rounded-xl border bg-secondary/40 p-4 flex items-center gap-3">
+          {/* Profile preview — Google account-chooser style: avatar
+              on the left, name + email stacked on the right. We force
+              LTR direction on this card so the layout matches Google's
+              UI regardless of the page's RTL context. */}
+          <div className="rounded-xl border bg-secondary/40 p-4 flex items-center gap-3" dir="ltr">
             {avatarUrl ? (
               <img
                 src={avatarUrl}
@@ -188,13 +191,13 @@ export default function OAuthConfirm() {
                 {getInitial(fullName)}
               </div>
             )}
-            <div className="flex-1 min-w-0 text-right">
+            <div className="flex-1 min-w-0 text-left">
               {fullName && (
                 <div className="font-semibold text-foreground truncate">{fullName}</div>
               )}
-              <div className="text-sm text-muted-foreground flex items-center gap-1.5 justify-end">
-                <bdi dir="ltr" className="truncate">{email}</bdi>
+              <div className="text-sm text-muted-foreground flex items-center gap-1.5">
                 <Mail className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{email}</span>
               </div>
             </div>
           </div>

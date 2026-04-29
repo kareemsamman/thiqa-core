@@ -296,8 +296,7 @@ export default function Login() {
       // Remember which form the user clicked from. /oauth-confirm uses
       // this to decide between "we couldn't find your account, want
       // to register?" (login) vs "confirm these details" (signup).
-      const isSignup = pageView === "signup";
-      sessionStorage.setItem('oauth_intent', isSignup ? 'signup' : 'login');
+      sessionStorage.setItem('oauth_intent', pageView === "signup" ? 'signup' : 'login');
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         // Land on /oauth-confirm so the user always sees what we
@@ -306,11 +305,19 @@ export default function Login() {
         // Landing-page hash fallback also forward there as backup.
         options: {
           redirectTo: `${window.location.origin}/oauth-confirm`,
-          // Force the Google consent screen on signup so first-time
-          // users always see exactly what data Thiqa receives. For
-          // login we let Google skip consent if the user already
-          // approved (so returning users aren't re-prompted).
-          ...(isSignup ? { queryParams: { prompt: 'consent' } } : {}),
+          // Force Google's "What this app will be able to access"
+          // consent screen every time, so the user explicitly sees
+          // what data Thiqa receives. The access_type=offline +
+          // prompt=consent combo is Google's documented way to make
+          // the consent screen always appear (without it, Google
+          // skips the screen for any account that previously
+          // approved the app). Slight cost: returning users see one
+          // extra click on every Google login, but the transparency
+          // win is worth it.
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       });
       if (error) {

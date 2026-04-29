@@ -26,6 +26,7 @@ const PUBLIC_PATH_PREFIXES = [
   '/reset-password',
   '/verify-email',
   '/no-access',
+  '/oauth-confirm',
   '/subscription-expired',
   '/signature',
   '/payment-success',
