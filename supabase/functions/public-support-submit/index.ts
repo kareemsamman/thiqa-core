@@ -219,7 +219,7 @@ Deno.serve(async (req) => {
   if (name.length < 2 || name.length > 120)        return badRequest("invalid_name");
   if (!EMAIL_RE.test(email) || email.length > 200) return badRequest("invalid_email");
   if (category.length < 2 || category.length > 80) return badRequest("invalid_category");
-  if (body.length < 20 || body.length > 5000)      return badRequest("invalid_body");
+  if (body.length < 1 || body.length > 5000)       return badRequest("invalid_body");
 
   const bodyHtml = sanitiseHtml(bodyHtmlRaw) || `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`;
 

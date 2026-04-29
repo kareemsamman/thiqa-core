@@ -51,7 +51,7 @@ export function SupportContactForm({ className }: SupportContactFormProps) {
 
     if (!category) next.category = "اختر فئة الطلب";
 
-    if (trimmedBody.length < 20) next.body = "النص قصير جداً (20 حرفاً على الأقل)";
+    if (!trimmedBody) next.body = "تفاصيل الطلب مطلوبة";
     else if (trimmedBody.length > 5000) next.body = "النص طويل جداً (الحد 5000 حرف)";
 
     return next;
@@ -290,7 +290,7 @@ export function SupportContactForm({ className }: SupportContactFormProps) {
               setBodyText(text);
               if (errors.body) validateField("body");
             }}
-            placeholder="اشرح طلبك بالتفصيل… (20 حرفاً على الأقل)"
+            placeholder="اشرح طلبك بالتفصيل…"
             invalid={!!errors.body}
             ariaLabel="تفاصيل طلب الدعم"
           />
@@ -346,7 +346,7 @@ function messageForError(code: string): string {
     case "invalid_category":
       return "الرجاء اختيار فئة صحيحة.";
     case "invalid_body":
-      return "نص الطلب يجب أن يكون بين 20 و5000 حرفاً.";
+      return "تفاصيل الطلب مطلوبة (الحد الأقصى 5000 حرف).";
     case "ticket_insert_failed":
     case "submit_failed":
       return "حدث خطأ أثناء إرسال الطلب. حاول مرة أخرى أو راسلنا على support@getthiqa.com.";
