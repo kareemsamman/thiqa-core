@@ -20,6 +20,7 @@ const PUBLIC_PATH_PREFIXES = [
   '/register',
   '/landing',
   '/pricing',
+  '/faq',
   '/privacy',
   '/terms',
   '/forgot-password',

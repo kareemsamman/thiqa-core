@@ -1901,7 +1901,7 @@ function LandingContent() {
                 className="flex-shrink-0 w-[260px] md:w-[320px]"
                 aria-hidden={i >= featureUpdates.length ? "true" : undefined}
               >
-                <div className="relative aspect-[8/9] rounded-[28px] overflow-hidden p-6 md:p-8 flex items-center justify-center">
+                <div className="relative aspect-[8/9] rounded-[28px] overflow-hidden">
                   <div
                     className="updates-bg-blur"
                     style={{ background: FEATURE_UPDATE_GRADIENTS[i % FEATURE_UPDATE_GRADIENTS.length] }}
@@ -1915,12 +1915,18 @@ function LandingContent() {
                     }}
                     aria-hidden="true"
                   />
-                  <img
-                    src={("image" in u && u.image) ? u.image : featuresMockup}
-                    alt=""
-                    className="relative max-w-full max-h-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
-                    loading="lazy"
-                  />
+                  {/* Inner absolute box — gives the flex container an
+                      explicit height (inset-0) so iOS Safari's
+                      aspect-ratio + max-h-full combo doesn't compute
+                      to 0 and hide the device mockup. */}
+                  <div className="absolute inset-0 p-6 md:p-8 flex items-center justify-center">
+                    <img
+                      src={("image" in u && u.image) ? u.image : featuresMockup}
+                      alt=""
+                      className="max-w-full max-h-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
+                      loading="lazy"
+                    />
+                  </div>
                 </div>
                 <div className="pt-5 px-1 text-right" dir="rtl">
                   <p className="text-[12px] font-light tracking-[0.18em] uppercase text-black/70">
