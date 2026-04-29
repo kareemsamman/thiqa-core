@@ -117,7 +117,7 @@ const INFO_CENTER_ITEMS = [
   { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "/landing#demo" },
   { title: "الميزات", desc: "كل ما يقدّمه Thiqa للوكلاء", icon: Sparkles, href: "/landing#features" },
   { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "/landing#testimonials" },
-  { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/landing#faq" },
+  { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/faq" },
 ];
 
 const SUPPORT_ITEMS = [
@@ -813,7 +813,7 @@ export default function Pricing() {
                   { label: "الأسعار", href: "/pricing" },
                   { label: "كيف يعمل", href: "/landing#demo" },
                   { label: "الميزات", href: "/landing#features" },
-                  { label: "أسئلة وأجوبة", href: "/landing#faq" },
+                  { label: "أسئلة وأجوبة", href: "/faq" },
                 ],
               },
               {

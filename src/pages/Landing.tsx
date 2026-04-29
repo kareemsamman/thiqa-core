@@ -805,7 +805,7 @@ function LandingContent() {
                       { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "#demo" },
                       { title: "الميزات", desc: "كل ما يقدّمه Thiqa للوكلاء", icon: Sparkles, href: "#features" },
                       { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "#testimonials" },
-                      { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "#faq" },
+                      { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/faq" },
                     ].map((item) => {
                       const Icon = item.icon;
                       const targetId = item.href.slice(1);
@@ -1074,7 +1074,7 @@ function LandingContent() {
                         { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "#demo" },
                         { title: "الميزات", desc: "كل ما يقدّمه Thiqa للوكلاء", icon: Sparkles, href: "#features" },
                         { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "#testimonials" },
-                        { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "#faq" },
+                        { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/faq" },
                       ].map((item) => {
                         const Icon = item.icon;
                         return (
@@ -2965,7 +2965,7 @@ function LandingContent() {
                   { label: "الأسعار", href: "/pricing" },
                   { label: "كيف يعمل", href: "/#demo" },
                   { label: "الميزات", href: "/#features" },
-                  { label: "أسئلة وأجوبة", href: "/#faq" },
+                  { label: "أسئلة وأجوبة", href: "/faq" },
                 ],
               },
               {
