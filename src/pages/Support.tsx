@@ -622,8 +622,6 @@ function TicketThread({ ticketId }: { ticketId: string }) {
 
   return (
     <MainLayout>
-      <Header title={`تذكرة ${ticket.ticket_number}`} subtitle={ticket.subject} />
-
       <div className="md:p-6 space-y-4 max-w-4xl mx-auto" dir="rtl">
         {/* Header card — back, ticket meta, status changer in one block. */}
         <Card className="rounded-2xl shadow-sm">

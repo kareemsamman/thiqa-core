@@ -7,7 +7,6 @@ import { Loader2, ExternalLink, AlertCircle, ArrowRight, Eye, EyeOff, UserPlus, 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
-import { useAgentContext } from "@/hooks/useAgentContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
@@ -111,8 +110,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
   const navigate = useNavigate();
-  const { user, isActive, isSuperAdmin, loading: authLoading, refreshProfile } = useAuth();
-  const { refetchAgentContext } = useAgentContext();
+  const { user, isActive, isSuperAdmin, loading: authLoading } = useAuth();
   // Tracks the user.id we've already redirected for. The login useEffect
   // depends on user / isActive / isSuperAdmin / authLoading, all of which
   // change *during* checkAndSetupUser (refreshProfile flips isAdmin →
@@ -215,36 +213,17 @@ export default function Login() {
             .eq('id', user.id)
             .maybeSingle();
 
-          // If no profile or no agent_id, this might be a Google OAuth user — set them up
+          // OAuth user without an agent yet: hand off to /dashboard.
+          // ProtectedRoute there detects the missing agent_id and runs
+          // setup-oauth-user with its own full-screen "جاري إعداد
+          // حسابك..." loader, so we don't toast it on the login form
+          // (which the user found jarring) and we don't risk a
+          // double-setup race when both pages mount at once.
           if (!profile || !profile.agent_id) {
             const isGoogleUser = user.app_metadata?.providers?.includes('google') ||
               user.app_metadata?.provider === 'google' ||
               (user.user_metadata as any)?.iss === 'https://accounts.google.com';
             if (isGoogleUser) {
-              toast.info("جاري إعداد حسابك...");
-              const { data: setupData, error: setupError } = await supabase.functions.invoke("setup-oauth-user");
-              if (setupError) {
-                console.error('[Login] setup-oauth-user error:', setupError);
-                navigate('/no-access', { replace: true });
-                return;
-              }
-              if (setupData?.already_setup && isSuperAdmin) {
-                navigate('/thiqa', { replace: true });
-                return;
-              }
-              // After setup-oauth-user has inserted profile / agent_users
-              // / user_roles / agent_feature_flags, the local React
-              // contexts are still holding their pre-setup snapshots:
-              //   - useAuth: isAdmin=false, no agent_id
-              //   - useAgentContext: empty agent / no features (its
-              //     realtime channel only listens to UPDATEs)
-              // Refresh both before navigating, otherwise the
-              // PermissionRoute on /dashboard reads hasFeature(
-              // 'dashboard')=false and bounces to /subscription, which
-              // is what the user saw as a blank page for ~10 seconds
-              // until the contexts caught up on their own.
-              await Promise.all([refreshProfile(), refetchAgentContext()]);
-              toast.success(setupData?.message || "تم إعداد حسابك بنجاح!");
               navigate('/dashboard', { replace: true });
               return;
             }
@@ -319,7 +298,12 @@ export default function Login() {
       sessionStorage.setItem('admin_session_active', 'true');
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.origin },
+        // Land on /dashboard, not /. ProtectedRoute on /dashboard
+        // detects an OAuth user with no agent_id and runs the
+        // setup-oauth-user flow with its own LoadingScreen, so the
+        // user never sees the marketing landing or gets bounced back
+        // to /login mid-setup.
+        options: { redirectTo: `${window.location.origin}/dashboard` },
       });
       if (error) {
         sessionStorage.removeItem('admin_session_active');

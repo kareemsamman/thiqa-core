@@ -11,7 +11,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading, profileLoading, profile, isActive, isSuperAdmin, refreshProfile } = useAuth();
-  const { isImpersonating, isSubscriptionActive, isSubscriptionPaused, loading: agentLoading } = useAgentContext();
+  const { isImpersonating, isSubscriptionActive, isSubscriptionPaused, loading: agentLoading, refetchAgentContext } = useAgentContext();
   const [oauthSetupState, setOauthSetupState] = useState<'idle' | 'running' | 'done'>('idle');
   const setupStartedRef = useRef(false);
 
@@ -36,11 +36,17 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       if (error) {
         console.error('[ProtectedRoute] setup-oauth-user error:', error);
       } else if (data?.success) {
-        await refreshProfile();
+        // Refresh BOTH the auth profile and the agent context.
+        // setup-oauth-user just inserted profiles + agent_users +
+        // user_roles + agent_feature_flags, but useAgentContext only
+        // listens for UPDATEs, so without a manual refetch the
+        // PermissionRoute on /dashboard reads hasFeature('dashboard')
+        // = false and bounces to /subscription.
+        await Promise.all([refreshProfile(), refetchAgentContext()]);
       }
       setOauthSetupState('done');
     });
-  }, [needsOAuthSetup, oauthSetupState, refreshProfile]);
+  }, [needsOAuthSetup, oauthSetupState, refreshProfile, refetchAgentContext]);
 
   // Super admin bypasses profile loading requirement
   const needsProfileLoading = user && !isSuperAdmin && profileLoading && !profile;
