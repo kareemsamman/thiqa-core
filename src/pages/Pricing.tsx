@@ -1,14 +1,25 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { useNavigate } from "react-router-dom";
 import {
-  Check, Info, ChevronDown, Menu, X, Play, Sparkles, Star, HelpCircle, MessageSquare,
+  Check, ChevronDown, Menu, X, Play, Sparkles, Star, HelpCircle, MessageSquare,
+  LayoutDashboard, ListChecks, Users, AlertTriangle, Mail, RefreshCw, Bell,
+  Upload, FolderOpen, PenLine, MessageCircle, Megaphone, Bot, TrendingUp,
+  Wallet, Building2, Calculator, Receipt, Banknote, Coins, Wrench,
+  type LucideIcon,
 } from "lucide-react";
 import { useLandingContent, ct } from "@/hooks/useLandingContent";
 import { supabase } from "@/integrations/supabase/client";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { cn } from "@/lib/utils";
 import { PublicSEO } from "@/components/public/PublicSEO";
+import { PLAN_FEATURE_CATALOG } from "@/lib/planFeatureCatalog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface PlanData {
   id: string;
@@ -19,10 +30,53 @@ interface PlanData {
   monthly_price: number;
   yearly_price: number;
   badge: string | null;
-  features: { text: string; info: boolean }[];
+  default_features: Record<string, boolean>;
 }
 
-// Fallback plans if DB fetch fails
+// Maps feature catalog keys → Lucide icon used in the card list. Keep
+// in sync with PLAN_FEATURE_CATALOG; an unmapped key falls back to a
+// neutral check.
+const FEATURE_ICON: Record<string, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  tasks: ListChecks,
+  contacts: Users,
+  accident_reports: AlertTriangle,
+  correspondence: Mail,
+  renewals: RefreshCw,
+  notifications: Bell,
+  files_upload: Upload,
+  files_explorer: FolderOpen,
+  digital_signatures: PenLine,
+  sms: MessageCircle,
+  marketing_sms: Megaphone,
+  ai_assistant: Bot,
+  financial_reports: TrendingUp,
+  broker_wallet: Wallet,
+  company_settlement: Building2,
+  accounting: Calculator,
+  receipts: Receipt,
+  cheques: Banknote,
+  debt_tracking: Coins,
+  repair_claims: Wrench,
+};
+
+// Number of features visible inside each card before the "compare all"
+// button takes over. Mirrors the Strain layout where the first 8-ish
+// items hint at value, deeper detail lives in the comparison view.
+const VISIBLE_FEATURE_COUNT = 8;
+
+// Default-features map used by the fallback plans. Keys come from
+// PLAN_FEATURE_CATALOG; the higher the plan the more flags flip on.
+const ALL_FEATURE_KEYS = PLAN_FEATURE_CATALOG.flatMap((g) => g.items.map((i) => i.key));
+const fillFeatures = (keys: string[]): Record<string, boolean> => {
+  const map: Record<string, boolean> = {};
+  for (const k of ALL_FEATURE_KEYS) map[k] = keys.includes(k);
+  return map;
+};
+
+// Fallback plans if DB fetch fails. default_features mirrors the
+// shape returned by `subscription_plans.default_features` so the
+// rendering path is identical whether data is live or fallback.
 const FALLBACK_PLANS: PlanData[] = [
   {
     id: "free_trial",
@@ -33,12 +87,7 @@ const FALLBACK_PLANS: PlanData[] = [
     monthly_price: 0,
     yearly_price: 0,
     badge: null,
-    features: [
-      { text: "حتى 3 معاملات شهرياً", info: true },
-      { text: "مستخدم واحد", info: false },
-      { text: "إدارة جهات اتصال", info: false },
-      { text: "دعم بريدي", info: false },
-    ],
+    default_features: fillFeatures(["dashboard", "contacts", "renewals", "notifications"]),
   },
   {
     id: "starter",
@@ -49,14 +98,10 @@ const FALLBACK_PLANS: PlanData[] = [
     monthly_price: 240,
     yearly_price: 200,
     badge: null,
-    features: [
-      { text: "إدارة حتى 200 عميل", info: true },
-      { text: "إصدار معاملات أساسي", info: true },
-      { text: "تقارير مالية شهرية", info: false },
-      { text: "دعم عبر البريد الإلكتروني", info: false },
-      { text: "استيراد بيانات أساسي", info: true },
-      { text: "نسخ احتياطي يومي تلقائي", info: true },
-    ],
+    default_features: fillFeatures([
+      "dashboard", "tasks", "contacts", "renewals", "notifications",
+      "files_upload", "files_explorer", "sms", "receipts",
+    ]),
   },
   {
     id: "basic",
@@ -67,14 +112,12 @@ const FALLBACK_PLANS: PlanData[] = [
     monthly_price: 240,
     yearly_price: 200,
     badge: "الأكثر شعبية",
-    features: [
-      { text: "إدارة عملاء بلا حدود", info: true },
-      { text: "إصدار معاملات متقدم", info: true },
-      { text: "إدارة مطالبات كاملة", info: false },
-      { text: "SMS وتذكيرات تلقائية", info: true },
-      { text: "تقارير مالية كاملة", info: true },
-      { text: "توقيع رقمي", info: true },
-    ],
+    default_features: fillFeatures([
+      "dashboard", "tasks", "contacts", "accident_reports", "correspondence",
+      "renewals", "notifications", "files_upload", "files_explorer",
+      "digital_signatures", "sms", "marketing_sms",
+      "financial_reports", "receipts", "cheques", "debt_tracking",
+    ]),
   },
   {
     id: "pro",
@@ -85,21 +128,9 @@ const FALLBACK_PLANS: PlanData[] = [
     monthly_price: 240,
     yearly_price: 200,
     badge: null,
-    features: [
-      { text: "كل ما في Basic", info: false },
-      { text: "إدارة فروع وصلاحيات", info: true },
-      { text: "API وتكاملات متقدمة", info: true },
-      { text: "تقارير مخصصة", info: false },
-      { text: "دعم VIP ومدير حساب", info: true },
-      { text: "مزامنة شركات التأمين", info: true },
-    ],
+    default_features: fillFeatures(ALL_FEATURE_KEYS),
   },
 ];
-
-// Number of features visible by default per card. Anything beyond this
-// gets revealed by the per-card "عرض جميع الميزات" toggle, mirroring
-// the agent-side PlanLadder's compare-style expand.
-const VISIBLE_FEATURE_COUNT = 5;
 
 const INFO_CENTER_ITEMS = [
   { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "/landing#demo" },
@@ -136,12 +167,10 @@ export default function Pricing() {
   const isYearly = (key: string) => !!yearlyByPlan[key];
   const toggleYearly = (key: string) =>
     setYearlyByPlan((s) => ({ ...s, [key]: !s[key] }));
-  // Per-card "view all features" expand state — same pattern as the
-  // agent-side PlanLadder so the marketing/upgrade UX feels consistent.
-  const [expandedByPlan, setExpandedByPlan] = useState<Record<string, boolean>>({});
-  const isExpanded = (key: string) => !!expandedByPlan[key];
-  const toggleExpanded = (key: string) =>
-    setExpandedByPlan((s) => ({ ...s, [key]: !s[key] }));
+  // Cross-plan "compare all features" dialog. Opened from any card's
+  // "عرض جميع الميزات" link — shows the full PLAN_FEATURE_CATALOG as
+  // a side-by-side matrix instead of expanding cards individually.
+  const [compareOpen, setCompareOpen] = useState(false);
   const [plans, setPlans] = useState<PlanData[]>(FALLBACK_PLANS);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSubmenu, setMobileSubmenu] = useState<"info" | "support" | null>(null);
@@ -168,13 +197,16 @@ export default function Pricing() {
       try {
         const { data, error } = await supabase
           .from("subscription_plans")
-          .select("id, plan_key, name, name_ar, description, monthly_price, yearly_price, badge, features")
+          .select("id, plan_key, name, name_ar, description, monthly_price, yearly_price, badge, default_features")
           .eq("is_active", true)
           .order("sort_order");
         if (!error && data && data.length > 0) {
           setPlans(data.map((p: any) => ({
             ...p,
-            features: (typeof p.features === 'string' ? JSON.parse(p.features) : p.features) || [],
+            default_features:
+              (typeof p.default_features === 'string'
+                ? JSON.parse(p.default_features)
+                : p.default_features) || {},
           })));
         }
       } catch {
@@ -185,17 +217,25 @@ export default function Pricing() {
 
   return (
     <div
-      className="min-h-screen text-black overflow-x-hidden relative"
+      className="min-h-screen text-black overflow-x-hidden relative bg-white"
       dir="rtl"
-      style={{
-        fontFamily: "'Cairo', sans-serif",
-        background: "linear-gradient(180deg, #7C5CFF 0%, #B5A6FF 22%, #FFFFFF 55%)",
-      }}
+      style={{ fontFamily: "'Cairo', sans-serif" }}
     >
       <PublicSEO
         title="Thiqa | الأسعار والخطط"
         description="خطط أسعار Thiqa لإدارة وكالات التأمين: ابدأ بالخطة المجانية ووسّع حسب حاجة وكالتك. أسعار شفافة، اشتراكات شهرية وسنوية، وبدون التزامات طويلة."
         keywords="أسعار Thiqa, خطط اشتراك Thiqa, تكلفة نظام إدارة التأمين, اشتراك مجاني, خطة احترافية"
+      />
+      {/* Purple gradient band — pinned to the top of the page so it
+          covers the navbar + hero only and fades cleanly into white
+          before the pricing cards begin (Strain reference). */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-0 inset-x-0 h-[820px]"
+        style={{
+          background:
+            "linear-gradient(180deg, #6F4FFF 0%, #9D89FF 38%, rgba(255,255,255,0.6) 78%, rgba(255,255,255,0) 100%)",
+        }}
       />
 
       {/* ═══ Navbar — static light pill, same 3-item structure as the
@@ -551,15 +591,15 @@ export default function Pricing() {
       </section>
 
       {/* ═══ Pricing Cards — Strain-style transparent cards: no
-          background, no border, no shadow. The card with a `badge`
-          only gets the violet pill on top to mark "most popular". */}
+          background, no border, no side rules. Sections are split by
+          full-width horizontal hairlines, exactly like the reference.
+          The card with a `badge` gets a violet "popular" pill above
+          the top hairline. */}
       <section className="relative z-10 pb-24 px-4 md:px-6" aria-labelledby="pricing-plans-heading">
-        {/* Visually subtle but semantically real H2 — gives the
-            document a proper H1 → H2 → H3 outline for crawlers. */}
         <h2 id="pricing-plans-heading" className="sr-only">
           خطط أسعار Thiqa
         </h2>
-        <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6 pt-4">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12 pt-6">
           {plans.map((plan) => {
             const isPopular = !!plan.badge;
             const isFree = plan.monthly_price === 0;
@@ -574,137 +614,135 @@ export default function Pricing() {
               : yearly && hasYearly
                 ? yearlyAsMonthly
                 : plan.monthly_price;
-            const expanded = isExpanded(plan.plan_key);
-            const overflowsLimit = plan.features.length > VISIBLE_FEATURE_COUNT;
-            const visibleFeatures = expanded || !overflowsLimit
-              ? plan.features
-              : plan.features.slice(0, VISIBLE_FEATURE_COUNT);
+            // Filter the shared feature catalog to just the entries
+            // this plan ships with — same source as the agent-side
+            // PlanLadder / Subscription page.
+            const includedFeatures = PLAN_FEATURE_CATALOG.flatMap((g) => g.items)
+              .filter((item) => plan.default_features?.[item.key] === true);
+            const visibleFeatures = includedFeatures.slice(0, VISIBLE_FEATURE_COUNT);
+            const hiddenCount = Math.max(0, includedFeatures.length - VISIBLE_FEATURE_COUNT);
             return (
-              <div
-                key={plan.id}
-                className="relative rounded-2xl flex flex-col p-7 md:p-8 transition-all"
-              >
+              <div key={plan.id} className="relative flex flex-col">
                 {isPopular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 px-3.5 py-1.5 text-[11px] font-bold rounded-full bg-[#7C5CFF] text-white shadow-md whitespace-nowrap">
-                    <Sparkles className="h-3.5 w-3.5" />
+                  <div className="absolute -top-3 right-0 inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold rounded-full bg-[#7C5CFF] text-white whitespace-nowrap">
+                    <Sparkles className="h-3 w-3" />
                     {plan.badge}
                   </div>
                 )}
 
-                {/* Header — Arabic name (with English label below) + description */}
-                <div>
-                  <h3 className="text-2xl font-extrabold text-black tracking-tight">
+                {/* ── Top hairline */}
+                <div className="border-t border-black/15" />
+
+                {/* ── Header: name, description, price */}
+                <div className="pt-7 pb-6">
+                  <h3 className="text-2xl font-bold text-black tracking-tight">
                     {plan.name_ar || plan.name}
                   </h3>
                   <p className="text-[11px] text-black/45 mt-1 uppercase tracking-[0.18em] font-semibold">
                     {plan.name}
                   </p>
                   {plan.description && (
-                    <p className="text-[13px] text-black/60 mt-2 leading-relaxed min-h-[2.6em]">
+                    <p className="text-[13px] text-black/60 mt-3 leading-relaxed min-h-[2.6em]">
                       {plan.description}
                     </p>
                   )}
-                </div>
-
-                {/* Price */}
-                <div className="mt-6">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-5xl font-black text-black tracking-tight tabular-nums leading-none">
+                  <div className="mt-6 flex items-baseline gap-1.5">
+                    <span className="text-4xl font-extrabold text-black tracking-tight tabular-nums leading-none">
                       {isFree ? "0" : displayPrice}
                     </span>
-                    <span className="text-2xl font-bold text-black/80">₪</span>
+                    <span className="text-xl font-bold text-black/80">₪</span>
                     {!isFree && (
-                      <span className="text-sm text-black/55 font-semibold">/ شهر</span>
+                      <span className="text-[13px] text-black/55 font-medium">/ شهر</span>
+                    )}
+                    {isFree && (
+                      <span className="text-[13px] text-black/55 font-medium">للأبد</span>
                     )}
                   </div>
-                  {isFree ? (
-                    <p className="text-[12px] text-black/50 mt-2">للأبد. بدون التزامات.</p>
-                  ) : yearly && hasYearly ? (
-                    <p className="text-[12px] text-emerald-600 mt-2 font-semibold">
-                      وفّر ₪{annualSavings} عند الدفع السنوي
-                    </p>
+                </div>
+
+                {/* ── Hairline */}
+                <div className="border-t border-black/15" />
+
+                {/* ── Billing toggle (paid plans) or trial info (free) */}
+                <div className="py-4 min-h-[56px] flex items-center justify-between">
+                  {hasYearly ? (
+                    <>
+                      <span className="text-[12px] text-black/55">
+                        {yearly
+                          ? `وفّر ₪${annualSavings} سنوياً`
+                          : "فوترة شهرية"}
+                      </span>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-[13px] font-semibold text-black">
+                          {yearly ? "سنوي" : "شهري"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => toggleYearly(plan.plan_key)}
+                          className={cn(
+                            "relative w-10 h-[22px] rounded-full transition-colors shrink-0",
+                            yearly ? "bg-black" : "bg-black/20",
+                          )}
+                          aria-pressed={yearly}
+                          role="switch"
+                          aria-checked={yearly}
+                          aria-label="تبديل الفوترة السنوية"
+                        >
+                          <span
+                            className={cn(
+                              "absolute top-[2px] h-[18px] w-[18px] rounded-full bg-white shadow transition-all",
+                              yearly ? "right-[2px]" : "left-[2px]",
+                            )}
+                          />
+                        </button>
+                      </div>
+                    </>
                   ) : (
-                    <p className="text-[12px] text-black/50 mt-2">فوترة شهرية</p>
+                    <span className="text-[13px] text-black/65">
+                      {isFree ? "خطة مجانية. بلا التزامات." : "فوترة شهرية"}
+                    </span>
                   )}
                 </div>
 
-                {/* Per-card billing toggle (paid plans only) */}
-                {hasYearly && (
-                  <div className="mt-4 flex items-center justify-between rounded-xl bg-black/[0.04] px-3.5 py-2.5">
-                    <span className="text-[13px] font-semibold text-black/70">
-                      {yearly ? "فوترة سنوية" : "فوترة شهرية"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => toggleYearly(plan.plan_key)}
-                      className={cn(
-                        "relative w-11 h-6 rounded-full transition-colors shrink-0",
-                        yearly ? "bg-[#7C5CFF]" : "bg-black/15",
-                      )}
-                      aria-pressed={yearly}
-                      role="switch"
-                      aria-checked={yearly}
-                      aria-label="تبديل الفوترة السنوية"
-                    >
-                      <span
-                        className={cn(
-                          "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all",
-                          yearly ? "right-0.5" : "left-0.5",
-                        )}
-                      />
-                    </button>
-                  </div>
-                )}
+                {/* ── Hairline */}
+                <div className="border-t border-black/15" />
 
-                {/* CTA — black pill, sits before the feature list (Strain) */}
-                <div className="mt-5">
+                {/* ── CTA — full-width black pill */}
+                <div className="py-5">
                   <button
                     type="button"
                     onClick={() => {
                       trackEvent("signup_click", `/pricing:${plan.plan_key}`);
                       navigate("/register");
                     }}
-                    className={cn(
-                      "w-full py-3.5 rounded-full font-bold text-[14px] transition-all hover:scale-[1.02]",
-                      isPopular || !isFree
-                        ? "bg-black text-white hover:shadow-[0_10px_28px_-8px_rgba(0,0,0,0.4)]"
-                        : "bg-white text-black border border-black/[0.18] hover:bg-black/[0.04]",
-                    )}
+                    className="w-full py-3.5 rounded-full font-bold text-[14px] bg-black text-white transition-all hover:bg-black/85"
                   >
                     {isFree ? "ابدأ مجاناً" : `انضم لخطة ${plan.name}`}
                   </button>
                 </div>
 
-                {/* What's in the path? */}
-                <div className="mt-6 pt-6 border-t border-black/[0.06] flex-1">
-                  <p className="font-bold text-[13px] text-black mb-3.5">ماذا تشمل هذه الخطة؟</p>
-                  <ul className="space-y-3">
-                    {visibleFeatures.map((f, i) => (
-                      <li key={i} className="flex items-center gap-2.5 text-[13.5px] text-black/75">
-                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#7C5CFF]/12 shrink-0">
-                          <Check className="h-3 w-3 text-[#7C5CFF]" strokeWidth={3} />
-                        </span>
-                        <span className="flex-1">{f.text}</span>
-                        {f.info && <Info className="h-3.5 w-3.5 text-black/25 shrink-0" />}
-                      </li>
-                    ))}
+                {/* ── Feature list (catalog-driven, with icons) */}
+                <div className="pt-2 flex-1">
+                  <p className="font-bold text-[13.5px] text-black mb-4">ماذا تشمل هذه الخطة؟</p>
+                  <ul className="space-y-3.5">
+                    {visibleFeatures.map((f) => {
+                      const Icon = FEATURE_ICON[f.key] ?? Check;
+                      return (
+                        <li key={f.key} className="flex items-center gap-3 text-[13px] text-black/80">
+                          <Icon className="h-[18px] w-[18px] shrink-0 text-black/70" strokeWidth={1.7} />
+                          <span className="flex-1 leading-tight">{f.label}</span>
+                        </li>
+                      );
+                    })}
                   </ul>
-                  {overflowsLimit && (
+                  {hiddenCount > 0 && (
                     <button
                       type="button"
-                      onClick={() => toggleExpanded(plan.plan_key)}
-                      className="mt-4 inline-flex items-center justify-center gap-1.5 text-[13px] font-bold text-[#7C5CFF] hover:text-[#5a3fd9] transition-colors"
+                      onClick={() => setCompareOpen(true)}
+                      className="mt-5 inline-flex items-center gap-1.5 text-[13px] font-bold text-black hover:text-[#7C5CFF] transition-colors"
                     >
-                      {expanded
-                        ? "إخفاء التفاصيل"
-                        : `عرض جميع الميزات (+${plan.features.length - VISIBLE_FEATURE_COUNT})`}
-                      <ChevronDown
-                        className={cn(
-                          "h-3.5 w-3.5 transition-transform",
-                          expanded && "rotate-180",
-                        )}
-                        strokeWidth={2.5}
-                      />
+                      عرض جميع الميزات
+                      <ChevronDown className="h-3.5 w-3.5 -rotate-90" strokeWidth={2.5} />
                     </button>
                   )}
                 </div>
@@ -712,7 +750,94 @@ export default function Pricing() {
             );
           })}
         </div>
+
+        {/* Page-level "compare all" link below the grid — gives users
+            a way to open the matrix even when no card overflows. */}
+        <div className="max-w-7xl mx-auto mt-12 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setCompareOpen(true)}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-full border border-black/15 text-[13.5px] font-bold text-black hover:bg-black/[0.04] transition-colors"
+          >
+            مقارنة جميع الميزات بين الخطط
+            <ChevronDown className="h-4 w-4 -rotate-90" strokeWidth={2.5} />
+          </button>
+        </div>
       </section>
+
+      {/* ═══ Compare-all dialog — full feature catalog × all plans
+          rendered as a matrix. Pulls from the same data the cards
+          do, so columns/rows stay in lock-step with subscription_plans. */}
+      <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
+        <DialogContent
+          dir="rtl"
+          className="max-w-5xl w-[95vw] max-h-[90vh] overflow-hidden p-0 flex flex-col"
+        >
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-black/[0.08]">
+            <DialogTitle className="text-right text-xl font-bold">
+              مقارنة الميزات بين الخطط
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-auto px-6 pb-6">
+            <table className="w-full border-collapse text-[13px]">
+              <thead className="sticky top-0 bg-white z-10">
+                <tr className="border-b border-black/15">
+                  <th className="py-3 pr-2 text-right font-bold text-black/55 text-[11px] uppercase tracking-wider w-[34%]">
+                    الميزة
+                  </th>
+                  {plans.map((p) => (
+                    <th key={p.id} className="py-3 px-2 text-center font-bold text-black">
+                      <div className="text-[14px]">{p.name_ar || p.name}</div>
+                      <div className="text-[11px] text-black/55 font-medium mt-0.5">
+                        {p.monthly_price === 0 ? "مجاناً" : `₪${p.monthly_price}/شهر`}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {PLAN_FEATURE_CATALOG.map((group) => (
+                  <Fragment key={group.group}>
+                    <tr>
+                      <td
+                        colSpan={1 + plans.length}
+                        className="pt-5 pb-2 pr-2 text-right text-[11px] font-bold uppercase tracking-wider text-[#7C5CFF]"
+                      >
+                        {group.group}
+                      </td>
+                    </tr>
+                    {group.items.map((item) => {
+                      const Icon = FEATURE_ICON[item.key] ?? Check;
+                      return (
+                        <tr key={item.key} className="border-t border-black/[0.06]">
+                          <td className="py-2.5 pr-2 text-right text-black/80">
+                            <span className="inline-flex items-center gap-2.5">
+                              <Icon className="h-4 w-4 shrink-0 text-black/55" strokeWidth={1.7} />
+                              {item.label}
+                            </span>
+                          </td>
+                          {plans.map((p) => {
+                            const has = p.default_features?.[item.key] === true;
+                            return (
+                              <td key={p.id} className="py-2.5 px-2 text-center">
+                                {has ? (
+                                  <Check className="h-4 w-4 mx-auto text-[#7C5CFF]" strokeWidth={3} />
+                                ) : (
+                                  <X className="h-4 w-4 mx-auto text-black/20" strokeWidth={2} />
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ═══ Footer — same 4-column desktop grid / mobile accordion
           pattern as the landing page. */}
