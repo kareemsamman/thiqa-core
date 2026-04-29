@@ -710,7 +710,7 @@ export default function Pricing() {
                     }}
                     className="w-full py-3.5 rounded-full font-bold text-[14px] bg-black text-white transition-all hover:bg-black/85"
                   >
-                    {isFree ? "ابدأ مجاناً" : `انضم لخطة ${plan.name}`}
+                    {isFree ? "ابدأ مجاناً" : `انضم لخطة ${plan.name_ar || plan.name}`}
                   </button>
                 </div>
 
