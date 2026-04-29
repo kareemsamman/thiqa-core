@@ -439,6 +439,7 @@ function TicketThread({ ticketId }: { ticketId: string }) {
   const [attachmentsByMessage, setAttachmentsByMessage] = useState<Record<string, Attachment[]>>({});
   const [signedUrlsByPath, setSignedUrlsByPath] = useState<Record<string, string>>({});
   const [authorsByUserId, setAuthorsByUserId] = useState<Record<string, AuthorProfile>>({});
+  const [preview, setPreview] = useState<{ url: string; name: string; type: "image" | "video" } | null>(null);
   const [reply, setReply] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
@@ -759,7 +760,12 @@ function TicketThread({ ticketId }: { ticketId: string }) {
                               )}
                             >
                               {atts.map((a) => (
-                                <AttachmentTile key={a.id} attachment={a} url={signedUrlsByPath[a.file_path]} />
+                                <AttachmentTile
+                                  key={a.id}
+                                  attachment={a}
+                                  url={signedUrlsByPath[a.file_path]}
+                                  onPreview={(p) => setPreview(p)}
+                                />
                               ))}
                             </div>
                           )}
@@ -840,6 +846,40 @@ function TicketThread({ ticketId }: { ticketId: string }) {
           </Card>
         )}
       </div>
+
+      {/* Image / video lightbox — opens in a centered dialog so the
+          user stays inside the conversation instead of bouncing to
+          a raw signed-URL tab. */}
+      <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
+        <DialogContent
+          dir="rtl"
+          className="max-w-5xl max-h-[92vh] p-0 overflow-hidden bg-background"
+        >
+          <DialogHeader className="px-4 py-3 border-b">
+            <DialogTitle className="flex items-center justify-between gap-3 text-sm font-medium">
+              <span className="truncate">{preview?.name}</span>
+              {preview && (
+                <a
+                  href={preview.url}
+                  download={preview.name}
+                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  تحميل
+                </a>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-center bg-muted/40 p-4 max-h-[80vh] overflow-auto">
+            {preview?.type === "image" && (
+              <img src={preview.url} alt={preview.name} className="max-w-full max-h-[78vh] object-contain rounded" />
+            )}
+            {preview?.type === "video" && (
+              <video src={preview.url} controls autoPlay className="max-w-full max-h-[78vh] rounded bg-black" />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
@@ -853,7 +893,15 @@ function FileIcon({ mime }: { mime: string }) {
   return <FileText className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 
-function AttachmentTile({ attachment, url }: { attachment: Attachment; url: string | undefined }) {
+function AttachmentTile({
+  attachment,
+  url,
+  onPreview,
+}: {
+  attachment: Attachment;
+  url: string | undefined;
+  onPreview?: (p: { url: string; name: string; type: "image" | "video" }) => void;
+}) {
   const isImage = (attachment.mime_type || "").startsWith("image/");
   const isVideo = (attachment.mime_type || "").startsWith("video/");
   if (!url) {
@@ -864,24 +912,35 @@ function AttachmentTile({ attachment, url }: { attachment: Attachment; url: stri
     );
   }
   if (isImage) {
-    // object-contain keeps small images at their natural size instead
-    // of stretching a tiny icon to fill 200px tall — the original
-    // object-cover crop made screenshots look broken.
+    // Thumbnail → click opens the lightbox modal. object-contain keeps
+    // small images at their natural size so a tiny icon doesn't get
+    // blown up to fill the tile.
     return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block rounded-lg overflow-hidden border bg-muted/30 hover:border-primary/40 transition-colors"
+      <button
+        type="button"
+        onClick={() => onPreview?.({ url, name: attachment.file_name, type: "image" })}
+        className="group block rounded-lg overflow-hidden border bg-muted/30 hover:border-primary/40 transition-colors text-right"
         title={attachment.file_name}
       >
-        <img src={url} alt={attachment.file_name} className="w-full max-h-48 object-contain" />
-      </a>
+        <img src={url} alt={attachment.file_name} className="w-full max-h-48 object-contain group-hover:opacity-95 transition-opacity" />
+      </button>
     );
   }
   if (isVideo) {
     return (
-      <video controls src={url} className="w-full max-h-48 rounded-lg border bg-black" />
+      <button
+        type="button"
+        onClick={() => onPreview?.({ url, name: attachment.file_name, type: "video" })}
+        className="relative group block rounded-lg overflow-hidden border bg-black hover:border-primary/40 transition-colors"
+        title={attachment.file_name}
+      >
+        <video src={url} className="w-full max-h-48" preload="metadata" />
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
+          <div className="h-10 w-10 rounded-full bg-white/90 flex items-center justify-center">
+            <Video className="h-5 w-5 text-foreground" />
+          </div>
+        </div>
+      </button>
     );
   }
   return (
