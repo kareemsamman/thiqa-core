@@ -24,6 +24,21 @@ interface PlanData {
 // Fallback plans if DB fetch fails
 const FALLBACK_PLANS: PlanData[] = [
   {
+    id: "free_trial",
+    plan_key: "free_trial",
+    name: "Free",
+    description: "ابدأ مجاناً للأبد — مسار مميّز للتجربة الأولى",
+    monthly_price: 0,
+    yearly_price: 0,
+    badge: null,
+    features: [
+      { text: "حتى 3 معاملات شهرياً", info: true },
+      { text: "مستخدم واحد", info: false },
+      { text: "إدارة جهات اتصال", info: false },
+      { text: "دعم بريدي", info: false },
+    ],
+  },
+  {
     id: "starter",
     plan_key: "starter",
     name: "Starter",
@@ -104,7 +119,13 @@ export default function Pricing() {
   usePageView("/pricing");
   const { data: content } = useLandingContent();
   const navigate = useNavigate();
-  const [yearly, setYearly] = useState(false);
+  // Per-card billing cycle (Strain-style) — each plan card owns its own
+  // monthly/annual toggle state so users can compare cycles side by side
+  // without flipping the whole page.
+  const [yearlyByPlan, setYearlyByPlan] = useState<Record<string, boolean>>({});
+  const isYearly = (key: string) => !!yearlyByPlan[key];
+  const toggleYearly = (key: string) =>
+    setYearlyByPlan((s) => ({ ...s, [key]: !s[key] }));
   const [plans, setPlans] = useState<PlanData[]>(FALLBACK_PLANS);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSubmenu, setMobileSubmenu] = useState<"info" | "support" | null>(null);
@@ -133,7 +154,6 @@ export default function Pricing() {
           .from("subscription_plans")
           .select("id, plan_key, name, description, monthly_price, yearly_price, badge, features")
           .eq("is_active", true)
-          .neq("plan_key", "free_trial")
           .order("sort_order");
         if (!error && data && data.length > 0) {
           setPlans(data.map((p: any) => ({
@@ -532,87 +552,128 @@ export default function Pricing() {
         <h2 id="pricing-plans-heading" className="sr-only">
           خطط أسعار Thiqa
         </h2>
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6 pt-4">
           {plans.map((plan) => {
             const isPopular = !!plan.badge;
+            const isFree = plan.monthly_price === 0;
+            const yearly = isYearly(plan.plan_key);
+            const hasYearly = !isFree && plan.yearly_price > 0;
+            const yearlyAsMonthly = hasYearly ? plan.yearly_price : plan.monthly_price;
+            const annualSavings = hasYearly
+              ? Math.max(0, (plan.monthly_price - plan.yearly_price) * 12)
+              : 0;
+            const displayPrice = isFree
+              ? 0
+              : yearly && hasYearly
+                ? yearlyAsMonthly
+                : plan.monthly_price;
             return (
               <div
                 key={plan.id}
                 className={cn(
-                  "relative rounded-2xl bg-white flex flex-col shadow-[0_10px_40px_-12px_rgba(15,40,120,0.12)]",
-                  isPopular ? "border-2 border-[#7C5CFF]/40" : "border border-black/[0.06]",
+                  "relative rounded-2xl bg-white flex flex-col p-7 md:p-8 transition-all",
+                  isPopular
+                    ? "ring-2 ring-[#7C5CFF] shadow-[0_18px_60px_-18px_rgba(124,92,255,0.35)]"
+                    : "ring-1 ring-black/[0.08] shadow-[0_10px_40px_-18px_rgba(15,40,120,0.18)] hover:ring-black/[0.16]",
                 )}
               >
-                {/* Header — plan name (RTL: on the right) + optional
-                    "most popular" pill (left). */}
-                <div className="p-7 md:p-8 pb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-2xl font-bold text-[#7C5CFF]">{plan.name}</h3>
-                    {plan.badge && (
-                      <span className="px-3.5 py-1.5 text-xs font-bold rounded-full bg-[#7C5CFF]/10 text-[#7C5CFF]">
-                        {plan.badge}
-                      </span>
-                    )}
+                {isPopular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 px-3.5 py-1.5 text-[11px] font-bold rounded-full bg-[#7C5CFF] text-white shadow-md whitespace-nowrap">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {plan.badge}
                   </div>
-                  <p className="text-sm text-black/55 mb-1 leading-relaxed">{plan.description}</p>
+                )}
+
+                {/* Header — name (right in RTL) + description */}
+                <div>
+                  <h3 className="text-2xl font-extrabold text-black tracking-tight">{plan.name}</h3>
+                  {plan.description && (
+                    <p className="text-[13px] text-black/60 mt-2 leading-relaxed min-h-[2.6em]">
+                      {plan.description}
+                    </p>
+                  )}
                 </div>
 
                 {/* Price */}
-                <div className="px-7 md:px-8 py-5 border-t border-dashed border-black/[0.08]">
-                  <div className="flex items-baseline gap-2 justify-end">
-                    <span className="text-sm text-black/50">₪ شهرياً</span>
-                    <span className="text-5xl md:text-6xl font-extrabold text-black tracking-tight">
-                      {yearly ? plan.yearly_price : plan.monthly_price}
+                <div className="mt-6">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-5xl font-black text-black tracking-tight tabular-nums leading-none">
+                      {isFree ? "0" : displayPrice}
                     </span>
+                    <span className="text-2xl font-bold text-black/80">₪</span>
+                    {!isFree && (
+                      <span className="text-sm text-black/55 font-semibold">/ شهر</span>
+                    )}
                   </div>
+                  {isFree ? (
+                    <p className="text-[12px] text-black/50 mt-2">للأبد. بدون التزامات.</p>
+                  ) : yearly && hasYearly ? (
+                    <p className="text-[12px] text-emerald-600 mt-2 font-semibold">
+                      وفّر ₪{annualSavings} عند الدفع السنوي
+                    </p>
+                  ) : (
+                    <p className="text-[12px] text-black/50 mt-2">فوترة شهرية</p>
+                  )}
                 </div>
 
-                {/* Yearly toggle */}
-                <div className="px-7 md:px-8 py-4 border-t border-dashed border-black/[0.08] flex items-center justify-end gap-3">
-                  <span className="text-sm text-black/60">سنوي</span>
-                  <button
-                    onClick={() => setYearly(!yearly)}
-                    className={cn(
-                      "relative w-12 h-7 rounded-full transition-colors",
-                      yearly ? "bg-[#7C5CFF]" : "bg-black/15",
-                    )}
-                    aria-pressed={yearly}
-                    aria-label="تبديل الفوترة السنوية"
-                  >
-                    <span
+                {/* Per-card billing toggle (paid plans only) */}
+                {hasYearly && (
+                  <div className="mt-4 flex items-center justify-between rounded-xl bg-black/[0.04] px-3.5 py-2.5">
+                    <span className="text-[13px] font-semibold text-black/70">
+                      {yearly ? "فوترة سنوية" : "فوترة شهرية"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleYearly(plan.plan_key)}
                       className={cn(
-                        "absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all",
-                        yearly ? "right-1" : "left-1",
+                        "relative w-11 h-6 rounded-full transition-colors shrink-0",
+                        yearly ? "bg-[#7C5CFF]" : "bg-black/15",
                       )}
-                    />
-                  </button>
-                </div>
+                      aria-pressed={yearly}
+                      role="switch"
+                      aria-checked={yearly}
+                      aria-label="تبديل الفوترة السنوية"
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all",
+                          yearly ? "right-0.5" : "left-0.5",
+                        )}
+                      />
+                    </button>
+                  </div>
+                )}
 
-                {/* CTA */}
-                <div className="px-7 md:px-8 py-5 border-t border-dashed border-black/[0.08]">
+                {/* CTA — black pill, sits before the feature list (Strain) */}
+                <div className="mt-5">
                   <button
-                    onClick={() => { trackEvent("signup_click", `/pricing:${plan.plan_key}`); navigate("/register"); }}
+                    type="button"
+                    onClick={() => {
+                      trackEvent("signup_click", `/pricing:${plan.plan_key}`);
+                      navigate("/register");
+                    }}
                     className={cn(
-                      "w-full py-3.5 rounded-full font-bold text-sm transition-colors",
-                      isPopular
-                        ? "bg-black text-white hover:bg-black/90"
-                        : "bg-black/[0.05] text-black hover:bg-black/10 border border-black/10",
+                      "w-full py-3.5 rounded-full font-bold text-[14px] transition-all hover:scale-[1.02]",
+                      isPopular || !isFree
+                        ? "bg-black text-white hover:shadow-[0_10px_28px_-8px_rgba(0,0,0,0.4)]"
+                        : "bg-white text-black border border-black/[0.18] hover:bg-black/[0.04]",
                     )}
                   >
-                    انضم لخطة {plan.name} مجاناً
+                    {isFree ? "ابدأ مجاناً" : `انضم لخطة ${plan.name}`}
                   </button>
                 </div>
 
-                {/* Features */}
-                <div className="px-7 md:px-8 pt-4 pb-7 md:pb-8 border-t border-dashed border-black/[0.08]">
-                  <p className="font-bold text-sm text-black mb-4 text-right">ماذا تشمل هذه الخطة؟</p>
+                {/* What's in the path? */}
+                <div className="mt-6 pt-6 border-t border-black/[0.06] flex-1">
+                  <p className="font-bold text-[13px] text-black mb-3.5">ماذا تشمل هذه الخطة؟</p>
                   <ul className="space-y-3">
                     {plan.features.map((f, i) => (
-                      <li key={i} className="flex items-center gap-3 text-sm text-black/70">
-                        {f.info && <Info className="h-4 w-4 text-black/25 shrink-0" />}
-                        {!f.info && <span className="w-4" />}
-                        <span className="flex-1 text-right">{f.text}</span>
-                        <Check className="h-4 w-4 text-[#7C5CFF] shrink-0" strokeWidth={2.5} />
+                      <li key={i} className="flex items-center gap-2.5 text-[13.5px] text-black/75">
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#7C5CFF]/12 shrink-0">
+                          <Check className="h-3 w-3 text-[#7C5CFF]" strokeWidth={3} />
+                        </span>
+                        <span className="flex-1">{f.text}</span>
+                        {f.info && <Info className="h-3.5 w-3.5 text-black/25 shrink-0" />}
                       </li>
                     ))}
                   </ul>
