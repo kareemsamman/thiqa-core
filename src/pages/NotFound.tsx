@@ -1,7 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { ArrowRight, Home } from "lucide-react";
-import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 
 if (typeof document !== "undefined") {
   const href =
@@ -14,6 +13,8 @@ if (typeof document !== "undefined") {
   }
 }
 
+const VIDEO_URL = "https://thiqacrm.b-cdn.net/video.mp4";
+
 const NotFound = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -25,10 +26,9 @@ const NotFound = () => {
   return (
     <div
       dir="rtl"
-      className="relative min-h-screen overflow-hidden bg-white text-black"
+      className="fixed inset-0 z-[9999] overflow-auto bg-white text-black"
       style={{ fontFamily: "'Cairo', sans-serif" }}
     >
-      {/* Decorative gradient blobs — same palette as the landing feature tiles */}
       <div
         aria-hidden
         className="pointer-events-none absolute -top-40 -right-32 h-[420px] w-[420px] rounded-full opacity-60 blur-3xl"
@@ -45,49 +45,40 @@ const NotFound = () => {
         style={{ background: "linear-gradient(135deg, #f5f3ff 0%, #ddd6fe 100%)" }}
       />
 
-      <header className="relative z-10 px-6 md:px-10 py-6 flex items-center justify-between">
-        <ThiqaLogoAnimation />
-        <a
-          href="/"
-          className="hidden sm:inline-flex items-center gap-1.5 text-[14px] font-semibold text-black/70 hover:text-black transition-colors"
-        >
-          <span>الصفحة الرئيسية</span>
-          <ArrowRight className="h-4 w-4 rotate-180" />
-        </a>
-      </header>
+      <main className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 md:px-10 py-12 text-center">
+        <video
+          src={VIDEO_URL}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          className="w-full max-w-lg aspect-video rounded-2xl shadow-[0_20px_60px_-20px_rgba(0,0,0,0.25)] object-cover bg-black/[0.04] opacity-0 animate-[notfound-reveal_1.1s_cubic-bezier(0.16,1,0.3,1)_120ms_forwards]"
+        />
 
-      <main className="relative z-10 flex flex-col items-center justify-center px-6 md:px-10 pt-8 pb-24 text-center">
         <div
-          className="opacity-0 animate-[notfound-reveal_1.1s_cubic-bezier(0.16,1,0.3,1)_220ms_forwards]"
+          className="mt-8 text-[5rem] md:text-[7rem] font-black leading-none tracking-tight opacity-0 animate-[notfound-reveal_1.1s_cubic-bezier(0.16,1,0.3,1)_280ms_forwards]"
+          style={{
+            background: "linear-gradient(135deg, #4f46e5 0%, #0284c7 50%, #7c3aed 100%)",
+            WebkitBackgroundClip: "text",
+            backgroundClip: "text",
+            color: "transparent",
+          }}
         >
-          <div
-            className="text-[6rem] md:text-[9rem] font-black leading-none tracking-tight"
-            style={{
-              background: "linear-gradient(135deg, #4f46e5 0%, #0284c7 50%, #7c3aed 100%)",
-              WebkitBackgroundClip: "text",
-              backgroundClip: "text",
-              color: "transparent",
-            }}
-          >
-            404
-          </div>
+          404
         </div>
 
-        <h1
-          className="mt-6 text-[1.5rem] md:text-[2.2rem] lg:text-[2.6rem] font-extrabold leading-[1.3] max-w-2xl opacity-0 animate-[notfound-reveal_1.1s_cubic-bezier(0.16,1,0.3,1)_360ms_forwards]"
-        >
+        <h1 className="mt-4 text-[1.4rem] md:text-[2rem] lg:text-[2.4rem] font-extrabold leading-[1.3] max-w-2xl opacity-0 animate-[notfound-reveal_1.1s_cubic-bezier(0.16,1,0.3,1)_420ms_forwards]">
           هذه الصفحة غير موجودة
         </h1>
 
-        <p
-          className="mt-4 text-[14px] md:text-[15px] text-black/70 max-w-md opacity-0 animate-[notfound-reveal_1.1s_cubic-bezier(0.16,1,0.3,1)_500ms_forwards]"
-        >
+        <p className="mt-3 text-[14px] md:text-[15px] text-black/70 max-w-md opacity-0 animate-[notfound-reveal_1.1s_cubic-bezier(0.16,1,0.3,1)_560ms_forwards]">
           الرابط الذي طلبته غير صحيح أو تمّ نقل الصفحة. يمكنك الرجوع للصفحة السابقة أو العودة إلى الصفحة الرئيسية.
         </p>
 
-        <div className="mt-10 flex flex-col sm:flex-row items-center gap-3 opacity-0 animate-[notfound-reveal_1.1s_cubic-bezier(0.16,1,0.3,1)_640ms_forwards]">
+        <div className="mt-8 flex flex-col sm:flex-row items-center gap-3 opacity-0 animate-[notfound-reveal_1.1s_cubic-bezier(0.16,1,0.3,1)_700ms_forwards]">
           <a
-            href="/"
+            href="/landing"
             className="inline-flex items-center gap-2 rounded-full bg-black text-white text-[15px] font-bold px-9 py-3.5 transition-all hover:scale-[1.03] hover:shadow-[0_10px_28px_-6px_rgba(0,0,0,0.25)]"
           >
             <Home className="h-4 w-4" />
@@ -104,7 +95,7 @@ const NotFound = () => {
         </div>
 
         <div
-          className="mt-12 inline-flex items-center gap-2 rounded-full bg-black/[0.04] border border-black/[0.06] px-4 py-2 text-[12px] text-black/60 font-mono opacity-0 animate-[notfound-reveal_1.1s_cubic-bezier(0.16,1,0.3,1)_780ms_forwards]"
+          className="mt-10 inline-flex items-center gap-2 rounded-full bg-black/[0.04] border border-black/[0.06] px-4 py-2 text-[12px] text-black/60 font-mono opacity-0 animate-[notfound-reveal_1.1s_cubic-bezier(0.16,1,0.3,1)_840ms_forwards]"
           dir="ltr"
         >
           <span className="text-black/40">path:</span>
