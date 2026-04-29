@@ -12,6 +12,7 @@ import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { cn } from "@/lib/utils";
 import { PublicSEO } from "@/components/public/PublicSEO";
 import { PLAN_FEATURE_CATALOG } from "@/lib/planFeatureCatalog";
+import { FAQSection } from "@/components/public/FAQSection";
 
 interface PlanData {
   id: string;
@@ -785,6 +786,10 @@ export default function Pricing() {
           })}
         </div>
       </section>
+
+      {/* ═══ FAQ ═══ Same component the landing page uses, so editing
+          questions/answers in FAQSection.tsx updates both surfaces. */}
+      <FAQSection />
 
       {/* ═══ Footer — same 4-column desktop grid / mobile accordion
           pattern as the landing page. */}

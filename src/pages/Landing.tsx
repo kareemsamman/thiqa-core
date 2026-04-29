@@ -13,33 +13,8 @@ import { useLandingContent, ct, ci } from "@/hooks/useLandingContent";
 import { cn } from "@/lib/utils";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { PublicSEO } from "@/components/public/PublicSEO";
+import { FAQSection, LANDING_FAQS } from "@/components/public/FAQSection";
 import { Helmet } from "react-helmet-async";
-
-// FAQ data — single source of truth shared by the rendered accordion
-// (inside the FAQ section) and the FAQPage JSON-LD below, so a wording
-// change can never put the two out of sync.
-const LANDING_FAQS: { q: string; a: string }[] = [
-  {
-    q: "ما هو Thiqa؟",
-    a: "نظام إدارة مخصّص لوكالات التأمين — إدارة العملاء والمعاملات والمدفوعات والتقارير في مكان واحد. مصمّم لواقع الوكالات في منطقتنا مع دعم كامل للعربية وواجهة RTL احترافية.",
-  },
-  {
-    q: "هل يمكنني إلغاء الاشتراك في أي وقت؟",
-    a: "نعم، الإلغاء مجاني ومتاح في أي وقت بدون التزام أو رسوم إضافية. عند الإلغاء نرسل لك نسخة احتياطية كاملة من قاعدة بياناتك لتحتفظ بها، وتبقى لديك إمكانية العودة متى شئت بنفس البيانات.",
-  },
-  {
-    q: "هل يمكن الانتقال بين خطة Pro وBasic؟",
-    a: "نعم. الترقية من Basic إلى Pro تتم فوراً من صفحة الاشتراك وتُفعَّل الميزات الإضافية مباشرة. الانتقال من Pro إلى Basic متاح أيضاً في أي وقت، ويُحتسب فرق السعر بالتناسب مع المدة المتبقية في فاتورتك القادمة.",
-  },
-  {
-    q: "هل يوجد فترة تجريبية مجانية؟",
-    a: "نعم، 35 يوماً تجربة مجانية بدون الحاجة لبطاقة ائتمان. جميع ميزات خطة Pro متاحة خلال التجربة لتختبر النظام بالكامل قبل الاشتراك.",
-  },
-  {
-    q: "هل معلوماتي وبيانات عملائي آمنة؟",
-    a: "نعم — تشفير متقدم لجميع البيانات، نسخ احتياطية يومية تلقائية، ونظام صلاحيات كامل يتحكم بمن يستطيع الوصول إلى أي معلومة داخل وكالتك. أنتم الوحيدون الذين يصلون لبياناتكم.",
-  },
-];
 
 // JSON-LD structured data for the home page. Tells Google we are a
 // SaaS product (SoftwareApplication) tied to the Thiqa Organization
@@ -519,7 +494,6 @@ function LandingContent() {
       stop();
     };
   }, []);
-  const [openFaq, setOpenFaq] = useState<number | null>(0);
   // Mobile hamburger drawer. Slides in from the left (visual side in
   // RTL — the same side as the hamburger button) and locks body scroll
   // while open so the backdrop doesn't scroll under it. ESC closes.
@@ -2850,72 +2824,9 @@ function LandingContent() {
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
 
-      {/* ═══ FAQ ═══
-          Single-column accordion, first item open by default, at most
-          one open at a time. Clean dividers between rows, circular
-          chevron control on the end side. */}
-      <section id="faq" className="py-24 md:py-36 relative bg-white">
-        <div className="relative max-w-4xl mx-auto px-6">
-          <p className="text-sm text-[#4a6cc7] text-center mb-4 tracking-wide font-semibold">{ct(content, "faq_label", "أسئلة وأجوبة")}</p>
-          <h2 className="text-3xl md:text-[2.8rem] font-bold text-center mb-16 text-black">
-            {ct(content, "faq_title", "كل ما يهمك معرفته عن Thiqa")}
-          </h2>
-
-          <div className="flex flex-col">
-            {LANDING_FAQS.map((faq, i) => {
-              const isOpen = openFaq === i;
-              const isLast = i === LANDING_FAQS.length - 1;
-              return (
-                <div key={i}>
-                    <button
-                      onClick={() => setOpenFaq(isOpen ? null : i)}
-                      className="w-full flex items-center gap-4 py-6 md:py-7 text-right group"
-                      aria-expanded={isOpen}
-                    >
-                      <h3 className="flex-1 text-right font-bold text-[16px] md:text-[18px] text-black leading-snug">
-                        {faq.q}
-                      </h3>
-                      <div
-                        className={`h-11 w-11 md:h-12 md:w-12 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
-                          isOpen
-                            ? "bg-black text-white"
-                            : "bg-black/[0.05] text-black group-hover:bg-black/[0.08]"
-                        }`}
-                      >
-                        {isOpen ? (
-                          <ChevronUp className="h-4 w-4" strokeWidth={2.5} />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
-                        )}
-                      </div>
-                    </button>
-                    <div
-                      className="grid overflow-hidden transition-all duration-300 ease-out"
-                      style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
-                    >
-                      <div className="min-h-0">
-                        <p className="text-right text-[14px] md:text-[15px] text-black/60 leading-relaxed pb-6 md:pb-7 pl-14 md:pl-16">
-                          {faq.a}
-                        </p>
-                      </div>
-                    </div>
-                    {!isLast && <div className="h-px bg-black/[0.08]" />}
-                  </div>
-                );
-            })}
-          </div>
-
-          <p className="mt-12 text-center text-[14px] md:text-[15px] text-black/55">
-            {ct(content, "faq_more_prompt", "هل لديك أسئلة إضافية؟")}{" "}
-            <Link
-              to="/register"
-              className="font-bold text-black underline underline-offset-4 decoration-2 decoration-[#4a6cc7] hover:opacity-80 transition-opacity"
-            >
-              {ct(content, "faq_more_cta", "تواصل معنا.")}
-            </Link>
-          </p>
-        </div>
-      </section>
+      {/* ═══ FAQ ═══ Shared component used on /landing#faq AND on the
+          pricing page, so wording stays in lock-step everywhere. */}
+      <FAQSection />
 
 
       <img src={SECTION_DIVIDER_URL} alt="" className="w-full h-auto block" aria-hidden="true" loading="lazy" />
