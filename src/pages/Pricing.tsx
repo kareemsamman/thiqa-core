@@ -693,7 +693,7 @@ export default function Pricing() {
                       </div>
                       {yearly && annualSavings > 0 && (
                         <span className="text-[13px] text-emerald-600 font-semibold tabular-nums">
-                          وفّر ₪{annualSavings}
+                          موفّر ₪{annualSavings}
                         </span>
                       )}
                     </>
