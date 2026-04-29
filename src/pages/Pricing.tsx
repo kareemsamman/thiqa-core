@@ -592,14 +592,19 @@ export default function Pricing() {
             const isFree = plan.monthly_price === 0;
             const yearly = isYearly(plan.plan_key);
             const hasYearly = !isFree && plan.yearly_price > 0;
-            const yearlyAsMonthly = hasYearly ? plan.yearly_price : plan.monthly_price;
+            // `yearly_price` is the annual TOTAL (matches PlanLadder +
+            // change-agent-plan), so savings = monthly × 12 − yearly,
+            // and on the yearly toggle we render the annual total with
+            // a / سنة suffix instead of pretending it's a per-month
+            // figure.
             const annualSavings = hasYearly
-              ? Math.max(0, (plan.monthly_price - plan.yearly_price) * 12)
+              ? Math.max(0, plan.monthly_price * 12 - plan.yearly_price)
               : 0;
+            const showYearly = yearly && hasYearly;
             const displayPrice = isFree
               ? 0
-              : yearly && hasYearly
-                ? yearlyAsMonthly
+              : showYearly
+                ? plan.yearly_price
                 : plan.monthly_price;
             const isFirst = idx === 0;
             const isLast = idx === arr.length - 1;
@@ -644,7 +649,9 @@ export default function Pricing() {
                     </span>
                     <span className="text-xl font-bold text-black/80">₪</span>
                     {!isFree && (
-                      <span className="text-[13px] text-black/55 font-medium">/ شهر</span>
+                      <span className="text-[13px] text-black/55 font-medium">
+                        {showYearly ? "/ سنة" : "/ شهر"}
+                      </span>
                     )}
                     {isFree && (
                       <span className="text-[13px] text-black/55 font-medium">للأبد</span>
