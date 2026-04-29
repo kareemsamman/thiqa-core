@@ -14,6 +14,7 @@ interface PlanData {
   id: string;
   plan_key: string;
   name: string;
+  name_ar: string | null;
   description: string | null;
   monthly_price: number;
   yearly_price: number;
@@ -27,6 +28,7 @@ const FALLBACK_PLANS: PlanData[] = [
     id: "free_trial",
     plan_key: "free_trial",
     name: "Free",
+    name_ar: "المجانية",
     description: "ابدأ مجاناً للأبد — مسار مميّز للتجربة الأولى",
     monthly_price: 0,
     yearly_price: 0,
@@ -42,6 +44,7 @@ const FALLBACK_PLANS: PlanData[] = [
     id: "starter",
     plan_key: "starter",
     name: "Starter",
+    name_ar: "البداية",
     description: "مناسب للوكلاء المستقلين في بداية الطريق",
     monthly_price: 240,
     yearly_price: 200,
@@ -59,6 +62,7 @@ const FALLBACK_PLANS: PlanData[] = [
     id: "basic",
     plan_key: "basic",
     name: "Basic",
+    name_ar: "الأساسية",
     description: "مناسب لوكالات التأمين الصغيرة والمتوسطة",
     monthly_price: 240,
     yearly_price: 200,
@@ -76,6 +80,7 @@ const FALLBACK_PLANS: PlanData[] = [
     id: "pro",
     plan_key: "pro",
     name: "Pro",
+    name_ar: "الاحترافية",
     description: "مناسب للوكالات الكبيرة مع فريق عمل",
     monthly_price: 240,
     yearly_price: 200,
@@ -90,6 +95,11 @@ const FALLBACK_PLANS: PlanData[] = [
     ],
   },
 ];
+
+// Number of features visible by default per card. Anything beyond this
+// gets revealed by the per-card "عرض جميع الميزات" toggle, mirroring
+// the agent-side PlanLadder's compare-style expand.
+const VISIBLE_FEATURE_COUNT = 5;
 
 const INFO_CENTER_ITEMS = [
   { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "/landing#demo" },
@@ -126,6 +136,12 @@ export default function Pricing() {
   const isYearly = (key: string) => !!yearlyByPlan[key];
   const toggleYearly = (key: string) =>
     setYearlyByPlan((s) => ({ ...s, [key]: !s[key] }));
+  // Per-card "view all features" expand state — same pattern as the
+  // agent-side PlanLadder so the marketing/upgrade UX feels consistent.
+  const [expandedByPlan, setExpandedByPlan] = useState<Record<string, boolean>>({});
+  const isExpanded = (key: string) => !!expandedByPlan[key];
+  const toggleExpanded = (key: string) =>
+    setExpandedByPlan((s) => ({ ...s, [key]: !s[key] }));
   const [plans, setPlans] = useState<PlanData[]>(FALLBACK_PLANS);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSubmenu, setMobileSubmenu] = useState<"info" | "support" | null>(null);
@@ -152,7 +168,7 @@ export default function Pricing() {
       try {
         const { data, error } = await supabase
           .from("subscription_plans")
-          .select("id, plan_key, name, description, monthly_price, yearly_price, badge, features")
+          .select("id, plan_key, name, name_ar, description, monthly_price, yearly_price, badge, features")
           .eq("is_active", true)
           .order("sort_order");
         if (!error && data && data.length > 0) {
@@ -178,17 +194,8 @@ export default function Pricing() {
         description="خطط أسعار Thiqa لإدارة وكالات التأمين: ابدأ بالخطة المجانية ووسّع حسب حاجة وكالتك. أسعار شفافة، اشتراكات شهرية وسنوية، وبدون التزامات طويلة."
         keywords="أسعار Thiqa, خطط اشتراك Thiqa, تكلفة نظام إدارة التأمين, اشتراك مجاني, خطة احترافية"
       />
-      {/* Top blue gradient — covers hero area, fades into white by the
-          time the pricing cards start. Absolute so it layers under the
-          content without pushing anything around. */}
-      <div
-        className="absolute inset-x-0 top-0 h-[640px] md:h-[720px] pointer-events-none z-0"
-        style={{
-          background:
-            "linear-gradient(180deg, #4b7bff 0%, #6d98ff 22%, #a6c3ff 48%, #dce8ff 70%, rgba(255,255,255,0) 100%)",
-        }}
-        aria-hidden="true"
-      />
+      {/* Page background stays plain white — the Strain-style cards
+          carry the visual weight, not a hero gradient. */}
 
       {/* ═══ Navbar — static light pill, same 3-item structure as the
           landing page. Mobile collapses to login + hamburger + drawer. */}
@@ -528,16 +535,16 @@ export default function Pricing() {
         </aside>
       </div>
 
-      {/* ═══ Pricing Hero — sits over the blue gradient, so the copy
-          is white for contrast and the small label is a soft white. */}
-      <section className="relative z-10 pt-32 md:pt-40 pb-16 md:pb-24 text-center px-6">
-        <p className="text-sm text-white/80 mb-4 tracking-wide font-medium">
+      {/* ═══ Pricing Hero — plain white background; copy is dark for
+          contrast on the white page. */}
+      <section className="relative z-10 pt-32 md:pt-40 pb-12 md:pb-16 text-center px-6">
+        <p className="text-sm text-black/55 mb-4 tracking-wide font-medium">
           {ct(content, "pricing_label", "الأسعار")}
         </p>
-        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-white drop-shadow-[0_2px_12px_rgba(15,40,120,0.22)]">
+        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-black">
           {ct(content, "pricing_title", "جرّب نظام إدارة وكالات التأمين لمدة 35 يوم مجاناً *")}
         </h1>
-        <p className="text-white/85 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed">
+        <p className="text-black/65 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed">
           {ct(content, "pricing_subtitle", "* جميع الميزات مفتوحة بالكامل — بدون بطاقة ائتمان.")}
         </p>
       </section>
@@ -567,6 +574,11 @@ export default function Pricing() {
               : yearly && hasYearly
                 ? yearlyAsMonthly
                 : plan.monthly_price;
+            const expanded = isExpanded(plan.plan_key);
+            const overflowsLimit = plan.features.length > VISIBLE_FEATURE_COUNT;
+            const visibleFeatures = expanded || !overflowsLimit
+              ? plan.features
+              : plan.features.slice(0, VISIBLE_FEATURE_COUNT);
             return (
               <div
                 key={plan.id}
@@ -584,9 +596,14 @@ export default function Pricing() {
                   </div>
                 )}
 
-                {/* Header — name (right in RTL) + description */}
+                {/* Header — Arabic name (with English label below) + description */}
                 <div>
-                  <h3 className="text-2xl font-extrabold text-black tracking-tight">{plan.name}</h3>
+                  <h3 className="text-2xl font-extrabold text-black tracking-tight">
+                    {plan.name_ar || plan.name}
+                  </h3>
+                  <p className="text-[11px] text-black/45 mt-1 uppercase tracking-[0.18em] font-semibold">
+                    {plan.name}
+                  </p>
                   {plan.description && (
                     <p className="text-[13px] text-black/60 mt-2 leading-relaxed min-h-[2.6em]">
                       {plan.description}
@@ -667,7 +684,7 @@ export default function Pricing() {
                 <div className="mt-6 pt-6 border-t border-black/[0.06] flex-1">
                   <p className="font-bold text-[13px] text-black mb-3.5">ماذا تشمل هذه الخطة؟</p>
                   <ul className="space-y-3">
-                    {plan.features.map((f, i) => (
+                    {visibleFeatures.map((f, i) => (
                       <li key={i} className="flex items-center gap-2.5 text-[13.5px] text-black/75">
                         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#7C5CFF]/12 shrink-0">
                           <Check className="h-3 w-3 text-[#7C5CFF]" strokeWidth={3} />
@@ -677,6 +694,24 @@ export default function Pricing() {
                       </li>
                     ))}
                   </ul>
+                  {overflowsLimit && (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(plan.plan_key)}
+                      className="mt-4 inline-flex items-center justify-center gap-1.5 text-[13px] font-bold text-[#7C5CFF] hover:text-[#5a3fd9] transition-colors"
+                    >
+                      {expanded
+                        ? "إخفاء التفاصيل"
+                        : `عرض جميع الميزات (+${plan.features.length - VISIBLE_FEATURE_COUNT})`}
+                      <ChevronDown
+                        className={cn(
+                          "h-3.5 w-3.5 transition-transform",
+                          expanded && "rotate-180",
+                        )}
+                        strokeWidth={2.5}
+                      />
+                    </button>
+                  )}
                 </div>
               </div>
             );
