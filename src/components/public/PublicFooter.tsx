@@ -172,6 +172,8 @@ export function PublicFooter() {
         <img
           src="https://thiqacrm.b-cdn.net/Group%201000011511.png"
           alt="Thiqa — نظام إدارة وكالات التأمين"
+          width={1770}
+          height={473}
           className="w-full h-auto block"
           loading="lazy"
         />

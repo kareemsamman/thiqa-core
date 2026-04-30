@@ -89,7 +89,7 @@ export default function ResetPassword() {
         noindex
       />
       <div className="fixed inset-0 lg:hidden -z-10">
-        <img src={loginBgMobile} alt="" className="w-full h-full object-cover" />
+        <img src={loginBgMobile} alt="" width={1920} height={927} className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-black/30 backdrop-blur-md" />
       </div>
       <div className="hidden lg:block fixed inset-0 -z-10 bg-gradient-to-br from-muted/40 to-background" />

@@ -186,6 +186,8 @@ export function ThiqaLogoAnimation({
           <img
             src={iconSrc}
             alt=""
+            width={iconSize}
+            height={iconSize}
             draggable={false}
             loading="eager"
             decoding="async"
