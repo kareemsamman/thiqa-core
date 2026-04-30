@@ -132,9 +132,16 @@ const SUPPORT_ITEMS = [
     demo: true,
   },
   {
+    title: "أسئلة وأجوبة",
+    desc: "إجابات على الاستفسارات الشائعة",
+    icon: HelpCircle,
+    href: "/faq",
+    filled: false,
+  },
+  {
     title: "تواصل معنا",
     desc: "هل لديك أسئلة؟ تحدّث معنا",
-    icon: HelpCircle,
+    icon: MessageSquare,
     href: "/contact",
     filled: false,
   },
@@ -216,7 +223,7 @@ export default function Pricing() {
           the cards sit cleanly on white, not on tinted purple. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute top-0 inset-x-0 h-[640px]"
+        className="gradient-drop pointer-events-none absolute top-0 inset-x-0 h-[640px]"
         style={{
           background:
             "linear-gradient(180deg, #6F4FFF 0%, #9D89FF 32%, rgba(255,255,255,0.85) 70%, rgba(255,255,255,0) 100%)",
@@ -412,7 +419,7 @@ export default function Pricing() {
           aria-label="قائمة التنقل"
           className={cn(
             "absolute top-0 inset-x-0 bg-white shadow-2xl rounded-b-3xl",
-            "flex flex-col transition-transform duration-[450ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
             "max-h-[90vh]",
             mobileMenuOpen ? "translate-y-0" : "-translate-y-full",
           )}

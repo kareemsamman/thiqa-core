@@ -18,6 +18,7 @@ const PUBLIC_ROUTE_PREFIXES = [
   "/landing",
   "/pricing",
   "/faq",
+  "/contact",
   "/terms",
   "/privacy",
   "/verify-email",

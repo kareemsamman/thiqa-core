@@ -21,6 +21,7 @@ const PUBLIC_PATH_PREFIXES = [
   '/landing',
   '/pricing',
   '/faq',
+  '/contact',
   '/privacy',
   '/terms',
   '/forgot-password',

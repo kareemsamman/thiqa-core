@@ -30,9 +30,16 @@ const SUPPORT_ITEMS = [
     demo: true,
   },
   {
+    title: "أسئلة وأجوبة",
+    desc: "إجابات على الاستفسارات الشائعة",
+    icon: HelpCircle,
+    href: "/faq",
+    filled: false,
+  },
+  {
     title: "تواصل معنا",
     desc: "هل لديك أسئلة؟ تحدّث معنا",
-    icon: HelpCircle,
+    icon: MessageSquare,
     href: "/contact",
     filled: false,
   },
@@ -105,7 +112,7 @@ export default function FAQ() {
           rides the gradient and the body lands on white. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute top-0 inset-x-0 h-[640px]"
+        className="gradient-drop pointer-events-none absolute top-0 inset-x-0 h-[640px]"
         style={{
           background:
             "linear-gradient(180deg, #6F4FFF 0%, #9D89FF 32%, rgba(255,255,255,0.85) 70%, rgba(255,255,255,0) 100%)",
@@ -162,6 +169,38 @@ export default function FAQ() {
                       );
                     })}
                   </div>
+
+                  <a
+                    href="/register"
+                    onClick={() => trackEvent("signup_click", "/faq:nav-info-card")}
+                    className="relative flex-shrink-0 w-[200px] rounded-xl overflow-hidden flex items-center justify-center text-center"
+                    style={{
+                      background: "linear-gradient(160deg, #3B5AD9 0%, #6A7FD8 55%, #A8B5E6 100%)",
+                    }}
+                  >
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{
+                        background:
+                          "radial-gradient(circle at 30% 75%, rgba(255,255,255,0.35), transparent 55%)",
+                        filter: "blur(14px)",
+                      }}
+                    />
+                    <div className="relative z-10 px-5 py-8 flex flex-col items-center">
+                      <img
+                        src="https://thiqacrm.b-cdn.net/small_black.png"
+                        alt=""
+                        className="w-8 h-8 mb-3 opacity-90 invert"
+                        aria-hidden="true"
+                      />
+                      <div className="text-white text-[22px] font-bold leading-tight">
+                        اكتشف Thiqa
+                      </div>
+                      <div className="text-white/80 text-[12px] mt-2 leading-snug">
+                        جولة سريعة في النظام
+                      </div>
+                    </div>
+                  </a>
                 </div>
               </div>
             </div>

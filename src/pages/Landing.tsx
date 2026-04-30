@@ -383,6 +383,28 @@ export default function Landing() {
 function LandingContent() {
   usePageView("/landing");
   const { data: content } = useLandingContent();
+
+  // Smooth-scroll to a hash target when the URL carries one (e.g. the
+  // user clicked /landing#demo from the Pricing nav). Browsers only
+  // auto-scroll for hashes on initial paint, and even then it's an
+  // instant jump — this turns it into a smooth glide. We retry a
+  // couple of times because the target may not be in the DOM on the
+  // first frame (lazy-mounted sections, Suspense boundaries, etc.).
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash) return;
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = document.getElementById(hash.slice(1));
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      attempts += 1;
+      if (attempts < 10) window.setTimeout(tryScroll, 100);
+    };
+    tryScroll();
+  }, []);
   const [activeTab, setActiveTab] = useState("policies");
   const [slideIdx, setSlideIdx] = useState(0);
   const [sliderInView, setSliderInView] = useState(false);
@@ -957,9 +979,16 @@ function LandingContent() {
                       demo: true as const,
                     },
                     {
+                      title: "أسئلة وأجوبة",
+                      desc: "إجابات على الاستفسارات الشائعة",
+                      icon: HelpCircle,
+                      href: "/faq",
+                      filled: false,
+                    },
+                    {
                       title: "تواصل معنا",
                       desc: "هل لديك أسئلة؟ تحدّث معنا",
-                      icon: HelpCircle,
+                      icon: MessageSquare,
                       href: "/contact",
                       filled: false,
                     },
@@ -1202,9 +1231,16 @@ function LandingContent() {
                           demo: true as const,
                         },
                         {
+                          title: "أسئلة وأجوبة",
+                          desc: "إجابات على الاستفسارات الشائعة",
+                          icon: HelpCircle,
+                          href: "/faq",
+                          filled: false,
+                        },
+                        {
                           title: "تواصل معنا",
                           desc: "هل لديك أسئلة؟ تحدّث معنا",
-                          icon: HelpCircle,
+                          icon: MessageSquare,
                           href: "/contact",
                           filled: false,
                         },
