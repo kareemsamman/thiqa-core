@@ -2008,7 +2008,61 @@ function LandingContent() {
           </div>
         </div>
 
-        <div className="updates-scroller overflow-x-auto overflow-y-hidden px-6 pb-3" dir="ltr" aria-label="آخر تحديثات Thiqa">
+        <div
+          ref={(el) => {
+            if (!el) return;
+            // Autoplay: gently scroll the rail rightward, pause on
+            // user interaction (hover/touch/focus), and loop back to
+            // the start when reaching the end. Respects
+            // prefers-reduced-motion.
+            if ((el as any).__autoplayBound) return;
+            (el as any).__autoplayBound = true;
+
+            const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            if (reduce) return;
+
+            const SPEED = 0.5; // px per frame (~30px/s at 60fps)
+            let paused = false;
+            let userScrolling = false;
+            let userTimer: number | null = null;
+            let raf = 0;
+
+            const tick = () => {
+              if (!paused && !userScrolling) {
+                const max = el.scrollWidth - el.clientWidth;
+                if (max > 0) {
+                  if (el.scrollLeft >= max - 1) {
+                    el.scrollLeft = 0;
+                  } else {
+                    el.scrollLeft += SPEED;
+                  }
+                }
+              }
+              raf = requestAnimationFrame(tick);
+            };
+
+            const pause = () => { paused = true; };
+            const resume = () => { paused = false; };
+            const onUserScroll = () => {
+              userScrolling = true;
+              if (userTimer) window.clearTimeout(userTimer);
+              userTimer = window.setTimeout(() => { userScrolling = false; }, 1500);
+            };
+
+            el.addEventListener("mouseenter", pause);
+            el.addEventListener("mouseleave", resume);
+            el.addEventListener("touchstart", pause, { passive: true });
+            el.addEventListener("touchend", resume, { passive: true });
+            el.addEventListener("focusin", pause);
+            el.addEventListener("focusout", resume);
+            el.addEventListener("wheel", onUserScroll, { passive: true });
+
+            raf = requestAnimationFrame(tick);
+          }}
+          className="updates-scroller overflow-x-auto overflow-y-hidden px-6 pb-3"
+          dir="ltr"
+          aria-label="آخر تحديثات Thiqa"
+        >
           <div className="flex w-max gap-5 md:gap-6 pr-6">
             {featureUpdates.map((u, i) => (
               <div
