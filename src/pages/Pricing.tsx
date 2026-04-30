@@ -588,7 +588,7 @@ export default function Pricing() {
           {ct(content, "pricing_label", "الأسعار")}
         </p>
         <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-white">
-          {ct(content, "pricing_title", "جرّب نظام إدارة وكالات التأمين لمدة 35 يوم مجاناً *")}
+          {ct(content, "pricing_title", "جرّب نظام الإدارة لمدة 35 يوم مجاناً *")}
         </h1>
         <p className="text-white/80 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed">
           {ct(content, "pricing_subtitle", "* جميع الميزات مفتوحة بالكامل — بدون بطاقة ائتمان.")}
@@ -854,6 +854,9 @@ export default function Pricing() {
                 items: [
                   { label: "عرض توضيحي", href: "", demo: true as const },
                   { label: "تواصل معنا", href: "/faq#support" },
+                  { label: "support@getthiqa.com", href: "mailto:support@getthiqa.com" },
+                  { label: "0525143581", href: "tel:+972525143581" },
+                  { label: "0598 948 155", href: "tel:+972598948155" },
                 ],
               },
               {

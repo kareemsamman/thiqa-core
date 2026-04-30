@@ -1308,7 +1308,7 @@ function LandingContent() {
             className="text-[1.5rem] md:text-[2.2rem] lg:text-[2.8rem] font-extrabold leading-[1.3] md:leading-[1.2] tracking-tight whitespace-pre-line hero-reveal text-black"
             style={{ animationDelay: '120ms' }}
           >
-            {ct(content, "hero_title", "نظام الإدارة الأذكى\nلوكالات التأمين التي تريد أن تربح أكثر")}
+            {"أول نظام مقدسي\nلوكالات التأمين التي تريد أن تربح أكثر"}
           </h1>
           <p
             className="mt-5 text-[14px] md:text-[15px] text-black/70 max-w-xl mx-auto leading-relaxed whitespace-pre-line hero-reveal"
@@ -3079,6 +3079,9 @@ function LandingContent() {
                 items: [
                   { label: "عرض توضيحي", href: "", demo: true as const },
                   { label: "تواصل معنا", href: "/faq#support" },
+                  { label: "support@getthiqa.com", href: "mailto:support@getthiqa.com" },
+                  { label: "0525143581", href: "tel:+972525143581" },
+                  { label: "0598 948 155", href: "tel:+972598948155" },
                 ],
               },
               {
