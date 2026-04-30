@@ -105,8 +105,8 @@ export default function ContactUs() {
 
       {/* ═══ Navbar — duplicated from Pricing/FAQ (extraction TBD). */}
       <nav className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-3">
-        <div className="pointer-events-auto flex flex-row-reverse md:flex-row items-center justify-between md:justify-normal px-4 md:px-6 h-14 md:h-16 mx-auto w-[92%] md:w-[75%] max-w-[72rem] rounded-full bg-white/75 backdrop-blur-md shadow-[0_1px_20px_0_rgba(0,0,0,0.10)]">
-          <div className="md:flex-1 md:flex md:justify-start">
+        <div className="pointer-events-auto flex flex-row-reverse lg:flex-row items-center justify-between lg:justify-normal px-4 lg:px-6 h-14 lg:h-16 mx-auto w-[92%] lg:w-[75%] max-w-[72rem] rounded-full bg-white/75 backdrop-blur-md shadow-[0_1px_20px_0_rgba(0,0,0,0.10)]">
+          <div className="lg:flex-1 lg:flex lg:justify-start">
             <a href="/landing" className="flex items-center text-black">
               <ThiqaLogoAnimation
                 iconSize={32}
@@ -116,7 +116,7 @@ export default function ContactUs() {
             </a>
           </div>
 
-          <div className="hidden md:flex items-center gap-10 text-[14px] font-medium text-black/75">
+          <div className="hidden lg:flex items-center gap-10 text-[14px] font-medium text-black/75">
             <a href="/pricing" className="hover:text-black transition-colors">الأسعار</a>
 
             <div className="relative group">
@@ -234,7 +234,7 @@ export default function ContactUs() {
             </div>
           </div>
 
-          <div className="md:flex-1 flex flex-row-reverse md:flex-row md:justify-end items-center gap-3 md:gap-5">
+          <div className="lg:flex-1 flex flex-row-reverse lg:flex-row lg:justify-end items-center gap-3 lg:gap-5">
             <button
               onClick={() => navigate("/login")}
               className="text-[14px] font-semibold text-black/80 hover:text-black transition-colors inline-flex items-center"
@@ -244,7 +244,7 @@ export default function ContactUs() {
 
             <button
               onClick={() => { trackEvent("signup_click", "/contact"); navigate("/register"); }}
-              className="hidden md:inline-flex px-8 py-3 text-[14px] font-bold text-black hover:bg-black/5 transition-all rounded-full"
+              className="hidden lg:inline-flex px-8 py-3 text-[14px] font-bold text-black hover:bg-black/5 transition-all rounded-full"
               style={{
                 border: "2px solid rgba(0, 0, 0, 0.22)",
                 background: "rgba(255, 255, 255, 0.0)",
@@ -257,7 +257,7 @@ export default function ContactUs() {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-full text-black hover:bg-black/5 transition-colors"
+              className="lg:hidden inline-flex items-center justify-center w-10 h-10 rounded-full text-black hover:bg-black/5 transition-colors"
               aria-label="فتح القائمة"
               aria-expanded={mobileMenuOpen}
             >
@@ -270,7 +270,7 @@ export default function ContactUs() {
       {/* Mobile drawer */}
       <div
         className={cn(
-          "fixed inset-0 z-[60] md:hidden transition-opacity duration-300",
+          "fixed inset-0 z-[60] lg:hidden transition-opacity duration-300",
           mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
         )}
         aria-hidden={!mobileMenuOpen}

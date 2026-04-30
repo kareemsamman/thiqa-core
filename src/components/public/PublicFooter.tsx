@@ -26,8 +26,10 @@ const SECTIONS: { title: string; items: FooterItem[] }[] = [
     title: "مركز المعلومات",
     items: [
       { label: "الأسعار", href: "/pricing" },
-      { label: "كيف يعمل", href: "/landing#demo" },
-      { label: "الميزات", href: "/landing#features" },
+      { label: "كل الأدوات", href: "/landing#demo" },
+      { label: "الحلول", href: "/landing#solutions" },
+      { label: "لماذا ثقة", href: "/landing#features" },
+      { label: "آراء العملاء", href: "/landing#testimonials" },
       { label: "أسئلة وأجوبة", href: "/faq" },
     ],
   },

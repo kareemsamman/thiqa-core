@@ -811,7 +811,7 @@ function LandingContent() {
           the layout each frame. */}
       <nav className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-2">
         <div
-          className="pointer-events-auto flex flex-row-reverse md:flex-row items-center justify-between md:justify-normal px-4 md:px-6 h-14 md:h-16 mx-auto transform-gpu w-[92%] md:w-[75%] max-w-[72rem]"
+          className="pointer-events-auto flex flex-row-reverse lg:flex-row items-center justify-between lg:justify-normal px-4 lg:px-6 h-14 lg:h-16 mx-auto transform-gpu w-[92%] lg:w-[75%] max-w-[72rem]"
           style={{
             // Mobile (< md): 92% width so the pill has real breathing
             // room on phones; desktop pins at 75%. Only the pill chrome
@@ -837,7 +837,7 @@ function LandingContent() {
           {/* Logo (right side under RTL because it's the first child).
               Always black: icon source and wordmark color do not
               swap on scroll anymore. */}
-          <div className="md:flex-1 md:flex md:justify-start">
+          <div className="lg:flex-1 lg:flex lg:justify-start">
             <div className="flex items-center text-black">
               <ThiqaLogoAnimation
                 iconSize={32}
@@ -852,7 +852,7 @@ function LandingContent() {
               support) that open on hover with a small bridging gap so
               mouse-intent doesn't break when the user tracks down
               toward the panel. */}
-          <div className="hidden md:flex items-center gap-10 text-[14px] font-medium text-black/75">
+          <div className="hidden lg:flex items-center gap-10 text-[14px] font-medium text-black/75">
             <a href="/pricing" className="transition-colors hover:text-black">الأسعار</a>
 
             {/* مركز المعلومات — scroll-to-section dropdown with a
@@ -1029,7 +1029,7 @@ function LandingContent() {
               child). On mobile this collapses to login text + a
               hamburger that opens the drawer; desktop keeps the full
               signup pill CTA. */}
-          <div className="md:flex-1 flex flex-row-reverse md:flex-row md:justify-end items-center gap-3 md:gap-5">
+          <div className="lg:flex-1 flex flex-row-reverse lg:flex-row lg:justify-end items-center gap-3 lg:gap-5">
             <Link
               to="/login"
               className="text-[14px] font-semibold text-black/80 hover:text-black transition-colors inline-flex items-center"
@@ -1040,7 +1040,7 @@ function LandingContent() {
             <Link
               to="/register"
               onClick={() => trackEvent("signup_click", "/landing")}
-              className="hidden md:inline-flex px-8 py-3 text-[14px] font-bold text-black hover:bg-black/5 transition-all"
+              className="hidden lg:inline-flex px-8 py-3 text-[14px] font-bold text-black hover:bg-black/5 transition-all"
               style={{
                 borderRadius: "100px",
                 border: "2px solid rgba(0, 0, 0, 0.22)",
@@ -1054,7 +1054,7 @@ function LandingContent() {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-full text-black hover:bg-black/5 transition-colors"
+              className="lg:hidden inline-flex items-center justify-center w-10 h-10 rounded-full text-black hover:bg-black/5 transition-colors"
               aria-label="فتح القائمة"
               aria-expanded={mobileMenuOpen}
             >
@@ -1075,7 +1075,7 @@ function LandingContent() {
           snappy. */}
       <div
         className={cn(
-          "fixed inset-0 z-[60] md:hidden transition-opacity duration-300",
+          "fixed inset-0 z-[60] lg:hidden transition-opacity duration-300",
           mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
         )}
         aria-hidden={!mobileMenuOpen}
@@ -1522,7 +1522,7 @@ function LandingContent() {
           );
           io.observe(el);
         }}
-        className="relative w-full md:min-h-screen overflow-hidden bg-white pb-10 md:pb-0"
+        className="relative w-full lg:min-h-screen overflow-hidden bg-white pb-10 lg:pb-0"
       >
         {/* Headline — two stacked lines, both black. The lead-in is
             font-light (300) and the punchline is font-bold (700) so
@@ -1550,7 +1550,7 @@ function LandingContent() {
         <img
           src="https://thiqacrm.b-cdn.net/hf_20260416_191720_99f2169b-05a1-45de-9063-68dd989588c1%201%20(2)%20(1).jpg"
           alt="وكيل تأمين غارق بالمهام قبل Thiqa"
-          className="hs-img relative mx-auto mt-6 w-[88%] h-auto block md:absolute md:bottom-0 md:left-1/2 md:-translate-x-1/2 md:w-[70%] md:h-[76%] md:object-cover md:object-bottom md:mt-0"
+          className="hs-img relative mx-auto mt-6 w-[88%] h-auto block lg:absolute lg:bottom-0 lg:left-1/2 lg:-translate-x-1/2 lg:w-[70%] lg:h-[76%] lg:object-cover lg:object-bottom lg:mt-0"
           loading="lazy"
         />
 
@@ -1558,7 +1558,7 @@ function LandingContent() {
             important "notifications" so the mobile story still reads
             as "drowning in tasks". Hidden on md+ where the absolute
             pills take over. */}
-        <div className="relative z-10 md:hidden px-5 mt-6 grid grid-cols-2 gap-2.5">
+        <div className="relative z-10 lg:hidden px-5 mt-6 grid grid-cols-2 gap-2.5">
           {[
             { icon: AlertTriangle, label: "عاجل", color: "text-rose-500" },
             { icon: Phone, label: "مكالمة فائتة", color: "text-[#122042]", badge: "7" },
@@ -1600,12 +1600,12 @@ function LandingContent() {
               pill surface (no inner white circle). Moved closer to
               the person (13-18% from edge instead of 2-8%) so they
               hug the head/shoulder area. */}
-          <div className="hs-pill hs-pill-l hs-d-1 hidden md:flex absolute top-[22%] left-[13%] lg:left-[16%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+          <div className="hs-pill hs-pill-l hs-d-1 hidden lg:flex absolute top-[22%] left-[13%] lg:left-[16%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
             <AlertTriangle className="h-4 w-4 text-rose-500 flex-shrink-0" strokeWidth={2.4} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">عاجل</span>
           </div>
 
-          <div className="hs-pill hs-pill-l hs-d-3 hidden md:flex absolute top-[30%] left-[11%] lg:left-[13%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+          <div className="hs-pill hs-pill-l hs-d-3 hidden lg:flex absolute top-[30%] left-[11%] lg:left-[13%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
             <Phone className="h-4 w-4 text-[#122042] flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">مكالمة فائتة</span>
             <span className="flex-shrink-0 h-5 min-w-[22px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
@@ -1613,18 +1613,18 @@ function LandingContent() {
             </span>
           </div>
 
-          <div className="hs-pill hs-pill-l hs-d-5 hidden md:flex absolute top-[38%] left-[14%] lg:left-[17%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+          <div className="hs-pill hs-pill-l hs-d-5 hidden lg:flex absolute top-[38%] left-[14%] lg:left-[17%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
             <MessageSquare className="h-4 w-4 text-rose-500 flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">شكوى عميل</span>
           </div>
 
-          <div className="hs-pill hs-pill-l hs-d-7 hidden md:flex absolute top-[46%] left-[12%] lg:left-[15%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+          <div className="hs-pill hs-pill-l hs-d-7 hidden lg:flex absolute top-[46%] left-[12%] lg:left-[15%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
             <BarChart3 className="h-4 w-4 text-amber-600 flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">خطأ في الجدول</span>
           </div>
 
           {/* Right pills */}
-          <div className="hs-pill hs-pill-r hs-d-2 hidden md:flex absolute top-[22%] right-[13%] lg:right-[16%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+          <div className="hs-pill hs-pill-r hs-d-2 hidden lg:flex absolute top-[22%] right-[13%] lg:right-[16%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
             <Mail className="h-4 w-4 text-[#122042] flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">بريد غير مقروء</span>
             <span className="flex-shrink-0 h-5 min-w-[22px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
@@ -1632,17 +1632,17 @@ function LandingContent() {
             </span>
           </div>
 
-          <div className="hs-pill hs-pill-r hs-d-4 hidden md:flex absolute top-[30%] right-[11%] lg:right-[13%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+          <div className="hs-pill hs-pill-r hs-d-4 hidden lg:flex absolute top-[30%] right-[11%] lg:right-[13%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
             <Clock className="h-4 w-4 text-rose-500 flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">تجديد متأخر</span>
           </div>
 
-          <div className="hs-pill hs-pill-r hs-d-6 hidden md:flex absolute top-[38%] right-[14%] lg:right-[17%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+          <div className="hs-pill hs-pill-r hs-d-6 hidden lg:flex absolute top-[38%] right-[14%] lg:right-[17%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
             <Bell className="h-4 w-4 text-amber-600 flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">مواعيد متراكمة</span>
           </div>
 
-          <div className="hs-pill hs-pill-r hs-d-8 hidden md:flex absolute top-[46%] right-[12%] lg:right-[15%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
+          <div className="hs-pill hs-pill-r hs-d-8 hidden lg:flex absolute top-[46%] right-[12%] lg:right-[15%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.12)]">
             <FileText className="h-4 w-4 text-[#7a5a36] flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">ملف PDF</span>
           </div>
@@ -1654,18 +1654,18 @@ function LandingContent() {
               live at scattered, non-aligned positions near the
               corners so the composition feels dispersed instead of
               gridded. */}
-          <div className="hs-pill hs-pill-l hs-d-9 hidden md:flex absolute top-[8%] left-[2%] lg:left-[3%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
+          <div className="hs-pill hs-pill-l hs-d-9 hidden lg:flex absolute top-[8%] left-[2%] lg:left-[3%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
             <MessageSquare className="h-5 w-5 text-[#122042] flex-shrink-0" strokeWidth={2} />
             <span className="text-[14px] font-semibold text-black whitespace-nowrap">استعلام جديد</span>
             <span className="flex-shrink-0 h-2.5 w-2.5 rounded-full bg-rose-500" />
           </div>
 
-          <div className="hs-pill hs-pill-r hs-d-10 hidden md:flex absolute top-[13%] right-[2%] lg:right-[2%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
+          <div className="hs-pill hs-pill-r hs-d-10 hidden lg:flex absolute top-[13%] right-[2%] lg:right-[2%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
             <AlertTriangle className="h-5 w-5 text-rose-500 flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[14px] font-semibold text-black whitespace-nowrap">معاملة منتهية</span>
           </div>
 
-          <div className="hs-pill hs-pill-l hs-d-11 hidden md:flex absolute top-[60%] left-[2%] lg:left-[2%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
+          <div className="hs-pill hs-pill-l hs-d-11 hidden lg:flex absolute top-[60%] left-[2%] lg:left-[2%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
             <Wallet className="h-5 w-5 text-amber-600 flex-shrink-0" strokeWidth={2} />
             <span className="text-[14px] font-semibold text-black whitespace-nowrap">دفعة متأخرة</span>
             <span className="flex-shrink-0 h-6 min-w-[26px] px-2 rounded-full bg-rose-500 text-white text-[11px] font-bold flex items-center justify-center">
@@ -1673,7 +1673,7 @@ function LandingContent() {
             </span>
           </div>
 
-          <div className="hs-pill hs-pill-r hs-d-12 hidden md:flex absolute top-[65%] right-[2%] lg:right-[3%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
+          <div className="hs-pill hs-pill-r hs-d-12 hidden lg:flex absolute top-[65%] right-[2%] lg:right-[3%] items-center gap-3 rounded-full bg-white/35 backdrop-blur-xl backdrop-saturate-150 border border-white/70 px-5 py-3.5 shadow-[0_14px_40px_-8px_rgba(18,32,66,0.22)]">
             <CreditCard className="h-5 w-5 text-[#122042] flex-shrink-0" strokeWidth={2} />
             <span className="text-[14px] font-semibold text-black whitespace-nowrap">تحصيل مطلوب</span>
           </div>
@@ -1683,12 +1683,12 @@ function LandingContent() {
               .hs-pill-blur filter class, placed at "between" spots
               not covered by the sharp pills so they fill negative
               space and add depth without competing for attention. */}
-          <div className="hs-pill hs-pill-blur hs-pill-l hs-d-13 hidden md:flex absolute top-[6%] left-[22%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.1)]">
+          <div className="hs-pill hs-pill-blur hs-pill-l hs-d-13 hidden lg:flex absolute top-[6%] left-[22%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.1)]">
             <Bell className="h-4 w-4 text-[#122042] flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">رسالة جديدة</span>
           </div>
 
-          <div className="hs-pill hs-pill-blur hs-pill-r hs-d-14 hidden md:flex absolute top-[74%] right-[20%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.1)]">
+          <div className="hs-pill hs-pill-blur hs-pill-r hs-d-14 hidden lg:flex absolute top-[74%] right-[20%] items-center gap-2.5 rounded-full bg-[#faf5ef] border border-black/[0.04] px-4 py-2.5 shadow-[0_8px_24px_-6px_rgba(18,32,66,0.1)]">
             <Clock className="h-4 w-4 text-amber-600 flex-shrink-0" strokeWidth={2.2} />
             <span className="text-[13px] font-semibold text-black whitespace-nowrap">طلب معلق</span>
           </div>
@@ -2952,7 +2952,7 @@ function LandingContent() {
               ))}
             </div>
 
-            <div className="flex lg:hidden justify-center gap-3 mt-6">
+            <div dir="ltr" className="flex lg:hidden justify-center gap-3 mt-6">
               <button onClick={() => goTestimonial("up")} aria-label="السابق" className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
                 <ChevronLeft className="h-5 w-5" />
               </button>
