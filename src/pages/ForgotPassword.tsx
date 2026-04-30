@@ -69,6 +69,7 @@ export default function ForgotPassword() {
       <PublicSEO
         title="Thiqa | استعادة كلمة المرور"
         description="استعد كلمة المرور لحسابك في Thiqa عبر بريدك الإلكتروني المسجّل، خلال دقائق."
+        noindex
       />
 
       <div className="w-full max-w-md animate-scale-in">

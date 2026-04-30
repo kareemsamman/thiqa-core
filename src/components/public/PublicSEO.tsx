@@ -15,6 +15,11 @@ type PublicSEOProps = {
   imageWidth?: string;
   imageHeight?: string;
   keywords?: string;
+  // Transactional flow pages (verify-email, forgot/reset password) want
+  // the rest of the meta (title, description, canonical, OG) but should
+  // stay out of search since they only make sense reached from an
+  // emailed link.
+  noindex?: boolean;
 };
 
 // Per-page SEO for public marketing/auth/legal pages. Sets a localized
@@ -32,6 +37,7 @@ export function PublicSEO({
   imageWidth = DEFAULT_OG_IMAGE_WIDTH,
   imageHeight = DEFAULT_OG_IMAGE_HEIGHT,
   keywords,
+  noindex = false,
 }: PublicSEOProps) {
   const location = useLocation();
   const path = pathname ?? location.pathname;
@@ -49,9 +55,13 @@ export function PublicSEO({
       <meta name="description" content={description} />
       <meta
         name="robots"
-        content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+        content={
+          noindex
+            ? "noindex, nofollow"
+            : "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+        }
       />
-      <meta name="googlebot" content="index, follow" />
+      <meta name="googlebot" content={noindex ? "noindex, nofollow" : "index, follow"} />
       {keywords ? <meta name="keywords" content={keywords} /> : null}
 
       <meta name="author" content="Thiqa" />

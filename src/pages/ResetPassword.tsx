@@ -86,6 +86,7 @@ export default function ResetPassword() {
       <PublicSEO
         title="Thiqa | تعيين كلمة مرور جديدة"
         description="أعد تعيين كلمة المرور لحسابك في Thiqa بأمان."
+        noindex
       />
       <div className="fixed inset-0 lg:hidden -z-10">
         <img src={loginBgMobile} alt="" className="w-full h-full object-cover" />

@@ -149,6 +149,7 @@ export default function VerifyEmail() {
       <PublicSEO
         title="Thiqa | تأكيد البريد الإلكتروني"
         description="أكمل تسجيل حسابك في Thiqa بتأكيد بريدك الإلكتروني."
+        noindex
       />
       <div className="w-full max-w-md animate-scale-in">
         <div className="rounded-3xl border border-white/20 bg-white/70 dark:bg-card/70 backdrop-blur-xl shadow-2xl shadow-black/10 overflow-hidden">
