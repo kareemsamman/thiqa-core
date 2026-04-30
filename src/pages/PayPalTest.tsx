@@ -113,8 +113,13 @@ export default function PayPalTest() {
 
     script.onload = () => {
       log("SDK loaded");
+      // Just flip status to "ready"; the useEffect below will render
+      // the buttons once React has mounted the ref'd container div.
+      // Calling renderButtons() synchronously here doesn't work —
+      // buttonsContainerRef.current is still null because React
+      // hasn't yet swapped from the loading spinner to the buttons
+      // div.
       setStatus({ kind: "ready" });
-      renderButtons();
     };
     script.onerror = () => {
       log("SDK failed to load");
@@ -186,14 +191,27 @@ export default function PayPalTest() {
       });
   };
 
-  // Re-render buttons when amount changes (createOrder closure captures
-  // the current amount value, so we need fresh buttons after each edit).
+  // Render (or re-render) the buttons whenever:
+  //  - status flips to "ready" — first paint after the SDK loads;
+  //    the ref'd container div is now in the DOM.
+  //  - amount changes — createOrder's closure captures the current
+  //    amount, so we need fresh buttons after each edit.
+  //  - currency changes — same reason. (Currency also forces an SDK
+  //    reload via reset(), which flips status back to "loading-sdk"
+  //    and then "ready", so this effect will fire again on the next
+  //    "ready" transition.)
+  // Captured / cancelled also re-render so the user can run a second
+  // payment without reloading.
   useEffect(() => {
-    if (status.kind === "ready" || status.kind === "captured" || status.kind === "cancelled") {
+    if (
+      status.kind === "ready" ||
+      status.kind === "captured" ||
+      status.kind === "cancelled"
+    ) {
       renderButtons();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amount, currency]);
+  }, [amount, status.kind]);
 
   if (authLoading) {
     return (
