@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { PublicSEO } from "@/components/public/PublicSEO";
 import { PLAN_FEATURE_CATALOG } from "@/lib/planFeatureCatalog";
 import { FAQSection } from "@/components/public/FAQSection";
+import { DemoCallTrigger } from "@/components/public/DemoCallDialog";
 
 interface PlanData {
   id: string;
@@ -125,8 +126,9 @@ const SUPPORT_ITEMS = [
     title: "عرض توضيحي",
     desc: "احجز جلسة تعريفية مع ممثلنا",
     icon: MessageSquare,
-    href: "mailto:support@getthiqa.com?subject=طلب%20عرض%20توضيحي",
+    href: "",
     filled: true,
+    demo: true,
   },
   {
     title: "تواصل معنا",
@@ -323,22 +325,31 @@ export default function Pricing() {
                 >
                   {SUPPORT_ITEMS.map((item) => {
                     const Icon = item.icon;
-                    return (
-                      <a
-                        key={item.title}
-                        href={item.href}
-                        className="flex items-center gap-4 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors"
-                      >
+                    const inner = (
+                      <>
                         <div className={cn(
-                          "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg",
+                          "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg pointer-events-none",
                           item.filled ? "bg-black text-white" : "bg-black/[0.05] text-black",
                         )}>
                           <Icon className="w-4 h-4" strokeWidth={2.2} />
                         </div>
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 pointer-events-none">
                           <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
                           <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
                         </div>
+                      </>
+                    );
+                    const cls = "w-full flex items-center gap-4 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors text-right";
+                    if ("demo" in item && item.demo) {
+                      return (
+                        <DemoCallTrigger key={item.title} className={cls}>
+                          {inner}
+                        </DemoCallTrigger>
+                      );
+                    }
+                    return (
+                      <a key={item.title} href={item.href} className={cls}>
+                        {inner}
                       </a>
                     );
                   })}
@@ -519,24 +530,36 @@ export default function Pricing() {
                     <ul className="flex flex-col gap-1">
                       {SUPPORT_ITEMS.map((item) => {
                         const Icon = item.icon;
+                        const inner = (
+                          <>
+                            <div className={cn(
+                              "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg pointer-events-none",
+                              item.filled ? "bg-black text-white" : "bg-black/[0.05] text-black",
+                            )}>
+                              <Icon className="w-4 h-4" strokeWidth={2.2} />
+                            </div>
+                            <div className="flex-1 min-w-0 pointer-events-none">
+                              <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
+                              <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
+                            </div>
+                          </>
+                        );
+                        const cls = "w-full flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors text-right";
                         return (
                           <li key={item.title}>
-                            <a
-                              href={item.href}
-                              onClick={() => setMobileMenuOpen(false)}
-                              className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors"
-                            >
-                              <div className={cn(
-                                "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg",
-                                item.filled ? "bg-black text-white" : "bg-black/[0.05] text-black",
-                              )}>
-                                <Icon className="w-4 h-4" strokeWidth={2.2} />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-[15px] font-bold text-black leading-tight">{item.title}</div>
-                                <div className="text-[13px] text-black/55 mt-0.5 leading-snug">{item.desc}</div>
-                              </div>
-                            </a>
+                            {"demo" in item && item.demo ? (
+                              <DemoCallTrigger className={cls}>
+                                {inner}
+                              </DemoCallTrigger>
+                            ) : (
+                              <a
+                                href={item.href}
+                                onClick={() => setMobileMenuOpen(false)}
+                                className={cls}
+                              >
+                                {inner}
+                              </a>
+                            )}
                           </li>
                         );
                       })}
@@ -829,7 +852,7 @@ export default function Pricing() {
               {
                 title: "الدعم والمساعدة",
                 items: [
-                  { label: "عرض توضيحي", href: "mailto:support@getthiqa.com?subject=طلب%20عرض%20توضيحي" },
+                  { label: "عرض توضيحي", href: "", demo: true as const },
                   { label: "تواصل معنا", href: "/faq#support" },
                 ],
               },
@@ -850,12 +873,18 @@ export default function Pricing() {
                       <ul className="space-y-3">
                         {section.items.map((item) => (
                           <li key={item.label}>
-                            <a
-                              href={item.href}
-                              className="text-[14px] text-black/60 hover:text-black transition-colors"
-                            >
-                              {item.label}
-                            </a>
+                            {"demo" in item && item.demo ? (
+                              <DemoCallTrigger className="text-[14px] text-black/60 hover:text-black transition-colors">
+                                {item.label}
+                              </DemoCallTrigger>
+                            ) : (
+                              <a
+                                href={item.href}
+                                className="text-[14px] text-black/60 hover:text-black transition-colors"
+                              >
+                                {item.label}
+                              </a>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -874,7 +903,13 @@ export default function Pricing() {
                       <ul className="mt-4 space-y-3 text-sm text-black/55 text-right">
                         {section.items.map((item) => (
                           <li key={item.label}>
-                            <a href={item.href} className="hover:text-black/80 transition-colors">{item.label}</a>
+                            {"demo" in item && item.demo ? (
+                              <DemoCallTrigger className="hover:text-black/80 transition-colors">
+                                {item.label}
+                              </DemoCallTrigger>
+                            ) : (
+                              <a href={item.href} className="hover:text-black/80 transition-colors">{item.label}</a>
+                            )}
                           </li>
                         ))}
                       </ul>

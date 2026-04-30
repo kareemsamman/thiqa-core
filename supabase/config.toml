@@ -33,6 +33,9 @@ verify_jwt = false
 [functions.test-sms-credentials]
 verify_jwt = false
 
+[functions.public-demo-request]
+verify_jwt = false
+
 [functions.request-addon-purchase]
 verify_jwt = false
 
