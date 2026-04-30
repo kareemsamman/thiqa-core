@@ -3079,9 +3079,6 @@ function LandingContent() {
                 items: [
                   { label: "عرض توضيحي", href: "", demo: true as const },
                   { label: "تواصل معنا", href: "/faq#support" },
-                  { label: "support@getthiqa.com", href: "mailto:support@getthiqa.com" },
-                  { label: "0525143581", href: "tel:+972525143581" },
-                  { label: "0598 948 155", href: "tel:+972598948155" },
                 ],
               },
               {
@@ -3151,7 +3148,26 @@ function LandingContent() {
             );
           })()}
 
-          <div className="flex items-center gap-3 mt-10 mb-6">
+          {/* Contact strip — email + phones, centered, LTR so the
+              digits/email render in natural order regardless of the
+              page direction. Sits between the link grid and the
+              divider/social row, separated from the socials below by
+              the same dot-capped hairline used elsewhere. */}
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[14px] text-black/65" dir="ltr">
+            <a href="mailto:support@getthiqa.com" className="hover:text-black transition-colors">
+              support@getthiqa.com
+            </a>
+            <span aria-hidden className="h-1 w-1 rounded-full bg-black/20" />
+            <a href="tel:+972525143581" className="hover:text-black transition-colors tabular-nums">
+              0525143581
+            </a>
+            <span aria-hidden className="h-1 w-1 rounded-full bg-black/20" />
+            <a href="tel:+972598948155" className="hover:text-black transition-colors tabular-nums">
+              0598 948 155
+            </a>
+          </div>
+
+          <div className="flex items-center gap-3 mt-6 mb-6">
             <div className="h-1.5 w-1.5 rounded-full bg-black/25" />
             <div className="flex-1 h-px bg-black/[0.08]" />
             <div className="h-1.5 w-1.5 rounded-full bg-black/25" />
