@@ -131,15 +131,15 @@ const FEATURE_UPDATE_GRADIENTS = [
 const featureUpdates = [
   { version: "v1.2", title: "تذكيرات SMS ذكية", date: "5 مارس 2026", image: "https://thiqacrm.b-cdn.net/v1.2-smart-sms-reminders%201.png" },
   { version: "v1.1", title: "توقيع العملاء الرقمي", date: "18 فبراير 2026", image: "https://thiqacrm.b-cdn.net/v1.1-customer-signatures%201.png" },
-  { version: "v1.0", title: "بلاغات الحوادث والمطالبات", date: "1 فبراير 2026", image: "https://thiqacrm.b-cdn.net/v1.0-claims-incidents%201.png" },
+  { version: "v1.0", title: "بلاغات الحوادث والمطالبات", date: "1 فبراير 2026", image: "https://thiqacrm.b-cdn.net/nnnewww/v1.0-claims-incidents%201.png" },
   { version: "v0.9", title: "إدارة السائقين الإضافيين", date: "15 يناير 2026", image: "https://thiqacrm.b-cdn.net/v0.9-additional-drivers%201.png" },
   { version: "v0.8", title: "شيكات متعددة البنوك", date: "28 ديسمبر 2025", image: "https://thiqacrm.b-cdn.net/v0.8-multi-bank-cheques%201.png" },
   { version: "v0.7", title: "سجل نشاطات المستخدمين", date: "10 ديسمبر 2025", image: "https://thiqacrm.b-cdn.net/v0.7-activity-log%201.png" },
   { version: "v0.6", title: "تقارير شركات التأمين", date: "22 نوفمبر 2025", image: "https://thiqacrm.b-cdn.net/v0.6-insurance-reports%201.png" },
-  { version: "v0.5", title: "ترويسات مخصصة للوكيل", date: "5 نوفمبر 2025", image: "https://thiqacrm.b-cdn.net/v0.5-agency-branding%201.png" },
-  { version: "v0.4", title: "حملات SMS تسويقية", date: "18 أكتوبر 2025", image: "https://thiqacrm.b-cdn.net/v0.4-sms-marketing-campaigns%201.png" },
+  { version: "v0.5", title: "ترويسات مخصصة للوكيل", date: "5 نوفمبر 2025", image: "https://thiqacrm.b-cdn.net/nnnewww/v0.5-agency-branding%201.png" },
+  { version: "v0.4", title: "حملات SMS تسويقية", date: "18 أكتوبر 2025", image: "https://thiqacrm.b-cdn.net/nnnewww/v0.4-sms-marketing-campaigns%201.png" },
   { version: "v0.3", title: "إيصالات رقمية وطباعة", date: "1 أكتوبر 2025", image: "https://thiqacrm.b-cdn.net/v0.3-digital-receipts%201.png" },
-  { version: "v0.2", title: "نظام المهام والمتابعات", date: "15 سبتمبر 2025", image: "https://thiqacrm.b-cdn.net/v0.2-tasks-followups%201.png" },
+  { version: "v0.2", title: "نظام المهام والمتابعات", date: "15 سبتمبر 2025", image: "https://thiqacrm.b-cdn.net/nnnewww/v0.2-tasks-followups%201.png" },
   { version: "v0.1", title: "نظام التنبيهات المركزي", date: "1 سبتمبر 2025", image: "https://thiqacrm.b-cdn.net/v0.1-notifications-system%201.png" },
 ];
 
@@ -2126,7 +2126,7 @@ function LandingContent() {
               }}
             >
               <img
-                src="https://thiqacrm.b-cdn.net/solutions-dashboard-overview%201.png"
+                src="https://thiqacrm.b-cdn.net/nnnewww/solutions-dashboard-overview%202.png"
                 alt=""
                 className="relative w-full h-auto block rounded-2xl"
                 loading="lazy"
@@ -2898,8 +2898,8 @@ function LandingContent() {
             {[
               // RTL flex order: index 0 = right, 1 = middle, 2 = left.
               { img: "https://thiqacrm.b-cdn.net/demo-call-3-receipts%201.png", label: "لوحة القيادة", rotate: -10, y: 10 },
-              { img: "https://thiqacrm.b-cdn.net/demo-call-2-dashboard%201.png", label: "التقارير", rotate: 0, y: 0 },
-              { img: "https://thiqacrm.b-cdn.net/demo-call-1-customers%201.png", label: "العملاء", rotate: 10, y: 10 },
+              { img: "https://thiqacrm.b-cdn.net/nnnewww/demo-call-2-dashboard%201.png", label: "التقارير", rotate: 0, y: 0 },
+              { img: "https://thiqacrm.b-cdn.net/nnnewww/demo-call-1-customers%202.png", label: "العملاء", rotate: 10, y: 10 },
             ].map((card, i) => (
               <div
                 key={i}
