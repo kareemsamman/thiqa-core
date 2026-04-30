@@ -2013,20 +2013,40 @@ function LandingContent() {
           }
           .updates-marquee-viewport {
             overflow: hidden;
+            /* Keep paint inside the viewport so iOS Safari doesn't
+               rasterize the full max-content track. */
+            contain: paint;
           }
           .updates-marquee-track {
             display: flex;
             width: max-content;
             gap: 1.25rem;
             animation: updatesMarquee 60s linear infinite;
-            will-change: transform;
+            /* No will-change here. Promoting the whole max-content
+               track to one composite layer made iOS Safari rasterize
+               it once and drop the duplicate half after the first
+               translate cycle — the rail kept moving but the images
+               turned blank on iPhone. We promote each card below
+               instead, so every card is its own painted layer. */
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+          }
+          .updates-marquee-track > * {
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
           }
           @media (min-width: 768px) {
             .updates-marquee-track { gap: 1.5rem; }
           }
-          .updates-marquee-viewport:hover .updates-marquee-track,
-          .updates-marquee-viewport:focus-within .updates-marquee-track {
-            animation-play-state: paused;
+          /* Pause only on real cursor input. iPhones synthesize
+             :hover on tap and the state is sticky until the next tap
+             elsewhere — without this guard, a single tap froze the
+             rail and the user's iPhone 15 Pro Max never resumed. */
+          @media (hover: hover) and (pointer: fine) {
+            .updates-marquee-viewport:hover .updates-marquee-track,
+            .updates-marquee-viewport:focus-within .updates-marquee-track {
+              animation-play-state: paused;
+            }
           }
           @media (prefers-reduced-motion: reduce) {
             .updates-marquee-track { animation: none; }
