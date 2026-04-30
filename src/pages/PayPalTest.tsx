@@ -149,13 +149,17 @@ export default function PayPalTest() {
     setStatus({ kind: "loading-sdk" });
     log("loading PayPal SDK", { clientId: `${clientId.slice(0, 6)}…`, currency });
 
-    // disable-funding=paypal hides the yellow "log in to PayPal"
-    // button and only renders the black "Debit or Credit Card"
-    // path. Matches the Thiqa billing UX — agents pay by card, not
-    // by linking a PayPal account.
+    // We render both PayPal-account and card buttons. Removing the
+    // PayPal button via disable-funding=paypal sounds appealing for
+    // a card-only Thiqa billing UX, but it requires "Advanced Credit
+    // and Debit Card Payments" to be enabled on the sandbox / live
+    // business account — and default sandbox accounts don't have
+    // that. With it disabled and PayPal funding turned off, the SDK
+    // has no valid funding source left and fails to load entirely.
+    // Once Advanced Cards is enabled in production we can revisit.
     const script = document.createElement("script");
     script.id = SDK_SCRIPT_ID;
-    script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId.trim())}&currency=${currency}&intent=capture&components=buttons&disable-funding=paypal`;
+    script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId.trim())}&currency=${currency}&intent=capture&components=buttons`;
     script.async = true;
 
     script.onload = () => {
