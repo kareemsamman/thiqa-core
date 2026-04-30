@@ -3,6 +3,7 @@ import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { useNavigate } from "react-router-dom";
 import {
   ChevronDown, Menu, X, Play, Sparkles, Star, HelpCircle, MessageSquare,
+  Mail, Phone,
 } from "lucide-react";
 import { useLandingContent, ct } from "@/hooks/useLandingContent";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
@@ -23,8 +24,8 @@ import { PublicFooter } from "@/components/public/PublicFooter";
 // separate task — same pattern FAQ.tsx already uses).
 
 const INFO_CENTER_ITEMS = [
-  { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "/landing#demo" },
-  { title: "الميزات", desc: "كل ما يقدّمه Thiqa للوكلاء", icon: Sparkles, href: "/landing#features" },
+  { title: "كل الأدوات", desc: "إدارة الوكالة تحت سقف واحد", icon: Play, href: "/landing#demo" },
+  { title: "لماذا ثقة", desc: "ثلاثة محاور تقلب طريقة عمل الوكالة", icon: Sparkles, href: "/landing#features" },
   { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "/landing#testimonials" },
   { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/faq" },
 ];
@@ -468,14 +469,75 @@ export default function ContactUs() {
       </section>
 
       {/* ═══ Form card — sits where the gradient fades to white, so
-          the card lands cleanly on the lighter portion of the band. */}
+          the card lands cleanly on the lighter portion of the band.
+          Below it: a compact contact strip mirroring the channels in
+          the footer (email + two phones) so the page itself answers
+          "how else can I reach you?" without scrolling all the way
+          down. */}
       <section className="relative z-10 pb-24 md:pb-32 px-4 md:px-6">
         <div className="max-w-3xl mx-auto">
           <SupportContactForm />
+
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <ContactPill
+              icon={Mail}
+              label="راسلنا على البريد"
+              value="support@getthiqa.com"
+              href="mailto:support@getthiqa.com"
+              dir="ltr"
+            />
+            <ContactPill
+              icon={Phone}
+              label="اتصل بنا"
+              value="0525143581"
+              href="tel:+972525143581"
+              dir="ltr"
+            />
+            <ContactPill
+              icon={Phone}
+              label="أو على"
+              value="0598 948 155"
+              href="tel:+972598948155"
+              dir="ltr"
+            />
+          </div>
         </div>
       </section>
 
       <PublicFooter />
     </div>
+  );
+}
+
+// Contact channel pill rendered under the form. Circular icon on the
+// right (RTL start), label + value on the left. The label is the
+// soft cue ("راسلنا على البريد") and the value is the actual contact
+// detail rendered in LTR so digits/email don't get mirrored.
+function ContactPill({
+  icon: Icon,
+  label,
+  value,
+  href,
+  dir,
+}: {
+  icon: typeof Mail;
+  label: string;
+  value: string;
+  href: string;
+  dir?: "ltr" | "rtl";
+}) {
+  return (
+    <a
+      href={href}
+      className="flex items-center gap-3 rounded-2xl bg-white border border-black/[0.06] px-4 py-3 hover:border-black/20 transition-colors text-right"
+    >
+      <span className="flex-shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-full bg-black/[0.05] text-black">
+        <Icon className="h-4 w-4" strokeWidth={2.2} />
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-[12px] text-black/55 leading-tight mb-0.5">{label}</span>
+        <span className="block text-[14px] font-bold text-black truncate" dir={dir}>{value}</span>
+      </span>
+    </a>
   );
 }

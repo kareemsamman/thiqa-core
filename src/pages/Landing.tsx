@@ -882,8 +882,8 @@ function LandingContent() {
                       tied to the page motion. */}
                   <div className="flex-1 flex flex-col">
                     {[
-                      { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "#demo" },
-                      { title: "الميزات", desc: "كل ما يقدّمه Thiqa للوكلاء", icon: Sparkles, href: "#features" },
+                      { title: "كل الأدوات", desc: "إدارة الوكالة تحت سقف واحد", icon: Play, href: "#demo" },
+                      { title: "لماذا ثقة", desc: "ثلاثة محاور تقلب طريقة عمل الوكالة", icon: Sparkles, href: "#features" },
                       { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "#testimonials" },
                       { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/faq" },
                     ].map((item) => {
@@ -1168,8 +1168,8 @@ function LandingContent() {
                   <div className="overflow-hidden">
                     <ul className="flex flex-col gap-1">
                       {[
-                        { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "#demo" },
-                        { title: "الميزات", desc: "كل ما يقدّمه Thiqa للوكلاء", icon: Sparkles, href: "#features" },
+                        { title: "كل الأدوات", desc: "إدارة الوكالة تحت سقف واحد", icon: Play, href: "#demo" },
+                        { title: "لماذا ثقة", desc: "ثلاثة محاور تقلب طريقة عمل الوكالة", icon: Sparkles, href: "#features" },
                         { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "#testimonials" },
                         { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/faq" },
                       ].map((item) => {

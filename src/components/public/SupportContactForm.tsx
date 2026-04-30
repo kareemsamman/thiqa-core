@@ -3,7 +3,6 @@ import { Loader2, CheckCircle2, AlertCircle, Mail, Clock, ArrowLeft } from "luci
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { FAQ_CATEGORIES } from "@/lib/faqContent";
-import { RichTextEditor } from "./RichTextEditor";
 
 // Per-field validation. Lives client-side AND server-side; the server
 // is authoritative, the client just gives instant feedback.
@@ -26,7 +25,6 @@ export function SupportContactForm({ className }: SupportContactFormProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [category, setCategory] = useState("");
-  const [bodyHtml, setBodyHtml] = useState("");
   const [bodyText, setBodyText] = useState("");
   // Honeypot — bots tend to autofill every field. Real users never
   // see this input (visually hidden + tabindex=-1) so a non-empty
@@ -80,7 +78,6 @@ export function SupportContactForm({ className }: SupportContactFormProps) {
           email: email.trim(),
           category,
           body: bodyText.trim(),
-          body_html: bodyHtml,
           honeypot,
         },
       });
@@ -93,7 +90,6 @@ export function SupportContactForm({ className }: SupportContactFormProps) {
       setName("");
       setEmail("");
       setCategory("");
-      setBodyHtml("");
       setBodyText("");
     } catch (err) {
       const code = err instanceof Error ? err.message : String(err);
@@ -197,15 +193,24 @@ export function SupportContactForm({ className }: SupportContactFormProps) {
     );
   }
 
+  // Strain-style card: rounded-3xl + soft border + drop shadow. Two
+  // columns for name+email on desktop, stacked on mobile. Pill inputs
+  // sit on a faint grey track so the white card stays the visual
+  // surface and the fields read as inset chips rather than competing
+  // outlined controls. Body is a plain textarea — no rich-text editor.
   return (
     <form
       id="support"
       onSubmit={handleSubmit}
-      className={cn("max-w-2xl mx-auto", className)}
+      className={cn(
+        "relative max-w-2xl mx-auto bg-white border border-black/[0.06] rounded-[28px]",
+        "shadow-[0_30px_80px_-30px_rgba(15,40,120,0.18)]",
+        "px-6 md:px-10 py-8 md:py-10",
+        className,
+      )}
       noValidate
     >
-      {/* Honeypot — visually hidden but technically present in the
-          DOM so naïve form-fillers/bots populate it. */}
+      {/* Honeypot — visually hidden but in the DOM. */}
       <div
         style={{ position: "absolute", left: "-9999px", top: "-9999px" }}
         aria-hidden="true"
@@ -222,89 +227,70 @@ export function SupportContactForm({ className }: SupportContactFormProps) {
         </label>
       </div>
 
-      <div className="text-center mb-8">
-        <p className="text-sm text-black/55 mb-3 tracking-wide">تواصل معنا</p>
-        <h2 className="text-2xl md:text-3xl font-bold text-black mb-2">لم تجد إجابتك؟ راسلنا مباشرة</h2>
-        <p className="text-[14px] md:text-[15px] text-black/55 leading-relaxed max-w-md mx-auto">
-          سنرد على بريدك الإلكتروني في أقرب وقت ممكن. كل التذاكر تدخل نظام الدعم لدينا ونتابعها يدوياً.
+      <div className="mb-7 text-right">
+        <h2 className="text-[24px] md:text-[28px] font-bold text-black leading-tight mb-1.5">
+          إرسال طلب
+        </h2>
+        <p className="text-[13.5px] md:text-[14px] text-black/55 leading-relaxed">
+          أرسل لنا رسالة وسنرد عليك في أقرب وقت ممكن.
         </p>
       </div>
 
-      <div className="space-y-5">
-        {/* Name */}
-        <div>
-          <label htmlFor="support-name" className="block text-[13px] font-semibold text-black mb-1.5">
-            الاسم الكامل <span className="text-red-500">*</span>
-          </label>
-          <input
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FieldShell
             id="support-name"
-            type="text"
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              if (errors.name) validateField("name");
-            }}
-            onBlur={() => validateField("name")}
-            placeholder="مثال: أحمد محمد"
-            autoComplete="name"
-            disabled={submitting}
-            aria-invalid={!!errors.name || undefined}
-            aria-describedby={errors.name ? "support-name-error" : undefined}
-            className={cn(
-              "w-full h-12 px-4 rounded-xl text-[15px] text-black bg-white border transition-colors outline-none placeholder:text-black/30",
-              errors.name
-                ? "border-red-300 focus:border-red-400"
-                : "border-black/15 focus:border-black/40",
-            )}
-          />
-          {errors.name && (
-            <p id="support-name-error" className="mt-1.5 text-[12px] text-red-600 flex items-center gap-1">
-              <AlertCircle className="h-3.5 w-3.5" />
-              {errors.name}
-            </p>
-          )}
-        </div>
+            label="الاسم الكامل"
+            error={errors.name}
+          >
+            <input
+              id="support-name"
+              type="text"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (errors.name) validateField("name");
+              }}
+              onBlur={() => validateField("name")}
+              placeholder="الاسم الكامل"
+              autoComplete="name"
+              disabled={submitting}
+              aria-invalid={!!errors.name || undefined}
+              aria-describedby={errors.name ? "support-name-error" : undefined}
+              className={pillInputClass(!!errors.name)}
+            />
+          </FieldShell>
 
-        {/* Email */}
-        <div>
-          <label htmlFor="support-email" className="block text-[13px] font-semibold text-black mb-1.5">
-            البريد الإلكتروني <span className="text-red-500">*</span>
-          </label>
-          <input
+          <FieldShell
             id="support-email"
-            type="email"
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              if (errors.email) validateField("email");
-            }}
-            onBlur={() => validateField("email")}
-            placeholder="example@email.com"
-            autoComplete="email"
-            disabled={submitting}
-            dir="ltr"
-            aria-invalid={!!errors.email || undefined}
-            aria-describedby={errors.email ? "support-email-error" : undefined}
-            className={cn(
-              "w-full h-12 px-4 rounded-xl text-[15px] text-black bg-white border transition-colors outline-none placeholder:text-black/30 text-right",
-              errors.email
-                ? "border-red-300 focus:border-red-400"
-                : "border-black/15 focus:border-black/40",
-            )}
-          />
-          {errors.email && (
-            <p id="support-email-error" className="mt-1.5 text-[12px] text-red-600 flex items-center gap-1">
-              <AlertCircle className="h-3.5 w-3.5" />
-              {errors.email}
-            </p>
-          )}
+            label="البريد الإلكتروني"
+            error={errors.email}
+          >
+            <input
+              id="support-email"
+              type="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (errors.email) validateField("email");
+              }}
+              onBlur={() => validateField("email")}
+              placeholder="email@example.com"
+              autoComplete="email"
+              disabled={submitting}
+              dir="ltr"
+              aria-invalid={!!errors.email || undefined}
+              aria-describedby={errors.email ? "support-email-error" : undefined}
+              className={cn(pillInputClass(!!errors.email), "text-left")}
+            />
+          </FieldShell>
         </div>
 
-        {/* Category */}
-        <div>
-          <label htmlFor="support-category" className="block text-[13px] font-semibold text-black mb-1.5">
-            فئة الطلب <span className="text-red-500">*</span>
-          </label>
+        <FieldShell
+          id="support-category"
+          label="فئة الطلب"
+          error={errors.category}
+        >
           <select
             id="support-category"
             value={category}
@@ -316,12 +302,7 @@ export function SupportContactForm({ className }: SupportContactFormProps) {
             disabled={submitting}
             aria-invalid={!!errors.category || undefined}
             aria-describedby={errors.category ? "support-category-error" : undefined}
-            className={cn(
-              "w-full h-12 px-4 rounded-xl text-[15px] text-black bg-white border transition-colors outline-none",
-              errors.category
-                ? "border-red-300 focus:border-red-400"
-                : "border-black/15 focus:border-black/40",
-            )}
+            className={pillInputClass(!!errors.category)}
           >
             <option value="" disabled>اختر فئة الطلب…</option>
             {FAQ_CATEGORIES.map((cat) => (
@@ -329,47 +310,42 @@ export function SupportContactForm({ className }: SupportContactFormProps) {
             ))}
             <option value="أخرى">أخرى</option>
           </select>
-          {errors.category && (
-            <p id="support-category-error" className="mt-1.5 text-[12px] text-red-600 flex items-center gap-1">
-              <AlertCircle className="h-3.5 w-3.5" />
-              {errors.category}
-            </p>
-          )}
-        </div>
+        </FieldShell>
 
-        {/* Body — visual editor */}
-        <div>
-          <label className="block text-[13px] font-semibold text-black mb-1.5">
-            تفاصيل الطلب <span className="text-red-500">*</span>
-          </label>
-          <RichTextEditor
-            value={bodyHtml}
-            onChange={(html, text) => {
-              setBodyHtml(html);
-              setBodyText(text);
+        <FieldShell
+          id="support-body"
+          label="تفاصيل الطلب"
+          error={errors.body}
+        >
+          <textarea
+            id="support-body"
+            value={bodyText}
+            onChange={(e) => {
+              setBodyText(e.target.value);
               if (errors.body) validateField("body");
             }}
-            placeholder="اشرح طلبك بالتفصيل…"
-            invalid={!!errors.body}
-            ariaLabel="تفاصيل طلب الدعم"
+            onBlur={() => validateField("body")}
+            placeholder="اكتب رسالتك..."
+            disabled={submitting}
+            rows={5}
+            aria-invalid={!!errors.body || undefined}
+            aria-describedby={errors.body ? "support-body-error" : undefined}
+            className={cn(
+              "w-full px-5 py-4 rounded-2xl text-[15px] text-black bg-black/[0.04] border outline-none transition-colors placeholder:text-black/35 resize-y min-h-[120px]",
+              errors.body
+                ? "border-rose-300 focus:bg-white focus:border-rose-400"
+                : "border-transparent focus:bg-white focus:border-black/20",
+            )}
           />
-          {errors.body && (
-            <p className="mt-1.5 text-[12px] text-red-600 flex items-center gap-1">
-              <AlertCircle className="h-3.5 w-3.5" />
-              {errors.body}
-            </p>
-          )}
-        </div>
+        </FieldShell>
 
-        {/* Submit error banner */}
         {submitError && (
-          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-[13.5px] text-red-700 flex items-start gap-2">
+          <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-[13.5px] text-rose-700 flex items-start gap-2">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>{submitError}</span>
           </div>
         )}
 
-        {/* Submit */}
         <div className="pt-2">
           <button
             type="submit"
@@ -382,7 +358,7 @@ export function SupportContactForm({ className }: SupportContactFormProps) {
                 جاري الإرسال…
               </>
             ) : (
-              "إرسال الطلب"
+              "إرسال"
             )}
           </button>
           <p className="mt-3 text-[12px] text-black/45 text-center leading-relaxed">
@@ -391,6 +367,50 @@ export function SupportContactForm({ className }: SupportContactFormProps) {
         </div>
       </div>
     </form>
+  );
+}
+
+// Pill input track — soft grey at rest, white on focus, rose tint on
+// error. Shared by the input + select so they read as one family.
+function pillInputClass(invalid: boolean): string {
+  return cn(
+    "w-full h-12 px-5 rounded-full text-[15px] text-black bg-black/[0.04] border outline-none transition-colors placeholder:text-black/35 text-right",
+    invalid
+      ? "border-rose-300 focus:bg-white focus:border-rose-400"
+      : "border-transparent focus:bg-white focus:border-black/20",
+  );
+}
+
+// Label-above-input shell with inline error message under the field.
+// Pulled into its own component so the four fields don't re-implement
+// the same label/aria/error wiring four times.
+function FieldShell({
+  id,
+  label,
+  error,
+  children,
+}: {
+  id: string;
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label
+        htmlFor={id}
+        className="block text-[13px] font-semibold text-black/80 mb-2 text-right"
+      >
+        {label}
+      </label>
+      {children}
+      {error && (
+        <p id={`${id}-error`} className="mt-1.5 text-[12px] text-rose-600 flex items-center gap-1 text-right">
+          <AlertCircle className="h-3.5 w-3.5" />
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
