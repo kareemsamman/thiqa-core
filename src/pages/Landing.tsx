@@ -3001,14 +3001,6 @@ function LandingContent() {
                   draggable={false}
                   loading="lazy"
                 />
-                {/* Label pill — small beige chip on the card corner. */}
-                <div
-                  className="absolute -top-3 right-3 flex items-center gap-2 bg-[#E8E0D0] text-black/70 text-[11px] font-semibold rounded-full px-3 py-1 shadow-sm"
-                  style={{ transform: `rotate(${-card.rotate}deg)` }}
-                >
-                  <span className="h-4 w-4 rounded-full bg-black/15 flex-shrink-0" />
-                  {card.label}
-                </div>
               </div>
             ))}
           </div>
