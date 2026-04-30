@@ -18,9 +18,11 @@ import { NoIndex } from "@/components/seo/NoIndex";
 // createOrder + onApprove response so you can verify the integration
 // shape before wiring it into real billing.
 //
-// We deliberately do NOT persist the Client ID anywhere — it lives
-// in component state only. Refresh the page and you start over. This
-// is a debug tool, not configuration.
+// Client ID + currency + amount are cached in localStorage so a
+// reload (or hopping between tabs while dev-server HMR remounts)
+// doesn't wipe what you typed. Client ID is *not* sensitive — it
+// ships in the SDK URL the browser fetches anyway. Secrets are
+// never entered here.
 
 declare global {
   interface Window {
@@ -52,6 +54,28 @@ interface PayPalButtonsConfig {
 
 const SDK_SCRIPT_ID = "paypal-sdk-test";
 
+// localStorage keys — kept narrow so we don't collide with anything.
+const LS_CLIENT_ID = "paypal_test_client_id";
+const LS_CURRENCY = "paypal_test_currency";
+const LS_AMOUNT = "paypal_test_amount";
+
+function readLocal(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    // Private-mode Safari can throw on getItem; fall back gracefully.
+    return fallback;
+  }
+}
+
+function writeLocal(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore — quota / private mode
+  }
+}
+
 const CURRENCY_OPTIONS = [
   { code: "USD", label: "USD — US Dollar" },
   { code: "EUR", label: "EUR — Euro" },
@@ -71,9 +95,15 @@ type Status =
 export default function PayPalTest() {
   const { user, isSuperAdmin, loading: authLoading } = useAuth();
 
-  const [clientId, setClientId] = useState("");
-  const [currency, setCurrency] = useState("USD");
-  const [amount, setAmount] = useState("1.00");
+  const [clientId, setClientId] = useState(() => readLocal(LS_CLIENT_ID, ""));
+  const [currency, setCurrency] = useState(() => readLocal(LS_CURRENCY, "USD"));
+  const [amount, setAmount] = useState(() => readLocal(LS_AMOUNT, "1.00"));
+
+  // Persist config changes — debounced via React's batching since each
+  // setState above already triggers a render.
+  useEffect(() => writeLocal(LS_CLIENT_ID, clientId), [clientId]);
+  useEffect(() => writeLocal(LS_CURRENCY, currency), [currency]);
+  useEffect(() => writeLocal(LS_AMOUNT, amount), [amount]);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [eventLog, setEventLog] = useState<Array<{ ts: string; event: string; payload?: unknown }>>([]);
   const buttonsContainerRef = useRef<HTMLDivElement | null>(null);
