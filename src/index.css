@@ -344,6 +344,17 @@ html {
     .faq-item-enter { animation: none; }
   }
 
+  /* Pricing-card entrance — each plan column fades + lifts in sequence
+     (animationDelay set per card inline). Same slideUp keyframe the
+     FAQ uses, just tuned a touch slower so the four-column reveal
+     reads as a coordinated cascade rather than a blur of pops. */
+  .pricing-card-enter {
+    animation: slideUp 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pricing-card-enter { animation: none; }
+  }
+
   /* Purple hero gradient drop — used on Pricing/FAQ/ContactUs, where
      the band sits behind the navbar + hero. Slides in from above so
      the page doesn't pop in flat. */

@@ -643,7 +643,7 @@ export default function Pricing() {
               <div
                 key={plan.id}
                 className={cn(
-                  "relative flex flex-col",
+                  "relative flex flex-col pricing-card-enter",
                   // Vertical hairlines BETWEEN cards on lg (RTL: card 1
                   // is rightmost, so border-r on cards 2+ creates the
                   // shared dividers without doubling the outer frame).
@@ -653,6 +653,7 @@ export default function Pricing() {
                   // side-by-side.
                   !isFirst && "border-t lg:border-t-0 border-black/15",
                 )}
+                style={{ animationDelay: `${200 + idx * 120}ms` }}
               >
                 {isPopular && (
                   <div className="absolute -top-3 right-6 inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold rounded-full bg-[#7C5CFF] text-white whitespace-nowrap z-10">
