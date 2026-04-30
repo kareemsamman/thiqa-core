@@ -109,6 +109,7 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const TermsOfUse = lazy(() => import("./pages/TermsOfUse"));
+const IconChecklist = lazy(() => import("./pages/IconChecklist"));
 
 // Prefetch every route chunk in the background after the app mounts,
 // so clicking a sidebar link never waits on a network download. We schedule
@@ -184,6 +185,7 @@ const ROUTE_PREFETCHERS: Array<() => Promise<unknown>> = [
   () => import("./pages/ContactUs"),
   () => import("./pages/ResetPassword"),
   () => import("./pages/ForgotPassword"),
+  () => import("./pages/IconChecklist"),
   () => import("./pages/Privacy"),
   () => import("./pages/TermsOfUse"),
 ];
