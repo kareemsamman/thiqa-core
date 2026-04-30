@@ -355,20 +355,20 @@ html {
     .pricing-card-enter { animation: none; }
   }
 
-  /* Atmospheric public-page background — "curtain reveal" entrance.
-     clip-path draws the layer in from the top down; the bottom stays
-     clipped until that point of the animation is reached, so the
-     gradient appears to unfold rather than slide. Combined with the
-     mask (which fades the bottom anyway), the lower half never
-     visually moves — only the upper portion paints in. The element
-     keeps its persistent scale(1.15) for the blur bleed. */
+  /* Atmospheric public-page background — soft "settle in" entrance.
+     Starts slightly zoomed past the baseline (scale 1.25) and fades
+     in while easing back to the persistent scale(1.15). No edges
+     slide across the viewport, no clip line travels through it —
+     the layer just blooms into place. 1300ms with a long ease-out
+     curve gives it a calm, ambient feel rather than an obvious
+     transition. */
   .public-gradient-bg {
     transform: scale(1.15);
-    animation: publicGradientReveal 1100ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: publicGradientSettle 1300ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
-  @keyframes publicGradientReveal {
-    from { clip-path: inset(0 0 100% 0); opacity: 0; }
-    to   { clip-path: inset(0 0 0 0);    opacity: 1; }
+  @keyframes publicGradientSettle {
+    from { transform: scale(1.25); opacity: 0; }
+    to   { transform: scale(1.15); opacity: 1; }
   }
   @media (prefers-reduced-motion: reduce) {
     .public-gradient-bg { animation: none; }
