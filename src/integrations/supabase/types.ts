@@ -6253,6 +6253,7 @@ export type Database = {
           closed_at: string | null
           contact_email: string | null
           contact_name: string | null
+          contact_phone: string | null
           created_at: string
           created_by_user_id: string | null
           id: string
@@ -6269,6 +6270,7 @@ export type Database = {
           closed_at?: string | null
           contact_email?: string | null
           contact_name?: string | null
+          contact_phone?: string | null
           created_at?: string
           created_by_user_id?: string | null
           id?: string
@@ -6285,6 +6287,7 @@ export type Database = {
           closed_at?: string | null
           contact_email?: string | null
           contact_name?: string | null
+          contact_phone?: string | null
           created_at?: string
           created_by_user_id?: string | null
           id?: string
