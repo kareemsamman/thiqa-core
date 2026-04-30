@@ -3192,6 +3192,7 @@ export type Database = {
       }
       import_progress: {
         Row: {
+          agent_id: string | null
           created_at: string
           error_log: Json | null
           estimated_finish_at: string | null
@@ -3207,6 +3208,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agent_id?: string | null
           created_at?: string
           error_log?: Json | null
           estimated_finish_at?: string | null
@@ -3222,6 +3224,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agent_id?: string | null
           created_at?: string
           error_log?: Json | null
           estimated_finish_at?: string | null
