@@ -34,7 +34,7 @@ export default function IconChecklist() {
       const apple = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
       try {
         const size = apple?.href ? await imageSize(apple.href) : null;
-        const ok = Boolean(apple?.href && apple.sizes?.value === "180x180" && size?.width === 180 && size.height === 180);
+        const ok = Boolean(apple?.href && apple.sizes?.value === "180x180" && size?.width === 180 && size?.height === 180);
         next.push({
           label: "apple-touch-icon",
           detail: ok ? `${apple?.getAttribute("href")} — ${size?.width}×${size?.height}` : "يجب أن يكون PNG بحجم 180×180",
@@ -53,7 +53,7 @@ export default function IconChecklist() {
           const src = icon?.src ? new URL(icon.src, window.location.origin).toString() : "";
           const size = src ? await imageSize(src) : null;
           const px = Number(wanted.split("x")[0]);
-          const ok = Boolean(icon && size?.width === px && size.height === px);
+          const ok = Boolean(icon && size?.width === px && size?.height === px);
           next.push({
             label: `manifest ${wanted}`,
             detail: ok ? `${icon.src} — ${size?.width}×${size?.height}` : `يجب أن يحتوي manifest على PNG ${wanted}`,
