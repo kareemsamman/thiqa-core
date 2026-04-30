@@ -129,8 +129,6 @@ const FEATURE_UPDATE_GRADIENTS = [
 ];
 
 const featureUpdates = [
-  { version: "v1.4", title: "إصدار معاملات بخطوة واحدة", date: "8 أبريل 2026" },
-  { version: "v1.3", title: "بوابات دفع متعددة", date: "22 مارس 2026" },
   { version: "v1.2", title: "تذكيرات SMS ذكية", date: "5 مارس 2026", image: "https://thiqacrm.b-cdn.net/v1.2-smart-sms-reminders%201.png" },
   { version: "v1.1", title: "توقيع العملاء الرقمي", date: "18 فبراير 2026", image: "https://thiqacrm.b-cdn.net/v1.1-customer-signatures%201.png" },
   { version: "v1.0", title: "بلاغات الحوادث والمطالبات", date: "1 فبراير 2026", image: "https://thiqacrm.b-cdn.net/v1.0-claims-incidents%201.png" },
