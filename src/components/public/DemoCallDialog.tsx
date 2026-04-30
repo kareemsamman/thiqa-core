@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Check, X, ChevronLeft, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, Check, X, ChevronRight, AlertCircle, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +24,7 @@ interface DemoCallDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const PHONE_RE = /^[+\d][\d\s().-]{5,24}$/;
+const PHONE_RE = /^\d{10}$/;
 const THIQA_LOGO_BLACK = "https://thiqacrm.b-cdn.net/small_black.png";
 
 // Three mockups that peek above the card. Same images as the
@@ -44,7 +44,7 @@ const BENEFITS = [
 ];
 
 const ERROR_LABELS: Record<string, string> = {
-  invalid_phone: "رقم الهاتف غير صالح. اكتب الرقم بدون أحرف.",
+  invalid_phone: "رقم الهاتف يجب أن يكون 10 أرقام.",
   rate_limited: "تم استلام طلبات كثيرة من جهازك. حاول بعد قليل.",
   ticket_create_failed: "حدث خطأ مؤقت — حاول مرة أخرى.",
 };
@@ -133,10 +133,10 @@ export function DemoCallDialog({ open, onOpenChange }: DemoCallDialogProps) {
             <SuccessCard ticketNumber={status.ticketNumber} onClose={() => onOpenChange(false)} />
           ) : (
             <div className="relative">
-              {/* Peek mockups above the card. Negative bottom margin
-                  pulls the card up to overlap them, matching the
-                  demo-call section pattern. */}
-              <div className="relative h-28 md:h-32 flex items-end justify-center gap-2 mb-[-44px] md:mb-[-56px] pointer-events-none">
+              {/* Peek mockups above the card. They sit just above the
+                  card with a small gap so the close button stays
+                  visible (no overlap into the card's top edge). */}
+              <div className="relative h-28 md:h-32 flex items-end justify-center gap-2 mb-3 pointer-events-none">
                 {PEEK_CARDS.map((card, i) => (
                   <div
                     key={i}
@@ -152,7 +152,7 @@ export function DemoCallDialog({ open, onOpenChange }: DemoCallDialogProps) {
               </div>
 
               {/* Main card */}
-              <div className="relative bg-white rounded-[28px] shadow-2xl shadow-black/30 px-6 pt-14 pb-7 md:px-8 md:pt-16 md:pb-8">
+              <div className="relative bg-white rounded-[28px] shadow-2xl shadow-black/30 px-6 pt-12 pb-7 md:px-8 md:pt-14 md:pb-8">
                 <DialogPrimitive.Close
                   className="absolute top-4 left-4 h-8 w-8 rounded-full flex items-center justify-center text-black/55 hover:text-black hover:bg-black/[0.05] transition-colors"
                   aria-label="إغلاق"
@@ -163,7 +163,7 @@ export function DemoCallDialog({ open, onOpenChange }: DemoCallDialogProps) {
                 <img
                   src={THIQA_LOGO_BLACK}
                   alt="Thiqa"
-                  className="h-7 mx-auto mb-6 select-none"
+                  className="h-12 mx-auto mb-6 select-none"
                   draggable={false}
                 />
 
@@ -194,15 +194,15 @@ export function DemoCallDialog({ open, onOpenChange }: DemoCallDialogProps) {
 
                   {/* Phone row: chevron submit on the LEFT (visual end
                       in RTL — feels like "send" / "next"); input fills
-                      the rest. */}
+                      the rest. Phone is digits-only, exactly 10 chars. */}
                   <div className="flex items-stretch gap-2">
                     <button
                       type="submit"
-                      disabled={submitting || !phone.trim()}
+                      disabled={submitting || phone.length !== 10}
                       aria-label="إرسال"
                       className={cn(
                         "shrink-0 h-12 w-12 rounded-full flex items-center justify-center transition-all",
-                        submitting || !phone.trim()
+                        submitting || phone.length !== 10
                           ? "bg-black/[0.05] text-black/30 cursor-not-allowed"
                           : "bg-black text-white hover:bg-black/85 shadow-md",
                       )}
@@ -210,16 +210,18 @@ export function DemoCallDialog({ open, onOpenChange }: DemoCallDialogProps) {
                       {submitting ? (
                         <Loader2 className="h-5 w-5 animate-spin" />
                       ) : (
-                        <ChevronLeft className="h-5 w-5" strokeWidth={2.5} />
+                        <ChevronRight className="h-5 w-5" strokeWidth={2.5} />
                       )}
                     </button>
                     <Input
                       type="tel"
-                      inputMode="tel"
+                      inputMode="numeric"
+                      pattern="\d{10}"
+                      maxLength={10}
                       dir="ltr"
-                      placeholder="05X-XXX-XXXX"
+                      placeholder="05XXXXXXXX"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                       required
                       className="flex-1 h-12 rounded-full bg-black/[0.04] border-0 text-left px-5 text-base placeholder:text-black/35 focus-visible:ring-2 focus-visible:ring-black/15"
                     />
