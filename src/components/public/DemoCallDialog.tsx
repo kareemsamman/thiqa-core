@@ -196,38 +196,63 @@ export function DemoCallDialog({ open, onOpenChange }: DemoCallDialogProps) {
 
                   {/* Phone row: chevron submit on the LEFT (visual end
                       in RTL — feels like "send" / "next"); input fills
-                      the rest. Phone is digits-only, exactly 10 chars. */}
-                  <div className="flex items-stretch gap-2">
-                    <button
-                      type="submit"
-                      disabled={submitting || !PHONE_RE.test(phone)}
-                      aria-label="إرسال"
-                      className={cn(
-                        "shrink-0 h-12 w-12 rounded-full flex items-center justify-center transition-all",
-                        submitting || !PHONE_RE.test(phone)
-                          ? "bg-black/[0.05] text-black/30 cursor-not-allowed"
-                          : "bg-black text-white hover:bg-black/85 shadow-md",
-                      )}
-                    >
-                      {submitting ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      ) : (
-                        <ChevronRight className="h-5 w-5" strokeWidth={2.5} />
-                      )}
-                    </button>
-                    <Input
-                      type="tel"
-                      inputMode="numeric"
-                      pattern="05\d{8}"
-                      maxLength={10}
-                      dir="ltr"
-                      placeholder="05XXXXXXXX"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      required
-                      className="flex-1 h-12 rounded-full bg-black/[0.04] border-0 text-left px-5 text-base placeholder:text-black/35 focus-visible:ring-2 focus-visible:ring-black/15"
-                    />
-                  </div>
+                      the rest. Phone is digits-only, exactly 10 chars
+                      starting with 05. We surface the validation
+                      reason below the input as soon as the user has
+                      typed something that doesn't match — silent
+                      while empty so the field doesn't shout at first
+                      paint. */}
+                  {(() => {
+                    const isInvalid = phone.length > 0 && !PHONE_RE.test(phone);
+                    return (
+                      <>
+                        <div className="flex items-stretch gap-2">
+                          <button
+                            type="submit"
+                            disabled={submitting || !PHONE_RE.test(phone)}
+                            aria-label="إرسال"
+                            className={cn(
+                              "shrink-0 h-12 w-12 rounded-full flex items-center justify-center transition-all",
+                              submitting || !PHONE_RE.test(phone)
+                                ? "bg-black/[0.05] text-black/30 cursor-not-allowed"
+                                : "bg-black text-white hover:bg-black/85 shadow-md",
+                            )}
+                          >
+                            {submitting ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                              <ChevronRight className="h-5 w-5" strokeWidth={2.5} />
+                            )}
+                          </button>
+                          <Input
+                            type="tel"
+                            inputMode="numeric"
+                            pattern="05\d{8}"
+                            maxLength={10}
+                            dir="ltr"
+                            placeholder="05XXXXXXXX"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                            required
+                            aria-invalid={isInvalid}
+                            aria-describedby={isInvalid ? "demo-phone-error" : undefined}
+                            className={cn(
+                              "flex-1 h-12 rounded-full text-left px-5 text-base placeholder:text-black/35 focus-visible:ring-2",
+                              isInvalid
+                                ? "bg-rose-500/[0.06] border border-rose-500/40 focus-visible:ring-rose-500/25"
+                                : "bg-black/[0.04] border-0 focus-visible:ring-black/15",
+                            )}
+                          />
+                        </div>
+
+                        {isInvalid && (
+                          <p id="demo-phone-error" className="mt-2 text-[13px] text-rose-600 text-right" dir="rtl">
+                            {ERROR_LABELS.invalid_phone}
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
 
                   {status.kind === "error" && (
                     <div className="flex items-start gap-2 mt-3 p-3 rounded-lg border border-rose-500/30 bg-rose-500/5 text-sm">

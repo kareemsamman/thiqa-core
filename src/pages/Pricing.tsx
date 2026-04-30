@@ -412,7 +412,7 @@ export default function Pricing() {
           aria-label="قائمة التنقل"
           className={cn(
             "absolute top-0 inset-x-0 bg-white shadow-2xl rounded-b-3xl",
-            "flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "flex flex-col transition-transform duration-[450ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
             "max-h-[90vh]",
             mobileMenuOpen ? "translate-y-0" : "-translate-y-full",
           )}
