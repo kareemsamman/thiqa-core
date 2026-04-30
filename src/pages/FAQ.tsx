@@ -3,7 +3,7 @@ import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { DemoCallTrigger } from "@/components/public/DemoCallDialog";
 import { useNavigate } from "react-router-dom";
 import {
-  ChevronDown, ChevronUp, Menu, X, Search, Play, Sparkles, Star,
+  ChevronDown, ChevronUp, Menu, X, Search, Play, Sparkles, Star, CheckCircle,
   HelpCircle, MessageSquare,
 } from "lucide-react";
 import { useLandingContent, ct } from "@/hooks/useLandingContent";
@@ -16,6 +16,7 @@ import { FAQ_CATEGORIES, flattenFaq, type FlatFaqItem } from "@/lib/faqContent";
 
 const INFO_CENTER_ITEMS = [
   { title: "كل الأدوات", desc: "إدارة الوكالة تحت سقف واحد", icon: Play, href: "/landing#demo" },
+  { title: "الحلول", desc: "كل ما تحتاجه لتنمو في مكان واحد", icon: CheckCircle, href: "/landing#solutions" },
   { title: "لماذا ثقة", desc: "ثلاثة محاور تقلب طريقة عمل الوكالة", icon: Sparkles, href: "/landing#features" },
   { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "/landing#testimonials" },
   { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/faq" },
@@ -312,7 +313,7 @@ export default function FAQ() {
             <div className="flex flex-row-reverse items-center gap-2">
               <button
                 onClick={() => { setMobileMenuOpen(false); navigate("/login"); }}
-                className="px-5 py-2 text-[14px] font-semibold text-black rounded-full bg-[#f1ece4] hover:bg-[#e8e2d6] transition-colors"
+                className="px-5 py-2 text-[14px] font-semibold text-white rounded-full bg-black hover:bg-black/85 transition-colors"
               >
                 {ct(content, "navbar_login", "تسجيل الدخول")}
               </button>

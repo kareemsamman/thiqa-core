@@ -16,6 +16,7 @@ import { PublicSEO } from "@/components/public/PublicSEO";
 import { FAQSection, LANDING_FAQS } from "@/components/public/FAQSection";
 import { DemoCallTrigger } from "@/components/public/DemoCallDialog";
 import { PublicFooter } from "@/components/public/PublicFooter";
+import { smoothScrollToElement, smoothScrollToHash } from "@/lib/smoothScroll";
 import { GalleryImage, LandingGalleryProvider } from "@/components/landing/LandingGallery";
 import { Helmet } from "react-helmet-async";
 
@@ -395,11 +396,7 @@ function LandingContent() {
     if (!hash) return;
     let attempts = 0;
     const tryScroll = () => {
-      const el = document.getElementById(hash.slice(1));
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-        return;
-      }
+      if (smoothScrollToHash(hash)) return;
       attempts += 1;
       if (attempts < 10) window.setTimeout(tryScroll, 100);
     };
@@ -883,6 +880,7 @@ function LandingContent() {
                   <div className="flex-1 flex flex-col">
                     {[
                       { title: "كل الأدوات", desc: "إدارة الوكالة تحت سقف واحد", icon: Play, href: "#demo" },
+                      { title: "الحلول", desc: "كل ما تحتاجه لتنمو في مكان واحد", icon: CheckCircle, href: "#solutions" },
                       { title: "لماذا ثقة", desc: "ثلاثة محاور تقلب طريقة عمل الوكالة", icon: Sparkles, href: "#features" },
                       { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "#testimonials" },
                       { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/faq" },
@@ -897,7 +895,7 @@ function LandingContent() {
                             const el = document.getElementById(targetId);
                             if (el) {
                               e.preventDefault();
-                              el.scrollIntoView({ behavior: "smooth", block: "start" });
+                              smoothScrollToElement(el);
                               if (typeof window !== "undefined") {
                                 window.history.replaceState(null, "", item.href);
                               }
@@ -1113,7 +1111,7 @@ function LandingContent() {
               <Link
                 to="/login"
                 onClick={() => setMobileMenuOpen(false)}
-                className="px-5 py-2 text-[14px] font-semibold text-black rounded-full bg-[#f1ece4] hover:bg-[#e8e2d6] transition-colors"
+                className="px-5 py-2 text-[14px] font-semibold text-white rounded-full bg-black hover:bg-black/85 transition-colors"
               >
                 {ct(content, "navbar_login", "تسجيل الدخول")}
               </Link>
@@ -1169,6 +1167,7 @@ function LandingContent() {
                     <ul className="flex flex-col gap-1">
                       {[
                         { title: "كل الأدوات", desc: "إدارة الوكالة تحت سقف واحد", icon: Play, href: "#demo" },
+                        { title: "الحلول", desc: "كل ما تحتاجه لتنمو في مكان واحد", icon: CheckCircle, href: "#solutions" },
                         { title: "لماذا ثقة", desc: "ثلاثة محاور تقلب طريقة عمل الوكالة", icon: Sparkles, href: "#features" },
                         { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "#testimonials" },
                         { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/faq" },
@@ -1178,7 +1177,17 @@ function LandingContent() {
                           <li key={item.href}>
                             <a
                               href={item.href}
-                              onClick={() => setMobileMenuOpen(false)}
+                              onClick={(e) => {
+                                setMobileMenuOpen(false);
+                                if (item.href.startsWith("#")) {
+                                  const el = document.getElementById(item.href.slice(1));
+                                  if (el) {
+                                    e.preventDefault();
+                                    setTimeout(() => smoothScrollToElement(el), 320);
+                                    window.history.replaceState(null, "", item.href);
+                                  }
+                                }
+                              }}
                               className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors"
                             >
                               <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-black/[0.05] text-black">
@@ -2139,6 +2148,7 @@ function LandingContent() {
         }
       `}</style>
       <section
+        id="solutions"
         ref={(el) => {
           if (!el) return;
           if ((el as HTMLElement & { __grBound?: boolean }).__grBound) return;

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { useNavigate } from "react-router-dom";
 import {
-  Check, ChevronDown, Menu, X, Play, Sparkles, Star, HelpCircle, MessageSquare,
+  Check, CheckCircle, ChevronDown, Menu, X, Play, Sparkles, Star, HelpCircle, MessageSquare,
   Users, FileText, Mail, Megaphone, Bot, Building2,
   type LucideIcon,
 } from "lucide-react";
@@ -118,6 +118,7 @@ const FALLBACK_PLANS: PlanData[] = [
 
 const INFO_CENTER_ITEMS = [
   { title: "كل الأدوات", desc: "إدارة الوكالة تحت سقف واحد", icon: Play, href: "/landing#demo" },
+  { title: "الحلول", desc: "كل ما تحتاجه لتنمو في مكان واحد", icon: CheckCircle, href: "/landing#solutions" },
   { title: "لماذا ثقة", desc: "ثلاثة محاور تقلب طريقة عمل الوكالة", icon: Sparkles, href: "/landing#features" },
   { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "/landing#testimonials" },
   { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/faq" },
@@ -426,7 +427,7 @@ export default function Pricing() {
             <div className="flex flex-row-reverse items-center gap-2">
               <button
                 onClick={() => { setMobileMenuOpen(false); navigate("/login"); }}
-                className="px-5 py-2 text-[14px] font-semibold text-black rounded-full bg-[#f1ece4] hover:bg-[#e8e2d6] transition-colors"
+                className="px-5 py-2 text-[14px] font-semibold text-white rounded-full bg-black hover:bg-black/85 transition-colors"
               >
                 {ct(content, "navbar_login", "تسجيل الدخول")}
               </button>
