@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { PublicSEO } from "@/components/public/PublicSEO";
 import { FAQSection, LANDING_FAQS } from "@/components/public/FAQSection";
+import { GalleryImage, LandingGalleryProvider } from "@/components/landing/LandingGallery";
 import { Helmet } from "react-helmet-async";
 
 // JSON-LD structured data for the home page. Tells Google we are a
@@ -636,6 +637,7 @@ function LandingContent() {
   };
 
   return (
+    <LandingGalleryProvider>
     <div className="min-h-screen text-black overflow-x-hidden bg-white" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
       <PublicSEO
         title="Thiqa | نظام إدارة وكالات التأمين"
@@ -1259,7 +1261,7 @@ function LandingContent() {
           style={{ animationDelay: '720ms' }}
         >
           <div className="relative rounded-t-xl overflow-hidden border border-black/[0.12] border-b-0 shadow-2xl shadow-black/20 max-w-full w-[95%] md:w-1/2">
-            <img
+            <GalleryImage
               src="https://thiqacrm.b-cdn.net/image%20227.jpg"
               alt="Thiqa — نظام إدارة وكالات التأمين"
               width={607}
@@ -1729,7 +1731,7 @@ function LandingContent() {
                     style={{ background: tab.glow }}
                     aria-hidden="true"
                   />
-                  <img
+                  <GalleryImage
                     src={tab.image ?? featuresMockup}
                     alt=""
                     className="relative z-10 w-full max-w-[88%] h-auto rounded-xl shadow-[0_30px_80px_-10px_rgba(18,32,66,0.45)]"
@@ -1845,6 +1847,12 @@ function LandingContent() {
           animation: updatesMarquee 80s linear infinite;
           will-change: transform;
         }
+        /* Pause the loop while the gallery lightbox is open — without
+           this the user opens an image and the underlying rail keeps
+           sliding, which feels jittery once they close the dialog. */
+        body.landing-lightbox-open .updates-marquee {
+          animation-play-state: paused;
+        }
         @keyframes updatesMarquee {
           from { transform: translate3d(0, 0, 0); }
           to   { transform: translate3d(-50%, 0, 0); }
@@ -1918,9 +1926,9 @@ function LandingContent() {
                       aspect-ratio + max-h-full combo doesn't compute
                       to 0 and hide the device mockup. */}
                   <div className="absolute inset-0 p-6 md:p-8 flex items-center justify-center">
-                    <img
+                    <GalleryImage
                       src={("image" in u && u.image) ? u.image : featuresMockup}
-                      alt=""
+                      alt={u.title}
                       className="max-w-full max-h-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
                       loading="lazy"
                     />
@@ -2125,9 +2133,9 @@ function LandingContent() {
                   "linear-gradient(135deg, #6b7fbc 0%, #a8b5d6 20%, #d4b8a0 40%, #c9a88a 55%, #9eadd4 75%, #7b93c8 100%)",
               }}
             >
-              <img
+              <GalleryImage
                 src="https://thiqacrm.b-cdn.net/nnnewww/solutions-dashboard-overview%202.png"
-                alt=""
+                alt="سيطرة كاملة وتقليل عبء الإدارة"
                 className="relative w-full h-auto block rounded-2xl"
                 loading="lazy"
               />
@@ -2694,9 +2702,9 @@ function LandingContent() {
 
         {/* Full-width hero image — edge to edge. */}
         <div className="relative w-full gl-image">
-          <img
+          <GalleryImage
             src="https://thiqacrm.b-cdn.net/Group%201000011508%20(1).png"
-            alt=""
+            alt="كل ما تحتاجه الوكالة، تحت سقف واحد"
             className="w-full h-auto block"
             loading="lazy"
           />
@@ -2872,9 +2880,9 @@ function LandingContent() {
           {/* Bottom mockup image — placeholder for now; swap via the
               `src` when the final artwork is ready. */}
           <div className="max-w-3xl mx-auto">
-            <img
+            <GalleryImage
               src="https://thiqacrm.b-cdn.net/free-cta-dashboard-hero%201.png"
-              alt=""
+              alt="قلنا لكم إنها مجاناً"
               className="w-full h-auto block"
               loading="lazy"
             />
@@ -2898,7 +2906,7 @@ function LandingContent() {
             {[
               // RTL flex order: index 0 = right, 1 = middle, 2 = left.
               { img: "https://thiqacrm.b-cdn.net/nnnewww/demo-call-1-customers%202.png", label: "لوحة القيادة", rotate: -10, y: 10 },
-              { img: "https://thiqacrm.b-cdn.net/nnnewww/demo-call-2-dashboard%201.png", label: "التقارير", rotate: 0, y: 0 },
+              { img: "https://thiqacrm.b-cdn.net/nnnewww/middle-mockup-control-panel%201.png", label: "التقارير", rotate: 0, y: 0 },
               { img: "https://thiqacrm.b-cdn.net/nnnewww/demo-call-1-customers%202.png", label: "العملاء", rotate: 10, y: 10 },
             ].map((card, i) => (
               <div
@@ -2909,9 +2917,9 @@ function LandingContent() {
                   zIndex: i === 1 ? 3 : 1,
                 }}
               >
-                <img
+                <GalleryImage
                   src={card.img}
-                  alt=""
+                  alt={card.label}
                   className="w-full h-full object-cover"
                   draggable={false}
                   loading="lazy"
@@ -3091,5 +3099,6 @@ function LandingContent() {
         </div>
       </footer>
     </div>
+    </LandingGalleryProvider>
   );
 }
