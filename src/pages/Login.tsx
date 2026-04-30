@@ -344,21 +344,42 @@ export default function Login() {
     if (!email || !email.includes("@")) { toast.error("يرجى إدخال بريد إلكتروني صحيح"); return; }
     if (!password || password.length < 6) { toast.error("كلمة المرور 6 أحرف على الأقل"); return; }
 
-    // Check rate limiting
-    const { locked, remainingMinutes } = isLoginLocked();
-    if (locked) {
-      setLockoutMessage(`تم تجاوز عدد المحاولات المسموح. حاول مجدداً بعد ${remainingMinutes} دقيقة.`);
-      return;
+    // Authoritative server-side rate limit check. localStorage is just
+    // UX feedback and can be cleared by the user, so we always confirm
+    // with the edge function before attempting auth.
+    try {
+      const { data: rl } = await supabase.functions.invoke("log-login-attempt", {
+        body: { action: "check", email: email.trim() },
+      });
+      if (rl?.locked) {
+        const mins = rl.remaining_minutes || 15;
+        setLockoutMessage(`تم تجاوز عدد المحاولات المسموح. حاول مجدداً بعد ${mins} دقيقة.`);
+        return;
+      }
+    } catch (e) {
+      // If the check fails (network), fall back to client-side hint
+      // and let signInWithPassword + Supabase's own rate limiting
+      // backstop us.
+      const { locked, remainingMinutes } = isLoginLocked();
+      if (locked) {
+        setLockoutMessage(`تم تجاوز عدد المحاولات المسموح. حاول مجدداً بعد ${remainingMinutes} دقيقة.`);
+        return;
+      }
     }
 
     setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
 
-      // Log the attempt to login_attempts so it appears in admin/users.
-      // Fire-and-forget: never block the login flow on logging.
+      // Log the attempt to login_attempts (also drives server-side
+      // lockout). Fire-and-forget: never block the login flow on logging.
       supabase.functions.invoke("log-login-attempt", {
         body: { email: email.trim(), success: !error },
+      }).then(({ data }) => {
+        if (data?.locked) {
+          const mins = data.remaining_minutes || 15;
+          setLockoutMessage(`تم تجاوز عدد المحاولات المسموح. حاول مجدداً بعد ${mins} دقيقة.`);
+        }
       }).catch((e) => console.warn("login attempt log failed", e));
 
       if (error) {
