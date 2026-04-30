@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { cn } from "@/lib/utils";
 import { PublicSEO } from "@/components/public/PublicSEO";
+import { BreadcrumbJsonLd, PricingJsonLd } from "@/components/public/PublicJsonLd";
 import { PLAN_FEATURE_CATALOG } from "@/lib/planFeatureCatalog";
 import { FAQSection } from "@/components/public/FAQSection";
 import { DemoCallTrigger } from "@/components/public/DemoCallDialog";
@@ -215,9 +216,23 @@ export default function Pricing() {
       style={{ fontFamily: "'Cairo', sans-serif" }}
     >
       <PublicSEO
-        title="Thiqa | الأسعار والخطط"
+        title="أسعار وخطط Thiqa — نظام إدارة وكالات التأمين"
         description="خطط أسعار Thiqa لإدارة وكالات التأمين: ابدأ بالخطة المجانية ووسّع حسب حاجة وكالتك. أسعار شفافة، اشتراكات شهرية وسنوية، وبدون التزامات طويلة."
-        keywords="أسعار Thiqa, خطط اشتراك Thiqa, تكلفة نظام إدارة التأمين, اشتراك مجاني, خطة احترافية"
+        keywords="أسعار Thiqa, خطط اشتراك Thiqa, تكلفة نظام إدارة التأمين, اشتراك مجاني, خطة احترافية, ثقة"
+      />
+      <BreadcrumbJsonLd
+        crumbs={[
+          { label: "Thiqa", href: "/" },
+          { label: "الأسعار", href: "/pricing" },
+        ]}
+      />
+      <PricingJsonLd
+        offers={plans.map((p) => ({
+          name: p.name_ar || p.name,
+          description: p.description,
+          monthlyPrice: p.monthly_price,
+          yearlyPrice: p.yearly_price,
+        }))}
       />
       <PublicGradientBackground />
 

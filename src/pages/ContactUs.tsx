@@ -9,6 +9,7 @@ import { useLandingContent, ct } from "@/hooks/useLandingContent";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { cn } from "@/lib/utils";
 import { PublicSEO } from "@/components/public/PublicSEO";
+import { BreadcrumbJsonLd, ContactPageJsonLd } from "@/components/public/PublicJsonLd";
 import { DemoCallTrigger } from "@/components/public/DemoCallDialog";
 import { SupportContactForm } from "@/components/public/SupportContactForm";
 import { PublicFooter } from "@/components/public/PublicFooter";
@@ -88,10 +89,17 @@ export default function ContactUs() {
       style={{ fontFamily: "'Cairo', sans-serif" }}
     >
       <PublicSEO
-        title="Thiqa | تواصل معنا"
+        title="تواصل معنا Thiqa — دعم نظام إدارة وكالات التأمين"
         description="تواصل مع فريق Thiqa — أرسل استفسارك أو طلب الدعم وسنرد عليك في أسرع وقت ممكن. نحن هنا للإجابة على كل أسئلتك حول نظام إدارة وكالات التأمين."
-        keywords="تواصل معنا Thiqa, دعم Thiqa, اتصل بنا, مساعدة وكالات التأمين"
+        keywords="تواصل معنا Thiqa, دعم Thiqa, اتصل بنا, مساعدة وكالات التأمين, ثقة"
       />
+      <BreadcrumbJsonLd
+        crumbs={[
+          { label: "Thiqa", href: "/" },
+          { label: "تواصل معنا", href: "/contact" },
+        ]}
+      />
+      <ContactPageJsonLd />
 
       <PublicGradientBackground />
 

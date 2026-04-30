@@ -5,6 +5,8 @@ User-agent: *
 Allow: /$
 Allow: /landing
 Allow: /pricing
+Allow: /faq
+Allow: /contact
 Allow: /login
 Allow: /register
 Allow: /forgot-password

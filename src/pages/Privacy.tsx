@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { ShieldCheck, Lock, Database, Users, Share2, Download, Cookie, RefreshCw, Mail, ArrowLeft } from "lucide-react";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { PublicSEO } from "@/components/public/PublicSEO";
+import { BreadcrumbJsonLd } from "@/components/public/PublicJsonLd";
 
 // Public legal page — no auth, no CRM chrome. Reads as a plain
 // document with a calm hero + numbered sections. Layout mirrors
@@ -10,9 +11,15 @@ export default function Privacy() {
   return (
     <div className="min-h-screen bg-white text-foreground public-page-enter" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
       <PublicSEO
-        title="Thiqa | سياسة الخصوصية"
+        title="سياسة الخصوصية Thiqa — حماية بيانات وكالات التأمين"
         description="سياسة خصوصية Thiqa: كيف نجمع بياناتك ونحميها ونستخدمها داخل نظام إدارة وكالات التأمين، وحقوقك في الوصول والتحكم بهذه البيانات."
-        keywords="سياسة خصوصية Thiqa, حماية البيانات, خصوصية التأمين, GDPR"
+        keywords="سياسة خصوصية Thiqa, حماية البيانات, خصوصية التأمين, GDPR, ثقة"
+      />
+      <BreadcrumbJsonLd
+        crumbs={[
+          { label: "Thiqa", href: "/" },
+          { label: "سياسة الخصوصية", href: "/privacy" },
+        ]}
       />
       {/* Top bar — Thiqa logo on the right, simple back link on the left. */}
       <header className="border-b border-black/[0.06]">

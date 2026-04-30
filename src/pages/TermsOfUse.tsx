@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { FileText, UserCheck, CreditCard, RefreshCw, Database, Ban, Wrench, AlertTriangle, ScrollText, Mail, ArrowLeft } from "lucide-react";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { PublicSEO } from "@/components/public/PublicSEO";
+import { BreadcrumbJsonLd } from "@/components/public/PublicJsonLd";
 
 // Public legal page — no auth, no CRM chrome. Same layout as Privacy.tsx
 // so the two read as a single set.
@@ -9,9 +10,15 @@ export default function TermsOfUse() {
   return (
     <div className="min-h-screen bg-white text-foreground public-page-enter" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
       <PublicSEO
-        title="Thiqa | شروط الاستخدام"
+        title="شروط الاستخدام Thiqa — اتفاقية خدمة وكالات التأمين"
         description="شروط استخدام منصة Thiqa لإدارة وكالات التأمين: حقوق وواجبات المستخدم، الاشتراكات والمدفوعات، حدود المسؤولية، وسياسات الإلغاء."
-        keywords="شروط استخدام Thiqa, اتفاقية الخدمة, شروط الاشتراك"
+        keywords="شروط استخدام Thiqa, اتفاقية الخدمة, شروط الاشتراك, ثقة"
+      />
+      <BreadcrumbJsonLd
+        crumbs={[
+          { label: "Thiqa", href: "/" },
+          { label: "شروط الاستخدام", href: "/terms" },
+        ]}
       />
       {/* Top bar */}
       <header className="border-b border-black/[0.06]">

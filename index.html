@@ -46,33 +46,32 @@
     </style>
     <script src="//cdn.asprise.com/scannerjs/scanner.js" type="text/javascript"></script>
 
-    <!-- Open Graph / Twitter defaults — overridden per page. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- Open Graph / Twitter defaults. PublicSEO overrides these
+         per page; the values here are what crawlers see if they
+         only fetch the static index.html (e.g. social previews
+         before JS hydrates). Image lives on the project CDN so
+         it stays put across deploys. -->
     <meta property="og:site_name" content="Thiqa" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="ar_AR" />
-    
-    
-    <meta property="og:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/nfTIvIsQDwQoh0X9pAWILErfEjZ2/social-images/social-1776516723518-Group_1000011514_(1)_1.webp">
-    <meta property="og:image:secure_url" content="https://thiqacrm.b-cdn.net/Screenshot%202026-04-18%20130915.png" />
+    <meta property="og:url" content="https://getthiqa.com/" />
+    <meta property="og:title" content="Thiqa | نظام إدارة وكالات التأمين" />
+    <meta property="og:description" content="Thiqa — نظام سحابي متكامل لإدارة وكالات التأمين: العملاء، الوثائق، الأقساط، التحصيل، التقارير، والتنبيهات. جرّب مجاناً." />
+    <meta property="og:image" content="https://thiqacrm.b-cdn.net/fav.png" />
+    <meta property="og:image:secure_url" content="https://thiqacrm.b-cdn.net/fav.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Thiqa | نظام إدارة وكالات التأمين" />
+
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@getthiqa" />
-    
-    
-    <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/nfTIvIsQDwQoh0X9pAWILErfEjZ2/social-images/social-1776516723518-Group_1000011514_(1)_1.webp">
-    
-  
-  
-  
-  <meta property="og:title" content="Thiqa | نظام إدارة وكالات التأمين">
-  <meta name="twitter:title" content="Thiqa | نظام إدارة وكالات التأمين">
-  <meta property="og:description" content="Thiqa — نظام سحابي متكامل لإدارة وكالات التأمين: العملاء، الوثائق، الأقساط، التحصيل، التقارير، والتنبيهات. جرّب مجاناً.">
-  <meta name="twitter:description" content="Thiqa — نظام سحابي متكامل لإدارة وكالات التأمين: العملاء، الوثائق، الأقساط، التحصيل، التقارير، والتنبيهات. جرّب مجاناً.">
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-</head>
+    <meta name="twitter:title" content="Thiqa | نظام إدارة وكالات التأمين" />
+    <meta name="twitter:description" content="Thiqa — نظام سحابي متكامل لإدارة وكالات التأمين: العملاء، الوثائق، الأقساط، التحصيل، التقارير، والتنبيهات. جرّب مجاناً." />
+    <meta name="twitter:image" content="https://thiqacrm.b-cdn.net/fav.png" />
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
