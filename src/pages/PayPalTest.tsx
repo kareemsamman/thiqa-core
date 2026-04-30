@@ -34,7 +34,10 @@ declare global {
 
 interface PayPalOrderActions {
   order: {
-    create: (intent: { purchase_units: Array<{ amount: { value: string; currency_code: string } }> }) => Promise<string>;
+    create: (intent: {
+      purchase_units: Array<{ amount: { value: string; currency_code: string } }>;
+      application_context?: { shipping_preference?: "NO_SHIPPING" | "GET_FROM_FILE" | "SET_PROVIDED_ADDRESS" };
+    }) => Promise<string>;
     capture: () => Promise<unknown>;
   };
 }
@@ -95,15 +98,25 @@ type Status =
 export default function PayPalTest() {
   const { user, isSuperAdmin, loading: authLoading } = useAuth();
 
-  const [clientId, setClientId] = useState(() => readLocal(LS_CLIENT_ID, ""));
-  const [currency, setCurrency] = useState(() => readLocal(LS_CURRENCY, "USD"));
-  const [amount, setAmount] = useState(() => readLocal(LS_AMOUNT, "1.00"));
+  const [clientId, setClientIdState] = useState(() => readLocal(LS_CLIENT_ID, ""));
+  const [currency, setCurrencyState] = useState(() => readLocal(LS_CURRENCY, "USD"));
+  const [amount, setAmountState] = useState(() => readLocal(LS_AMOUNT, "1.00"));
 
-  // Persist config changes — debounced via React's batching since each
-  // setState above already triggers a render.
-  useEffect(() => writeLocal(LS_CLIENT_ID, clientId), [clientId]);
-  useEffect(() => writeLocal(LS_CURRENCY, currency), [currency]);
-  useEffect(() => writeLocal(LS_AMOUNT, amount), [amount]);
+  // Write to localStorage synchronously inside each setter so a
+  // mid-edit unmount (HMR remount, route change, browser tab
+  // discard) can never lose the typed value to a deferred useEffect.
+  const setClientId = (v: string) => {
+    setClientIdState(v);
+    writeLocal(LS_CLIENT_ID, v);
+  };
+  const setCurrency = (v: string) => {
+    setCurrencyState(v);
+    writeLocal(LS_CURRENCY, v);
+  };
+  const setAmount = (v: string) => {
+    setAmountState(v);
+    writeLocal(LS_AMOUNT, v);
+  };
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [eventLog, setEventLog] = useState<Array<{ ts: string; event: string; payload?: unknown }>>([]);
   const buttonsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -136,9 +149,13 @@ export default function PayPalTest() {
     setStatus({ kind: "loading-sdk" });
     log("loading PayPal SDK", { clientId: `${clientId.slice(0, 6)}…`, currency });
 
+    // disable-funding=paypal hides the yellow "log in to PayPal"
+    // button and only renders the black "Debit or Credit Card"
+    // path. Matches the Thiqa billing UX — agents pay by card, not
+    // by linking a PayPal account.
     const script = document.createElement("script");
     script.id = SDK_SCRIPT_ID;
-    script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId.trim())}&currency=${currency}&intent=capture&components=buttons`;
+    script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId.trim())}&currency=${currency}&intent=capture&components=buttons&disable-funding=paypal`;
     script.async = true;
 
     script.onload = () => {
@@ -178,6 +195,11 @@ export default function PayPalTest() {
                   amount: { value: amount, currency_code: currency },
                 },
               ],
+              // NO_SHIPPING strips the "Ship to billing address"
+              // checkbox and any shipping-address collection from
+              // the card form. Billing address is still collected
+              // (PayPal requires it for fraud checks on cards).
+              application_context: { shipping_preference: "NO_SHIPPING" },
             })
             .then((orderID) => {
               log("order created", { orderID });
