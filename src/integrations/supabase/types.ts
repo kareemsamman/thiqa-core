@@ -5043,6 +5043,57 @@ export type Database = {
           },
         ]
       }
+      policy_wizard_drafts: {
+        Row: {
+          agent_id: string | null
+          created_at: string
+          draft_summary: Json | null
+          form_snapshot: Json | null
+          id: string
+          minimized_at: string | null
+          preselected_client_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agent_id?: string | null
+          created_at?: string
+          draft_summary?: Json | null
+          form_snapshot?: Json | null
+          id: string
+          minimized_at?: string | null
+          preselected_client_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          agent_id?: string | null
+          created_at?: string
+          draft_summary?: Json | null
+          form_snapshot?: Json | null
+          id?: string
+          minimized_at?: string | null
+          preselected_client_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policy_wizard_drafts_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_wizard_drafts_preselected_client_id_fkey"
+            columns: ["preselected_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pricing_rules: {
         Row: {
           age_band: Database["public"]["Enums"]["age_band"] | null
@@ -6156,24 +6207,27 @@ export type Database = {
       }
       support_messages: {
         Row: {
-          author_user_id: string
+          author_user_id: string | null
           body: string
+          body_html: string | null
           created_at: string
           id: string
           is_admin_reply: boolean
           ticket_id: string
         }
         Insert: {
-          author_user_id: string
+          author_user_id?: string | null
           body: string
+          body_html?: string | null
           created_at?: string
           id?: string
           is_admin_reply?: boolean
           ticket_id: string
         }
         Update: {
-          author_user_id?: string
+          author_user_id?: string | null
           body?: string
+          body_html?: string | null
           created_at?: string
           id?: string
           is_admin_reply?: boolean
@@ -6191,12 +6245,15 @@ export type Database = {
       }
       support_tickets: {
         Row: {
-          agent_id: string
+          agent_id: string | null
           category_id: string | null
           closed_at: string | null
+          contact_email: string | null
+          contact_name: string | null
           created_at: string
-          created_by_user_id: string
+          created_by_user_id: string | null
           id: string
+          source: string
           status: string
           subcategory_id: string | null
           subject: string
@@ -6204,12 +6261,15 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          agent_id: string
+          agent_id?: string | null
           category_id?: string | null
           closed_at?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
           created_at?: string
-          created_by_user_id: string
+          created_by_user_id?: string | null
           id?: string
+          source?: string
           status?: string
           subcategory_id?: string | null
           subject: string
@@ -6217,12 +6277,15 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          agent_id?: string
+          agent_id?: string | null
           category_id?: string | null
           closed_at?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
           created_at?: string
-          created_by_user_id?: string
+          created_by_user_id?: string | null
           id?: string
+          source?: string
           status?: string
           subcategory_id?: string | null
           subject?: string
