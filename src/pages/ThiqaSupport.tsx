@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, endOfDay, endOfMonth, endOfWeek, endOfYear, startOfDay, startOfMonth, startOfWeek, startOfYear } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
-import { Building2, ChevronLeft, ChevronRight, Copy, MessageSquare, Search, Trash2 } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, Copy, Globe, MessageSquare, Search, Trash2 } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ThiqaHeader } from "@/components/thiqa/ThiqaHeader";
 import { Input } from "@/components/ui/input";
@@ -29,14 +29,17 @@ import { cn } from "@/lib/utils";
 interface TicketRow {
   id: string;
   ticket_number: string;
-  agent_id: string;
+  agent_id: string | null;
   category_id: string | null;
   subcategory_id: string | null;
   subject: string;
   status: "open" | "in_progress" | "done" | "cancelled";
-  created_by_user_id: string;
+  created_by_user_id: string | null;
   created_at: string;
   updated_at: string;
+  source: "agent" | "public";
+  contact_name: string | null;
+  contact_email: string | null;
 }
 
 interface AgentRow {
@@ -131,7 +134,9 @@ export default function ThiqaSupport() {
     setTickets(ts);
 
     if (ts.length > 0) {
-      const agentIds = Array.from(new Set(ts.map((t) => t.agent_id)));
+      // Public-FAQ tickets carry agent_id=NULL — skip them in the lookup
+      // so the .in() doesn't 400 on a null member.
+      const agentIds = Array.from(new Set(ts.map((t) => t.agent_id).filter(Boolean) as string[]));
       const catIds = Array.from(
         new Set([
           ...ts.map((t) => t.category_id).filter(Boolean) as string[],
@@ -140,7 +145,9 @@ export default function ThiqaSupport() {
       );
 
       const [aRes, cRes, allCatsRes] = await Promise.all([
-        supabase.from("agents").select("id, name, name_ar, short_code").in("id", agentIds),
+        agentIds.length > 0
+          ? supabase.from("agents").select("id, name, name_ar, short_code").in("id", agentIds)
+          : Promise.resolve({ data: [] }),
         catIds.length > 0
           ? supabase.from("support_categories").select("id, name_ar, parent_id").in("id", catIds)
           : Promise.resolve({ data: [] }),
@@ -186,20 +193,24 @@ export default function ThiqaSupport() {
     const window = resolveDateWindow(datePeriod, customStart, customEnd);
     return tickets.filter((t) => {
       if (statusFilter !== "all" && t.status !== statusFilter) return false;
-      if (agentFilter !== "all" && t.agent_id !== agentFilter) return false;
+      if (agentFilter === "public") {
+        if (t.source !== "public") return false;
+      } else if (agentFilter !== "all" && t.agent_id !== agentFilter) return false;
       if (categoryFilter !== "all" && t.category_id !== categoryFilter) return false;
       if (window) {
         const updated = new Date(t.updated_at);
         if (updated < window.start || updated > window.end) return false;
       }
       if (!q) return true;
-      const a = agents[t.agent_id];
+      const a = t.agent_id ? agents[t.agent_id] : null;
       const haystack = [
         t.ticket_number,
         t.subject,
         a?.name,
         a?.name_ar,
         a?.short_code,
+        t.contact_name,
+        t.contact_email,
       ].filter(Boolean).join(" ").toLowerCase();
       return haystack.includes(q);
     });
@@ -307,6 +318,7 @@ export default function ThiqaSupport() {
                   <SelectTrigger className="w-44"><SelectValue placeholder="الوكيل" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">كل الوكلاء</SelectItem>
+                    <SelectItem value="public">من صفحة FAQ</SelectItem>
                     {allAgents.map((a) => (
                       <SelectItem key={a.id} value={a.id} className="text-right">
                         {a.name_ar || a.name}{a.short_code ? ` · ${a.short_code}` : ""}
@@ -354,7 +366,12 @@ export default function ThiqaSupport() {
                       {STATUS_LABEL[statusFilter as TicketRow["status"]]} <span className="text-muted-foreground">×</span>
                     </Badge>
                   )}
-                  {agentFilter !== "all" && agents[agentFilter] && (
+                  {agentFilter === "public" && (
+                    <Badge variant="outline" className="cursor-pointer gap-1.5" onClick={() => setAgentFilter("all")}>
+                      من صفحة FAQ <span className="text-muted-foreground">×</span>
+                    </Badge>
+                  )}
+                  {agentFilter !== "all" && agentFilter !== "public" && agents[agentFilter] && (
                     <Badge variant="outline" className="cursor-pointer gap-1.5" onClick={() => setAgentFilter("all")}>
                       {agents[agentFilter].name_ar || agents[agentFilter].name} <span className="text-muted-foreground">×</span>
                     </Badge>
@@ -390,9 +407,15 @@ export default function ThiqaSupport() {
             <>
               <div className="space-y-2">
                 {visiblePage.map((t) => {
-                  const a = agents[t.agent_id];
+                  const a = t.agent_id ? agents[t.agent_id] : null;
+                  const isPublic = t.source === "public";
                   const cat = t.category_id ? categories[t.category_id] : null;
                   const sub = t.subcategory_id ? categories[t.subcategory_id] : null;
+                  // Public-FAQ tickets don't have an agent — fall back to the
+                  // submitter's name (set on the ticket at form submit).
+                  const displayName = a
+                    ? (a.name_ar || a.name)
+                    : (t.contact_name || "—");
                   return (
                     <Card
                       key={t.id}
@@ -402,10 +425,17 @@ export default function ThiqaSupport() {
                         <button
                           type="button"
                           onClick={() => navigate(`/thiqa/support/${t.id}`)}
-                          className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0 hover:bg-primary/15 transition-colors"
+                          className={cn(
+                            "h-12 w-12 rounded-full flex items-center justify-center shrink-0 transition-colors",
+                            isPublic
+                              ? "bg-emerald-500/10 hover:bg-emerald-500/15"
+                              : "bg-primary/10 hover:bg-primary/15",
+                          )}
                           aria-label="فتح التذكرة"
                         >
-                          <Building2 className="h-6 w-6 text-primary" />
+                          {isPublic
+                            ? <Globe className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                            : <Building2 className="h-6 w-6 text-primary" />}
                         </button>
 
                         <div
@@ -413,11 +443,17 @@ export default function ThiqaSupport() {
                           onClick={() => navigate(`/thiqa/support/${t.id}`)}
                         >
                           {/* Agent name + short-code (prominent — admin's
-                              first scan signal). */}
+                              first scan signal). For public-FAQ tickets we
+                              show the submitter name + a "FAQ" badge. */}
                           <div className="flex items-center gap-2 flex-wrap mb-1">
                             <span className="text-base md:text-lg font-bold truncate">
-                              {a ? (a.name_ar || a.name) : "—"}
+                              {displayName}
                             </span>
+                            {isPublic && (
+                              <Badge variant="outline" className="text-[10px] font-medium border-emerald-500/40 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300">
+                                من صفحة FAQ
+                              </Badge>
+                            )}
                             {a?.short_code && (
                               <button
                                 type="button"
@@ -441,6 +477,9 @@ export default function ThiqaSupport() {
                               {STATUS_LABEL[t.status]}
                             </Badge>
                             {cat && <Badge variant="outline" className="text-[10px]">{cat.name_ar}{sub ? ` / ${sub.name_ar}` : ""}</Badge>}
+                            {isPublic && t.contact_email && (
+                              <span className="ltr-nums truncate max-w-[180px]" dir="ltr">{t.contact_email}</span>
+                            )}
                             <span className="ltr-nums">· {format(new Date(t.updated_at), "dd/MM/yyyy HH:mm")}</span>
                           </div>
                         </div>

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { format, isSameDay } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
-import { ArrowRight, LifeBuoy, Loader2, Paperclip, Plus, Send, X, Image as ImageIcon, Video, FileText, Download, ShieldCheck, MessageCircle } from "lucide-react";
+import { ArrowRight, Globe, LifeBuoy, Loader2, Mail, Paperclip, Plus, Send, X, Image as ImageIcon, Video, FileText, Download, ShieldCheck, MessageCircle } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -30,20 +30,23 @@ interface Category {
 interface Ticket {
   id: string;
   ticket_number: string;
-  agent_id: string;
+  agent_id: string | null;
   category_id: string | null;
   subcategory_id: string | null;
   subject: string;
   status: "open" | "in_progress" | "done" | "cancelled";
-  created_by_user_id: string;
+  created_by_user_id: string | null;
   created_at: string;
   updated_at: string;
+  source: "agent" | "public";
+  contact_name: string | null;
+  contact_email: string | null;
 }
 
 interface Message {
   id: string;
   ticket_id: string;
-  author_user_id: string;
+  author_user_id: string | null;
   body: string;
   is_admin_reply: boolean;
   created_at: string;
@@ -483,9 +486,12 @@ function TicketThread({ ticketId }: { ticketId: string }) {
     if (msgs.length > 0) {
       const ids = msgs.map((m) => m.id);
       // Fetch profiles for each unique author so the thread shows real
-      // names instead of the generic "زميل" fallback.
-      const authorIds = Array.from(new Set(msgs.map((m) => m.author_user_id)));
-      supabase
+      // names instead of the generic "زميل" fallback. Public-FAQ
+      // submissions have author_user_id=NULL — skip those.
+      const authorIds = Array.from(
+        new Set(msgs.map((m) => m.author_user_id).filter(Boolean) as string[]),
+      );
+      if (authorIds.length > 0) supabase
         .from("profiles")
         .select("id, full_name, email")
         .in("id", authorIds)
@@ -644,6 +650,12 @@ function TicketThread({ ticketId }: { ticketId: string }) {
                 <Badge variant="outline" className={cn("font-medium", STATUS_TONE[ticket.status])}>
                   {STATUS_LABEL[ticket.status]}
                 </Badge>
+                {ticket.source === "public" && (
+                  <Badge variant="outline" className="text-[10px] font-medium border-emerald-500/40 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300 gap-1">
+                    <Globe className="h-3 w-3" />
+                    من صفحة FAQ
+                  </Badge>
+                )}
               </div>
               <div className="font-semibold text-base md:text-lg text-foreground leading-snug">{ticket.subject}</div>
             </div>
@@ -666,6 +678,28 @@ function TicketThread({ ticketId }: { ticketId: string }) {
           </CardContent>
         </Card>
 
+        {/* Public-FAQ tickets aren't tied to an agent account — surface
+            the contact name + email so the admin knows who they're
+            replying to (the reply is delivered as an email, not chat). */}
+        {ticket.source === "public" && (
+          <Card className="rounded-2xl border-emerald-500/30 bg-emerald-500/5">
+            <CardContent className="p-3 md:p-4 flex items-center gap-3 flex-wrap text-sm">
+              <div className="h-9 w-9 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
+                <Mail className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold truncate">{ticket.contact_name || "زائر"}</div>
+                <div className="text-xs text-muted-foreground truncate" dir="ltr">
+                  {ticket.contact_email || "—"}
+                </div>
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                ردك سيُرسل عبر البريد الإلكتروني
+              </span>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Thread — forum/email style: every message shares a column,
             with the sender header (avatar + bold name + role badge +
             time) above the body. Admin replies get a tinted background
@@ -680,13 +714,27 @@ function TicketThread({ ticketId }: { ticketId: string }) {
             ) : (
               <div className="divide-y divide-border/60">
                 {messages.map((m, idx) => {
-                  const mine = m.author_user_id === user?.id;
+                  const mine = !!m.author_user_id && m.author_user_id === user?.id;
                   const adminSide = m.is_admin_reply;
-                  const author = authorsByUserId[m.author_user_id];
+                  const author = m.author_user_id ? authorsByUserId[m.author_user_id] : undefined;
+                  // Public-FAQ submissions have author_user_id=NULL; the
+                  // submitter's name + email live on the ticket.
+                  const isPublicSubmitter = !adminSide && !m.author_user_id && ticket.source === "public";
                   const senderName = adminSide
                     ? "فريق ثقة"
-                    : (author?.full_name || author?.email?.split("@")[0] || "وكيل");
-                  const senderEmail = !adminSide ? author?.email : null;
+                    : isPublicSubmitter
+                      ? (ticket.contact_name || "زائر")
+                      : (author?.full_name || author?.email?.split("@")[0] || "وكيل");
+                  const senderEmail = adminSide
+                    ? null
+                    : isPublicSubmitter
+                      ? ticket.contact_email
+                      : author?.email;
+                  const senderRoleLabel = adminSide
+                    ? "إدارة ثقة"
+                    : isPublicSubmitter
+                      ? "زائر FAQ"
+                      : "وكيل";
                   const prev = idx > 0 ? messages[idx - 1] : null;
                   const showDateSep = !prev || !isSameDay(new Date(prev.created_at), new Date(m.created_at));
                   const initials = adminSide ? "" : getInitials(senderName);
@@ -739,7 +787,7 @@ function TicketThread({ ticketId }: { ticketId: string }) {
                                   : "border-emerald-500/40 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300",
                               )}
                             >
-                              {adminSide ? "إدارة ثقة" : "وكيل"}
+                              {senderRoleLabel}
                             </Badge>
                             {senderEmail && (
                               <span className="text-[11px] text-muted-foreground truncate max-w-[200px]" dir="ltr">
