@@ -2048,7 +2048,7 @@ function LandingContent() {
                     <GalleryImage
                       src={("image" in u && u.image) ? u.image : featuresMockup}
                       alt={u.title}
-                      className="max-w-full max-h-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
+                      className="block h-full w-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
                     />
                   </div>
                 </div>
