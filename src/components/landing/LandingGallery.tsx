@@ -21,6 +21,12 @@ import { cn } from "@/lib/utils";
 // nav order matches DOM render order. Click → opens the dialog at
 // that image; arrows / keyboard ←/→ cycle through every registered
 // image; ESC or click-outside closes.
+//
+// The context value (`register`/`unregister`/`open`) is intentionally
+// stable across renders. Earlier the value object was rebuilt every
+// render, which made each child's `useLayoutEffect([ctx, ...])`
+// re-run, unregister, and re-register — turning every register call
+// into an infinite re-render loop on mount.
 
 interface RegisteredImage {
   src: string;
@@ -41,9 +47,12 @@ export function LandingGalleryProvider({ children }: { children: React.ReactNode
   // demo-call mockups), and we don't want them to appear twice in
   // the nav.
   const imagesRef = useRef<Map<string, RegisteredImage>>(new Map());
-  const [version, setVersion] = useState(0);
+  const [, setVersion] = useState(0);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
+  // All callbacks read from imagesRef.current so they stay
+  // referentially stable. Bumping version forces a re-render of the
+  // Dialog when the Map mutates.
   const register = useCallback((src: string, alt: string) => {
     if (!imagesRef.current.has(src)) {
       imagesRef.current.set(src, { src, alt });
@@ -57,32 +66,27 @@ export function LandingGalleryProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  const images = useMemo(
-    () => Array.from(imagesRef.current.values()),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [version],
-  );
-
-  const open = useCallback(
-    (src: string) => {
-      const idx = images.findIndex((i) => i.src === src);
-      if (idx >= 0) setActiveIndex(idx);
-    },
-    [images],
-  );
+  const open = useCallback((src: string) => {
+    const arr = Array.from(imagesRef.current.values());
+    const idx = arr.findIndex((i) => i.src === src);
+    if (idx >= 0) setActiveIndex(idx);
+  }, []);
 
   const close = useCallback(() => setActiveIndex(null), []);
-  const next = useCallback(
-    () => setActiveIndex((i) => (i === null || images.length === 0 ? i : (i + 1) % images.length)),
-    [images.length],
-  );
-  const prev = useCallback(
-    () =>
-      setActiveIndex((i) =>
-        i === null || images.length === 0 ? i : (i - 1 + images.length) % images.length,
-      ),
-    [images.length],
-  );
+  const next = useCallback(() => {
+    setActiveIndex((i) => {
+      const sz = imagesRef.current.size;
+      if (i === null || sz === 0) return i;
+      return (i + 1) % sz;
+    });
+  }, []);
+  const prev = useCallback(() => {
+    setActiveIndex((i) => {
+      const sz = imagesRef.current.size;
+      if (i === null || sz === 0) return i;
+      return (i - 1 + sz) % sz;
+    });
+  }, []);
 
   // Keyboard nav + body-class hook so the marquee can pause itself
   // via CSS while the lightbox is up. Dialog already handles ESC and
@@ -108,11 +112,20 @@ export function LandingGalleryProvider({ children }: { children: React.ReactNode
     };
   }, [activeIndex, next, prev]);
 
+  // Stable across renders → child effects don't fire spuriously.
+  const ctxValue = useMemo<GalleryContextValue>(
+    () => ({ register, unregister, open }),
+    [register, unregister, open],
+  );
+
+  // Re-derived on every render; cheap (≤ ~25 entries) and lets the
+  // Dialog see the current Map without a separate state mirror.
+  const images = Array.from(imagesRef.current.values());
   const active = activeIndex !== null ? images[activeIndex] : null;
   const total = images.length;
 
   return (
-    <GalleryContext.Provider value={{ register, unregister, open }}>
+    <GalleryContext.Provider value={ctxValue}>
       {children}
       <Dialog open={activeIndex !== null} onOpenChange={(o) => !o && close()}>
         <DialogContent
@@ -187,7 +200,7 @@ type GalleryImageProps = ImgHTMLAttributes<HTMLImageElement> & {
   src: string;
 };
 
-export function GalleryImage({ src, alt = "", className, style, onClick, ...rest }: GalleryImageProps) {
+export function GalleryImage({ src, alt = "", className, onClick, ...rest }: GalleryImageProps) {
   const ctx = useContext(GalleryContext);
 
   useLayoutEffect(() => {
@@ -205,7 +218,6 @@ export function GalleryImage({ src, alt = "", className, style, onClick, ...rest
         if (!e.defaultPrevented) ctx?.open(src);
       }}
       className={cn(ctx && "cursor-zoom-in", className)}
-      style={style}
       {...rest}
     />
   );
