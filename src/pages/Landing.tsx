@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { Button } from "@/components/ui/button";
 import {
-  ChevronLeft, ChevronUp, ChevronDown, CheckCircle, Star, ArrowLeft, Play, X, Check,
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, CheckCircle, Star, ArrowLeft, Play, X, Check,
   Users, FileText, CreditCard, BarChart3, Bell, MessageSquare,
   Phone, Shield, RefreshCcw, Wallet, AlertTriangle, Mail, Clock, Menu,
   HelpCircle, Sparkles, Facebook, Instagram,
@@ -628,22 +628,56 @@ function LandingContent() {
     {
       quote: "أهم شيء بالنسبة لي في النظام هو الدقة. قبل Thiqa كنت أفقد عمولات وألاحق شيكات في ملفات إكسل. اليوم المحرك المالي يعمل كل شيء لوحده —",
       highlight: "أعرف بالضبط كم ربحت من كل معاملة وما هو الرصيد مع كل شركة. هذا هدوء بال لم يكن عندي لسنوات.",
-      name: "ماهر سليمان,",
+      name: "ماهر سليمان",
       role: "مدير وكالة تأمين",
     },
     {
-      quote: "منذ أن انتقلنا لـ Thiqa وفرنا ساعات عمل كل يوم. التقارير التلقائية والتذكيرات الذكية غيّرت لنا الوكالة.",
-      highlight: "لا أفوّت أي تجديد ولا أفقد أي عميل. النظام يعمل من أجلي 24/7.",
-      name: "أحمد خالد,",
+      quote: "منذ أن انتقلنا لـ Thiqa وفرنا ساعات عمل كل يوم. التذكيرات قبل التجديد بأسبوع وبشهر تلقائية، والعميل يستلم رسالة باسمه على البوليصة.",
+      highlight: "لا أفوّت أي تجديد ولا أفقد أي عميل. النظام يعمل من أجلي ٢٤/٧.",
+      name: "أحمد خالد",
       role: "وكيل تأمين — حيفا",
     },
     {
-      quote: "الدعم ممتاز والنظام سهل الاستخدام. خلال أسبوع كل فريقي كان يعمل على Thiqa بشكل سلس.",
+      quote: "الدعم ممتاز والنظام سهل الاستخدام. خلال أسبوع كل فريقي كان يعمل على Thiqa بشكل سلس بدون تدريب طويل.",
       highlight: "التصدير لإكسل والتقارير المالية وفرت عليّ محاسب. ببساطة مثالي.",
-      name: "يوسف كنعان,",
+      name: "يوسف كنعان",
       role: "وكيل تأمين — الناصرة",
     },
+    {
+      quote: "إدارة الشيكات كانت كابوس. أربعة بنوك مختلفة، تواريخ استحقاق متفرقة، وخمس مرات في الأسبوع كنت أنسى شيك.",
+      highlight: "اليوم Thiqa يذكّرني قبل يومين، يفصل الشيكات حسب البنك، وتحصيلي صار شبه مؤتمت.",
+      name: "سامي حسن",
+      role: "وكيل تأمين — أم الفحم",
+    },
+    {
+      quote: "أدير ثلاث فروع: الناصرة، شفاعمرو، وعكا. كل موظف يرى ما يخصه فقط، وأنا أرى كل شيء بلحظتها.",
+      highlight: "تقارير الأرباح بحسب الفرع والوسيط وفّرت لي قرارات لم أكن قادرًا على اتخاذها بدون أرقام واضحة.",
+      name: "نديم عبد",
+      role: "مدير عمليات — وكالة تأمين",
+    },
+    {
+      quote: "التوقيع الرقمي عبر SMS كان نقطة التحول. العميل يوقّع من بيته، المعاملة جاهزة في خمس دقائق بدل أن يأتي للمكتب.",
+      highlight: "نسبة إغلاق الصفقات ارتفعت ٤٠٪ من أول شهر — العملاء بحبّوا السرعة.",
+      name: "خالد إبراهيم",
+      role: "وكيل تأمين — كفر قاسم",
+    },
   ];
+
+  // Google-style avatar: deterministic color + first letter of the
+  // testimonial's name. Replaces the old gray-square placeholder.
+  const TESTIMONIAL_AVATAR_PALETTE = [
+    "#4f46e5", "#0891b2", "#059669", "#d97706",
+    "#dc2626", "#db2777", "#7c3aed", "#0284c7",
+  ];
+  const colorForTestimonial = (name: string) => {
+    let hash = 0;
+    for (let i = 0; i < name.length; i += 1) {
+      hash = (hash << 5) - hash + name.charCodeAt(i);
+      hash |= 0;
+    }
+    return TESTIMONIAL_AVATAR_PALETTE[Math.abs(hash) % TESTIMONIAL_AVATAR_PALETTE.length];
+  };
+  const initialOf = (name: string) => name.trim().charAt(0) || "?";
 
   const goTestimonial = (dir: "up" | "down") => {
     testimonialTickRef.current++;
@@ -2771,7 +2805,7 @@ function LandingContent() {
           }}
         />
         <div className="relative max-w-6xl mx-auto px-6">
-          <p className="text-sm text-[#4a6cc7] text-center mb-4 tracking-wide font-semibold">{ct(content, "testimonials_label", "قصص العملاء")}</p>
+          <p className="text-sm text-black/70 text-center mb-4 tracking-wide font-light">{ct(content, "testimonials_label", "قصص العملاء")}</p>
           <h2 className="text-3xl md:text-[2.8rem] font-bold text-center mb-16 text-black">
             {ct(content, "testimonials_title", "تعالوا اسمعوا ماذا يقول وكلاؤنا")}
           </h2>
@@ -2779,15 +2813,17 @@ function LandingContent() {
           <div className="relative">
             <button
               onClick={() => goTestimonial("up")}
+              aria-label="السابق"
               className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-14 hidden lg:flex h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black items-center justify-center transition-colors z-10"
             >
-              <ChevronLeft className="h-5 w-5 rotate-180" />
+              <ChevronLeft className="h-5 w-5" />
             </button>
             <button
               onClick={() => goTestimonial("down")}
+              aria-label="التالي"
               className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-14 hidden lg:flex h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black items-center justify-center transition-colors z-10"
             >
-              <ChevronLeft className="h-5 w-5" />
+              <ChevronRight className="h-5 w-5" />
             </button>
 
             <div
@@ -2821,7 +2857,17 @@ function LandingContent() {
                     {testimonials[testimonialIdx].highlight}
                   </p>
                   <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 rounded-lg bg-black/[0.08] flex-shrink-0" />
+                    {/* Google-style colored circle with the first
+                        letter of the name. Color is deterministic on
+                        the name string so the same person always
+                        gets the same chip. */}
+                    <div
+                      className="h-12 w-12 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xl font-bold shadow-sm"
+                      style={{ background: colorForTestimonial(testimonials[testimonialIdx].name) }}
+                      aria-hidden="true"
+                    >
+                      {initialOf(testimonials[testimonialIdx].name)}
+                    </div>
                     <div>
                       <p className="font-bold text-black">{testimonials[testimonialIdx].name}</p>
                       <p className="text-sm text-black/55">{testimonials[testimonialIdx].role}</p>
@@ -2853,11 +2899,11 @@ function LandingContent() {
             </div>
 
             <div className="flex lg:hidden justify-center gap-3 mt-6">
-              <button onClick={() => goTestimonial("up")} className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
-                <ChevronLeft className="h-5 w-5 rotate-180" />
-              </button>
-              <button onClick={() => goTestimonial("down")} className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
+              <button onClick={() => goTestimonial("up")} aria-label="السابق" className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
                 <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button onClick={() => goTestimonial("down")} aria-label="التالي" className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
+                <ChevronRight className="h-5 w-5" />
               </button>
             </div>
           </div>
