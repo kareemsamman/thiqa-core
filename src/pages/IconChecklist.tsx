@@ -66,7 +66,7 @@ export default function IconChecklist() {
       }
 
       try {
-        const response = await fetch("/favicon.ico", { method: "HEAD", cache: "no-store" });
+        const response = await fetch("/favicon.ico", { cache: "no-store" });
         next.push({
           label: "favicon.ico",
           detail: response.ok ? "/favicon.ico موجود للمتصفحات التي تطلبه تلقائياً" : "favicon.ico غير متاح",
