@@ -120,6 +120,7 @@ export default function PayPalTest() {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [eventLog, setEventLog] = useState<Array<{ ts: string; event: string; payload?: unknown }>>([]);
   const buttonsContainerRef = useRef<HTMLDivElement | null>(null);
+  const autoLoadedRef = useRef(false);
 
   const log = (event: string, payload?: unknown) => {
     setEventLog((prev) => [
@@ -178,6 +179,22 @@ export default function PayPalTest() {
 
     document.head.appendChild(script);
   };
+
+  // Auto-load the SDK on first mount whenever a Client ID is already
+  // saved. This means a tab discard / HMR reload / route round-trip
+  // doesn't force the user to click "Load PayPal SDK" again — they
+  // come back and the buttons re-render automatically.
+  // autoLoadedRef guards against React 18 StrictMode firing the
+  // effect twice in dev.
+  useEffect(() => {
+    if (autoLoadedRef.current) return;
+    autoLoadedRef.current = true;
+    const saved = readLocal(LS_CLIENT_ID, "").trim();
+    if (saved) {
+      loadSdk();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const renderButtons = () => {
     if (!window.paypal || !buttonsContainerRef.current) return;
@@ -333,7 +350,15 @@ export default function PayPalTest() {
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-3 space-y-1.5">
-                <Label htmlFor="client-id">Sandbox Client ID</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="client-id">Sandbox Client ID</Label>
+                  {clientId.trim() && (
+                    <span className="text-xs flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Saved locally — survives reloads
+                    </span>
+                  )}
+                </div>
                 <Input
                   id="client-id"
                   placeholder="AY7…"
