@@ -9,6 +9,7 @@ import { PlanLadder } from "@/components/pricing/PlanLadder";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import thiqaLogoIcon from "@/assets/thiqa-logo-icon.svg";
+import { NoIndex } from "@/components/seo/NoIndex";
 
 // Defaults match the values seeded in the support_contact_settings
 // migration — used as a fallback if the settings query hasn't loaded
@@ -91,6 +92,8 @@ export default function SubscriptionExpired() {
   };
 
   return (
+    <>
+    <NoIndex />
     <div className="min-h-screen bg-gradient-to-br from-muted/40 to-background flex flex-col" dir="rtl">
       {isImpersonating && impersonatedAgent && (
         <div className="bg-primary text-primary-foreground py-2 px-4 flex items-center justify-between gap-3 shadow-md">
@@ -189,5 +192,6 @@ export default function SubscriptionExpired() {
         </div>
       </div>
     </div>
+    </>
   );
 }

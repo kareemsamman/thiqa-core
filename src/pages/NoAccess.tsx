@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ShieldX, Mail, Phone, LogOut, Loader2, Lock } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { NoIndex } from "@/components/seo/NoIndex";
 
 interface AgentContact {
   agent_name: string | null;
@@ -49,15 +50,20 @@ export default function NoAccess() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <>
+        <NoIndex />
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </>
     );
   }
 
   const isPlanLocked = profile?.status === 'plan_locked';
 
   return (
+    <>
+    <NoIndex />
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md border shadow-lg animate-scale-in">
         <CardHeader className="text-center space-y-4">
@@ -156,5 +162,6 @@ export default function NoAccess() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

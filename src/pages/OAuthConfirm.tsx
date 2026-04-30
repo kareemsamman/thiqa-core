@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { NoIndex } from "@/components/seo/NoIndex";
 
 // Inline Google "G" so we don't have to ship a brand asset for one icon.
 function GoogleG({ className }: { className?: string }) {
@@ -143,9 +144,12 @@ export default function OAuthConfirm() {
   //  - profile already has agent_id (about to redirect to /dashboard).
   if (authLoading || profileLoading || !user || isSuperAdmin || profile?.agent_id) {
     return (
+      <>
+      <NoIndex />
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
+      </>
     );
   }
 
@@ -153,6 +157,8 @@ export default function OAuthConfirm() {
   const initialColor = colorForKey(email || fullName || "x");
 
   return (
+    <>
+    <NoIndex />
     <div className="min-h-screen flex items-center justify-center bg-background p-4" dir="rtl">
       <Card className="w-full max-w-md border shadow-lg animate-scale-in">
         <CardHeader className="text-center space-y-4">
@@ -288,5 +294,6 @@ export default function OAuthConfirm() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

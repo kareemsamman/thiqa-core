@@ -180,6 +180,8 @@ export default function SignaturePage() {
           <title>توقيع العميل | ثقة للتأمين</title>
           <meta name="description" content="توقيع العميل على نموذج التأمين عبر رابط آمن لمرة واحدة." />
           <link rel="canonical" href={typeof window !== "undefined" ? window.location.href : "/"} />
+          <meta name="robots" content="noindex, nofollow" />
+          <meta name="googlebot" content="noindex, nofollow" />
         </Helmet>
         <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center p-4" dir="rtl">
           <Card className="w-full max-w-md">
@@ -203,6 +205,8 @@ export default function SignaturePage() {
           <title>رابط توقيع غير صالح | ثقة للتأمين</title>
           <meta name="description" content="رابط التوقيع غير صالح أو منتهي." />
           <link rel="canonical" href={typeof window !== "undefined" ? window.location.href : "/"} />
+          <meta name="robots" content="noindex, nofollow" />
+          <meta name="googlebot" content="noindex, nofollow" />
         </Helmet>
         <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center p-4" dir="rtl">
           <Card className="w-full max-w-md text-center">
@@ -229,6 +233,8 @@ export default function SignaturePage() {
           <title>تم التوقيع مسبقاً | ثقة للتأمين</title>
           <meta name="description" content="لقد قمت بالتوقيع على هذا النموذج مسبقاً." />
           <link rel="canonical" href={typeof window !== "undefined" ? window.location.href : "/"} />
+          <meta name="robots" content="noindex, nofollow" />
+          <meta name="googlebot" content="noindex, nofollow" />
         </Helmet>
         <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center p-4" dir="rtl">
           <Card className="w-full max-w-md text-center">
@@ -261,6 +267,8 @@ export default function SignaturePage() {
           <title>تم التوقيع | ثقة للتأمين</title>
           <meta name="description" content="تم حفظ توقيع العميل بنجاح." />
           <link rel="canonical" href={typeof window !== "undefined" ? window.location.href : "/"} />
+          <meta name="robots" content="noindex, nofollow" />
+          <meta name="googlebot" content="noindex, nofollow" />
         </Helmet>
         <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center p-4" dir="rtl">
           <Card className="w-full max-w-md text-center">
@@ -285,6 +293,8 @@ export default function SignaturePage() {
         <title>توقيع العميل | ثقة للتأمين</title>
         <meta name="description" content="توقيع العميل على نموذج التأمين عبر رابط آمن لمرة واحدة." />
         <link rel="canonical" href={typeof window !== "undefined" ? window.location.href : "/"} />
+        <meta name="robots" content="noindex, nofollow" />
+        <meta name="googlebot" content="noindex, nofollow" />
       </Helmet>
       <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center p-4" dir="rtl">
         <Card className="w-full max-w-lg">

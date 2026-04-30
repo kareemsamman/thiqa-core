@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { useSidebarState } from "@/hooks/useSidebarState";
+import { NoIndex } from "@/components/seo/NoIndex";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -24,6 +25,10 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
+      {/* Authenticated CRM/admin chrome — keep these routes out of
+          search. Overrides SiteHelmet's index/follow default via
+          react-helmet-async last-mount-wins. */}
+      <NoIndex />
       <main className={`min-h-screen transition-all duration-300 px-2 py-3 pt-[4.5rem] md:pt-6 md:p-6 ${sidebarMargin} ${isThiqaSuperAdmin ? 'pb-6' : 'pb-40 md:pb-6'} ${isImpersonating ? 'mt-10' : ''}`}>
         <div className="max-w-full">{children}</div>
       </main>

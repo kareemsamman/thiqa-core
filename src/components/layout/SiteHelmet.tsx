@@ -3,12 +3,13 @@ import { useLocation } from "react-router-dom";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 
 // App-wide Helmet defaults. Sets a fallback title/description plus a
-// global `noindex, nofollow` robots tag so the authenticated CRM and
-// admin areas stay out of search engines on principle. Public marketing,
-// auth, and legal pages mount <PublicSEO> inside their route, which is
-// rendered AFTER this component in the tree — react-helmet-async resolves
-// duplicate tags by "last mount wins", so PublicSEO cleanly overrides
-// both the title and the robots tag for those pages.
+// global `index, follow` robots tag — the public marketing pages must
+// be crawlable as a baseline, since Google skips rendering JS entirely
+// when the initial HTML says noindex (so a later <PublicSEO> override
+// would never take effect for crawlers). CRM and admin routes mount
+// inside MainLayout, which carries its own <NoIndex> Helmet entry —
+// react-helmet-async resolves duplicate tags by "last mount wins", so
+// MainLayout cleanly switches authenticated routes back to noindex.
 //
 // Keyed by location.pathname so the Helmet remounts on every navigation.
 // react-helmet-async otherwise keeps stale tags from an unmounted child
@@ -26,8 +27,8 @@ export function SiteHelmet() {
     <Helmet key={location.pathname}>
       <title>{title}</title>
       <meta name="description" content={description} />
-      <meta name="robots" content="noindex, nofollow" />
-      <meta name="googlebot" content="noindex, nofollow" />
+      <meta name="robots" content="index, follow" />
+      <meta name="googlebot" content="index, follow" />
       <meta property="og:title" content={title} />
       <meta property="og:description" content={description} />
       <meta name="twitter:title" content={title} />

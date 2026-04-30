@@ -1,6 +1,7 @@
 import { useLocation } from "react-router-dom";
 import { useEffect, useRef } from "react";
 import { Headphones, Home } from "lucide-react";
+import { NoIndex } from "@/components/seo/NoIndex";
 
 if (typeof document !== "undefined") {
   const href =
@@ -41,6 +42,8 @@ const NotFound = () => {
   }, []);
 
   return (
+    <>
+    <NoIndex />
     <div
       dir="rtl"
       className="fixed inset-0 z-[9999] h-screen w-screen overflow-hidden bg-black text-white"
@@ -116,6 +119,7 @@ const NotFound = () => {
         }
       `}</style>
     </div>
+    </>
   );
 };
 

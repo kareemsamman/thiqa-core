@@ -5,15 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <!-- Default title/description. Per-page <PublicSEO> overrides these
-         for marketing/auth/legal pages and switches robots to "index". -->
+         for marketing/auth/legal pages with localized title + canonical. -->
     <title>Thiqa | نظام إدارة وكالات التأمين</title>
     <meta name="description" content="Thiqa — نظام سحابي متكامل لإدارة وكالات التأمين: العملاء، الوثائق، الأقساط، التحصيل، التقارير، والتنبيهات. جرّب مجاناً.">
 
-    <!-- Default crawl posture: noindex. Public marketing/auth/legal
-         pages override this via <PublicSEO> to "index, follow". CRM
-         and admin routes inherit the default and stay out of search. -->
-    <meta name="robots" content="noindex, nofollow" />
-    <meta name="googlebot" content="noindex, nofollow" />
+    <!-- Default crawl posture: index, follow. The previous default of
+         noindex was a footgun: Google explicitly skips JS rendering
+         when the initial HTML carries noindex (see "noindex" in the
+         crawler docs), which meant the per-page <PublicSEO> override
+         to "index, follow" never reached the index for marketing /
+         pricing / FAQ pages. CRM and admin routes mount inside
+         MainLayout, which carries a <NoIndex> Helmet entry so they
+         still stay out of search. -->
+    <meta name="robots" content="index, follow" />
+    <meta name="googlebot" content="index, follow" />
 
     <meta name="author" content="Thiqa" />
     <meta name="publisher" content="Thiqa" />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CheckCircle } from "lucide-react";
+import { NoIndex } from "@/components/seo/NoIndex";
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
@@ -47,6 +48,8 @@ export default function PaymentSuccess() {
   }, [paymentId]);
 
   return (
+    <>
+    <NoIndex />
     <div className="min-h-screen flex items-center justify-center bg-background p-4" dir="rtl">
       <div className="text-center space-y-4">
         <div className="w-20 h-20 mx-auto rounded-full bg-green-100 flex items-center justify-center">
@@ -59,5 +62,6 @@ export default function PaymentSuccess() {
         )}
       </div>
     </div>
+    </>
   );
 }
