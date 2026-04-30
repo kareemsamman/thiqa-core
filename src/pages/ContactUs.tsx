@@ -12,6 +12,7 @@ import { PublicSEO } from "@/components/public/PublicSEO";
 import { DemoCallTrigger } from "@/components/public/DemoCallDialog";
 import { SupportContactForm } from "@/components/public/SupportContactForm";
 import { PublicFooter } from "@/components/public/PublicFooter";
+import { PublicGradientBackground } from "@/components/public/PublicGradientBackground";
 
 // Public "Contact us" surface — the support form used to live as a
 // trailing section on /faq#support, but mixing the FAQ catalog and a
@@ -92,15 +93,7 @@ export default function ContactUs() {
         keywords="تواصل معنا Thiqa, دعم Thiqa, اتصل بنا, مساعدة وكالات التأمين"
       />
 
-      {/* Purple gradient band — shared identity with /pricing and /faq. */}
-      <div
-        aria-hidden
-        className="gradient-drop pointer-events-none absolute top-0 inset-x-0 h-[640px]"
-        style={{
-          background:
-            "linear-gradient(180deg, #6F4FFF 0%, #9D89FF 32%, rgba(255,255,255,0.85) 70%, rgba(255,255,255,0) 100%)",
-        }}
-      />
+      <PublicGradientBackground />
 
       {/* ═══ Navbar — duplicated from Pricing/FAQ (extraction TBD). */}
       <nav className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-3">
@@ -457,13 +450,13 @@ export default function ContactUs() {
 
       {/* ═══ Hero — same gradient band, white copy. */}
       <section className="relative z-10 pt-32 md:pt-40 pb-12 md:pb-16 text-center px-6">
-        <p className="text-sm text-black/65 mb-4 tracking-wide font-medium">
+        <p className="text-sm text-white/80 mb-4 tracking-wide font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
           تواصل معنا
         </p>
-        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-black">
+        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
           نحن هنا لمساعدتك
         </h1>
-        <p className="text-black/70 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed">
+        <p className="text-white/85 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
           أرسل لنا استفسارك أو طلب الدعم وسنرد عليك في أسرع وقت ممكن.
         </p>
       </section>

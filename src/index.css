@@ -355,19 +355,19 @@ html {
     .pricing-card-enter { animation: none; }
   }
 
-  /* Purple hero gradient drop — used on Pricing/FAQ/ContactUs, where
-     the band sits behind the navbar + hero. Slides in from above so
-     the page doesn't pop in flat. */
-  .gradient-drop {
-    animation: gradientDrop 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
-    transform-origin: top center;
+  /* Atmospheric public-page background — fades in on mount so the
+     aurora doesn't snap into existence. The background layer itself
+     keeps its own transform: scale(1.1) for the blur bleed, so the
+     animation only touches opacity. */
+  .public-gradient-bg {
+    animation: publicGradientFade 700ms ease-out both;
   }
-  @keyframes gradientDrop {
-    from { transform: translateY(-30%) scaleY(0.7); opacity: 0; }
-    to   { transform: translateY(0)    scaleY(1);   opacity: 1; }
+  @keyframes publicGradientFade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .gradient-drop { animation: none; }
+    .public-gradient-bg { animation: none; }
   }
 
   /* LoadingScreen — slow rotating ring around the Thiqa lockup. */

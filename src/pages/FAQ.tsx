@@ -11,6 +11,7 @@ import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { cn } from "@/lib/utils";
 import { PublicSEO } from "@/components/public/PublicSEO";
 import { PublicFooter } from "@/components/public/PublicFooter";
+import { PublicGradientBackground } from "@/components/public/PublicGradientBackground";
 import { FAQ_CATEGORIES, flattenFaq, type FlatFaqItem } from "@/lib/faqContent";
 
 const INFO_CENTER_ITEMS = [
@@ -107,17 +108,7 @@ export default function FAQ() {
         keywords="أسئلة Thiqa, مساعدة Thiqa, دليل النظام, أسئلة شائعة, دعم وكالات التأمين"
       />
 
-      {/* Purple gradient band — same recipe as the pricing page so the
-          two surfaces share an identity. Pinned to top so the hero
-          rides the gradient and the body lands on white. */}
-      <div
-        aria-hidden
-        className="gradient-drop pointer-events-none absolute top-0 inset-x-0 h-[640px]"
-        style={{
-          background:
-            "linear-gradient(180deg, #6F4FFF 0%, #9D89FF 32%, rgba(255,255,255,0.85) 70%, rgba(255,255,255,0) 100%)",
-        }}
-      />
+      <PublicGradientBackground />
 
       {/* ═══ Navbar — duplicated from Pricing for now (extraction is a
           separate task). FAQ link in INFO_CENTER_ITEMS now points to
@@ -478,13 +469,13 @@ export default function FAQ() {
           a centered title + subtitle. Search bar sits below in white
           card so it's visually anchored as the entry point. */}
       <section className="relative z-10 pt-32 md:pt-40 pb-8 md:pb-12 text-center px-6">
-        <p className="text-sm text-black/65 mb-4 tracking-wide font-medium">
+        <p className="text-sm text-white/80 mb-4 tracking-wide font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
           أسئلة وأجوبة
         </p>
-        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-black">
+        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
           كل ما يهمك معرفته عن Thiqa
         </h1>
-        <p className="text-black/70 text-[15px] md:text-base max-w-2xl mx-auto leading-relaxed">
+        <p className="text-white/85 text-[15px] md:text-base max-w-2xl mx-auto leading-relaxed drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
           إجابات على الأسئلة الأكثر شيوعاً من وكلاء التأمين — التسجيل، الميزات، التكاملات، والدعم.
         </p>
       </section>

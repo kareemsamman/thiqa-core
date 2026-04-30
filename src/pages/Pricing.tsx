@@ -15,6 +15,7 @@ import { PLAN_FEATURE_CATALOG } from "@/lib/planFeatureCatalog";
 import { FAQSection } from "@/components/public/FAQSection";
 import { DemoCallTrigger } from "@/components/public/DemoCallDialog";
 import { PublicFooter } from "@/components/public/PublicFooter";
+import { PublicGradientBackground } from "@/components/public/PublicGradientBackground";
 
 interface PlanData {
   id: string;
@@ -217,18 +218,7 @@ export default function Pricing() {
         description="خطط أسعار Thiqa لإدارة وكالات التأمين: ابدأ بالخطة المجانية ووسّع حسب حاجة وكالتك. أسعار شفافة، اشتراكات شهرية وسنوية، وبدون التزامات طويلة."
         keywords="أسعار Thiqa, خطط اشتراك Thiqa, تكلفة نظام إدارة التأمين, اشتراك مجاني, خطة احترافية"
       />
-      {/* Purple gradient band — pinned to the top of the page so it
-          covers the navbar + hero only and fades into white well
-          above the pricing grid (Strain reference). Kept short so
-          the cards sit cleanly on white, not on tinted purple. */}
-      <div
-        aria-hidden
-        className="gradient-drop pointer-events-none absolute top-0 inset-x-0 h-[640px]"
-        style={{
-          background:
-            "linear-gradient(180deg, #6F4FFF 0%, #9D89FF 32%, rgba(255,255,255,0.85) 70%, rgba(255,255,255,0) 100%)",
-        }}
-      />
+      <PublicGradientBackground />
 
       {/* ═══ Navbar — static light pill, same 3-item structure as the
           landing page. Mobile collapses to login + hamburger + drawer. */}
@@ -592,13 +582,13 @@ export default function Pricing() {
       {/* ═══ Pricing Hero — sits on the purple band of the gradient,
           so copy is white for contrast. */}
       <section className="relative z-10 pt-32 md:pt-40 pb-12 md:pb-16 text-center px-6">
-        <p className="text-sm text-black/65 mb-4 tracking-wide font-medium">
+        <p className="text-sm text-white/80 mb-4 tracking-wide font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
           {ct(content, "pricing_label", "الأسعار")}
         </p>
-        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-black">
+        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
           {ct(content, "pricing_title", "جرّب نظام الإدارة لمدة 35 يوم مجاناً *")}
         </h1>
-        <p className="text-black/70 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed">
+        <p className="text-white/85 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
           {ct(content, "pricing_subtitle", "* جميع الميزات مفتوحة بالكامل — بدون بطاقة ائتمان.")}
         </p>
       </section>
