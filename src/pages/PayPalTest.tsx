@@ -120,7 +120,6 @@ export default function PayPalTest() {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [eventLog, setEventLog] = useState<Array<{ ts: string; event: string; payload?: unknown }>>([]);
   const buttonsContainerRef = useRef<HTMLDivElement | null>(null);
-  const autoLoadedRef = useRef(false);
 
   const log = (event: string, payload?: unknown) => {
     setEventLog((prev) => [
@@ -170,31 +169,27 @@ export default function PayPalTest() {
       setStatus({ kind: "ready" });
     };
     script.onerror = () => {
-      log("SDK failed to load");
+      log("SDK failed to load", { url: script.src });
       setStatus({
         kind: "error",
-        message: "PayPal SDK failed to load — check the Client ID and that you're using a Sandbox key.",
+        message:
+          "PayPal SDK failed to load. Common causes: (1) the Client ID is wrong or not a Sandbox key, " +
+          "(2) a browser extension or ad blocker is blocking www.paypal.com, " +
+          "(3) the network briefly dropped — try again. " +
+          "Open DevTools → Network and look for the gray sdk/js request to see the real status code.",
       });
     };
 
     document.head.appendChild(script);
   };
 
-  // Auto-load the SDK on first mount whenever a Client ID is already
-  // saved. This means a tab discard / HMR reload / route round-trip
-  // doesn't force the user to click "Load PayPal SDK" again — they
-  // come back and the buttons re-render automatically.
-  // autoLoadedRef guards against React 18 StrictMode firing the
-  // effect twice in dev.
-  useEffect(() => {
-    if (autoLoadedRef.current) return;
-    autoLoadedRef.current = true;
-    const saved = readLocal(LS_CLIENT_ID, "").trim();
-    if (saved) {
-      loadSdk();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // (Earlier I had an auto-load useEffect that fired loadSdk() on
+  // every mount when a Client ID was cached. It made the page hit
+  // the network on every render, which surfaced as "SDK failed to
+  // load" the moment anything went wrong with the PayPal request.
+  // Reverted — the user clicks "Load PayPal SDK" explicitly.
+  // Persistence still keeps the form populated, so they only paste
+  // the Client ID once.)
 
   const renderButtons = () => {
     if (!window.paypal || !buttonsContainerRef.current) return;
