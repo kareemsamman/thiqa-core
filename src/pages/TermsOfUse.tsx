@@ -7,7 +7,7 @@ import { PublicSEO } from "@/components/public/PublicSEO";
 // so the two read as a single set.
 export default function TermsOfUse() {
   return (
-    <div className="min-h-screen bg-white text-foreground" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
+    <div className="min-h-screen bg-white text-foreground public-page-enter" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
       <PublicSEO
         title="Thiqa | شروط الاستخدام"
         description="شروط استخدام منصة Thiqa لإدارة وكالات التأمين: حقوق وواجبات المستخدم، الاشتراكات والمدفوعات، حدود المسؤولية، وسياسات الإلغاء."

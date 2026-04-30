@@ -3,7 +3,7 @@ import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { useNavigate } from "react-router-dom";
 import {
   Check, ChevronDown, Menu, X, Play, Sparkles, Star, HelpCircle, MessageSquare,
-  Users, FileText, Mail, Megaphone, Bot, Building2,
+  Users, FileText, Mail, Phone, Megaphone, Bot, Building2,
   type LucideIcon,
 } from "lucide-react";
 import { useLandingContent, ct } from "@/hooks/useLandingContent";
@@ -200,7 +200,7 @@ export default function Pricing() {
 
   return (
     <div
-      className="min-h-screen text-black overflow-x-hidden relative bg-white"
+      className="min-h-screen text-black overflow-x-hidden relative bg-white public-page-enter"
       dir="rtl"
       style={{ fontFamily: "'Cairo', sans-serif" }}
     >
@@ -924,15 +924,18 @@ export default function Pricing() {
               digits/email render in natural order. Same hairline as
               the landing footer separates it from the copyright. */}
           <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[14px] text-black/65" dir="ltr">
-            <a href="mailto:support@getthiqa.com" className="hover:text-black transition-colors">
+            <a href="mailto:support@getthiqa.com" className="inline-flex items-center gap-2 hover:text-black transition-colors">
+              <Mail className="h-4 w-4" strokeWidth={2} aria-hidden />
               support@getthiqa.com
             </a>
             <span aria-hidden className="h-1 w-1 rounded-full bg-black/20" />
-            <a href="tel:+972525143581" className="hover:text-black transition-colors tabular-nums">
+            <a href="tel:+972525143581" className="inline-flex items-center gap-2 hover:text-black transition-colors tabular-nums">
+              <Phone className="h-4 w-4" strokeWidth={2} aria-hidden />
               0525143581
             </a>
             <span aria-hidden className="h-1 w-1 rounded-full bg-black/20" />
-            <a href="tel:+972598948155" className="hover:text-black transition-colors tabular-nums">
+            <a href="tel:+972598948155" className="inline-flex items-center gap-2 hover:text-black transition-colors tabular-nums">
+              <Phone className="h-4 w-4" strokeWidth={2} aria-hidden />
               0598 948 155
             </a>
           </div>

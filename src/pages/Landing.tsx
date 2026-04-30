@@ -695,7 +695,7 @@ function LandingContent() {
 
   return (
     <LandingGalleryProvider>
-    <div className="min-h-screen text-black overflow-x-hidden bg-white" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
+    <div className="min-h-screen text-black overflow-x-hidden bg-white public-page-enter" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
       <PublicSEO
         title="Thiqa | نظام إدارة وكالات التأمين"
         description="Thiqa — نظام سحابي متكامل لإدارة وكالات التأمين بالعربية: عملاء، معاملات، أقساط، تحصيل، شيكات، تقارير، وتنبيهات. جرّب 35 يوم مجاناً."
@@ -3151,15 +3151,18 @@ function LandingContent() {
               divider/social row, separated from the socials below by
               the same dot-capped hairline used elsewhere. */}
           <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[14px] text-black/65" dir="ltr">
-            <a href="mailto:support@getthiqa.com" className="hover:text-black transition-colors">
+            <a href="mailto:support@getthiqa.com" className="inline-flex items-center gap-2 hover:text-black transition-colors">
+              <Mail className="h-4 w-4" strokeWidth={2} aria-hidden />
               support@getthiqa.com
             </a>
             <span aria-hidden className="h-1 w-1 rounded-full bg-black/20" />
-            <a href="tel:+972525143581" className="hover:text-black transition-colors tabular-nums">
+            <a href="tel:+972525143581" className="inline-flex items-center gap-2 hover:text-black transition-colors tabular-nums">
+              <Phone className="h-4 w-4" strokeWidth={2} aria-hidden />
               0525143581
             </a>
             <span aria-hidden className="h-1 w-1 rounded-full bg-black/20" />
-            <a href="tel:+972598948155" className="hover:text-black transition-colors tabular-nums">
+            <a href="tel:+972598948155" className="inline-flex items-center gap-2 hover:text-black transition-colors tabular-nums">
+              <Phone className="h-4 w-4" strokeWidth={2} aria-hidden />
               0598 948 155
             </a>
           </div>

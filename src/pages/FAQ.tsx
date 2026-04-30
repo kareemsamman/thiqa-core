@@ -90,7 +90,7 @@ export default function FAQ() {
 
   return (
     <div
-      className="min-h-screen text-black overflow-x-hidden relative bg-white"
+      className="min-h-screen text-black overflow-x-hidden relative bg-white public-page-enter"
       dir="rtl"
       style={{ fontFamily: "'Cairo', sans-serif" }}
     >

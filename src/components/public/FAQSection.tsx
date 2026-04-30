@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { useLandingContent, ct } from "@/hooks/useLandingContent";
@@ -42,8 +42,34 @@ export function FAQSection({ compact = false }: { compact?: boolean } = {}) {
   const { data: content } = useLandingContent();
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
+  // Trigger the stagger entrance only once the section scrolls into
+  // view — otherwise the animation finishes before the user reaches
+  // it on the long landing page. Users with reduced-motion skip the
+  // hidden-then-animate step entirely so rows render immediately.
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const reducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const [inView, setInView] = useState(reducedMotion);
+  useEffect(() => {
+    const node = sectionRef.current;
+    if (!node || inView) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.15 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [inView]);
+
   return (
     <section
+      ref={sectionRef}
       id="faq"
       className={cn(
         "relative bg-white",
@@ -63,7 +89,11 @@ export function FAQSection({ compact = false }: { compact?: boolean } = {}) {
             const isOpen = openFaq === i;
             const isLast = i === LANDING_FAQS.length - 1;
             return (
-              <div key={i}>
+              <div
+                key={i}
+                className={inView ? "faq-item-enter" : undefined}
+                style={inView ? { animationDelay: `${120 + i * 90}ms` } : { opacity: 0 }}
+              >
                 <button
                   onClick={() => setOpenFaq(isOpen ? null : i)}
                   className="w-full flex items-center gap-4 py-6 md:py-7 text-right group"

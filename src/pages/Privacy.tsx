@@ -8,7 +8,7 @@ import { PublicSEO } from "@/components/public/PublicSEO";
 // TermsOfUse.tsx so the two pages feel like one set.
 export default function Privacy() {
   return (
-    <div className="min-h-screen bg-white text-foreground" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
+    <div className="min-h-screen bg-white text-foreground public-page-enter" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
       <PublicSEO
         title="Thiqa | سياسة الخصوصية"
         description="سياسة خصوصية Thiqa: كيف نجمع بياناتك ونحميها ونستخدمها داخل نظام إدارة وكالات التأمين، وحقوقك في الوصول والتحكم بهذه البيانات."
