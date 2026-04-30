@@ -113,32 +113,12 @@ export function useSessionTracker() {
       }
     };
 
-    // Realtime subscription so a kick from /admin/users is enforced
-    // instantly instead of waiting up to 30s for the heartbeat to pick
-    // it up. Filter on our own session row only. On any UPDATE that
-    // sets kicked_at, sign out immediately. Heartbeat stays as a
-    // fallback for cases where the realtime channel fails to connect.
-    const subscribeToKick = () => {
-      const id = sessionIdRef.current || sessionStorage.getItem('current_session_id');
-      if (!id) return null;
-      return supabase
-        .channel(`user_session_kick:${id}`)
-        .on(
-          'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'user_sessions', filter: `id=eq.${id}` },
-          async (payload: any) => {
-            if (payload?.new?.kicked_at) {
-              if (heartbeatRef.current) {
-                window.clearInterval(heartbeatRef.current);
-                heartbeatRef.current = null;
-              }
-              sessionStorage.removeItem('current_session_id');
-              await signOut();
-            }
-          },
-        )
-        .subscribe();
-    };
+    // (Removed: per-row Realtime subscription on user_sessions. The
+    // table was dropped from the supabase_realtime publication for
+    // privacy — the row carries IP / user-agent / device columns and
+    // an external scan flagged the broadcast surface. The 30-second
+    // heartbeat below already polls kicked_at as the documented
+    // fallback, so kicks still fire — just up to 30s later.)
 
     // Ping last_seen_at so the UI can tell this tab is still alive.
     // Admins viewing /admin/users treat any session without a recent
@@ -146,8 +126,9 @@ export function useSessionTracker() {
     //
     // The same call also reads back kicked_at. When an admin has hit
     // the "طرد" button on this session, that column is non-null and we
-    // sign the user out on the next tick (≤30s lag) — this is the
-    // fallback for when realtime isn't available.
+    // sign the user out on the next tick (≤30s lag). With user_sessions
+    // off the supabase_realtime publication this is the only kick
+    // mechanism — instant kicks via postgres_changes were retired.
     const startHeartbeat = () => {
       if (heartbeatRef.current) window.clearInterval(heartbeatRef.current);
       heartbeatRef.current = window.setInterval(async () => {
@@ -173,20 +154,16 @@ export function useSessionTracker() {
       }, HEARTBEAT_INTERVAL_MS);
     };
 
-    let kickChannel: ReturnType<typeof subscribeToKick> = null;
-
     // Check if there's an orphaned session from previous tab/window
     const orphanedSessionId = sessionStorage.getItem('current_session_id');
     if (orphanedSessionId) {
       sessionIdRef.current = orphanedSessionId;
       startedRef.current = true;
       startHeartbeat();
-      kickChannel = subscribeToKick();
     } else {
       startSession().then(() => {
         if (sessionIdRef.current) {
           startHeartbeat();
-          kickChannel = subscribeToKick();
         }
       });
     }
@@ -226,9 +203,6 @@ export function useSessionTracker() {
       if (heartbeatRef.current) {
         window.clearInterval(heartbeatRef.current);
         heartbeatRef.current = null;
-      }
-      if (kickChannel) {
-        supabase.removeChannel(kickChannel);
       }
     };
   }, [user, signOut]);
