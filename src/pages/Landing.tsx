@@ -2065,7 +2065,19 @@ function LandingContent() {
                     <GalleryImage
                       src={("image" in u && u.image) ? u.image : featuresMockup}
                       alt={u.title}
-                      className="max-w-full max-h-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
+                      // iOS Safari note: inside a `width: max-content`
+                      // marquee, percentage-based `max-h-full` on the
+                      // inner <img> sometimes resolves to 0 for every
+                      // card except the first one (the first card
+                      // gets a real layout pass before the marquee
+                      // animation starts; later cards inherit the
+                      // collapsed height and render as empty
+                      // gradients on iPhone). Forcing explicit
+                      // `w-full h-full` plus `object-contain` gives
+                      // every <img> a concrete box tied to its
+                      // absolute parent (`inset-0`) so the device
+                      // mockup renders on every card on mobile too.
+                      className="block w-full h-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
                     />
                   </div>
                 </div>
