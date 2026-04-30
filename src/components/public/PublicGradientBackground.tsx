@@ -1,16 +1,14 @@
 // Atmospheric gradient layer used on /pricing, /faq, /contact —
-// home page intentionally excluded. The layer is fixed to the
-// viewport so the aurora always rides at the top while the page
-// scrolls underneath. A CSS mask fades the bottom 60% to transparent
-// (cleaner than stacking a white overlay), so the page body lands
-// on its own white background as the user scrolls.
+// home page intentionally excluded.
 //
-// Five stacked radial gradients on top of a 95deg linear base for
-// the aurora effect; blur(40px) + scale(1.15) blend the radials and
-// hide the rectangle edge. Pointer-events disabled so it never
-// intercepts clicks. The transform + drop-from-top entrance
-// animation lives in index.css under .public-gradient-bg so the
-// keyframe can compose with the persistent scale(1.15).
+// Structure: an outer `fixed inset-0` wrapper carries the fade mask
+// and stays still. An inner div paints the actual aurora and is the
+// one that animates — translateY + scale + opacity together. Because
+// the mask lives on the wrapper (not the moving inner), the visible
+// edges of the gradient never sweep across the viewport during the
+// entrance: the wrapper's mask clips them. The result is that the
+// aurora *drifts* into place from above and fades in together,
+// rather than sliding as a hard rectangle.
 
 const AURORA_BACKGROUND = `
   radial-gradient(ellipse 70% 90% at 45% 30%, rgba(255, 180, 140, 1) 0%, rgba(255, 170, 130, 0.85) 25%, transparent 60%),
@@ -20,23 +18,25 @@ const AURORA_BACKGROUND = `
   linear-gradient(95deg, #6a72a0 0%, #a8a5c4 25%, #c8b4b0 45%, #9898c0 65%, #3a4268 85%, #1a2248 100%)
 `;
 
-// Pull the fade up so the bottom half of the viewport is fully
-// transparent — the page's own white background shows through, and
-// content scrolling under the lower half lands cleanly on white.
-// Top ~20% is the gradient at full strength, 20→50% is the fade.
 const FADE_MASK = "linear-gradient(to bottom, black 0%, black 20%, transparent 55%)";
 
 export function PublicGradientBackground() {
   return (
     <div
       aria-hidden
-      className="public-gradient-bg pointer-events-none fixed inset-0 z-0"
+      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
       style={{
-        background: AURORA_BACKGROUND,
-        filter: "blur(40px)",
         WebkitMaskImage: FADE_MASK,
         maskImage: FADE_MASK,
       }}
-    />
+    >
+      <div
+        className="public-gradient-bg absolute inset-0"
+        style={{
+          background: AURORA_BACKGROUND,
+          filter: "blur(40px)",
+        }}
+      />
+    </div>
   );
 }

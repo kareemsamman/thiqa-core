@@ -355,20 +355,20 @@ html {
     .pricing-card-enter { animation: none; }
   }
 
-  /* Atmospheric public-page background — soft "settle in" entrance.
-     Starts slightly zoomed past the baseline (scale 1.25) and fades
-     in while easing back to the persistent scale(1.15). No edges
-     slide across the viewport, no clip line travels through it —
-     the layer just blooms into place. 1300ms with a long ease-out
-     curve gives it a calm, ambient feel rather than an obvious
-     transition. */
+  /* Atmospheric public-page background — drifts in from above WHILE
+     fading. The fade mask sits on a wrapper that stays still, so
+     this inner element can translate freely without ever showing a
+     hard edge: the wrapper's mask clips whatever the inner element
+     paints. translateY pairs with opacity so motion + fade resolve
+     at the same moment, reading as a single coordinated entrance
+     rather than separate effects layered on top of each other. */
   .public-gradient-bg {
     transform: scale(1.15);
-    animation: publicGradientSettle 1300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: publicGradientDrift 1300ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
-  @keyframes publicGradientSettle {
-    from { transform: scale(1.25); opacity: 0; }
-    to   { transform: scale(1.15); opacity: 1; }
+  @keyframes publicGradientDrift {
+    from { transform: scale(1.15) translateY(-40%); opacity: 0; }
+    to   { transform: scale(1.15) translateY(0);    opacity: 1; }
   }
   @media (prefers-reduced-motion: reduce) {
     .public-gradient-bg { animation: none; }
