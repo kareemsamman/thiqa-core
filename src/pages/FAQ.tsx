@@ -470,13 +470,13 @@ export default function FAQ() {
           a centered title + subtitle. Search bar sits below in white
           card so it's visually anchored as the entry point. */}
       <section className="relative z-10 pt-32 md:pt-40 pb-8 md:pb-12 text-center px-6">
-        <p className="text-sm text-white/80 mb-4 tracking-wide font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
+        <p className="text-sm text-black/65 mb-4 tracking-wide font-medium">
           أسئلة وأجوبة
         </p>
-        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
+        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-black">
           كل ما يهمك معرفته عن Thiqa
         </h1>
-        <p className="text-white/85 text-[15px] md:text-base max-w-2xl mx-auto leading-relaxed drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
+        <p className="text-black/70 text-[15px] md:text-base max-w-2xl mx-auto leading-relaxed">
           إجابات على الأسئلة الأكثر شيوعاً من وكلاء التأمين — التسجيل، الميزات، التكاملات، والدعم.
         </p>
       </section>

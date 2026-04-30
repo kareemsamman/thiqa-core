@@ -450,13 +450,13 @@ export default function ContactUs() {
 
       {/* ═══ Hero — same gradient band, white copy. */}
       <section className="relative z-10 pt-32 md:pt-40 pb-12 md:pb-16 text-center px-6">
-        <p className="text-sm text-white/80 mb-4 tracking-wide font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
+        <p className="text-sm text-black/65 mb-4 tracking-wide font-medium">
           تواصل معنا
         </p>
-        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
+        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-black">
           نحن هنا لمساعدتك
         </h1>
-        <p className="text-white/85 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
+        <p className="text-black/70 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed">
           أرسل لنا استفسارك أو طلب الدعم وسنرد عليك في أسرع وقت ممكن.
         </p>
       </section>

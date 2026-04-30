@@ -583,13 +583,13 @@ export default function Pricing() {
       {/* ═══ Pricing Hero — sits on the purple band of the gradient,
           so copy is white for contrast. */}
       <section className="relative z-10 pt-32 md:pt-40 pb-12 md:pb-16 text-center px-6">
-        <p className="text-sm text-white/80 mb-4 tracking-wide font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
+        <p className="text-sm text-black/65 mb-4 tracking-wide font-medium">
           {ct(content, "pricing_label", "الأسعار")}
         </p>
-        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
+        <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-black">
           {ct(content, "pricing_title", "جرّب نظام الإدارة لمدة 35 يوم مجاناً *")}
         </h1>
-        <p className="text-white/85 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
+        <p className="text-black/70 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed">
           {ct(content, "pricing_subtitle", "* جميع الميزات مفتوحة بالكامل — بدون بطاقة ائتمان.")}
         </p>
       </section>

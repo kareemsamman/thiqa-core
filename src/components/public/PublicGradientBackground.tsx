@@ -1,14 +1,16 @@
-// Atmospheric gradient layer used on /pricing, /faq, /contact —
+// Atmospheric gradient band used on /pricing, /faq, /contact —
 // home page intentionally excluded.
 //
-// Structure: an outer `fixed inset-0` wrapper carries the fade mask
-// and stays still. An inner div paints the actual aurora and is the
-// one that animates — translateY + scale + opacity together. Because
-// the mask lives on the wrapper (not the moving inner), the visible
-// edges of the gradient never sweep across the viewport during the
-// entrance: the wrapper's mask clips them. The result is that the
-// aurora *drifts* into place from above and fades in together,
-// rather than sliding as a hard rectangle.
+// Anchored to the top of the page (absolute, not fixed), 720px
+// tall — same shape as the old purple band so it scrolls AWAY with
+// the page rather than tracking the viewport.
+//
+// Two layers: an outer wrapper carries the fade mask + clips
+// overflow, an inner div paints the aurora and is the one that
+// animates. With the mask on the stationary wrapper, the inner can
+// translate freely without ever showing a hard edge — the aurora
+// drifts into place from above and fades in together, rather than
+// sliding as a rectangle.
 
 const AURORA_BACKGROUND = `
   radial-gradient(ellipse 70% 90% at 45% 30%, rgba(255, 180, 140, 1) 0%, rgba(255, 170, 130, 0.85) 25%, transparent 60%),
@@ -24,7 +26,7 @@ export function PublicGradientBackground() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+      className="pointer-events-none absolute top-0 inset-x-0 h-[720px] z-0 overflow-hidden"
       style={{
         WebkitMaskImage: FADE_MASK,
         maskImage: FADE_MASK,
