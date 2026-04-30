@@ -2913,15 +2913,15 @@ function LandingContent() {
 
           <div className="relative">
             <button
-              onClick={() => goTestimonial("up")}
-              aria-label="السابق"
+              onClick={() => goTestimonial("down")}
+              aria-label="التالي"
               className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-14 hidden lg:flex h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black items-center justify-center transition-colors z-10"
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
             <button
-              onClick={() => goTestimonial("down")}
-              aria-label="التالي"
+              onClick={() => goTestimonial("up")}
+              aria-label="السابق"
               className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-14 hidden lg:flex h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black items-center justify-center transition-colors z-10"
             >
               <ChevronRight className="h-5 w-5" />
@@ -3000,10 +3000,10 @@ function LandingContent() {
             </div>
 
             <div dir="ltr" className="flex lg:hidden justify-center gap-3 mt-6">
-              <button onClick={() => goTestimonial("up")} aria-label="السابق" className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
+              <button onClick={() => goTestimonial("down")} aria-label="التالي" className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
                 <ChevronLeft className="h-5 w-5" />
               </button>
-              <button onClick={() => goTestimonial("down")} aria-label="التالي" className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
+              <button onClick={() => goTestimonial("up")} aria-label="السابق" className="h-11 w-11 rounded-full bg-black/[0.06] hover:bg-black/[0.12] text-black flex items-center justify-center transition-colors">
                 <ChevronRight className="h-5 w-5" />
               </button>
             </div>
