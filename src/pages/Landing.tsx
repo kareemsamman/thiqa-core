@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, ChevronUp, ChevronDown, CheckCircle, Star, ArrowLeft, Play, X, Check,
   Users, FileText, CreditCard, BarChart3, Bell, MessageSquare,
   Phone, Shield, RefreshCcw, Wallet, AlertTriangle, Mail, Clock, Menu,
-  HelpCircle, Sparkles, Facebook, Instagram,
+  HelpCircle, Sparkles,
 } from "lucide-react";
 import { useLandingContent, ct, ci } from "@/hooks/useLandingContent";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { PublicSEO } from "@/components/public/PublicSEO";
 import { FAQSection, LANDING_FAQS } from "@/components/public/FAQSection";
 import { DemoCallTrigger } from "@/components/public/DemoCallDialog";
+import { PublicFooter } from "@/components/public/PublicFooter";
 import { GalleryImage, LandingGalleryProvider } from "@/components/landing/LandingGallery";
 import { Helmet } from "react-helmet-async";
 
@@ -959,7 +960,7 @@ function LandingContent() {
                       title: "تواصل معنا",
                       desc: "هل لديك أسئلة؟ تحدّث معنا",
                       icon: HelpCircle,
-                      href: "/faq#support",
+                      href: "/contact",
                       filled: false,
                     },
                   ].map((item) => {
@@ -1204,7 +1205,7 @@ function LandingContent() {
                           title: "تواصل معنا",
                           desc: "هل لديك أسئلة؟ تحدّث معنا",
                           icon: HelpCircle,
-                          href: "/faq#support",
+                          href: "/contact",
                           filled: false,
                         },
                       ].map((item) => {
@@ -3045,183 +3046,7 @@ function LandingContent() {
         </div>
       </section>
 
-      {/* ═══ Footer ═══
-          Desktop: 4-column link grid (RTL order: how-to-start,
-          info center, support, legal). Mobile: the same four
-          sections collapse into accordion rows with + / − toggles.
-          Below sits the copyright strip and a full-width Thiqa
-          lockup image that anchors the bottom of the page. */}
-      <footer className="border-t border-black/[0.08] pt-16 pb-0 bg-white">
-        <div className="max-w-7xl mx-auto px-6">
-          {(() => {
-            const sections = [
-              {
-                title: "كيف تبدأ؟",
-                items: [
-                  { label: "جرّب مجاناً", href: "/register" },
-                  { label: "تسجيل الدخول", href: "/login" },
-                ],
-              },
-              {
-                title: "مركز المعلومات",
-                items: [
-                  { label: "الأسعار", href: "/pricing" },
-                  { label: "كيف يعمل", href: "/#demo" },
-                  { label: "الميزات", href: "/#features" },
-                  { label: "أسئلة وأجوبة", href: "/faq" },
-                ],
-              },
-              {
-                title: "الدعم والمساعدة",
-                items: [
-                  { label: "عرض توضيحي", href: "", demo: true as const },
-                  { label: "تواصل معنا", href: "/faq#support" },
-                ],
-              },
-              {
-                title: "شروط وسياسات",
-                items: [
-                  { label: "شروط الاستخدام", href: "/terms" },
-                  { label: "سياسة الخصوصية", href: "/privacy" },
-                ],
-              },
-            ];
-            return (
-              <>
-                {/* Desktop 4-column grid — right-aligned Arabic. */}
-                <div className="hidden md:grid grid-cols-4 gap-8 text-right">
-                  {sections.map((section) => (
-                    <div key={section.title}>
-                      <h4 className="text-[15px] font-bold text-black mb-5">{section.title}</h4>
-                      <ul className="space-y-3">
-                        {section.items.map((item) => (
-                          <li key={item.label}>
-                            {"demo" in item && item.demo ? (
-                              <DemoCallTrigger className="text-[14px] text-black/60 hover:text-black transition-colors">
-                                {item.label}
-                              </DemoCallTrigger>
-                            ) : (
-                              <a
-                                href={item.href}
-                                className="text-[14px] text-black/60 hover:text-black transition-colors"
-                              >
-                                {item.label}
-                              </a>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Mobile accordion — same four sections, each row
-                    expands on tap. */}
-                <div className="md:hidden flex flex-col divide-y divide-black/[0.08]">
-                  {sections.map((section) => (
-                    <details key={section.title} className="group py-6">
-                      <summary className="flex items-center justify-between cursor-pointer list-none">
-                        <span className="text-lg font-bold text-black">{section.title}</span>
-                        <span className="text-black/55 text-2xl font-light group-open:hidden">+</span>
-                        <span className="text-black/55 text-2xl font-light hidden group-open:inline">−</span>
-                      </summary>
-                      <ul className="mt-4 space-y-3 text-sm text-black/60 text-right">
-                        {section.items.map((item) => (
-                          <li key={item.label}>
-                            {"demo" in item && item.demo ? (
-                              <DemoCallTrigger className="hover:text-black transition-colors">
-                                {item.label}
-                              </DemoCallTrigger>
-                            ) : (
-                              <a href={item.href} className="hover:text-black transition-colors">{item.label}</a>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  ))}
-                </div>
-              </>
-            );
-          })()}
-
-          {/* Contact strip — email + phones, centered, LTR so the
-              digits/email render in natural order regardless of the
-              page direction. Sits between the link grid and the
-              divider/social row, separated from the socials below by
-              the same dot-capped hairline used elsewhere. */}
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[14px] text-black/65" dir="ltr">
-            <a href="mailto:support@getthiqa.com" className="inline-flex items-center gap-2 hover:text-black transition-colors">
-              <Mail className="h-4 w-4" strokeWidth={2} aria-hidden />
-              support@getthiqa.com
-            </a>
-            <span aria-hidden className="h-1 w-1 rounded-full bg-black/20" />
-            <a href="tel:+972525143581" className="inline-flex items-center gap-2 hover:text-black transition-colors tabular-nums">
-              <Phone className="h-4 w-4" strokeWidth={2} aria-hidden />
-              0525143581
-            </a>
-            <span aria-hidden className="h-1 w-1 rounded-full bg-black/20" />
-            <a href="tel:+972598948155" className="inline-flex items-center gap-2 hover:text-black transition-colors tabular-nums">
-              <Phone className="h-4 w-4" strokeWidth={2} aria-hidden />
-              0598 948 155
-            </a>
-          </div>
-
-          <div className="flex items-center gap-3 mt-6 mb-6">
-            <div className="h-1.5 w-1.5 rounded-full bg-black/25" />
-            <div className="flex-1 h-px bg-black/[0.08]" />
-            <div className="h-1.5 w-1.5 rounded-full bg-black/25" />
-          </div>
-
-          {/* Bottom strip — copyright on the right (RTL start), social
-              icons on the left (RTL end). Stacks on mobile. The icons
-              use a blue→light-blue gradient over a faint white tint
-              that matches the slider/feature gradients on the page. */}
-          <div className="flex flex-col-reverse md:flex-row items-center justify-between gap-6 mb-16">
-            <p className="text-sm text-black/50">
-              © Thiqa {new Date().getFullYear()} جميع الحقوق محفوظة
-            </p>
-            <div className="flex items-center gap-3">
-              <a
-                href="https://www.facebook.com/getthiqa"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Facebook"
-                className="h-11 w-11 rounded-full flex items-center justify-center text-white shadow-[0_6px_18px_-6px_rgba(69,94,187,0.55)] hover:opacity-90 transition-opacity"
-                style={{
-                  background:
-                    "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%), rgba(255, 255, 255, 0.02)",
-                }}
-              >
-                <Facebook className="h-[18px] w-[18px]" />
-              </a>
-              <a
-                href="https://www.instagram.com/getthiqa"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Instagram"
-                className="h-11 w-11 rounded-full flex items-center justify-center text-white shadow-[0_6px_18px_-6px_rgba(69,94,187,0.55)] hover:opacity-90 transition-opacity"
-                style={{
-                  background:
-                    "linear-gradient(180deg, #455EBB 0%, #8A96CB 100%), rgba(255, 255, 255, 0.02)",
-                }}
-              >
-                <Instagram className="h-[18px] w-[18px]" />
-              </a>
-            </div>
-          </div>
-        </div>
-
-        {/* Full-width Thiqa lockup image — anchors the bottom. */}
-        <div className="w-full overflow-hidden">
-          <img
-            src="https://thiqacrm.b-cdn.net/Group%201000011511.png"
-            alt="Thiqa"
-            className="w-full h-auto block"
-            loading="lazy"
-          />
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
     </LandingGalleryProvider>
   );

@@ -3,7 +3,7 @@ import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { useNavigate } from "react-router-dom";
 import {
   Check, ChevronDown, Menu, X, Play, Sparkles, Star, HelpCircle, MessageSquare,
-  Users, FileText, Mail, Phone, Megaphone, Bot, Building2,
+  Users, FileText, Mail, Megaphone, Bot, Building2,
   type LucideIcon,
 } from "lucide-react";
 import { useLandingContent, ct } from "@/hooks/useLandingContent";
@@ -14,6 +14,7 @@ import { PublicSEO } from "@/components/public/PublicSEO";
 import { PLAN_FEATURE_CATALOG } from "@/lib/planFeatureCatalog";
 import { FAQSection } from "@/components/public/FAQSection";
 import { DemoCallTrigger } from "@/components/public/DemoCallDialog";
+import { PublicFooter } from "@/components/public/PublicFooter";
 
 interface PlanData {
   id: string;
@@ -134,7 +135,7 @@ const SUPPORT_ITEMS = [
     title: "تواصل معنا",
     desc: "هل لديك أسئلة؟ تحدّث معنا",
     icon: HelpCircle,
-    href: "/faq#support",
+    href: "/contact",
     filled: false,
   },
 ];
@@ -827,139 +828,7 @@ export default function Pricing() {
           default since it has its own visual rhythm). */}
       <FAQSection compact />
 
-      {/* ═══ Footer — same 4-column desktop grid / mobile accordion
-          pattern as the landing page. */}
-      <footer className="relative z-10 border-t border-black/[0.08] pt-16 pb-0 bg-white">
-        <div className="max-w-7xl mx-auto px-6">
-          {(() => {
-            const sections = [
-              {
-                title: "كيف تبدأ؟",
-                items: [
-                  { label: "جرّب مجاناً", href: "/register" },
-                  { label: "تسجيل الدخول", href: "/login" },
-                ],
-              },
-              {
-                title: "مركز المعلومات",
-                items: [
-                  { label: "الأسعار", href: "/pricing" },
-                  { label: "كيف يعمل", href: "/landing#demo" },
-                  { label: "الميزات", href: "/landing#features" },
-                  { label: "أسئلة وأجوبة", href: "/faq" },
-                ],
-              },
-              {
-                title: "الدعم والمساعدة",
-                items: [
-                  { label: "عرض توضيحي", href: "", demo: true as const },
-                  { label: "تواصل معنا", href: "/faq#support" },
-                ],
-              },
-              {
-                title: "شروط وسياسات",
-                items: [
-                  { label: "شروط الاستخدام", href: "/terms" },
-                  { label: "سياسة الخصوصية", href: "/privacy" },
-                ],
-              },
-            ];
-            return (
-              <>
-                <div className="hidden md:grid grid-cols-4 gap-8 text-right">
-                  {sections.map((section) => (
-                    <div key={section.title}>
-                      <h4 className="text-[15px] font-bold text-black mb-5">{section.title}</h4>
-                      <ul className="space-y-3">
-                        {section.items.map((item) => (
-                          <li key={item.label}>
-                            {"demo" in item && item.demo ? (
-                              <DemoCallTrigger className="text-[14px] text-black/60 hover:text-black transition-colors">
-                                {item.label}
-                              </DemoCallTrigger>
-                            ) : (
-                              <a
-                                href={item.href}
-                                className="text-[14px] text-black/60 hover:text-black transition-colors"
-                              >
-                                {item.label}
-                              </a>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="md:hidden flex flex-col divide-y divide-black/[0.06]">
-                  {sections.map((section) => (
-                    <details key={section.title} className="group py-6">
-                      <summary className="flex items-center justify-between cursor-pointer list-none">
-                        <span className="text-lg font-bold text-black">{section.title}</span>
-                        <span className="text-black/40 text-2xl font-light group-open:hidden">+</span>
-                        <span className="text-black/40 text-2xl font-light hidden group-open:inline">−</span>
-                      </summary>
-                      <ul className="mt-4 space-y-3 text-sm text-black/55 text-right">
-                        {section.items.map((item) => (
-                          <li key={item.label}>
-                            {"demo" in item && item.demo ? (
-                              <DemoCallTrigger className="hover:text-black/80 transition-colors">
-                                {item.label}
-                              </DemoCallTrigger>
-                            ) : (
-                              <a href={item.href} className="hover:text-black/80 transition-colors">{item.label}</a>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  ))}
-                </div>
-              </>
-            );
-          })()}
-
-          {/* Contact strip — email + phones, centered, LTR so the
-              digits/email render in natural order. Same hairline as
-              the landing footer separates it from the copyright. */}
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[14px] text-black/65" dir="ltr">
-            <a href="mailto:support@getthiqa.com" className="inline-flex items-center gap-2 hover:text-black transition-colors">
-              <Mail className="h-4 w-4" strokeWidth={2} aria-hidden />
-              support@getthiqa.com
-            </a>
-            <span aria-hidden className="h-1 w-1 rounded-full bg-black/20" />
-            <a href="tel:+972525143581" className="inline-flex items-center gap-2 hover:text-black transition-colors tabular-nums">
-              <Phone className="h-4 w-4" strokeWidth={2} aria-hidden />
-              0525143581
-            </a>
-            <span aria-hidden className="h-1 w-1 rounded-full bg-black/20" />
-            <a href="tel:+972598948155" className="inline-flex items-center gap-2 hover:text-black transition-colors tabular-nums">
-              <Phone className="h-4 w-4" strokeWidth={2} aria-hidden />
-              0598 948 155
-            </a>
-          </div>
-
-          <div className="flex items-center gap-3 mt-6 mb-6">
-            <div className="h-1.5 w-1.5 rounded-full bg-black/20" />
-            <div className="flex-1 h-px bg-black/[0.08]" />
-            <div className="h-1.5 w-1.5 rounded-full bg-black/20" />
-          </div>
-
-          <p className="text-sm text-black/50 text-center mb-8">
-            © Thiqa {new Date().getFullYear()} جميع الحقوق محفوظة
-          </p>
-        </div>
-
-        <div className="w-full overflow-hidden">
-          <img
-            src="https://thiqacrm.b-cdn.net/Group%201000011511.png"
-            alt="Thiqa"
-            className="w-full h-auto block"
-            loading="lazy"
-          />
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

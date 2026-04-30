@@ -135,7 +135,7 @@ export function FAQSection({ compact = false }: { compact?: boolean } = {}) {
         <p className="mt-12 text-center text-[14px] md:text-[15px] text-black/55">
           {ct(content, "faq_more_prompt", "هل لديك أسئلة إضافية؟")}{" "}
           <Link
-            to="/faq#support"
+            to="/contact"
             className="font-bold text-black hover:opacity-80 transition-opacity"
           >
             {ct(content, "faq_more_cta", "تواصل معنا.")}

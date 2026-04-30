@@ -104,6 +104,7 @@ const Landing = lazy(() => import("./pages/Landing"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const Pricing = lazy(() => import("./pages/Pricing"));
 const FAQ = lazy(() => import("./pages/FAQ"));
+const ContactUs = lazy(() => import("./pages/ContactUs"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const Privacy = lazy(() => import("./pages/Privacy"));
@@ -180,6 +181,7 @@ const ROUTE_PREFETCHERS: Array<() => Promise<unknown>> = [
   () => import("./pages/VerifyEmail"),
   () => import("./pages/Pricing"),
   () => import("./pages/FAQ"),
+  () => import("./pages/ContactUs"),
   () => import("./pages/ResetPassword"),
   () => import("./pages/ForgotPassword"),
   () => import("./pages/Privacy"),
@@ -284,6 +286,7 @@ const App = () => (
               <Route path="/landing" element={<Landing />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/faq" element={<FAQ />} />
+              <Route path="/contact" element={<ContactUs />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Login />} />
               <Route path="/no-access" element={<NoAccess />} />

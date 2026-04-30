@@ -1,17 +1,26 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
-import { DemoCallTrigger } from "@/components/public/DemoCallDialog";
 import { useNavigate } from "react-router-dom";
 import {
-  ChevronDown, ChevronUp, Menu, X, Search, Play, Sparkles, Star,
-  HelpCircle, MessageSquare,
+  ChevronDown, Menu, X, Play, Sparkles, Star, HelpCircle, MessageSquare,
 } from "lucide-react";
 import { useLandingContent, ct } from "@/hooks/useLandingContent";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { cn } from "@/lib/utils";
 import { PublicSEO } from "@/components/public/PublicSEO";
+import { DemoCallTrigger } from "@/components/public/DemoCallDialog";
+import { SupportContactForm } from "@/components/public/SupportContactForm";
 import { PublicFooter } from "@/components/public/PublicFooter";
-import { FAQ_CATEGORIES, flattenFaq, type FlatFaqItem } from "@/lib/faqContent";
+
+// Public "Contact us" surface — the support form used to live as a
+// trailing section on /faq#support, but mixing the FAQ catalog and a
+// separate contact form on the same page made each feel cramped. Now
+// FAQ is purely the catalog and this page owns the contact flow.
+//
+// Visual recipe matches Pricing/FAQ: purple gradient band at the top
+// behind the navbar + hero, then a centered card with the form on
+// white. Navbar is duplicated from Pricing for now (extraction is a
+// separate task — same pattern FAQ.tsx already uses).
 
 const INFO_CENTER_ITEMS = [
   { title: "كيف يعمل", desc: "شاهد النظام في الخطوات الأساسية", icon: Play, href: "/landing#demo" },
@@ -38,38 +47,13 @@ const SUPPORT_ITEMS = [
   },
 ];
 
-export default function FAQ() {
-  usePageView("/faq");
+export default function ContactUs() {
+  usePageView("/contact");
   const { data: content } = useLandingContent();
   const navigate = useNavigate();
 
-  const [activeCategoryId, setActiveCategoryId] = useState<string>(FAQ_CATEGORIES[0].id);
-  const [openQuestion, setOpenQuestion] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSubmenu, setMobileSubmenu] = useState<"info" | "support" | null>(null);
-
-  // Flatten the catalog once and filter against the live search input.
-  // Empty query → no filtering, the active tab takes over.
-  const allItems = useMemo(() => flattenFaq(), []);
-  const trimmedQuery = searchQuery.trim();
-  const searchResults: FlatFaqItem[] = useMemo(() => {
-    if (!trimmedQuery) return [];
-    const q = trimmedQuery.toLowerCase();
-    return allItems.filter(
-      (it) =>
-        it.q.toLowerCase().includes(q) ||
-        it.a.toLowerCase().includes(q) ||
-        it.categoryLabel.toLowerCase().includes(q),
-    );
-  }, [trimmedQuery, allItems]);
-
-  const isSearching = trimmedQuery.length > 0;
-  const activeCategory = FAQ_CATEGORIES.find((c) => c.id === activeCategoryId) ?? FAQ_CATEGORIES[0];
-
-  // Build a unique key per Q so the open-row logic survives across
-  // category switches without colliding on duplicate question texts.
-  const qKey = (categoryId: string, subTitle: string, q: string) => `${categoryId}::${subTitle}::${q}`;
 
   useEffect(() => {
     if (!mobileMenuOpen) {
@@ -95,14 +79,12 @@ export default function FAQ() {
       style={{ fontFamily: "'Cairo', sans-serif" }}
     >
       <PublicSEO
-        title="Thiqa | الأسئلة الشائعة"
-        description="إجابات شاملة على أسئلتك حول Thiqa لإدارة وكالات التأمين: التسجيل، إصدار المعاملات، الرسائل، الإيصالات، التوقيع الرقمي، التقارير، والدعم الفني."
-        keywords="أسئلة Thiqa, مساعدة Thiqa, دليل النظام, أسئلة شائعة, دعم وكالات التأمين"
+        title="Thiqa | تواصل معنا"
+        description="تواصل مع فريق Thiqa — أرسل استفسارك أو طلب الدعم وسنرد عليك في أسرع وقت ممكن. نحن هنا للإجابة على كل أسئلتك حول نظام إدارة وكالات التأمين."
+        keywords="تواصل معنا Thiqa, دعم Thiqa, اتصل بنا, مساعدة وكالات التأمين"
       />
 
-      {/* Purple gradient band — same recipe as the pricing page so the
-          two surfaces share an identity. Pinned to top so the hero
-          rides the gradient and the body lands on white. */}
+      {/* Purple gradient band — shared identity with /pricing and /faq. */}
       <div
         aria-hidden
         className="pointer-events-none absolute top-0 inset-x-0 h-[640px]"
@@ -112,9 +94,7 @@ export default function FAQ() {
         }}
       />
 
-      {/* ═══ Navbar — duplicated from Pricing for now (extraction is a
-          separate task). FAQ link in INFO_CENTER_ITEMS now points to
-          this page. */}
+      {/* ═══ Navbar — duplicated from Pricing/FAQ (extraction TBD). */}
       <nav className="fixed inset-x-0 top-0 z-50 pointer-events-none mt-3">
         <div className="pointer-events-auto flex flex-row-reverse md:flex-row items-center justify-between md:justify-normal px-4 md:px-6 h-14 md:h-16 mx-auto w-[92%] md:w-[75%] max-w-[72rem] rounded-full bg-white/75 backdrop-blur-md shadow-[0_1px_20px_0_rgba(0,0,0,0.10)]">
           <div className="md:flex-1 md:flex md:justify-start">
@@ -194,16 +174,16 @@ export default function FAQ() {
                         </div>
                       </>
                     );
-                    const className = "w-full flex items-center gap-4 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors text-right";
+                    const cls = "w-full flex items-center gap-4 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors text-right";
                     if ("demo" in item && item.demo) {
                       return (
-                        <DemoCallTrigger key={item.title} className={className}>
+                        <DemoCallTrigger key={item.title} className={cls}>
                           {inner}
                         </DemoCallTrigger>
                       );
                     }
                     return (
-                      <a key={item.title} href={item.href} className={className}>
+                      <a key={item.title} href={item.href} className={cls}>
                         {inner}
                       </a>
                     );
@@ -222,7 +202,7 @@ export default function FAQ() {
             </button>
 
             <button
-              onClick={() => { trackEvent("signup_click", "/faq"); navigate("/register"); }}
+              onClick={() => { trackEvent("signup_click", "/contact"); navigate("/register"); }}
               className="hidden md:inline-flex px-8 py-3 text-[14px] font-bold text-black hover:bg-black/5 transition-all rounded-full"
               style={{
                 border: "2px solid rgba(0, 0, 0, 0.22)",
@@ -398,18 +378,18 @@ export default function FAQ() {
                             </div>
                           </>
                         );
-                        const className = "w-full flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors text-right";
+                        const cls = "w-full flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-black/[0.03] transition-colors text-right";
                         return (
                           <li key={item.title}>
                             {"demo" in item && item.demo ? (
-                              <DemoCallTrigger className={className}>
+                              <DemoCallTrigger className={cls}>
                                 {inner}
                               </DemoCallTrigger>
                             ) : (
                               <a
                                 href={item.href}
                                 onClick={() => setMobileMenuOpen(false)}
-                                className={className}
+                                className={cls}
                               >
                                 {inner}
                               </a>
@@ -426,7 +406,7 @@ export default function FAQ() {
 
           <div className="px-5 pt-6 pb-7">
             <button
-              onClick={() => { trackEvent("signup_click", "/faq"); setMobileMenuOpen(false); navigate("/register"); }}
+              onClick={() => { trackEvent("signup_click", "/contact"); setMobileMenuOpen(false); navigate("/register"); }}
               className="w-full py-4 text-[15px] font-bold text-white bg-black rounded-full hover:bg-black/90 transition-all shadow-[0_6px_20px_-6px_rgba(0,0,0,0.4)]"
             >
               {ct(content, "navbar_cta", "احصل على 35 يوم مجاناً")}
@@ -435,291 +415,28 @@ export default function FAQ() {
         </aside>
       </div>
 
-      {/* ═══ Hero — same gradient band the pricing page rides on, with
-          a centered title + subtitle. Search bar sits below in white
-          card so it's visually anchored as the entry point. */}
-      <section className="relative z-10 pt-32 md:pt-40 pb-8 md:pb-12 text-center px-6">
+      {/* ═══ Hero — same gradient band, white copy. */}
+      <section className="relative z-10 pt-32 md:pt-40 pb-12 md:pb-16 text-center px-6">
         <p className="text-sm text-white/75 mb-4 tracking-wide font-medium">
-          أسئلة وأجوبة
+          تواصل معنا
         </p>
         <h1 className="text-[2rem] md:text-[3rem] lg:text-[3.4rem] font-bold mb-5 leading-[1.15] text-white">
-          كل ما يهمك معرفته عن Thiqa
+          نحن هنا لمساعدتك
         </h1>
-        <p className="text-white/80 text-[15px] md:text-base max-w-2xl mx-auto leading-relaxed">
-          إجابات على الأسئلة الأكثر شيوعاً من وكلاء التأمين — التسجيل، الميزات، التكاملات، والدعم.
+        <p className="text-white/80 text-[15px] md:text-base max-w-xl mx-auto leading-relaxed">
+          أرسل لنا استفسارك أو طلب الدعم وسنرد عليك في أسرع وقت ممكن.
         </p>
       </section>
 
-      {/* ═══ Search bar — centered, prominent. Filters across all
-          categories live as the user types. */}
-      <section className="relative z-10 px-4 md:px-6">
+      {/* ═══ Form card — sits where the gradient fades to white, so
+          the card lands cleanly on the lighter portion of the band. */}
+      <section className="relative z-10 pb-24 md:pb-32 px-4 md:px-6">
         <div className="max-w-3xl mx-auto">
-          <div className="relative">
-            <Search className="absolute right-5 top-1/2 -translate-y-1/2 h-5 w-5 text-black/35" strokeWidth={2} />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ابحث عن سؤال أو موضوع…"
-              className="w-full h-14 pr-14 pl-12 rounded-full bg-white border border-black/15 text-[15px] text-black placeholder:text-black/35 outline-none focus:border-black/40 transition-colors shadow-[0_4px_24px_-8px_rgba(0,0,0,0.12)]"
-              aria-label="ابحث في الأسئلة الشائعة"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute left-4 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full bg-black/[0.06] hover:bg-black/[0.10] flex items-center justify-center transition-colors"
-                aria-label="مسح البحث"
-              >
-                <X className="h-3.5 w-3.5 text-black/60" strokeWidth={2.5} />
-              </button>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ Body — when searching: flat results across all categories.
-          Otherwise: horizontal category tabs + the active category's
-          subcategory groups with accordion Q&As. */}
-      <section className="relative z-10 pt-10 md:pt-14 pb-24 px-4 md:px-6">
-        <div className="max-w-5xl mx-auto">
-          {isSearching ? (
-            <SearchResults
-              results={searchResults}
-              query={trimmedQuery}
-              openQuestion={openQuestion}
-              setOpenQuestion={setOpenQuestion}
-              qKey={qKey}
-            />
-          ) : (
-            <>
-              {/* Tabs row */}
-              <div className="flex gap-2 overflow-x-auto pb-3 mb-8 scrollbar-thin">
-                {FAQ_CATEGORIES.map((cat) => {
-                  const Icon = cat.icon;
-                  const isActive = cat.id === activeCategoryId;
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveCategoryId(cat.id);
-                        setOpenQuestion(null);
-                      }}
-                      className={cn(
-                        "shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-[13.5px] font-semibold transition-colors",
-                        isActive
-                          ? "bg-black text-white"
-                          : "bg-black/[0.04] text-black/70 hover:bg-black/[0.08] hover:text-black",
-                      )}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
-                      {cat.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Category description */}
-              <div className="mb-8">
-                <h2 className="text-2xl md:text-3xl font-bold text-black mb-2">
-                  {activeCategory.label}
-                </h2>
-                <p className="text-[14px] md:text-[15px] text-black/60 leading-relaxed">
-                  {activeCategory.description}
-                </p>
-              </div>
-
-              {/* Subcategory groups + accordions */}
-              <div className="space-y-12">
-                {activeCategory.subcategories.map((sub) => (
-                  <div key={sub.title}>
-                    <h3 className="text-[13px] font-bold uppercase tracking-[0.18em] text-[#7C5CFF] mb-4">
-                      {sub.title}
-                    </h3>
-                    <div className="flex flex-col">
-                      {sub.items.map((item, i) => {
-                        const key = qKey(activeCategory.id, sub.title, item.q);
-                        const isOpen = openQuestion === key;
-                        const isLast = i === sub.items.length - 1;
-                        return (
-                          <FaqRow
-                            key={key}
-                            question={item.q}
-                            answer={item.a}
-                            isOpen={isOpen}
-                            isLast={isLast}
-                            onToggle={() => setOpenQuestion(isOpen ? null : key)}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          <p className="mt-16 text-center text-[14px] md:text-[15px] text-black/55">
-            لم تجد إجابة سؤالك؟{" "}
-            <a
-              href="/contact"
-              className="font-bold text-black hover:opacity-80 transition-opacity"
-            >
-              راسلنا مباشرة.
-            </a>
-          </p>
+          <SupportContactForm />
         </div>
       </section>
 
       <PublicFooter />
-    </div>
-  );
-}
-
-// One question + answer row in the accordion. Same circular-chevron
-// visual treatment as the shared FAQSection used on /landing#faq and
-// /pricing — keeps the FAQ aesthetic consistent across surfaces.
-function FaqRow({
-  question,
-  answer,
-  isOpen,
-  isLast,
-  onToggle,
-}: {
-  question: string;
-  answer: string;
-  isOpen: boolean;
-  isLast: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <div>
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-4 py-5 md:py-6 text-right group"
-        aria-expanded={isOpen}
-      >
-        <h4 className="flex-1 text-right font-bold text-[15px] md:text-[17px] text-black leading-snug">
-          {question}
-        </h4>
-        <div
-          className={cn(
-            "h-10 w-10 md:h-11 md:w-11 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300",
-            isOpen
-              ? "bg-black text-white"
-              : "bg-black/[0.05] text-black group-hover:bg-black/[0.08]",
-          )}
-        >
-          {isOpen ? (
-            <ChevronUp className="h-4 w-4" strokeWidth={2.5} />
-          ) : (
-            <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
-          )}
-        </div>
-      </button>
-      <div
-        className="grid overflow-hidden transition-all duration-300 ease-out"
-        style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
-      >
-        <div className="min-h-0">
-          <p className="text-right text-[14px] md:text-[15px] text-black/65 leading-relaxed pb-5 md:pb-6 pl-14 md:pl-16">
-            {answer}
-          </p>
-        </div>
-      </div>
-      {!isLast && <div className="h-px bg-black/[0.08]" />}
-    </div>
-  );
-}
-
-// Search-mode renderer. Highlights the query inside both question and
-// answer text, and prefixes each row with its category label so users
-// always know where a result lives in the catalog.
-function SearchResults({
-  results,
-  query,
-  openQuestion,
-  setOpenQuestion,
-  qKey,
-}: {
-  results: FlatFaqItem[];
-  query: string;
-  openQuestion: string | null;
-  setOpenQuestion: (k: string | null) => void;
-  qKey: (categoryId: string, subTitle: string, q: string) => string;
-}) {
-  if (results.length === 0) {
-    return (
-      <div className="py-16 text-center">
-        <p className="text-[15px] text-black/55 mb-2">لا توجد نتائج تطابق بحثك عن:</p>
-        <p className="text-[17px] font-bold text-black">"{query}"</p>
-        <p className="mt-6 text-[14px] text-black/55">
-          جرّب كلمات مختلفة، أو{" "}
-          <a href="/contact" className="font-bold text-black hover:opacity-80 transition-opacity">
-            تواصل معنا
-          </a>{" "}
-          مباشرة.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <p className="text-[13px] text-black/55 mb-4">
-        {results.length} نتيجة لـ <span className="font-bold text-black">"{query}"</span>
-      </p>
-      <div className="flex flex-col">
-        {results.map((item, i) => {
-          const key = qKey(item.categoryId, item.subcategoryTitle, item.q);
-          const isOpen = openQuestion === key;
-          const isLast = i === results.length - 1;
-          return (
-            <div key={key}>
-              <button
-                onClick={() => setOpenQuestion(isOpen ? null : key)}
-                className="w-full flex items-center gap-4 py-5 md:py-6 text-right group"
-                aria-expanded={isOpen}
-              >
-                <div className="flex-1 text-right">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#7C5CFF] mb-1">
-                    {item.categoryLabel} · {item.subcategoryTitle}
-                  </p>
-                  <h4 className="font-bold text-[15px] md:text-[17px] text-black leading-snug">
-                    {item.q}
-                  </h4>
-                </div>
-                <div
-                  className={cn(
-                    "h-10 w-10 md:h-11 md:w-11 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300",
-                    isOpen
-                      ? "bg-black text-white"
-                      : "bg-black/[0.05] text-black group-hover:bg-black/[0.08]",
-                  )}
-                >
-                  {isOpen ? (
-                    <ChevronUp className="h-4 w-4" strokeWidth={2.5} />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
-                  )}
-                </div>
-              </button>
-              <div
-                className="grid overflow-hidden transition-all duration-300 ease-out"
-                style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
-              >
-                <div className="min-h-0">
-                  <p className="text-right text-[14px] md:text-[15px] text-black/65 leading-relaxed pb-5 md:pb-6 pl-14 md:pl-16">
-                    {item.a}
-                  </p>
-                </div>
-              </div>
-              {!isLast && <div className="h-px bg-black/[0.08]" />}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
