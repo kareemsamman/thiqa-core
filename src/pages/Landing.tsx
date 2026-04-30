@@ -3016,7 +3016,7 @@ function LandingContent() {
             </p>
             <Link
               to="/register"
-              className="inline-flex items-center gap-2 bg-[#E8E0D0] hover:bg-[#ddd4c0] text-black font-bold text-[14px] md:text-[15px] rounded-full px-8 py-4 transition-colors"
+              className="inline-flex items-center gap-2 bg-black hover:bg-black/85 text-white font-bold text-[14px] md:text-[15px] rounded-full px-8 py-4 transition-colors"
             >
               {ct(content, "demo_cta", "احجز مكالمة تجريبية")}
             </Link>
