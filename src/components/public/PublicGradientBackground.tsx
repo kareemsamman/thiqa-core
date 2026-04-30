@@ -20,7 +20,11 @@ const AURORA_BACKGROUND = `
   linear-gradient(95deg, #6a72a0 0%, #a8a5c4 25%, #c8b4b0 45%, #9898c0 65%, #3a4268 85%, #1a2248 100%)
 `;
 
-const FADE_MASK = "linear-gradient(to bottom, black 0%, black 40%, transparent 95%)";
+// Pull the fade up so the bottom half of the viewport is fully
+// transparent — the page's own white background shows through, and
+// content scrolling under the lower half lands cleanly on white.
+// Top ~20% is the gradient at full strength, 20→50% is the fade.
+const FADE_MASK = "linear-gradient(to bottom, black 0%, black 20%, transparent 55%)";
 
 export function PublicGradientBackground() {
   return (
