@@ -390,10 +390,16 @@ Deno.serve(async (req) => {
       tls: { minVersion: "TLSv1.2" },
     });
 
+    // Use the authenticated SMTP user as the From address (matches
+    // public-support-submit / register-agent). The smtp_from_email
+    // setting defaults to a sibling alias (no-reply@…) — Hostinger's
+    // own inbox accepts that mismatched envelope, but external
+    // recipients hit SPF/DMARC alignment failures and silently drop
+    // the message. Customer replies on FAQ tickets go out to
+    // arbitrary domains, so we have to send From the address that's
+    // actually in our SPF record.
     await transporter.sendMail({
-      from: `"${smtp.senderName}" <${smtp.fromEmail}>`,
-      // Replies should land in the support inbox, not the no-reply alias.
-      replyTo: smtp.user,
+      from: `"${smtp.senderName}" <${smtp.user}>`,
       to: plan.to.join(", "),
       subject: plan.subject,
       text: `${plan.intro}\n\nرقم التذكرة: ${ticket.ticket_number}\nالوكيل: ${agentName}\nالموضوع: ${ticket.subject}\n${latestMessage ? `\n${latestMessage}\n` : ""}\nرابط التذكرة: ${link}`,
