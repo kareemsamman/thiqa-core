@@ -2897,7 +2897,7 @@ function LandingContent() {
           <div className="relative h-44 md:h-52 flex items-end justify-center gap-3 md:gap-6">
             {[
               // RTL flex order: index 0 = right, 1 = middle, 2 = left.
-              { img: "https://thiqacrm.b-cdn.net/demo-call-3-receipts%201.png", label: "لوحة القيادة", rotate: -10, y: 10 },
+              { img: "https://thiqacrm.b-cdn.net/nnnewww/demo-call-1-customers%202.png", label: "لوحة القيادة", rotate: -10, y: 10 },
               { img: "https://thiqacrm.b-cdn.net/nnnewww/demo-call-2-dashboard%201.png", label: "التقارير", rotate: 0, y: 0 },
               { img: "https://thiqacrm.b-cdn.net/nnnewww/demo-call-1-customers%202.png", label: "العملاء", rotate: 10, y: 10 },
             ].map((card, i) => (
