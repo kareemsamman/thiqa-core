@@ -355,19 +355,20 @@ html {
     .pricing-card-enter { animation: none; }
   }
 
-  /* Atmospheric public-page background — drops in from above on
-     mount, then settles to a baseline scale(1.15) so the blur
-     bleed extends past the viewport edges. The element keeps the
-     scale persistently because the animation's `to` state matches it
-     (animation-fill-mode: both). */
+  /* Atmospheric public-page background — "curtain reveal" entrance.
+     clip-path draws the layer in from the top down; the bottom stays
+     clipped until that point of the animation is reached, so the
+     gradient appears to unfold rather than slide. Combined with the
+     mask (which fades the bottom anyway), the lower half never
+     visually moves — only the upper portion paints in. The element
+     keeps its persistent scale(1.15) for the blur bleed. */
   .public-gradient-bg {
     transform: scale(1.15);
-    animation: publicGradientDrop 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
-    transform-origin: top center;
+    animation: publicGradientReveal 1100ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-  @keyframes publicGradientDrop {
-    from { transform: scale(1.15) translateY(-100%); opacity: 0; }
-    to   { transform: scale(1.15) translateY(0);    opacity: 1; }
+  @keyframes publicGradientReveal {
+    from { clip-path: inset(0 0 100% 0); opacity: 0; }
+    to   { clip-path: inset(0 0 0 0);    opacity: 1; }
   }
   @media (prefers-reduced-motion: reduce) {
     .public-gradient-bg { animation: none; }
