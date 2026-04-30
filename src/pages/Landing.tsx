@@ -2013,8 +2013,6 @@ function LandingContent() {
           }
           .updates-marquee-viewport {
             overflow: hidden;
-            -webkit-mask-image: linear-gradient(to right, transparent 0, #000 5%, #000 95%, transparent 100%);
-                    mask-image: linear-gradient(to right, transparent 0, #000 5%, #000 95%, transparent 100%);
           }
           .updates-marquee-track {
             display: flex;
