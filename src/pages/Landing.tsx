@@ -3038,12 +3038,9 @@ function LandingContent() {
             <p className="text-[14px] md:text-[16px] text-black/55 max-w-xl mx-auto mb-10 leading-relaxed">
               {ct(content, "demo_subtitle", "مكالمة واحد-لواحد مع ممثّل لعرض عملي للنظام — بدون التزام وبدون أي تكلفة.")}
             </p>
-            <Link
-              to="/register"
-              className="inline-flex items-center gap-2 bg-black hover:bg-black/85 text-white font-bold text-[14px] md:text-[15px] rounded-full px-8 py-4 transition-colors"
-            >
+            <DemoCallTrigger className="inline-flex items-center gap-2 bg-black hover:bg-black/85 text-white font-bold text-[14px] md:text-[15px] rounded-full px-8 py-4 transition-colors">
               {ct(content, "demo_cta", "احجز مكالمة تجريبية")}
-            </Link>
+            </DemoCallTrigger>
           </div>
         </div>
       </section>

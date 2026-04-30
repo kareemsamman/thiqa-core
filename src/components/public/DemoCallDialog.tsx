@@ -24,7 +24,9 @@ interface DemoCallDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const PHONE_RE = /^\d{10}$/;
+// 10-digit local mobile starting with 05 — covers both Israeli
+// (050/052/053/054/055/058) and Palestinian (056/059) prefixes.
+const PHONE_RE = /^05\d{8}$/;
 const THIQA_LOGO_BLACK = "https://thiqacrm.b-cdn.net/small_black.png";
 
 // Three mockups that peek above the card. Same images as the
@@ -44,7 +46,7 @@ const BENEFITS = [
 ];
 
 const ERROR_LABELS: Record<string, string> = {
-  invalid_phone: "رقم الهاتف يجب أن يكون 10 أرقام.",
+  invalid_phone: "رقم الهاتف يجب أن يبدأ بـ 05 ويتكون من 10 أرقام.",
   rate_limited: "تم استلام طلبات كثيرة من جهازك. حاول بعد قليل.",
   ticket_create_failed: "حدث خطأ مؤقت — حاول مرة أخرى.",
 };
@@ -198,11 +200,11 @@ export function DemoCallDialog({ open, onOpenChange }: DemoCallDialogProps) {
                   <div className="flex items-stretch gap-2">
                     <button
                       type="submit"
-                      disabled={submitting || phone.length !== 10}
+                      disabled={submitting || !PHONE_RE.test(phone)}
                       aria-label="إرسال"
                       className={cn(
                         "shrink-0 h-12 w-12 rounded-full flex items-center justify-center transition-all",
-                        submitting || phone.length !== 10
+                        submitting || !PHONE_RE.test(phone)
                           ? "bg-black/[0.05] text-black/30 cursor-not-allowed"
                           : "bg-black text-white hover:bg-black/85 shadow-md",
                       )}
@@ -216,7 +218,7 @@ export function DemoCallDialog({ open, onOpenChange }: DemoCallDialogProps) {
                     <Input
                       type="tel"
                       inputMode="numeric"
-                      pattern="\d{10}"
+                      pattern="05\d{8}"
                       maxLength={10}
                       dir="ltr"
                       placeholder="05XXXXXXXX"
