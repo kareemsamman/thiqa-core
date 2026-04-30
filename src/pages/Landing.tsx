@@ -284,7 +284,7 @@ const featureTabs = [
     desc: "استلام الشيكات مع تسجيل البنك والفرع والتاريخ، تقسيط داخلي مع متابعة المستحقات على العميل، ربط مع بوابات دفع إلكتروني متعددة (Tranzila أو أي بوابة أخرى حسب الطلب)، وإيصالات نقدية قابلة للطباعة أو الإرسال عبر SMS — كل ذلك في ملف واحد.",
     gradient: "linear-gradient(180deg, #3B6FBB 0%, #85A9D1 100%)",
     glow: "radial-gradient(70% 60% at 72% 45%, rgba(255,255,255,0.38) 0%, transparent 60%)",
-    image: "https://thiqacrm.b-cdn.net/image%20215.png",
+    image: "https://thiqacrm.b-cdn.net/image%20229.png",
     stats: [
       { value: "بوابات دفع", unit: "", label: "دفع بالبطاقة عبر Tranzila أو أي بوابة أخرى حسب الطلب — مباشرة من داخل المعاملة." },
       { value: "65%", unit: "", label: "تقليص في وقت متابعة الديون وتسوية الشيكات بلا Excel يدوي." },

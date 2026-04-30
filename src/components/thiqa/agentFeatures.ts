@@ -12,10 +12,15 @@
 //     across plans (so backend-only features like AI assistant or
 //     financial_reports stay controllable).
 //
-// Drop-list (intentionally NOT in this file): leads, ippbx,
-// visa_payment — removed from plans and not in any nav. The Features
-// tab silently ignores any agent_feature_flags rows for keys not in
-// this registry, which is what we want during a tail-cleanup.
+// Drop-list (intentionally NOT in this file): leads, ippbx — removed
+// from plans and not in any nav. The Features tab silently ignores
+// any agent_feature_flags rows for keys not in this registry, which
+// is what we want during a tail-cleanup.
+//
+// Admin-gated entries (visa_payment) live in a dedicated group below.
+// They sit outside plan defaults — Thiqa flips them manually per
+// agent. ADMIN_ONLY_FEATURES in useAgentContext is the matching
+// runtime gate; keep the two lists in sync.
 
 export interface AgentFeatureDef {
   key: string;
@@ -30,6 +35,7 @@ export const AGENT_FEATURE_GROUPS = [
   "المالية والمحاسبة",
   "المراسلات والاتصال",
   "ميزات متقدمة",
+  "بموافقة إدارية",
 ] as const;
 
 export const AGENT_FEATURES: AgentFeatureDef[] = [
@@ -65,6 +71,9 @@ export const AGENT_FEATURES: AgentFeatureDef[] = [
 
   // ─── Advanced ────────────────────────────────────────────────
   { key: "ai_assistant",       label: "المساعد الذكي (ثاقب)",   description: "مساعد AI للاستعلام عن بيانات النظام",     group: "ميزات متقدمة" },
+
+  // ─── Admin-gated (default OFF, never set by plan defaults) ───
+  { key: "visa_payment",       label: "الدفع بفيزا (Tranzila)", description: "تفعيل بطاقات Visa عبر Tranzila — يتطلب موافقة إدارية", group: "بموافقة إدارية" },
 ];
 
 export const AGENT_FEATURE_BY_KEY: Record<string, AgentFeatureDef> = AGENT_FEATURES.reduce((acc, f) => {
