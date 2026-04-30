@@ -579,6 +579,28 @@ function LandingContent() {
     };
   }, []);
 
+  // Force-prefetch every feature-update marquee image on mount.
+  //
+  // Without this, iOS Safari defers the decode of any <img> whose
+  // layout box is outside the viewport — and the marquee
+  // (overflow-hidden, CSS translateX animation) keeps cards 3+
+  // off-screen at rest, so Safari never decodes them. By the time
+  // the animation drags them in, the user sees gradient backgrounds
+  // with empty image slots. Image.decode() puts every marquee image
+  // into the decoded cache up-front so the in-DOM <img> elements
+  // paint instantly when their card animates into view.
+  useEffect(() => {
+    featureUpdates.forEach((u) => {
+      const src = "image" in u ? u.image : null;
+      if (!src) return;
+      const img = new Image();
+      img.src = src;
+      // decode() is async; .catch silently absorbs unsupported MIME
+      // or network failures so this never throws into React.
+      img.decode?.().catch(() => {});
+    });
+  }, []);
+
   // Top marquee — auto-cycling centered sales message. The old
   // horizontally scrolling icon list has been replaced by a single
   // centered line of copy that swaps every 5 s with a gentle fade +
