@@ -30,7 +30,6 @@ const SECTIONS: { title: string; items: FooterItem[] }[] = [
       { label: "الحلول", href: "/landing#solutions" },
       { label: "لماذا ثقة", href: "/landing#features" },
       { label: "آراء العملاء", href: "/landing#testimonials" },
-      { label: "أسئلة وأجوبة", href: "/faq" },
     ],
   },
   {

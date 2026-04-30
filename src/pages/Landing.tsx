@@ -883,7 +883,6 @@ function LandingContent() {
                       { title: "الحلول", desc: "كل ما تحتاجه لتنمو في مكان واحد", icon: CheckCircle, href: "#solutions" },
                       { title: "لماذا ثقة", desc: "ثلاثة محاور تقلب طريقة عمل الوكالة", icon: Sparkles, href: "#features" },
                       { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "#testimonials" },
-                      { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/faq" },
                     ].map((item) => {
                       const Icon = item.icon;
                       const targetId = item.href.slice(1);
@@ -1170,7 +1169,6 @@ function LandingContent() {
                         { title: "الحلول", desc: "كل ما تحتاجه لتنمو في مكان واحد", icon: CheckCircle, href: "#solutions" },
                         { title: "لماذا ثقة", desc: "ثلاثة محاور تقلب طريقة عمل الوكالة", icon: Sparkles, href: "#features" },
                         { title: "آراء العملاء", desc: "ماذا يقول عملاؤنا عن النظام", icon: Star, href: "#testimonials" },
-                        { title: "أسئلة وأجوبة", desc: "إجابات على الاستفسارات الشائعة", icon: HelpCircle, href: "/faq" },
                       ].map((item) => {
                         const Icon = item.icon;
                         return (
