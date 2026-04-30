@@ -65,16 +65,14 @@ export default function IconChecklist() {
         next.push({ label: "manifest 512x512", detail: "تعذر قراءة manifest", state: "fail" });
       }
 
-      try {
-        const response = await fetch("/favicon.ico", { cache: "no-store" });
-        next.push({
-          label: "favicon.ico",
-          detail: response.ok ? "/favicon.ico موجود للمتصفحات التي تطلبه تلقائياً" : "favicon.ico غير متاح",
-          state: response.ok ? "pass" : "fail",
-        });
-      } catch {
-        next.push({ label: "favicon.ico", detail: "تعذر فحص favicon.ico", state: "fail" });
-      }
+      const ico = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]')).find((link) =>
+        link.href.endsWith("/favicon.ico"),
+      );
+      next.push({
+        label: "favicon.ico",
+        detail: ico ? "/favicon.ico مرتبط في head للمتصفحات التي تطلبه تلقائياً" : "favicon.ico غير مرتبط في head",
+        state: ico ? "pass" : "fail",
+      });
 
       if (!cancelled) setChecks(next);
     };
