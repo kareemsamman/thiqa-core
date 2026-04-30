@@ -83,7 +83,16 @@ export function validateEmailFormat(email: string): string | null {
   return null;
 }
 
-// Rate limiting for login attempts
+// ---------------------------------------------------------------------------
+// Login rate limiting — UX-ONLY HELPER
+// ---------------------------------------------------------------------------
+// Authoritative brute-force enforcement lives in the `log-login-attempt`
+// edge function (counts failures from the `login_attempts` table using
+// the service role). The localStorage counter below is intentionally
+// non-authoritative: it just gives the user immediate visual feedback
+// between server round-trips. Clearing localStorage does NOT bypass the
+// real lockout.
+// ---------------------------------------------------------------------------
 const LOGIN_ATTEMPTS_KEY = "thiqa_login_attempts";
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
