@@ -236,13 +236,18 @@ function SessionTrackerWrapper({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Public-page widgets: cookie banner + accessibility FAB. Mounted only
-// on the marketing landing and the auth/legal pages so the
-// authenticated CRM stays uncluttered. The list is intentionally
-// short — exact paths only, no startsWith fan-out, since "/" would
-// otherwise match every route.
+// Public-page widgets: cookie banner + accessibility FAB. Mounted on
+// every public marketing/auth/legal route so the visitor experience
+// is consistent — the cookie banner persists its choice in
+// localStorage, so it only shows the first time and stays dismissed
+// across pages. The authenticated CRM is excluded by virtue of not
+// being in this list.
 const PUBLIC_WIDGET_PATHS = new Set([
   "/",
+  "/landing",
+  "/pricing",
+  "/faq",
+  "/contact",
   "/login",
   "/register",
   "/terms",
