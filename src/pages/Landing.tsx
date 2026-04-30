@@ -2080,8 +2080,12 @@ function LandingContent() {
                   {/* Inner absolute box — gives the flex container an
                       explicit height (inset-0) so iOS Safari's
                       aspect-ratio + max-h-full combo doesn't compute
-                      to 0 and hide the device mockup. */}
-                  <div className="absolute inset-0 p-6 md:p-8 flex items-center justify-center">
+                      to 0 and hide the device mockup. z-10 forces
+                      the image above the gradient bg layer; without
+                      it iOS Safari intermittently painted the
+                      blurred gradient on top of the mockup once each
+                      card got its own composite layer. */}
+                  <div className="absolute inset-0 z-10 p-6 md:p-8 flex items-center justify-center">
                     {/* No loading="lazy" — the cards live inside a
                         CSS-animated translateX marquee, and iOS
                         Safari's IntersectionObserver evaluates each
