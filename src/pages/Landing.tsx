@@ -1262,7 +1262,7 @@ function LandingContent() {
         >
           <div className="relative rounded-t-xl overflow-hidden border border-black/[0.12] border-b-0 shadow-2xl shadow-black/20 max-w-full w-[95%] md:w-1/2">
             <img
-              src="https://thiqacrm.b-cdn.net/1new.png"
+              src="https://thiqacrm.b-cdn.net/image%20227.jpg"
               alt="Thiqa — نظام إدارة وكالات التأمين"
               width={607}
               height={407}
