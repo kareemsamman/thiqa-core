@@ -1964,24 +1964,13 @@ function LandingContent() {
           filter: blur(28px) saturate(1.1);
           will-change: filter;
         }
-        /* Infinite marquee. The rail renders the card set twice
-           in the DOM, then translates from 0 → −50% in a continuous
-           linear loop. Because the two halves are identical,
-           resetting to 0 at the end is visually seamless. */
-        .updates-marquee {
-          width: max-content;
-          animation: updatesMarquee 80s linear infinite;
-          will-change: transform;
+        .updates-scroller {
+          -webkit-overflow-scrolling: touch;
+          scroll-snap-type: x mandatory;
+          scrollbar-width: none;
         }
-        /* Pause the loop while the gallery lightbox is open — without
-           this the user opens an image and the underlying rail keeps
-           sliding, which feels jittery once they close the dialog. */
-        body.landing-lightbox-open .updates-marquee {
-          animation-play-state: paused;
-        }
-        @keyframes updatesMarquee {
-          from { transform: translate3d(0, 0, 0); }
-          to   { transform: translate3d(-50%, 0, 0); }
+        .updates-scroller::-webkit-scrollbar {
+          display: none;
         }
       `}</style>
       <section
@@ -2019,19 +2008,13 @@ function LandingContent() {
           </div>
         </div>
 
-        {/* Full-width marquee rail. The outer div clips overflow;
-            the inner .updates-marquee translates leftward forever.
-            The card list is rendered twice so the loop seam is
-            invisible — at the end of set 1, set 2 is already
-            perfectly in place. Motion is right → left (new cards
-            appear from the right edge). */}
-        <div className="overflow-hidden" dir="ltr">
-          <div className="updates-marquee flex gap-5 md:gap-6">
-            {[...featureUpdates, ...featureUpdates].map((u, i) => (
+        <div className="updates-scroller overflow-x-auto overflow-y-hidden px-6 pb-3" dir="ltr" aria-label="آخر تحديثات Thiqa">
+          <div className="flex w-max gap-5 md:gap-6 pr-6">
+            {featureUpdates.map((u, i) => (
               <div
                 key={i}
-                className="flex-shrink-0 w-[260px] md:w-[320px]"
-                aria-hidden={i >= featureUpdates.length ? "true" : undefined}
+                className="w-[78vw] max-w-[300px] flex-shrink-0 scroll-snap-align-start md:w-[320px]"
+                style={{ scrollSnapAlign: "start" }}
               >
                 <div className="relative aspect-[8/9] rounded-[28px] overflow-hidden">
                   <div
@@ -2065,7 +2048,7 @@ function LandingContent() {
                     <GalleryImage
                       src={("image" in u && u.image) ? u.image : featuresMockup}
                       alt={u.title}
-                      className="max-w-full max-h-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
+                      className="block h-full w-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
                     />
                   </div>
                 </div>
