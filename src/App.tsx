@@ -3,16 +3,44 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { GlobalQuotaDialogHost } from "@/components/subscription/GlobalQuotaDialogHost";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "@/hooks/useAuth";
 import { RecentClientProvider } from "@/hooks/useRecentClient";
 import { PolicyWizardControllerProvider } from "@/hooks/usePolicyWizardController";
-import { GlobalPolicyWizardHost } from "@/components/policies/GlobalPolicyWizardHost";
-import { ThaqibWidget } from "@/components/ai-assistant/ThaqibWidget";
-import { CookieConsent } from "@/components/public/CookieConsent";
-import { AccessibilityWidget } from "@/components/public/AccessibilityWidget";
+
+// Lazy-loaded global hosts. Each returns null until their gating
+// condition fires (event for quota, instances list for wizard, agent
+// permission for Thaqib), so eager-importing them was pulling the
+// AddQuotaDialog / PolicyWizard / ThaqibPanel sub-trees into every
+// initial bundle — including the public landing where they never
+// render. The Suspense fallback is null because none of these own
+// any visible chrome.
+const GlobalQuotaDialogHost = lazy(() =>
+  import("@/components/subscription/GlobalQuotaDialogHost").then((m) => ({
+    default: m.GlobalQuotaDialogHost,
+  })),
+);
+const GlobalPolicyWizardHost = lazy(() =>
+  import("@/components/policies/GlobalPolicyWizardHost").then((m) => ({
+    default: m.GlobalPolicyWizardHost,
+  })),
+);
+const ThaqibWidget = lazy(() =>
+  import("@/components/ai-assistant/ThaqibWidget").then((m) => ({
+    default: m.ThaqibWidget,
+  })),
+);
+const CookieConsent = lazy(() =>
+  import("@/components/public/CookieConsent").then((m) => ({
+    default: m.CookieConsent,
+  })),
+);
+const AccessibilityWidget = lazy(() =>
+  import("@/components/public/AccessibilityWidget").then((m) => ({
+    default: m.AccessibilityWidget,
+  })),
+);
 import { useLocation } from "react-router-dom";
 import { useSessionTracker } from "@/hooks/useSessionTracker";
 import { SidebarStateProvider } from "@/hooks/useSidebarState";
@@ -264,8 +292,10 @@ function PublicWidgets() {
   if (!PUBLIC_WIDGET_PATHS.has(location.pathname)) return null;
   return (
     <>
-      <CookieConsent />
-      <AccessibilityWidget />
+      <Suspense fallback={null}>
+        <CookieConsent />
+        <AccessibilityWidget />
+      </Suspense>
     </>
   );
 }
@@ -276,7 +306,9 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <GlobalQuotaDialogHost />
+        <Suspense fallback={null}>
+          <GlobalQuotaDialogHost />
+        </Suspense>
         <BrowserRouter>
           <AuthProvider>
             <SessionTrackerWrapper>
@@ -286,8 +318,10 @@ const App = () => (
             <SidebarStateProvider>
             <RecentClientProvider>
             <PolicyWizardControllerProvider>
-            <GlobalPolicyWizardHost />
-            <ThaqibWidget />
+            <Suspense fallback={null}>
+              <GlobalPolicyWizardHost />
+              <ThaqibWidget />
+            </Suspense>
             <PublicWidgets />
             <RoutePrefetcher />
             <AppChrome />

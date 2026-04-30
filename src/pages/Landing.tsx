@@ -1858,6 +1858,8 @@ function LandingContent() {
                   <GalleryImage
                     src={tab.image ?? featuresMockup}
                     alt={`Thiqa — ${tab.label}`}
+                    width={1372}
+                    height={870}
                     className="relative z-10 w-full max-w-[88%] h-auto rounded-xl shadow-[0_30px_80px_-10px_rgba(18,32,66,0.45)]"
                     loading="lazy"
                   />
@@ -2099,6 +2101,8 @@ function LandingContent() {
                     <GalleryImage
                       src={("image" in u && u.image) ? u.image : featuresMockup}
                       alt={u.title}
+                      width={1372}
+                      height={870}
                       className="block w-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
                     />
                   </div>
@@ -2306,6 +2310,8 @@ function LandingContent() {
               <GalleryImage
                 src="https://thiqacrm.b-cdn.net/nnnewww/solutions-dashboard-overview%202.png"
                 alt="سيطرة كاملة وتقليل عبء الإدارة"
+                width={1372}
+                height={870}
                 className="relative w-full h-auto block rounded-2xl"
                 loading="lazy"
               />
@@ -2875,6 +2881,8 @@ function LandingContent() {
           <GalleryImage
             src="https://thiqacrm.b-cdn.net/Group%201000011508%20(1).png"
             alt="كل ما تحتاجه الوكالة، تحت سقف واحد"
+            width={1920}
+            height={552}
             className="w-full h-auto block"
             loading="lazy"
           />
@@ -3065,6 +3073,8 @@ function LandingContent() {
             <GalleryImage
               src="https://thiqacrm.b-cdn.net/free-cta-dashboard-hero%201.png"
               alt="قلنا لكم إنها مجاناً"
+              width={1372}
+              height={870}
               className="w-full h-auto block"
               loading="lazy"
             />
@@ -3102,6 +3112,8 @@ function LandingContent() {
                 <GalleryImage
                   src={card.img}
                   alt={card.label}
+                  width={1372}
+                  height={870}
                   className="w-full h-full object-cover"
                   draggable={false}
                   loading="lazy"
