@@ -868,7 +868,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
       if (Array.isArray(snap.newChildren)) setNewChildren(snap.newChildren as NewChildForm[]);
 
       const asyncHydrate = async () => {
-        const tasks: Promise<void>[] = [];
+        const tasks: PromiseLike<void>[] = [];
         if (snap.selectedCategoryId) {
           tasks.push(
             supabase.from("insurance_categories").select("*").eq("id", snap.selectedCategoryId as string).maybeSingle()
