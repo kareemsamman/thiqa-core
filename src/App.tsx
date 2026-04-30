@@ -307,6 +307,7 @@ const App = () => (
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<TermsOfUse />} />
+              <Route path="/icon-checklist" element={<IconChecklist />} />
               <Route path="/subscription-expired" element={<SubscriptionExpired />} />
               {/* Thiqa Super Admin routes */}
               <Route path="/thiqa" element={<ThiqaAdminRoute><ThiqaDashboard /></ThiqaAdminRoute>} />
