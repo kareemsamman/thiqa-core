@@ -148,7 +148,7 @@ export function DemoCallDialog({ open, onOpenChange }: DemoCallDialogProps) {
                       zIndex: card.z,
                     }}
                   >
-                    <img src={card.src} alt="" className="w-full h-full object-cover" draggable={false} />
+                    <img src={card.src} alt="" aria-hidden="true" className="w-full h-full object-cover" draggable={false} />
                   </div>
                 ))}
               </div>

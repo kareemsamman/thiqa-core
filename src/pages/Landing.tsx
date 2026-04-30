@@ -1859,7 +1859,7 @@ function LandingContent() {
                   />
                   <GalleryImage
                     src={tab.image ?? featuresMockup}
-                    alt=""
+                    alt={`Thiqa — ${tab.label}`}
                     className="relative z-10 w-full max-w-[88%] h-auto rounded-xl shadow-[0_30px_80px_-10px_rgba(18,32,66,0.45)]"
                     loading="lazy"
                   />
@@ -2685,7 +2685,7 @@ function LandingContent() {
                             >
                               <img
                                 src={slide.image}
-                                alt=""
+                                alt={`Thiqa — ${slide.eyebrow}`}
                                 draggable={false}
                                 className="max-w-full max-h-full object-contain rounded-xl shadow-[0_20px_50px_-12px_rgba(10,15,35,0.5)] pointer-events-none"
                                 loading="lazy"

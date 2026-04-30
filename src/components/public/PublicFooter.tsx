@@ -170,7 +170,7 @@ export function PublicFooter() {
       <div className="w-full overflow-hidden">
         <img
           src="https://thiqacrm.b-cdn.net/Group%201000011511.png"
-          alt="Thiqa"
+          alt="Thiqa — نظام إدارة وكالات التأمين"
           className="w-full h-auto block"
           loading="lazy"
         />
