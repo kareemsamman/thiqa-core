@@ -254,6 +254,9 @@ const PUBLIC_WIDGET_PATHS = new Set([
   "/register",
   "/terms",
   "/privacy",
+  "/forgot-password",
+  "/reset-password",
+  "/verify-email",
 ]);
 
 function PublicWidgets() {
