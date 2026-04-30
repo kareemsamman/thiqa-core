@@ -1,5 +1,6 @@
 import { Helmet } from "react-helmet-async";
 import { useLocation } from "react-router-dom";
+import { PublicAnalytics } from "@/components/analytics/PublicAnalytics";
 
 const SITE_ORIGIN = "https://getthiqa.com";
 const DEFAULT_OG_IMAGE = "https://thiqacrm.b-cdn.net/fav.png";
@@ -37,6 +38,11 @@ export function PublicSEO({
   const canonical = `${SITE_ORIGIN}${path === "/" ? "" : path}`;
 
   return (
+    <>
+    {/* gtag for public/marketing/auth pages only — CRM routes never
+        mount PublicSEO, so the analytics script is never loaded
+        there. */}
+    <PublicAnalytics />
     <Helmet>
       <html lang="ar" dir="rtl" />
       <title>{title}</title>
@@ -79,5 +85,6 @@ export function PublicSEO({
       <meta name="twitter:image" content={image} />
       <meta name="twitter:image:alt" content={title} />
     </Helmet>
+    </>
   );
 }
