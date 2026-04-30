@@ -2008,14 +2008,10 @@ function LandingContent() {
           </div>
         </div>
 
-        <div className="updates-scroller overflow-x-auto overflow-y-hidden px-6 pb-3" dir="ltr" aria-label="آخر تحديثات Thiqa">
-          <div className="flex w-max gap-5 md:gap-6 pr-6">
+        <div className="max-w-6xl mx-auto px-6" aria-label="آخر تحديثات Thiqa">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
             {featureUpdates.map((u, i) => (
-              <div
-                key={i}
-                className="w-[78vw] max-w-[300px] flex-shrink-0 scroll-snap-align-start md:w-[320px]"
-                style={{ scrollSnapAlign: "start" }}
-              >
+              <div key={i} className="w-full">
                 <div className="relative aspect-[8/9] rounded-[28px] overflow-hidden">
                   <div
                     className="updates-bg-blur"
