@@ -1926,11 +1926,20 @@ function LandingContent() {
                       aspect-ratio + max-h-full combo doesn't compute
                       to 0 and hide the device mockup. */}
                   <div className="absolute inset-0 p-6 md:p-8 flex items-center justify-center">
+                    {/* No loading="lazy" — the cards live inside a
+                        CSS-animated translateX marquee, and iOS
+                        Safari's IntersectionObserver evaluates each
+                        <img> against its untranslated layout box.
+                        That puts every duplicate card "off screen"
+                        from Safari's POV and the lazy fetch never
+                        fires, leaving the cards as empty gradients
+                        on iPhone. Eager-load fixes it; the rail
+                        shows ~3 cards above the fold so the cost is
+                        worth the correctness. */}
                     <GalleryImage
                       src={("image" in u && u.image) ? u.image : featuresMockup}
                       alt={u.title}
                       className="max-w-full max-h-full object-contain rounded-2xl shadow-[0_24px_50px_-12px_rgba(10,15,35,0.45)]"
-                      loading="lazy"
                     />
                   </div>
                 </div>
