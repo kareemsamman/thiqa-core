@@ -1287,8 +1287,15 @@ export default function ThiqaAgentDetail() {
                           .map(p => {
                             const yearly = p.yearly_price ?? p.monthly_price * 12;
                             return (
-                              <SelectItem key={p.plan_key} value={p.plan_key}>
-                                {p.name_ar || p.name} — ₪{p.monthly_price}/شهر · ₪{yearly}/سنة
+                              <SelectItem key={p.plan_key} value={p.plan_key} className="py-2">
+                                <div className="flex w-full items-center justify-between gap-6">
+                                  <span className="font-medium">{p.name_ar || p.name}</span>
+                                  <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                                    ₪{p.monthly_price.toLocaleString()}/شهر
+                                    <span className="mx-1.5 text-muted-foreground/40">·</span>
+                                    ₪{yearly.toLocaleString()}/سنة
+                                  </span>
+                                </div>
                               </SelectItem>
                             );
                           }) : (
