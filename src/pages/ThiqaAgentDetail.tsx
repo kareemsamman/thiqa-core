@@ -366,7 +366,12 @@ export default function ThiqaAgentDetail() {
     }
 
     setSaving(false);
-    error ? toast.error('خطأ في الحفظ') : toast.success('تم الحفظ');
+    if (error) {
+      console.error('saveAgent failed', { error, patch });
+      toast.error(`خطأ في الحفظ: ${error.message}`);
+    } else {
+      toast.success('تم الحفظ');
+    }
   };
 
   // ─── Toggle feature ───
