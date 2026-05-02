@@ -1,0 +1,14 @@
+-- Drop the hardcoded agents.plan CHECK constraint.
+--
+-- ThiqaSettings → "الخطط" lets the super admin add new subscription_plans
+-- rows with arbitrary plan_keys (e.g. "business"). The CHECK constraint
+-- on agents.plan was a closed enum
+-- ('free_trial','entry','basic','professional','ultimate','custom','starter','pro')
+-- that nobody updated when new plans were created — so moving an agent
+-- to any newly-created plan failed with:
+--   new row for relation "agents" violates check constraint "agents_plan_check"
+--
+-- The valid set of plan_keys lives in public.subscription_plans, so the
+-- enum belongs there, not duplicated as a CHECK on agents. Dropping the
+-- CHECK aligns the schema with the system's actual design.
+ALTER TABLE public.agents DROP CONSTRAINT IF EXISTS agents_plan_check;
