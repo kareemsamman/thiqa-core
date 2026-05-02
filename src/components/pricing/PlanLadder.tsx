@@ -77,6 +77,13 @@ interface PlanLadderProps {
   resource?: LimitResource;
   /** Called after a plan change is confirmed via the edge function. */
   onPlanChanged?: () => void;
+  /**
+   * When true, the price block on each card is replaced with a
+   * "السعر عند الطلب" placeholder. The CTA stays clickable so the
+   * caller can still pick a plan — used by the upgrade popup when
+   * the Thiqa-admin `show_public_prices` toggle is off.
+   */
+  hidePrices?: boolean;
   className?: string;
 }
 
@@ -94,6 +101,7 @@ export function PlanLadder({
   featureLabel,
   resource,
   onPlanChanged,
+  hidePrices = false,
   className,
 }: PlanLadderProps) {
   const { planInfo, agent } = useAgentContext();
@@ -179,6 +187,7 @@ export function PlanLadder({
               resourceMeta={meta}
               newQuota={newQuota ?? null}
               detailsOpen={detailsOpen}
+              hidePrices={hidePrices}
               onToggleDetails={() => setDetailsOpen((v) => !v)}
               onSelect={() => setConfirmTarget(plan)}
             />
@@ -213,6 +222,7 @@ function PlanCard({
   resourceMeta,
   newQuota,
   detailsOpen,
+  hidePrices,
   onToggleDetails,
   onSelect,
 }: {
@@ -225,6 +235,7 @@ function PlanCard({
   resourceMeta: { label: string; icon: typeof Users } | null;
   newQuota: number | null;
   detailsOpen: boolean;
+  hidePrices: boolean;
   onToggleDetails: () => void;
   onSelect: () => void;
 }) {
@@ -255,14 +266,20 @@ function PlanCard({
       <div className="mb-4">
         <p className="text-lg font-bold tracking-tight">{plan.name_ar || plan.name}</p>
         <p className="text-[11px] text-muted-foreground mt-0.5 uppercase tracking-wider">{plan.name}</p>
-        <div className="flex items-baseline gap-1 mt-3">
-          <span className="text-3xl font-extrabold tabular-nums">₪{plan.monthly_price}</span>
-          <span className="text-sm text-muted-foreground">/ شهر</span>
-        </div>
-        {plan.yearly_price !== null && (
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            أو ₪{plan.yearly_price} سنوياً
-          </p>
+        {hidePrices ? (
+          <p className="mt-3 text-base font-semibold text-slate-700">السعر عند الطلب</p>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-1 mt-3">
+              <span className="text-3xl font-extrabold tabular-nums">₪{plan.monthly_price}</span>
+              <span className="text-sm text-muted-foreground">/ شهر</span>
+            </div>
+            {plan.yearly_price !== null && (
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                أو ₪{plan.yearly_price} سنوياً
+              </p>
+            )}
+          </>
         )}
       </div>
 

@@ -788,6 +788,67 @@ const SYSTEM_FEATURES = [
   { key: 'accident_fees', label: 'رسوم الحوادث' },
 ];
 
+// Toggle that hides prices on the public /pricing page and the in-app
+// upgrade popup. The CTA buttons stay clickable — only the price text
+// is concealed, so users can still subscribe without seeing the price
+// upfront. Defaults to "show" so existing installs are unaffected.
+function PublicPriceVisibilityCard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: settings, isLoading } = useThiqaPlatformSettings();
+  const showPrices = settings?.show_public_prices !== "false";
+
+  const toggleMutation = useMutation({
+    mutationFn: async (newValue: boolean) => {
+      const { error } = await supabase
+        .from("thiqa_platform_settings")
+        .upsert(
+          { setting_key: "show_public_prices", setting_value: String(newValue), updated_at: new Date().toISOString() },
+          { onConflict: "setting_key" }
+        );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["thiqa-platform-settings"] });
+      toast({ title: "تم الحفظ", description: "تم تحديث إعداد عرض الأسعار" });
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل في حفظ الإعداد", variant: "destructive" });
+    },
+  });
+
+  if (isLoading) return <Skeleton className="h-32 w-full" />;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Eye className="h-5 w-5" />
+          عرض الأسعار العامة
+        </CardTitle>
+        <CardDescription>
+          التحكم في إظهار الأسعار في صفحة <code dir="ltr">/pricing</code> وفي نافذة الترقية داخل التطبيق
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
+          <div className="space-y-0.5">
+            <Label className="text-base font-medium">إظهار الأسعار</Label>
+            <p className="text-sm text-muted-foreground">
+              عند الإيقاف، يبقى زر الاشتراك / الترقية فعّالاً لكن لن تظهر الأسعار للزائر — يمكنه الضغط للاشتراك دون رؤية السعر مسبقاً.
+            </p>
+          </div>
+          <Switch
+            checked={showPrices}
+            onCheckedChange={(checked) => toggleMutation.mutate(checked)}
+            disabled={toggleMutation.isPending}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function PlansSettingsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -924,6 +985,8 @@ function PlansSettingsTab() {
 
   return (
     <div className="space-y-4">
+      <PublicPriceVisibilityCard />
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">

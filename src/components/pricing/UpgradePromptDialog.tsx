@@ -88,6 +88,10 @@ export function UpgradePromptDialog({
     subtitle: 'طوّر حزمتك للحصول على المزيد من الميزات',
     cta: 'عرض الحزم',
   });
+  // `show_public_prices` toggle (Thiqa admin → الخطط والأسعار). When
+  // false, the plan grid below renders without prices but the CTA on
+  // each card stays clickable.
+  const [hidePrices, setHidePrices] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -96,7 +100,7 @@ export function UpgradePromptDialog({
       const { data } = await supabase
         .from('thiqa_platform_settings')
         .select('setting_key, setting_value')
-        .in('setting_key', ['upgrade_popup_title', 'upgrade_popup_subtitle', 'upgrade_popup_cta_label']);
+        .in('setting_key', ['upgrade_popup_title', 'upgrade_popup_subtitle', 'upgrade_popup_cta_label', 'show_public_prices']);
       if (cancelled || !data) return;
       const map = new Map<string, string>();
       data.forEach((s: any) => map.set(s.setting_key, s.setting_value ?? ''));
@@ -105,6 +109,7 @@ export function UpgradePromptDialog({
         subtitle: map.get('upgrade_popup_subtitle') || 'طوّر حزمتك للحصول على المزيد من الميزات',
         cta: map.get('upgrade_popup_cta_label') || 'عرض الحزم',
       });
+      setHidePrices(map.get('show_public_prices') === 'false');
     })();
     return () => { cancelled = true; };
   }, [open]);
@@ -198,6 +203,7 @@ export function UpgradePromptDialog({
             featureKey={featureKey}
             featureLabel={featureLabel}
             resource={resource}
+            hidePrices={hidePrices}
             onPlanChanged={() => setTimeout(() => onOpenChange(false), 400)}
           />
         </div>

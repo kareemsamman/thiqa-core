@@ -208,6 +208,25 @@ export default function Pricing() {
     })();
   }, []);
 
+  // `show_public_prices` toggle (Thiqa admin → الخطط والأسعار). When the
+  // platform setting is 'false', the price block + yearly toggle are
+  // concealed but the upgrade CTA stays clickable. Default true keeps
+  // existing installs unchanged when the row is missing or the fetch
+  // fails.
+  const [showPrices, setShowPrices] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("thiqa_platform_settings")
+        .select("setting_value")
+        .eq("setting_key", "show_public_prices")
+        .maybeSingle();
+      if (!cancelled && data?.setting_value === "false") setShowPrices(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Paid plans only (free_trial is shown elsewhere). With lg:grid-cols-3
   // a 5-plan layout becomes 3 + 2; the trailing empty cell(s) of the
   // last lg-row are filled by hidden-on-mobile placeholders below so
@@ -232,14 +251,16 @@ export default function Pricing() {
           { label: "الأسعار", href: "/pricing" },
         ]}
       />
-      <PricingJsonLd
-        offers={plans.map((p) => ({
-          name: p.name_ar || p.name,
-          description: p.description,
-          monthlyPrice: p.monthly_price,
-          yearlyPrice: p.yearly_price,
-        }))}
-      />
+      {showPrices && (
+        <PricingJsonLd
+          offers={plans.map((p) => ({
+            name: p.name_ar || p.name,
+            description: p.description,
+            monthlyPrice: p.monthly_price,
+            yearlyPrice: p.yearly_price,
+          }))}
+        />
+      )}
       <PublicGradientBackground />
 
       {/* ═══ Navbar — static light pill, same 3-item structure as the
@@ -699,17 +720,25 @@ export default function Pricing() {
                     </p>
                   )}
                   <div className="mt-6 flex items-baseline gap-1.5">
-                    <span className="text-4xl font-extrabold text-black tracking-tight tabular-nums leading-none">
-                      {isFree ? "0" : displayPrice}
-                    </span>
-                    <span className="text-xl font-bold text-black/80">₪</span>
-                    {!isFree && (
-                      <span className="text-[13px] text-black/55 font-medium">
-                        {showYearly ? "/ سنة" : "/ شهر"}
+                    {showPrices ? (
+                      <>
+                        <span className="text-4xl font-extrabold text-black tracking-tight tabular-nums leading-none">
+                          {isFree ? "0" : displayPrice}
+                        </span>
+                        <span className="text-xl font-bold text-black/80">₪</span>
+                        {!isFree && (
+                          <span className="text-[13px] text-black/55 font-medium">
+                            {showYearly ? "/ سنة" : "/ شهر"}
+                          </span>
+                        )}
+                        {isFree && (
+                          <span className="text-[13px] text-black/55 font-medium">للأبد</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-2xl font-bold text-black/85 tracking-tight leading-none">
+                        السعر عند الطلب
                       </span>
-                    )}
-                    {isFree && (
-                      <span className="text-[13px] text-black/55 font-medium">للأبد</span>
                     )}
                   </div>
                 </div>
@@ -727,7 +756,11 @@ export default function Pricing() {
                     see the concrete amount they save the moment they
                     flip the switch. */}
                 <div className="px-7 md:px-8 py-4 min-h-[64px] flex items-center justify-between">
-                  {hasYearly ? (
+                  {!showPrices ? (
+                    <span className="text-[13px] text-black/65">
+                      {isFree ? "خطة مجانية. بلا التزامات." : "تواصل معنا لمعرفة التفاصيل"}
+                    </span>
+                  ) : hasYearly ? (
                     <>
                       <div className="flex items-center gap-2.5">
                         <span className="text-[13px] font-semibold text-black">
