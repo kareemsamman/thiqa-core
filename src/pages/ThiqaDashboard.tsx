@@ -111,6 +111,11 @@ interface Payment {
 export default function ThiqaDashboard() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  // Cash collected this calendar month — sum of agent_subscription_payments
+  // for the current month. Replaces the old MRR-style calculation
+  // (sum of agents.monthly_price) which couldn't reflect the actual
+  // money received from customers.
+  const [monthlyRevenue, setMonthlyRevenue] = useState(0);
   // plan_key → Arabic display name. Built from subscription_plans so
   // plans added through /thiqa/settings (e.g. custom "businesses")
   // show their real label instead of the raw English key.
@@ -121,7 +126,7 @@ export default function ThiqaDashboard() {
 
   useEffect(() => {
     if (authLoading || !user) return;
-    Promise.all([fetchAgents(), fetchRecentPayments(), fetchPlans()]).finally(() => setLoading(false));
+    Promise.all([fetchAgents(), fetchRecentPayments(), fetchPlans(), fetchMonthlyRevenue()]).finally(() => setLoading(false));
   }, [authLoading, user]);
 
   const fetchAgents = async () => {
@@ -138,6 +143,18 @@ export default function ThiqaDashboard() {
     if (data) setPayments(data as Payment[]);
   };
 
+  const fetchMonthlyRevenue = async () => {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+    const { data } = await supabase
+      .from("agent_subscription_payments")
+      .select("amount")
+      .gte("payment_date", monthStart)
+      .lte("payment_date", monthEnd);
+    setMonthlyRevenue((data || []).reduce((sum, p: { amount: number }) => sum + Number(p.amount || 0), 0));
+  };
+
   const fetchPlans = async () => {
     const { data } = await supabase
       .from("subscription_plans")
@@ -152,23 +169,20 @@ export default function ThiqaDashboard() {
   const totalAgents = agents.length;
   const activeAgents = agents.filter(a => a.subscription_status === "active").length;
   const expiredAgents = agents.filter(a => a.subscription_status === "expired" || a.subscription_status === "suspended").length;
-  // Window is 90 days so paying agents on annual cycles also surface
-  // here (a 30-day window only catches monthly renewals). Trial
-  // subscriptions are included so onboarding agents about to lapse
-  // are visible on the same panel as paying ones.
+  // 30-day window — short enough that the panel surfaces only the
+  // renewals admin actually needs to chase this month. Trial
+  // subscriptions are included so lapsing onboardings show up
+  // alongside paying ones.
   const expiringSoon = agents
     .filter(a => {
       if (a.subscription_status !== "active" && a.subscription_status !== "trial") return false;
       if (!a.subscription_expires_at) return false;
       const days = differenceInDays(new Date(a.subscription_expires_at), new Date());
-      return days >= 0 && days <= 90;
+      return days >= 0 && days <= 30;
     })
     .sort((a, b) =>
       new Date(a.subscription_expires_at!).getTime() - new Date(b.subscription_expires_at!).getTime(),
     );
-  const totalMonthlyRevenue = agents
-    .filter(a => a.subscription_status === "active" && (a.monthly_price ?? 0) > 0)
-    .reduce((sum, a) => sum + (a.monthly_price ?? 0), 0);
 
   // Plan-tier breakdown for the totals card. Hardcoding Pro/Basic was
   // wrong on two fronts: the canonical plan keys are now
@@ -232,13 +246,13 @@ export default function ThiqaDashboard() {
           />
           <KpiTile
             title="الإيرادات الشهرية"
-            value={`₪${totalMonthlyRevenue.toLocaleString("en-US")}`}
+            value={`₪${monthlyRevenue.toLocaleString("en-US")}`}
             icon={TrendingUp}
             tone="amber"
           />
         </div>
 
-        {/* Expiring Soon — 90-day window, includes trial subscriptions */}
+        {/* Expiring Soon — 30-day window, includes trial subscriptions */}
         {expiringSoon.length > 0 && (
           <Card className="rounded-2xl border-amber-500/40 bg-amber-500/5 shadow-sm">
             <CardHeader className="pb-3">
@@ -246,7 +260,7 @@ export default function ThiqaDashboard() {
                 <div className="h-8 w-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
                   <Clock className="h-4 w-4" />
                 </div>
-                <span>اشتراكات تنتهي خلال 90 يوماً</span>
+                <span>اشتراكات تنتهي خلال 30 يوماً</span>
                 <Badge variant="outline" className="bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-400 mr-1">
                   {expiringSoon.length}
                 </Badge>
