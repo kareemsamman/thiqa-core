@@ -114,7 +114,14 @@ const SelectItem = React.forwardRef<
     ref={ref}
     dir="rtl"
     className={cn(
-      "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pr-2 pl-8 text-sm text-right outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 focus:bg-accent focus:text-accent-foreground",
+      // Highlight = soft muted hover, not the stark dark `accent` band.
+      // Radix auto-focuses the currently-selected item when the
+      // dropdown opens, so `focus:bg-accent` was painting the active
+      // value with a near-black background (— our --accent token is
+      // 0 0% 15%) every time a Select reopened with a value already
+      // chosen. `bg-muted/60` matches the soft hover style we use on
+      // CommandItem / DropdownMenuItem so all popover lists agree.
+      "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pr-2 pl-8 text-sm text-right outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 focus:bg-muted/60 focus:text-foreground",
       className,
     )}
     {...props}
