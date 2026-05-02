@@ -184,20 +184,21 @@ export default function ThiqaDashboard() {
       new Date(a.subscription_expires_at!).getTime() - new Date(b.subscription_expires_at!).getTime(),
     );
 
-  // Plan-tier breakdown for the totals card. Hardcoding Pro/Basic was
-  // wrong on two fronts: the canonical plan keys are now
-  // entry/basic/professional/ultimate (legacy `pro` is gone), and
-  // free_trial agents don't fit either bucket. Build a sorted list of
-  // non-zero tiers using the same Arabic labels the rest of the app
-  // shows.
+  // Plan-tier breakdown for the totals card. Canonical tiers render
+  // first in the order below; any custom plan keys added via
+  // /thiqa/settings (e.g. "businesses") are appended after so they
+  // aren't silently dropped from the breakdown.
   const PLAN_TIER_ORDER = ["ultimate", "professional", "pro", "basic", "entry", "free_trial"] as const;
   const planCounts = agents.reduce<Record<string, number>>((acc, a) => {
     const k = a.plan || "free_trial";
     acc[k] = (acc[k] ?? 0) + 1;
     return acc;
   }, {});
-  const planBreakdown = PLAN_TIER_ORDER
-    .filter(k => (planCounts[k] ?? 0) > 0)
+  const knownKeys = PLAN_TIER_ORDER.filter(k => (planCounts[k] ?? 0) > 0);
+  const customKeys = Object.keys(planCounts)
+    .filter(k => !(PLAN_TIER_ORDER as readonly string[]).includes(k))
+    .sort((a, b) => (planNames[a] || a).localeCompare(planNames[b] || b, "ar"));
+  const planBreakdown = [...knownKeys, ...customKeys]
     .map(k => ({ label: `${planLabel(k, planNames[k])}: ${planCounts[k]}` }));
 
   if (loading) {
