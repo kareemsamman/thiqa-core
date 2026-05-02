@@ -325,8 +325,10 @@ export default function Subscription() {
     const endDate = isTrial ? trialEnd : expiresAt;
     const now = new Date(nowTick);
     const msRemaining = endDate ? Math.max(0, endDate.getTime() - now.getTime()) : 0;
-    // Use floor so "35 days 2 hours" doesn't round up to 36.
-    const daysRemaining = endDate ? Math.floor(msRemaining / 86400000) : null;
+    // Use ceil so this matches the next-invoice hero card on the
+    // same page (which uses Math.ceil) — both should agree on whether
+    // 96.4 days remaining reads as "96" or "97".
+    const daysRemaining = endDate ? Math.ceil(msRemaining / 86400000) : null;
     const hoursRemaining = endDate ? Math.floor((msRemaining % 86400000) / 3600000) : 0;
     const minutesRemaining = endDate ? Math.floor((msRemaining % 3600000) / 60000) : 0;
     const isExpired = endDate ? endDate.getTime() <= now.getTime() : false;

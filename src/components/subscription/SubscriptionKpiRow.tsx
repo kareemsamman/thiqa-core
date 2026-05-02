@@ -92,6 +92,11 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
   const { agent, planInfo } = useAgentContext();
   const [discount, setDiscount] = useState<{ discounted_price: number; ends_at: string } | null>(null);
   const [addons, setAddons] = useState<Array<{ quantity: number; unit_price: number }>>([]);
+  // Latest active payment so the cycle progress bar reflects the
+  // actual coverage window (period_end - period_start) rather than a
+  // hardcoded 30/365. After a 3-month payment the bar should read
+  // "0% منتهية ... من 96 يوم", not "من 30 يوم".
+  const [latestPayment, setLatestPayment] = useState<{ period_start: string | null; period_end: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -101,7 +106,7 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
       setLoading(true);
       const today = new Date().toISOString().slice(0, 10);
       try {
-        const [discountResp, addonsResp] = await Promise.all([
+        const [discountResp, addonsResp, paymentResp] = await Promise.all([
           supabase
             .from('agent_discounts')
             .select('discounted_price, ends_at')
@@ -119,10 +124,19 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
             .eq('billing_cycle', 'monthly')
             .lte('starts_at', today)
             .or(`ends_at.is.null,ends_at.gte.${today}`),
+          supabase
+            .from('agent_subscription_payments')
+            .select('period_start, period_end')
+            .eq('agent_id', agent.id)
+            .not('period_end', 'is', null)
+            .order('period_end', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
         ]);
         if (cancelled) return;
         setDiscount((discountResp.data as { discounted_price: number; ends_at: string } | null) ?? null);
         setAddons((addonsResp.data as Array<{ quantity: number; unit_price: number }> | null) ?? []);
+        setLatestPayment((paymentResp.data as { period_start: string | null; period_end: string | null } | null) ?? null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -156,11 +170,27 @@ export function SubscriptionKpiRow({ nowTick }: { nowTick: number }) {
   const endDate = isTrial ? trialEnd : expiresAt;
   const now = new Date(nowTick);
   const msRemaining = endDate ? Math.max(0, endDate.getTime() - now.getTime()) : 0;
-  const daysRemaining = endDate ? Math.floor(msRemaining / 86400000) : null;
+  // Use ceil so the count matches the next-invoice card on the same
+  // page (Math.ceil((billingDate - now) / 86400000)). Floor here was
+  // showing 96 while the hero card showed 97 for the same expiry.
+  const daysRemaining = endDate ? Math.ceil(msRemaining / 86400000) : null;
   const isExpired = endDate ? endDate.getTime() <= now.getTime() : false;
 
   const cycleLabels = getCycleLabels(agent.billing_cycle);
-  const periodLengthDays = isTrial ? 35 : cycleLabels.periodDays;
+  // For paid agents, the cycle length comes from the latest payment's
+  // (period_end - period_start). A 3-month payment → 96-ish days,
+  // not the cycleLabels default of 30. Trial stays at the canonical
+  // 35-day window. Falls back to cycleLabels.periodDays when no
+  // payment is on file yet.
+  const paymentCycleDays = latestPayment?.period_start && latestPayment?.period_end
+    ? Math.max(
+        1,
+        Math.round(
+          (new Date(latestPayment.period_end).getTime() - new Date(latestPayment.period_start).getTime()) / 86400000,
+        ),
+      )
+    : null;
+  const periodLengthDays = isTrial ? 35 : (paymentCycleDays ?? cycleLabels.periodDays);
   const progress = endDate
     ? Math.min(100, Math.max(0, ((periodLengthDays * 86400000 - msRemaining) / (periodLengthDays * 86400000)) * 100))
     : 0;
