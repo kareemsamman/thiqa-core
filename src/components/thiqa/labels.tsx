@@ -34,8 +34,13 @@ export const STATUS_LABEL_AR: Record<string, string> = {
   cancelled: "ملغى",
 };
 
-export function planLabel(plan: string | null | undefined): string {
+export function planLabel(plan: string | null | undefined, displayName?: string | null): string {
   if (!plan) return "—";
+  // Prefer an explicit name passed in by the caller (typically the
+  // subscription_plans.name_ar for plans created by Thiqa admin that
+  // aren't in the seeded set). Fall back to our static dictionary,
+  // then the raw key as a last resort.
+  if (displayName && displayName.trim()) return displayName;
   return PLAN_LABEL_AR[plan] ?? plan;
 }
 
@@ -48,15 +53,19 @@ interface BadgeOpts {
   className?: string;
 }
 
-export function PlanBadge({ plan, className }: { plan: string | null | undefined } & BadgeOpts) {
+export function PlanBadge({
+  plan,
+  displayName,
+  className,
+}: { plan: string | null | undefined; displayName?: string | null } & BadgeOpts) {
   // Higher tiers (Professional, Ultimate, legacy Pro) get the filled
   // primary look so they read as paid plans at a glance; Entry / Basic
   // / trial stay as outline pills.
   const k = plan ?? "";
   if (k === "pro" || k === "professional" || k === "ultimate") {
-    return <Badge className={`bg-primary ${className ?? ""}`}>{planLabel(k)}</Badge>;
+    return <Badge className={`bg-primary ${className ?? ""}`}>{planLabel(k, displayName)}</Badge>;
   }
-  return <Badge variant="outline" className={className}>{planLabel(k)}</Badge>;
+  return <Badge variant="outline" className={className}>{planLabel(k, displayName)}</Badge>;
 }
 
 export function StatusBadge({ status, className }: { status: string | null | undefined } & BadgeOpts) {

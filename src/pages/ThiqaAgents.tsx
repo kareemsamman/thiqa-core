@@ -73,6 +73,10 @@ function isDormant(lastActivityAt: string | null | undefined) {
 
 export default function ThiqaAgents() {
   const [agents, setAgents] = useState<Agent[]>([]);
+  // plan_key → Arabic display name. Built from subscription_plans so
+  // plans the Thiqa admin added through Settings (e.g. "البزنس") show
+  // their real Arabic label instead of the raw key.
+  const [planNames, setPlanNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
@@ -85,10 +89,16 @@ export default function ThiqaAgents() {
 
   const fetchAgents = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("agents")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const [{ data, error }, { data: plansData }] = await Promise.all([
+      supabase.from("agents").select("*").order("created_at", { ascending: false }),
+      supabase.from("subscription_plans").select("plan_key, name, name_ar"),
+    ]);
+
+    const nameMap: Record<string, string> = {};
+    (plansData || []).forEach((p: any) => {
+      nameMap[p.plan_key] = p.name_ar || p.name || p.plan_key;
+    });
+    setPlanNames(nameMap);
 
     if (!error && data) {
       const agentIds = data.map((a: any) => a.id);
@@ -333,7 +343,7 @@ export default function ThiqaAgents() {
                         </div>
                         <div className="flex flex-col items-end gap-1">
                           {renderStatus(agent)}
-                          <PlanBadge plan={agent.plan} />
+                          <PlanBadge plan={agent.plan} displayName={planNames[agent.plan]} />
                         </div>
                       </div>
                       <div className="flex items-center justify-between mt-3 pt-3 border-t text-xs">
@@ -393,7 +403,7 @@ export default function ThiqaAgents() {
                             </div>
                           </td>
                           <td className="p-3 text-muted-foreground">{agent.email}</td>
-                          <td className="p-3"><PlanBadge plan={agent.plan} /></td>
+                          <td className="p-3"><PlanBadge plan={agent.plan} displayName={planNames[agent.plan]} /></td>
                           <td className="p-3">{renderStatus(agent)}</td>
                           <td className="p-3">
                             <div className="flex flex-col items-start gap-0.5">
