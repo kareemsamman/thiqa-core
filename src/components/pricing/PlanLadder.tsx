@@ -206,6 +206,7 @@ export function PlanLadder({
         open={!!confirmTarget}
         onOpenChange={(v) => !v && setConfirmTarget(null)}
         targetPlan={confirmTarget}
+        hidePrices={hidePrices}
         onSuccess={() => onPlanChanged?.()}
       />
     </>

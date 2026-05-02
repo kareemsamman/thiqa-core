@@ -51,6 +51,13 @@ interface PlanChangeConfirmDialogProps {
   onSuccess?: () => void;
   /** Which cycle the user picked on the plan card (defaults to monthly). */
   initialCycle?: BillingCycle;
+  /**
+   * When true, the price hero, cycle toggle, and the billing-math card
+   * are replaced with a "السعر عند الطلب" placeholder + a generic
+   * "the plan will activate immediately" note. Threaded down from
+   * PlanLadder when the Thiqa-admin `show_public_prices` toggle is off.
+   */
+  hidePrices?: boolean;
 }
 
 const ARABIC_MONTHS = [
@@ -202,6 +209,7 @@ export function PlanChangeConfirmDialog({
   targetPlan,
   onSuccess,
   initialCycle = 'monthly',
+  hidePrices = false,
 }: PlanChangeConfirmDialogProps) {
   const { agent, planInfo } = useAgentContext();
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
@@ -322,53 +330,61 @@ export function PlanChangeConfirmDialog({
                   تأكيد التحويل إلى حزمة {targetPlan.name_ar || targetPlan.name}.
                 </DialogDescription>
 
-                {/* Price hero in header — confident, big, with cycle
-                    toggle inline and savings badge when relevant. */}
-                <div className="flex items-end justify-between gap-3">
-                  <div className="flex items-baseline gap-1.5 text-white">
-                    <span className="text-[15px] font-medium text-white/60">₪</span>
-                    <span className="text-4xl md:text-[40px] font-extrabold tabular-nums leading-none">
-                      {cyclePrice.toLocaleString('en')}
-                    </span>
-                    <span className="text-sm font-medium text-white/60">
-                      / {cycle === 'yearly' ? 'سنة' : 'شهر'}
-                    </span>
-                  </div>
-                  {cycle === 'yearly' && yearlySavings > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-bold ring-1 ring-emerald-400/40">
-                      <Sparkle className="h-3 w-3" weight="fill" />
-                      وفّر ₪{yearlySavings.toLocaleString('en')}
-                    </span>
-                  )}
-                </div>
+                {hidePrices ? (
+                  <p className="text-2xl md:text-[28px] font-bold text-white/90 leading-none">
+                    السعر عند الطلب
+                  </p>
+                ) : (
+                  <>
+                    {/* Price hero in header — confident, big, with cycle
+                        toggle inline and savings badge when relevant. */}
+                    <div className="flex items-end justify-between gap-3">
+                      <div className="flex items-baseline gap-1.5 text-white">
+                        <span className="text-[15px] font-medium text-white/60">₪</span>
+                        <span className="text-4xl md:text-[40px] font-extrabold tabular-nums leading-none">
+                          {cyclePrice.toLocaleString('en')}
+                        </span>
+                        <span className="text-sm font-medium text-white/60">
+                          / {cycle === 'yearly' ? 'سنة' : 'شهر'}
+                        </span>
+                      </div>
+                      {cycle === 'yearly' && yearlySavings > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-bold ring-1 ring-emerald-400/40">
+                          <Sparkle className="h-3 w-3" weight="fill" />
+                          وفّر ₪{yearlySavings.toLocaleString('en')}
+                        </span>
+                      )}
+                    </div>
 
-                {/* Cycle toggle — subtle pill, white-on-glass */}
-                <div className="mt-4 inline-flex gap-1 p-1 rounded-lg bg-white/10 backdrop-blur ring-1 ring-white/15">
-                  <button
-                    type="button"
-                    onClick={() => setCycle('monthly')}
-                    className={cn(
-                      'px-4 py-1.5 rounded-md text-xs font-semibold transition-all',
-                      cycle === 'monthly'
-                        ? 'bg-white text-slate-900 shadow'
-                        : 'text-white/70 hover:text-white',
-                    )}
-                  >
-                    شهري
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCycle('yearly')}
-                    className={cn(
-                      'px-4 py-1.5 rounded-md text-xs font-semibold transition-all',
-                      cycle === 'yearly'
-                        ? 'bg-white text-slate-900 shadow'
-                        : 'text-white/70 hover:text-white',
-                    )}
-                  >
-                    سنوي
-                  </button>
-                </div>
+                    {/* Cycle toggle — subtle pill, white-on-glass */}
+                    <div className="mt-4 inline-flex gap-1 p-1 rounded-lg bg-white/10 backdrop-blur ring-1 ring-white/15">
+                      <button
+                        type="button"
+                        onClick={() => setCycle('monthly')}
+                        className={cn(
+                          'px-4 py-1.5 rounded-md text-xs font-semibold transition-all',
+                          cycle === 'monthly'
+                            ? 'bg-white text-slate-900 shadow'
+                            : 'text-white/70 hover:text-white',
+                        )}
+                      >
+                        شهري
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCycle('yearly')}
+                        className={cn(
+                          'px-4 py-1.5 rounded-md text-xs font-semibold transition-all',
+                          cycle === 'yearly'
+                            ? 'bg-white text-slate-900 shadow'
+                            : 'text-white/70 hover:text-white',
+                        )}
+                      >
+                        سنوي
+                      </button>
+                    </div>
+                  </>
+                )}
               </>
             ) : (
               <div className="text-center">
@@ -440,17 +456,27 @@ export function PlanChangeConfirmDialog({
             )}
 
             {/* Billing summary — primary-tinted card, the actual money
-                question. */}
+                question. When `hidePrices` is on, the proration math
+                is replaced with a generic activation note since the
+                amounts would otherwise leak the price. */}
             {billing && (
               <div className="rounded-xl bg-primary/5 ring-1 ring-primary/15 p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-primary">
                     <CalendarBlank className="h-4 w-4" weight="fill" />
                   </div>
-                  <p className="text-sm font-bold text-slate-900">متى وكم ستدفع</p>
+                  <p className="text-sm font-bold text-slate-900">
+                    {hidePrices ? 'تأكيد التغيير' : 'متى وكم ستدفع'}
+                  </p>
                 </div>
                 <div className="pr-9">
-                  <BillingExplanation billing={billing} />
+                  {hidePrices ? (
+                    <p className="text-sm text-slate-800">
+                      سيتم تفعيل الحزمة فوراً. تواصل معنا لمعرفة تفاصيل الفوترة.
+                    </p>
+                  ) : (
+                    <BillingExplanation billing={billing} />
+                  )}
                 </div>
               </div>
             )}
