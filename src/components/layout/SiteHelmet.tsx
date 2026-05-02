@@ -1,6 +1,21 @@
 import { Helmet } from "react-helmet-async";
 import { useLocation } from "react-router-dom";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
+import { navigationGroups } from "./navigation";
+
+// Flatten the sidebar nav into [href, name] pairs sorted by descending
+// href length so nested paths (e.g. /admin/marketing-sms) win against
+// their parents (/admin) in startsWith matching.
+const NAV_TITLE_ENTRIES: ReadonlyArray<readonly [string, string]> = navigationGroups
+  .flatMap((g) => g.items.map((i) => [i.href, i.name] as const))
+  .sort((a, b) => b[0].length - a[0].length);
+
+function pageNameFor(pathname: string): string | null {
+  for (const [href, name] of NAV_TITLE_ENTRIES) {
+    if (pathname === href || pathname.startsWith(`${href}/`)) return name;
+  }
+  return null;
+}
 
 // App-wide Helmet defaults. Sets a fallback title/description plus a
 // global `index, follow` robots tag — the public marketing pages must
@@ -11,6 +26,11 @@ import { useSiteSettings } from "@/hooks/useSiteSettings";
 // react-helmet-async resolves duplicate tags by "last mount wins", so
 // MainLayout cleanly switches authenticated routes back to noindex.
 //
+// Title format is `Thiqa | <page name>`, where the page name is derived
+// from the sidebar nav entry matching the current pathname. Pages that
+// already mount their own <Helmet><title> (Login, SignaturePage, etc.)
+// still override this via "last mount wins".
+//
 // Keyed by location.pathname so the Helmet remounts on every navigation.
 // react-helmet-async otherwise keeps stale tags from an unmounted child
 // (e.g. /login's PublicSEO) when this component's own props are unchanged
@@ -20,7 +40,8 @@ export function SiteHelmet() {
   const { data: settings } = useSiteSettings();
   const location = useLocation();
 
-  const title = settings?.site_title ? `Thiqa | ${settings.site_title}` : "Thiqa";
+  const pageName = pageNameFor(location.pathname);
+  const title = pageName ? `Thiqa | ${pageName}` : "Thiqa";
   const description = settings?.site_description || "Thiqa";
 
   return (
