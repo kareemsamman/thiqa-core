@@ -182,9 +182,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           sessionStorage.setItem(SESSION_KEY, 'true');
         }
 
-        // TOKEN_REFRESHED for the same user: nothing to load. Profile,
-        // role, branch, etc. are already in state.
-        if (event === 'TOKEN_REFRESHED' && sameUser) {
+        // Same user re-entering via any auth event: profile, role,
+        // branch, etc. are already in state. Skip the refetch.
+        //
+        // Supabase fires SIGNED_IN, TOKEN_REFRESHED, INITIAL_SESSION,
+        // and USER_UPDATED whenever the tab regains visibility or the
+        // access token rotates — all carrying the user we already
+        // have. The previous guard only short-circuited TOKEN_REFRESHED,
+        // so a SIGNED_IN on tab return still flipped profileLoading=true,
+        // which made ThiqaAdminRoute / ProtectedRoute swap the current
+        // page out for a Loader2 spinner. That unmount-remount cycle
+        // re-ran every page's fetchAll() and silently wiped any form
+        // input the user hadn't saved yet. PASSWORD_RECOVERY is left
+        // out of the skip on purpose so the recovery flow can still
+        // refresh the profile if needed.
+        if (sameUser && event !== 'PASSWORD_RECOVERY') {
           setLoading(false);
           return;
         }
