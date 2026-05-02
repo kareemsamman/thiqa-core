@@ -111,13 +111,17 @@ interface Payment {
 export default function ThiqaDashboard() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  // plan_key → Arabic display name. Built from subscription_plans so
+  // plans added through /thiqa/settings (e.g. custom "businesses")
+  // show their real label instead of the raw English key.
+  const [planNames, setPlanNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (authLoading || !user) return;
-    Promise.all([fetchAgents(), fetchRecentPayments()]).finally(() => setLoading(false));
+    Promise.all([fetchAgents(), fetchRecentPayments(), fetchPlans()]).finally(() => setLoading(false));
   }, [authLoading, user]);
 
   const fetchAgents = async () => {
@@ -132,6 +136,17 @@ export default function ThiqaDashboard() {
       .order("payment_date", { ascending: false })
       .limit(10);
     if (data) setPayments(data as Payment[]);
+  };
+
+  const fetchPlans = async () => {
+    const { data } = await supabase
+      .from("subscription_plans")
+      .select("plan_key, name, name_ar");
+    const map: Record<string, string> = {};
+    (data || []).forEach((p: any) => {
+      map[p.plan_key] = p.name_ar || p.name || p.plan_key;
+    });
+    setPlanNames(map);
   };
 
   const totalAgents = agents.length;
@@ -169,7 +184,7 @@ export default function ThiqaDashboard() {
   }, {});
   const planBreakdown = PLAN_TIER_ORDER
     .filter(k => (planCounts[k] ?? 0) > 0)
-    .map(k => ({ label: `${planLabel(k)}: ${planCounts[k]}` }));
+    .map(k => ({ label: `${planLabel(k, planNames[k])}: ${planCounts[k]}` }));
 
   if (loading) {
     return (
@@ -310,7 +325,7 @@ export default function ThiqaDashboard() {
                         onClick={() => navigate(`/thiqa/agents/${agent.id}`)}
                       >
                         <td className="p-3 font-medium">{agent.name_ar || agent.name}</td>
-                        <td className="p-3"><PlanBadge plan={agent.plan} className="text-xs" /></td>
+                        <td className="p-3"><PlanBadge plan={agent.plan} displayName={planNames[agent.plan]} className="text-xs" /></td>
                         <td className="p-3"><StatusBadge status={agent.subscription_status} className="text-xs" /></td>
                         <td className="p-3 text-muted-foreground text-xs">
                           {agent.subscription_expires_at
@@ -355,7 +370,7 @@ export default function ThiqaDashboard() {
                           <td className="p-3 font-medium">{p.agents?.name_ar || p.agents?.name || "—"}</td>
                           <td className="p-3 font-medium text-green-600">₪{p.amount}</td>
                           <td className="p-3">
-                            <Badge variant="outline" className="text-xs">{planLabel(p.plan)}</Badge>
+                            <Badge variant="outline" className="text-xs">{planLabel(p.plan, planNames[p.plan])}</Badge>
                           </td>
                         </tr>
                       ))}

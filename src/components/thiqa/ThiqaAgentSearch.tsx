@@ -40,6 +40,10 @@ function normalize(input: string): string {
 export function ThiqaAgentSearch({ open, onOpenChange }: ThiqaAgentSearchProps) {
   const navigate = useNavigate();
   const [agents, setAgents] = useState<AgentRow[]>([]);
+  // plan_key → Arabic display name. Custom plans (added via
+  // /thiqa/settings) aren't in the static labels.tsx dictionary, so
+  // without this lookup PlanBadge renders the raw English plan_key.
+  const [planNames, setPlanNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -48,14 +52,23 @@ export function ThiqaAgentSearch({ open, onOpenChange }: ThiqaAgentSearchProps) 
   useEffect(() => {
     if (!open || agents.length > 0 || loading) return;
     setLoading(true);
-    supabase
-      .from("agents")
-      .select("id, name, name_ar, email, phone, plan, subscription_status")
-      .order("name", { ascending: true })
-      .then(({ data }) => {
-        if (data) setAgents(data as AgentRow[]);
-        setLoading(false);
+    Promise.all([
+      supabase
+        .from("agents")
+        .select("id, name, name_ar, email, phone, plan, subscription_status")
+        .order("name", { ascending: true }),
+      supabase
+        .from("subscription_plans")
+        .select("plan_key, name, name_ar"),
+    ]).then(([agentsRes, plansRes]) => {
+      if (agentsRes.data) setAgents(agentsRes.data as AgentRow[]);
+      const map: Record<string, string> = {};
+      (plansRes.data || []).forEach((p: any) => {
+        map[p.plan_key] = p.name_ar || p.name || p.plan_key;
       });
+      setPlanNames(map);
+      setLoading(false);
+    });
   }, [open, agents.length, loading]);
 
   // Reset query when the dialog closes so reopening starts fresh.
@@ -100,7 +113,7 @@ export function ThiqaAgentSearch({ open, onOpenChange }: ThiqaAgentSearchProps) 
                 // plan label. Keeps both visible whenever they actually
                 // convey different info (e.g. basic+trial, professional+suspended).
                 const showStatus =
-                  statusLabel(a.subscription_status) !== planLabel(a.plan);
+                  statusLabel(a.subscription_status) !== planLabel(a.plan, planNames[a.plan]);
                 return (
                   <CommandItem
                     key={a.id}
@@ -125,7 +138,7 @@ export function ThiqaAgentSearch({ open, onOpenChange }: ThiqaAgentSearchProps) 
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <PlanBadge plan={a.plan} className="text-[10px]" />
+                      <PlanBadge plan={a.plan} displayName={planNames[a.plan]} className="text-[10px]" />
                       {showStatus && <StatusBadge status={a.subscription_status} className="text-[10px]" />}
                     </div>
                   </CommandItem>

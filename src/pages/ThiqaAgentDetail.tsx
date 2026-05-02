@@ -1499,6 +1499,7 @@ export default function ThiqaAgentDetail() {
                 onUpdated={(patch) =>
                   setAgent((prev) => (prev ? { ...prev, ...patch } : prev))
                 }
+                planDisplayName={(() => { const dp = dbPlans.find(d => d.plan_key === agent.plan); return dp?.name_ar || dp?.name; })()}
               />
             </div>
           </TabsContent>
@@ -2143,7 +2144,7 @@ export default function ThiqaAgentDetail() {
                           <td className="p-2 md:p-3 text-xs md:text-sm">{p.period_start ? format(new Date(p.period_start), 'dd/MM/yyyy') : format(new Date(p.payment_date), 'dd/MM/yyyy')}</td>
                           <td className="p-2 md:p-3 text-xs md:text-sm">{p.period_end ? format(new Date(p.period_end), 'dd/MM/yyyy') : '—'}</td>
                           <td className="p-2 md:p-3 font-medium text-xs md:text-sm">₪{p.amount}</td>
-                          <td className="p-2 md:p-3"><Badge variant="outline" className="text-[10px] md:text-xs">{p.plan}</Badge></td>
+                          <td className="p-2 md:p-3"><Badge variant="outline" className="text-[10px] md:text-xs">{(() => { const dp = dbPlans.find(d => d.plan_key === p.plan); return dp?.name_ar || dp?.name || p.plan; })()}</Badge></td>
                           <td className="p-2 md:p-3 text-muted-foreground text-xs md:text-sm">{p.notes || '—'}</td>
                           <td className="p-2 md:p-3">
                             <div className="flex items-center gap-1">

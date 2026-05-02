@@ -49,6 +49,11 @@ interface SubscriptionStateTesterProps {
   /** Called with the patched fields after a successful DB update so
    *  the parent's local copy stays in sync without a refetch. */
   onUpdated: (patch: Partial<AgentSubscriptionFields>) => void;
+  /** Arabic display name for the agent's current plan_key (resolved
+   *  from subscription_plans). When omitted, falls back to the raw
+   *  key — fine for the legacy entry/basic/professional/ultimate
+   *  set, but custom plans would render their English plan_key. */
+  planDisplayName?: string | null;
 }
 
 type TestAction =
@@ -217,7 +222,7 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: 'ملغي',
 };
 
-export function SubscriptionStateTester({ agent, onUpdated }: SubscriptionStateTesterProps) {
+export function SubscriptionStateTester({ agent, onUpdated, planDisplayName }: SubscriptionStateTesterProps) {
   const [pendingAction, setPendingAction] = useState<ActionConfig | null>(null);
   const [running, setRunning] = useState(false);
 
@@ -265,7 +270,7 @@ export function SubscriptionStateTester({ agent, onUpdated }: SubscriptionStateT
           </div>
           <div className="flex justify-between gap-4">
             <span className="text-muted-foreground">الباقة</span>
-            <span className="font-semibold">{agent.plan}</span>
+            <span className="font-semibold">{planDisplayName || agent.plan}</span>
           </div>
           <div className="flex justify-between gap-4">
             <span className="text-muted-foreground">انتهاء التجربة</span>
