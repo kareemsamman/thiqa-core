@@ -2049,20 +2049,21 @@ export default function ThiqaAgentDetail() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><CreditCard className="h-5 w-5" />سجل المدفوعات</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-xl border bg-muted/30 p-4 space-y-4">
+              <CardContent className="space-y-3">
+                <div className="space-y-2">
                   {/* Row 1 — Financial info */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">المبلغ (₪)</Label>
-                      <Input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder={`${(agent.monthly_price || 300) * (agent.billing_cycle === 'yearly' ? 12 : 1)}`} />
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium text-muted-foreground">المبلغ (₪)</Label>
+                      <Input className="h-9" type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder={`${(agent.monthly_price || 300) * (agent.billing_cycle === 'yearly' ? 12 : 1)}`} />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
                         الخصم (₪)
                         <span className="text-[10px]">— اختياري</span>
                       </Label>
                       <Input
+                        className="h-9"
                         type="number"
                         value={paymentDiscount}
                         onChange={e => setPaymentDiscount(e.target.value)}
@@ -2070,10 +2071,10 @@ export default function ThiqaAgentDetail() {
                         title="مقدار الخصم المطبّق على هذه الدفعة. يُحفظ كسجل تدقيقي حتى لو تم تعديل الخصم لاحقاً."
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">عدد الأشهر</Label>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium text-muted-foreground">عدد الأشهر</Label>
                       <Select value={String(paymentMonths)} onValueChange={(v) => handlePaymentMonthsChange(Number(v))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="1">شهر</SelectItem>
                           <SelectItem value="2">شهرين</SelectItem>
@@ -2086,13 +2087,13 @@ export default function ThiqaAgentDetail() {
                   </div>
 
                   {/* Row 2 — Period with live duration */}
-                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 sm:items-end">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">من تاريخ</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 sm:items-end">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium text-muted-foreground">من تاريخ</Label>
                       <DateInputPicker value={periodStart} onChange={handlePeriodStartChange} />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">إلى تاريخ</Label>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium text-muted-foreground">إلى تاريخ</Label>
                       <DateInputPicker value={periodEnd} onChange={setPeriodEnd} />
                     </div>
                     {(() => {
@@ -2102,8 +2103,8 @@ export default function ThiqaAgentDetail() {
                         : (days >= 3 && days <= 10) ? `${days} أيام`
                         : `${days} يوماً`;
                       return (
-                        <div className="flex items-center gap-2 px-3 h-10 rounded-lg border bg-background text-sm whitespace-nowrap">
-                          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex items-center gap-1.5 px-2.5 h-9 rounded-md border bg-muted/40 text-xs whitespace-nowrap">
+                          <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
                           <span className="text-muted-foreground">المدة:</span>
                           <span className="font-semibold tabular-nums">{label}</span>
                         </div>
@@ -2111,15 +2112,13 @@ export default function ThiqaAgentDetail() {
                     })()}
                   </div>
 
-                  {/* Row 3 — Notes (full width) */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">ملاحظات</Label>
-                    <Input value={paymentNotes} onChange={e => setPaymentNotes(e.target.value)} placeholder="اختياري — داخلية، لا تظهر للوكيل" />
-                  </div>
-
-                  {/* Action */}
-                  <div className="flex justify-end pt-1">
-                    <Button onClick={recordPayment} disabled={!paymentAmount} className="min-w-[180px] gap-2">
+                  {/* Row 3 — Notes + submit (inline) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 sm:items-end">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium text-muted-foreground">ملاحظات</Label>
+                      <Input className="h-9" value={paymentNotes} onChange={e => setPaymentNotes(e.target.value)} placeholder="اختياري — داخلية، لا تظهر للوكيل" />
+                    </div>
+                    <Button onClick={recordPayment} disabled={!paymentAmount} className="h-9 min-w-[160px] gap-2">
                       <CreditCard className="h-4 w-4" />
                       تسجيل الدفعة
                     </Button>
