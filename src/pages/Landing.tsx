@@ -36,6 +36,17 @@ const LANDING_JSON_LD = {
       url: "https://getthiqa.com/",
       logo: "https://thiqacrm.b-cdn.net/small_black.png",
       image: "https://thiqacrm.b-cdn.net/fav.png",
+      email: "support@getthiqa.com",
+      contactPoint: [
+        {
+          "@type": "ContactPoint",
+          contactType: "customer support",
+          telephone: "+972-52-514-3581",
+          email: "support@getthiqa.com",
+          availableLanguage: ["Arabic", "Hebrew", "English"],
+          areaServed: ["IL", "PS"],
+        },
+      ],
       sameAs: [
         "https://www.facebook.com/getthiqa",
         "https://www.instagram.com/getthiqa",
