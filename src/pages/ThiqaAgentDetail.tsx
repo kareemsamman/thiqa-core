@@ -2050,50 +2050,80 @@ export default function ThiqaAgentDetail() {
                 <CardTitle className="flex items-center gap-2"><CreditCard className="h-5 w-5" />سجل المدفوعات</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-3 items-end">
-                  <div>
-                    <Label>المبلغ (₪)</Label>
-                    <Input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder={`${(agent.monthly_price || 300) * (agent.billing_cycle === 'yearly' ? 12 : 1)}`} />
+                <div className="rounded-xl border bg-muted/30 p-4 space-y-4">
+                  {/* Row 1 — Financial info */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">المبلغ (₪)</Label>
+                      <Input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder={`${(agent.monthly_price || 300) * (agent.billing_cycle === 'yearly' ? 12 : 1)}`} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                        الخصم (₪)
+                        <span className="text-[10px]">— اختياري</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        value={paymentDiscount}
+                        onChange={e => setPaymentDiscount(e.target.value)}
+                        placeholder="0"
+                        title="مقدار الخصم المطبّق على هذه الدفعة. يُحفظ كسجل تدقيقي حتى لو تم تعديل الخصم لاحقاً."
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">عدد الأشهر</Label>
+                      <Select value={String(paymentMonths)} onValueChange={(v) => handlePaymentMonthsChange(Number(v))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">شهر</SelectItem>
+                          <SelectItem value="2">شهرين</SelectItem>
+                          <SelectItem value="3">3 أشهر</SelectItem>
+                          <SelectItem value="6">6 أشهر</SelectItem>
+                          <SelectItem value="12">سنة</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div>
-                    <Label className="flex items-center gap-1">
-                      الخصم (₪)
-                      <span className="text-[10px] text-muted-foreground">— اختياري</span>
-                    </Label>
-                    <Input
-                      type="number"
-                      value={paymentDiscount}
-                      onChange={e => setPaymentDiscount(e.target.value)}
-                      placeholder="0"
-                      title="مقدار الخصم المطبّق على هذه الدفعة. يُحفظ كسجل تدقيقي حتى لو تم تعديل الخصم لاحقاً."
-                    />
+
+                  {/* Row 2 — Period with live duration */}
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 sm:items-end">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">من تاريخ</Label>
+                      <DateInputPicker value={periodStart} onChange={handlePeriodStartChange} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">إلى تاريخ</Label>
+                      <DateInputPicker value={periodEnd} onChange={setPeriodEnd} />
+                    </div>
+                    {(() => {
+                      const days = Math.max(0, Math.round((periodEnd.getTime() - periodStart.getTime()) / 86400000));
+                      const label = days === 1 ? 'يوم واحد'
+                        : days === 2 ? 'يومان'
+                        : (days >= 3 && days <= 10) ? `${days} أيام`
+                        : `${days} يوماً`;
+                      return (
+                        <div className="flex items-center gap-2 px-3 h-10 rounded-lg border bg-background text-sm whitespace-nowrap">
+                          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-muted-foreground">المدة:</span>
+                          <span className="font-semibold tabular-nums">{label}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
-                  <div>
-                    <Label>عدد الأشهر</Label>
-                    <Select value={String(paymentMonths)} onValueChange={(v) => handlePaymentMonthsChange(Number(v))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">شهر</SelectItem>
-                        <SelectItem value="2">شهرين</SelectItem>
-                        <SelectItem value="3">3 أشهر</SelectItem>
-                        <SelectItem value="6">6 أشهر</SelectItem>
-                        <SelectItem value="12">سنة</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>من تاريخ</Label>
-                    <DateInputPicker value={periodStart} onChange={handlePeriodStartChange} />
-                  </div>
-                  <div>
-                    <Label>إلى تاريخ</Label>
-                    <DateInputPicker value={periodEnd} onChange={setPeriodEnd} />
-                  </div>
-                  <div>
-                    <Label>ملاحظات</Label>
+
+                  {/* Row 3 — Notes (full width) */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">ملاحظات</Label>
                     <Input value={paymentNotes} onChange={e => setPaymentNotes(e.target.value)} placeholder="اختياري — داخلية، لا تظهر للوكيل" />
                   </div>
-                  <Button onClick={recordPayment} disabled={!paymentAmount} className="w-full text-xs md:text-sm whitespace-nowrap">تسجيل الدفعة</Button>
+
+                  {/* Action */}
+                  <div className="flex justify-end pt-1">
+                    <Button onClick={recordPayment} disabled={!paymentAmount} className="min-w-[180px] gap-2">
+                      <CreditCard className="h-4 w-4" />
+                      تسجيل الدفعة
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Checkbox to also mark unbilled overages as billed when saving */}
@@ -2135,7 +2165,7 @@ export default function ThiqaAgentDetail() {
                     </thead>
                     <tbody>
                       {payments.map((p: any) => (
-                        <tr key={p.id} className="border-t">
+                        <tr key={p.id} className="border-t hover:bg-muted/40 transition-colors">
                           <td className="p-2 md:p-3">
                             <Badge className={`text-[10px] md:text-xs ${p.status === 'active' ? 'bg-green-600' : 'bg-muted text-muted-foreground'}`}>
                               {p.status === 'active' ? 'فعالة' : 'منتهية'}
