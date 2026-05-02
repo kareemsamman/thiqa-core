@@ -562,7 +562,10 @@ export default function Subscription() {
                       <h2 className="text-xl font-bold">
                         {sub.isTrial ? "فترة تجريبية مجانية" :
                          sub.isCancelled ? "اشتراك ملغي" :
-                         `خطة ${agent.plan === "pro" ? "Pro" : agent.plan === "basic" ? "Basic" : agent.plan}`}
+                         (() => {
+                           const p = plans.find(pp => pp.plan_key === agent.plan);
+                           return `خطة ${p?.name_ar || p?.name || agent.plan}`;
+                         })()}
                       </h2>
                       <Badge variant="outline" className={cn("text-[10px] mt-0.5",
                         sub.isTrial ? "border-primary text-primary" :
@@ -863,7 +866,7 @@ export default function Subscription() {
                           <Crown className="h-4 w-4 text-muted-foreground" />
                           <div>
                             <p className="text-sm font-medium">
-                              خطة {billingPlan?.name || (billingPlanKey === "pro" ? "Pro" : billingPlanKey === "basic" ? "Basic" : billingPlanKey)}
+                              خطة {billingPlan?.name_ar || billingPlan?.name || billingPlanKey}
                             </p>
                             <p className="text-[10px] text-muted-foreground">
                               {cycleLabels.subscriptionLabel}
@@ -1195,7 +1198,7 @@ export default function Subscription() {
                           <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20">
                             <td className="p-3">{format(new Date(p.payment_date), "dd/MM/yyyy")}</td>
                             <td className="p-3 font-semibold">₪{p.amount?.toLocaleString()}</td>
-                            <td className="p-3"><Badge variant="secondary" className="text-xs">{p.plan}</Badge></td>
+                            <td className="p-3"><Badge variant="secondary" className="text-xs">{plans.find(pp => pp.plan_key === p.plan)?.name_ar || plans.find(pp => pp.plan_key === p.plan)?.name || p.plan}</Badge></td>
                             <td className="p-3 text-muted-foreground text-xs truncate max-w-[200px]">{p.notes || "—"}</td>
                             <td className="p-3">
                               {p.receipt_url ? (
