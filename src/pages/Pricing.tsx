@@ -208,6 +208,13 @@ export default function Pricing() {
     })();
   }, []);
 
+  // Paid plans only (free_trial is shown elsewhere). With lg:grid-cols-3
+  // a 5-plan layout becomes 3 + 2; the trailing empty cell(s) of the
+  // last lg-row are filled by hidden-on-mobile placeholders below so
+  // the row separator hairline completes across the full width.
+  const paidPlans = plans.filter((p) => p.plan_key !== 'free_trial');
+  const lgPlaceholderCount = (3 - (paidPlans.length % 3)) % 3;
+
   return (
     <div
       className="min-h-screen text-black overflow-x-hidden relative bg-white public-page-enter"
@@ -620,10 +627,11 @@ export default function Pricing() {
         {/* One shared frame around the whole grid — the cards are
             connected by hairlines, not individual outlined boxes
             (Strain reference). The 12px dots at every line crossing
-            mark each section/column intersection. Four columns on lg
-            so every paid plan lives on one row regardless of count. */}
-        <div className="max-w-7xl mx-auto border border-black/15 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 bg-white/40 backdrop-blur-[2px]">
-          {plans.filter((p) => p.plan_key !== 'free_trial').map((plan, idx, arr) => {
+            mark each section/column intersection. Three columns on lg
+            so a 5-plan catalogue wraps as 3 + 2 (with placeholder cells
+            completing the bottom-row hairline). */}
+        <div className="max-w-7xl mx-auto border border-black/15 rounded-2xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 bg-white/40 backdrop-blur-[2px]">
+          {paidPlans.map((plan, idx, arr) => {
             const isPopular = !!plan.badge;
             const isFree = plan.monthly_price === 0;
             const yearly = isYearly(plan.plan_key);
@@ -643,20 +651,30 @@ export default function Pricing() {
                 ? plan.yearly_price
                 : plan.monthly_price;
             const isFirst = idx === 0;
-            const isLast = idx === arr.length - 1;
+            // lg-row position: with 3 cols, idx % 3 === 0 is the rightmost
+            // card in its row (RTL), so it abuts the outer frame on its
+            // right and skips border-r. The leftmost-rendered card in a
+            // row is either at col 3 in DOM, or the very last DOM card
+            // when the final lg-row is partial (e.g. 5 cards → idx 4
+            // sits in the middle DOM-wise but is leftmost-rendered
+            // since col 3 is filled by a placeholder).
+            const lgRow = Math.floor(idx / 3);
+            const isRightmostInLgRow = idx % 3 === 0;
+            const isLeftmostRendered = idx % 3 === 2 || idx === arr.length - 1;
             return (
               <div
                 key={plan.id}
                 className={cn(
                   "relative flex flex-col pricing-card-enter",
-                  // Vertical hairlines BETWEEN cards on lg (RTL: card 1
-                  // is rightmost, so border-r on cards 2+ creates the
-                  // shared dividers without doubling the outer frame).
-                  !isFirst && "lg:border-r lg:border-black/15",
+                  // Vertical hairline on the card's right side (RTL: this
+                  // is the divider with the previous DOM card to its right).
+                  !isRightmostInLgRow && "lg:border-r lg:border-black/15",
                   // Horizontal hairlines between stacked cards on
-                  // mobile/tablet — disabled on lg where cards sit
-                  // side-by-side.
-                  !isFirst && "border-t lg:border-t-0 border-black/15",
+                  // mobile/tablet.
+                  !isFirst && "border-t border-black/15",
+                  // On lg, only cards in row 2+ get a top border so the
+                  // single-row case stays seamless under the outer frame.
+                  lgRow > 0 ? "lg:border-t lg:border-black/15" : "lg:border-t-0",
                 )}
                 style={{ animationDelay: `${200 + idx * 120}ms` }}
               >
@@ -700,7 +718,7 @@ export default function Pricing() {
                     The dots use CSS pseudo-elements positioned at the
                     line endpoints, so they sit on top of the vertical
                     column dividers exactly like the Strain reference. */}
-                <SectionDivider isFirst={isFirst} isLast={isLast} />
+                <SectionDivider isFirst={isRightmostInLgRow} isLast={isLeftmostRendered} />
 
                 {/* ── Billing toggle (paid plans) or trial info (free).
                     Toggle group sits on the RIGHT (start in RTL) next
@@ -748,7 +766,7 @@ export default function Pricing() {
                   )}
                 </div>
 
-                <SectionDivider isFirst={isFirst} isLast={isLast} />
+                <SectionDivider isFirst={isRightmostInLgRow} isLast={isLeftmostRendered} />
 
                 {/* ── CTA — full-width black pill */}
                 <div className="px-7 md:px-8 py-5">
@@ -831,6 +849,17 @@ export default function Pricing() {
               </div>
             );
           })}
+          {/* Empty grid cells that fill out the last lg-row when the
+              plan count isn't a multiple of 3 (e.g. 5 plans → one
+              placeholder so the row-2 separator hairline spans the
+              full width). Mobile/tablet ignore them via `hidden`. */}
+          {Array.from({ length: lgPlaceholderCount }, (_, i) => (
+            <div
+              key={`pricing-placeholder-${i}`}
+              aria-hidden
+              className="hidden lg:block lg:border-t lg:border-black/15"
+            />
+          ))}
         </div>
       </section>
 
