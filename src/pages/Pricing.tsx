@@ -885,12 +885,19 @@ export default function Pricing() {
           {/* Empty grid cells that fill out the last lg-row when the
               plan count isn't a multiple of 3 (e.g. 5 plans → one
               placeholder so the row-2 separator hairline spans the
-              full width). Mobile/tablet ignore them via `hidden`. */}
+              full width). Mobile/tablet ignore them via `hidden`.
+              The first placeholder also draws a `border-r` so the
+              last DOM card gets a closing vertical hairline on its
+              left side (otherwise the card looks open-ended against
+              empty space). */}
           {Array.from({ length: lgPlaceholderCount }, (_, i) => (
             <div
               key={`pricing-placeholder-${i}`}
               aria-hidden
-              className="hidden lg:block lg:border-t lg:border-black/15"
+              className={cn(
+                "hidden lg:block lg:border-t lg:border-black/15",
+                i === 0 && "lg:border-r",
+              )}
             />
           ))}
         </div>
