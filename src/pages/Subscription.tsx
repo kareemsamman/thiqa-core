@@ -231,6 +231,23 @@ export default function Subscription() {
   } | null>(null);
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  // `show_public_prices` toggle (Thiqa admin → الخطط والأسعار). When
+  // false, the "الخطط المتاحة" PlanLadder below renders without prices
+  // — same behaviour as the public /pricing page and the upgrade popup.
+  const [hidePrices, setHidePrices] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("thiqa_platform_settings")
+        .select("setting_value")
+        .eq("setting_key", "show_public_prices")
+        .maybeSingle();
+      if (!cancelled && data?.setting_value === "false") setHidePrices(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -652,7 +669,7 @@ export default function Subscription() {
                 : "قارن بين الحزم واختر ما يناسب احتياجاتك."}
             </p>
           </div>
-          <PlanLadder />
+          <PlanLadder hidePrices={hidePrices} />
         </div>
 
           </TabsContent>
