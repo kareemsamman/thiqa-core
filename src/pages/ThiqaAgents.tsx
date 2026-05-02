@@ -29,6 +29,9 @@ interface Agent {
    *  the team has ever logged in (or sessions exist outside the
    *  fetched window). */
   last_activity_at?: string | null;
+  /** site_settings.site_title — the agency name the admin set on the
+   *  العلامة التجارية tab. Falls back to name_ar/name when missing. */
+  site_title?: string | null;
 }
 
 type ActivityFilter = "all" | "active" | "dormant" | "never";
@@ -139,11 +142,24 @@ export default function ThiqaAgents() {
         }
       });
 
+      // Site title (اسم الموقع) per agent so the listing can show the
+      // agency brand the admin set on /thiqa/agents/:id → العلامة
+      // instead of the raw user name.
+      const { data: siteData } = await supabase
+        .from("site_settings")
+        .select("agent_id, site_title")
+        .in("agent_id", agentIds);
+      const siteTitleMap: Record<string, string> = {};
+      (siteData || []).forEach((s: any) => {
+        if (s.agent_id && s.site_title) siteTitleMap[s.agent_id] = s.site_title;
+      });
+
       setAgents(
         (data as Agent[]).map((a) => ({
           ...a,
           email_confirmed: confirmMap[a.id] ?? false,
           last_activity_at: activityMap[a.id] ?? null,
+          site_title: siteTitleMap[a.id] ?? null,
         })),
       );
     }
@@ -331,7 +347,7 @@ export default function ThiqaAgents() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <div className="font-semibold text-sm truncate">{agent.name_ar || agent.name}</div>
+                            <div className="font-semibold text-sm truncate">{agent.site_title || agent.name_ar || agent.name}</div>
                             {isNew(agent.created_at) && (
                               <Badge className="bg-blue-500 text-[9px] px-1.5 py-0 gap-0.5">
                                 <Sparkles className="h-2.5 w-2.5" />
@@ -390,7 +406,7 @@ export default function ThiqaAgents() {
                               </div>
                               <div>
                                 <div className="font-medium flex items-center gap-1.5">
-                                  {agent.name_ar || agent.name}
+                                  {agent.site_title || agent.name_ar || agent.name}
                                   {isNew(agent.created_at) && (
                                     <Badge className="bg-blue-500 text-[9px] px-1.5 py-0 gap-0.5">
                                       <Sparkles className="h-2.5 w-2.5" />
