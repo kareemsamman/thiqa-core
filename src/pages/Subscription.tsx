@@ -1189,7 +1189,6 @@ export default function Subscription() {
                           <th className="text-right p-3 font-medium text-muted-foreground">تاريخ الدفع</th>
                           <th className="text-right p-3 font-medium text-muted-foreground">المبلغ</th>
                           <th className="text-right p-3 font-medium text-muted-foreground">الخطة</th>
-                          <th className="text-right p-3 font-medium text-muted-foreground">ملاحظات</th>
                           <th className="text-right p-3 font-medium text-muted-foreground w-24">الإيصال</th>
                         </tr>
                       </thead>
@@ -1199,7 +1198,6 @@ export default function Subscription() {
                             <td className="p-3">{format(new Date(p.payment_date), "dd/MM/yyyy")}</td>
                             <td className="p-3 font-semibold">₪{p.amount?.toLocaleString()}</td>
                             <td className="p-3"><Badge variant="secondary" className="text-xs">{plans.find(pp => pp.plan_key === p.plan)?.name_ar || plans.find(pp => pp.plan_key === p.plan)?.name || p.plan}</Badge></td>
-                            <td className="p-3 text-muted-foreground text-xs truncate max-w-[200px]">{p.notes || "—"}</td>
                             <td className="p-3">
                               {p.receipt_url ? (
                                 <a

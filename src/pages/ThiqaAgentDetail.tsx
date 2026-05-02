@@ -119,6 +119,13 @@ export default function ThiqaAgentDetail() {
   const [paymentDate, setPaymentDate] = useState<Date>(new Date());
   const [periodStart, setPeriodStart] = useState<Date>(new Date());
   const [periodEnd, setPeriodEnd] = useState<Date>(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d; });
+  // Quick "covers N months" selector. The admin used to have to
+  // hand-pick "إلى تاريخ" three months out for a 3-month payment, and
+  // since the field defaults to +1 month it was easy to forget — the
+  // agent would then see "30 days remaining" right after a 3-month
+  // payment got recorded. Picking N here recomputes period_end so the
+  // happy path is one tap.
+  const [paymentMonths, setPaymentMonths] = useState<number>(1);
   const [deleteAgentOpen, setDeleteAgentOpen] = useState(false);
   const [deletingAgent, setDeletingAgent] = useState(false);
   const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null);
@@ -662,6 +669,7 @@ export default function ThiqaAgentDetail() {
       toast.success('تم تسجيل الدفعة');
       setPaymentAmount(""); setPaymentNotes(""); setPaymentDiscount(""); setPaymentDate(new Date());
       setIncludeOveragesInPayment(false);
+      setPaymentMonths(1);
       const d = new Date(); setPeriodStart(d); const e = new Date(d); e.setMonth(e.getMonth() + 1); setPeriodEnd(e);
       fetchAll();
     }
@@ -687,7 +695,15 @@ export default function ThiqaAgentDetail() {
   const handlePeriodStartChange = (date: Date) => {
     setPeriodStart(date);
     const end = new Date(date);
-    end.setMonth(end.getMonth() + 1);
+    end.setMonth(end.getMonth() + paymentMonths);
+    setPeriodEnd(end);
+  };
+
+  // ─── Re-derive period end when "months covered" changes ───
+  const handlePaymentMonthsChange = (months: number) => {
+    setPaymentMonths(months);
+    const end = new Date(periodStart);
+    end.setMonth(end.getMonth() + months);
     setPeriodEnd(end);
   };
 
@@ -2033,7 +2049,7 @@ export default function ThiqaAgentDetail() {
                 <CardTitle className="flex items-center gap-2"><CreditCard className="h-5 w-5" />سجل المدفوعات</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-3 items-end">
                   <div>
                     <Label>المبلغ (₪)</Label>
                     <Input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder={`${(agent.monthly_price || 300) * (agent.billing_cycle === 'yearly' ? 12 : 1)}`} />
@@ -2052,6 +2068,19 @@ export default function ThiqaAgentDetail() {
                     />
                   </div>
                   <div>
+                    <Label>عدد الأشهر</Label>
+                    <Select value={String(paymentMonths)} onValueChange={(v) => handlePaymentMonthsChange(Number(v))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">شهر</SelectItem>
+                        <SelectItem value="2">شهرين</SelectItem>
+                        <SelectItem value="3">3 أشهر</SelectItem>
+                        <SelectItem value="6">6 أشهر</SelectItem>
+                        <SelectItem value="12">سنة</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
                     <Label>من تاريخ</Label>
                     <DateInputPicker value={periodStart} onChange={handlePeriodStartChange} />
                   </div>
@@ -2061,7 +2090,7 @@ export default function ThiqaAgentDetail() {
                   </div>
                   <div>
                     <Label>ملاحظات</Label>
-                    <Input value={paymentNotes} onChange={e => setPaymentNotes(e.target.value)} placeholder="اختياري" />
+                    <Input value={paymentNotes} onChange={e => setPaymentNotes(e.target.value)} placeholder="اختياري — داخلية، لا تظهر للوكيل" />
                   </div>
                   <Button onClick={recordPayment} disabled={!paymentAmount} className="w-full text-xs md:text-sm whitespace-nowrap">تسجيل الدفعة</Button>
                 </div>
