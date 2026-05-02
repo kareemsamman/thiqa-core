@@ -200,7 +200,7 @@ serve(async (req) => {
       .from("policies")
       .select(`
         *,
-        client:clients(full_name, phone_number, phone_number_2, id_number, signature_url),
+        client:clients(id, full_name, phone_number, phone_number_2, id_number, signature_url),
         car:cars(car_number, manufacturer_name, model, year, car_type, color),
         company:insurance_companies(name, name_ar),
         broker:brokers(name),
