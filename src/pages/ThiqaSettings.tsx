@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Settings, Mail, Save, Loader2, Eye, EyeOff, Shield, Send, CheckCircle2, XCircle, HardDrive, CreditCard, Plus, Trash2, GripVertical, Pencil, Bot, Users, MessageCircle, Phone, LifeBuoy } from "lucide-react";
 import { SupportCategoriesTab } from "@/components/thiqa/SupportCategoriesTab";
 import { SmsProviderConfig, type SmsProviderChoice } from "@/components/sms/SmsProviderConfig";
+import { useUnsavedChanges, UnsavedChangesIndicator, useGuardedTabChange } from "@/hooks/useUnsavedChanges";
 
 function useThiqaPlatformSettings() {
   return useQuery({
@@ -63,13 +64,25 @@ function SupportContactCard() {
   const { data: settings, isLoading } = useThiqaPlatformSettings();
   const [whatsapp, setWhatsapp] = useState("");
   const [phone, setPhone] = useState("");
+  const [original, setOriginal] = useState({ whatsapp: "", phone: "" });
 
   useEffect(() => {
     if (settings) {
-      setWhatsapp(settings.support_whatsapp || "");
-      setPhone(settings.support_phone || "");
+      const next = {
+        whatsapp: settings.support_whatsapp || "",
+        phone: settings.support_phone || "",
+      };
+      setWhatsapp(next.whatsapp);
+      setPhone(next.phone);
+      setOriginal(next);
     }
   }, [settings]);
+
+  const { isDirty, markClean } = useUnsavedChanges(
+    { whatsapp, phone },
+    original,
+    { id: "thiqa-settings-support-contact" },
+  );
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -91,6 +104,7 @@ function SupportContactCard() {
       queryClient.invalidateQueries({ queryKey: ["thiqa-platform-settings"] });
       queryClient.invalidateQueries({ queryKey: ["thiqa-support-contact"] });
       toast({ title: "تم الحفظ", description: "تم تحديث بيانات التواصل بنجاح" });
+      markClean();
     },
     onError: () => {
       toast({ title: "خطأ", description: "فشل في حفظ بيانات التواصل", variant: "destructive" });
@@ -147,8 +161,12 @@ function SupportContactCard() {
           </p>
         </div>
 
-        <div className="flex justify-end pt-4 border-t">
-          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+        <div className="flex justify-end items-center gap-3 pt-4 border-t">
+          <UnsavedChangesIndicator isDirty={isDirty} />
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending || !isDirty}
+          >
             {saveMutation.isPending ? (
               <Loader2 className="h-4 w-4 ml-2 animate-spin" />
             ) : (
@@ -359,25 +377,33 @@ function SmtpSettingsTab() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useThiqaPlatformSettings();
   const [showPassword, setShowPassword] = useState(false);
-  const [form, setForm] = useState<SmtpForm>({
+  const SMTP_DEFAULTS: SmtpForm = {
     smtp_host: "",
     smtp_port: "465",
     smtp_user: "",
     smtp_password: "",
     smtp_sender_name: "Thiqa Insurance",
-  });
+  };
+  const [form, setForm] = useState<SmtpForm>(SMTP_DEFAULTS);
+  const [originalForm, setOriginalForm] = useState<SmtpForm>(SMTP_DEFAULTS);
 
   useEffect(() => {
     if (settings) {
-      setForm({
+      const next: SmtpForm = {
         smtp_host: settings.smtp_host || "smtp.hostinger.com",
         smtp_port: settings.smtp_port || "465",
         smtp_user: settings.smtp_user || "",
         smtp_password: settings.smtp_password || "",
         smtp_sender_name: settings.smtp_sender_name || "Thiqa Insurance",
-      });
+      };
+      setForm(next);
+      setOriginalForm(next);
     }
   }, [settings]);
+
+  const { isDirty, markClean } = useUnsavedChanges(form, originalForm, {
+    id: "thiqa-settings-smtp",
+  });
 
   const saveMutation = useMutation({
     mutationFn: async (formData: SmtpForm) => {
@@ -392,6 +418,7 @@ function SmtpSettingsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["thiqa-platform-settings"] });
       toast({ title: "تم الحفظ", description: "تم حفظ إعدادات SMTP بنجاح" });
+      markClean();
     },
     onError: () => {
       toast({ title: "خطأ", description: "فشل في حفظ الإعدادات", variant: "destructive" });
@@ -486,10 +513,11 @@ function SmtpSettingsTab() {
           />
         </div>
 
-        <div className="flex justify-end pt-4 border-t">
+        <div className="flex justify-end items-center gap-3 pt-4 border-t">
+          <UnsavedChangesIndicator isDirty={isDirty} />
           <Button
             onClick={() => saveMutation.mutate(form)}
-            disabled={saveMutation.isPending}
+            disabled={saveMutation.isPending || !isDirty}
           >
             {saveMutation.isPending ? (
               <Loader2 className="h-4 w-4 ml-2 animate-spin" />
@@ -597,21 +625,29 @@ function StorageSettingsTab() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useThiqaPlatformSettings();
   const [showApiKey, setShowApiKey] = useState(false);
-  const [form, setForm] = useState<BunnyCdnForm>({
+  const BUNNY_DEFAULTS: BunnyCdnForm = {
     bunny_cdn_url: "",
     bunny_storage_zone: "",
     bunny_api_key: "",
-  });
+  };
+  const [form, setForm] = useState<BunnyCdnForm>(BUNNY_DEFAULTS);
+  const [originalForm, setOriginalForm] = useState<BunnyCdnForm>(BUNNY_DEFAULTS);
 
   useEffect(() => {
     if (settings) {
-      setForm({
+      const next: BunnyCdnForm = {
         bunny_cdn_url: settings.bunny_cdn_url || "",
         bunny_storage_zone: settings.bunny_storage_zone || "",
         bunny_api_key: settings.bunny_api_key || "",
-      });
+      };
+      setForm(next);
+      setOriginalForm(next);
     }
   }, [settings]);
+
+  const { isDirty, markClean } = useUnsavedChanges(form, originalForm, {
+    id: "thiqa-settings-storage",
+  });
 
   const saveMutation = useMutation({
     mutationFn: async (formData: BunnyCdnForm) => {
@@ -628,6 +664,7 @@ function StorageSettingsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["thiqa-platform-settings"] });
       toast({ title: "تم الحفظ", description: "تم حفظ إعدادات التخزين بنجاح" });
+      markClean();
     },
     onError: () => {
       toast({ title: "خطأ", description: "فشل في حفظ الإعدادات", variant: "destructive" });
@@ -705,10 +742,11 @@ function StorageSettingsTab() {
           <p className="text-xs text-muted-foreground">مفتاح API الخاص بمنطقة التخزين (Storage Zone Password)</p>
         </div>
 
-        <div className="flex justify-end pt-4 border-t">
+        <div className="flex justify-end items-center gap-3 pt-4 border-t">
+          <UnsavedChangesIndicator isDirty={isDirty} />
           <Button
             onClick={() => saveMutation.mutate(form)}
-            disabled={saveMutation.isPending}
+            disabled={saveMutation.isPending || !isDirty}
           >
             {saveMutation.isPending ? (
               <Loader2 className="h-4 w-4 ml-2 animate-spin" />
@@ -1321,13 +1359,22 @@ function AiAssistantSettingsTab() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useThiqaPlatformSettings();
   const [prompt, setPrompt] = useState("");
+  const [originalPrompt, setOriginalPrompt] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (settings?.ai_assistant_prompt) {
-      setPrompt(settings.ai_assistant_prompt);
+    if (settings?.ai_assistant_prompt !== undefined) {
+      const next = settings.ai_assistant_prompt || "";
+      setPrompt(next);
+      setOriginalPrompt(next);
     }
   }, [settings]);
+
+  const { isDirty, markClean } = useUnsavedChanges(
+    { prompt },
+    { prompt: originalPrompt },
+    { id: "thiqa-settings-ai-assistant" },
+  );
 
   const handleSave = async () => {
     setSaving(true);
@@ -1353,6 +1400,7 @@ function AiAssistantSettingsTab() {
 
       queryClient.invalidateQueries({ queryKey: ["thiqa-platform-settings"] });
       toast({ title: "تم الحفظ", description: "تم حفظ تعليمات المساعد الذكي بنجاح" });
+      markClean();
     } catch (err: any) {
       toast({ title: "خطأ", description: err.message || "فشل في الحفظ", variant: "destructive" });
     } finally {
@@ -1387,10 +1435,13 @@ function AiAssistantSettingsTab() {
             dir="rtl"
           />
         </div>
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? <Loader2 className="h-4 w-4 ml-1 animate-spin" /> : <Save className="h-4 w-4 ml-1" />}
-          حفظ التعليمات
-        </Button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <UnsavedChangesIndicator isDirty={isDirty} />
+          <Button onClick={handleSave} disabled={saving || !isDirty}>
+            {saving ? <Loader2 className="h-4 w-4 ml-1 animate-spin" /> : <Save className="h-4 w-4 ml-1" />}
+            حفظ التعليمات
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -1400,7 +1451,7 @@ function AgentDefaultsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useThiqaPlatformSettings();
-  const [form, setForm] = useState({
+  const AGENT_DEFAULTS_INITIAL = {
     default_sms_provider: "019sms",
     default_sms_019_user: "",
     default_sms_019_token: "",
@@ -1424,7 +1475,9 @@ function AgentDefaultsTab() {
     addon_extra_marketing_sms_price: "50",
     addon_onboarding_price: "200",
     addon_data_migration_price: "450",
-  });
+  };
+  const [form, setForm] = useState(AGENT_DEFAULTS_INITIAL);
+  const [originalForm, setOriginalForm] = useState(AGENT_DEFAULTS_INITIAL);
   // Mirror the form fields into the shape SmsProviderConfig expects.
   const smsProviderValue = {
     provider: (form.default_sms_provider === "htd" ? "htd" : "019sms") as SmsProviderChoice,
@@ -1438,7 +1491,7 @@ function AgentDefaultsTab() {
 
   useEffect(() => {
     if (settings) {
-      setForm({
+      const next = {
         default_sms_provider: settings.default_sms_provider || "019sms",
         default_sms_019_user: settings.default_sms_019_user || "",
         default_sms_019_token: settings.default_sms_019_token || "",
@@ -1462,9 +1515,15 @@ function AgentDefaultsTab() {
         addon_extra_marketing_sms_price: settings.addon_extra_marketing_sms_price || "50",
         addon_onboarding_price: settings.addon_onboarding_price || "200",
         addon_data_migration_price: settings.addon_data_migration_price || "450",
-      });
+      };
+      setForm(next);
+      setOriginalForm(next);
     }
   }, [settings]);
+
+  const { isDirty, markClean } = useUnsavedChanges(form, originalForm, {
+    id: "thiqa-settings-agent-defaults",
+  });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -1478,6 +1537,7 @@ function AgentDefaultsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["thiqa-platform-settings"] });
       toast({ title: "تم الحفظ", description: "تم حفظ الإعدادات الافتراضية" });
+      markClean();
     },
     onError: () => {
       toast({ title: "خطأ", description: "فشل في الحفظ", variant: "destructive" });
@@ -1718,15 +1778,23 @@ function AgentDefaultsTab() {
         </CardContent>
       </Card>
 
-      <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-        {saveMutation.isPending ? <Loader2 className="h-4 w-4 ml-2 animate-spin" /> : <Save className="h-4 w-4 ml-2" />}
-        حفظ الإعدادات الافتراضية
-      </Button>
+      <div className="flex items-center gap-3 flex-wrap">
+        <UnsavedChangesIndicator isDirty={isDirty} />
+        <Button
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending || !isDirty}
+        >
+          {saveMutation.isPending ? <Loader2 className="h-4 w-4 ml-2 animate-spin" /> : <Save className="h-4 w-4 ml-2" />}
+          حفظ الإعدادات الافتراضية
+        </Button>
+      </div>
     </div>
   );
 }
 
 export default function ThiqaSettings() {
+  const [activeTab, setActiveTab] = useState("general");
+  const onTabChange = useGuardedTabChange(setActiveTab);
   return (
     <MainLayout>
       <div className="md:p-6" dir="rtl">
@@ -1734,7 +1802,7 @@ export default function ThiqaSettings() {
 
         <div className="space-y-6">
 
-        <Tabs defaultValue="general" className="w-full">
+        <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
           <TabsList>
             <TabsTrigger value="general" className="gap-2">
               <Shield className="h-4 w-4" />

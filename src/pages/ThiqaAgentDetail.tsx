@@ -40,6 +40,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { DateInputPicker } from "@/components/shared/DateInputPicker";
+import { useUnsavedChanges, UnsavedChangesIndicator, useGuardedTabChange } from "@/hooks/useUnsavedChanges";
 
 // Feature catalog moved to ./agentFeatures.ts so it can be reused
 // from the plan defaults editor and stays the single source of
@@ -143,6 +144,40 @@ export default function ThiqaAgentDetail() {
   const [importTotalRows, setImportTotalRows] = useState(0);
   const [importDoneRows, setImportDoneRows] = useState(0);
 
+  // Pristine snapshots — captured after fetchAll() and after every
+  // successful save. The unsaved-changes hook deep-equals current vs
+  // these to decide whether to show the indicator and block navigation.
+  // Stored separately (rather than reading from the loaded data
+  // directly) because each tab has its own save flow and "clean" state.
+  const [originalAgent, setOriginalAgent] = useState<AgentDetail | null>(null);
+  const [originalSmsSettings, setOriginalSmsSettings] = useState<any>(null);
+  const [originalAuthSettings, setOriginalAuthSettings] = useState<any>(null);
+  const [originalPaymentSettings, setOriginalPaymentSettings] = useState<any>(null);
+  const [originalSiteSettings, setOriginalSiteSettings] = useState<any>(null);
+
+  const infoDirty = useUnsavedChanges(agent, originalAgent, {
+    id: "thiqa-agent-info",
+    enabled: !!agent,
+  });
+  const smsDirty = useUnsavedChanges(smsSettings, originalSmsSettings, {
+    id: "thiqa-agent-sms",
+    enabled: !!smsSettings || !!originalSmsSettings,
+  });
+  const authDirty = useUnsavedChanges(authSettings, originalAuthSettings, {
+    id: "thiqa-agent-auth",
+    enabled: !!authSettings || !!originalAuthSettings,
+  });
+  const paymentDirty = useUnsavedChanges(paymentSettings, originalPaymentSettings, {
+    id: "thiqa-agent-tranzila",
+    enabled: !!paymentSettings || !!originalPaymentSettings,
+  });
+  const siteDirty = useUnsavedChanges(siteSettings, originalSiteSettings, {
+    id: "thiqa-agent-branding",
+    enabled: !!siteSettings || !!originalSiteSettings,
+  });
+
+  const guardedSetActiveTab = useGuardedTabChange(setActiveTab);
+
   // Elapsed time ticker for import
   useEffect(() => {
     if (!importStartTime) return;
@@ -187,6 +222,7 @@ export default function ThiqaAgentDetail() {
         // and types are regenerated.
         const a = agentRes.data as unknown as AgentDetail;
         setAgent(a);
+        setOriginalAgent(a);
         setOriginalPlan(a.plan);
       }
       const featureMap: Record<string, boolean> = {};
@@ -194,7 +230,10 @@ export default function ThiqaAgentDetail() {
       setFeatures(featureMap);
       if (paymentsRes.data) setPayments(paymentsRes.data);
       if (usersRes.data) setAgentUsers(usersRes.data);
-      if (smsRes.data) setSmsSettings(smsRes.data);
+      if (smsRes.data) {
+        setSmsSettings(smsRes.data);
+        setOriginalSmsSettings(smsRes.data);
+      }
       // Fetch the Thiqa platform default so the SMS config component can
       // tell the user what "inherit" resolves to.
       const { data: platformDefaultRow } = await supabase
@@ -204,9 +243,18 @@ export default function ThiqaAgentDetail() {
         .maybeSingle();
       const pd = (platformDefaultRow?.setting_value || '').toLowerCase();
       setPlatformSmsDefaultProvider(pd === 'htd' ? 'htd' : '019sms');
-      if (authRes.data) setAuthSettings(authRes.data);
-      if (payRes.data) setPaymentSettings(payRes.data);
-      if (siteRes.data) setSiteSettings(siteRes.data);
+      if (authRes.data) {
+        setAuthSettings(authRes.data);
+        setOriginalAuthSettings(authRes.data);
+      }
+      if (payRes.data) {
+        setPaymentSettings(payRes.data);
+        setOriginalPaymentSettings(payRes.data);
+      }
+      if (siteRes.data) {
+        setSiteSettings(siteRes.data);
+        setOriginalSiteSettings(siteRes.data);
+      }
       const rm: Record<string, string> = {};
       if (rolesRes.data) rolesRes.data.forEach((r: any) => { rm[r.user_id] = r.role; });
       setUserRoles(rm);
@@ -371,6 +419,7 @@ export default function ThiqaAgentDetail() {
       toast.error(`خطأ في الحفظ: ${error.message}`);
     } else {
       toast.success('تم الحفظ');
+      infoDirty.markClean();
     }
   };
 
@@ -704,6 +753,7 @@ export default function ThiqaAgentDetail() {
     }
     setSavingSection(null);
     toast.success('تم حفظ إعدادات SMS');
+    smsDirty.markClean();
   };
 
   // ─── Save auth settings ───
@@ -731,6 +781,7 @@ export default function ThiqaAgentDetail() {
     }
     setSavingSection(null);
     toast.success('تم حفظ إعدادات المصادقة');
+    authDirty.markClean();
   };
 
   // ─── Save payment/Tranzila settings ───
@@ -758,6 +809,7 @@ export default function ThiqaAgentDetail() {
     }
     setSavingSection(null);
     toast.success('تم حفظ إعدادات الدفع');
+    paymentDirty.markClean();
   };
 
   // ─── Save site/branding settings ───
@@ -780,6 +832,7 @@ export default function ThiqaAgentDetail() {
     }
     setSavingSection(null);
     toast.success('تم حفظ العلامة التجارية');
+    siteDirty.markClean();
   };
 
   // ─── Create new user for agent ───
@@ -1215,7 +1268,7 @@ export default function ThiqaAgentDetail() {
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={guardedSetActiveTab} className="space-y-4">
           {/* Pill-bar tabs with horizontal scroll and the same rounded
               shell as the dashboard's filter chips. The default
               shadcn TabsList uses `bg-muted` which collapses 12
@@ -1363,8 +1416,9 @@ export default function ThiqaAgentDetail() {
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-3 pt-2">
-                  <Button onClick={handleSaveClick} disabled={saving}>
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <UnsavedChangesIndicator isDirty={infoDirty.isDirty} />
+                  <Button onClick={handleSaveClick} disabled={saving || !infoDirty.isDirty}>
                     {saving ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
                     حفظ التغييرات
                   </Button>
@@ -1595,10 +1649,16 @@ export default function ThiqaAgentDetail() {
                     <span className="text-sm text-muted-foreground">الشعار الحالي</span>
                   </div>
                 )}
-                <Button onClick={saveSiteSettings} disabled={savingSection === 'site'}>
-                  {savingSection === 'site' ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
-                  حفظ العلامة التجارية
-                </Button>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <UnsavedChangesIndicator isDirty={siteDirty.isDirty} />
+                  <Button
+                    onClick={saveSiteSettings}
+                    disabled={savingSection === 'site' || !siteDirty.isDirty}
+                  >
+                    {savingSection === 'site' ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
+                    حفظ العلامة التجارية
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1641,10 +1701,16 @@ export default function ThiqaAgentDetail() {
                     })
                   }
                 />
-                <Button onClick={saveSmsSettings} disabled={savingSection === 'sms'}>
-                  {savingSection === 'sms' ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
-                  حفظ إعدادات SMS
-                </Button>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <UnsavedChangesIndicator isDirty={smsDirty.isDirty} />
+                  <Button
+                    onClick={saveSmsSettings}
+                    disabled={savingSection === 'sms' || !smsDirty.isDirty}
+                  >
+                    {savingSection === 'sms' ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
+                    حفظ إعدادات SMS
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1689,10 +1755,16 @@ export default function ThiqaAgentDetail() {
                   <div><Label>IPPBX Token ID</Label><Input value={initAuth().ippbx_token_id || ''} onChange={e => setAuthSettings({...initAuth(), ...authSettings, ippbx_token_id: e.target.value})} dir="ltr" /></div>
                 </CardContent>
               </Card>
-              <Button onClick={saveAuthSettings} disabled={savingSection === 'auth'}>
-                {savingSection === 'auth' ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
-                حفظ إعدادات المصادقة
-              </Button>
+              <div className="flex items-center gap-3 flex-wrap">
+                <UnsavedChangesIndicator isDirty={authDirty.isDirty} />
+                <Button
+                  onClick={saveAuthSettings}
+                  disabled={savingSection === 'auth' || !authDirty.isDirty}
+                >
+                  {savingSection === 'auth' ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
+                  حفظ إعدادات المصادقة
+                </Button>
+              </div>
             </div>
           </TabsContent>
 
@@ -1728,10 +1800,16 @@ export default function ThiqaAgentDetail() {
                   <div><Label>Fail URL</Label><Input value={initPay().fail_url || ''} onChange={e => setPaymentSettings({...initPay(), ...paymentSettings, fail_url: e.target.value})} dir="ltr" /></div>
                   <div><Label>Notify URL (Webhook)</Label><Input value={initPay().notify_url || ''} onChange={e => setPaymentSettings({...initPay(), ...paymentSettings, notify_url: e.target.value})} dir="ltr" /></div>
                 </div>
-                <Button onClick={savePaymentSettings} disabled={savingSection === 'payment'}>
-                  {savingSection === 'payment' ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
-                  حفظ إعدادات Tranzila
-                </Button>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <UnsavedChangesIndicator isDirty={paymentDirty.isDirty} />
+                  <Button
+                    onClick={savePaymentSettings}
+                    disabled={savingSection === 'payment' || !paymentDirty.isDirty}
+                  >
+                    {savingSection === 'payment' ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Save className="h-4 w-4 ml-2" />}
+                    حفظ إعدادات Tranzila
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

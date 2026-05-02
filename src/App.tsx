@@ -51,6 +51,7 @@ import { AppChrome } from "@/components/layout/AppChrome";
 import { AgentProvider } from "@/hooks/useAgentContext";
 import { UpgradePromptProvider } from "@/components/pricing/UpgradePromptProvider";
 import { ThiqaAdminRoute } from "@/components/auth/ThiqaAdminRoute";
+import { UnsavedChangesProvider } from "@/hooks/useUnsavedChanges";
 
 // All pages are code-split. Each route's bundle is only downloaded when
 // the user navigates to it. The Suspense fallback is intentionally null
@@ -310,6 +311,7 @@ const App = () => (
           <GlobalQuotaDialogHost />
         </Suspense>
         <BrowserRouter>
+          <UnsavedChangesProvider>
           <AuthProvider>
             <SessionTrackerWrapper>
             <AgentProvider>
@@ -663,6 +665,7 @@ const App = () => (
             </AgentProvider>
             </SessionTrackerWrapper>
           </AuthProvider>
+          </UnsavedChangesProvider>
         </BrowserRouter>
       </TooltipProvider>
     </HelmetProvider>

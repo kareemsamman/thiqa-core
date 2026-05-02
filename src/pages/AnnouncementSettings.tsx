@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 import { Megaphone, Plus, Trash2, Calendar, Building2 } from "lucide-react";
 import { format, addDays } from "date-fns";
+import { useUnsavedChanges, UnsavedChangesIndicator } from "@/hooks/useUnsavedChanges";
 
 interface Announcement {
   id: string;
@@ -53,6 +54,12 @@ export default function AnnouncementSettings() {
   const [daysToShow, setDaysToShow] = useState(7);
   const [showOnce, setShowOnce] = useState(false);
   const [targetAgentId, setTargetAgentId] = useState<string>("all");
+
+  const formInitial = { title: "", content: "", daysToShow: 7, showOnce: false, targetAgentId: "all" };
+  const formCurrent = { title, content, daysToShow, showOnce, targetAgentId };
+  const { isDirty, markClean } = useUnsavedChanges(formCurrent, formInitial, {
+    id: "announcement-settings-create",
+  });
 
   useEffect(() => {
     fetchAll();
@@ -105,6 +112,7 @@ export default function AnnouncementSettings() {
       setDaysToShow(7);
       setShowOnce(false);
       setTargetAgentId("all");
+      markClean();
       fetchAll();
     }
     setSaving(false);
@@ -213,9 +221,16 @@ export default function AnnouncementSettings() {
               </div>
             </div>
 
-            <Button onClick={handleCreate} disabled={saving} className="w-full sm:w-auto">
-              {saving ? "جاري الإنشاء..." : "إنشاء الإعلان"}
-            </Button>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button
+                onClick={handleCreate}
+                disabled={saving || !isDirty}
+                className="w-full sm:w-auto"
+              >
+                {saving ? "جاري الإنشاء..." : "إنشاء الإعلان"}
+              </Button>
+              <UnsavedChangesIndicator isDirty={isDirty} />
+            </div>
           </CardContent>
         </Card>
 
