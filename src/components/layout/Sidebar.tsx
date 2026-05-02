@@ -204,15 +204,23 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
     [location.pathname],
   );
   const { user, profile, signOut, isAdmin, branchName, isSuperAdmin } = useAuth();
-  // Avatar source: prefer the profile row (admin can edit it), but fall
-  // back to whatever Google handed us in user_metadata for OAuth users
-  // who haven't been mirrored into profiles.avatar_url yet.
-  const avatarUrl = profile?.avatar_url
+  const { data: siteSettings } = useSiteSettings();
+  const { hasFeature, isThiqaSuperAdmin, agent, planInfo, isImpersonating, impersonatedAgent } = useAgentContext();
+  // While impersonating, the sidebar pill mirrors the impersonated
+  // agent's identity (name / logo / email) so it's obvious which
+  // tenant the super admin is currently inside. The AppChrome banner
+  // already announces the impersonation; this keeps the chrome
+  // consistent across the rail and the popover.
+  const showAsAgent = isImpersonating && !!impersonatedAgent;
+  // Avatar source: when impersonating fall back to the agent's logo;
+  // otherwise prefer the profile row (admin can edit it), then
+  // whatever Google handed us in user_metadata for OAuth users who
+  // haven't been mirrored into profiles.avatar_url yet.
+  const avatarUrl = (showAsAgent ? impersonatedAgent.logo_url : null)
+    || profile?.avatar_url
     || (user?.user_metadata as Record<string, unknown> | undefined)?.avatar_url as string | undefined
     || (user?.user_metadata as Record<string, unknown> | undefined)?.picture as string | undefined
     || null;
-  const { data: siteSettings } = useSiteSettings();
-  const { hasFeature, isThiqaSuperAdmin, agent, planInfo } = useAgentContext();
   const { can } = usePermissions();
   const { showUpgradePrompt } = useUpgradePrompt();
 
@@ -293,8 +301,13 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
     });
   };
 
-  const userName = profile?.full_name || profile?.email?.split('@')[0] || 'مستخدم';
+  const userName =
+    (showAsAgent && (impersonatedAgent.name_ar || impersonatedAgent.name))
+    || profile?.full_name
+    || profile?.email?.split('@')[0]
+    || 'مستخدم';
   const userInitial = userName.charAt(0);
+  const userEmail = (showAsAgent && impersonatedAgent.email) || profile?.email;
   const userRole = isAdmin ? 'مدير' : 'موظف';
   const userBranch = branchName;
 
@@ -870,7 +883,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                         {userName}
                       </p>
                       <p className="truncate text-[11.5px] text-slate-500 text-right mt-0.5" dir="ltr">
-                        {profile?.email}
+                        {userEmail}
                       </p>
                       {isAdmin && trial && agent && (
                         <div className="mt-2 space-y-1.5">
@@ -1049,9 +1062,9 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                       type="button"
                       className="inline-flex items-center justify-center rounded-full transition-colors hover:bg-slate-100"
                     >
-                      {profile?.avatar_url ? (
+                      {avatarUrl ? (
                         <img
-                          src={profile.avatar_url}
+                          src={avatarUrl}
                           alt={userName}
                           className="h-9 w-9 rounded-full object-cover ring-2 ring-white flex-shrink-0"
                         />
@@ -1097,7 +1110,7 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
                           {userName}
                         </p>
                         <p className="truncate text-[11.5px] text-slate-500 text-right mt-0.5" dir="ltr">
-                          {profile?.email}
+                          {userEmail}
                         </p>
                         {isAdmin && trial && agent && (
                           <div className="mt-2 space-y-1.5">
@@ -1212,15 +1225,22 @@ function SidebarContent({ collapsed, onCollapse, onNavigate }: {
 // ============================================================================
 function MobileTopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const { user, profile, isAdmin } = useAuth();
-  const avatarUrl = profile?.avatar_url
+  const { data: siteSettings } = useSiteSettings();
+  const { isThiqaSuperAdmin, isImpersonating, impersonatedAgent } = useAgentContext();
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  const showAsAgent = isImpersonating && !!impersonatedAgent;
+  const avatarUrl = (showAsAgent ? impersonatedAgent.logo_url : null)
+    || profile?.avatar_url
     || (user?.user_metadata as Record<string, unknown> | undefined)?.avatar_url as string | undefined
     || (user?.user_metadata as Record<string, unknown> | undefined)?.picture as string | undefined
     || null;
-  const { data: siteSettings } = useSiteSettings();
-  const { isThiqaSuperAdmin } = useAgentContext();
-  const [profileOpen, setProfileOpen] = useState(false);
 
-  const userName = profile?.full_name || profile?.email?.split('@')[0] || 'مستخدم';
+  const userName =
+    (showAsAgent && (impersonatedAgent.name_ar || impersonatedAgent.name))
+    || profile?.full_name
+    || profile?.email?.split('@')[0]
+    || 'مستخدم';
   const userInitial = (userName.charAt(0) || '?').toUpperCase();
 
   return (
@@ -1277,13 +1297,16 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, profile, signOut, isAdmin, branchName, isSuperAdmin } = useAuth();
-  const avatarUrl = profile?.avatar_url
+  const { data: siteSettings } = useSiteSettings();
+  const { hasFeature, isThiqaSuperAdmin, isImpersonating, impersonatedAgent } = useAgentContext();
+  const { showUpgradePrompt } = useUpgradePrompt();
+
+  const showAsAgent = isImpersonating && !!impersonatedAgent;
+  const avatarUrl = (showAsAgent ? impersonatedAgent.logo_url : null)
+    || profile?.avatar_url
     || (user?.user_metadata as Record<string, unknown> | undefined)?.avatar_url as string | undefined
     || (user?.user_metadata as Record<string, unknown> | undefined)?.picture as string | undefined
     || null;
-  const { data: siteSettings } = useSiteSettings();
-  const { hasFeature, isThiqaSuperAdmin } = useAgentContext();
-  const { showUpgradePrompt } = useUpgradePrompt();
 
   // Mirror the desktop sidebar's two-stage filter: hide items the user
   // has no permission for (they shouldn't know they exist), but keep
@@ -1337,7 +1360,11 @@ function MobileSidebarContent({ onNavigate }: { onNavigate: () => void }) {
     }
   };
 
-  const userName = profile?.full_name || profile?.email?.split('@')[0] || 'مستخدم';
+  const userName =
+    (showAsAgent && (impersonatedAgent.name_ar || impersonatedAgent.name))
+    || profile?.full_name
+    || profile?.email?.split('@')[0]
+    || 'مستخدم';
   const userInitial = (userName.charAt(0) || '?').toUpperCase();
   const userRole = isAdmin ? 'مدير' : 'موظف';
 
