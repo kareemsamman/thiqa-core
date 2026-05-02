@@ -49,6 +49,18 @@ export default function ThiqaPayments() {
     setLoading(false);
   };
 
+  // Plan key → Arabic display name. Custom plans created via the Thiqa
+  // admin (e.g. "businesses") aren't in the static label dictionary in
+  // labels.tsx, so without this lookup PlanBadge falls back to the raw
+  // English plan_key.
+  const planNameByKey = useMemo(() => {
+    const map: Record<string, string> = {};
+    plans.forEach((p) => {
+      map[p.plan_key] = p.name_ar || p.name;
+    });
+    return map;
+  }, [plans]);
+
   // Compute months for filter
   const months = useMemo(() => {
     const set = new Set<string>();
@@ -261,7 +273,11 @@ export default function ThiqaPayments() {
                           {p.agents?.email || '—'}
                         </td>
                         <td className="p-3">
-                          <PlanBadge plan={p.plan} className="text-xs" />
+                          <PlanBadge
+                            plan={p.plan}
+                            displayName={planNameByKey[p.plan]}
+                            className="text-xs"
+                          />
                         </td>
                         <td className="p-3 font-semibold">₪{p.amount?.toLocaleString()}</td>
                         <td className="p-3 text-xs">
