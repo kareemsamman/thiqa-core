@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -64,6 +66,14 @@ interface PolicyData {
   insurance_price: number;
   is_under_24?: boolean | null;
   group_id: string | null;
+  // Per-row fields ported in from PolicyEditDrawer so single-policy edit
+  // through this modal keeps full feature parity.
+  broker_id?: string | null;
+  office_commission?: number | null;
+  cancelled?: boolean | null;
+  transferred?: boolean | null;
+  transferred_car_number?: string | null;
+  notes?: string | null;
   insurance_companies?: {
     id: string;
     name: string;
@@ -93,7 +103,12 @@ interface PolicyData {
 interface PackagePolicyEditModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  groupId: string | null;
+  // Either groupId (package mode — edits every sibling in the group) or
+  // policyId (single mode — edits just one row, with the option to grow
+  // it into a package via the addon builder). Pass null/undefined for
+  // whichever you're not using.
+  groupId?: string | null;
+  policyId?: string | null;
   initialPolicyId?: string | null;
   onSaved?: () => void;
 }
@@ -104,17 +119,30 @@ interface EditState {
   issueDate: string;
   insurancePrice: string;
   companyId: string;
-  // Editable policy type — only service rows (ROAD_SERVICE ↔
-  // ACCIDENT_FEE_EXEMPTION) are allowed to flip this, the UI locks it
-  // for ELZAMI / THIRD_FULL since switching those would have way more
-  // consequences (tariff tables, car fields, refund math…).
+  // The (possibly switched) policy type. In package mode the UI only
+  // allows ROAD_SERVICE ↔ ACCIDENT_FEE_EXEMPTION switches; in single
+  // mode the user can flip between any of the four types.
   policyType: string;
+  policyTypeChild: string;
+  brokerId: string;
+  officeCommission: string;
+  cancelled: boolean;
+  transferred: boolean;
+  transferredCarNumber: string;
+  notes: string;
 }
 
 interface LookupOption {
   id: string;
   label: string;
 }
+
+interface BrokerOption {
+  id: string;
+  name: string;
+}
+
+const NO_BROKER = "__NO_BROKER__";
 
 const policyTypeLabels: Record<string, string> = {
   ELZAMI: "إلزامي",
@@ -147,17 +175,21 @@ export function PackagePolicyEditModal({
   open,
   onOpenChange,
   groupId,
+  policyId,
   initialPolicyId,
   onSaved,
 }: PackagePolicyEditModalProps) {
   const { toast } = useToast();
+  // Single mode triggers when there's no groupId but a policyId — shows
+  // one card and lets the user convert into a package by enabling addons.
+  const isSingleMode = !groupId && !!policyId;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [policies, setPolicies] = useState<PolicyData[]>([]);
   const [editStates, setEditStates] = useState<Record<string, EditState>>({});
   const [clientName, setClientName] = useState<string>("");
   const [carNumber, setCarNumber] = useState<string>("");
-  
+
   // Extra drivers state
   const [clientId, setClientId] = useState<string | null>(null);
   const [existingChildren, setExistingChildren] = useState<ClientChild[]>([]);
@@ -172,6 +204,7 @@ export function PackagePolicyEditModal({
   const [thirdFullCompanies, setThirdFullCompanies] = useState<LookupOption[]>([]);
   const [roadServices, setRoadServices] = useState<LookupOption[]>([]);
   const [accidentFeeServices, setAccidentFeeServices] = useState<LookupOption[]>([]);
+  const [brokers, setBrokers] = useState<BrokerOption[]>([]);
 
   // Extra context needed to insert new addon policies into the package
   // (everything inherits from the existing package — same client, car,
@@ -181,7 +214,15 @@ export function PackagePolicyEditModal({
   const [carType, setCarType] = useState<string | null>(null);
   const [carValue, setCarValue] = useState<number | null>(null);
   const [carYear, setCarYear] = useState<number | null>(null);
-  const [isUnder24, setIsUnder24] = useState<boolean | null>(null);
+
+  // Client-level under-24 state. The radio mirrors PolicyEditDrawer's UI
+  // (only "none" / "client" — "additional_driver" was a legacy mode that
+  // the old drawer no longer exposed). Driver name/id are kept as-is when
+  // the existing record had additional_driver, so we don't accidentally
+  // clobber legacy data on save.
+  const [under24Type, setUnder24Type] = useState<'none' | 'client' | 'additional_driver'>('none');
+  const [under24DriverName, setUnder24DriverName] = useState<string>("");
+  const [under24DriverId, setUnder24DriverId] = useState<string>("");
 
   // Package builder state — mirrors the wizard so we can reuse
   // PackageBuilderSection. Initialize all four addon types as defaults
@@ -206,6 +247,9 @@ export function PackagePolicyEditModal({
   const [clientPhone, setClientPhone] = useState<string | null>(null);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [successPolicyId, setSuccessPolicyId] = useState<string | null>(null);
+  // Whether the just-saved record is a package (true if pre-existing
+  // package, or single-mode policy that was promoted with addons).
+  const [successIsPackage, setSuccessIsPackage] = useState(true);
 
   const getCompanyOptions = useCallback(
     (policyType: string): LookupOption[] => {
@@ -218,15 +262,14 @@ export function PackagePolicyEditModal({
     [elzamiCompanies, thirdFullCompanies, roadServices, accidentFeeServices],
   );
 
-  // Fetch all policies in the package
+  // Fetch policy/policies + lookups. Branches on mode: groupId fetches
+  // every sibling in the package, policyId fetches just the one row.
   const fetchPolicies = useCallback(async () => {
-    if (!groupId || !open) return;
-    
+    if ((!groupId && !policyId) || !open) return;
+
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("policies")
-        .select(`
+      const baseSelect = `
           id,
           policy_type_parent,
           policy_type_child,
@@ -239,16 +282,37 @@ export function PackagePolicyEditModal({
           client_id,
           car_id,
           branch_id,
+          broker_id,
+          office_commission,
+          cancelled,
+          transferred,
+          transferred_car_number,
+          notes,
           insurance_companies (id, name, name_ar),
           road_services (id, name, name_ar),
           accident_fee_services (id, name, name_ar),
           cars (car_type, car_value, year, car_number),
-          clients (full_name)
-        `)
-        .eq("group_id", groupId)
-        .order("created_at", { ascending: true });
+          clients (id, full_name, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id)
+      `;
 
-      if (error) throw error;
+      let data: any[] | null = null;
+      if (groupId) {
+        const { data: groupData, error } = await supabase
+          .from("policies")
+          .select(baseSelect)
+          .eq("group_id", groupId)
+          .order("created_at", { ascending: true });
+        if (error) throw error;
+        data = (groupData as any[]) || [];
+      } else if (policyId) {
+        const { data: oneData, error } = await supabase
+          .from("policies")
+          .select(baseSelect)
+          .eq("id", policyId)
+          .single();
+        if (error) throw error;
+        data = oneData ? [oneData as any] : [];
+      }
 
       // Sort by policy type
       const sortedData = (data || []).sort((a, b) => {
@@ -269,17 +333,24 @@ export function PackagePolicyEditModal({
         states[p.id] = {
           startDate: p.start_date || "",
           endDate: p.end_date || "",
-          issueDate: (p as any).issue_date || p.start_date || "",
+          issueDate: p.issue_date || p.start_date || "",
           insurancePrice: p.insurance_price?.toString() || "0",
           companyId: currentCompanyId,
           policyType: p.policy_type_parent,
+          policyTypeChild: p.policy_type_child || "",
+          brokerId: p.broker_id || NO_BROKER,
+          officeCommission: p.office_commission != null ? String(p.office_commission) : "0",
+          cancelled: !!p.cancelled,
+          transferred: !!p.transferred,
+          transferredCarNumber: p.transferred_car_number || "",
+          notes: p.notes || "",
         };
       });
       setEditStates(states);
 
       // Fetch the lookup tables in parallel so the selects populate before
       // the user starts editing.
-      const [icRes, rsRes, afRes, pkgRsRes, pkgAfRes] = await Promise.all([
+      const [icRes, rsRes, afRes, pkgRsRes, pkgAfRes, brokersRes] = await Promise.all([
         supabase
           .from('insurance_companies')
           .select('id, name, name_ar, category_parent, elzami_commission, broker_id')
@@ -305,6 +376,10 @@ export function PackagePolicyEditModal({
           .select('id, name, name_ar, active')
           .eq('active', true)
           .order('sort_order', { ascending: true }),
+        supabase
+          .from('brokers')
+          .select('id, name')
+          .order('name'),
       ]);
 
       const toOption = (row: any): LookupOption => ({
@@ -346,6 +421,7 @@ export function PackagePolicyEditModal({
       );
       setRoadServices((rsRes.data || []).map(toOption));
       setAccidentFeeServices((afRes.data || []).map(toOption));
+      setBrokers((brokersRes.data || []) as BrokerOption[]);
 
       // Build the typed Company[] buckets the package builder expects.
       // Road service / accident fee company filters mirror Step3 of the
@@ -367,39 +443,48 @@ export function PackagePolicyEditModal({
 
       // Get client name, car number, and client_id from first policy
       if (sortedData.length > 0) {
-        setClientName(sortedData[0].clients?.full_name || "");
-        setCarNumber(sortedData[0].cars?.car_number || "");
-        const cId = (sortedData[0] as any).client_id;
+        const first: any = sortedData[0];
+        setClientName(first.clients?.full_name || "");
+        setCarNumber(first.cars?.car_number || "");
+        const cId = first.client_id;
         setClientId(cId || null);
         // Capture car / branch / age band so we can stamp newly-added
         // addon policies with the same context as the rest of the package.
-        setCarId((sortedData[0] as any).car_id || null);
-        setBranchId((sortedData[0] as any).branch_id || null);
-        setCarType(sortedData[0].cars?.car_type || null);
-        setCarValue(sortedData[0].cars?.car_value ?? null);
-        setCarYear(sortedData[0].cars?.year ?? null);
+        setCarId(first.car_id || null);
+        setBranchId(first.branch_id || null);
+        setCarType(first.cars?.car_type || null);
+        setCarValue(first.cars?.car_value ?? null);
+        setCarYear(first.cars?.year ?? null);
+        // Phone comes from the joined clients row now.
+        setClientPhone(first.clients?.phone_number || null);
+
         // is_under_24 is per-policy in the schema but uniform across the
         // package — pull from THIRD_FULL when present, else from any row.
         const ageSourcePolicy = sortedData.find((p) => p.policy_type_parent === 'THIRD_FULL') || sortedData[0];
-        setIsUnder24(ageSourcePolicy.is_under_24 ?? null);
-        
-        // Fetch existing children + phone for this client
+
+        // Seed under24 controls from the client row. Prefer the explicit
+        // under24_type column; fall back to less_than_24 / is_under_24 to
+        // cover legacy rows from before that column existed.
+        const clientRow = first.clients;
+        const seededType: 'none' | 'client' | 'additional_driver' =
+          clientRow?.under24_type && clientRow.under24_type !== 'none'
+            ? clientRow.under24_type
+            : (ageSourcePolicy.is_under_24 || clientRow?.less_than_24)
+              ? 'client'
+              : 'none';
+        setUnder24Type(seededType);
+        setUnder24DriverName(clientRow?.under24_driver_name || "");
+        setUnder24DriverId(clientRow?.under24_driver_id || "");
+
+        // Fetch existing children for this client
         if (cId) {
-          const [{ data: childrenData }, { data: clientRow }] = await Promise.all([
-            supabase
-              .from("client_children")
-              .select("*")
-              .eq("client_id", cId)
-              .order("created_at", { ascending: true }),
-            supabase
-              .from("clients")
-              .select("phone_number")
-              .eq("id", cId)
-              .maybeSingle(),
-          ]);
+          const { data: childrenData } = await supabase
+            .from("client_children")
+            .select("*")
+            .eq("client_id", cId)
+            .order("created_at", { ascending: true });
           setExistingChildren(childrenData || []);
-          setClientPhone(clientRow?.phone_number || null);
-          
+
           // Find the main policy (THIRD_FULL) to get linked children
           const mainPolicy = sortedData.find(p => p.policy_type_parent === "THIRD_FULL");
           if (mainPolicy) {
@@ -410,11 +495,14 @@ export function PackagePolicyEditModal({
             const ids = (linkedData || []).map(l => l.child_id);
             setLinkedChildIds(ids);
             setSelectedChildIds(ids);
+          } else {
+            setLinkedChildIds([]);
+            setSelectedChildIds([]);
           }
         }
       }
     } catch (error) {
-      console.error("Error fetching package policies:", error);
+      console.error("Error fetching policies:", error);
       toast({
         title: "خطأ",
         description: "فشل في تحميل المعاملات",
@@ -423,7 +511,7 @@ export function PackagePolicyEditModal({
     } finally {
       setLoading(false);
     }
-  }, [groupId, open, toast]);
+  }, [groupId, policyId, open, toast]);
 
   useEffect(() => {
     fetchPolicies();
@@ -447,7 +535,9 @@ export function PackagePolicyEditModal({
       setCarType(null);
       setCarValue(null);
       setCarYear(null);
-      setIsUnder24(null);
+      setUnder24Type('none');
+      setUnder24DriverName("");
+      setUnder24DriverId("");
       setPackageAddons([
         { type: "elzami", enabled: false, company_id: "", insurance_price: "", elzami_commission: 0, office_commission: "0", start_date: "", end_date: "" },
         { type: "third_full", enabled: false, company_id: "", insurance_price: "", policy_type_child: "", broker_buy_price: "", start_date: "", end_date: "" },
@@ -457,38 +547,19 @@ export function PackagePolicyEditModal({
       setClientPhone(null);
       setShowSuccessDialog(false);
       setSuccessPolicyId(null);
+      setSuccessIsPackage(true);
     }
   }, [open]);
 
-  const getTypeName = (policy: PolicyData) => {
-    if (policy.policy_type_parent === "THIRD_FULL" && policy.policy_type_child) {
-      return policyChildLabels[policy.policy_type_child] || policy.policy_type_child;
-    }
-    return policyTypeLabels[policy.policy_type_parent] || policy.policy_type_parent;
-  };
-
-  const getCompanyName = (policy: PolicyData) => {
-    if (policy.policy_type_parent === "ROAD_SERVICE" && policy.road_services) {
-      return policy.road_services.name_ar || policy.road_services.name;
-    }
-    if (policy.policy_type_parent === "ACCIDENT_FEE_EXEMPTION" && policy.accident_fee_services) {
-      return policy.accident_fee_services.name_ar || policy.accident_fee_services.name;
-    }
-    if (policy.insurance_companies) {
-      return policy.insurance_companies.name_ar || policy.insurance_companies.name;
-    }
-    return "-";
-  };
-
-  const updateEditState = (policyId: string, field: keyof EditState, value: string) => {
+  const updateEditState = <K extends keyof EditState>(policyId: string, field: K, value: EditState[K]) => {
     setEditStates((prev) => {
-      const newState = { ...prev[policyId], [field]: value };
-      
+      const newState = { ...prev[policyId], [field]: value } as EditState;
+
       // Auto-calculate end date when start date changes
-      if (field === "startDate" && value) {
+      if (field === "startDate" && typeof value === 'string' && value) {
         newState.endDate = calculateEndDate(value);
       }
-      
+
       return { ...prev, [policyId]: newState };
     });
   };
@@ -505,11 +576,11 @@ export function PackagePolicyEditModal({
   // Validate new child form
   const validateNewChild = (child: NewChildForm, allNewChildren: NewChildForm[]): Record<string, string> => {
     const errors: Record<string, string> = {};
-    
+
     if (!child.full_name.trim()) {
       errors.full_name = "الاسم مطلوب";
     }
-    
+
     if (!child.id_number.trim()) {
       errors.id_number = "رقم الهوية مطلوب";
     } else if (!isValidIsraeliId(child.id_number)) {
@@ -522,14 +593,14 @@ export function PackagePolicyEditModal({
       const duplicateInExisting = existingChildren.some(
         c => digitsOnly(c.id_number).trim() === normalized
       );
-      
+
       if (duplicateInNew) {
         errors.id_number = "رقم الهوية مكرر في القائمة";
       } else if (duplicateInExisting) {
         errors.id_number = "رقم الهوية موجود مسبقاً للعميل";
       }
     }
-    
+
     return errors;
   };
 
@@ -537,7 +608,7 @@ export function PackagePolicyEditModal({
   const handleAddNewChild = () => {
     setNewChildren((prev) => [...prev, createEmptyChildForm()]);
   };
-  
+
   // Ref for auto-scroll to new child
   const newChildBottomRef = useRef<HTMLDivElement>(null);
   const prevNewChildrenLengthRef = useRef(newChildren.length);
@@ -560,7 +631,7 @@ export function PackagePolicyEditModal({
     }
     prevEnabledAddonsRef.current = enabledNow;
   }, [packageAddons]);
-  
+
   // Auto-scroll when new child is added
   useEffect(() => {
     if (newChildren.length > prevNewChildrenLengthRef.current) {
@@ -694,7 +765,7 @@ export function PackagePolicyEditModal({
             })
             .select("id")
             .single();
-          
+
           if (insertError) throw insertError;
           if (inserted) newChildIds.push(inserted.id);
         }
@@ -704,7 +775,7 @@ export function PackagePolicyEditModal({
       const mainPolicy = policies.find(p => p.policy_type_parent === "THIRD_FULL");
       if (mainPolicy) {
         const allSelectedIds = [...selectedChildIds, ...newChildIds];
-        
+
         // Remove old links that are no longer selected
         const toRemove = linkedChildIds.filter(id => !allSelectedIds.includes(id));
         if (toRemove.length > 0) {
@@ -714,7 +785,7 @@ export function PackagePolicyEditModal({
             .eq("policy_id", mainPolicy.id)
             .in("child_id", toRemove);
         }
-        
+
         // Add new links
         const toAdd = allSelectedIds.filter(id => !linkedChildIds.includes(id));
         if (toAdd.length > 0) {
@@ -727,7 +798,44 @@ export function PackagePolicyEditModal({
         }
       }
 
-      // 3. Process each policy
+      // 3. Persist client-level under24 fields. Mirrors PolicyEditDrawer:
+      // legacy `additional_driver` rows keep their driver name/id; "none"
+      // and "client" wipe the driver fields.
+      if (clientId) {
+        await supabase
+          .from('clients')
+          .update({
+            under24_type: under24Type,
+            under24_driver_name: under24Type === 'additional_driver' ? under24DriverName : null,
+            under24_driver_id: under24Type === 'additional_driver' ? under24DriverId : null,
+            less_than_24: under24Type !== 'none',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', clientId);
+      }
+      const clientUnder24 = under24Type !== 'none';
+
+      // 4. If we're in single mode and the user enabled addons, the
+      // existing single policy needs a group_id so the addons can attach
+      // to it. Create a policy_groups row up front and stamp the existing
+      // row with that id during the update step below.
+      let effectiveGroupId: string | null = groupId || null;
+      const enabledAddons = packageAddons.filter((a) => a.enabled);
+      if (isSingleMode && enabledAddons.length > 0 && !effectiveGroupId) {
+        const { data: groupData, error: groupError } = await supabase
+          .from('policy_groups')
+          .insert({
+            client_id: clientId,
+            car_id: carId || null,
+            name: `باقة - ${new Date().toLocaleDateString('en-GB')}`,
+          })
+          .select()
+          .single();
+        if (groupError) throw groupError;
+        effectiveGroupId = groupData?.id || null;
+      }
+
+      // 5. Process each policy
       for (const policy of policies) {
         const state = editStates[policy.id];
         if (!state) continue;
@@ -742,6 +850,9 @@ export function PackagePolicyEditModal({
         // stays on its original type.
         const selectedId = state.companyId || '';
         const effectiveType = state.policyType || policy.policy_type_parent;
+        const effectiveChild = effectiveType === 'THIRD_FULL'
+          ? (state.policyTypeChild || policy.policy_type_child || null)
+          : null;
 
         // Recalculate profit based on the (possibly edited) policy type
         // using the selected company.
@@ -776,10 +887,10 @@ export function PackagePolicyEditModal({
           }
           profit = price - companyPayment;
         } else if (effectiveType === "THIRD_FULL" && selectedId) {
-          const ageBand: Enums<"age_band"> = policy.is_under_24 ? "UNDER_24" : "UP_24";
+          const ageBand: Enums<"age_band"> = clientUnder24 ? "UNDER_24" : "UP_24";
           const result = await calculatePolicyProfit({
             policyTypeParent: effectiveType as Enums<"policy_type_parent">,
-            policyTypeChild: (policy.policy_type_child || null) as Enums<"policy_type_child"> | null,
+            policyTypeChild: (effectiveChild || null) as Enums<"policy_type_child"> | null,
             companyId: selectedId,
             carType: (policy.cars?.car_type || "car") as Enums<"car_type">,
             ageBand,
@@ -802,11 +913,33 @@ export function PackagePolicyEditModal({
           insurance_price: price,
           payed_for_company: companyPayment,
           profit,
+          office_commission: effectiveType === 'ELZAMI'
+            ? (parseFloat(state.officeCommission) || 0)
+            : 0,
+          cancelled: state.cancelled,
+          transferred: state.transferred,
+          transferred_car_number: state.transferred ? (state.transferredCarNumber || null) : null,
+          notes: state.notes || null,
+          broker_id: state.brokerId === NO_BROKER ? null : state.brokerId,
+          is_under_24: clientUnder24,
           updated_at: new Date().toISOString(),
         };
+
+        // Stamp newly-created package id onto the existing single policy
+        // when the user just promoted it into a package.
+        if (isSingleMode && effectiveGroupId && policy.group_id !== effectiveGroupId) {
+          updatePayload.group_id = effectiveGroupId;
+        }
+
         if (effectiveType !== policy.policy_type_parent) {
           updatePayload.policy_type_parent = effectiveType as Enums<"policy_type_parent">;
         }
+        if (effectiveType === 'THIRD_FULL') {
+          updatePayload.policy_type_child = effectiveChild as Enums<"policy_type_child"> | null;
+        } else if (effectiveType !== policy.policy_type_parent) {
+          updatePayload.policy_type_child = null;
+        }
+
         if (effectiveType === 'ROAD_SERVICE') {
           updatePayload.road_service_id = selectedId || null;
           updatePayload.accident_fee_service_id = null;
@@ -829,13 +962,13 @@ export function PackagePolicyEditModal({
         if (error) throw error;
       }
 
-      // 4. Insert any new addon policies the user enabled in the
+      // 6. Insert any new addon policies the user enabled in the
       // package builder. Mirrors the wizard's addon-insert flow but
-      // inherits client/car/branch/age band from the existing package.
-      const enabledAddons = packageAddons.filter((a) => a.enabled);
+      // inherits client/car/branch/age band from the existing package
+      // (or the freshly-promoted single policy).
       if (enabledAddons.length > 0) {
         const { data: { user } } = await supabase.auth.getUser();
-        const ageBand: Enums<"age_band"> = isUnder24 ? "UNDER_24" : "UP_24";
+        const ageBand: Enums<"age_band"> = clientUnder24 ? "UNDER_24" : "UP_24";
         const carTypeForCalc = (carType || "car") as Enums<"car_type">;
         const addonTypeMap: Record<PackageAddon['type'], Enums<"policy_type_parent">> = {
           elzami: 'ELZAMI',
@@ -870,9 +1003,14 @@ export function PackagePolicyEditModal({
             category_id: null,
             policy_type_parent: addonTypeParent,
             policy_type_child: addonTypeChild,
-            company_id: addon.type === 'road_service' || addon.type === 'accident_fee_exemption'
-              ? null
-              : (addon.company_id || null),
+            // Match the wizard: save company_id for ALL addon types
+            // including road_service / accident_fee. The printed package
+            // invoice joins insurance_companies via company_id and would
+            // render "-" for the insurer column without it. The in-app
+            // PackageComponentsTable still prefers road_services /
+            // accident_fee_services for the badge label, so keeping both
+            // satisfies every consumer.
+            company_id: addon.company_id || null,
             start_date: addon.start_date || null,
             end_date: addon.end_date || null,
             issue_date: addon.start_date || null,
@@ -883,8 +1021,8 @@ export function PackagePolicyEditModal({
             road_service_id: addon.road_service_id || null,
             accident_fee_service_id: addon.accident_fee_service_id || null,
             office_commission: addon.type === 'elzami' ? parseFloat(addon.office_commission || '0') || 0 : 0,
-            group_id: groupId,
-            is_under_24: isUnder24,
+            group_id: effectiveGroupId,
+            is_under_24: clientUnder24,
             notes: 'إضافة ضمن باقة',
             branch_id: branchId || null,
             created_by_admin_id: user?.id || null,
@@ -894,13 +1032,21 @@ export function PackagePolicyEditModal({
         }
       }
 
-      toast({ title: "تم الحفظ", description: "تم تحديث جميع معاملات الباقة بنجاح" });
+      toast({
+        title: "تم الحفظ",
+        description: isSingleMode && enabledAddons.length === 0
+          ? "تم تحديث المعاملة بنجاح"
+          : "تم تحديث المعاملات بنجاح",
+      });
       // Trigger the same print/SMS dialog the wizard shows after a new
       // package is created. PolicySuccessDialog resolves the rest of the
       // group via group_id, so any policy id from the package works.
       const anchorPolicyId = policies[0]?.id || null;
       if (anchorPolicyId) {
         setSuccessPolicyId(anchorPolicyId);
+        // Treat as package whenever there are siblings or the user just
+        // promoted a single into a package via addons.
+        setSuccessIsPackage(!!effectiveGroupId);
         setShowSuccessDialog(true);
       } else {
         onOpenChange(false);
@@ -918,7 +1064,12 @@ export function PackagePolicyEditModal({
     }
   };
 
-  if (!groupId) return null;
+  if (!groupId && !policyId) return null;
+
+  const titleText = isSingleMode ? 'تعديل المعاملة' : 'تعديل الباقة';
+  const totalLabel = isSingleMode ? 'إجمالي' : 'إجمالي الباقة';
+  const saveLabel = isSingleMode ? 'حفظ' : 'حفظ جميع التغييرات';
+  const emptyText = isSingleMode ? 'لم يتم العثور على المعاملة' : 'لا توجد معاملات في هذه الباقة';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -929,7 +1080,7 @@ export function PackagePolicyEditModal({
               <Package className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <span>تعديل الباقة</span>
+              <span>{titleText}</span>
               {clientName && (
                 <span className="text-muted-foreground font-normal mr-2">
                   - {clientName}
@@ -950,7 +1101,7 @@ export function PackagePolicyEditModal({
           </div>
         ) : policies.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            لا توجد معاملات في هذه الباقة
+            {emptyText}
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col">
@@ -993,60 +1144,128 @@ export function PackagePolicyEditModal({
                         </div>
                         <Badge className={cn("text-xs font-bold", config.bg, config.text, "border", config.border)}>
                           {policyTypeLabels[effectiveType] || effectiveType}
+                          {effectiveType === 'THIRD_FULL' && state?.policyTypeChild
+                            ? ` - ${policyChildLabels[state.policyTypeChild] || state.policyTypeChild}`
+                            : ''}
                         </Badge>
                       </div>
 
-                      {/* Type switcher — only for service rows. Switching
-                          between ROAD_SERVICE and ACCIDENT_FEE_EXEMPTION
-                          swaps the service-options list and wipes the
-                          current companyId so the user has to pick a
-                          valid row from the new pool. */}
-                      {isServiceRow && (
+                      {/* Type switcher: full type list in single mode, restricted
+                          ROAD↔ACCIDENT switch otherwise (changing e.g. THIRD_FULL
+                          → ELZAMI inside a package would create duplicates / break
+                          tariff math, so it stays locked there). */}
+                      {isSingleMode ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold text-foreground/80">نوع المعاملة</Label>
+                            <Select
+                              value={effectiveType}
+                              onValueChange={(v) => {
+                                updateEditState(policy.id, 'policyType', v);
+                                // Sub-type and company depend on the type, so wipe
+                                // them whenever the type flips.
+                                updateEditState(policy.id, 'policyTypeChild', '');
+                                updateEditState(policy.id, 'companyId', '');
+                              }}
+                            >
+                              <SelectTrigger className="h-9 text-sm bg-background">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ELZAMI">إلزامي</SelectItem>
+                                <SelectItem value="THIRD_FULL">ثالث/شامل</SelectItem>
+                                <SelectItem value="ROAD_SERVICE">خدمات الطريق</SelectItem>
+                                <SelectItem value="ACCIDENT_FEE_EXEMPTION">إعفاء رسوم حادث</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {effectiveType === 'THIRD_FULL' && (
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-foreground/80">النوع الفرعي</Label>
+                              <Select
+                                value={state?.policyTypeChild || ''}
+                                onValueChange={(v) => updateEditState(policy.id, 'policyTypeChild', v)}
+                              >
+                                <SelectTrigger className="h-9 text-sm bg-background">
+                                  <SelectValue placeholder="اختر..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="THIRD">طرف ثالث</SelectItem>
+                                  <SelectItem value="FULL">شامل</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        isServiceRow && (
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold text-foreground/80">نوع الخدمة</Label>
+                            <Select
+                              value={effectiveType}
+                              onValueChange={(v) => {
+                                updateEditState(policy.id, 'policyType', v);
+                                // Reset the selected service id whenever the
+                                // type flips — the id belongs to a different
+                                // table and would otherwise be invalid.
+                                updateEditState(policy.id, 'companyId', '');
+                              }}
+                            >
+                              <SelectTrigger className="h-9 text-sm bg-background">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ROAD_SERVICE">خدمات الطريق</SelectItem>
+                                <SelectItem value="ACCIDENT_FEE_EXEMPTION">إعفاء رسوم حادث</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )
+                      )}
+
+                      {/* Company + broker row */}
+                      <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
-                          <Label className="text-xs font-semibold text-foreground/80">نوع الخدمة</Label>
+                          <Label className="text-xs font-semibold text-foreground/80">{companyLabel}</Label>
                           <Select
-                            value={effectiveType}
-                            onValueChange={(v) => {
-                              updateEditState(policy.id, 'policyType', v);
-                              // Reset the selected service id whenever the
-                              // type flips — the id belongs to a different
-                              // table and would otherwise be invalid.
-                              updateEditState(policy.id, 'companyId', '');
-                            }}
+                            value={state?.companyId || ''}
+                            onValueChange={(v) => updateEditState(policy.id, 'companyId', v)}
                           >
                             <SelectTrigger className="h-9 text-sm bg-background">
-                              <SelectValue />
+                              <SelectValue placeholder="اختر..." />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="ROAD_SERVICE">خدمات الطريق</SelectItem>
-                              <SelectItem value="ACCIDENT_FEE_EXEMPTION">إعفاء رسوم حادث</SelectItem>
+                              {companyOptions.length === 0 ? (
+                                <div className="px-2 py-1.5 text-xs text-muted-foreground">لا توجد خيارات متاحة</div>
+                              ) : (
+                                companyOptions.map((opt) => (
+                                  <SelectItem key={opt.id} value={opt.id}>
+                                    {opt.label}
+                                  </SelectItem>
+                                ))
+                              )}
                             </SelectContent>
                           </Select>
                         </div>
-                      )}
-
-                      {/* Company selector */}
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold text-foreground/80">{companyLabel}</Label>
-                        <Select
-                          value={state?.companyId || ''}
-                          onValueChange={(v) => updateEditState(policy.id, 'companyId', v)}
-                        >
-                          <SelectTrigger className="h-9 text-sm bg-background">
-                            <SelectValue placeholder="اختر..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {companyOptions.length === 0 ? (
-                              <div className="px-2 py-1.5 text-xs text-muted-foreground">لا توجد خيارات متاحة</div>
-                            ) : (
-                              companyOptions.map((opt) => (
-                                <SelectItem key={opt.id} value={opt.id}>
-                                  {opt.label}
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold text-foreground/80">الوسيط</Label>
+                          <Select
+                            value={state?.brokerId || NO_BROKER}
+                            onValueChange={(v) => updateEditState(policy.id, 'brokerId', v)}
+                          >
+                            <SelectTrigger className="h-9 text-sm bg-background">
+                              <SelectValue placeholder="اختياري" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={NO_BROKER}>بدون وسيط</SelectItem>
+                              {brokers.map((b) => (
+                                <SelectItem key={b.id} value={b.id}>
+                                  {b.name}
                                 </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
 
                       {/* Dates + Price */}
@@ -1086,9 +1305,87 @@ export function PackagePolicyEditModal({
                           />
                         </div>
                       </div>
+
+                      {/* Office commission — only meaningful for ELZAMI rows. */}
+                      {effectiveType === 'ELZAMI' && (
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold text-amber-600">عمولة للمكتب (₪)</Label>
+                          <Input
+                            type="number"
+                            value={state?.officeCommission || "0"}
+                            onChange={(e) => updateEditState(policy.id, "officeCommission", e.target.value)}
+                            className="h-9 text-left ltr-nums text-sm bg-background"
+                            placeholder="0"
+                          />
+                          <p className="text-[11px] text-muted-foreground">تدخل في حساب العميل كدين</p>
+                        </div>
+                      )}
+
+                      {/* Cancelled / transferred toggles + transferred car number */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="flex items-center gap-2 p-2 rounded-md bg-background border cursor-pointer">
+                          <Checkbox
+                            checked={!!state?.cancelled}
+                            onCheckedChange={(v) => updateEditState(policy.id, 'cancelled', !!v)}
+                          />
+                          <span className="text-xs font-medium">ملغاة</span>
+                        </label>
+                        <label className="flex items-center gap-2 p-2 rounded-md bg-background border cursor-pointer">
+                          <Checkbox
+                            checked={!!state?.transferred}
+                            onCheckedChange={(v) => updateEditState(policy.id, 'transferred', !!v)}
+                          />
+                          <span className="text-xs font-medium">منقولة</span>
+                        </label>
+                      </div>
+                      {state?.transferred && (
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold text-foreground/80">رقم السيارة المنقولة إليها</Label>
+                          <Input
+                            value={state?.transferredCarNumber || ""}
+                            onChange={(e) => updateEditState(policy.id, 'transferredCarNumber', e.target.value)}
+                            className="h-9 text-sm bg-background ltr-input"
+                            placeholder="رقم السيارة"
+                          />
+                        </div>
+                      )}
+
+                      {/* Notes */}
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-foreground/80">ملاحظات</Label>
+                        <Textarea
+                          value={state?.notes || ""}
+                          onChange={(e) => updateEditState(policy.id, 'notes', e.target.value)}
+                          rows={2}
+                          className="text-sm bg-background"
+                        />
+                      </div>
                     </div>
                   );
                 })}
+
+                {/* Modal-level under-24 control. Lives outside the per-card
+                    grid because it's a client property — applies to every
+                    policy in the modal, package or single. */}
+                {clientId && (
+                  <div className="space-y-2 p-3 bg-muted/30 rounded-lg border">
+                    <Label className="text-sm font-semibold">أقل من 24 سنة</Label>
+                    <RadioGroup
+                      value={under24Type === 'additional_driver' ? 'client' : under24Type}
+                      onValueChange={(v: 'none' | 'client') => setUnder24Type(v)}
+                      className="flex flex-col gap-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="none" id={`under24_none_${policyId || groupId || 'modal'}`} />
+                        <Label htmlFor={`under24_none_${policyId || groupId || 'modal'}`} className="cursor-pointer text-sm">لا</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="client" id={`under24_client_${policyId || groupId || 'modal'}`} />
+                        <Label htmlFor={`under24_client_${policyId || groupId || 'modal'}`} className="cursor-pointer text-sm">نعم – العميل أقل من 24</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                )}
 
                 {/* Package additions — show cards only for addon types
                     that aren't already in the package, so the user can
@@ -1134,7 +1431,7 @@ export function PackagePolicyEditModal({
                         elzamiCompanies={pkgElzamiCompanies}
                         thirdFullCompanies={pkgThirdFullCompanies}
                         carType={carType || undefined}
-                        ageBand={isUnder24 ? 'UNDER_24' : 'UP_24'}
+                        ageBand={under24Type !== 'none' ? 'UNDER_24' : 'UP_24'}
                         hideTypes={existingAddonTypes}
                       />
                     </div>
@@ -1222,7 +1519,7 @@ export function PackagePolicyEditModal({
                         {newChildren.map((child, index) => {
                           const errors = childErrors[child.id] || {};
                           const isLast = index === newChildren.length - 1;
-                          
+
                           return (
                             <div
                               key={child.id}
@@ -1242,7 +1539,7 @@ export function PackagePolicyEditModal({
                                   حذف
                                 </Button>
                               </div>
-                              
+
                               <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
                                 {/* Full Name */}
                                 <div className="space-y-0.5">
@@ -1260,7 +1557,7 @@ export function PackagePolicyEditModal({
                                     <p className="text-xs text-destructive">{errors.full_name}</p>
                                   )}
                                 </div>
-                                
+
                                 {/* ID Number */}
                                 <div className="space-y-0.5">
                                   <Label className="text-xs">
@@ -1277,7 +1574,7 @@ export function PackagePolicyEditModal({
                                     <p className="text-xs text-destructive">{errors.id_number}</p>
                                   )}
                                 </div>
-                                
+
                                 {/* Relation */}
                                 <div className="space-y-0.5">
                                   <Label className="text-xs">الصلة</Label>
@@ -1344,7 +1641,7 @@ export function PackagePolicyEditModal({
               <div className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Calculator className="h-4 w-4" />
-                  <span className="font-medium text-sm">إجمالي الباقة</span>
+                  <span className="font-medium text-sm">{totalLabel}</span>
                 </div>
                 <div className="text-xl font-bold text-primary ltr-nums">
                   {formatCurrency(calculateTotal())}
@@ -1369,7 +1666,7 @@ export function PackagePolicyEditModal({
             ) : (
               <Save className="h-4 w-4 ml-1" />
             )}
-            حفظ جميع التغييرات
+            {saveLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1384,7 +1681,7 @@ export function PackagePolicyEditModal({
           policyId={successPolicyId}
           clientId={clientId}
           clientPhone={clientPhone}
-          isPackage
+          isPackage={successIsPackage}
           onClose={() => {
             setShowSuccessDialog(false);
             setSuccessPolicyId(null);
