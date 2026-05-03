@@ -111,6 +111,9 @@ interface PackageBuilderSectionProps {
   /** Minimize the wizard and optionally navigate away — used by the
    *  "manage companies" links on the addon company selectors. */
   onMinimizeAndNavigate?: (path?: string, origin?: { x: number; y: number }) => void;
+  /** Hide cards for the listed addon types — used by the package edit
+   *  modal to suppress types that already exist in the package. */
+  hideTypes?: PackageAddon['type'][];
 }
 
 export function PackageBuilderSection({
@@ -130,7 +133,9 @@ export function PackageBuilderSection({
   errors = {},
   ageBand = 'ANY',
   onMinimizeAndNavigate,
+  hideTypes,
 }: PackageBuilderSectionProps) {
+  const isHidden = (t: PackageAddon['type']) => hideTypes?.includes(t) ?? false;
   const [loadingRoadPrice, setLoadingRoadPrice] = useState(false);
   const [loadingAccidentPrice, setLoadingAccidentPrice] = useState(false);
   const [loadingElzamiCommission, setLoadingElzamiCommission] = useState(false);
@@ -238,10 +243,10 @@ export function PackageBuilderSection({
   }, [roadServiceAddon.company_id, carType, roadServices]);
 
   // Determine which addons can be shown based on main policy type
-  const showElzamiAddon = mainPolicyType === 'THIRD_FULL';
-  const showThirdFullAddon = mainPolicyType === 'ELZAMI';
-  const showRoadServiceAddon = true;
-  const showAccidentFeeAddon = true;
+  const showElzamiAddon = mainPolicyType === 'THIRD_FULL' && !isHidden('elzami');
+  const showThirdFullAddon = mainPolicyType === 'ELZAMI' && !isHidden('third_full');
+  const showRoadServiceAddon = !isHidden('road_service');
+  const showAccidentFeeAddon = !isHidden('accident_fee_exemption');
 
   // Auto-initialize addon dates from main policy or third_full when enabled
   useEffect(() => {

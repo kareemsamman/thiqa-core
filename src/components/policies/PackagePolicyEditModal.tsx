@@ -23,6 +23,8 @@ import { formatCurrency } from "@/lib/utils";
 import { digitsOnly, isValidIsraeliId } from "@/lib/validation";
 import { ClientChild, NewChildForm, RELATION_OPTIONS, createEmptyChildForm } from "@/types/clientChildren";
 import type { Enums } from "@/integrations/supabase/types";
+import { PackageBuilderSection } from "@/components/policies/wizard/PackageBuilderSection";
+import type { PackageAddon, Company, RoadService as PkgRoadService, AccidentFeeService as PkgAccidentFeeService } from "@/components/policies/wizard/types";
 
 // Helper to calculate end date (1 year - 1 day from start)
 const calculateEndDate = (startDate: string): string => {
@@ -171,6 +173,34 @@ export function PackagePolicyEditModal({
   const [roadServices, setRoadServices] = useState<LookupOption[]>([]);
   const [accidentFeeServices, setAccidentFeeServices] = useState<LookupOption[]>([]);
 
+  // Extra context needed to insert new addon policies into the package
+  // (everything inherits from the existing package — same client, car,
+  // branch, age band).
+  const [carId, setCarId] = useState<string | null>(null);
+  const [branchId, setBranchId] = useState<string | null>(null);
+  const [carType, setCarType] = useState<string | null>(null);
+  const [carValue, setCarValue] = useState<number | null>(null);
+  const [carYear, setCarYear] = useState<number | null>(null);
+  const [isUnder24, setIsUnder24] = useState<boolean | null>(null);
+
+  // Package builder state — mirrors the wizard so we can reuse
+  // PackageBuilderSection. Initialize all four addon types as defaults
+  // (PackageBuilderSection's updateAddon only mutates entries that
+  // already exist in the array). Cards for types already present in the
+  // package are hidden via `hideTypes` below.
+  const [packageAddons, setPackageAddons] = useState<PackageAddon[]>([
+    { type: "elzami", enabled: false, company_id: "", insurance_price: "", elzami_commission: 0, office_commission: "0", start_date: "", end_date: "" },
+    { type: "third_full", enabled: false, company_id: "", insurance_price: "", policy_type_child: "", broker_buy_price: "", start_date: "", end_date: "" },
+    { type: "road_service", enabled: false, road_service_id: "", company_id: "", insurance_price: "", start_date: "", end_date: "" },
+    { type: "accident_fee_exemption", enabled: false, accident_fee_service_id: "", company_id: "", insurance_price: "", start_date: "", end_date: "" },
+  ]);
+  const [pkgElzamiCompanies, setPkgElzamiCompanies] = useState<Company[]>([]);
+  const [pkgThirdFullCompanies, setPkgThirdFullCompanies] = useState<Company[]>([]);
+  const [pkgRoadServiceCompanies, setPkgRoadServiceCompanies] = useState<Company[]>([]);
+  const [pkgAccidentFeeCompanies, setPkgAccidentFeeCompanies] = useState<Company[]>([]);
+  const [pkgRoadServices, setPkgRoadServices] = useState<PkgRoadService[]>([]);
+  const [pkgAccidentFeeServices, setPkgAccidentFeeServices] = useState<PkgAccidentFeeService[]>([]);
+
   const getCompanyOptions = useCallback(
     (policyType: string): LookupOption[] => {
       if (policyType === 'ELZAMI') return elzamiCompanies;
@@ -201,6 +231,8 @@ export function PackagePolicyEditModal({
           is_under_24,
           group_id,
           client_id,
+          car_id,
+          branch_id,
           insurance_companies (id, name, name_ar),
           road_services (id, name, name_ar),
           accident_fee_services (id, name, name_ar),
@@ -241,10 +273,10 @@ export function PackagePolicyEditModal({
 
       // Fetch the lookup tables in parallel so the selects populate before
       // the user starts editing.
-      const [icRes, rsRes, afRes] = await Promise.all([
+      const [icRes, rsRes, afRes, pkgRsRes, pkgAfRes] = await Promise.all([
         supabase
           .from('insurance_companies')
-          .select('id, name, name_ar, category_parent')
+          .select('id, name, name_ar, category_parent, elzami_commission, broker_id')
           .order('name_ar', { ascending: true }),
         supabase
           .from('road_services')
@@ -254,6 +286,19 @@ export function PackagePolicyEditModal({
           .from('accident_fee_services')
           .select('id, name, name_ar')
           .order('name_ar', { ascending: true }),
+        // Full rows (with allowed_car_types / active) for the package
+        // builder's filtering logic — kept as a separate fetch so we
+        // don't disturb the existing LookupOption selects.
+        supabase
+          .from('road_services')
+          .select('id, name, name_ar, allowed_car_types, active')
+          .eq('active', true)
+          .order('sort_order', { ascending: true }),
+        supabase
+          .from('accident_fee_services')
+          .select('id, name, name_ar, active')
+          .eq('active', true)
+          .order('sort_order', { ascending: true }),
       ]);
 
       const toOption = (row: any): LookupOption => ({
@@ -296,12 +341,41 @@ export function PackagePolicyEditModal({
       setRoadServices((rsRes.data || []).map(toOption));
       setAccidentFeeServices((afRes.data || []).map(toOption));
 
+      // Build the typed Company[] buckets the package builder expects.
+      // Road service / accident fee company filters mirror Step3 of the
+      // wizard — accident fee uses the full active company list because
+      // the data team hasn't tagged those rows with category_parent yet.
+      const fullCompanies = icRows as Company[];
+      setPkgElzamiCompanies(fullCompanies.filter((r) => matchesCategory(r, 'ELZAMI')));
+      setPkgThirdFullCompanies(
+        fullCompanies.filter((r) => {
+          if (matchesCategory(r, 'THIRD_FULL')) return true;
+          if (!r.category_parent || (Array.isArray(r.category_parent) && r.category_parent.length === 0)) return true;
+          return false;
+        }),
+      );
+      setPkgRoadServiceCompanies(fullCompanies.filter((r) => matchesCategory(r, 'ROAD_SERVICE')));
+      setPkgAccidentFeeCompanies(fullCompanies);
+      setPkgRoadServices((pkgRsRes.data || []) as PkgRoadService[]);
+      setPkgAccidentFeeServices((pkgAfRes.data || []) as PkgAccidentFeeService[]);
+
       // Get client name, car number, and client_id from first policy
       if (sortedData.length > 0) {
         setClientName(sortedData[0].clients?.full_name || "");
         setCarNumber(sortedData[0].cars?.car_number || "");
         const cId = (sortedData[0] as any).client_id;
         setClientId(cId || null);
+        // Capture car / branch / age band so we can stamp newly-added
+        // addon policies with the same context as the rest of the package.
+        setCarId((sortedData[0] as any).car_id || null);
+        setBranchId((sortedData[0] as any).branch_id || null);
+        setCarType(sortedData[0].cars?.car_type || null);
+        setCarValue(sortedData[0].cars?.car_value ?? null);
+        setCarYear(sortedData[0].cars?.year ?? null);
+        // is_under_24 is per-policy in the schema but uniform across the
+        // package — pull from THIRD_FULL when present, else from any row.
+        const ageSourcePolicy = sortedData.find((p) => p.policy_type_parent === 'THIRD_FULL') || sortedData[0];
+        setIsUnder24(ageSourcePolicy.is_under_24 ?? null);
         
         // Fetch existing children for this client
         if (cId) {
@@ -354,6 +428,18 @@ export function PackagePolicyEditModal({
       setSelectedChildIds([]);
       setNewChildren([]);
       setChildErrors({});
+      setCarId(null);
+      setBranchId(null);
+      setCarType(null);
+      setCarValue(null);
+      setCarYear(null);
+      setIsUnder24(null);
+      setPackageAddons([
+        { type: "elzami", enabled: false, company_id: "", insurance_price: "", elzami_commission: 0, office_commission: "0", start_date: "", end_date: "" },
+        { type: "third_full", enabled: false, company_id: "", insurance_price: "", policy_type_child: "", broker_buy_price: "", start_date: "", end_date: "" },
+        { type: "road_service", enabled: false, road_service_id: "", company_id: "", insurance_price: "", start_date: "", end_date: "" },
+        { type: "accident_fee_exemption", enabled: false, accident_fee_service_id: "", company_id: "", insurance_price: "", start_date: "", end_date: "" },
+      ]);
     }
   }, [open]);
 
@@ -653,6 +739,71 @@ export function PackagePolicyEditModal({
         if (error) throw error;
       }
 
+      // 4. Insert any new addon policies the user enabled in the
+      // package builder. Mirrors the wizard's addon-insert flow but
+      // inherits client/car/branch/age band from the existing package.
+      const enabledAddons = packageAddons.filter((a) => a.enabled);
+      if (enabledAddons.length > 0) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const ageBand: Enums<"age_band"> = isUnder24 ? "UNDER_24" : "UP_24";
+        const carTypeForCalc = (carType || "car") as Enums<"car_type">;
+        const addonTypeMap: Record<PackageAddon['type'], Enums<"policy_type_parent">> = {
+          elzami: 'ELZAMI',
+          third_full: 'THIRD_FULL',
+          road_service: 'ROAD_SERVICE',
+          accident_fee_exemption: 'ACCIDENT_FEE_EXEMPTION',
+        };
+
+        for (const addon of enabledAddons) {
+          const addonTypeParent = addonTypeMap[addon.type];
+          const addonTypeChild = addon.type === 'third_full' && addon.policy_type_child
+            ? (addon.policy_type_child as Enums<"policy_type_child">)
+            : null;
+          const addonInsurancePrice = parseFloat(addon.insurance_price) || 0;
+
+          const profitData = await calculatePolicyProfit({
+            policyTypeParent: addonTypeParent,
+            policyTypeChild: addonTypeChild,
+            companyId: addon.company_id || '',
+            carType: carTypeForCalc,
+            ageBand,
+            carValue,
+            carYear,
+            insurancePrice: addonInsurancePrice,
+            roadServiceId: addon.road_service_id || null,
+            accidentFeeServiceId: addon.accident_fee_service_id || null,
+          });
+
+          const { error: addonError } = await supabase.from('policies').insert({
+            client_id: clientId,
+            car_id: carId || null,
+            category_id: null,
+            policy_type_parent: addonTypeParent,
+            policy_type_child: addonTypeChild,
+            company_id: addon.type === 'road_service' || addon.type === 'accident_fee_exemption'
+              ? null
+              : (addon.company_id || null),
+            start_date: addon.start_date || null,
+            end_date: addon.end_date || null,
+            issue_date: addon.start_date || null,
+            insurance_price: addonInsurancePrice,
+            profit: profitData.profit,
+            payed_for_company: profitData.companyPayment,
+            company_cost_snapshot: profitData.companyPayment,
+            road_service_id: addon.road_service_id || null,
+            accident_fee_service_id: addon.accident_fee_service_id || null,
+            office_commission: addon.type === 'elzami' ? parseFloat(addon.office_commission || '0') || 0 : 0,
+            group_id: groupId,
+            is_under_24: isUnder24,
+            notes: 'إضافة ضمن باقة',
+            branch_id: branchId || null,
+            created_by_admin_id: user?.id || null,
+          } as never);
+
+          if (addonError) throw addonError;
+        }
+      }
+
       toast({ title: "تم الحفظ", description: "تم تحديث جميع معاملات الباقة بنجاح" });
       onOpenChange(false);
       onSaved?.();
@@ -835,6 +986,57 @@ export function PackagePolicyEditModal({
                     </div>
                   );
                 })}
+
+                {/* Package additions — show cards only for addon types
+                    that aren't already in the package, so the user can
+                    extend an existing باقة without leaving the modal. */}
+                {(() => {
+                  const existingTypeMap: Record<string, PackageAddon['type']> = {
+                    ELZAMI: 'elzami',
+                    THIRD_FULL: 'third_full',
+                    ROAD_SERVICE: 'road_service',
+                    ACCIDENT_FEE_EXEMPTION: 'accident_fee_exemption',
+                  };
+                  const existingAddonTypes = policies
+                    .map((p) => existingTypeMap[(editStates[p.id]?.policyType || p.policy_type_parent) as string])
+                    .filter(Boolean) as PackageAddon['type'][];
+                  // PackageBuilderSection's ELZAMI ↔ THIRD_FULL toggle is
+                  // gated by mainPolicyType. THIRD_FULL beats ELZAMI as
+                  // "main" since it's the one that anchors the package
+                  // (drivers, broker) in the wizard too.
+                  const mainPolicyType = existingAddonTypes.includes('third_full')
+                    ? 'THIRD_FULL'
+                    : existingAddonTypes.includes('elzami')
+                      ? 'ELZAMI'
+                      : 'THIRD_FULL';
+                  const mainPolicy = policies.find((p) => p.policy_type_parent === mainPolicyType) || policies[0];
+                  const mainState = mainPolicy ? editStates[mainPolicy.id] : null;
+                  const mainStartDate = mainState?.startDate || mainPolicy?.start_date || '';
+                  const mainEndDate = mainState?.endDate || mainPolicy?.end_date || '';
+                  const allFour: PackageAddon['type'][] = ['elzami', 'third_full', 'road_service', 'accident_fee_exemption'];
+                  const missing = allFour.filter((t) => !existingAddonTypes.includes(t));
+                  if (missing.length === 0) return null;
+                  return (
+                    <div className="space-y-2 p-3 bg-muted/20 rounded-lg border border-dashed">
+                      <PackageBuilderSection
+                        addons={packageAddons}
+                        onAddonsChange={setPackageAddons}
+                        mainPolicyType={mainPolicyType}
+                        mainStartDate={mainStartDate}
+                        mainEndDate={mainEndDate}
+                        roadServices={pkgRoadServices}
+                        accidentFeeServices={pkgAccidentFeeServices}
+                        roadServiceCompanies={pkgRoadServiceCompanies}
+                        accidentFeeCompanies={pkgAccidentFeeCompanies}
+                        elzamiCompanies={pkgElzamiCompanies}
+                        thirdFullCompanies={pkgThirdFullCompanies}
+                        carType={carType || undefined}
+                        ageBand={isUnder24 ? 'UNDER_24' : 'UP_24'}
+                        hideTypes={existingAddonTypes}
+                      />
+                    </div>
+                  );
+                })()}
 
                 {/* Extra Drivers Section */}
                 {clientId && (
