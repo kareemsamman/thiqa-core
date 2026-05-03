@@ -48,7 +48,6 @@ import {
 } from "lucide-react";
 import { Lock as LockIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
-import { PolicyEditDrawer } from "./PolicyEditDrawer";
 import { PolicyPaymentsSection } from "./PolicyPaymentsSection";
 import { PolicyFilesSection } from "./PolicyFilesSection";
 import { PackageComponentsTable } from "./PackageComponentsTable";
@@ -1581,7 +1580,12 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
 
       {policy && (
         <>
-          <PolicyEditDrawer open={editOpen} onOpenChange={setEditOpen} policy={policy} onSaved={handleEditComplete} />
+          <PackagePolicyEditModal
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            policyId={policy.id}
+            onSaved={handleEditComplete}
+          />
           {/* When the drawer is sitting on a package, canceling should
               mark every sibling as cancelled in one shot — not just the
               primary — otherwise the user has to hunt down each component

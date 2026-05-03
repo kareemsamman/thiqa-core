@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
-import { PolicyEditDrawer } from "@/components/policies/PolicyEditDrawer";
+import { PackagePolicyEditModal } from "@/components/policies/PackagePolicyEditModal";
 import { PolicyFilters, PolicyFilterValues } from "@/components/policies/PolicyFilters";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { PolicyTableView } from "@/components/policies/PolicyTableView";
@@ -360,41 +360,6 @@ export default function Policies() {
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
-  // Prepare policy for edit drawer
-  const prepareForEdit = (policy: PolicyRecord) => {
-    return {
-      id: policy.id,
-      policy_type_parent: policy.policy_type_parent,
-      policy_type_child: policy.policy_type_child,
-      start_date: policy.start_date,
-      end_date: policy.end_date,
-      insurance_price: policy.insurance_price,
-      cancelled: policy.cancelled,
-      transferred: policy.transferred,
-      transferred_car_number: policy.transferred_car_number,
-      is_under_24: policy.is_under_24,
-      notes: policy.notes,
-      broker_id: policy.broker_id,
-      clients: {
-        id: policy.clients?.id || '',
-        full_name: policy.clients?.full_name || '',
-        less_than_24: policy.clients?.less_than_24 || false,
-      },
-      cars: {
-        id: policy.cars?.id || '',
-        car_number: policy.cars?.car_number || '',
-        car_type: policy.cars?.car_type || null,
-        car_value: policy.cars?.car_value || null,
-        year: policy.cars?.year || null,
-      },
-      insurance_companies: {
-        id: policy.insurance_companies?.id || '',
-        name: policy.insurance_companies?.name || '',
-        name_ar: policy.insurance_companies?.name_ar || null,
-      },
-    };
-  };
-
   return (
     <MainLayout>
       <Header
@@ -527,13 +492,18 @@ export default function Policies() {
       />
 
       {selectedPolicyForEdit && (
-        <PolicyEditDrawer
+        <PackagePolicyEditModal
           open={editOpen}
           onOpenChange={(open) => {
             setEditOpen(open);
             if (!open) setSelectedPolicyForEdit(null);
           }}
-          policy={prepareForEdit(selectedPolicyForEdit)}
+          // Single vs package routing — packages still go through the
+          // group_id branch so every sibling row stays in sync; single
+          // policies go through the policy_id branch and show one card.
+          {...(selectedPolicyForEdit.group_id
+            ? { groupId: selectedPolicyForEdit.group_id }
+            : { policyId: selectedPolicyForEdit.id })}
           onSaved={() => {
             // Optimistic: Update local state immediately
             setEditOpen(false);
