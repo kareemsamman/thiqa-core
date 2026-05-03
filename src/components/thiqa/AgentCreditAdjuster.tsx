@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Loader2, MessageSquare, Megaphone, Bot } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Loader2, MessageSquare, Megaphone, Bot, Infinity as InfinityIcon } from "lucide-react";
 
 type UsageType = "sms" | "marketing_sms" | "ai_chat";
 
@@ -14,13 +15,27 @@ interface Row {
   key: UsageType;
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
+  /** Column on subscription_plans that holds the base monthly cap. */
+  planLimitColumn: "sms_limit" | "marketing_sms_limit" | "ai_limit";
+  /** Column on agents that holds the per-agent override (NULL=inherit, -1=unlimited). */
+  overrideColumn: "sms_limit_override" | "marketing_sms_limit_override" | "ai_limit_override";
 }
 
 const ROWS: Row[] = [
-  { key: "sms",           label: "رسائل SMS",     Icon: MessageSquare },
-  { key: "marketing_sms", label: "SMS تسويقية",   Icon: Megaphone     },
-  { key: "ai_chat",       label: "استعلامات AI", Icon: Bot           },
+  { key: "sms",           label: "رسائل SMS",     Icon: MessageSquare, planLimitColumn: "sms_limit",           overrideColumn: "sms_limit_override"           },
+  { key: "marketing_sms", label: "SMS تسويقية",   Icon: Megaphone,     planLimitColumn: "marketing_sms_limit", overrideColumn: "marketing_sms_limit_override" },
+  { key: "ai_chat",       label: "استعلامات AI", Icon: Bot,           planLimitColumn: "ai_limit",            overrideColumn: "ai_limit_override"            },
 ];
+
+/** null = unlimited, number = hard cap. Mirrors the effective() helper
+ *  in AgentUsageStats so the adjuster shows the same number the agent
+ *  sees on /subscription. */
+function effectiveLimit(override: number | null | undefined, plan: number | null | undefined): number | null {
+  if (override === -1) return null;
+  if (override !== null && override !== undefined) return override;
+  if (plan === null || plan === undefined) return null;
+  return plan;
+}
 
 interface Props {
   agentId: string;
@@ -36,6 +51,11 @@ export function AgentCreditAdjuster({ agentId, onAdjusted }: Props) {
     marketing_sms: 0,
     ai_chat: 0,
   });
+  const [limits, setLimits] = useState<Record<UsageType, number | null>>({
+    sms: null,
+    marketing_sms: null,
+    ai_chat: null,
+  });
   const [drafts, setDrafts] = useState<Record<UsageType, string>>({
     sms: "",
     marketing_sms: "",
@@ -47,30 +67,59 @@ export function AgentCreditAdjuster({ agentId, onAdjusted }: Props) {
     ai_chat: false,
   });
 
-  const fetchCounts = async () => {
+  const fetchData = async () => {
     setLoading(true);
     const period = format(new Date(), "yyyy-MM");
-    const { data, error } = await supabase
-      .from("agent_usage_log")
-      .select("usage_type, count")
-      .eq("agent_id", agentId)
-      .eq("period", period);
-    if (error) {
-      toast.error("فشل في تحميل العدّادات: " + error.message);
-    } else {
-      const map: Record<UsageType, number> = { sms: 0, marketing_sms: 0, ai_chat: 0 };
-      (data || []).forEach((r: any) => {
-        if (r.usage_type === "sms" || r.usage_type === "marketing_sms" || r.usage_type === "ai_chat") {
-          map[r.usage_type as UsageType] = (map[r.usage_type as UsageType] ?? 0) + (r.count ?? 0);
-        }
-      });
-      setCounts(map);
+
+    const [usageRes, agentRes] = await Promise.all([
+      supabase
+        .from("agent_usage_log")
+        .select("usage_type, count")
+        .eq("agent_id", agentId)
+        .eq("period", period),
+      supabase
+        .from("agents")
+        .select("plan, sms_limit_override, marketing_sms_limit_override, ai_limit_override")
+        .eq("id", agentId)
+        .maybeSingle(),
+    ]);
+
+    if (usageRes.error) {
+      toast.error("فشل في تحميل العدّادات: " + usageRes.error.message);
+      setLoading(false);
+      return;
     }
+
+    const countMap: Record<UsageType, number> = { sms: 0, marketing_sms: 0, ai_chat: 0 };
+    (usageRes.data || []).forEach((r: any) => {
+      if (r.usage_type === "sms" || r.usage_type === "marketing_sms" || r.usage_type === "ai_chat") {
+        countMap[r.usage_type as UsageType] += r.count ?? 0;
+      }
+    });
+    setCounts(countMap);
+
+    // Resolve effective limit per row (override beats plan default).
+    const planKey = (agentRes.data as any)?.plan;
+    let planLimits: Record<string, number | null> = {};
+    if (planKey) {
+      const { data: pData } = await supabase
+        .from("subscription_plans")
+        .select("sms_limit, marketing_sms_limit, ai_limit")
+        .eq("plan_key", planKey)
+        .maybeSingle();
+      if (pData) planLimits = pData as any;
+    }
+    const overrides = (agentRes.data as any) ?? {};
+    const limitMap: Record<UsageType, number | null> = { sms: null, marketing_sms: null, ai_chat: null };
+    for (const row of ROWS) {
+      limitMap[row.key] = effectiveLimit(overrides[row.overrideColumn], planLimits[row.planLimitColumn] ?? null);
+    }
+    setLimits(limitMap);
     setLoading(false);
   };
 
   useEffect(() => {
-    if (agentId) fetchCounts();
+    if (agentId) fetchData();
   }, [agentId]);
 
   const handleApply = async (row: Row) => {
@@ -117,10 +166,17 @@ export function AgentCreditAdjuster({ agentId, onAdjusted }: Props) {
           </div>
         ) : (
           <div className="space-y-3">
-            {ROWS.map((row) => (
+            {ROWS.map((row) => {
+              const used = counts[row.key];
+              const cap = limits[row.key];
+              const overCap = cap !== null && used > cap;
+              return (
               <div
                 key={row.key}
-                className="grid grid-cols-1 sm:grid-cols-[180px_1fr_140px_auto] items-center gap-3 p-3 border rounded-lg"
+                className={cn(
+                  "grid grid-cols-1 sm:grid-cols-[180px_1fr_140px_auto] items-center gap-3 p-3 border rounded-lg",
+                  overCap && "border-red-500/50 bg-red-500/5",
+                )}
               >
                 <div className="flex items-center gap-2">
                   <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
@@ -128,11 +184,19 @@ export function AgentCreditAdjuster({ agentId, onAdjusted }: Props) {
                   </div>
                   <div className="text-sm font-medium">{row.label}</div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  العدّاد الحالي:{" "}
-                  <strong className="tabular-nums text-foreground">
-                    {counts[row.key].toLocaleString("en-US")}
+                <div className="text-xs text-muted-foreground flex items-baseline gap-1">
+                  <span>العدّاد الحالي:</span>
+                  <strong
+                    className={cn(
+                      "tabular-nums ltr-nums text-base",
+                      overCap ? "text-red-600" : "text-foreground",
+                    )}
+                  >
+                    {used.toLocaleString("en-US")}
                   </strong>
+                  <span className="ltr-nums text-muted-foreground">
+                    / {cap === null ? <InfinityIcon className="h-3.5 w-3.5 inline" /> : cap.toLocaleString("en-US")}
+                  </span>
                 </div>
                 <Input
                   type="number"
@@ -157,7 +221,8 @@ export function AgentCreditAdjuster({ agentId, onAdjusted }: Props) {
                   تطبيق
                 </Button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </CardContent>
