@@ -1365,6 +1365,43 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     });
   }, [policies]);
 
+  // Fetch file counts up-front so the tab badges are accurate before the
+  // user clicks into the tabs. Radix Tabs unmounts inactive TabsContent,
+  // so ClientFilesTab's own onCountChange wouldn't fire until activated.
+  const policyIdsKey = useMemo(
+    () => clientFilesPolicyRefs.map((p) => p.id).sort().join(','),
+    [clientFilesPolicyRefs],
+  );
+  useEffect(() => {
+    if (!policyIdsKey) {
+      setSystemFilesCount(0);
+      setClientFilesCount(0);
+      return;
+    }
+    const policyIds = policyIdsKey.split(',');
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('media_files')
+        .select('entity_type')
+        .in('entity_id', policyIds)
+        .in('entity_type', ['policy_crm', 'policy', 'policy_insurance'])
+        .is('deleted_at', null);
+      if (cancelled || error) return;
+      let sys = 0;
+      let cli = 0;
+      for (const row of data || []) {
+        if (row.entity_type === 'policy_crm') sys++;
+        else cli++;
+      }
+      setSystemFilesCount(sys);
+      setClientFilesCount(cli);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [policyIdsKey]);
+
   // Group payments by batch_id for unified display
   const groupedPayments = useMemo((): GroupedPayment[] => {
     const groups = new Map<string, GroupedPayment>();
