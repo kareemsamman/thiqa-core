@@ -34,6 +34,7 @@ import { ClientFilters, ClientFilterValues } from "@/components/clients/ClientFi
 import { RowActionsMenu } from "@/components/shared/RowActionsMenu";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { useShortcutAction } from "@/hooks/useShortcutAction";
+import { useAgentContext } from "@/hooks/useAgentContext";
 
 interface Client {
   id: string;
@@ -68,6 +69,10 @@ export default function Clients() {
   const navigate = useNavigate();
   const { clientId: urlClientId } = useParams<{ clientId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
+  // Tenant guard: super admins bypass RLS, so list queries must
+  // filter on agent_id explicitly during impersonation. For regular
+  // agent users this is redundant with RLS but harmless.
+  const { agentId, loading: agentContextLoading } = useAgentContext();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -116,24 +121,24 @@ export default function Clients() {
     }
 
     if (openClientId !== viewingClient?.id) {
-      supabase
+      let q = supabase
         .from('clients')
         .select('*, broker:brokers(id, name), branch:branches(id, name, name_ar), created_by:profiles!clients_created_by_admin_id_fkey(full_name, email)')
         .eq('id', openClientId)
-        .is('deleted_at', null)
-        .single()
-        .then(({ data, error }) => {
-          if (data && !error) {
-            setViewingClient(data);
-            setInitialCarFilter(carId || null);
-            // Clear legacy query params if present
-            if (searchParams.get('open')) {
-              setSearchParams({});
-            }
+        .is('deleted_at', null);
+      if (agentId) q = q.eq('agent_id', agentId);
+      q.single().then(({ data, error }) => {
+        if (data && !error) {
+          setViewingClient(data);
+          setInitialCarFilter(carId || null);
+          // Clear legacy query params if present
+          if (searchParams.get('open')) {
+            setSearchParams({});
           }
-        });
+        }
+      });
     }
-  }, [urlClientId, searchParams, setSearchParams, viewingClient]);
+  }, [urlClientId, searchParams, setSearchParams, viewingClient, agentId]);
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
@@ -144,6 +149,9 @@ export default function Clients() {
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
+
+      // Tenant scope — see useAgentContext import comment above.
+      if (agentId) query = query.eq('agent_id', agentId);
 
       if (searchQuery) {
         const normalized = normalizeArabic(searchQuery);
@@ -183,11 +191,14 @@ export default function Clients() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchQuery, filters, toast]);
+  }, [currentPage, searchQuery, filters, toast, agentId]);
 
   useEffect(() => {
+    // Wait for the agent context to resolve so we never query
+    // without the tenant filter during impersonation.
+    if (agentContextLoading) return;
     fetchClients();
-  }, [fetchClients]);
+  }, [fetchClients, agentContextLoading]);
 
   const handleDelete = async () => {
     if (!deletingClient) return;
