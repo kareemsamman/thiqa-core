@@ -118,7 +118,16 @@ interface EditState {
   endDate: string;
   issueDate: string;
   insurancePrice: string;
+  // For non-service rows this IS the insurance company id. For
+  // ROAD_SERVICE / ACCIDENT_FEE_EXEMPTION rows it's the *service* id
+  // (a road_services / accident_fee_services row), kept under the same
+  // name to avoid touching every consumer.
   companyId: string;
+  // Real insurance company (insurance_companies.id) for service rows —
+  // the printed package invoice joins on this column, so we surface it
+  // as a separate select for ROAD_SERVICE / ACCIDENT_FEE_EXEMPTION.
+  // Unused (left blank) for non-service rows.
+  insuranceCompanyId: string;
   // The (possibly switched) policy type. In package mode the UI only
   // allows ROAD_SERVICE ↔ ACCIDENT_FEE_EXEMPTION switches; in single
   // mode the user can flip between any of the four types.
@@ -336,6 +345,7 @@ export function PackagePolicyEditModal({
           issueDate: p.issue_date || p.start_date || "",
           insurancePrice: p.insurance_price?.toString() || "0",
           companyId: currentCompanyId,
+          insuranceCompanyId: p.insurance_companies?.id || "",
           policyType: p.policy_type_parent,
           policyTypeChild: p.policy_type_child || "",
           brokerId: p.broker_id || NO_BROKER,
@@ -943,11 +953,14 @@ export function PackagePolicyEditModal({
         if (effectiveType === 'ROAD_SERVICE') {
           updatePayload.road_service_id = selectedId || null;
           updatePayload.accident_fee_service_id = null;
-          updatePayload.company_id = null;
+          // Persist the insurer chosen in the new "شركة التأمين"
+          // select — printed invoice joins on company_id so leaving
+          // it null was rendering "-" for the insurer column.
+          updatePayload.company_id = state.insuranceCompanyId || null;
         } else if (effectiveType === 'ACCIDENT_FEE_EXEMPTION') {
           updatePayload.accident_fee_service_id = selectedId || null;
           updatePayload.road_service_id = null;
-          updatePayload.company_id = null;
+          updatePayload.company_id = state.insuranceCompanyId || null;
         } else {
           updatePayload.company_id = selectedId || null;
           updatePayload.road_service_id = null;
@@ -1223,7 +1236,11 @@ export function PackagePolicyEditModal({
                         )
                       )}
 
-                      {/* Company + broker row */}
+                      {/* Company + (broker or insurance company) row.
+                          For service rows we replace الوسيط with شركة
+                          التأمين so the user can set the insurer that
+                          shows on the printed invoice — broker doesn't
+                          apply to road service / accident fee anyway. */}
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
                           <Label className="text-xs font-semibold text-foreground/80">{companyLabel}</Label>
@@ -1247,25 +1264,57 @@ export function PackagePolicyEditModal({
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs font-semibold text-foreground/80">الوسيط</Label>
-                          <Select
-                            value={state?.brokerId || NO_BROKER}
-                            onValueChange={(v) => updateEditState(policy.id, 'brokerId', v)}
-                          >
-                            <SelectTrigger className="h-9 text-sm bg-background">
-                              <SelectValue placeholder="اختياري" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={NO_BROKER}>بدون وسيط</SelectItem>
-                              {brokers.map((b) => (
-                                <SelectItem key={b.id} value={b.id}>
-                                  {b.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        {isServiceRow ? (
+                          (() => {
+                            const insuranceList = effectiveType === 'ROAD_SERVICE'
+                              ? pkgRoadServiceCompanies
+                              : pkgAccidentFeeCompanies;
+                            return (
+                              <div className="space-y-1">
+                                <Label className="text-xs font-semibold text-foreground/80">شركة التأمين</Label>
+                                <Select
+                                  value={state?.insuranceCompanyId || ''}
+                                  onValueChange={(v) => updateEditState(policy.id, 'insuranceCompanyId', v)}
+                                >
+                                  <SelectTrigger className="h-9 text-sm bg-background">
+                                    <SelectValue placeholder="اختر..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {insuranceList.length === 0 ? (
+                                      <div className="px-2 py-1.5 text-xs text-muted-foreground">لا توجد شركات</div>
+                                    ) : (
+                                      insuranceList.map((c) => (
+                                        <SelectItem key={c.id} value={c.id}>
+                                          {c.name_ar || c.name}
+                                        </SelectItem>
+                                      ))
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold text-foreground/80">الوسيط</Label>
+                            <Select
+                              value={state?.brokerId || NO_BROKER}
+                              onValueChange={(v) => updateEditState(policy.id, 'brokerId', v)}
+                            >
+                              <SelectTrigger className="h-9 text-sm bg-background">
+                                <SelectValue placeholder="اختياري" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={NO_BROKER}>بدون وسيط</SelectItem>
+                                {brokers.map((b) => (
+                                  <SelectItem key={b.id} value={b.id}>
+                                    {b.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                       </div>
 
                       {/* Dates + Price */}
@@ -1321,33 +1370,41 @@ export function PackagePolicyEditModal({
                         </div>
                       )}
 
-                      {/* Cancelled / transferred toggles + transferred car number */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <label className="flex items-center gap-2 p-2 rounded-md bg-background border cursor-pointer">
-                          <Checkbox
-                            checked={!!state?.cancelled}
-                            onCheckedChange={(v) => updateEditState(policy.id, 'cancelled', !!v)}
-                          />
-                          <span className="text-xs font-medium">ملغاة</span>
-                        </label>
-                        <label className="flex items-center gap-2 p-2 rounded-md bg-background border cursor-pointer">
-                          <Checkbox
-                            checked={!!state?.transferred}
-                            onCheckedChange={(v) => updateEditState(policy.id, 'transferred', !!v)}
-                          />
-                          <span className="text-xs font-medium">منقولة</span>
-                        </label>
-                      </div>
-                      {state?.transferred && (
-                        <div className="space-y-1">
-                          <Label className="text-xs font-semibold text-foreground/80">رقم السيارة المنقولة إليها</Label>
-                          <Input
-                            value={state?.transferredCarNumber || ""}
-                            onChange={(e) => updateEditState(policy.id, 'transferredCarNumber', e.target.value)}
-                            className="h-9 text-sm bg-background ltr-input"
-                            placeholder="رقم السيارة"
-                          />
-                        </div>
+                      {/* Cancelled / transferred toggles — only meaningful
+                          for "real" policies (THIRD_FULL / ELZAMI). Service
+                          addons are tied to the parent policy's lifecycle,
+                          so showing these toggles there just confuses the
+                          user. */}
+                      {!isServiceRow && (
+                        <>
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="flex items-center gap-2 p-2 rounded-md bg-background border cursor-pointer">
+                              <Checkbox
+                                checked={!!state?.cancelled}
+                                onCheckedChange={(v) => updateEditState(policy.id, 'cancelled', !!v)}
+                              />
+                              <span className="text-xs font-medium">ملغاة</span>
+                            </label>
+                            <label className="flex items-center gap-2 p-2 rounded-md bg-background border cursor-pointer">
+                              <Checkbox
+                                checked={!!state?.transferred}
+                                onCheckedChange={(v) => updateEditState(policy.id, 'transferred', !!v)}
+                              />
+                              <span className="text-xs font-medium">منقولة</span>
+                            </label>
+                          </div>
+                          {state?.transferred && (
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-foreground/80">رقم السيارة المنقولة إليها</Label>
+                              <Input
+                                value={state?.transferredCarNumber || ""}
+                                onChange={(e) => updateEditState(policy.id, 'transferredCarNumber', e.target.value)}
+                                className="h-9 text-sm bg-background ltr-input"
+                                placeholder="رقم السيارة"
+                              />
+                            </div>
+                          )}
+                        </>
                       )}
 
                       {/* Notes */}
