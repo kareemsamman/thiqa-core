@@ -24,6 +24,7 @@ import { ClientChild, NewChildForm, RELATION_OPTIONS, createEmptyChildForm } fro
 import type { Enums } from "@/integrations/supabase/types";
 import { PackageBuilderSection } from "@/components/policies/wizard/PackageBuilderSection";
 import type { PackageAddon, Company, RoadService as PkgRoadService, AccidentFeeService as PkgAccidentFeeService } from "@/components/policies/wizard/types";
+import { PolicySuccessDialog } from "@/components/policies/PolicySuccessDialog";
 
 // Helper to calculate end date (1 year - 1 day from start)
 const calculateEndDate = (startDate: string): string => {
@@ -199,6 +200,12 @@ export function PackagePolicyEditModal({
   const [pkgAccidentFeeCompanies, setPkgAccidentFeeCompanies] = useState<Company[]>([]);
   const [pkgRoadServices, setPkgRoadServices] = useState<PkgRoadService[]>([]);
   const [pkgAccidentFeeServices, setPkgAccidentFeeServices] = useState<PkgAccidentFeeService[]>([]);
+
+  // Print/SMS dialog after save — same component the wizard uses, so
+  // editing a package gets the same "ready to send" UX as creating one.
+  const [clientPhone, setClientPhone] = useState<string | null>(null);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [successPolicyId, setSuccessPolicyId] = useState<string | null>(null);
 
   const getCompanyOptions = useCallback(
     (policyType: string): LookupOption[] => {
@@ -376,14 +383,22 @@ export function PackagePolicyEditModal({
         const ageSourcePolicy = sortedData.find((p) => p.policy_type_parent === 'THIRD_FULL') || sortedData[0];
         setIsUnder24(ageSourcePolicy.is_under_24 ?? null);
         
-        // Fetch existing children for this client
+        // Fetch existing children + phone for this client
         if (cId) {
-          const { data: childrenData } = await supabase
-            .from("client_children")
-            .select("*")
-            .eq("client_id", cId)
-            .order("created_at", { ascending: true });
+          const [{ data: childrenData }, { data: clientRow }] = await Promise.all([
+            supabase
+              .from("client_children")
+              .select("*")
+              .eq("client_id", cId)
+              .order("created_at", { ascending: true }),
+            supabase
+              .from("clients")
+              .select("phone_number")
+              .eq("id", cId)
+              .maybeSingle(),
+          ]);
           setExistingChildren(childrenData || []);
+          setClientPhone(clientRow?.phone_number || null);
           
           // Find the main policy (THIRD_FULL) to get linked children
           const mainPolicy = sortedData.find(p => p.policy_type_parent === "THIRD_FULL");
@@ -439,6 +454,9 @@ export function PackagePolicyEditModal({
         { type: "road_service", enabled: false, road_service_id: "", company_id: "", insurance_price: "", start_date: "", end_date: "" },
         { type: "accident_fee_exemption", enabled: false, accident_fee_service_id: "", company_id: "", insurance_price: "", start_date: "", end_date: "" },
       ]);
+      setClientPhone(null);
+      setShowSuccessDialog(false);
+      setSuccessPolicyId(null);
     }
   }, [open]);
 
@@ -601,6 +619,60 @@ export function PackagePolicyEditModal({
         variant: "destructive",
       });
       return;
+    }
+
+    // Validate any newly-enabled package addons. The wizard's
+    // PackageBuilderSection does not validate on its own — it expects
+    // the host (the wizard) to gate save. Catching empty fields here
+    // also covers the case where the company-pricing filter silently
+    // wipes the road_service / accident_fee selection after the user
+    // picks a company that doesn't price the chosen service.
+    const addonLabels: Record<PackageAddon['type'], string> = {
+      elzami: 'إلزامي',
+      third_full: 'ثالث/شامل',
+      road_service: 'خدمات الطريق',
+      accident_fee_exemption: 'إعفاء رسوم حادث',
+    };
+    for (const addon of packageAddons) {
+      if (!addon.enabled) continue;
+      const label = addonLabels[addon.type];
+      const price = parseFloat(addon.insurance_price);
+      if (!price || price <= 0) {
+        toast({ title: "خطأ في البيانات", description: `أدخل السعر للإضافة (${label})`, variant: "destructive" });
+        return;
+      }
+      if (addon.type === 'third_full' && !addon.policy_type_child) {
+        toast({ title: "خطأ في البيانات", description: `اختر النوع (ثالث/شامل) للإضافة (${label})`, variant: "destructive" });
+        return;
+      }
+      if ((addon.type === 'elzami' || addon.type === 'third_full') && !addon.company_id) {
+        toast({ title: "خطأ في البيانات", description: `اختر شركة التأمين للإضافة (${label})`, variant: "destructive" });
+        return;
+      }
+      if (addon.type === 'road_service') {
+        if (!addon.road_service_id) {
+          toast({ title: "خطأ في البيانات", description: `اختر نوع الخدمة للإضافة (${label})`, variant: "destructive" });
+          return;
+        }
+        if (!addon.company_id) {
+          toast({ title: "خطأ في البيانات", description: `اختر الشركة للإضافة (${label})`, variant: "destructive" });
+          return;
+        }
+      }
+      if (addon.type === 'accident_fee_exemption') {
+        if (!addon.accident_fee_service_id) {
+          toast({ title: "خطأ في البيانات", description: `اختر نوع الخدمة للإضافة (${label})`, variant: "destructive" });
+          return;
+        }
+        if (!addon.company_id) {
+          toast({ title: "خطأ في البيانات", description: `اختر الشركة للإضافة (${label})`, variant: "destructive" });
+          return;
+        }
+      }
+      if (!addon.start_date || !addon.end_date) {
+        toast({ title: "خطأ في البيانات", description: `حدد تواريخ البدء والانتهاء للإضافة (${label})`, variant: "destructive" });
+        return;
+      }
     }
 
     setSaving(true);
@@ -823,8 +895,17 @@ export function PackagePolicyEditModal({
       }
 
       toast({ title: "تم الحفظ", description: "تم تحديث جميع معاملات الباقة بنجاح" });
-      onOpenChange(false);
-      onSaved?.();
+      // Trigger the same print/SMS dialog the wizard shows after a new
+      // package is created. PolicySuccessDialog resolves the rest of the
+      // group via group_id, so any policy id from the package works.
+      const anchorPolicyId = policies[0]?.id || null;
+      if (anchorPolicyId) {
+        setSuccessPolicyId(anchorPolicyId);
+        setShowSuccessDialog(true);
+      } else {
+        onOpenChange(false);
+        onSaved?.();
+      }
     } catch (error) {
       console.error("Error saving policies:", error);
       toast({
@@ -1292,6 +1373,26 @@ export function PackagePolicyEditModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Post-save print/SMS dialog — shares the exact component the
+          new-policy wizard uses. Closing it also closes the edit modal
+          and notifies the parent so it can refresh its policy list. */}
+      {successPolicyId && clientId && (
+        <PolicySuccessDialog
+          open={showSuccessDialog}
+          onOpenChange={setShowSuccessDialog}
+          policyId={successPolicyId}
+          clientId={clientId}
+          clientPhone={clientPhone}
+          isPackage
+          onClose={() => {
+            setShowSuccessDialog(false);
+            setSuccessPolicyId(null);
+            onOpenChange(false);
+            onSaved?.();
+          }}
+        />
+      )}
     </Dialog>
   );
 }
