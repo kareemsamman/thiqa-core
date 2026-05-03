@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,25 +14,24 @@ interface Row {
   key: UsageType;
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
-  walletColumn: "sms_credit_balance" | "marketing_sms_credit_balance" | "ai_credit_balance";
 }
 
 const ROWS: Row[] = [
-  { key: "sms",           label: "رسائل SMS",     Icon: MessageSquare, walletColumn: "sms_credit_balance" },
-  { key: "marketing_sms", label: "SMS تسويقية",   Icon: Megaphone,     walletColumn: "marketing_sms_credit_balance" },
-  { key: "ai_chat",       label: "استعلامات AI", Icon: Bot,           walletColumn: "ai_credit_balance" },
+  { key: "sms",           label: "رسائل SMS",     Icon: MessageSquare },
+  { key: "marketing_sms", label: "SMS تسويقية",   Icon: Megaphone     },
+  { key: "ai_chat",       label: "استعلامات AI", Icon: Bot           },
 ];
 
 interface Props {
   agentId: string;
   /** Called after a successful adjustment so the parent can refresh
-   *  any other widgets that read agent_credit_wallet. */
+   *  the usage tiles that read agent_usage_log. */
   onAdjusted?: () => void;
 }
 
 export function AgentCreditAdjuster({ agentId, onAdjusted }: Props) {
   const [loading, setLoading] = useState(true);
-  const [balances, setBalances] = useState<Record<UsageType, number>>({
+  const [counts, setCounts] = useState<Record<UsageType, number>>({
     sms: 0,
     marketing_sms: 0,
     ai_chat: 0,
@@ -47,39 +47,41 @@ export function AgentCreditAdjuster({ agentId, onAdjusted }: Props) {
     ai_chat: false,
   });
 
-  const fetchBalances = async () => {
+  const fetchCounts = async () => {
     setLoading(true);
+    const period = format(new Date(), "yyyy-MM");
     const { data, error } = await supabase
-      .from("agent_credit_wallet")
-      .select("sms_credit_balance, marketing_sms_credit_balance, ai_credit_balance")
+      .from("agent_usage_log")
+      .select("usage_type, count")
       .eq("agent_id", agentId)
-      .maybeSingle();
+      .eq("period", period);
     if (error) {
-      toast.error("فشل في تحميل الرصيد: " + error.message);
+      toast.error("فشل في تحميل العدّادات: " + error.message);
     } else {
-      setBalances({
-        sms: data?.sms_credit_balance ?? 0,
-        marketing_sms: data?.marketing_sms_credit_balance ?? 0,
-        ai_chat: data?.ai_credit_balance ?? 0,
+      const map: Record<UsageType, number> = { sms: 0, marketing_sms: 0, ai_chat: 0 };
+      (data || []).forEach((r: any) => {
+        if (r.usage_type === "sms" || r.usage_type === "marketing_sms" || r.usage_type === "ai_chat") {
+          map[r.usage_type as UsageType] = (map[r.usage_type as UsageType] ?? 0) + (r.count ?? 0);
+        }
       });
+      setCounts(map);
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    if (agentId) fetchBalances();
+    if (agentId) fetchCounts();
   }, [agentId]);
 
   const handleApply = async (row: Row) => {
     const raw = drafts[row.key].trim();
-    // Accept "+5", "-5", "5". parseInt handles all three.
     const delta = parseInt(raw, 10);
     if (!Number.isFinite(delta) || delta === 0) {
       toast.error("أدخل عدداً غير صفري (مثال: +5 أو -5)");
       return;
     }
     setPending((p) => ({ ...p, [row.key]: true }));
-    const { data, error } = await supabase.rpc("adjust_agent_credit", {
+    const { data, error } = await supabase.rpc("adjust_agent_usage", {
       p_agent_id: agentId,
       p_usage_type: row.key,
       p_delta: delta,
@@ -89,24 +91,21 @@ export function AgentCreditAdjuster({ agentId, onAdjusted }: Props) {
       toast.error("فشل التعديل: " + error.message);
       return;
     }
-    const newBalance = (data as number | null) ?? 0;
-    setBalances((b) => ({ ...b, [row.key]: newBalance }));
+    const newCount = (data as number | null) ?? 0;
+    setCounts((c) => ({ ...c, [row.key]: newCount }));
     setDrafts((d) => ({ ...d, [row.key]: "" }));
-    toast.success(
-      delta > 0
-        ? `تمت إضافة ${delta} إلى رصيد ${row.label} (الرصيد الآن ${newBalance})`
-        : `تم خصم ${Math.abs(delta)} من رصيد ${row.label} (الرصيد الآن ${newBalance})`
-    );
+    toast.success(`العدّاد الآن ${newCount} لـ ${row.label}`);
     onAdjusted?.();
   };
 
   return (
     <Card className="rounded-2xl shadow-sm">
       <CardHeader>
-        <CardTitle>تعديل الرصيد الإضافي</CardTitle>
+        <CardTitle>تعديل عدّاد الاستخدام</CardTitle>
         <CardDescription>
-          أضف أو اخصم من رصيد الوكيل الإضافي. يستخدم بعد استنفاد حصة الباقة الشهرية.
-          استخدم عدداً موجباً للإضافة (مثال: 5) أو سالباً للخصم (مثال: -5).
+          يعدّل العدّاد المعروض على شاشة الاشتراك مباشرة (مثل "8 / 150").
+          أدخل عدداً موجباً للإضافة إلى العدّاد (مثال: 5)، أو سالباً للخصم (مثال: -5).
+          العدّاد لا يقلّ عن صفر.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -130,9 +129,9 @@ export function AgentCreditAdjuster({ agentId, onAdjusted }: Props) {
                   <div className="text-sm font-medium">{row.label}</div>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  الرصيد الحالي:{" "}
+                  العدّاد الحالي:{" "}
                   <strong className="tabular-nums text-foreground">
-                    {balances[row.key].toLocaleString("en-US")}
+                    {counts[row.key].toLocaleString("en-US")}
                   </strong>
                 </div>
                 <Input
