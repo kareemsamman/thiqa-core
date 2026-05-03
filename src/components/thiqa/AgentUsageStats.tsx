@@ -40,10 +40,6 @@ interface CreditWallet {
   ai_credit_balance: number | null;
 }
 
-interface CountRow {
-  count: number | null;
-}
-
 interface UsageData {
   // Resource limits (from plan + override) and current usage
   users: { count: number; limit: EffectiveLimit };
@@ -95,7 +91,7 @@ export function AgentUsageStats({ agentId, refreshKey = 0 }: { agentId: string; 
         branchesCountRes,
         clientsCountRes,
         carsCountRes,
-        policiesCountRes,
+        policySettingRes,
       ] = await Promise.all([
         supabase
           .from("agents")
@@ -121,10 +117,42 @@ export function AgentUsageStats({ agentId, refreshKey = 0 }: { agentId: string; 
           .maybeSingle(),
         supabase.from("agent_users").select("user_id", { count: "exact", head: true }).eq("agent_id", agentId),
         supabase.from("branches").select("id", { count: "exact", head: true }).eq("agent_id", agentId).eq("is_active", true),
-        supabase.from("clients").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
+        supabase.from("clients").select("id", { count: "exact", head: true }).eq("agent_id", agentId).is("deleted_at", null),
         supabase.from("cars").select("id", { count: "exact", head: true }).eq("agent_id", agentId).is("deleted_at", null),
-        supabase.from("policies").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
+        supabase
+          .from("thiqa_platform_settings")
+          .select("setting_value")
+          .eq("setting_key", "policy_limit_period")
+          .maybeSingle(),
       ]);
+
+      // Policies count must mirror useAgentLimits so the admin tile
+      // matches what the agent themselves see on /subscription:
+      //   - scoped to the active package window (policy_limit_period)
+      //   - distinct by COALESCE(group_id, id) so multi-vehicle deals
+      //     count as one معاملة, not N rows
+      //   - excludes soft-deleted rows
+      const policyLimitPeriod = ((policySettingRes.data as any)?.setting_value ?? "monthly") as
+        | "monthly"
+        | "yearly"
+        | "lifetime";
+      const policyPeriodStart =
+        policyLimitPeriod === "monthly"
+          ? new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+          : policyLimitPeriod === "yearly"
+          ? new Date(new Date().getFullYear(), 0, 1).toISOString()
+          : new Date(0).toISOString();
+
+      const { data: policyRows } = await supabase
+        .from("policies")
+        .select("id, group_id")
+        .eq("agent_id", agentId)
+        .is("deleted_at", null)
+        .gte("created_at", policyPeriodStart);
+
+      const policiesCount = new Set(
+        (policyRows ?? []).map((p: any) => p.group_id ?? p.id),
+      ).size;
 
       const overrides = (agentRes.data || {}) as AgentOverrides;
       const planKey = overrides.plan;
@@ -158,7 +186,7 @@ export function AgentUsageStats({ agentId, refreshKey = 0 }: { agentId: string; 
         clients: { count: clientsCountRes.count ?? 0 },
         cars: { count: carsCountRes.count ?? 0 },
         policies: {
-          count: policiesCountRes.count ?? 0,
+          count: policiesCount,
           limit: effective(overrides.policies_limit_override, plan.policies_limit),
         },
         sms: {

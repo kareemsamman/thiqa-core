@@ -191,13 +191,16 @@ export function useAgentLimits(): AgentLimits {
             : new Date(0).toISOString();
 
         // 5. Policies count — COUNT DISTINCT COALESCE(group_id, id)
-        // over the current period. Done client-side by fetching the
-        // pair and counting distinct, which is cheap for any realistic
-        // agent volume (caps at a few thousand rows).
+        // over the current period, excluding soft-deleted rows so a
+        // cancelled/deleted client's policies stop consuming quota.
+        // Done client-side by fetching the pair and counting distinct,
+        // which is cheap for any realistic agent volume (caps at a few
+        // thousand rows).
         const { data: policyRows } = await supabase
           .from('policies')
           .select('id, group_id')
           .eq('agent_id', agentId)
+          .is('deleted_at', null)
           .gte('created_at', periodStart);
 
         const distinctTransactions = new Set(
