@@ -70,3 +70,63 @@ npm run lint
 ## Deployment
 
 The site is built with `npm run build` and the contents of `dist/` are served by any static host (or behind a CDN). Supabase handles auth, storage, and Edge Functions.
+
+### Cloudflare configuration (REQUIRED for production SEO)
+
+The site is currently hosted on Lovable Cloud, with `getthiqa.com` proxied through Cloudflare. Lovable's hosting only serves literal file paths and SPA-fallbacks every other URL to `dist/index.html`. That means without the rules below, Googlebot fetching `https://getthiqa.com/pricing` gets the homepage HTML instead of `dist/pricing/index.html` — and the entire prerender pipeline (`scripts/prerender.mjs`) is wasted for the 7 non-root routes.
+
+Two Cloudflare rules sit in front of Lovable to fix this:
+
+#### 1. Rules → Transform Rules → Rewrite URL: `rewrite-prerendered-routes-to-index`
+
+Rewrites pretty URLs to their prerendered file path BEFORE the request reaches Lovable's origin. The browser's URL bar stays unchanged; only what Cloudflare asks the origin for changes.
+
+**Match expression:**
+```
+(http.request.uri.path in {"/pricing" "/pricing/" "/faq" "/faq/" "/contact" "/contact/" "/login" "/login/" "/register" "/register/" "/privacy" "/privacy/" "/terms" "/terms/"})
+```
+
+**Rewrite path (Dynamic):**
+```
+concat(regex_replace(http.request.uri.path, "/$", ""), "/index.html")
+```
+
+**If a new public route is added to the prerender list in `scripts/prerender.mjs`, add it (with both bare and trailing-slash forms) to this Transform Rule's `in {}` allowlist or it won't be served correctly.** The CRM routes (`/dashboard`, `/clients`, `/admin/*`, `/thiqa/*`, etc.) are deliberately excluded — they continue to use Lovable's SPA fallback, which React Router handles client-side.
+
+#### 2. Rules → Redirect Rules: `301-www-to-apex`
+
+Upgrades the www → apex redirect from Lovable's default 302 (temporary) to a 301 (permanent), so Google passes full link equity to the canonical hostname.
+
+**Match expression:**
+```
+(http.host eq "www.getthiqa.com")
+```
+
+**Redirect target URL (Dynamic):**
+```
+concat("https://getthiqa.com", http.request.uri)
+```
+
+**Status code:** `301`
+
+#### Verifying the rules
+
+```bash
+# Each prerendered route should return its OWN data-prerendered-route attribute
+for r in pricing faq contact login register privacy terms; do
+  curl -s "https://getthiqa.com/$r" | grep -oE 'data-prerendered-route="[^"]*"' | head -1
+done
+
+# www should 301 (not 302) and preserve path/query
+curl -sI "https://www.getthiqa.com/pricing?ref=test" | grep -E "^(HTTP|Location):"
+
+# CRM still falls through to SPA shell (homepage HTML, React Router takes over)
+curl -s "https://getthiqa.com/dashboard" | grep -oE 'data-prerendered-route="[^"]*"' | head -1
+```
+
+Or run the full health probe:
+```bash
+ORIGIN=https://getthiqa.com node scripts/verify-deploy.mjs
+```
+
+If the Cloudflare account is ever rebuilt, recreate both rules from the expressions above. They're stored in Cloudflare's dashboard, not in this repo, so this README is the source of truth.
