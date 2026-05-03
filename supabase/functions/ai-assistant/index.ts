@@ -965,12 +965,24 @@ Deno.serve(async (req) => {
     const branchId = profile?.branch_id || null;
     const userFullName = profile?.full_name || user.email || "";
 
-    const { data: agentRow } = await adminClient
-      .from("agents")
-      .select("name, name_ar")
-      .eq("id", agentId)
+    // Prefer the user-configured site_title from branding settings
+    // (اسم الموقع on the العلامة page) — that's what users mean by
+    // "اسم الوكالة". Fall back to the agents table only if branding
+    // hasn't been set up yet.
+    const { data: siteSettings } = await adminClient
+      .from("site_settings")
+      .select("site_title")
+      .eq("agent_id", agentId)
       .maybeSingle();
-    const agencyName = agentRow?.name_ar || agentRow?.name || "";
+    let agencyName = siteSettings?.site_title || "";
+    if (!agencyName) {
+      const { data: agentRow } = await adminClient
+        .from("agents")
+        .select("name, name_ar")
+        .eq("id", agentId)
+        .maybeSingle();
+      agencyName = agentRow?.name_ar || agentRow?.name || "";
+    }
 
     let branchName = "";
     if (branchId) {
