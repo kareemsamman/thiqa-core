@@ -757,7 +757,7 @@ function buildPackageInvoiceHtml(
 
     const companyName = p.company?.name_ar || p.company?.name || '-';
     const periodText = (p.start_date && p.end_date)
-      ? `${formatDate(p.start_date)} → ${formatDate(p.end_date)}`
+      ? `${formatDate(p.end_date)} ← ${formatDate(p.start_date)}`
       : '-';
     const commission = p.office_commission || 0;
     // Pull the transfer portion out of this policy's commission so the
