@@ -1,8 +1,8 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState, type ComponentType, type LazyExoticComponent } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, dehydrate, hydrate } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "@/hooks/useAuth";
@@ -47,6 +47,36 @@ import { SidebarStateProvider } from "@/hooks/useSidebarState";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PermissionRoute } from "@/components/auth/PermissionRoute";
 import { SiteHelmet } from "@/components/layout/SiteHelmet";
+import { PrerenderReadyBeacon } from "@/components/seo/PrerenderReadyBeacon";
+import { RouteSkeleton } from "@/components/layout/RouteSkeleton";
+
+// Wraps React.lazy so each code-split route carries its OWN Suspense
+// boundary instead of sharing one global boundary around <Routes>.
+//
+// Why per-route Suspense:
+// React 19 hydration is incompatible with a Suspense boundary that
+// surrounds prerendered DOM. With a global <Suspense fallback={null}>
+// around <Routes>, the boundary suspends on the first hydration render
+// and renders its fallback (null) — which doesn't match the
+// prerendered Landing/Pricing/etc. markup that's actually in the DOM.
+// React then throws error #418 and falls back to client render, hurting
+// CLS/INP and partially undoing the prerender SEO win. With each lazy
+// component carrying its own boundary INTERNALLY, the prerendered
+// (eager) routes don't have a Suspense boundary in their hydration
+// path at all — and lazy CRM/admin routes still get a clean fallback
+// during their chunk fetch.
+function lazyWithSuspense<T extends ComponentType<unknown>>(
+  loader: () => Promise<{ default: T }>,
+): T {
+  const Lazy: LazyExoticComponent<T> = lazy(loader);
+  const Wrapped = ((props: React.ComponentProps<T>) => (
+    <Suspense fallback={<RouteSkeleton />}>
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+      <Lazy {...(props as any)} />
+    </Suspense>
+  )) as unknown as T;
+  return Wrapped;
+}
 import { AppChrome } from "@/components/layout/AppChrome";
 import { AgentProvider } from "@/hooks/useAgentContext";
 import { UpgradePromptProvider } from "@/components/pricing/UpgradePromptProvider";
@@ -61,84 +91,100 @@ import { UnsavedChangesProvider } from "@/hooks/useUnsavedChanges";
 // every chunk in the background once the app is idle, so by the time
 // the user actually clicks a nav link the target page is already
 // cached.
-const Index = lazy(() => import("./pages/Index"));
-const Login = lazy(() => import("./pages/Login"));
-const NoAccess = lazy(() => import("./pages/NoAccess"));
-const OAuthConfirm = lazy(() => import("./pages/OAuthConfirm"));
-const Clients = lazy(() => import("./pages/Clients"));
-const Cars = lazy(() => import("./pages/Cars"));
-const Policies = lazy(() => import("./pages/Policies"));
-const Companies = lazy(() => import("./pages/Companies"));
-const Brokers = lazy(() => import("./pages/Brokers"));
-const BrokerWallet = lazy(() => import("./pages/BrokerWallet"));
-const Cheques = lazy(() => import("./pages/Cheques"));
-const Media = lazy(() => import("./pages/Media"));
-const AdminUsers = lazy(() => import("./pages/AdminUsers"));
-const BranchManagement = lazy(() => import("./pages/BranchManagement"));
-const SmsOnboarding = lazy(() => import("./pages/SmsOnboarding"));
-const Receipts = lazy(() => import("./pages/Receipts"));
-const Accounting = lazy(() => import("./pages/Accounting"));
-const CompanySettlement = lazy(() => import("./pages/CompanySettlement"));
-const CompanySettlementDetail = lazy(() => import("./pages/CompanySettlementDetail"));
-const InvoiceTemplates = lazy(() => import("./pages/InvoiceTemplates"));
-const InsuranceCategories = lazy(() => import("./pages/InsuranceCategories"));
-const RoadServices = lazy(() => import("./pages/RoadServices"));
-const AccidentFeeServices = lazy(() => import("./pages/AccidentFeeServices"));
-const PaymentSettings = lazy(() => import("./pages/PaymentSettings"));
-const SmsSettings = lazy(() => import("./pages/SmsSettings"));
-const CustomerSignatures = lazy(() => import("./pages/CustomerSignatures"));
-const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
-const PaymentFail = lazy(() => import("./pages/PaymentFail"));
-const SignaturePage = lazy(() => import("./pages/SignaturePage"));
-const Notifications = lazy(() => import("./pages/Notifications"));
-const WordPressImport = lazy(() => import("./pages/WordPressImport"));
-const DatabaseMigration = lazy(() => import("./pages/DatabaseMigration"));
-const NotFound = lazy(() => import("./pages/NotFound"));
-const SmsHistory = lazy(() => import("./pages/SmsHistory"));
-const DebtTracking = lazy(() => import("./pages/DebtTracking"));
-const AuthSettings = lazy(() => import("./pages/AuthSettings"));
-const FinancialReports = lazy(() => import("./pages/FinancialReports"));
-const CompanyWallet = lazy(() => import("./pages/CompanyWallet"));
-const ElzamiCostsReport = lazy(() => import("./pages/ElzamiCostsReport"));
-const PolicyReports = lazy(() => import("./pages/PolicyReports"));
-const MarketingSms = lazy(() => import("./pages/MarketingSms"));
-const AccidentReports = lazy(() => import("./pages/AccidentReports"));
-const AccidentReportForm = lazy(() => import("./pages/AccidentReportForm"));
-const AccidentTemplateMapper = lazy(() => import("./pages/AccidentTemplateMapper"));
-const AnnouncementSettings = lazy(() => import("./pages/AnnouncementSettings"));
-const Tasks = lazy(() => import("./pages/Tasks"));
-const BusinessContacts = lazy(() => import("./pages/BusinessContacts"));
-const RepairClaims = lazy(() => import("./pages/RepairClaims"));
-const RepairClaimDetail = lazy(() => import("./pages/RepairClaimDetail"));
-const CorrespondenceLetters = lazy(() => import("./pages/CorrespondenceLetters"));
-const Leads = lazy(() => import("./pages/Leads"));
-const FormTemplates = lazy(() => import("./pages/FormTemplates"));
-const FormTemplateEditor = lazy(() => import("./pages/FormTemplateEditor"));
-const ActivityLog = lazy(() => import("./pages/ActivityLog"));
-const BrandingSettings = lazy(() => import("./pages/BrandingSettings"));
-const SubscriptionExpired = lazy(() => import("./pages/SubscriptionExpired"));
-const Subscription = lazy(() => import("./pages/Subscription"));
-const Support = lazy(() => import("./pages/Support"));
-const ThiqaAgents = lazy(() => import("./pages/ThiqaAgents"));
-const ThiqaAgentDetail = lazy(() => import("./pages/ThiqaAgentDetail"));
-const ThiqaCreateAgent = lazy(() => import("./pages/ThiqaCreateAgent"));
-const ThiqaPayments = lazy(() => import("./pages/ThiqaPayments"));
-const ThiqaDashboard = lazy(() => import("./pages/ThiqaDashboard"));
-const ThiqaSettings = lazy(() => import("./pages/ThiqaSettings"));
-const ThiqaLandingCMS = lazy(() => import("./pages/ThiqaLandingCMS"));
-const ThiqaAnalytics = lazy(() => import("./pages/ThiqaAnalytics"));
-const ThiqaSupport = lazy(() => import("./pages/ThiqaSupport"));
-const PayPalTest = lazy(() => import("./pages/PayPalTest"));
-const Landing = lazy(() => import("./pages/Landing"));
-const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
-const Pricing = lazy(() => import("./pages/Pricing"));
-const FAQ = lazy(() => import("./pages/FAQ"));
-const ContactUs = lazy(() => import("./pages/ContactUs"));
-const ResetPassword = lazy(() => import("./pages/ResetPassword"));
-const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
-const Privacy = lazy(() => import("./pages/Privacy"));
-const TermsOfUse = lazy(() => import("./pages/TermsOfUse"));
-const IconChecklist = lazy(() => import("./pages/IconChecklist"));
+const Index = lazyWithSuspense(() => import("./pages/Index"));
+// Login (also serves /register) is eager — it's prerendered so its
+// chunk must be available synchronously at hydration. See the eager-
+// import block below for the full reasoning.
+import Login from "./pages/Login";
+const NoAccess = lazyWithSuspense(() => import("./pages/NoAccess"));
+const OAuthConfirm = lazyWithSuspense(() => import("./pages/OAuthConfirm"));
+const Clients = lazyWithSuspense(() => import("./pages/Clients"));
+const Cars = lazyWithSuspense(() => import("./pages/Cars"));
+const Policies = lazyWithSuspense(() => import("./pages/Policies"));
+const Companies = lazyWithSuspense(() => import("./pages/Companies"));
+const Brokers = lazyWithSuspense(() => import("./pages/Brokers"));
+const BrokerWallet = lazyWithSuspense(() => import("./pages/BrokerWallet"));
+const Cheques = lazyWithSuspense(() => import("./pages/Cheques"));
+const Media = lazyWithSuspense(() => import("./pages/Media"));
+const AdminUsers = lazyWithSuspense(() => import("./pages/AdminUsers"));
+const BranchManagement = lazyWithSuspense(() => import("./pages/BranchManagement"));
+const SmsOnboarding = lazyWithSuspense(() => import("./pages/SmsOnboarding"));
+const Receipts = lazyWithSuspense(() => import("./pages/Receipts"));
+const Accounting = lazyWithSuspense(() => import("./pages/Accounting"));
+const CompanySettlement = lazyWithSuspense(() => import("./pages/CompanySettlement"));
+const CompanySettlementDetail = lazyWithSuspense(() => import("./pages/CompanySettlementDetail"));
+const InvoiceTemplates = lazyWithSuspense(() => import("./pages/InvoiceTemplates"));
+const InsuranceCategories = lazyWithSuspense(() => import("./pages/InsuranceCategories"));
+const RoadServices = lazyWithSuspense(() => import("./pages/RoadServices"));
+const AccidentFeeServices = lazyWithSuspense(() => import("./pages/AccidentFeeServices"));
+const PaymentSettings = lazyWithSuspense(() => import("./pages/PaymentSettings"));
+const SmsSettings = lazyWithSuspense(() => import("./pages/SmsSettings"));
+const CustomerSignatures = lazyWithSuspense(() => import("./pages/CustomerSignatures"));
+const PaymentSuccess = lazyWithSuspense(() => import("./pages/PaymentSuccess"));
+const PaymentFail = lazyWithSuspense(() => import("./pages/PaymentFail"));
+const SignaturePage = lazyWithSuspense(() => import("./pages/SignaturePage"));
+const Notifications = lazyWithSuspense(() => import("./pages/Notifications"));
+const WordPressImport = lazyWithSuspense(() => import("./pages/WordPressImport"));
+const DatabaseMigration = lazyWithSuspense(() => import("./pages/DatabaseMigration"));
+const NotFound = lazyWithSuspense(() => import("./pages/NotFound"));
+const SmsHistory = lazyWithSuspense(() => import("./pages/SmsHistory"));
+const DebtTracking = lazyWithSuspense(() => import("./pages/DebtTracking"));
+const AuthSettings = lazyWithSuspense(() => import("./pages/AuthSettings"));
+const FinancialReports = lazyWithSuspense(() => import("./pages/FinancialReports"));
+const CompanyWallet = lazyWithSuspense(() => import("./pages/CompanyWallet"));
+const ElzamiCostsReport = lazyWithSuspense(() => import("./pages/ElzamiCostsReport"));
+const PolicyReports = lazyWithSuspense(() => import("./pages/PolicyReports"));
+const MarketingSms = lazyWithSuspense(() => import("./pages/MarketingSms"));
+const AccidentReports = lazyWithSuspense(() => import("./pages/AccidentReports"));
+const AccidentReportForm = lazyWithSuspense(() => import("./pages/AccidentReportForm"));
+const AccidentTemplateMapper = lazyWithSuspense(() => import("./pages/AccidentTemplateMapper"));
+const AnnouncementSettings = lazyWithSuspense(() => import("./pages/AnnouncementSettings"));
+const Tasks = lazyWithSuspense(() => import("./pages/Tasks"));
+const BusinessContacts = lazyWithSuspense(() => import("./pages/BusinessContacts"));
+const RepairClaims = lazyWithSuspense(() => import("./pages/RepairClaims"));
+const RepairClaimDetail = lazyWithSuspense(() => import("./pages/RepairClaimDetail"));
+const CorrespondenceLetters = lazyWithSuspense(() => import("./pages/CorrespondenceLetters"));
+const Leads = lazyWithSuspense(() => import("./pages/Leads"));
+const FormTemplates = lazyWithSuspense(() => import("./pages/FormTemplates"));
+const FormTemplateEditor = lazyWithSuspense(() => import("./pages/FormTemplateEditor"));
+const ActivityLog = lazyWithSuspense(() => import("./pages/ActivityLog"));
+const BrandingSettings = lazyWithSuspense(() => import("./pages/BrandingSettings"));
+const SubscriptionExpired = lazyWithSuspense(() => import("./pages/SubscriptionExpired"));
+const Subscription = lazyWithSuspense(() => import("./pages/Subscription"));
+const Support = lazyWithSuspense(() => import("./pages/Support"));
+const ThiqaAgents = lazyWithSuspense(() => import("./pages/ThiqaAgents"));
+const ThiqaAgentDetail = lazyWithSuspense(() => import("./pages/ThiqaAgentDetail"));
+const ThiqaCreateAgent = lazyWithSuspense(() => import("./pages/ThiqaCreateAgent"));
+const ThiqaPayments = lazyWithSuspense(() => import("./pages/ThiqaPayments"));
+const ThiqaDashboard = lazyWithSuspense(() => import("./pages/ThiqaDashboard"));
+const ThiqaSettings = lazyWithSuspense(() => import("./pages/ThiqaSettings"));
+const ThiqaLandingCMS = lazyWithSuspense(() => import("./pages/ThiqaLandingCMS"));
+const ThiqaAnalytics = lazyWithSuspense(() => import("./pages/ThiqaAnalytics"));
+const ThiqaSupport = lazyWithSuspense(() => import("./pages/ThiqaSupport"));
+const PayPalTest = lazyWithSuspense(() => import("./pages/PayPalTest"));
+// Public marketing/auth/legal pages are EAGER imports so the prerender
+// snapshot's hydration first-render produces the same DOM as what got
+// captured. React.lazy wraps the loader in a Promise that's still
+// "pending" on the first sync render even when the module is cached
+// (modulepreload hint + main.tsx pre-import) — and a pending lazy
+// boundary renders its Suspense fallback (null), which doesn't match
+// the prerendered Landing/Pricing/etc. DOM → React error #418.
+//
+// Bundle-size cost: these chunks now load with the main entry instead
+// of on-demand. The marketing pages are ALSO the most common first hit,
+// so the user pays this cost on their initial visit either way; only
+// users who land directly on a CRM route would see a slightly larger
+// initial bundle.
+import Landing from "./pages/Landing";
+import VerifyEmail from "./pages/VerifyEmail";
+import Pricing from "./pages/Pricing";
+import FAQ from "./pages/FAQ";
+import ContactUs from "./pages/ContactUs";
+import ResetPassword from "./pages/ResetPassword";
+import ForgotPassword from "./pages/ForgotPassword";
+import Privacy from "./pages/Privacy";
+import TermsOfUse from "./pages/TermsOfUse";
+const IconChecklist = lazyWithSuspense(() => import("./pages/IconChecklist"));
 
 // Prefetch every route chunk in the background after the app mounts,
 // so clicking a sidebar link never waits on a network download. We schedule
@@ -261,6 +307,31 @@ const queryClient = new QueryClient({
   },
 });
 
+// During the prerender pass, scripts/prerender.mjs reads
+// window.__GET_QUERY_CACHE__() to dehydrate the QueryClient state and
+// inject it into the captured HTML as a __REACT_QUERY_STATE__ JSON
+// blob. On a real visit, we rehydrate that blob into queryClient
+// SYNCHRONOUSLY at module-init time (before React renders), so
+// useLandingContent and any other query returns the same Supabase-
+// sourced data the prerender saw on hydration's first render — no
+// fallback-vs-CMS text mismatch / React error #418.
+//
+// We do this directly with `hydrate()` instead of <HydrationBoundary>
+// because the boundary applies state on commit, which can race with
+// the first render's data read in production minified builds; the
+// direct call guarantees the cache is populated before App ever
+// mounts.
+if (typeof window !== "undefined") {
+  const w = window as {
+    __GET_QUERY_CACHE__?: () => unknown;
+    __REACT_QUERY_STATE__?: Parameters<typeof hydrate>[1];
+  };
+  w.__GET_QUERY_CACHE__ = () => dehydrate(queryClient);
+  if (w.__REACT_QUERY_STATE__) {
+    hydrate(queryClient, w.__REACT_QUERY_STATE__);
+  }
+}
+
 // Session tracker wrapper component
 function SessionTrackerWrapper({ children }: { children: React.ReactNode }) {
   useSessionTracker();
@@ -301,15 +372,43 @@ function PublicWidgets() {
   );
 }
 
+// Wraps the global UI chrome (toasters, lazy-loaded widget hosts, public
+// widgets) that depends on browser-only state which can't be matched
+// between the prerender snapshot and hydration first-render — sonner's
+// useTheme(), createPortal targets, lazy-resolved Suspense boundaries,
+// localStorage-driven banners, etc.
+//
+// During the build-time prerender pass, scripts/prerender.mjs sets
+// window.__PRERENDER__ via evaluateOnNewDocument BEFORE the bundle runs.
+// We never set chromeMounted in that case, so the snapshot ships without
+// the chrome and dist/<route>/index.html is hydration-safe.
+//
+// On real users, chromeMounted flips to true on the first effect tick
+// after hydration, mounting the chrome ~one frame later. The brief delay
+// is invisible because the chrome is mostly empty viewports + a fixed-
+// position cookie banner that animates in anyway.
+function DeferredChrome({ children }: { children: React.ReactNode }) {
+  const [chromeMounted, setChromeMounted] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if ((window as { __PRERENDER__?: boolean }).__PRERENDER__) return;
+    setChromeMounted(true);
+  }, []);
+  if (!chromeMounted) return null;
+  return <>{children}</>;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <HelmetProvider>
       <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <Suspense fallback={null}>
-          <GlobalQuotaDialogHost />
-        </Suspense>
+        <DeferredChrome>
+          <Toaster />
+          <Sonner />
+          <Suspense fallback={null}>
+            <GlobalQuotaDialogHost />
+          </Suspense>
+        </DeferredChrome>
         <BrowserRouter>
           <UnsavedChangesProvider>
           <AuthProvider>
@@ -317,17 +416,25 @@ const App = () => (
             <AgentProvider>
             <UpgradePromptProvider>
             <SiteHelmet />
+            <PrerenderReadyBeacon />
             <SidebarStateProvider>
             <RecentClientProvider>
             <PolicyWizardControllerProvider>
-            <Suspense fallback={null}>
-              <GlobalPolicyWizardHost />
-              <ThaqibWidget />
-            </Suspense>
-            <PublicWidgets />
+            <DeferredChrome>
+              <Suspense fallback={null}>
+                <GlobalPolicyWizardHost />
+                <ThaqibWidget />
+              </Suspense>
+              <PublicWidgets />
+            </DeferredChrome>
             <RoutePrefetcher />
             <AppChrome />
-            <Suspense fallback={null}>
+            {/* No global Suspense around <Routes> — each lazy route
+                carries its own Suspense via lazyWithSuspense() so the
+                eager prerendered routes have NO Suspense boundary in
+                their hydration path. A surrounding boundary would
+                suspend on first render and clobber the prerendered
+                DOM with its fallback (React error #418). */}
             <Routes>
               <Route path="/landing" element={<Landing />} />
               <Route path="/pricing" element={<Pricing />} />
@@ -657,7 +764,6 @@ const App = () => (
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-            </Suspense>
             </PolicyWizardControllerProvider>
             </RecentClientProvider>
             </SidebarStateProvider>

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import thiqaIconDefault from "@/assets/thiqa-logo-icon.svg";
 
+declare global {
+  interface Window {
+    __PRERENDER__?: boolean;
+  }
+}
+
 const TEXT = "Thiqa";
 const DURATION_MS = 2800;
 
@@ -72,7 +78,26 @@ export function ThiqaLogoAnimation({
   subtitle,
   subtitleClassName,
 }: ThiqaLogoAnimationProps = {}) {
-  const [t, setT] = useState<number>(0);
+  // Start at the animation's END state (t=1) in two cases:
+  //   - During the prerender pass (window.__PRERENDER__ set by
+  //     scripts/prerender.mjs via evaluateOnNewDocument). Without this,
+  //     the snapshot captures the animation MID-flight — the 2800ms
+  //     duration far outlasts the prerender beacon's 250ms quiet
+  //     window, so easeOut interpolation values like
+  //     `translateY(0.000179912px)` get baked into the dist HTML.
+  //   - During hydration from a prerendered snapshot
+  //     (window.__HYDRATING_PRERENDER__ set by main.tsx). First render
+  //     must produce the same inline styles the snapshot has, otherwise
+  //     React 19 throws hydration error #418 on the text mismatch.
+  //
+  // Both paths converge on t=1 → exactly `opacity:1; translateY(0px)
+  // scale(1)` for every letter. Cost: the entrance animation doesn't
+  // play on a prerendered route's first paint. Re-renders triggered by
+  // in-app client-side navigation still animate normally.
+  const [t, setT] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    return window.__PRERENDER__ || window.__HYDRATING_PRERENDER__ ? 1 : 0;
+  });
   const raf = useRef<number | null>(null);
   const startTs = useRef<number | null>(null);
 
@@ -90,10 +115,17 @@ export function ThiqaLogoAnimation({
   }, []);
 
   useEffect(() => {
+    // Skip the animation if we already started at the end (prerender
+    // hydration). Otherwise play normally.
+    if (t >= 1) return;
     play();
     return () => {
       if (raf.current != null) cancelAnimationFrame(raf.current);
     };
+    // play is a stable useCallback; t is intentionally only checked on
+    // the first effect run so that subsequent state updates from the
+    // animation tick don't re-trigger it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [play]);
 
   // Wordmark letters stagger in over 0 → 0.55. Subtitle words stagger

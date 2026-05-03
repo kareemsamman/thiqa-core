@@ -134,7 +134,7 @@ export function PublicFooter() {
             end. Stacks on mobile. */}
         <div className="flex flex-col-reverse md:flex-row items-center justify-between gap-6 mb-16">
           <p className="text-sm text-black/50">
-            © Thiqa {new Date().getFullYear()} جميع الحقوق محفوظة
+            {`© Thiqa ${new Date().getFullYear()} جميع الحقوق محفوظة`}
           </p>
           <div className="flex items-center gap-3">
             <a

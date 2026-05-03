@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 export type LandingContentMap = Record<string, { text_value: string | null; image_url: string | null; json_value: any }>;
 
 export function useLandingContent() {
-  return useQuery({
+  const result = useQuery({
     queryKey: ["landing-content"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -23,6 +23,7 @@ export function useLandingContent() {
     },
     staleTime: 5 * 60 * 1000,
   });
+  return result;
 }
 
 /** Helper to get text with fallback */

@@ -19,6 +19,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import loginBgMobile from "@/assets/login-bg-mobile.png";
 import { PublicSEO } from "@/components/public/PublicSEO";
+import { WebPageJsonLd } from "@/components/public/PublicJsonLd";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { digitsOnly } from "@/lib/validation";
 import {
@@ -540,13 +541,13 @@ export default function Login() {
     }
   };
 
-  if (authLoading) {
-    return (
-      <div className="h-[100dvh] flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  // Intentionally do NOT short-circuit on authLoading here — the page
+  // is prerendered, so the captured DOM is the form (auth resolved as
+  // unauthenticated during the prerender pass). Hydration's first
+  // render must produce the SAME form, otherwise React throws #418
+  // (loader vs form is a structural mismatch). For the rare visitor
+  // who's already logged in, the useEffect above bounces them to
+  // /dashboard a tick later — they see the form for ~50ms.
 
   const passwordStrength = checkPasswordStrength(signupPasswordDisplay);
 
@@ -561,6 +562,10 @@ export default function Login() {
             : "سجّل دخولك إلى Thiqa لإدارة عملاء وكالتك ومعاملاتك وأقساطك ومدفوعاتك في مكان واحد."
         }
         keywords={isSignup ? "تسجيل في Thiqa, إنشاء حساب, اشتراك مجاني, نظام تأمين" : "تسجيل دخول Thiqa, دخول للنظام"}
+      />
+      <WebPageJsonLd
+        name={isSignup ? "إنشاء حساب — Thiqa" : "تسجيل الدخول — Thiqa"}
+        pathname={isSignup ? "/register" : "/login"}
       />
       {/* Mobile video banner — short (15vh) strip at the top of the
           screen with the white Thiqa lockup centered on top. Hidden

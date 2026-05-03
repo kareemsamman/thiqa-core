@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 // Persisted choice — once a visitor accepts or declines, the banner
@@ -8,19 +8,19 @@ const STORAGE_KEY = "thiqa-cookie-consent";
 type Choice = "accepted" | "declined";
 
 export function CookieConsent() {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
+  // Read localStorage synchronously in the initializer so initial render
+  // matches what hydration sees. Reading in a useEffect would flip
+  // visibility AFTER first paint, which breaks hydration on prerendered
+  // pages (the captured DOM has the banner; the hydration first render
+  // would produce null → React error #418).
+  const [visible, setVisible] = useState<boolean>(() => {
     try {
       const v = localStorage.getItem(STORAGE_KEY) as Choice | null;
-      // Show only when no choice has been recorded yet.
-      if (v !== "accepted" && v !== "declined") setVisible(true);
+      return v !== "accepted" && v !== "declined";
     } catch {
-      // localStorage blocked → just show the banner; the user can dismiss
-      // it for the session and it'll come back next visit.
-      setVisible(true);
+      return true;
     }
-  }, []);
+  });
 
   if (!visible) return null;
 

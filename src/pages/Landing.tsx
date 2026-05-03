@@ -70,6 +70,7 @@ const LANDING_JSON_LD = {
     },
     {
       "@type": "WebSite",
+      "@id": "https://getthiqa.com/#website",
       url: "https://getthiqa.com/",
       name: "Thiqa",
       inLanguage: "ar",
@@ -733,6 +734,13 @@ function LandingContent() {
         keywords="نظام إدارة التأمين, برنامج وكالات التأمين, إدارة معاملات التأمين, CRM للتأمين, نظام تحصيل أقساط, إدارة شيكات التأمين, ثقة, Thiqa"
         pathname="/"
       />
+      {/* Homepage JSON-LD: Organization + SoftwareApplication + WebSite
+          + FAQPage in one @graph. Routed through Helmet so it lands in
+          <head>, where Google looks first. The script tag's text node
+          can produce a recoverable hydration warning (React 19 vs
+          react-helmet-async), but main.tsx's onRecoverableError filter
+          silences #418/#419 specifically — visible UI is identical
+          before and after recovery. */}
       <Helmet>
         <script type="application/ld+json">
           {JSON.stringify(LANDING_JSON_LD)}

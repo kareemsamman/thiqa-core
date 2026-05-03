@@ -120,6 +120,38 @@ export function PricingJsonLd({ offers }: { offers: PricingOffer[] }) {
   );
 }
 
+// Lightweight WebPage entity for routes that don't have a richer
+// schema of their own (login, privacy, terms). Anchors the page to
+// the Organization defined on the homepage via @id reference, so
+// crawlers see a consistent publisher graph across the site without
+// having to re-emit the full Organization block per page.
+export function WebPageJsonLd({
+  name,
+  pathname,
+  description,
+}: {
+  name: string;
+  pathname: string;
+  description?: string;
+}) {
+  const url = `${SITE_ORIGIN}${pathname === "/" ? "" : pathname}`;
+  const data = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name,
+    url,
+    inLanguage: "ar",
+    ...(description ? { description } : {}),
+    isPartOf: { "@type": "WebSite", "@id": `${SITE_ORIGIN}/#website` },
+    publisher: { "@id": `${SITE_ORIGIN}/#org` },
+  };
+  return (
+    <Helmet>
+      <script type="application/ld+json">{JSON.stringify(data)}</script>
+    </Helmet>
+  );
+}
+
 // ContactPage with embedded ContactPoint for /contact.
 export function ContactPageJsonLd() {
   const data = {

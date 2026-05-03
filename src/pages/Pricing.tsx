@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { usePageView, trackEvent } from "@/hooks/useAnalyticsTracker";
 import { useNavigate } from "react-router-dom";
 import {
@@ -164,7 +165,31 @@ export default function Pricing() {
   // expands every card to reveal the full feature catalog as a
   // ✓/✗ matrix in-place, exactly like the agent-side PlanLadder.
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [plans, setPlans] = useState<PlanData[]>(FALLBACK_PLANS);
+  // Plans live in React Query so the prerender pass dehydrates them
+  // alongside useLandingContent, and a real visit's hydration first
+  // render uses the same data the captured DOM was produced from.
+  // FALLBACK_PLANS keeps things sensible when the query is still
+  // loading or Supabase is unreachable from the build environment.
+  const { data: plansData } = useQuery({
+    queryKey: ["pricing-plans"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscription_plans")
+        .select("id, plan_key, name, name_ar, description, monthly_price, yearly_price, badge, users_limit, branches_limit, policies_limit, sms_limit, marketing_sms_limit, ai_limit, default_features")
+        .eq("is_active", true)
+        .order("sort_order");
+      if (error || !data || data.length === 0) return FALLBACK_PLANS;
+      return data.map((p: any) => ({
+        ...p,
+        default_features:
+          (typeof p.default_features === "string"
+            ? JSON.parse(p.default_features)
+            : p.default_features) || {},
+      })) as PlanData[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const plans = plansData ?? FALLBACK_PLANS;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSubmenu, setMobileSubmenu] = useState<"info" | "support" | null>(null);
 
@@ -185,47 +210,23 @@ export default function Pricing() {
     };
   }, [mobileMenuOpen]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data, error } = await supabase
-          .from("subscription_plans")
-          .select("id, plan_key, name, name_ar, description, monthly_price, yearly_price, badge, users_limit, branches_limit, policies_limit, sms_limit, marketing_sms_limit, ai_limit, default_features")
-          .eq("is_active", true)
-          .order("sort_order");
-        if (!error && data && data.length > 0) {
-          setPlans(data.map((p: any) => ({
-            ...p,
-            default_features:
-              (typeof p.default_features === 'string'
-                ? JSON.parse(p.default_features)
-                : p.default_features) || {},
-          })));
-        }
-      } catch {
-        // fallback plans already set
-      }
-    })();
-  }, []);
-
   // `show_public_prices` toggle (Thiqa admin → الخطط والأسعار). When the
   // platform setting is 'false', the price block + yearly toggle are
-  // concealed but the upgrade CTA stays clickable. Default true keeps
-  // existing installs unchanged when the row is missing or the fetch
-  // fails.
-  const [showPrices, setShowPrices] = useState(true);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+  // concealed but the upgrade CTA stays clickable. React Query so the
+  // prerender pass dehydrates this and hydration's first render produces
+  // the same value the captured DOM was prerendered with.
+  const { data: showPrices = true } = useQuery({
+    queryKey: ["pricing-show-public-prices"],
+    queryFn: async () => {
       const { data } = await supabase
         .from("thiqa_platform_settings")
         .select("setting_value")
         .eq("setting_key", "show_public_prices")
         .maybeSingle();
-      if (!cancelled && data?.setting_value === "false") setShowPrices(false);
-    })();
-    return () => { cancelled = true; };
-  }, []);
+      return data?.setting_value !== "false";
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Paid plans only (free_trial is shown elsewhere). With lg:grid-cols-3
   // a 5-plan layout becomes 3 + 2; the trailing empty cell(s) of the
