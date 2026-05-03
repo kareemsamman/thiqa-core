@@ -30,6 +30,7 @@ interface Step1Props {
 
   // Category
   categories: InsuranceCategory[];
+  loadingCategories?: boolean;
   selectedCategory: InsuranceCategory | null;
   onCategoryChange: (category: InsuranceCategory) => void;
   onCategoriesChanged?: (createdId?: string) => void | Promise<void>;
@@ -69,6 +70,7 @@ export function Step1BranchTypeClient({
   setSelectedBranchId,
   onBranchesChanged,
   categories,
+  loadingCategories,
   selectedCategory,
   onCategoryChange,
   onCategoriesChanged,
@@ -355,7 +357,16 @@ export function Step1BranchTypeClient({
           )}
         </div>
 
-        {categories.length === 0 ? (
+        {loadingCategories ? (
+          // Skeleton while the initial fetch is in flight — without this the
+          // user briefly sees the "no insurance types yet" empty state before
+          // the cards appear.
+          <div className="flex flex-wrap gap-2">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-12 w-36 rounded-md border border-dashed bg-muted/30 animate-pulse" />
+            ))}
+          </div>
+        ) : categories.length === 0 ? (
           isAdmin ? (
             <Card className="p-4 border-dashed bg-primary/5">
               <div className="flex items-start gap-3 mb-3">

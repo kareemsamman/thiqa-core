@@ -293,8 +293,14 @@ export function PolicyWizard({
     isPackage: boolean;
   } | null>(null);
 
+  // Track category fetch so Step 1 can render a skeleton instead of
+  // flashing the "no insurance types yet" empty-state while the initial
+  // request is still in flight.
+  const [loadingCategories, setLoadingCategories] = useState(true);
+
   // Fetch categories (stable ref so the quick-add dialog can refresh in place)
   const fetchCategories = useCallback(async () => {
+    setLoadingCategories(true);
     const { data } = await supabase
       .from('insurance_categories')
       .select('*')
@@ -308,6 +314,7 @@ export function PolicyWizard({
       }));
       setCategories(typedCategories);
     }
+    setLoadingCategories(false);
   }, [setCategories]);
 
   // Fetch categories and brokers on open
@@ -1835,6 +1842,7 @@ export function PolicyWizard({
                   if (createdId) handleBranchChange(createdId);
                 }}
                 categories={categories}
+                loadingCategories={loadingCategories}
                 selectedCategory={selectedCategory}
                 onCategoryChange={handleCategoryChange}
                 onCategoriesChanged={async (createdId) => {
