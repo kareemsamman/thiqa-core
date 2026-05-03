@@ -77,7 +77,7 @@ function effective(override: number | null, plan: number | null): EffectiveLimit
   return { value: plan, source: "plan" };
 }
 
-export function AgentUsageStats({ agentId }: { agentId: string }) {
+export function AgentUsageStats({ agentId, refreshKey = 0 }: { agentId: string; refreshKey?: number }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<UsageData | null>(null);
 
@@ -179,7 +179,7 @@ export function AgentUsageStats({ agentId }: { agentId: string }) {
       });
       setLoading(false);
     })();
-  }, [agentId]);
+  }, [agentId, refreshKey]);
 
   if (loading || !data) {
     return (

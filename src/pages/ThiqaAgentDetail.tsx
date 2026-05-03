@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { AgentSupportTickets } from "@/components/thiqa/AgentSupportTickets";
 import { AgentUsageStats } from "@/components/thiqa/AgentUsageStats";
+import { AgentCreditAdjuster } from "@/components/thiqa/AgentCreditAdjuster";
 import { AGENT_FEATURES, AGENT_FEATURE_GROUPS } from "@/components/thiqa/agentFeatures";
 import { ThiqaAgentSearch } from "@/components/thiqa/ThiqaAgentSearch";
 import { Search } from "lucide-react";
@@ -86,6 +87,9 @@ export default function ThiqaAgentDetail() {
   }, []);
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [agents_original_plan, setOriginalPlan] = useState<string>("");
+  // Bumped when AgentCreditAdjuster applies a delta so AgentUsageStats
+  // re-fetches the wallet balances it shows in the usage tiles.
+  const [statsRefreshKey, setStatsRefreshKey] = useState(0);
   const [features, setFeatures] = useState<Record<string, boolean>>({});
   const [payments, setPayments] = useState<any[]>([]);
   const [unbilledOverages, setUnbilledOverages] = useState<any[]>([]);
@@ -2326,7 +2330,13 @@ export default function ThiqaAgentDetail() {
 
           {/* ═══════════ STATS TAB ═══════════ */}
           <TabsContent value="stats">
-            <AgentUsageStats agentId={agentId!} />
+            <div className="space-y-4">
+              <AgentUsageStats agentId={agentId!} refreshKey={statsRefreshKey} />
+              <AgentCreditAdjuster
+                agentId={agentId!}
+                onAdjusted={() => setStatsRefreshKey((k) => k + 1)}
+              />
+            </div>
           </TabsContent>
         </Tabs>
       </div>
