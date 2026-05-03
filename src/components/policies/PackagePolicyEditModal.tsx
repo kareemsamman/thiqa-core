@@ -1082,7 +1082,16 @@ export function PackagePolicyEditModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-hidden !flex !flex-col p-6" dir="rtl">
+      <DialogContent
+        className={cn(
+          "max-h-[92vh] overflow-hidden !flex !flex-col p-6",
+          // Single-policy mode only has one card to render — using
+          // the wider 4xl width here just leaves a big empty gutter
+          // on the left of every field.
+          isSingleMode ? "max-w-xl" : "max-w-4xl",
+        )}
+        dir="rtl"
+      >
         <DialogHeader className="text-right shrink-0">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-primary/10">
