@@ -1416,12 +1416,13 @@ export function PackagePolicyEditModal({
                       value={under24Type === 'additional_driver' ? 'client' : under24Type}
                       onValueChange={(v: 'none' | 'client') => setUnder24Type(v)}
                       className="flex flex-col gap-2"
+                      dir="rtl"
                     >
-                      <div className="flex items-center gap-2">
+                      <div dir="rtl" className="flex items-center gap-2">
                         <RadioGroupItem value="none" id={`under24_none_${policyId || groupId || 'modal'}`} />
                         <Label htmlFor={`under24_none_${policyId || groupId || 'modal'}`} className="cursor-pointer text-sm">لا</Label>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div dir="rtl" className="flex items-center gap-2">
                         <RadioGroupItem value="client" id={`under24_client_${policyId || groupId || 'modal'}`} />
                         <Label htmlFor={`under24_client_${policyId || groupId || 'modal'}`} className="cursor-pointer text-sm">نعم – العميل أقل من 24</Label>
                       </div>
