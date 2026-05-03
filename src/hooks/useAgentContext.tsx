@@ -59,8 +59,8 @@ interface AgentContextType {
   isImpersonating: boolean;
   impersonatedAgent: AgentInfo | null;
   hasFeature: (featureKey: string) => boolean;
-  startImpersonation: (agentId: string) => void;
-  stopImpersonation: () => void;
+  startImpersonation: (agentId: string) => Promise<void>;
+  stopImpersonation: () => Promise<void>;
   /** Force a refetch of agent + plan + feature flags. Realtime channels
    *  pick up UPDATEs automatically, but flows that *insert* the agent
    *  (e.g. fresh OAuth signup) need to call this manually so the
@@ -94,12 +94,28 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const isThiqaSuperAdmin = isSuperAdmin && !impersonatedAgentId;
   const isImpersonating = isSuperAdmin && !!impersonatedAgentId;
 
-  const startImpersonation = useCallback((id: string) => {
+  // Impersonation is enforced server-side via the impersonation_sessions
+  // table (see migration 20260503130000) — every agent_data_* RLS policy
+  // scopes super-admin reads/writes to the row's target_agent_id while
+  // active. The sessionStorage flag is just the UI cache so the React
+  // tree knows to render the agent layout instead of /thiqa/*.
+  const startImpersonation = useCallback(async (id: string) => {
+    const { error } = await supabase.rpc('start_impersonation', { p_agent_id: id });
+    if (error) {
+      console.error('start_impersonation failed', error);
+      throw error;
+    }
     sessionStorage.setItem(IMPERSONATION_KEY, id);
     setImpersonatedAgentId(id);
   }, []);
 
-  const stopImpersonation = useCallback(() => {
+  const stopImpersonation = useCallback(async () => {
+    const { error } = await supabase.rpc('stop_impersonation');
+    if (error) {
+      console.error('stop_impersonation failed', error);
+      // Continue with the client-side cleanup anyway — better to drop
+      // out of impersonation UI than to be wedged if the RPC blipped.
+    }
     sessionStorage.removeItem(IMPERSONATION_KEY);
     setImpersonatedAgentId(null);
     setImpersonatedAgent(null);
@@ -243,14 +259,30 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Super admin impersonating an agent
+    // Super admin impersonating an agent. Make sure the server-side
+    // impersonation_sessions row matches what's in sessionStorage —
+    // a tab refresh could leave the row missing (e.g. another tab
+    // called stop_impersonation) which would silently empty every
+    // page since RLS now scopes by it.
     if (isSuperAdmin && impersonatedAgentId) {
       setLoading(true);
-      loadAgentContext(impersonatedAgentId, true);
+      (async () => {
+        const { error } = await supabase.rpc('start_impersonation', {
+          p_agent_id: impersonatedAgentId,
+        });
+        if (error) {
+          console.error('failed to resync impersonation_sessions', error);
+        }
+        loadAgentContext(impersonatedAgentId, true);
+      })();
       return;
     }
 
-    // Super admin without impersonation — no agent context
+    // Super admin without impersonation — no agent context. Don't
+    // proactively call stop_impersonation here: another tab might
+    // still be mid-impersonation and clearing the server-side row
+    // would silently empty its tenant queries. Cleanup happens on
+    // explicit Exit / signOut.
     if (isSuperAdmin) {
       setLoading(false);
       return;

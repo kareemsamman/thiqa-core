@@ -1263,12 +1263,11 @@ export default function ThiqaAgentDetail() {
             </div>
             <div className="flex gap-2 flex-wrap shrink-0">
               <Button
-                onClick={() => {
-                  startImpersonation(agentId!);
-                  // Land on the agent's own dashboard, not the public
-                  // landing page (`/` resolves to <Landing /> which
-                  // bounced super-admins out of the agent context they
-                  // just entered).
+                onClick={async () => {
+                  // Await so the server-side impersonation_sessions
+                  // row is in place before /dashboard mounts and
+                  // starts firing tenant-scoped queries.
+                  await startImpersonation(agentId!);
                   navigate('/dashboard');
                 }}
                 className="h-10 rounded-full gap-2 bg-foreground text-background hover:bg-foreground/90 shadow-sm"

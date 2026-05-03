@@ -79,8 +79,8 @@ export default function SubscriptionExpired() {
   const whatsapp = contact?.support_whatsapp || DEFAULT_SUPPORT_WHATSAPP;
   const phone = contact?.support_phone || DEFAULT_SUPPORT_PHONE;
 
-  const handleExitImpersonation = () => {
-    stopImpersonation();
+  const handleExitImpersonation = async () => {
+    await stopImpersonation();
     navigate('/thiqa');
   };
 

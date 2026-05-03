@@ -59,8 +59,8 @@ export function AppChrome() {
   // bindings to react to.
   useGlobalShortcutListener();
 
-  const handleExitImpersonation = () => {
-    stopImpersonation();
+  const handleExitImpersonation = async () => {
+    await stopImpersonation();
     navigate('/thiqa');
   };
 

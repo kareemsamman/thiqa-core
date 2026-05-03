@@ -109,6 +109,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Drop any server-side impersonation row first — its tenant scope
+    // would otherwise persist across logins on the same auth.uid().
+    // Best-effort; failures here shouldn't block sign-out.
+    try {
+      await supabase.rpc('stop_impersonation');
+    } catch (e) {
+      console.warn('stop_impersonation on signOut failed', e);
+    }
+    sessionStorage.removeItem('thiqa_impersonate_agent_id');
+
     // Close the active user_sessions row before auth clears, so the
     // Sessions tab doesn't keep showing the user as active. Must run
     // while the JWT is still valid (UPDATE policy keys on auth.uid()).
