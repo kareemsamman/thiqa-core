@@ -70,9 +70,6 @@ interface PolicyData {
   // through this modal keeps full feature parity.
   broker_id?: string | null;
   office_commission?: number | null;
-  cancelled?: boolean | null;
-  transferred?: boolean | null;
-  transferred_car_number?: string | null;
   notes?: string | null;
   insurance_companies?: {
     id: string;
@@ -134,9 +131,6 @@ interface EditState {
   policyType: string;
   policyTypeChild: string;
   officeCommission: string;
-  cancelled: boolean;
-  transferred: boolean;
-  transferredCarNumber: string;
   notes: string;
 }
 
@@ -296,9 +290,6 @@ export function PackagePolicyEditModal({
           branch_id,
           broker_id,
           office_commission,
-          cancelled,
-          transferred,
-          transferred_car_number,
           notes,
           insurance_companies (id, name, name_ar),
           road_services (id, name, name_ar),
@@ -352,9 +343,6 @@ export function PackagePolicyEditModal({
           policyType: p.policy_type_parent,
           policyTypeChild: p.policy_type_child || "",
           officeCommission: p.office_commission != null ? String(p.office_commission) : "0",
-          cancelled: !!p.cancelled,
-          transferred: !!p.transferred,
-          transferredCarNumber: p.transferred_car_number || "",
           notes: p.notes || "",
         };
       });
@@ -936,9 +924,6 @@ export function PackagePolicyEditModal({
           office_commission: effectiveType === 'ELZAMI'
             ? (parseFloat(state.officeCommission) || 0)
             : 0,
-          cancelled: state.cancelled,
-          transferred: state.transferred,
-          transferred_car_number: state.transferred ? (state.transferredCarNumber || null) : null,
           notes: state.notes || null,
           // One broker for the whole package — applied to every row.
           broker_id: packageBrokerId === NO_BROKER ? null : packageBrokerId,
@@ -1405,43 +1390,6 @@ export function PackagePolicyEditModal({
                           />
                           <p className="text-[11px] text-muted-foreground">تدخل في حساب العميل كدين</p>
                         </div>
-                      )}
-
-                      {/* Cancelled / transferred toggles — only meaningful
-                          for "real" policies (THIRD_FULL / ELZAMI). Service
-                          addons are tied to the parent policy's lifecycle,
-                          so showing these toggles there just confuses the
-                          user. */}
-                      {!isServiceRow && (
-                        <>
-                          <div className="grid grid-cols-2 gap-2">
-                            <label className="flex items-center gap-2 p-2 rounded-md bg-background border cursor-pointer">
-                              <Checkbox
-                                checked={!!state?.cancelled}
-                                onCheckedChange={(v) => updateEditState(policy.id, 'cancelled', !!v)}
-                              />
-                              <span className="text-xs font-medium">ملغاة</span>
-                            </label>
-                            <label className="flex items-center gap-2 p-2 rounded-md bg-background border cursor-pointer">
-                              <Checkbox
-                                checked={!!state?.transferred}
-                                onCheckedChange={(v) => updateEditState(policy.id, 'transferred', !!v)}
-                              />
-                              <span className="text-xs font-medium">منقولة</span>
-                            </label>
-                          </div>
-                          {state?.transferred && (
-                            <div className="space-y-1">
-                              <Label className="text-xs font-semibold text-foreground/80">رقم السيارة المنقولة إليها</Label>
-                              <Input
-                                value={state?.transferredCarNumber || ""}
-                                onChange={(e) => updateEditState(policy.id, 'transferredCarNumber', e.target.value)}
-                                className="h-9 text-sm bg-background ltr-input"
-                                placeholder="رقم السيارة"
-                              />
-                            </div>
-                          )}
-                        </>
                       )}
 
                       {/* Notes */}
