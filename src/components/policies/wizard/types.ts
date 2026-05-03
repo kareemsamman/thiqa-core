@@ -210,7 +210,7 @@ export interface RenewalData {
 
 // Constants
 export const CAR_POLICY_TYPES = [
-  { value: "ELZAMI", label: "إلزامي", requiresBroker: false },
+  { value: "ELZAMI", label: "إلزامي", requiresBroker: true },
   { value: "THIRD_FULL", label: "ثالث/شامل", hasChild: true, requiresBroker: true },
   { value: "ROAD_SERVICE", label: "خدمات الطريق", requiresBroker: false },
   { value: "ACCIDENT_FEE_EXEMPTION", label: "إعفاء رسوم حادث", requiresBroker: false },
