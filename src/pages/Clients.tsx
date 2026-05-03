@@ -102,7 +102,20 @@ export default function Clients() {
   const [initialCarFilter, setInitialCarFilter] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingClient, setDeletingClient] = useState<Client | null>(null);
+  const [deletingPolicyCount, setDeletingPolicyCount] = useState(0);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const openDeleteDialog = async (client: Client) => {
+    setDeletingClient(client);
+    setDeletingPolicyCount(0);
+    setDeleteDialogOpen(true);
+    const { count } = await supabase
+      .from('policies')
+      .select('*', { count: 'exact', head: true })
+      .eq('client_id', client.id)
+      .is('deleted_at', null);
+    setDeletingPolicyCount(count ?? 0);
+  };
 
   // Handle URL param to open client directly (supports both /clients/:id and
   // ?open=id). When the URL drops back to /clients with no client id (e.g.
@@ -204,29 +217,23 @@ export default function Clients() {
     if (!deletingClient) return;
     setDeleteLoading(true);
     try {
-      // Check if client has active policies
-      const { count } = await supabase
+      const now = new Date().toISOString();
+
+      // Cascade soft-delete: archive any active policies tied to this client
+      // so they disappear from lists/reports alongside the client. Receipts,
+      // payments and other downstream records remain in place but are filtered
+      // out everywhere via the policy's deleted_at.
+      const { error: policiesError } = await supabase
         .from('policies')
-        .select('*', { count: 'exact', head: true })
+        .update({ deleted_at: now })
         .eq('client_id', deletingClient.id)
         .is('deleted_at', null);
 
-      if (count && count > 0) {
-        toast({ 
-          title: "لا يمكن الحذف", 
-          description: `العميل لديه ${count} معاملة مرتبطة`,
-          variant: "destructive" 
-        });
-        setDeleteLoading(false);
-        setDeleteDialogOpen(false);
-        setDeletingClient(null);
-        return;
-      }
+      if (policiesError) throw policiesError;
 
-      // No policies - archive the client
       const { error } = await supabase
         .from('clients')
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: now })
         .eq('id', deletingClient.id);
 
       if (error) throw error;
@@ -238,6 +245,7 @@ export default function Clients() {
       setDeleteLoading(false);
       setDeleteDialogOpen(false);
       setDeletingClient(null);
+      setDeletingPolicyCount(0);
     }
   };
 
@@ -462,10 +470,7 @@ export default function Clients() {
                             setSelectedClient(client);
                             setDrawerOpen(true);
                           }}
-                          onDelete={() => {
-                            setDeletingClient(client);
-                            setDeleteDialogOpen(true);
-                          }}
+                          onDelete={() => openDeleteDialog(client)}
                         />
                       </TableCell>
                     </TableRow>
@@ -517,10 +522,20 @@ export default function Clients() {
 
       <DeleteConfirmDialog
         open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) {
+            setDeletingClient(null);
+            setDeletingPolicyCount(0);
+          }
+        }}
         onConfirm={handleDelete}
         title="حذف العميل"
-        description={`هل أنت متأكد من حذف العميل "${deletingClient?.full_name}"؟`}
+        description={
+          deletingPolicyCount > 0
+            ? `العميل "${deletingClient?.full_name}" لديه ${deletingPolicyCount} معاملة مرتبطة. سيتم حذف العميل وجميع معاملاته. هل تريد المتابعة؟`
+            : `هل أنت متأكد من حذف العميل "${deletingClient?.full_name}"؟`
+        }
         loading={deleteLoading}
       />
     </MainLayout>
