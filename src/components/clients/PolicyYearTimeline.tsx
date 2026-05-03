@@ -31,6 +31,7 @@ import {
   Printer,
   Copy,
   Hash,
+  Baby,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -82,6 +83,7 @@ interface PolicyRecord {
   broker?: { id: string; name: string } | null;
   branch_id?: string | null;
   created_at?: string;
+  is_under_24?: boolean | null;
 }
 
 interface TransferAdjustment {
@@ -1352,6 +1354,24 @@ function PolicyPackageCard({
               {childrenCount} سائق إضافي
             </Badge>
           )}
+
+          {/* Under-24 indicator — true if any policy in the card was
+              flagged as is_under_24 (set by the under-24 toggle in the
+              edit modal / wizard). Mirrors the chip the printed invoice
+              now stamps on the customer info table. */}
+          {(() => {
+            const policiesInCard: PolicyRecord[] = isPkg && pkg.mainPolicy
+              ? [pkg.mainPolicy, ...pkg.addons]
+              : [policy];
+            const isUnder24 = policiesInCard.some((p) => p.is_under_24);
+            if (!isUnder24) return null;
+            return (
+              <Badge variant="outline" className="gap-1 text-xs bg-amber-500/10 border-amber-500/30 text-amber-700">
+                <Baby className="h-3 w-3" />
+                أقل من 24
+              </Badge>
+            );
+          })()}
 
           {/* Broker indicator — shows when any policy in this card (main or
               an addon inside the package) is tied to a broker. Label flips

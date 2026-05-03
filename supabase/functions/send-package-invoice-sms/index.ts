@@ -684,6 +684,14 @@ function buildPackageInvoiceHtml(
   const carTypesText = uniqueCarTypes.join('، ');
   const carModelsText = uniqueCarModels.join('، ');
 
+  // Stamp the customer name with an "أقل من 24" chip whenever any
+  // policy in the invoice was issued under that flag — matches the
+  // badge the package card now shows in the in-app timeline.
+  const isUnder24Customer = policies.some((p: any) => p.is_under_24);
+  const under24ChipHtml = isUnder24Customer
+    ? '<span class="under24-chip">أقل من 24</span>'
+    : '';
+
   // Smarter invoice title based on the policy types in this package.
   const policyTypeKinds = new Set<string>();
   policies.forEach((p: any) => {
@@ -1126,6 +1134,18 @@ function buildPackageInvoiceHtml(
       font-variant-numeric: tabular-nums;
       direction: ltr;
       text-align: right;
+    }
+    .customer-grid .under24-chip {
+      display: inline-block;
+      margin-right: 6px;
+      padding: 1px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #92400e;
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      border-radius: 999px;
+      vertical-align: middle;
     }
 
     /* ── Items table ── */
@@ -1717,7 +1737,7 @@ function buildPackageInvoiceHtml(
       <div class="customer-grid">
         <div class="cell">
           <div class="label">الاسم</div>
-          <div class="value">${client.full_name || '-'}</div>
+          <div class="value">${client.full_name || '-'}${under24ChipHtml}</div>
         </div>
         <div class="cell">
           <div class="label">رقم الهوية</div>
