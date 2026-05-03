@@ -133,7 +133,6 @@ interface EditState {
   // mode the user can flip between any of the four types.
   policyType: string;
   policyTypeChild: string;
-  brokerId: string;
   officeCommission: string;
   cancelled: boolean;
   transferred: boolean;
@@ -214,6 +213,10 @@ export function PackagePolicyEditModal({
   const [roadServices, setRoadServices] = useState<LookupOption[]>([]);
   const [accidentFeeServices, setAccidentFeeServices] = useState<LookupOption[]>([]);
   const [brokers, setBrokers] = useState<BrokerOption[]>([]);
+  // Single broker for the whole package — replaces the per-row select.
+  // Initialized from the THIRD_FULL row when present, otherwise from
+  // the first row that has a broker set.
+  const [packageBrokerId, setPackageBrokerId] = useState<string>(NO_BROKER);
 
   // Extra context needed to insert new addon policies into the package
   // (everything inherits from the existing package — same client, car,
@@ -348,7 +351,6 @@ export function PackagePolicyEditModal({
           insuranceCompanyId: p.insurance_companies?.id || "",
           policyType: p.policy_type_parent,
           policyTypeChild: p.policy_type_child || "",
-          brokerId: p.broker_id || NO_BROKER,
           officeCommission: p.office_commission != null ? String(p.office_commission) : "0",
           cancelled: !!p.cancelled,
           transferred: !!p.transferred,
@@ -357,6 +359,13 @@ export function PackagePolicyEditModal({
         };
       });
       setEditStates(states);
+
+      // Seed the single package-level broker from the most relevant
+      // row: prefer THIRD_FULL (which is the row that conceptually
+      // owns the broker), fall back to any row that has a broker set.
+      const brokerSource = sortedData.find((p) => p.policy_type_parent === 'THIRD_FULL' && p.broker_id)
+        || sortedData.find((p) => p.broker_id);
+      setPackageBrokerId(brokerSource?.broker_id || NO_BROKER);
 
       // Fetch the lookup tables in parallel so the selects populate before
       // the user starts editing.
@@ -558,6 +567,7 @@ export function PackagePolicyEditModal({
       setShowSuccessDialog(false);
       setSuccessPolicyId(null);
       setSuccessIsPackage(true);
+      setPackageBrokerId(NO_BROKER);
     }
   }, [open]);
 
@@ -930,7 +940,8 @@ export function PackagePolicyEditModal({
           transferred: state.transferred,
           transferred_car_number: state.transferred ? (state.transferredCarNumber || null) : null,
           notes: state.notes || null,
-          broker_id: state.brokerId === NO_BROKER ? null : state.brokerId,
+          // One broker for the whole package — applied to every row.
+          broker_id: packageBrokerId === NO_BROKER ? null : packageBrokerId,
           is_under_24: clientUnder24,
           updated_at: new Date().toISOString(),
         };
@@ -1124,6 +1135,29 @@ export function PackagePolicyEditModal({
                 once an addon was enabled. */}
             <div dir="rtl" className="flex-1 min-h-0 overflow-y-auto -mx-6 px-6">
               <div className="space-y-2 py-1">
+                {/* Single broker for the whole package — applied to
+                    every row on save. Replaces the per-row broker
+                    select that used to live inside each card. */}
+                <div className="flex items-center gap-3 p-2 rounded-lg bg-muted/30 border">
+                  <Label className="text-sm font-semibold shrink-0">الوسيط للباقة</Label>
+                  <Select
+                    value={packageBrokerId}
+                    onValueChange={setPackageBrokerId}
+                  >
+                    <SelectTrigger className="h-9 text-sm bg-background flex-1">
+                      <SelectValue placeholder="بدون وسيط" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_BROKER}>بدون وسيط</SelectItem>
+                      {brokers.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {policies.map((policy) => {
                   const state = editStates[policy.id];
                   // The effective type drives icon / color / options —
@@ -1236,40 +1270,40 @@ export function PackagePolicyEditModal({
                         )
                       )}
 
-                      {/* Company + (broker or insurance company) row.
-                          For service rows we replace الوسيط with شركة
-                          التأمين so the user can set the insurer that
-                          shows on the printed invoice — broker doesn't
-                          apply to road service / accident fee anyway. */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-xs font-semibold text-foreground/80">{companyLabel}</Label>
-                          <Select
-                            value={state?.companyId || ''}
-                            onValueChange={(v) => updateEditState(policy.id, 'companyId', v)}
-                          >
-                            <SelectTrigger className="h-9 text-sm bg-background">
-                              <SelectValue placeholder="اختر..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {companyOptions.length === 0 ? (
-                                <div className="px-2 py-1.5 text-xs text-muted-foreground">لا توجد خيارات متاحة</div>
-                              ) : (
-                                companyOptions.map((opt) => (
-                                  <SelectItem key={opt.id} value={opt.id}>
-                                    {opt.label}
-                                  </SelectItem>
-                                ))
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {isServiceRow ? (
-                          (() => {
-                            const insuranceList = effectiveType === 'ROAD_SERVICE'
-                              ? pkgRoadServiceCompanies
-                              : pkgAccidentFeeCompanies;
-                            return (
+                      {/* For service rows the second column holds the
+                          insurance company picker (the printed invoice
+                          joins on company_id). For other types the
+                          row is just a single company select since the
+                          broker now lives in the package-level header. */}
+                      {isServiceRow ? (
+                        (() => {
+                          const insuranceList = effectiveType === 'ROAD_SERVICE'
+                            ? pkgRoadServiceCompanies
+                            : pkgAccidentFeeCompanies;
+                          return (
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs font-semibold text-foreground/80">{companyLabel}</Label>
+                                <Select
+                                  value={state?.companyId || ''}
+                                  onValueChange={(v) => updateEditState(policy.id, 'companyId', v)}
+                                >
+                                  <SelectTrigger className="h-9 text-sm bg-background">
+                                    <SelectValue placeholder="اختر..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {companyOptions.length === 0 ? (
+                                      <div className="px-2 py-1.5 text-xs text-muted-foreground">لا توجد خيارات متاحة</div>
+                                    ) : (
+                                      companyOptions.map((opt) => (
+                                        <SelectItem key={opt.id} value={opt.id}>
+                                          {opt.label}
+                                        </SelectItem>
+                                      ))
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              </div>
                               <div className="space-y-1">
                                 <Label className="text-xs font-semibold text-foreground/80">شركة التأمين</Label>
                                 <Select
@@ -1292,30 +1326,33 @@ export function PackagePolicyEditModal({
                                   </SelectContent>
                                 </Select>
                               </div>
-                            );
-                          })()
-                        ) : (
-                          <div className="space-y-1">
-                            <Label className="text-xs font-semibold text-foreground/80">الوسيط</Label>
-                            <Select
-                              value={state?.brokerId || NO_BROKER}
-                              onValueChange={(v) => updateEditState(policy.id, 'brokerId', v)}
-                            >
-                              <SelectTrigger className="h-9 text-sm bg-background">
-                                <SelectValue placeholder="اختياري" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value={NO_BROKER}>بدون وسيط</SelectItem>
-                                {brokers.map((b) => (
-                                  <SelectItem key={b.id} value={b.id}>
-                                    {b.name}
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold text-foreground/80">{companyLabel}</Label>
+                          <Select
+                            value={state?.companyId || ''}
+                            onValueChange={(v) => updateEditState(policy.id, 'companyId', v)}
+                          >
+                            <SelectTrigger className="h-9 text-sm bg-background">
+                              <SelectValue placeholder="اختر..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {companyOptions.length === 0 ? (
+                                <div className="px-2 py-1.5 text-xs text-muted-foreground">لا توجد خيارات متاحة</div>
+                              ) : (
+                                companyOptions.map((opt) => (
+                                  <SelectItem key={opt.id} value={opt.id}>
+                                    {opt.label}
                                   </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                      </div>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
 
                       {/* Dates + Price */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
