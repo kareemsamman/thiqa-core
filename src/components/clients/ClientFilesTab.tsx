@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, FileText, ExternalLink, FolderOpen, ImageIcon } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, FileText, ExternalLink, FolderOpen, ImageIcon, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { FilePreviewGallery } from '@/components/policies/FilePreviewGallery';
 
@@ -22,6 +23,7 @@ export interface ClientFilesPolicyRef {
   label: string;
   car_number?: string | null;
   policy_number?: string | null;
+  document_number?: string | null;
 }
 
 interface ClientFilesTabProps {
@@ -51,6 +53,7 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<MediaFile | null>(null);
+  const [search, setSearch] = useState('');
 
   const policyIds = useMemo(() => policies.map((p) => p.id), [policies]);
   const policyMap = useMemo(() => {
@@ -94,6 +97,24 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [policyIds.join(','), kind]);
 
+  const filteredFiles = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return files;
+    return files.filter((file) => {
+      const policy = file.entity_id ? policyMap.get(file.entity_id) : null;
+      const haystack = [
+        file.original_name,
+        policy?.car_number,
+        policy?.policy_number,
+        policy?.document_number,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [files, search, policyMap]);
+
   const isExternalLink = (file: MediaFile) => !file.storage_path && file.size === 0;
 
   const heading = kind === 'system' ? 'ملفات النظام' : 'ملفات العميل';
@@ -109,9 +130,23 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
         <div className="flex items-center gap-2 text-primary font-semibold">
           <HeadingIcon className="h-4 w-4" />
           <span>{heading}</span>
-          <Badge variant="secondary" className="ml-auto">{files.length}</Badge>
+          <Badge variant="secondary" className="ml-auto">
+            {search.trim() ? `${filteredFiles.length} / ${files.length}` : files.length}
+          </Badge>
         </div>
         <p className="text-xs text-muted-foreground">{description}</p>
+
+        {!loading && files.length > 0 && (
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="ابحث برقم السيارة، اسم الملف، رقم البوليصة، أو رقم المعاملة..."
+              className="pr-9"
+            />
+          </div>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -120,9 +155,11 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
           </div>
         ) : files.length === 0 ? (
           <p className="text-center text-muted-foreground py-8">لا توجد ملفات</p>
+        ) : filteredFiles.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8">لا نتائج مطابقة للبحث</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {files.map((file) => {
+            {filteredFiles.map((file) => {
               const policy = file.entity_id ? policyMap.get(file.entity_id) : null;
               const policyLabel = policy?.label ?? 'معاملة';
               const carNumber = policy?.car_number;
@@ -189,7 +226,7 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
 
       <FilePreviewGallery
         file={selectedFile}
-        allFiles={files}
+        allFiles={filteredFiles}
         onClose={() => setSelectedFile(null)}
         onNavigate={(f) => setSelectedFile(f)}
       />

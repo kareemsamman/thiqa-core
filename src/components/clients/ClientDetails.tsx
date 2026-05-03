@@ -1361,6 +1361,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         label: `${typeLabel}${docPart}`,
         car_number: p.car?.car_number ?? null,
         policy_number: p.policy_number,
+        document_number: p.document_number,
       };
     });
   }, [policies]);
