@@ -103,18 +103,28 @@ export default function Clients() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingClient, setDeletingClient] = useState<Client | null>(null);
   const [deletingPolicyCount, setDeletingPolicyCount] = useState(0);
+  const [deletingCarCount, setDeletingCarCount] = useState(0);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const openDeleteDialog = async (client: Client) => {
     setDeletingClient(client);
     setDeletingPolicyCount(0);
+    setDeletingCarCount(0);
     setDeleteDialogOpen(true);
-    const { count } = await supabase
-      .from('policies')
-      .select('*', { count: 'exact', head: true })
-      .eq('client_id', client.id)
-      .is('deleted_at', null);
-    setDeletingPolicyCount(count ?? 0);
+    const [policiesRes, carsRes] = await Promise.all([
+      supabase
+        .from('policies')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', client.id)
+        .is('deleted_at', null),
+      supabase
+        .from('cars')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', client.id)
+        .is('deleted_at', null),
+    ]);
+    setDeletingPolicyCount(policiesRes.count ?? 0);
+    setDeletingCarCount(carsRes.count ?? 0);
   };
 
   // Handle URL param to open client directly (supports both /clients/:id and
@@ -217,27 +227,38 @@ export default function Clients() {
     if (!deletingClient) return;
     setDeleteLoading(true);
     try {
-      const now = new Date().toISOString();
-
-      // Cascade soft-delete: archive any active policies tied to this client
-      // so they disappear from lists/reports alongside the client. Receipts,
-      // payments and other downstream records remain in place but are filtered
-      // out everywhere via the policy's deleted_at.
-      const { error: policiesError } = await supabase
-        .from('policies')
-        .update({ deleted_at: now })
-        .eq('client_id', deletingClient.id)
-        .is('deleted_at', null);
-
-      if (policiesError) throw policiesError;
-
+      // Hard-delete cascades through the database FKs:
+      //   clients (this row)
+      //     ↳ cars                ON DELETE CASCADE
+      //     ↳ policies            ON DELETE CASCADE
+      //         ↳ policy_payments / signatures / reminders / transfers ...
+      //                                ON DELETE CASCADE (most tables)
+      //         ↳ broker_settlement_items  ON DELETE RESTRICT
+      // The RESTRICT FK from broker_settlement_items is the only thing
+      // that can block: if any of this client's policies were ever
+      // included in a broker settlement, Postgres throws 23503 and the
+      // row stays untouched. Surface that as a clear message instead of
+      // a generic "failed to delete" so the agent knows to clear the
+      // settlement first (or contact support).
       const { error } = await supabase
         .from('clients')
-        .update({ deleted_at: now })
+        .delete()
         .eq('id', deletingClient.id);
 
-      if (error) throw error;
-      toast({ title: "تم الحذف", description: "تم حذف العميل بنجاح" });
+      if (error) {
+        const blockedBySettlement =
+          error.code === '23503' ||
+          /broker_settlement|settlement_item/i.test(error.message ?? '');
+        toast({
+          title: blockedBySettlement ? "تعذّر الحذف" : "خطأ",
+          description: blockedBySettlement
+            ? "هذا العميل مرتبط بمعاملات تسوية مع وسيط لا يمكن حذفها. تواصل مع الدعم."
+            : "فشل في حذف العميل",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "تم الحذف", description: "تم حذف العميل وجميع بياناته نهائيًا" });
       fetchClients();
     } catch (error) {
       toast({ title: "خطأ", description: "فشل في حذف العميل", variant: "destructive" });
@@ -246,6 +267,7 @@ export default function Clients() {
       setDeleteDialogOpen(false);
       setDeletingClient(null);
       setDeletingPolicyCount(0);
+      setDeletingCarCount(0);
     }
   };
 
@@ -527,14 +549,15 @@ export default function Clients() {
           if (!open) {
             setDeletingClient(null);
             setDeletingPolicyCount(0);
+            setDeletingCarCount(0);
           }
         }}
         onConfirm={handleDelete}
         title="حذف العميل"
         description={
-          deletingPolicyCount > 0
-            ? `العميل "${deletingClient?.full_name}" لديه ${deletingPolicyCount} معاملة مرتبطة. سيتم حذف العميل وجميع معاملاته. هل تريد المتابعة؟`
-            : `هل أنت متأكد من حذف العميل "${deletingClient?.full_name}"؟`
+          deletingPolicyCount > 0 || deletingCarCount > 0
+            ? `العميل "${deletingClient?.full_name}" لديه ${deletingCarCount} سيارة و ${deletingPolicyCount} معاملة مرتبطة. سيتم حذف العميل وجميع سياراته ومعاملاته نهائيًا ولا يمكن التراجع. هل تريد المتابعة؟`
+            : `سيتم حذف العميل "${deletingClient?.full_name}" نهائيًا. هل تريد المتابعة؟`
         }
         loading={deleteLoading}
       />
