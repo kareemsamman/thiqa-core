@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -874,7 +873,11 @@ export function PackagePolicyEditModal({
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col">
-            <ScrollArea dir="rtl" className="flex-1 min-h-0 -mx-6 px-6">
+            {/* Native overflow-y-auto — radix ScrollArea was swallowing
+                wheel events inside the package builder cards on some
+                browsers, leaving the modal effectively unscrollable
+                once an addon was enabled. */}
+            <div dir="rtl" className="flex-1 min-h-0 overflow-y-auto -mx-6 px-6">
               <div className="space-y-2 py-1">
                 {policies.map((policy) => {
                   const state = editStates[policy.id];
@@ -1253,7 +1256,7 @@ export function PackagePolicyEditModal({
                   </div>
                 )}
               </div>
-            </ScrollArea>
+            </div>
 
             {/* Total Summary */}
             <div className="shrink-0 border-t pt-3 mt-1">
