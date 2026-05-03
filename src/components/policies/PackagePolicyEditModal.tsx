@@ -524,6 +524,25 @@ export function PackagePolicyEditModal({
   // Ref for auto-scroll to new child
   const newChildBottomRef = useRef<HTMLDivElement>(null);
   const prevNewChildrenLengthRef = useRef(newChildren.length);
+
+  // Ref + previous-enabled-set for scrolling the package builder into
+  // view when the user toggles a card on (otherwise the freshly-expanded
+  // form sits off-screen at the bottom of the modal).
+  const addonSectionRef = useRef<HTMLDivElement>(null);
+  const prevEnabledAddonsRef = useRef<Set<PackageAddon['type']>>(new Set());
+
+  useEffect(() => {
+    const enabledNow = new Set(packageAddons.filter((a) => a.enabled).map((a) => a.type));
+    const newlyEnabled = [...enabledNow].some((t) => !prevEnabledAddonsRef.current.has(t));
+    if (newlyEnabled) {
+      // Wait for the expanded card markup to render before scrolling so
+      // we land at the bottom of the now-taller section.
+      setTimeout(() => {
+        addonSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      }, 50);
+    }
+    prevEnabledAddonsRef.current = enabledNow;
+  }, [packageAddons]);
   
   // Auto-scroll when new child is added
   useEffect(() => {
@@ -1017,7 +1036,7 @@ export function PackagePolicyEditModal({
                   const missing = allFour.filter((t) => !existingAddonTypes.includes(t));
                   if (missing.length === 0) return null;
                   return (
-                    <div className="space-y-2 p-3 bg-muted/20 rounded-lg border border-dashed">
+                    <div ref={addonSectionRef} className="space-y-2 p-3 bg-muted/20 rounded-lg border border-dashed">
                       <PackageBuilderSection
                         addons={packageAddons}
                         onAddonsChange={setPackageAddons}
