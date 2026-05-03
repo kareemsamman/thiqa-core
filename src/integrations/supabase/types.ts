@@ -3190,6 +3190,32 @@ export type Database = {
           },
         ]
       }
+      impersonation_sessions: {
+        Row: {
+          started_at: string
+          super_admin_user_id: string
+          target_agent_id: string
+        }
+        Insert: {
+          started_at?: string
+          super_admin_user_id: string
+          target_agent_id: string
+        }
+        Update: {
+          started_at?: string
+          super_admin_user_id?: string
+          target_agent_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "impersonation_sessions_target_agent_id_fkey"
+            columns: ["target_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       import_progress: {
         Row: {
           agent_id: string | null
@@ -6685,6 +6711,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      adjust_agent_usage: {
+        Args: { p_agent_id: string; p_delta: number; p_usage_type: string }
+        Returns: number
+      }
       agent_matches: {
         Args: { _row_agent_id: string; _user_id: string }
         Returns: boolean
@@ -6975,6 +7005,7 @@ export type Database = {
           total_payable: number
         }[]
       }
+      get_impersonated_agent_id: { Args: never; Returns: string }
       get_my_agent_admin_contact: {
         Args: never
         Returns: {
@@ -7551,6 +7582,8 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      start_impersonation: { Args: { p_agent_id: string }; Returns: undefined }
+      stop_impersonation: { Args: never; Returns: undefined }
       unlock_plan_locked_user: { Args: { p_user_id: string }; Returns: string }
       user_belongs_to_agent: {
         Args: { _agent_id: string; _user_id: string }
