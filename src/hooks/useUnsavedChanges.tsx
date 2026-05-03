@@ -257,8 +257,7 @@ export function useGuardedNavigate() {
     async (...args: Parameters<typeof navigate>) => {
       const ok = await confirmDiscard();
       if (!ok) return;
-      // @ts-expect-error overloaded signatures
-      navigate(...args);
+      (navigate as (...a: unknown[]) => void)(...args);
     },
     [navigate, confirmDiscard],
   );
