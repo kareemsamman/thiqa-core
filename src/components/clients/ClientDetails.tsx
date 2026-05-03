@@ -61,6 +61,7 @@ import {
   Trash2,
   MoreHorizontal,
   FileImage,
+  FolderOpen,
   DollarSign,
   MessageSquare,
   Loader2,
@@ -94,6 +95,7 @@ import { PaymentEditDialog } from '@/components/clients/PaymentEditDialog';
 import { PaymentGroupDetailsDialog } from '@/components/clients/PaymentGroupDetailsDialog';
 import { getCombinedPaymentTypeLabel, getPaymentTypeLabel } from '@/lib/paymentLabels';
 import { RefundsTab } from '@/components/clients/RefundsTab';
+import { ClientFilesTab, type ClientFilesPolicyRef } from '@/components/clients/ClientFilesTab';
 import { AccidentReportWizard } from '@/components/accident-reports/AccidentReportWizard';
 import { ClientAccidentsTab } from '@/components/clients/ClientAccidentsTab';
 import { useClientAccidentInfo } from '@/hooks/useClientAccidentInfo';
@@ -320,6 +322,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   // and scroll the target card into view. Default matches the previous
   // defaultValue.
   const [activeTab, setActiveTab] = useState<string>('policies');
+  const [systemFilesCount, setSystemFilesCount] = useState(0);
+  const [clientFilesCount, setClientFilesCount] = useState(0);
 
   // Jump from the payments log to the المعاملات tab and scroll the card
   // owning this policy into view. Policy cards in PolicyYearTimeline tag
@@ -1341,6 +1345,26 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     return groupIds.size + standalone;
   }, [policies]);
 
+  // Flat list of policy refs (id + display label + car number) used by
+  // the files tabs to label each file with the معاملة it belongs to.
+  const clientFilesPolicyRefs = useMemo<ClientFilesPolicyRef[]>(() => {
+    return policies.map((p) => {
+      const typeLabel =
+        p.policy_type_parent === 'THIRD_FULL' && p.policy_type_child === 'THIRD'
+          ? 'ثالث'
+          : p.policy_type_parent === 'THIRD_FULL' && p.policy_type_child === 'FULL'
+          ? 'شامل'
+          : policyTypeLabels[p.policy_type_parent] || p.policy_type_parent;
+      const docPart = p.document_number ? ` #${p.document_number}` : '';
+      return {
+        id: p.id,
+        label: `${typeLabel}${docPart}`,
+        car_number: p.car?.car_number ?? null,
+        policy_number: p.policy_number,
+      };
+    });
+  }, [policies]);
+
   // Group payments by batch_id for unified display
   const groupedPayments = useMemo((): GroupedPayment[] => {
     const groups = new Map<string, GroupedPayment>();
@@ -1895,6 +1919,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             <TabsTrigger value="refunds" className="gap-1.5 shrink-0 whitespace-nowrap">
               <Banknote className="h-4 w-4" />
               المرتجعات
+            </TabsTrigger>
+            <TabsTrigger value="files-system" className="gap-1.5 shrink-0 whitespace-nowrap">
+              <FolderOpen className="h-4 w-4" />
+              ملفات النظام ({systemFilesCount})
+            </TabsTrigger>
+            <TabsTrigger value="files-client" className="gap-1.5 shrink-0 whitespace-nowrap">
+              <FileImage className="h-4 w-4" />
+              ملفات العميل ({clientFilesCount})
             </TabsTrigger>
           </TabsList>
 
@@ -2636,12 +2668,30 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
           {/* Refunds Tab */}
           <TabsContent value="refunds" className="mt-6">
-            <RefundsTab 
+            <RefundsTab
               clientId={client.id}
               branchId={client.branch_id}
               onRefundAdded={() => {
                 fetchWalletBalance();
               }}
+            />
+          </TabsContent>
+
+          {/* System Files Tab — internal/CRM docs across all of the client's policies */}
+          <TabsContent value="files-system" className="mt-6">
+            <ClientFilesTab
+              policies={clientFilesPolicyRefs}
+              kind="system"
+              onCountChange={setSystemFilesCount}
+            />
+          </TabsContent>
+
+          {/* Client Files Tab — insurance/policy docs across all of the client's policies */}
+          <TabsContent value="files-client" className="mt-6">
+            <ClientFilesTab
+              policies={clientFilesPolicyRefs}
+              kind="client"
+              onCountChange={setClientFilesCount}
             />
           </TabsContent>
         </Tabs>
