@@ -254,8 +254,8 @@ export default function DatabaseMigration() {
       
       // Test connection by counting records
       const [policiesResult, clientsResult, mediaResult] = await Promise.all([
-        supabase.from('policies').select('id', { count: 'exact', head: true }),
-        supabase.from('clients').select('id', { count: 'exact', head: true }),
+        supabase.from('policies').select('id', { count: 'exact', head: true }).is('deleted_at', null),
+        supabase.from('clients').select('id', { count: 'exact', head: true }).is('deleted_at', null),
         supabase.from('media_files').select('id', { count: 'exact', head: true }).is('deleted_at', null)
       ]);
 

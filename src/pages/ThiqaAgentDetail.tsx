@@ -286,9 +286,9 @@ export default function ThiqaAgentDetail() {
     if (!agentId) return;
     setStatsLoading(true);
     const [clientsRes, carsRes, policiesRes] = await Promise.all([
-      supabase.from('clients').select('id', { count: 'exact', head: true }).eq('agent_id', agentId),
+      supabase.from('clients').select('id', { count: 'exact', head: true }).eq('agent_id', agentId).is('deleted_at', null),
       supabase.from('cars').select('id', { count: 'exact', head: true }).eq('agent_id', agentId).is('deleted_at', null),
-      supabase.from('policies').select('id', { count: 'exact', head: true }).eq('agent_id', agentId),
+      supabase.from('policies').select('id', { count: 'exact', head: true }).eq('agent_id', agentId).is('deleted_at', null),
     ]);
     setAgentStats({
       clients: clientsRes.count || 0,

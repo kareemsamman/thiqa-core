@@ -118,8 +118,8 @@ async function detectCompletedSteps(agentId: string): Promise<Set<string>> {
         .eq("agent_id", agentId)
         .eq("is_seed", false),
       supabase.from("profiles").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
-      supabase.from("clients").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
-      supabase.from("policies").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
+      supabase.from("clients").select("id", { count: "exact", head: true }).eq("agent_id", agentId).is("deleted_at", null),
+      supabase.from("policies").select("id", { count: "exact", head: true }).eq("agent_id", agentId).is("deleted_at", null),
       supabase.from("branches").select("id", { count: "exact", head: true }).eq("agent_id", agentId),
     ]);
 

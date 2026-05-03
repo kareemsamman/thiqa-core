@@ -139,7 +139,8 @@ serve(async (req: Request) => {
         const { data: siblings } = await supabase
           .from('policies')
           .select('id')
-          .eq('group_id', policy.group_id);
+          .eq('group_id', policy.group_id)
+          .is('deleted_at', null);
         for (const s of siblings || []) {
           if (s.id && !refundPolicyIds.includes(s.id)) refundPolicyIds.push(s.id);
         }
