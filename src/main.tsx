@@ -64,7 +64,7 @@ if (container.firstElementChild && prerenderedRoute === currentPath) {
     // (genuine state mismatches, missing data, etc.) still surfaces
     // through the default console path so we hear about real bugs.
     onRecoverableError: (error, errorInfo) => {
-      const msg = String(error?.message ?? error);
+      const msg = String((error as { message?: unknown })?.message ?? error);
       if (/#41[89]/.test(msg) || /Hydration failed/.test(msg)) return;
       // eslint-disable-next-line no-console
       console.error("Recoverable React error:", error, errorInfo);
