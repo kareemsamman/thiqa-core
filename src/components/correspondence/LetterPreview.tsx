@@ -38,7 +38,7 @@ export function LetterPreview({ title, recipientName, bodyHtml, createdAt, class
 
         setPhoneInfo({
           phoneLinks: Array.isArray(phoneLinks) ? phoneLinks as CompanyPhones['phoneLinks'] : [],
-          companyLocation: data?.company_location || '',
+          companyLocation: (typeof info.company_location === 'string' ? info.company_location : '') || '',
         });
       } catch {
         setPhoneInfo({ phoneLinks: [], companyLocation: '' });
