@@ -102,6 +102,7 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   transfer: 'تحويل بنكي',
   bank_transfer: 'تحويل بنكي',
   visa: 'فيزا',
+  visa_external: 'فيزا خارجي',
   customer_cheque: 'شيك عميل',
 };
 
