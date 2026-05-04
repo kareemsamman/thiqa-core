@@ -348,12 +348,17 @@ export function Step4Payments({
               const isProcessing = creatingPolicy && selectedVisaPaymentIndex === index;
               const isLocked = payment.locked === true;
               const isDisabled = visaPaid || isLocked;
-              
+              // Locked rows still let the agent change *what* the
+              // payment is (type / date / cheque info / image) — only
+              // the amount stays bound to the policy price.
+              const isAmountDisabled = isDisabled;
+              const isMetaDisabled = visaPaid; // type, date, cheque trio, images
+
               // Actions column only needs to exist when there's something to put in it —
               // cheque number input, visa pay button, or a paid/locked badge. Cash payments
               // have nothing here, so we drop the whole column and save a row on mobile.
               const hasActionsColumn =
-                (payment.payment_type === 'cheque' && !isLocked) ||
+                payment.payment_type === 'cheque' ||
                 isVisa ||
                 isLocked;
 
@@ -395,38 +400,31 @@ export function Step4Payments({
 
                   {/* Main row: Type / Amount / Date / (Actions only when relevant). */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 items-end pl-8">
-                    {/* Payment Type */}
+                    {/* Payment Type — editable even on locked rows so
+                        the agent can switch the auto ELZAMI payment to
+                        cash / فيزا / تحويل instead of فيزا خارجي. */}
                     <div>
                       <Label className="text-[10px] mb-1 block text-muted-foreground">نوع الدفع</Label>
-                      {isLocked ? (
-                        // Locked ELZAMI auto-payment — not editable. Render a
-                        // static "فيزا خارجي" chip so the wizard matches the
-                        // rest of the app (customer pays it directly on the
-                        // insurance company's portal, not through our till).
-                        <div className="h-10 px-3 rounded-md border border-border/60 bg-muted/40 flex items-center text-sm font-medium opacity-80 cursor-not-allowed">
-                          فيزا خارجي
-                        </div>
-                      ) : (
-                        <Select
-                          value={payment.payment_type}
-                          onValueChange={(v) => updatePayment(payment.id, 'payment_type', v)}
-                          disabled={isDisabled}
-                        >
-                          <SelectTrigger className="h-10">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {paymentTypes.map((type) => (
-                              <SelectItem key={type.value} value={type.value}>
-                                {type.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
+                      <Select
+                        value={payment.payment_type}
+                        onValueChange={(v) => updatePayment(payment.id, 'payment_type', v)}
+                        disabled={isMetaDisabled}
+                      >
+                        <SelectTrigger className="h-10">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {paymentTypes.map((type) => (
+                            <SelectItem key={type.value} value={type.value}>
+                              {type.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
-                    {/* Amount */}
+                    {/* Amount — stays locked on auto rows: the price is
+                        bound to the policy's insurance_price. */}
                     <div>
                       <Label className="text-[10px] mb-1 block text-muted-foreground">المبلغ (₪)</Label>
                       <Input
@@ -434,7 +432,7 @@ export function Step4Payments({
                         value={payment.amount || ''}
                         onChange={(e) => updatePayment(payment.id, 'amount', parseFloat(e.target.value) || 0)}
                         placeholder="0"
-                        disabled={isDisabled}
+                        disabled={isAmountDisabled}
                         className={cn(
                           "h-10",
                           paymentsExceedPrice && "border-destructive",
@@ -449,8 +447,8 @@ export function Step4Payments({
                       <ArabicDatePicker
                         value={payment.payment_date}
                         onChange={(date) => updatePayment(payment.id, 'payment_date', date)}
-                        className={cn("h-10", isLocked && "opacity-70 cursor-not-allowed")}
-                        disabled={isDisabled}
+                        className="h-10"
+                        disabled={isMetaDisabled}
                       />
                     </div>
 
@@ -497,7 +495,7 @@ export function Step4Payments({
                       into the main row's 4-col layout. Bank is weighted
                       slightly wider since it holds the searchable
                       combobox with the longest content. */}
-                  {payment.payment_type === 'cheque' && !isLocked && (
+                  {payment.payment_type === 'cheque' && (
                     <div
                       className="mt-2 grid gap-2 items-end pl-8"
                       style={{
@@ -510,7 +508,7 @@ export function Step4Payments({
                         <BankPicker
                           value={payment.bank_code}
                           onChange={(code) => updatePayment(payment.id, 'bank_code', code)}
-                          disabled={isDisabled}
+                          disabled={isMetaDisabled}
                         />
                       </div>
                       <div>
@@ -527,7 +525,7 @@ export function Step4Payments({
                           }}
                           placeholder="مثال: 305"
                           className="h-10 font-mono ltr-nums"
-                          disabled={isDisabled}
+                          disabled={isMetaDisabled}
                         />
                       </div>
                       <div>
@@ -538,14 +536,17 @@ export function Step4Payments({
                           placeholder="رقم الشيك"
                           maxLength={CHEQUE_NUMBER_MAX_LENGTH}
                           className="h-10 font-mono ltr-input"
-                          disabled={isDisabled}
+                          disabled={isMetaDisabled}
                         />
                       </div>
                     </div>
                   )}
 
-                  {/* Inline receipt strip — thin, no divider, same card. */}
-                  {(payment.payment_type === 'cash' || payment.payment_type === 'cheque' || payment.payment_type === 'transfer') && !visaPaid && (
+                  {/* Inline receipt strip — thin, no divider, same card.
+                      Locked auto rows also get the strip so the agent
+                      can attach a screenshot of the external visa
+                      receipt even when the type stays as فيزا. */}
+                  {(payment.payment_type === 'cash' || payment.payment_type === 'cheque' || payment.payment_type === 'transfer' || isLocked) && !visaPaid && (
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                       <div className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
                         <span>
