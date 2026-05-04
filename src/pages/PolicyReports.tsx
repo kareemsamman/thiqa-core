@@ -1415,11 +1415,6 @@ export default function PolicyReports() {
                   </Card>
                 </div>
 
-                {/* Secondary Stats Row */}
-                <Card className="p-4 text-center">
-                  <p className="text-xs text-muted-foreground">معاملات</p>
-                  <p className="text-2xl font-bold text-slate-700">{renewalsSummary.total_transactions || 0}</p>
-                </Card>
               </div>
             )}
 
