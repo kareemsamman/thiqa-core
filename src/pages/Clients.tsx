@@ -234,16 +234,16 @@ export default function Clients() {
       //         ↳ policy_payments / signatures / reminders / transfers ...
       //                                ON DELETE CASCADE (most tables)
       //         ↳ broker_settlement_items  ON DELETE RESTRICT
-      // The RESTRICT FK from broker_settlement_items is the only thing
-      // that can block: if any of this client's policies were ever
-      // included in a broker settlement, Postgres throws 23503 and the
-      // row stays untouched. Surface that as a clear message instead of
-      // a generic "failed to delete" so the agent knows to clear the
-      // settlement first (or contact support).
-      const { error } = await supabase
-        .from('clients')
-        .delete()
-        .eq('id', deletingClient.id);
+      // We route through the delete_client_cascade RPC so the cascade
+      // can wipe locked policy_payments (the auto ELZAMI / Tranzila
+      // rows guarded by prevent_locked_payment_delete). The RPC flips
+      // session_replication_role to 'replica' inside a SECURITY DEFINER
+      // wrapper, which disables user triggers but keeps FK CASCADE
+      // enforcement. broker_settlement_items.policy_id is still
+      // RESTRICT and will surface as 23503 / the toast below.
+      const { error } = await supabase.rpc('delete_client_cascade', {
+        p_client_id: deletingClient.id,
+      });
 
       if (error) {
         const blockedBySettlement =
