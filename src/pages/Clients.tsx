@@ -247,13 +247,18 @@ export default function Clients() {
 
       if (error) {
         const blockedBySettlement =
-          error.code === '23503' ||
           /broker_settlement|settlement_item/i.test(error.message ?? '');
+        const isFkBlock = error.code === '23503';
         toast({
           title: blockedBySettlement ? "تعذّر الحذف" : "خطأ",
           description: blockedBySettlement
             ? "هذا العميل مرتبط بمعاملات تسوية مع وسيط لا يمكن حذفها. تواصل مع الدعم."
-            : "فشل في حذف العميل",
+            // Surface the actual Postgres detail when an FK still blocks
+            // — easier to track down a missing CASCADE than chasing a
+            // generic "failed" message.
+            : isFkBlock
+              ? `فشل في حذف العميل بسبب ارتباط ببيانات أخرى: ${error.message}`
+              : (error.message || "فشل في حذف العميل"),
           variant: "destructive",
         });
         return;
