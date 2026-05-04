@@ -208,11 +208,13 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month, onActionC
 
     setSaving(true);
     try {
+      const userId = (await supabase.auth.getUser()).data.user?.id ?? null;
       const payload: Record<string, any> = {
         client_id: currentClient.clientId,
         follow_up_month: month,
         agent_id: agentId,
         status,
+        updated_by: userId,
         updated_at: new Date().toISOString(),
       };
 
