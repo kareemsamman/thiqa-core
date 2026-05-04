@@ -231,17 +231,24 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
     const receivedSum = receipts
       .filter((r) => !r.refused)
       .reduce((s, r) => s + Number(r.total_amount || 0), 0);
-    // Gross we owe brokers = sum of broker_buy_price on policies where
-    // we bought from the broker (from_broker direction). The to_broker
-    // rows are where we sold to the broker, so we don't owe them
-    // anything against those — broker_buy_price = 0 in that case.
+    // Two independent broker ledgers:
+    //   from_broker → we bought through broker, we owe broker_buy_price.
+    //                 سند صرف (disbursedSum) settles it. Pill: متبقي للوسطاء.
+    //   to_broker   → we exported through broker, broker owes
+    //                 insurance_price. سند قبض (receivedSum) settles it.
+    //                 Pill: مستحق من الوسطاء.
+    // The directions don't offset each other on the pills — a user who
+    // paid one broker hasn't reduced what a different broker owes them.
     const grossOwed = overlayed.reduce((s, r) => {
       if (r.main.broker_direction === 'to_broker') return s;
       return s + Number(r.broker_buy_price || 0);
     }, 0);
-    // Net "still owe brokers" — what the user wants on the pill: a
-    // disbursement reduces it.
+    const grossDueFromBrokers = overlayed.reduce((s, r) => {
+      if (r.main.broker_direction !== 'to_broker') return s;
+      return s + Number(r.insurance_price || 0);
+    }, 0);
     const remainingDueSum = Math.max(0, grossOwed - disbursedSum);
+    const remainingFromBrokersSum = Math.max(0, grossDueFromBrokers - receivedSum);
     const netProfitSum = profitSum - data.expensesTotal;
     return {
       sellSum,
@@ -249,7 +256,9 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
       disbursedSum,
       receivedSum,
       remainingDueSum,
+      remainingFromBrokersSum,
       grossOwed,
+      grossDueFromBrokers,
       netProfitSum,
       activeCount: overlayed.length,
     };
@@ -362,6 +371,22 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
                     value: `${disbursements.filter((r) => !r.refused).length}`,
                   },
                   { label: 'الإجمالي', value: fmt(totals.disbursedSum), strong: true },
+                ]}
+              />
+            }
+          />
+          <Sep />
+          <SummaryPill
+            label="مستحق من الوسطاء"
+            value={fmt(totals.remainingFromBrokersSum)}
+            tone="success"
+            tooltip={
+              <BreakdownLines
+                title="مستحق من الوسطاء (الصافي)"
+                lines={[
+                  { label: 'إجمالي مستحق', value: fmt(totals.grossDueFromBrokers) },
+                  { label: 'مقبوض من الوسطاء', value: `− ${fmt(totals.receivedSum)}` },
+                  { label: 'المتبقي', value: fmt(totals.remainingFromBrokersSum), strong: true },
                 ]}
               />
             }

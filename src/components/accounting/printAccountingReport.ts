@@ -54,6 +54,7 @@ interface BrokerTotals {
   sellSum: number;
   profitSum: number;
   remainingDueSum: number;
+  remainingFromBrokersSum: number;
   disbursedSum: number;
   receivedSum: number;
   netProfitSum: number;
@@ -74,13 +75,16 @@ export function buildCompanyStats(totals: CompanyTotals): ReportPayload['stats']
   ];
 }
 
-/** Six KPI pills mirroring the on-screen broker summary bar. */
+/** KPI pills mirroring the on-screen broker summary bar. Both
+ *  ledger directions: متبقي للوسطاء (we owe brokers) and مستحق من الوسطاء
+ *  (brokers owe us), each net of its matching settlement type. */
 export function buildBrokerStats(totals: BrokerTotals): ReportPayload['stats'] {
   return [
     { label: 'سعر البيع للعميل', value: fmtMoney(totals.sellSum), tone: 'primary' },
     { label: 'الربح', value: fmtMoney(totals.profitSum), tone: 'success' },
     { label: 'متبقي للوسطاء', value: fmtMoney(totals.remainingDueSum), tone: 'destructive' },
     { label: 'مدفوع للوسطاء', value: fmtMoney(totals.disbursedSum), tone: 'amber' },
+    { label: 'مستحق من الوسطاء', value: fmtMoney(totals.remainingFromBrokersSum), tone: 'success' },
     { label: 'مقبوض من الوسطاء', value: fmtMoney(totals.receivedSum), tone: 'emerald' },
     {
       label: 'الأرباح الصافية',
