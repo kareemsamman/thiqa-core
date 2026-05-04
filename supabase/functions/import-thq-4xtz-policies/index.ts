@@ -20,12 +20,17 @@ const COMPANY_MAP: Record<string, string> = {
   "עאלמיה": "العالمية",
 };
 
-// Service code (Hebrew) → Arabic name for road_services
-const SERVICE_MAP: Record<string, string> = {
+// Service code (Hebrew) → Arabic word — used to build a combined service
+// name when the Excel cell contains multiple codes (e.g. "ג/ש" → "جرار + زجاج").
+// We match the combined name against an EXISTING road_services row; we do
+// NOT create per-code services anymore. The order in this map defines the
+// canonical order used to build the combined name.
+const SERVICE_WORDS: Record<string, string> = {
   "ג": "جرار",
   "ש": "زجاج",
   "רח": "سيارة بديلة",
 };
+const SERVICE_ORDER = ["ג", "ש", "רח"]; // canonical order
 
 // Israeli vehicle datasets (mirrors fetch-vehicle/index.ts)
 const GOV_API_URL = "https://data.gov.il/api/3/action/datastore_search";
@@ -128,6 +133,14 @@ function parseServices(col19: string): { codes: string[]; unknown: string[] } {
     }
   }
   return { codes, unknown };
+}
+
+// Build the canonical Arabic combined name (e.g. "جرار + زجاج") from a
+// set of Hebrew codes. Order is fixed (ג, ש, רח) so "ש/ג" and "ג/ש" both
+// produce "جرار + زجاج".
+function combinedServiceName(codes: string[]): string {
+  const ordered = SERVICE_ORDER.filter((c) => codes.includes(c)).map((c) => SERVICE_WORDS[c]);
+  return ordered.join(" + ");
 }
 
 function policyChild(col6: string): "THIRD" | "FULL" | null {
