@@ -539,6 +539,7 @@ export default function PolicyReports() {
         console.error('Error fetching renewals summary:', summaryRes.error);
         toast.error('فشل في تحميل ملخص التجديدات');
       } else if (summaryRes.data && summaryRes.data.length > 0) {
+        console.log('[renewals_summary RPC]', summaryRes.data[0]);
         setRenewalsSummary(summaryRes.data[0] as unknown as RenewalSummary);
       } else {
         // No data returned, set default empty summary
