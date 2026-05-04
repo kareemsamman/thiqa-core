@@ -274,6 +274,7 @@ Deno.serve(async (req) => {
     }
 
     const results: RowResult[] = [];
+    console.log("[import] running v2 with BRANCH_ID + file_number");
 
     // Compute next file_number (format F####)
     const { data: fnRows } = await admin
