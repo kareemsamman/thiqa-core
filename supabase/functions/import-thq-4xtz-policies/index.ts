@@ -434,6 +434,19 @@ Deno.serve(async (req) => {
       const payment = parsePayment(row.payment);
       const services = parseServices(row.service);
 
+      // Resolve the COMBINED road service (single row) for this Excel cell.
+      // "ג/ש" → "جرار + زجاج" → must already exist in road_services.
+      // If missing, we still insert the main policy but skip the service link
+      // and report it so the user can add the missing service manually.
+      let combinedSvcName: string | null = null;
+      let combinedSvcId: string | null = null;
+      let missingService = false;
+      if (services.codes.length > 0) {
+        combinedSvcName = combinedServiceName(services.codes);
+        combinedSvcId = findServiceIdByName(combinedSvcName);
+        if (!combinedSvcId) missingService = true;
+      }
+
       let policy_id: string;
       // If there are road service add-ons, this row represents a *package*
       // (شامل/ثالث + خدمات طريق under one معاملة). Create a policy_groups
@@ -441,7 +454,9 @@ Deno.serve(async (req) => {
       // the UI shows a single معاملة card (مكونات الباقة) instead of N
       // separate rows.
       let group_id: string | null = null;
-      if (services.codes.length > 0 && !dry_run) {
+      // Only build a package (policy_groups) when we actually have a service
+      // to attach. Missing services degrade to a plain main policy.
+      if (combinedSvcId && !dry_run) {
         const { data: gIns, error: gErr } = await admin
           .from("policy_groups")
           .insert({ agent_id: AGENT_ID, client_id, car_id, name: "باقة" })
@@ -511,39 +526,43 @@ Deno.serve(async (req) => {
         }
       }
 
-      // 5) Insert road service add-on policies (price 0) — one per code
+      // 5) Insert ONE road service add-on policy (price 0) using the
+      // combined service. If no combined service exists, skip and report.
       let svcCount = 0;
-      for (const code of services.codes) {
-        const svc_id = svcByCode.get(code);
-        if (!svc_id) continue;
+      if (combinedSvcId) {
         if (dry_run) {
-          svcCount++;
-          continue;
+          svcCount = 1;
+        } else {
+          const { error } = await admin.from("policies").insert({
+            agent_id: AGENT_ID,
+            branch_id: BRANCH_ID,
+            client_id,
+            car_id,
+            company_id,
+            policy_type_parent: "ROAD_SERVICE",
+            start_date,
+            end_date,
+            issue_date: start_date,
+            insurance_price: 0,
+            road_service_id: combinedSvcId,
+            cancelled: false,
+            transferred: false,
+            group_id,
+          });
+          if (!error) svcCount = 1;
         }
-        const { error } = await admin.from("policies").insert({
-          agent_id: AGENT_ID,
-          branch_id: BRANCH_ID,
-          client_id,
-          car_id,
-          company_id,
-          policy_type_parent: "ROAD_SERVICE",
-          start_date,
-          end_date,
-          issue_date: start_date,
-          insurance_price: 0,
-          road_service_id: svc_id,
-          cancelled: false,
-          transferred: false,
-          group_id,
-        });
-        if (!error) svcCount++;
       }
       r.road_service_policies = svcCount;
 
       r.status = "inserted";
+      const notes: string[] = [];
       if (services.unknown.length) {
-        r.reason = `unknown service tokens: ${services.unknown.join(",")}`;
+        notes.push(`unknown service tokens: ${services.unknown.join(",")}`);
       }
+      if (missingService && combinedSvcName) {
+        notes.push(`road_service '${combinedSvcName}' not found — service link skipped`);
+      }
+      if (notes.length) r.reason = notes.join("; ");
       results.push(r);
     }
 
