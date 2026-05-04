@@ -275,6 +275,16 @@ export function PlanChangeConfirmDialog({
         emailSent: !!data.email_sent,
       });
       onSuccess?.();
+      // Hard-reload the page after the celebratory panel has had time
+      // to register so every consumer of the agent context (sidebar
+      // badge, plan summary, limits, feature flags) reflects the new
+      // plan. The realtime channel on agents.UPDATE is supposed to do
+      // this implicitly, but we've seen it stay stale in practice —
+      // a deterministic reload is the only thing that catches every
+      // cached surface in one go.
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     } catch (e: any) {
       toast.error(e?.message || 'تعذّر تغيير الحزمة. حاول مجدداً أو تواصل مع الدعم.');
       setSubmitting(false);
@@ -548,7 +558,7 @@ export function PlanChangeConfirmDialog({
             </>
           ) : (
             <Button
-              onClick={() => onOpenChange(false)}
+              onClick={() => window.location.reload()}
               size="lg"
               className="gap-2 mr-auto px-6 font-bold"
             >
