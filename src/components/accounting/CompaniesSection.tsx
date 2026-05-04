@@ -40,6 +40,7 @@ import {
 import {
   IssuanceEditOverlay,
   IssuanceEditPatch,
+  IssuanceRow,
   POLICY_TYPE_DISPLAY,
   PAYMENT_METHOD_LABELS,
   applyOverlay,
@@ -185,26 +186,32 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
     [],
   );
 
-  // Memoized: recompute only when the underlying data or the search
-  // string changes — not on every editLocal keystroke.
+  // Companies tab includes:
+  //   - direct policies (no broker)
+  //   - to_broker policies — broker resells, but we still issued via
+  //     the company so we owe payed_for_company
+  // Excludes from_broker — there the broker is the principal and we
+  // owe the broker (broker_buy_price), tracked under the brokers tab.
+  const isCompanyRelevant = (r: IssuanceRow) =>
+    r.main.broker_direction !== 'from_broker';
   const issuancesAll = useMemo(
     () =>
       [...data.issuances, ...data.returns]
-        .filter((r) => !r.main.broker_id)
+        .filter(isCompanyRelevant)
         .filter((r) => matchesIssuanceSearch(r, search)),
     [data.issuances, data.returns, search],
   );
   const issuancesActive = useMemo(
     () =>
       data.issuances
-        .filter((r) => !r.main.broker_id)
+        .filter(isCompanyRelevant)
         .filter((r) => matchesIssuanceSearch(r, search)),
     [data.issuances, search],
   );
   const returns = useMemo(
     () =>
       data.returns
-        .filter((r) => !r.main.broker_id)
+        .filter(isCompanyRelevant)
         .filter((r) => matchesIssuanceSearch(r, search)),
     [data.returns, search],
   );
@@ -217,21 +224,20 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
     [data.companyReceipts, search],
   );
 
-  // Broker policies feed the net-profit pill too — the user wants the
-  // الأرباح الصافية number on the companies tab to reflect *all* office
-  // earnings (companies + brokers) minus expenses, even though the rest
-  // of the page is scoped to companies-only. Brokers stay broken out
-  // in the tooltip so the source of each piece is visible.
+  // from_broker policies don't appear in issuancesActive (they belong
+  // to the brokers tab), but their profit still feeds الأرباح الصافية
+  // since the office earned that margin. to_broker profits are already
+  // captured in profitOnly via issuancesActive — including them here
+  // would double-count.
   const brokerProfit = useMemo(() => {
-    const brokerRows = data.issuances.filter((r) => !!r.main.broker_id);
-    return brokerRows.reduce((s, r) => {
-      if (r.main.broker_direction === 'to_broker') {
-        return s + Number(r.profit || 0);
-      }
-      return (
-        s + Math.max(0, Number(r.insurance_price || 0) - Number(r.broker_buy_price || 0))
-      );
-    }, 0);
+    const fromBrokerRows = data.issuances.filter(
+      (r) => r.main.broker_direction === 'from_broker',
+    );
+    return fromBrokerRows.reduce(
+      (s, r) =>
+        s + Math.max(0, Number(r.insurance_price || 0) - Number(r.broker_buy_price || 0)),
+      0,
+    );
   }, [data.issuances]);
 
   const totals = useMemo(() => {
