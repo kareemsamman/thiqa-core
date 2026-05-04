@@ -65,6 +65,7 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   cash: 'نقدًا',
   cheque: 'شيك',
   visa: 'فيزا',
+  visa_external: 'فيزا خارجي',
   transfer: 'حوالة/تحويل',
 };
 

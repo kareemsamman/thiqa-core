@@ -94,6 +94,7 @@ const PAYMENT_METHOD_LABELS: Record<string, { label: string; icon: typeof Bankno
   cash: { label: "نقدي", icon: Banknote },
   cheque: { label: "شيك", icon: FileText },
   visa: { label: "فيزا", icon: CreditCard },
+  visa_external: { label: "فيزا خارجي", icon: CreditCard },
   transfer: { label: "تحويل", icon: Building },
 };
 
