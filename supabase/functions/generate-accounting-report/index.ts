@@ -306,13 +306,14 @@ function buildAccountingReportHtml(
       font-size: 12px;
     }
     table.data thead th {
-      background: #1a1a1a;
-      color: #ffffff;
+      background: #f4f4f5;
+      color: #1a1a1a;
       padding: 8px 10px;
       font-weight: 700;
       font-size: 11px;
       letter-spacing: 0.4px;
-      border-left: 1px solid #2d2d2d;
+      border-bottom: 1px solid #1a1a1a;
+      border-left: 1px solid #e5e7eb;
     }
     table.data thead th:last-child { border-left: 0; }
     table.data tbody td {

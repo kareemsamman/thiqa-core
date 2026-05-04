@@ -282,7 +282,7 @@ function buildAccountingReportHtml(
     .stat.tone-amber .stat-value { color: #b45309; }
     .section-title { padding: 8px 14px; border: 1px solid #1a1a1a; border-bottom: 0; background: #f4f4f5; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
     table.data { width: 100%; border-collapse: collapse; border: 1px solid #1a1a1a; font-size: 12px; }
-    table.data thead th { background: #1a1a1a; color: #ffffff; padding: 8px 10px; font-weight: 700; font-size: 11px; letter-spacing: 0.4px; border-left: 1px solid #2d2d2d; }
+    table.data thead th { background: #f4f4f5; color: #1a1a1a; padding: 8px 10px; font-weight: 700; font-size: 11px; letter-spacing: 0.4px; border-bottom: 1px solid #1a1a1a; border-left: 1px solid #e5e7eb; }
     table.data thead th:last-child { border-left: 0; }
     table.data tbody td { padding: 7px 10px; border-top: 1px solid #e5e7eb; border-left: 1px solid #e5e7eb; font-variant-numeric: tabular-nums; vertical-align: middle; }
     table.data tbody td:last-child { border-left: 0; }
