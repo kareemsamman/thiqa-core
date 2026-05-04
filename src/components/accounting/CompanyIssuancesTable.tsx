@@ -237,16 +237,49 @@ export function CompanyIssuancesTable({
     field: keyof PolicyPatch,
     raw: string,
   ) => {
-    // payed_for_company is package-aware: ELZAMI sub-policies don't
-    // contribute to it (customer pays the portal directly), so for
-    // THIRD_FULL+ELZAMI packages the whole amount belongs to the main
-    // (THIRD_FULL) sub. Writing to row.main.id is correct. Other
-    // fields stay locked for packages — use the details drawer.
+    // Other fields stay locked for packages — use the details drawer.
+    // المستحق للشركة is the one exception (handled below).
     if (row.is_grouped && field !== 'payed_for_company') return;
     const num = raw === '' ? 0 : Number(raw);
     if (Number.isNaN(num)) return;
-    onPatch(row.id, { [field]: num });
-    policyDebounced.schedule(row.main.id, { [field]: num });
+
+    if (field !== 'payed_for_company') {
+      onPatch(row.id, { [field]: num });
+      policyDebounced.schedule(row.main.id, { [field]: num });
+      return;
+    }
+
+    // Editing المستحق للشركة implies الربح follows: by construction
+    // insurance_price = profit + payed_for_company. We mirror that
+    // invariant locally + on save so the user sees الربح update live.
+    // from_broker rows compute profit from broker_buy_price instead —
+    // skip the auto-mirror there. ELZAMI is already excluded at the cell.
+    const isFromBroker = row.main.broker_direction === 'from_broker';
+    const viewed = view(row);
+
+    // Overlay reflects displayed totals so the profit cell on this row
+    // updates in real time as the user types.
+    const overlayPatch: IssuanceEditPatch = { payed_for_company: num };
+    if (!isFromBroker) overlayPatch.profit = viewed.insurance_price - num;
+    onPatch(row.id, overlayPatch);
+
+    // The DB save targets row.main.id. For packages the displayed
+    // payed_for_company is the SUM across subs (ELZAMI subs store
+    // payed_for_company = insurance_price), so we subtract non-main
+    // subs' contribution before writing — that way the on-disk sum
+    // matches what the user typed once aggregates rebuild. الربح on
+    // the main sub follows from its own insurance_price.
+    const nonMainPayed = row.is_grouped
+      ? row.sub_policies
+          .filter((s) => s.id !== row.main.id)
+          .reduce((sum, s) => sum + Number(s.payed_for_company ?? 0), 0)
+      : 0;
+    const mainPayedNew = num - nonMainPayed;
+    const dbPatch: PolicyPatch = { payed_for_company: mainPayedNew };
+    if (!isFromBroker) {
+      dbPatch.profit = Number(viewed.main.insurance_price ?? 0) - mainPayedNew;
+    }
+    policyDebounced.schedule(row.main.id, dbPatch);
   };
 
   const updateDateField = (row: IssuanceRow, field: 'issue_date' | 'start_date' | 'end_date', raw: string) => {
