@@ -4,10 +4,6 @@ import { useAuth } from './useAuth';
 
 interface AgentInfo {
   id: string;
-  /** Human-readable agent code ("THQ-XXXX"). Surfaced into the
-   *  agent context so feature flows that need to scope behavior to a
-   *  specific tenant can read it without a separate query. */
-  short_code: string | null;
   name: string;
   name_ar: string | null;
   email: string;

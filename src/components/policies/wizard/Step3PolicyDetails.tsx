@@ -31,19 +31,9 @@ import type {
   NewCarForm,
 } from "./types";
 import { CAR_POLICY_TYPES } from "./types";
-import { useAgentContext } from "@/hooks/useAgentContext";
 
 // Company X ID - default for road service and accident fee
 const COMPANY_X_ID = "0014273c-78fc-4945-920c-6c8ce653f64a";
-
-// Agent-specific behavior: when this agent creates a THIRD_FULL
-// policy and enables road service, the price they typed for the
-// main policy is treated as the package total — so the road
-// service price is auto-deducted from the main amount once. The
-// agent's mental model is "the customer pays X, and Y of that is
-// for road service", which the deduction makes match what the
-// customer actually owes per row. Other agents see no change.
-const AGENT_DEDUCT_ROAD_SERVICE_FROM_MAIN = 'THQ-4XTZ';
 
 interface Step3Props {
   // Category
@@ -168,34 +158,6 @@ export function Step3PolicyDetails({
   const [loadingPrice, setLoadingPrice] = useState(false);
 
   const [scanning, setScanning] = useState<'insurance' | 'crm' | null>(null);
-
-  // ── Agent-scoped deduct: road service price → minus from main ──
-  // Only fires once per wizard mount (no rollback on edit/disable —
-  // the agent explicitly asked us NOT to mess with the price after
-  // the first deduction). Gate: agent.short_code matches the flag,
-  // main is THIRD_FULL, road service has just been given a price.
-  const { agent } = useAgentContext();
-  const hasDeductedRoadServiceRef = useRef(false);
-  const roadServiceAddon = packageAddons.find((a) => a.type === 'road_service');
-  const roadServicePriceForDeduct = parseFloat(roadServiceAddon?.insurance_price || '0') || 0;
-  useEffect(() => {
-    if (agent?.short_code !== AGENT_DEDUCT_ROAD_SERVICE_FROM_MAIN) return;
-    if (policy.policy_type_parent !== 'THIRD_FULL') return;
-    if (!packageMode) return;
-    if (!roadServiceAddon?.enabled) return;
-    if (roadServicePriceForDeduct <= 0) return;
-    if (hasDeductedRoadServiceRef.current) return;
-
-    const currentMain = parseFloat(policy.insurance_price || '0') || 0;
-    if (currentMain <= 0) return; // no main to deduct from yet
-
-    const adjusted = Math.max(0, currentMain - roadServicePriceForDeduct);
-    setPolicy({ ...policy, insurance_price: String(adjusted) });
-    hasDeductedRoadServiceRef.current = true;
-    toast.message('تم تعديل سعر الثالث/الشامل', {
-      description: `تم خصم ${roadServicePriceForDeduct} ₪ (سعر خدمة الطريق) من السعر`,
-    });
-  }, [agent?.short_code, policy.policy_type_parent, packageMode, roadServiceAddon?.enabled, roadServicePriceForDeduct]);
 
   // Convert base64 to Blob for scanner
   const base64ToBlob = (base64: string): Blob => {
