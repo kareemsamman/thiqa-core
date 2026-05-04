@@ -541,7 +541,7 @@ Deno.serve(async (req) => {
             branch_id: BRANCH_ID,
             client_id,
             car_id,
-            company_id,
+            company_id: ROAD_SERVICE_COMPANY_ID,
             policy_type_parent: "ROAD_SERVICE",
             start_date,
             end_date,
