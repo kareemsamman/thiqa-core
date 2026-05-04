@@ -6859,6 +6859,10 @@ export type Database = {
       }
       dashboard_total_client_debt: { Args: never; Returns: number }
       delete_agent_cascade: { Args: { p_agent_id: string }; Returns: undefined }
+      delete_client_cascade: {
+        Args: { p_client_id: string }
+        Returns: undefined
+      }
       enforce_agent_isolation: { Args: { _agent_id: string }; Returns: boolean }
       enforce_agent_isolation_insert: {
         Args: { _agent_id: string }
