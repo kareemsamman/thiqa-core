@@ -179,13 +179,26 @@ serve(async (req) => {
       policiesById = new Map((policies as unknown as PolicyRow[]).map(p => [p.id, p]));
     }
 
-    // Resolve issuer name for the footer.
+    // Resolve issuer name for the footer + the agent's brand (name + logo)
+    // for the report header so it identifies whose business this report is.
     const { data: userProfile } = await service
       .from('profiles')
-      .select('full_name, email')
+      .select('full_name, email, agent_id')
       .eq('id', user.id)
       .single();
     const generatedBy = userProfile?.full_name || userProfile?.email || 'Unknown';
+
+    let agentName: string | null = null;
+    let agentLogoUrl: string | null = null;
+    if (userProfile?.agent_id) {
+      const { data: agentRow } = await service
+        .from('agents')
+        .select('name, name_ar, logo_url')
+        .eq('id', userProfile.agent_id)
+        .single();
+      agentName = (agentRow?.name_ar as string | null) || (agentRow?.name as string | null) || null;
+      agentLogoUrl = (agentRow?.logo_url as string | null) || null;
+    }
 
     // Branch label (optional — only when filter is applied).
     let branchLabel: string | null = null;
@@ -208,6 +221,8 @@ serve(async (req) => {
       policyType: policy_type || null,
       generatedBy,
       branchLabel,
+      agentName,
+      agentLogoUrl,
     });
 
     if (!bunnyApiKey || !bunnyStorageZone) {
@@ -312,10 +327,12 @@ interface BuildArgs {
   policyType: string | null;
   generatedBy: string;
   branchLabel: string | null;
+  agentName: string | null;
+  agentLogoUrl: string | null;
 }
 
 function buildReportHtml(args: BuildArgs): string {
-  const { clients, policiesById, month, startDate, endDate, daysFilter, policyType, generatedBy, branchLabel } = args;
+  const { clients, policiesById, month, startDate, endDate, daysFilter, policyType, generatedBy, branchLabel, agentName, agentLogoUrl } = args;
 
   const generatedAt = new Date().toLocaleString('en-GB', {
     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -394,6 +411,11 @@ function buildReportHtml(args: BuildArgs): string {
       padding-bottom: 22px;
       border-bottom: 1px solid #1a1a1a;
       margin-bottom: 24px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand .logo {
+      width: 56px; height: 56px; border-radius: 8px; object-fit: cover;
+      border: 1px solid #1a1a1a; background: #ffffff;
     }
     .brand .name { font-size: 18px; font-weight: 700; }
     .brand .sub { font-size: 12px; margin-top: 4px; font-weight: 500; }
@@ -581,8 +603,11 @@ function buildReportHtml(args: BuildArgs): string {
     <!-- Header -->
     <div class="report-top">
       <div class="brand">
-        <div class="name">تقرير التجديدات</div>
-        <div class="sub">${escapeHtml(rangeLabel)}</div>
+        ${agentLogoUrl ? `<img class="logo" src="${escapeHtml(agentLogoUrl)}" alt="">` : ''}
+        <div>
+          <div class="name">${escapeHtml(agentName || 'تقرير التجديدات')}</div>
+          <div class="sub">${escapeHtml(agentName ? `تقرير التجديدات — ${rangeLabel}` : rangeLabel)}</div>
+        </div>
       </div>
       <div class="report-meta">
         <div class="doc-title">تقرير</div>

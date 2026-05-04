@@ -539,12 +539,6 @@ export default function PolicyReports() {
         console.error('Error fetching renewals summary:', summaryRes.error);
         toast.error('فشل في تحميل ملخص التجديدات');
       } else if (summaryRes.data && summaryRes.data.length > 0) {
-        console.log('[renewals_summary RPC]', summaryRes.data[0]);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const dbg = await (supabase as any).rpc('_debug_renewals_diff', {
-          p_end_month: renewalsMonth ? `${renewalsMonth}-01` : `${new Date().toISOString().slice(0, 7)}-01`,
-        });
-        console.log('[renewals_diff DEBUG]', { rows: dbg.data, error: dbg.error });
         setRenewalsSummary(summaryRes.data[0] as unknown as RenewalSummary);
       } else {
         // No data returned, set default empty summary
