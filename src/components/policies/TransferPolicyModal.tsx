@@ -211,11 +211,6 @@ export function TransferPolicyModal({
   const loadSmsTemplate = async () => {
     setLoadingTemplate(true);
     try {
-      const { data: settings } = await supabase
-        .from("sms_settings")
-        .select("*")
-        .single();
-
       // Prefer the internal document_number (always present — DB trigger
       // assigns it) over the external insurance-company policy_number
       // (frequently empty at transfer time). Falling back to the bare
