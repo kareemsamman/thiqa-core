@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const AGENT_ID = "6a2e7957-1444-4cb2-a6f8-abc104003fa0";
+const BRANCH_ID = "94e2643f-5ff2-4acb-b31d-35f90a87071d"; // بيت صفافا
 
 // Hebrew company name → Arabic name (used for both name and name_ar on insert)
 const COMPANY_MAP: Record<string, string> = {
@@ -273,6 +274,23 @@ Deno.serve(async (req) => {
     }
 
     const results: RowResult[] = [];
+    console.log("[import] running v2 with BRANCH_ID + file_number");
+
+    // Compute next file_number (format F####)
+    const { data: fnRows } = await admin
+      .from("clients")
+      .select("file_number")
+      .eq("agent_id", AGENT_ID)
+      .like("file_number", "F%");
+    let nextFileNum = 1;
+    for (const row of fnRows || []) {
+      const m = String(row.file_number || "").match(/^F(\d+)$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n + 1 > nextFileNum) nextFileNum = n + 1;
+      }
+    }
+    const makeFileNumber = () => `F${String(nextFileNum++).padStart(4, "0")}`;
 
     for (const row of rows) {
       const r: RowResult = { rowIndex: row.rowIndex, status: "skipped" };
@@ -340,6 +358,7 @@ Deno.serve(async (req) => {
       if (existingClient) {
         client_id = existingClient.id;
       } else {
+        const fileNumber = dry_run ? `<F${String(nextFileNum++).padStart(4, "0")}>` : makeFileNumber();
         if (dry_run) {
           client_id = `<would-create-client:${id_number}>`;
         } else {
@@ -347,6 +366,8 @@ Deno.serve(async (req) => {
             .from("clients")
             .insert({
               agent_id: AGENT_ID,
+              branch_id: BRANCH_ID,
+              file_number: fileNumber,
               full_name,
               id_number,
               phone_number: (row.phone || "").trim() || null,
@@ -386,6 +407,7 @@ Deno.serve(async (req) => {
             .from("cars")
             .insert({
               agent_id: AGENT_ID,
+              branch_id: BRANCH_ID,
               client_id,
               car_number,
               manufacturer_name: info.manufacturer_name,
@@ -422,6 +444,7 @@ Deno.serve(async (req) => {
           .from("policies")
           .insert({
             agent_id: AGENT_ID,
+            branch_id: BRANCH_ID,
             client_id,
             car_id,
             company_id,
@@ -453,6 +476,7 @@ Deno.serve(async (req) => {
         if (amount > 0 && !dry_run) {
           const { error } = await admin.from("policy_payments").insert({
             agent_id: AGENT_ID,
+            branch_id: BRANCH_ID,
             policy_id,
             payment_type: "cash",
             amount,
@@ -478,6 +502,7 @@ Deno.serve(async (req) => {
         }
         const { error } = await admin.from("policies").insert({
           agent_id: AGENT_ID,
+          branch_id: BRANCH_ID,
           client_id,
           car_id,
           company_id,
