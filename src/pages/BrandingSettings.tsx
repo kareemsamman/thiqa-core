@@ -7,13 +7,28 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Upload, Trash2, Image, Save, PenTool, Palette, Receipt, Keyboard } from "lucide-react";
+import { Loader2, Upload, Trash2, Image, Save, PenTool, Palette, Receipt, Keyboard, Sparkles, RefreshCw } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSiteSettings, useUpdateSiteSettings } from "@/hooks/useSiteSettings";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createSafeHtml } from "@/lib/sanitize";
 import { ShortcutsTabContent } from "@/components/admin/ShortcutsTabContent";
+
+// Resolve the current user's agent_id, used to scope uploads under the
+// `{agent_id}/...` folder that the `branding` bucket's RLS policy
+// requires.
+async function resolveAgentId(): Promise<string | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: au } = await supabase
+    .from("agent_users")
+    .select("agent_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  return au?.agent_id ?? null;
+}
 
 function ImageUploadField({
   label,
@@ -22,6 +37,7 @@ function ImageUploadField({
   onUpload,
   onRemove,
   accept = "image/*",
+  enableAiEnhance = false,
 }: {
   label: string;
   description: string;
@@ -29,9 +45,15 @@ function ImageUploadField({
   onUpload: (url: string) => void;
   onRemove: () => void;
   accept?: string;
+  enableAiEnhance?: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSaving, setAiSaving] = useState(false);
+  const [enhancedDataUrl, setEnhancedDataUrl] = useState<string | null>(null);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -39,21 +61,7 @@ function ImageUploadField({
 
     setUploading(true);
     try {
-      // The branding bucket's RLS policy requires uploads to live
-      // under the caller's `{agent_id}/...` folder, so we resolve the
-      // current user's agent_id first and use it as the path prefix.
-      // Without this, every upload returns "new row violates row-level
-      // security policy" and the toast just says "failed to upload".
-      const { data: { user } } = await supabase.auth.getUser();
-      let agentId: string | null = null;
-      if (user) {
-        const { data: au } = await supabase
-          .from("agent_users")
-          .select("agent_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        agentId = au?.agent_id ?? null;
-      }
+      const agentId = await resolveAgentId();
       if (!agentId) {
         toast.error("تعذر تحديد الوكالة. حاول إعادة تسجيل الدخول.");
         return;
@@ -83,12 +91,70 @@ function ImageUploadField({
     }
   };
 
+  const runEnhance = async () => {
+    if (!currentUrl) return;
+    setAiLoading(true);
+    setEnhancedDataUrl(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("enhance-logo", {
+        body: { imageUrl: currentUrl },
+      });
+      if (error) throw error;
+      const dataUrl = (data as any)?.imageDataUrl as string | undefined;
+      if (!dataUrl) throw new Error((data as any)?.error || "no image returned");
+      setEnhancedDataUrl(dataUrl);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "فشل في تحسين الصورة");
+      setAiOpen(false);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const openEnhanceDialog = () => {
+    setAiOpen(true);
+    void runEnhance();
+  };
+
+  const acceptEnhanced = async () => {
+    if (!enhancedDataUrl) return;
+    setAiSaving(true);
+    try {
+      const agentId = await resolveAgentId();
+      if (!agentId) {
+        toast.error("تعذر تحديد الوكالة. حاول إعادة تسجيل الدخول.");
+        return;
+      }
+      const res = await fetch(enhancedDataUrl);
+      const blob = await res.blob();
+      const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
+      const path = `${agentId}/${crypto.randomUUID()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("branding")
+        .upload(path, blob, { upsert: true, contentType: blob.type || "image/png" });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage
+        .from("branding")
+        .getPublicUrl(path);
+      onUpload(publicUrl);
+      toast.success("تم تحديث الشعار");
+      setAiOpen(false);
+      setEnhancedDataUrl(null);
+    } catch (err: any) {
+      console.error(err);
+      toast.error("فشل في حفظ الصورة المُحسَّنة");
+    } finally {
+      setAiSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
       <p className="text-xs text-muted-foreground">{description}</p>
       {currentUrl ? (
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 flex-wrap">
           <img
             src={currentUrl}
             alt={label}
@@ -98,6 +164,18 @@ function ImageUploadField({
             <Trash2 className="h-4 w-4 ml-1" />
             حذف
           </Button>
+          {enableAiEnhance && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={openEnhanceDialog}
+              disabled={aiLoading || aiSaving}
+              className="gap-1"
+            >
+              <Sparkles className="h-4 w-4" />
+              تحسين بالذكاء الاصطناعي
+            </Button>
+          )}
         </div>
       ) : (
         <div
@@ -122,6 +200,82 @@ function ImageUploadField({
         onChange={handleUpload}
         disabled={uploading}
       />
+
+      {enableAiEnhance && (
+        <Dialog
+          open={aiOpen}
+          onOpenChange={(open) => {
+            if (aiSaving) return;
+            setAiOpen(open);
+            if (!open) setEnhancedDataUrl(null);
+          }}
+        >
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5" />
+                تحسين الشعار بالذكاء الاصطناعي
+              </DialogTitle>
+              <DialogDescription>
+                قارن بين الشعار الأصلي والنسخة المُحسَّنة، ثم اختر ما يناسبك.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground text-center">الأصلية</div>
+                <div className="aspect-square rounded-lg border bg-muted/30 flex items-center justify-center p-2">
+                  {currentUrl && (
+                    <img src={currentUrl} alt="original" className="max-h-full max-w-full object-contain" />
+                  )}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground text-center">المُحسَّنة</div>
+                <div className="aspect-square rounded-lg border bg-muted/30 flex items-center justify-center p-2">
+                  {aiLoading ? (
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                      <span className="text-xs">جاري التحسين...</span>
+                    </div>
+                  ) : enhancedDataUrl ? (
+                    <img src={enhancedDataUrl} alt="enhanced" className="max-h-full max-w-full object-contain" />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 justify-end pt-2">
+              <Button
+                variant="ghost"
+                onClick={() => setAiOpen(false)}
+                disabled={aiSaving}
+              >
+                احتفظ بالأصلية
+              </Button>
+              <Button
+                variant="outline"
+                onClick={runEnhance}
+                disabled={aiLoading || aiSaving}
+                className="gap-1"
+              >
+                <RefreshCw className={`h-4 w-4 ${aiLoading ? "animate-spin" : ""}`} />
+                جرّب مرة أخرى
+              </Button>
+              <Button
+                onClick={acceptEnhanced}
+                disabled={!enhancedDataUrl || aiLoading || aiSaving}
+                className="gap-1"
+              >
+                {aiSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                استخدم هذه
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
@@ -312,6 +466,7 @@ export default function BrandingSettings() {
                   currentUrl={logoUrl}
                   onUpload={setLogoUrl}
                   onRemove={() => setLogoUrl(null)}
+                  enableAiEnhance
                 />
               </CardContent>
             </Card>

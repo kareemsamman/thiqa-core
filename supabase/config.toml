@@ -82,3 +82,6 @@ verify_jwt = false
 
 [functions.setup-oauth-user]
 verify_jwt = false
+
+[functions.enhance-logo]
+verify_jwt = false
