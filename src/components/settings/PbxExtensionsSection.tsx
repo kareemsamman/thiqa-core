@@ -24,12 +24,12 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Phone, Plus, Trash2, Star, Loader2, Eye, EyeOff, AlertCircle } from "lucide-react";
+import md5 from "blueimp-md5";
 
 interface PbxExtension {
   id: string;
   extension_number: string;
   extension_name: string | null;
-  password_plain: string;
   is_default: boolean;
   created_at: string;
 }
@@ -103,8 +103,7 @@ export function PbxExtensionsSection({
         .insert({
           extension_number: newExtension.extension_number,
           extension_name: newExtension.extension_name || null,
-          password_plain: newExtension.password_plain,
-          password_md5: "", // Will be computed by trigger
+          password_md5: md5(newExtension.password_plain),
           is_default: newExtension.is_default || extensions.length === 0,
         } as any)
         .select()

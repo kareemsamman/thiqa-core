@@ -89,12 +89,9 @@ export function CancelPolicyModal({
     if (checked && !smsMessage) {
       setLoadingTemplate(true);
       try {
-        const { data: settings } = await supabase
-          .from("sms_settings")
-          .select("cancellation_sms_template")
-          .single();
+        const { data: tmpl } = await supabase.rpc('get_sms_cancellation_template');
 
-        let template = settings?.cancellation_sms_template || 
+        let template = (tmpl as string | null) ||
           "مرحباً {{client_name}}، تم إلغاء معاملة التأمين رقم {{policy_number}}. {{refund_message}}للاستفسار يرجى التواصل معنا.";
         
         // Replace placeholders

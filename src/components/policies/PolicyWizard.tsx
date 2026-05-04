@@ -343,12 +343,8 @@ export function PolicyWizard({
 
   // Check if Tranzila is enabled
   const checkTranzilaEnabled = useCallback(async () => {
-    const { data } = await supabase
-      .from('payment_settings')
-      .select('is_enabled')
-      .eq('provider', 'tranzila')
-      .single();
-    setTranzilaEnabled(data?.is_enabled || false);
+    const { data } = await supabase.rpc('get_payment_provider_enabled', { p_provider: 'tranzila' });
+    setTranzilaEnabled(data === true);
   }, []);
 
   // Shared function to handle ELZAMI payment logic when entering Step 4

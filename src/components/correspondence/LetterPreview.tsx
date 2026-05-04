@@ -28,20 +28,17 @@ export function LetterPreview({ title, recipientName, bodyHtml, createdAt, class
   useEffect(() => {
     async function fetchPhones() {
       try {
-        const { data } = await supabase
-          .from('sms_settings')
-          .select('company_phone_links, company_location')
-          .limit(1)
-          .maybeSingle();
+        const { data } = await supabase.rpc('get_company_contact_info');
+        const info = (data ?? {}) as { company_phone_links?: unknown; company_location?: unknown };
 
-        let phoneLinks = data?.company_phone_links as unknown;
+        let phoneLinks = info.company_phone_links;
         if (phoneLinks && typeof phoneLinks === 'string') {
           try { phoneLinks = JSON.parse(phoneLinks); } catch { phoneLinks = []; }
         }
 
         setPhoneInfo({
           phoneLinks: Array.isArray(phoneLinks) ? phoneLinks as CompanyPhones['phoneLinks'] : [],
-          companyLocation: data?.company_location || '',
+          companyLocation: (typeof info.company_location === 'string' ? info.company_location : '') || '',
         });
       } catch {
         setPhoneInfo({ phoneLinks: [], companyLocation: '' });

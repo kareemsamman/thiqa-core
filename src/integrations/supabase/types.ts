@@ -4280,7 +4280,6 @@ export type Database = {
           id: string
           is_default: boolean | null
           password_md5: string
-          password_plain: string
         }
         Insert: {
           agent_id?: string | null
@@ -4290,7 +4289,6 @@ export type Database = {
           id?: string
           is_default?: boolean | null
           password_md5: string
-          password_plain: string
         }
         Update: {
           agent_id?: string | null
@@ -4300,7 +4298,6 @@ export type Database = {
           id?: string
           is_default?: boolean | null
           password_md5?: string
-          password_plain?: string
         }
         Relationships: [
           {
@@ -6996,6 +6993,7 @@ export type Database = {
           total_payable: number
         }[]
       }
+      get_company_contact_info: { Args: never; Returns: Json }
       get_company_wallet_balance: {
         Args: { p_company_id: string; p_from_date?: string; p_to_date?: string }
         Returns: {
@@ -7016,6 +7014,11 @@ export type Database = {
       }
       get_my_agent_id: { Args: never; Returns: string }
       get_my_branch_id: { Args: never; Returns: string }
+      get_payment_provider_enabled: {
+        Args: { p_provider: string }
+        Returns: boolean
+      }
+      get_sms_cancellation_template: { Args: never; Returns: string }
       get_tasks_with_users: {
         Args: { target_date: string }
         Returns: {
