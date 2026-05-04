@@ -75,11 +75,17 @@ export function getInsuranceChildBadgeClass(type: PolicyTypeChild | null): strin
  * Get the display label for a policy type
  */
 export function getInsuranceTypeLabel(
-  parent: PolicyTypeParent, 
+  parent: PolicyTypeParent,
   child?: PolicyTypeChild | null
 ): string {
   if (child && (parent === 'THIRD_FULL')) {
     return POLICY_CHILD_LABELS[child];
+  }
+  // Some RPCs (renewals/renewed) flatten THIRD_FULL+child into the bare
+  // child enum so each row reads as "ثالث" or "شامل" instead of the
+  // ambiguous "طرف ثالث / شامل" placeholder.
+  if ((parent as string) in POLICY_CHILD_LABELS) {
+    return POLICY_CHILD_LABELS[parent as unknown as PolicyTypeChild];
   }
   return POLICY_TYPE_LABELS[parent] || parent;
 }
