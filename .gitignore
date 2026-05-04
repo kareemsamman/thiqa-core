@@ -25,3 +25,9 @@ dist-ssr
 
 # Supabase CLI local state
 supabase/.temp/
+
+# Claude Code local workspace
+.claude/
+
+# One-off dumps
+tmp_*.sql
