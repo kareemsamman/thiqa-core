@@ -31,6 +31,7 @@ const PAYMENT_TYPE_LABELS: Record<string, string> = {
   cash: 'نقدي',
   cheque: 'شيك',
   visa: 'فيزا',
+  visa_external: 'فيزا خارجي',
   transfer: 'تحويل',
 };
 
