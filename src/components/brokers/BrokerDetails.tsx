@@ -113,6 +113,8 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
     toBrokerCount: 0,
     paidToBroker: 0,
     receivedFromBroker: 0,
+    paidToBrokerCount: 0,
+    receivedFromBrokerCount: 0,
   });
   const [clientDrawerOpen, setClientDrawerOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -213,14 +215,16 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
         .eq("broker_id", broker.id)
         .eq("status", "completed");
 
-      // we_owe = I paid broker (reduces my debt)
-      // broker_owes = Broker paid me (reduces broker's debt)
-      const paidToBroker = (settlementsData || [])
-        .filter((s: any) => s.direction === 'we_owe' && !s.refused)
+      // we_owe = I paid broker (سند صرف)
+      // broker_owes = Broker paid me (سند قبض)
+      const paidSettlements = (settlementsData || [])
+        .filter((s: any) => s.direction === 'we_owe' && !s.refused);
+      const receivedSettlements = (settlementsData || [])
+        .filter((s: any) => s.direction === 'broker_owes' && !s.refused);
+
+      const paidToBroker = paidSettlements
         .reduce((sum: number, s: any) => sum + Number(s.total_amount || 0), 0);
-      
-      const receivedFromBroker = (settlementsData || [])
-        .filter((s: any) => s.direction === 'broker_owes' && !s.refused)
+      const receivedFromBroker = receivedSettlements
         .reduce((sum: number, s: any) => sum + Number(s.total_amount || 0), 0);
 
       setStats({
@@ -230,8 +234,10 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
         toBrokerTotal,   // Policy profits broker owes me
         fromBrokerCount: fromBrokerPolicies.length,
         toBrokerCount: toBrokerPolicies.length,
-        paidToBroker,    // Settlements I paid to broker
-        receivedFromBroker, // Settlements broker paid to me
+        paidToBroker,    // Settlements I paid to broker (سند صرف)
+        receivedFromBroker, // Settlements broker paid to me (سند قبض)
+        paidToBrokerCount: paidSettlements.length,
+        receivedFromBrokerCount: receivedSettlements.length,
       });
     } catch (error) {
       console.error("Error fetching broker data:", error);
@@ -339,12 +345,14 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
     setEndDate("");
   };
 
-  // Net balance = (what broker owes me from policies + what I received from broker)
-  //             - (what I owe broker from policies + what I paid to broker)
-  // Simplified: (toBrokerTotal - fromBrokerTotal) + (receivedFromBroker - paidToBroker)
+  // Net balance = remaining broker debt after settlements.
+  //   Broker→me ledger: toBrokerTotal (gross) - receivedFromBroker (paid back)
+  //   Me→broker ledger: fromBrokerTotal (gross) - paidToBroker (paid back)
+  // Net (positive = broker still owes me) = brokerLedger - meLedger
+  //   = (toBrokerTotal - fromBrokerTotal) - (receivedFromBroker - paidToBroker)
   const policyNetBalance = stats.toBrokerTotal - stats.fromBrokerTotal;
   const settlementNetBalance = stats.receivedFromBroker - stats.paidToBroker;
-  const netBalance = policyNetBalance + settlementNetBalance;
+  const netBalance = policyNetBalance - settlementNetBalance;
 
   const dateRangeText = startDate || endDate
     ? `${startDate ? formatDate(startDate) : "..."} - ${endDate ? formatDate(endDate) : "..."}`
@@ -712,6 +720,45 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
                     </div>
                     <div className="text-2xl font-bold text-orange-700 dark:text-orange-400 ltr-nums text-right">
                       {formatCurrency(stats.fromBrokerTotal)}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Settlements breakdown — shown only when there's history,
+                  so the balance math is transparent. Receipts (سند قبض)
+                  reduce the broker's debt; disbursements (سند صرف) reduce
+                  ours. Without this row the user can't see why the hero
+                  net dropped below the gross policy total. */}
+              {(stats.receivedFromBroker > 0 || stats.paidToBroker > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x border-t">
+                  <div className="px-6 py-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-100 dark:bg-emerald-900/30 print:bg-emerald-100">
+                        <ArrowDownLeft className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
+                      </div>
+                      <span className="text-sm font-medium">استلمت من الوسيط</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mb-1.5">
+                      {stats.receivedFromBrokerCount} {stats.receivedFromBrokerCount === 1 ? "سند قبض" : "سندات قبض"} — يخصم من دينه
+                    </div>
+                    <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 ltr-nums text-right">
+                      −{formatCurrency(stats.receivedFromBroker)}
+                    </div>
+                  </div>
+
+                  <div className="px-6 py-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-md bg-amber-100 dark:bg-amber-900/30 print:bg-amber-100">
+                        <ArrowUpRight className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400" />
+                      </div>
+                      <span className="text-sm font-medium">دفعت للوسيط</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mb-1.5">
+                      {stats.paidToBrokerCount} {stats.paidToBrokerCount === 1 ? "سند صرف" : "سندات صرف"} — يخصم من ديني
+                    </div>
+                    <div className="text-2xl font-bold text-amber-700 dark:text-amber-400 ltr-nums text-right">
+                      −{formatCurrency(stats.paidToBroker)}
                     </div>
                   </div>
                 </div>

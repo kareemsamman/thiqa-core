@@ -563,12 +563,15 @@ export default function BrokerWallet() {
     setMainNotes('');
   };
 
-  // Net balance includes both policy profits AND settlements
-  // Policy obligations: toBrokerProfit - fromBrokerProfit
-  // Settlement balance: receivedFromBroker - paidToBroker
+  // Remaining broker debt = gross policy net minus settlements already paid.
+  //   policyNetBalance — gross from policies (positive = broker owes me).
+  //   settlementNetBalance — net of payments exchanged
+  //     (positive = broker has paid me more than I've paid them).
+  // Subtracting cancels out the gross with what's already settled, so a
+  // matching سند قبض (broker paid the policy) drives the net to zero.
   const policyNetBalance = policyBrokerOwesMe - policyOweToBroker;
   const settlementNetBalance = receivedFromBroker - paidToBroker;
-  const netBalance = policyNetBalance + settlementNetBalance;
+  const netBalance = policyNetBalance - settlementNetBalance;
   const totalPaymentLines = paymentLines.reduce((sum, p) => sum + (p.amount || 0), 0);
 
   const selectedVisaPayment = selectedVisaPaymentIndex !== null ? paymentLines[selectedVisaPaymentIndex] : null;

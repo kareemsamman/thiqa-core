@@ -201,12 +201,15 @@ serve(async (req) => {
       .filter((s: any) => s.direction === 'broker_owes' && s.status === 'completed')
       .reduce((sum: number, s: any) => sum + Number(s.total_amount || 0), 0);
 
-    // Net = (broker owes me + I received from broker)
-    //     − (I owe broker + I paid broker)
+    // Net = remaining broker debt after settlements.
+    //   Broker→me ledger: toBrokerTotal (gross) − receivedFromBroker (paid back)
+    //   Me→broker ledger: fromBrokerTotal (gross) − paidToBroker (paid back)
+    // Net = brokerLedger − meLedger
+    //     = (toBrokerTotal − fromBrokerTotal) − (receivedFromBroker − paidToBroker)
     // Positive = broker still owes me. Negative = I still owe broker.
     const policyNet = toBrokerTotal - fromBrokerTotal;
     const settlementNet = receivedFromBroker - paidToBroker;
-    const netBalance = policyNet + settlementNet;
+    const netBalance = policyNet - settlementNet;
 
     currentStep = "build html";
     const html = generateReportHtml({
