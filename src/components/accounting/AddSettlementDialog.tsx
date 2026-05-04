@@ -31,7 +31,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
-import { Banknote, FileText, Loader2, Plus, Receipt, Scan, Split, Trash2, Wallet } from 'lucide-react';
+import { Banknote, CreditCard, FileText, Loader2, Plus, Receipt, Scan, Split, Trash2, Wallet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAgentContext } from '@/hooks/useAgentContext';
@@ -44,7 +44,7 @@ import { cn } from '@/lib/utils';
 
 export type SettlementMode = 'company' | 'broker';
 export type SettlementKind = 'disbursement' | 'receipt';
-export type PaymentLineType = 'cash' | 'cheque' | 'customer_cheque' | 'bank_transfer';
+export type PaymentLineType = 'cash' | 'cheque' | 'customer_cheque' | 'bank_transfer' | 'visa';
 
 export interface SettlementEntity {
   id: string;
@@ -89,6 +89,7 @@ const PAYMENT_TYPE_LABEL: Record<PaymentLineType, string> = {
   cheque: 'شيك جديد',
   customer_cheque: 'شيك عميل',
   bank_transfer: 'تحويل بنكي',
+  visa: 'فيزا',
 };
 
 const PAYMENT_TYPE_ICON: Record<PaymentLineType, typeof Banknote> = {
@@ -96,6 +97,7 @@ const PAYMENT_TYPE_ICON: Record<PaymentLineType, typeof Banknote> = {
   cheque: FileText,
   customer_cheque: Wallet,
   bank_transfer: Receipt,
+  visa: CreditCard,
 };
 
 const today = () => format(new Date(), 'yyyy-MM-dd');
@@ -137,7 +139,8 @@ export function AddSettlementDialog({
   onSaved,
 }: Props) {
   const { user } = useAuth();
-  const { agentId } = useAgentContext();
+  const { agentId, hasFeature } = useAgentContext();
+  const visaEnabled = hasFeature('visa_payment');
   const [entityId, setEntityId] = useState<string>(defaultEntityId ?? '');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<PaymentLine[]>([makeLine('cash')]);
@@ -445,6 +448,9 @@ export function AddSettlementDialog({
                   <QuickAddButton type="cheque" onClick={() => addLineOfType('cheque')} />
                   <QuickAddButton type="customer_cheque" onClick={() => addLineOfType('customer_cheque')} />
                   <QuickAddButton type="bank_transfer" onClick={() => addLineOfType('bank_transfer')} />
+                  {visaEnabled && (
+                    <QuickAddButton type="visa" onClick={() => addLineOfType('visa')} />
+                  )}
                   <Popover open={splitOpen} onOpenChange={setSplitOpen}>
                     <PopoverTrigger asChild>
                       <Button type="button" variant="outline" size="sm" className="gap-1.5">
@@ -596,7 +602,7 @@ function PaymentLineCard({
           the type select even though the line was created via the
           quick-add button, so a typo can be corrected without removing
           and re-adding. */}
-      {(line.payment_type === 'cash' || line.payment_type === 'bank_transfer') && (
+      {(line.payment_type === 'cash' || line.payment_type === 'bank_transfer' || line.payment_type === 'visa') && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="space-y-1.5">
             <Label className="text-[11px]">طريقة الدفع</Label>
