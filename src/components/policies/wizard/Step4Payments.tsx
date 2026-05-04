@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
-import { Plus, Trash2, CreditCard, AlertCircle, Loader2, Split, Upload, X, ImageIcon, Lock, Scan, Info, FileText } from "lucide-react";
+import { Plus, Trash2, CreditCard, AlertCircle, Loader2, Split, Upload, X, ImageIcon, Sparkles, Scan, Info, FileText } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { PaymentSummaryBar } from "./PaymentSummaryBar";
@@ -362,16 +362,14 @@ export function Step4Payments({
               // have nothing here, so we drop the whole column and save a row on mobile.
               const hasActionsColumn =
                 payment.payment_type === 'cheque' ||
-                isVisa ||
-                isLocked;
+                (isVisa && !isLocked);
 
               return (
                 <Card
                   key={payment.id}
                   className={cn(
                     "relative p-3",
-                    visaPaid && "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800",
-                    isLocked && "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
+                    visaPaid && "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
                   )}
                 >
                   {/* Delete button — absolute top-left so it never claims its own row on mobile */}
@@ -388,17 +386,17 @@ export function Step4Payments({
                     </Button>
                   )}
 
-                  {/* Locked Payment Badge */}
+                  {/* Elzami feature tag — subtle pill, not a disabled-looking header */}
                   {isLocked && payment.locked_label && (
-                    <div className="flex flex-wrap items-center gap-2 mb-2 pb-2 border-b border-amber-200 dark:border-amber-700">
-                      <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                      <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
+                        <Sparkles className="h-3 w-3" />
                         {payment.locked_label}
                       </span>
-                      <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] text-muted-foreground">
                         محسوبة تلقائيًا
                       </span>
-                      <span className="basis-full text-[11px] text-amber-700/80 dark:text-amber-300/80 leading-snug">
+                      <span className="basis-full text-[10px] text-muted-foreground leading-snug">
                         اتركها كاملة إذا الزبون دفع للشركة مباشرة، أو حطها 0 إذا بدنا نحصلها لاحقاً.
                       </span>
                     </div>
@@ -482,13 +480,6 @@ export function Step4Payments({
                           <span className="text-xs text-green-600 font-medium flex items-center gap-1 flex-1">
                             <CreditCard className="h-3.5 w-3.5" />
                             تم الدفع
-                          </span>
-                        )}
-
-                        {isLocked && (
-                          <span className="text-xs text-amber-600 font-medium flex items-center gap-1 flex-1">
-                            <Lock className="h-3.5 w-3.5" />
-                            مقفلة
                           </span>
                         )}
                       </div>
