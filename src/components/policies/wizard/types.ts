@@ -229,6 +229,12 @@ export const PAYMENT_TYPES_BASE = [
   { value: "cash", label: "نقدي" },
   { value: "cheque", label: "شيك" },
   { value: "transfer", label: "تحويل" },
+  // فيزا خارجي is the customer paying directly on the insurance
+  // company's portal — money never passes through us, so it
+  // doesn't need the visa_payment / Tranzila feature flag and
+  // is always offered. It's persisted as its own enum value so
+  // the dropdown can list it next to regular Tranzila فيزا.
+  { value: "visa_external", label: "فيزا خارجي" },
 ];
 
 export const PAYMENT_TYPES = [

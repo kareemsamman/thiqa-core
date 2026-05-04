@@ -2,16 +2,19 @@
 // invoices, receipts) renders the same human-readable text for the same
 // underlying policy_payments row.
 //
-// Special case: ELZAMI premiums are paid directly on the insurance
-// company's portal with the customer's own card — the money never passes
-// through the agency till. We store those rows with payment_type = 'visa'
-// and locked = true (see applyElzamiPaymentLogic in PolicyWizard), and
-// render them as "فيزا خارجي" so staff know it's an external charge.
+// "فيزا خارجي" is the customer paying directly on the insurance
+// company's portal with their own card — money never passes through
+// us. It now has its own enum value (visa_external) so the label is a
+// straight map lookup. Older rows that were stored as ('visa' +
+// locked=true) were re-stamped to visa_external by the back-fill
+// migration 20260504140100; the locked-visa branch in
+// getPaymentTypeLabel is kept as a safety net for any straggler.
 
 export const PAYMENT_TYPE_LABELS: Record<string, string> = {
   cash: 'نقدي',
   cheque: 'شيك',
   visa: 'فيزا',
+  visa_external: 'فيزا خارجي',
   transfer: 'تحويل',
 };
 

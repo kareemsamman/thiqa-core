@@ -371,11 +371,13 @@ export function PolicyWizard({
         if (!hasLockedElzamiPayment) {
           // Add new locked payment. ELZAMI is paid by the customer directly
           // on the insurance company's portal (using their card); the money
-          // never passes through the agency's till, so we store it as 'visa'
-          // and render it as "فيزا خارجي" in every payments surface.
+          // never passes through the agency's till, so we store it as
+          // 'visa_external' (its own enum value, distinct from regular
+          // Tranzila 'visa') so every payments surface labels it as
+          // "فيزا خارجي" without having to special-case the locked flag.
           setPayments([{
             id: crypto.randomUUID(),
-            payment_type: 'visa',
+            payment_type: 'visa_external',
             amount: elzamiPrice,
             payment_date: elzamiDate,
             refused: false,
