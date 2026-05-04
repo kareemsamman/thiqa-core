@@ -280,10 +280,10 @@ export default function ActivityLog() {
       const { data: payments } = await supabase
         .from("policy_payments")
         .select(`
-          id, created_at, amount, payment_type, cheque_number,
+          id, created_at, amount, payment_type, cheque_number, locked, source,
           policies(
-            cancelled, 
-            policy_type_parent, 
+            cancelled,
+            policy_type_parent,
             policy_type_child,
             insurance_companies(name, name_ar),
             cars(car_number),
@@ -299,7 +299,11 @@ export default function ActivityLog() {
         for (const pay of payments) {
           if ((pay.policies as any)?.cancelled) continue;
           if ((pay.policies as any)?.clients?.deleted_at) continue;
-          if ((pay.policies as any)?.policy_type_parent === "ELZAMI") continue;
+          // Hide system-generated locked rows (the auto ELZAMI
+          // "external visa" anchor) — those aren't real customer
+          // payments. Real customer payments toward an ELZAMI debt
+          // (cash, transfer, etc.) DO surface in the activity feed.
+          if ((pay as any).locked === true || (pay as any).source === 'system') continue;
 
           const clientName = (pay.policies as any)?.clients?.full_name || "عميل";
           const fileNumber = (pay.policies as any)?.clients?.file_number || "";

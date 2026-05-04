@@ -348,10 +348,13 @@ export function Step4Payments({
               const isProcessing = creatingPolicy && selectedVisaPaymentIndex === index;
               const isLocked = payment.locked === true;
               const isDisabled = visaPaid || isLocked;
-              // Locked rows still let the agent change *what* the
-              // payment is (type / date / cheque info / image) — only
-              // the amount stays bound to the policy price.
-              const isAmountDisabled = isDisabled;
+              // Locked rows are now fully editable except for delete:
+              // the agent can set amount to 0 (or any partial value)
+              // when the customer hasn't paid the company portal yet
+              // and wants the agency to collect later. Default stays
+              // at the full insurance_price so the existing flow is
+              // unchanged.
+              const isAmountDisabled = visaPaid;
               const isMetaDisabled = visaPaid; // type, date, cheque trio, images
 
               // Actions column only needs to exist when there's something to put in it —
@@ -387,13 +390,16 @@ export function Step4Payments({
 
                   {/* Locked Payment Badge */}
                   {isLocked && payment.locked_label && (
-                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-200 dark:border-amber-700">
+                    <div className="flex flex-wrap items-center gap-2 mb-2 pb-2 border-b border-amber-200 dark:border-amber-700">
                       <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                       <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
                         {payment.locked_label}
                       </span>
                       <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded-full">
                         محسوبة تلقائيًا
+                      </span>
+                      <span className="basis-full text-[11px] text-amber-700/80 dark:text-amber-300/80 leading-snug">
+                        اتركها كاملة إذا الزبون دفع للشركة مباشرة، أو حطها 0 إذا بدنا نحصلها لاحقاً.
                       </span>
                     </div>
                   )}
@@ -423,8 +429,10 @@ export function Step4Payments({
                       </Select>
                     </div>
 
-                    {/* Amount — stays locked on auto rows: the price is
-                        bound to the policy's insurance_price. */}
+                    {/* Amount — editable even on locked rows so the
+                        agent can set 0 when the customer hasn't paid
+                        the company portal yet (the agency collects
+                        later through normal cash/visa/transfer rows). */}
                     <div>
                       <Label className="text-[10px] mb-1 block text-muted-foreground">المبلغ (₪)</Label>
                       <Input
@@ -436,7 +444,6 @@ export function Step4Payments({
                         className={cn(
                           "h-10",
                           paymentsExceedPrice && "border-destructive",
-                          isLocked && "opacity-70 cursor-not-allowed"
                         )}
                       />
                     </div>

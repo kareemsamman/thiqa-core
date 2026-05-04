@@ -435,46 +435,32 @@ export function DebtPaymentModal({
         const paidTotal = Math.min(groupPoolPaid, fullPrice);
         const fullPackageRemaining = Math.max(0, fullPrice - paidTotal);
 
-        // For debt display: only show non-ELZAMI portion that's actually payable
-        // This follows the business rule: ELZAMI is excluded from wallet/debt
-        const nonElzamiPrice = policyComponents
-          .filter(p => p.policyType !== 'ELZAMI')
-          .reduce((sum, p) => sum + p.price, 0)
-          + policyComponents
-            .filter(p => p.policyType === 'ELZAMI')
-            .reduce((sum, p) => sum + p.officeCommission, 0);
+        // ELZAMI now flows through the same debt math as everything
+        // else: insurance_price + (commission if ELZAMI) is owed by
+        // the customer. The locked auto-row's amount drives whether
+        // it's already covered (default = full price → no debt) or
+        // surfaces as outstanding (agent set to 0 → full debt).
+        const remainingTotal = Math.max(0, fullPackageRemaining);
 
-        // Remaining debt = min(non-ELZAMI prices, total package remaining)
-        // This ensures we don't show ELZAMI debt as client debt
-        const remainingTotal = Math.max(0, Math.min(nonElzamiPrice, fullPackageRemaining));
-
-        // Determine which policies can receive payments (non-ELZAMI with remaining > 0)
-        // For packages: distribute payment pool internally
-        const poolPaid = paidTotal;
-        let remainingPool = poolPaid;
-        
-        // Sort by priority: ELZAMI first (fills up first), then others by price ascending
-        const sortedComponents = [...policyComponents].sort((a, b) => {
-          if (a.policyType === 'ELZAMI' && b.policyType !== 'ELZAMI') return -1;
-          if (a.policyType !== 'ELZAMI' && b.policyType === 'ELZAMI') return 1;
-          return a.price - b.price;
-        });
-
-        // Distribute paid amount internally to determine what's left to pay per component
+        // Distribute the paid pool across components in price-ascending
+        // order — keeps small premiums (commissions, road service)
+        // from being marked partial when the bigger policies are also
+        // unpaid. No more ELZAMI-first waterfall (that was a workaround
+        // for the "always paid externally" assumption).
+        let remainingPool = paidTotal;
+        const sortedComponents = [...policyComponents].sort((a, b) => a.price - b.price);
         const componentsWithInternalRemaining = sortedComponents.map(comp => {
           const coverAmount = Math.min(remainingPool, comp.price);
           remainingPool = Math.max(0, remainingPool - coverAmount);
-          const internalRemaining = comp.price - coverAmount;
           return {
             ...comp,
-            remaining: internalRemaining,
+            remaining: comp.price - coverAmount,
           };
         });
 
-        // Payable policies: non-ELZAMI with remaining > 0, OR ELZAMI with unpaid office commission
+        // Anything still unpaid is collectable from the customer.
         const payablePolicies = componentsWithInternalRemaining.filter(
-          p => (p.policyType !== 'ELZAMI' && p.remaining > 0) ||
-               (p.policyType === 'ELZAMI' && p.officeCommission > 0 && p.remaining > 0)
+          p => p.remaining > 0,
         );
 
         // Only include items that have payable policies (with actual debt to collect)

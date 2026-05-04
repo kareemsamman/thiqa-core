@@ -132,32 +132,39 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
     buckets.set(key, list);
   }
 
+  // Per-policy money owed to the agency. ELZAMI rows now flow through
+  // the same formula as everyone else: insurance_price covers what
+  // the agency forwards to the company (driven by the locked auto-row
+  // amount), and office_commission is the agency's earning. When the
+  // agent leaves the locked row at full price the customer's "paid"
+  // already covers insurance_price → only commission shows; when they
+  // set it to 0 the full insurance_price surfaces as customer debt.
+  const policyPrice = (p: PolicyDebt) =>
+    (p.insurance_price || 0) + (p.policy_type_parent === 'ELZAMI' ? (p.office_commission || 0) : 0);
+  const policyPaid = (p: PolicyDebt) => p.paid || 0;
+
   for (const [key, items] of buckets) {
     // Standalone branch: single policy in the bucket.
     if (items.length === 1) {
       const p = items[0];
-      // Skip bare ELZAMI with no commission — nothing for the agent.
-      if (p.policy_type_parent === 'ELZAMI' && (p.office_commission || 0) === 0) continue;
-
-      const isElzami = p.policy_type_parent === 'ELZAMI';
-      const commission = p.office_commission || 0;
-      const price = isElzami ? commission : (p.insurance_price + commission);
-      const effectivePaid = isElzami ? Math.max(0, p.paid - p.insurance_price) : p.paid;
-      const remaining = Math.max(0, price - effectivePaid);
+      const price = policyPrice(p);
+      const paid = policyPaid(p);
+      const remaining = Math.max(0, price - paid);
       if (remaining <= 0) continue;
+
+      const commission = p.office_commission || 0;
+      const isElzami = p.policy_type_parent === 'ELZAMI';
+      const baseLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
 
       rows.push({
         key: p.id,
         isPackage: false,
-        typeLabel: isElzami
-          ? 'عمولة مكتب'
-          : getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child) +
-            (commission > 0 ? ' + عمولة مكتب' : ''),
+        typeLabel: baseLabel + (isElzami && commission > 0 ? ' + عمولة مكتب' : (commission > 0 ? ' + عمولة مكتب' : '')),
         hasCommission: commission > 0,
-        commissionTotal: commission,
+        commissionTotal: isElzami ? commission : 0,
         transferFee: p.transfer_fee || 0,
         price,
-        paid: Math.min(effectivePaid, price),
+        paid: Math.min(paid, price),
         remaining,
         startDate: p.start_date,
         endDate: p.end_date,
@@ -171,27 +178,20 @@ const aggregateDebtRows = (policies: PolicyDebt[]): DebtRow[] => {
     }
 
     // Package branch: multiple policies share a group_id (or car).
-    // ELZAMI contributes only office_commission, never its insurance_price.
-    const nonElzami = items.filter((p) => p.policy_type_parent !== 'ELZAMI');
-    const elzami = items.filter((p) => p.policy_type_parent === 'ELZAMI');
-    const nonElzamiPrice = nonElzami.reduce((sum, p) => sum + p.insurance_price, 0);
-    const elzamiCommission = elzami.reduce((sum, p) => sum + (p.office_commission || 0), 0);
-    const elzamiBasePrice = elzami.reduce((sum, p) => sum + p.insurance_price, 0);
-    const packagePrice = nonElzamiPrice + elzamiCommission;
-
-    // Waterfall allocation across the whole package pool: the elzami base is a
-    // passthrough to the insurance company, so the customer's payments cover
-    // it first. Only what remains in the pool counts as paid toward the office
-    // debt (non-elzami price + elzami commission). This way a 1650 payment on
-    // a شامل+إلزامي package is attributed to the elzami base (company money),
-    // not to the office, and the debt row shows paid=0 / remaining=full.
-    const totalPaidPool = items.reduce((sum, p) => sum + p.paid, 0);
-    const officePaidRaw = totalPaidPool - elzamiBasePrice;
-    const packagePaid = Math.max(0, Math.min(packagePrice, officePaidRaw));
-    const packageRemaining = packagePrice - packagePaid;
+    // Plain sum across all members (the old ELZAMI waterfall was a
+    // workaround for the assumption that ELZAMI was always paid
+    // externally — that's now driven by the locked-row amount, so
+    // every member's paid value is already correct).
+    const packagePrice = items.reduce((sum, p) => sum + policyPrice(p), 0);
+    const packagePaidRaw = items.reduce((sum, p) => sum + policyPaid(p), 0);
+    const packagePaid = Math.min(packagePrice, packagePaidRaw);
+    const packageRemaining = Math.max(0, packagePrice - packagePaid);
     if (packageRemaining <= 0) continue;
 
-    const typeLabels = nonElzami
+    const nonElzami = items.filter((p) => p.policy_type_parent !== 'ELZAMI');
+    const elzami = items.filter((p) => p.policy_type_parent === 'ELZAMI');
+    const elzamiCommission = elzami.reduce((sum, p) => sum + (p.office_commission || 0), 0);
+    const typeLabels = items
       .map((p) => getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child))
       .filter(Boolean);
     const hasCommission = elzamiCommission > 0;
