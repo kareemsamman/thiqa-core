@@ -121,7 +121,7 @@ export function useAgentLimits(): AgentLimits {
         const { data: overrideRow } = await supabase
           .from('agents')
           .select(
-            'users_limit_override, branches_limit_override, policies_limit_override, sms_limit_override, marketing_sms_limit_override, ai_limit_override',
+            'users_limit_override, branches_limit_override, policies_limit_override, sms_limit_override, marketing_sms_limit_override, ai_limit_override, policies_usage_offset',
           )
           .eq('id', agentId)
           .maybeSingle();
@@ -251,9 +251,14 @@ export function useAgentLimits(): AgentLimits {
             addonQty.extra_branch,
           ),
         );
+        // Subtract the per-agent offset so seed/imported policies
+        // don't consume quota. Offset stays fixed; as the agent
+        // creates new policies the displayed count climbs from 0.
+        const policiesOffset = (overrideRow as any)?.policies_usage_offset ?? 0;
+        const policiesUsed = Math.max(0, distinctTransactions.size - policiesOffset);
         setPolicies(
           buildLimit(
-            distinctTransactions.size,
+            policiesUsed,
             applyOverride(overrideRow?.policies_limit_override as number | null, planInfo.policies_limit),
             0,
           ),

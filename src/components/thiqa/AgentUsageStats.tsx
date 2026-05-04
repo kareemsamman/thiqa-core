@@ -95,7 +95,7 @@ export function AgentUsageStats({ agentId, refreshKey = 0 }: { agentId: string; 
       ] = await Promise.all([
         supabase
           .from("agents")
-          .select("plan, users_limit_override, branches_limit_override, policies_limit_override, sms_limit_override, marketing_sms_limit_override, ai_limit_override")
+          .select("plan, users_limit_override, branches_limit_override, policies_limit_override, sms_limit_override, marketing_sms_limit_override, ai_limit_override, policies_usage_offset")
           .eq("id", agentId)
           .maybeSingle(),
         supabase
@@ -150,12 +150,16 @@ export function AgentUsageStats({ agentId, refreshKey = 0 }: { agentId: string; 
         .is("deleted_at", null)
         .gte("created_at", policyPeriodStart);
 
-      const policiesCount = new Set(
+      const policiesCountRaw = new Set(
         (policyRows ?? []).map((p: any) => p.group_id ?? p.id),
       ).size;
 
       const overrides = (agentRes.data || {}) as AgentOverrides;
       const planKey = overrides.plan;
+      // Subtract the per-agent offset so seed/imported policies
+      // don't show as quota usage (mirror of useAgentLimits).
+      const policiesOffset = (agentRes.data as any)?.policies_usage_offset ?? 0;
+      const policiesCount = Math.max(0, policiesCountRaw - policiesOffset);
 
       let plan: PlanLimits = { users_limit: null, branches_limit: null, policies_limit: null, sms_limit: null, marketing_sms_limit: null, ai_limit: null };
       if (planKey) {
