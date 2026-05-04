@@ -237,7 +237,12 @@ export function CompanyIssuancesTable({
     field: keyof PolicyPatch,
     raw: string,
   ) => {
-    if (row.is_grouped) return;
+    // payed_for_company is package-aware: ELZAMI sub-policies don't
+    // contribute to it (customer pays the portal directly), so for
+    // THIRD_FULL+ELZAMI packages the whole amount belongs to the main
+    // (THIRD_FULL) sub. Writing to row.main.id is correct. Other
+    // fields stay locked for packages — use the details drawer.
+    if (row.is_grouped && field !== 'payed_for_company') return;
     const num = raw === '' ? 0 : Number(raw);
     if (Number.isNaN(num)) return;
     onPatch(row.id, { [field]: num });
@@ -569,10 +574,8 @@ export function CompanyIssuancesTable({
                             ) : (
                               <NumberCell
                                 value={row.payed_for_company ?? 0}
-                                disabled={!editable}
                                 onChange={(v) => updateNumericField(rawRow, 'payed_for_company', v)}
                                 tone="destructive"
-                                tip={disabledTip}
                               />
                             )}
                           </TableCell>
