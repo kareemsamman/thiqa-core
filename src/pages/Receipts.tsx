@@ -417,6 +417,10 @@ export default function Receipts() {
   // Pagination
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  // Total receipts matching current filters — drives the "عدد الإيصالات"
+  // tile and the printed report header so they reflect the whole set,
+  // not just the current page (which is capped at PAGE_SIZE).
+  const [totalCount, setTotalCount] = useState(0);
 
   // Add / edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -491,8 +495,30 @@ export default function Receipts() {
         );
       }
 
-      const { data, error } = await query;
+      // Fire the page query and a separate count-only query in
+      // parallel. The page query is paginated (PAGE_SIZE rows max);
+      // the count query gives the real total across all pages so
+      // the stat tile and the printed report header don't lie.
+      let countQuery = (supabase as any)
+        .from("receipts")
+        .select("id", { count: "exact", head: true })
+        .eq("agent_id", agentId)
+        .eq("receipt_type", activeTab);
+      if (dateFrom) countQuery = countQuery.gte("receipt_date", dateFrom);
+      if (dateTo) countQuery = countQuery.lte("receipt_date", dateTo);
+      if (paymentMethodFilter !== "all") countQuery = countQuery.eq("payment_method", paymentMethodFilter);
+      if (branchFilter) countQuery = countQuery.eq("branch_id", branchFilter);
+      if (searchQuery.trim()) {
+        const term = searchQuery.trim();
+        countQuery = countQuery.or(`client_name.ilike.%${term}%,car_number.ilike.%${term}%`);
+      }
+
+      const [{ data, error }, { count: total, error: countErr }] = await Promise.all([
+        query,
+        countQuery,
+      ]);
       if (error) throw error;
+      if (countErr) throw countErr;
 
       const rows = (data || []) as ReceiptRecord[];
       setReceipts(rows);
@@ -501,6 +527,7 @@ export default function Receipts() {
       if (rows.length > PAGE_SIZE) {
         setReceipts(rows.slice(0, PAGE_SIZE));
       }
+      setTotalCount(total ?? 0);
     } catch (err: any) {
       console.error("Error fetching receipts:", err);
       toast.error("خطأ في تحميل الإيصالات");
@@ -881,7 +908,7 @@ export default function Receipts() {
         title: "تقرير الإيصالات",
         subtitle: filterBits.length > 0 ? filterBits.join(" · ") : undefined,
         stats: [
-          { label: "عدد الإيصالات", value: String(receipts.length), tone: "primary" },
+          { label: "عدد الإيصالات", value: String(totalCount), tone: "primary" },
           { label: "المجموع", value: fmtMoney(totalAmount), tone: "emerald" },
           { label: "نقدي", value: fmtMoney(cashTotal), tone: "success" },
           { label: "شيك", value: fmtMoney(chequeTotal), tone: "amber" },
@@ -1019,7 +1046,7 @@ export default function Receipts() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">عدد الإيصالات</p>
-                    <p className="text-xl font-bold">{receipts.length}</p>
+                    <p className="text-xl font-bold">{totalCount}</p>
                   </div>
                 </CardContent>
               </Card>
