@@ -139,8 +139,7 @@ export function AddSettlementDialog({
   onSaved,
 }: Props) {
   const { user } = useAuth();
-  const { agentId, hasFeature } = useAgentContext();
-  const visaEnabled = hasFeature('visa_payment');
+  const { agentId } = useAgentContext();
   const [entityId, setEntityId] = useState<string>(defaultEntityId ?? '');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<PaymentLine[]>([makeLine('cash')]);
@@ -448,9 +447,7 @@ export function AddSettlementDialog({
                   <QuickAddButton type="cheque" onClick={() => addLineOfType('cheque')} />
                   <QuickAddButton type="customer_cheque" onClick={() => addLineOfType('customer_cheque')} />
                   <QuickAddButton type="bank_transfer" onClick={() => addLineOfType('bank_transfer')} />
-                  {visaEnabled && (
-                    <QuickAddButton type="visa" onClick={() => addLineOfType('visa')} />
-                  )}
+                  <QuickAddButton type="visa" onClick={() => addLineOfType('visa')} />
                   <Popover open={splitOpen} onOpenChange={setSplitOpen}>
                     <PopoverTrigger asChild>
                       <Button type="button" variant="outline" size="sm" className="gap-1.5">

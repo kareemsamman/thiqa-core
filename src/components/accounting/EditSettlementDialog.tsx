@@ -24,7 +24,6 @@ import { BankPicker } from '@/components/shared/BankPicker';
 import { MultiImagePicker } from '@/components/shared/MultiImagePicker';
 import { sanitizeChequeNumber, validateChequeNumber } from '@/lib/chequeUtils';
 import { supabase } from '@/integrations/supabase/client';
-import { useAgentContext } from '@/hooks/useAgentContext';
 import { toast } from 'sonner';
 import { SettlementRow } from './SettlementsTable';
 
@@ -90,8 +89,6 @@ const empty: EditableState = {
  * customer cheques (use delete + re-add for that case).
  */
 export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }: Props) {
-  const { hasFeature } = useAgentContext();
-  const visaEnabled = hasFeature('visa_payment');
   const [state, setState] = useState<EditableState>(empty);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -233,9 +230,7 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
                         شيك عميل (غير قابل للتعديل هنا)
                       </SelectItem>
                       <SelectItem value="bank_transfer">تحويل بنكي</SelectItem>
-                      {(visaEnabled || state.payment_type === 'visa') && (
-                        <SelectItem value="visa">فيزا</SelectItem>
-                      )}
+                      <SelectItem value="visa">فيزا</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
