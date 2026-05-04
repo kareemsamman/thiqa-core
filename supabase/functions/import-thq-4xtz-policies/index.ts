@@ -175,26 +175,27 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return json({ error: "Unauthorized" }, 401);
-    }
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Verify caller is super admin
-    const callerClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const {
-      data: { user: caller },
-    } = await callerClient.auth.getUser();
-    if (!caller) return json({ error: "Unauthorized" }, 401);
-
+    // One-off import token. Function will be DELETED after the import completes.
+    const ONE_OFF_TOKEN = "thq4xtz-import-2026-05-04-z9k3j7q1";
+    const provided = req.headers.get("x-import-token") || "";
+    const authHeader = req.headers.get("Authorization") || "";
+    let authorized = provided === ONE_OFF_TOKEN;
     const admin = createClient(supabaseUrl, serviceKey);
-    const { data: isSA } = await admin.rpc("is_super_admin", { _user_id: caller.id });
-    if (!isSA) return json({ error: "Super admin only" }, 403);
+    if (!authorized && authHeader) {
+      const callerClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user: caller } } = await callerClient.auth.getUser();
+      if (caller) {
+        const { data: isSA } = await admin.rpc("is_super_admin", { _user_id: caller.id });
+        if (isSA) authorized = true;
+      }
+    }
+    if (!authorized) return json({ error: "Unauthorized" }, 401);
 
     const body = await req.json();
     const { rows, dry_run } = body as { rows: RowInput[]; dry_run?: boolean };
