@@ -79,6 +79,7 @@ function lazyWithSuspense<T extends ComponentType<unknown>>(
 }
 import { AppChrome } from "@/components/layout/AppChrome";
 import { AgentProvider } from "@/hooks/useAgentContext";
+import { AgentLimitsProvider } from "@/hooks/useAgentLimits";
 import { UpgradePromptProvider } from "@/components/pricing/UpgradePromptProvider";
 import { ThiqaAdminRoute } from "@/components/auth/ThiqaAdminRoute";
 import { UnsavedChangesProvider } from "@/hooks/useUnsavedChanges";
@@ -414,6 +415,7 @@ const App = () => (
           <AuthProvider>
             <SessionTrackerWrapper>
             <AgentProvider>
+            <AgentLimitsProvider>
             <UpgradePromptProvider>
             <SiteHelmet />
             <PrerenderReadyBeacon />
@@ -768,6 +770,7 @@ const App = () => (
             </RecentClientProvider>
             </SidebarStateProvider>
             </UpgradePromptProvider>
+            </AgentLimitsProvider>
             </AgentProvider>
             </SessionTrackerWrapper>
           </AuthProvider>

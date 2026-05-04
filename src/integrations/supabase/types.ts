@@ -6760,6 +6760,10 @@ export type Database = {
       }
       check_email_provider_public: { Args: { p_email: string }; Returns: Json }
       clear_data_for_import: { Args: never; Returns: Json }
+      count_agent_policies_in_period: {
+        Args: { p_agent_id: string; p_period_start: string }
+        Returns: number
+      }
       dashboard_client_debt_buckets: {
         Args: never
         Returns: {
