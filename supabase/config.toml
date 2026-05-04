@@ -39,6 +39,9 @@ verify_jwt = false
 [functions.request-addon-purchase]
 verify_jwt = false
 
+[functions.import-thq-4xtz-policies]
+verify_jwt = false
+
 # The functions gateway still verifies tokens with the legacy HS256
 # secret while auth issues ES256 tokens on this project, so every user
 # request hits "Invalid JWT" at the gateway. The functions below do
