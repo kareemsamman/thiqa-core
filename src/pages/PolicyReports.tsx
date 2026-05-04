@@ -204,14 +204,10 @@ interface RenewalPolicy {
 
 interface RenewalSummary {
   total_expiring: number;
-  not_contacted: number;
-  sms_sent: number;
-  called: number;
+  pending: number;
   renewed: number;
-  not_interested: number;
-  // New fields for enhanced stats
-  total_packages: number;
-  total_single: number;
+  declined: number;
+  total_transactions: number;
   total_value: number;
 }
 
@@ -548,13 +544,10 @@ export default function PolicyReports() {
         // No data returned, set default empty summary
         setRenewalsSummary({
           total_expiring: 0,
-          not_contacted: 0,
-          sms_sent: 0,
-          called: 0,
+          pending: 0,
           renewed: 0,
-          not_interested: 0,
-          total_packages: 0,
-          total_single: 0,
+          declined: 0,
+          total_transactions: 0,
           total_value: 0
         });
       }
@@ -786,7 +779,7 @@ export default function PolicyReports() {
     setGeneratingPdf(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-renewals-report', {
-        body: { 
+        body: {
           month: renewalsMonth,
           days_filter: renewalsDaysFilter !== 'month' ? parseInt(renewalsDaysFilter) : null,
           policy_type: renewalsPolicyTypeFilter !== 'all' ? renewalsPolicyTypeFilter : null
@@ -794,7 +787,7 @@ export default function PolicyReports() {
       });
 
       if (error) throw error;
-      
+
       if (data?.url) {
         window.open(data.url, '_blank');
         toast.success('تم إنشاء التقرير');
@@ -1388,20 +1381,17 @@ export default function PolicyReports() {
                       <div>
                         <p className="text-sm text-muted-foreground">إجمالي بحاجة للتجديد</p>
                         <p className="text-4xl font-bold text-primary mt-1">{renewalsSummary.total_expiring}</p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          عميل • ₪{(renewalsSummary.total_value || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                        </p>
                       </div>
                       <RefreshCw className="h-12 w-12 text-primary/30" />
                     </div>
                   </Card>
 
-                  {/* لم يتم التواصل - أولوية عالية */}
+                  {/* معلقون - أولوية عالية */}
                   <Card className="p-6 bg-gradient-to-br from-amber-500/10 to-amber-500/5 border-amber-500/20">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-muted-foreground">لم يتم التواصل</p>
-                        <p className="text-4xl font-bold text-amber-600 mt-1">{renewalsSummary.not_contacted}</p>
+                        <p className="text-sm text-muted-foreground">معلقون</p>
+                        <p className="text-4xl font-bold text-amber-600 mt-1">{renewalsSummary.pending}</p>
                         <p className="text-xs text-amber-600/70 mt-2">بحاجة لاتخاذ إجراء</p>
                       </div>
                       <AlertCircle className="h-12 w-12 text-amber-500/30" />
@@ -1415,7 +1405,7 @@ export default function PolicyReports() {
                         <p className="text-sm text-muted-foreground">تم التجديد</p>
                         <p className="text-4xl font-bold text-green-600 mt-1">{renewalsSummary.renewed}</p>
                         <p className="text-xs text-green-600/70 mt-2">
-                          {renewalsSummary.total_expiring > 0 
+                          {renewalsSummary.total_expiring > 0
                             ? `${Math.round((renewalsSummary.renewed / renewalsSummary.total_expiring) * 100)}% نسبة التحويل`
                             : '0% نسبة التحويل'}
                         </p>
@@ -1425,29 +1415,11 @@ export default function PolicyReports() {
                   </Card>
                 </div>
 
-                {/* Secondary Stats Row - 5 Small Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <Card className="p-4 text-center">
-                    <p className="text-xs text-muted-foreground">تم إرسال SMS</p>
-                    <p className="text-2xl font-bold text-blue-600">{renewalsSummary.sms_sent}</p>
-                  </Card>
-                  <Card className="p-4 text-center">
-                    <p className="text-xs text-muted-foreground">تم الاتصال</p>
-                    <p className="text-2xl font-bold text-amber-600">{renewalsSummary.called}</p>
-                  </Card>
-                  <Card className="p-4 text-center">
-                    <p className="text-xs text-muted-foreground">غير مهتم</p>
-                    <p className="text-2xl font-bold text-red-600">{renewalsSummary.not_interested}</p>
-                  </Card>
-                  <Card className="p-4 text-center">
-                    <p className="text-xs text-muted-foreground">باقات</p>
-                    <p className="text-2xl font-bold text-purple-600">{renewalsSummary.total_packages || 0}</p>
-                  </Card>
-                  <Card className="p-4 text-center">
-                    <p className="text-xs text-muted-foreground">معاملات مفردة</p>
-                    <p className="text-2xl font-bold text-slate-600">{renewalsSummary.total_single || 0}</p>
-                  </Card>
-                </div>
+                {/* Secondary Stats Row */}
+                <Card className="p-4 text-center">
+                  <p className="text-xs text-muted-foreground">معاملات</p>
+                  <p className="text-2xl font-bold text-slate-700">{renewalsSummary.total_transactions || 0}</p>
+                </Card>
               </div>
             )}
 
