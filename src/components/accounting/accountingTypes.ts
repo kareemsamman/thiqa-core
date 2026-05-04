@@ -100,6 +100,7 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   cash: 'نقدي',
   cheque: 'شيك',
   transfer: 'تحويل بنكي',
+  bank_transfer: 'تحويل بنكي',
   visa: 'فيزا',
   customer_cheque: 'شيك عميل',
 };
