@@ -8,6 +8,9 @@ const corsHeaders = {
 
 const AGENT_ID = "6a2e7957-1444-4cb2-a6f8-abc104003fa0";
 const BRANCH_ID = "94e2643f-5ff2-4acb-b31d-35f90a87071d"; // بيت صفافا
+// Road services are ALWAYS issued through تيك تاك (tiktak), never through
+// the main car-policy company. وطنية etc. don't sell road services.
+const ROAD_SERVICE_COMPANY_ID = "6593eeaf-940b-4822-9aa7-edae18ae6a67"; // تيك تاك
 
 // Hebrew company name → Arabic name (used for both name and name_ar on insert)
 const COMPANY_MAP: Record<string, string> = {
