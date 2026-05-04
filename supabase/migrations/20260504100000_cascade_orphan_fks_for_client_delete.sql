@@ -27,11 +27,17 @@ BEGIN
     FROM (VALUES
       ('accident_reports',         'policy_id',                   'CASCADE'),
       ('customer_signatures',      'car_id',                      'CASCADE'),
+      ('customer_signatures',      'policy_id',                   'CASCADE'),
       ('marketing_sms_recipients', 'client_id',                   'CASCADE'),
       ('automated_sms_log',        'client_id',                   'CASCADE'),
       ('automated_sms_log',        'car_id',                      'SET NULL'),
       ('renewal_intents',          'new_policy_id',               'SET NULL'),
-      ('renewal_intents',          'transferred_from_policy_id',  'SET NULL')
+      ('renewal_intents',          'transferred_from_policy_id',  'SET NULL'),
+      ('policies',                 'transferred_from_policy_id',  'SET NULL'),
+      ('policy_groups',            'car_id',                      'CASCADE'),
+      ('policy_transfers',         'new_policy_id',               'SET NULL'),
+      ('repair_claims',            'client_id',                   'CASCADE'),
+      ('repair_claims',            'policy_id',                   'CASCADE')
     ) AS t(table_name, column_name, on_delete_action)
   LOOP
     -- Find every FK constraint on (table_name, column_name) and rewrite it
