@@ -29,7 +29,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           search. Overrides SiteHelmet's index/follow default via
           react-helmet-async last-mount-wins. */}
       <NoIndex />
-      <main className={`min-h-screen transition-all duration-300 px-2 py-3 pt-[4.5rem] md:pt-6 md:p-6 ${sidebarMargin} ${isThiqaSuperAdmin ? 'pb-6' : 'pb-40 md:pb-6'} ${isImpersonating ? 'mt-10' : ''}`}>
+      <main className={`min-h-screen transition-all duration-300 px-2 py-3 pt-[4.5rem] md:pt-6 md:p-6 ${sidebarMargin} ${isThiqaSuperAdmin ? 'pb-6' : 'pb-40 md:pb-24'} ${isImpersonating ? 'mt-10' : ''}`}>
         <div className="max-w-full">{children}</div>
       </main>
     </div>

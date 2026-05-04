@@ -298,7 +298,7 @@ export function CompanyIssuancesTable({
 
   return (
     <TooltipProvider delayDuration={250}>
-      <div className="space-y-2.5 pb-24">
+      <div className="space-y-2.5">
         <div className="relative">
         <div className="rounded-lg border bg-card">
           <StickyHorizontalScroll ref={scrollerRef}>
