@@ -437,6 +437,27 @@ Deno.serve(async (req) => {
       const services = parseServices(row.service);
 
       let policy_id: string;
+      // If there are road service add-ons, this row represents a *package*
+      // (شامل/ثالث + خدمات طريق under one معاملة). Create a policy_groups
+      // row first and stamp every member policy with the same group_id so
+      // the UI shows a single معاملة card (مكونات الباقة) instead of N
+      // separate rows.
+      let group_id: string | null = null;
+      if (services.codes.length > 0 && !dry_run) {
+        const { data: gIns, error: gErr } = await admin
+          .from("policy_groups")
+          .insert({ agent_id: AGENT_ID, client_id, car_id, name: "باقة" })
+          .select("id")
+          .single();
+        if (gErr) {
+          r.reason = `policy_group insert failed: ${gErr.message}`;
+          r.status = "manual";
+          results.push(r);
+          continue;
+        }
+        group_id = gIns.id;
+      }
+
       if (dry_run) {
         policy_id = `<would-create-policy:${policy_number || "?"}>`;
       } else {
@@ -457,6 +478,7 @@ Deno.serve(async (req) => {
             policy_number,
             cancelled: false,
             transferred: false,
+            group_id,
           })
           .select("id")
           .single();
@@ -514,6 +536,7 @@ Deno.serve(async (req) => {
           road_service_id: svc_id,
           cancelled: false,
           transferred: false,
+          group_id,
         });
         if (!error) svcCount++;
       }
