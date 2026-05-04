@@ -31,6 +31,7 @@ import {
   Loader2,
   Users,
   User,
+  Package,
 } from 'lucide-react';
 
 interface RenewalAssistantProps {
@@ -45,6 +46,7 @@ interface RenewalAssistantProps {
 
 interface PolicyRow {
   id: string;
+  group_id: string | null;
   policy_type_parent: string;
   policy_type_child: string | null;
   end_date: string;
@@ -52,6 +54,24 @@ interface PolicyRow {
   car: { car_number: string } | null;
   company: { name: string; name_ar: string | null } | null;
 }
+
+// Packages share group_id; one package = one معاملة. Single ungrouped
+// policies key off their own id. Mirrors report_renewals' package logic.
+const countTransactions = (policies: PolicyRow[]) => {
+  const keys = new Set<string>();
+  for (const p of policies) keys.add(p.group_id ?? p.id);
+  return keys.size;
+};
+
+const hasPackage = (policies: PolicyRow[]) => {
+  const counts = new Map<string, number>();
+  for (const p of policies) {
+    if (!p.group_id) continue;
+    counts.set(p.group_id, (counts.get(p.group_id) ?? 0) + 1);
+  }
+  for (const c of counts.values()) if (c > 1) return true;
+  return false;
+};
 
 interface ClientGroup {
   clientId: string;
@@ -89,6 +109,7 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month, onActionC
         .select(`
           id,
           client_id,
+          group_id,
           policy_type_parent,
           policy_type_child,
           end_date,
@@ -156,6 +177,7 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month, onActionC
 
         grouped.get(clientId)!.policies.push({
           id: policy.id,
+          group_id: policy.group_id ?? null,
           policy_type_parent: policy.policy_type_parent,
           policy_type_child: policy.policy_type_child,
           end_date: policy.end_date,
@@ -339,9 +361,20 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month, onActionC
               <div className="flex items-center gap-2 flex-wrap">
                 <User className="h-5 w-5 text-muted-foreground" />
                 <span className="font-semibold text-lg">{currentClient.clientName}</span>
-                <Badge variant="outline" className="text-xs">
-                  {currentClient.policies.length} {currentClient.policies.length === 1 ? 'معاملة' : 'معاملات'}
-                </Badge>
+                {(() => {
+                  const txCount = countTransactions(currentClient.policies);
+                  return (
+                    <Badge variant="outline" className="text-xs">
+                      {txCount} {txCount === 1 ? 'معاملة' : 'معاملات'}
+                    </Badge>
+                  );
+                })()}
+                {hasPackage(currentClient.policies) && (
+                  <Badge variant="secondary" className="text-xs gap-1">
+                    <Package className="h-3 w-3" />
+                    باقة
+                  </Badge>
+                )}
               </div>
               {currentClient.clientPhone && (
                 <ClickablePhone phone={currentClient.clientPhone} className="text-muted-foreground" showIcon />
@@ -384,19 +417,20 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month, onActionC
             </div>
 
             {/* Total */}
-            {currentClient.policies.length > 1 && (
-              <div className="flex justify-between items-center px-2 text-sm">
-                <span className="text-muted-foreground">
-                  إجمالي ({currentClient.policies.length} معاملات)
-                </span>
-                <span className="font-bold">
-                  {currentClient.policies
-                    .reduce((sum, p) => sum + p.insurance_price, 0)
-                    .toLocaleString('en-US')}{' '}
-                  &#8362;
-                </span>
-              </div>
-            )}
+            {currentClient.policies.length > 1 && (() => {
+              const txCount = countTransactions(currentClient.policies);
+              const total = currentClient.policies.reduce((sum, p) => sum + p.insurance_price, 0);
+              return (
+                <div className="flex justify-between items-center px-2 text-sm">
+                  <span className="text-muted-foreground">
+                    إجمالي ({txCount} {txCount === 1 ? 'معاملة' : 'معاملات'})
+                  </span>
+                  <span className="font-bold">
+                    {total.toLocaleString('en-US')} &#8362;
+                  </span>
+                </div>
+              );
+            })()}
 
             {/* Decline reason input */}
             {showDeclineInput && (
@@ -439,49 +473,57 @@ export function RenewalAssistant({ open, onOpenChange, agentId, month, onActionC
 
             {/* Action buttons */}
             {!showDeclineInput && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="space-y-3 pt-2 border-t">
+                <p className="text-sm text-center text-muted-foreground">
+                  ماذا تريد أن تفعل مع هذا العميل؟
+                </p>
+
+                {/* Primary action — most common case */}
                 <Button
                   onClick={handleRenewed}
                   disabled={saving}
-                  className="bg-green-600 hover:bg-green-700 text-white"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white h-12 text-base font-semibold"
                 >
                   {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                    <Loader2 className="h-5 w-5 animate-spin ml-2" />
                   ) : (
-                    <CheckCircle2 className="h-4 w-4 ml-2" />
+                    <CheckCircle2 className="h-5 w-5 ml-2" />
                   )}
                   تم التجديد
                 </Button>
-                <Button
-                  onClick={handlePending}
-                  disabled={saving}
-                  variant="outline"
-                  className="border-amber-500 text-amber-600 hover:bg-amber-50"
-                >
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                  ) : (
-                    <Clock className="h-4 w-4 ml-2" />
-                  )}
-                  معلّق
-                </Button>
-                <Button
-                  onClick={() => setShowDeclineInput(true)}
-                  disabled={saving}
-                  variant="outline"
-                  className="border-destructive text-destructive hover:bg-destructive/10"
-                >
-                  <XCircle className="h-4 w-4 ml-2" />
-                  رفض التجديد
-                </Button>
-                <Button
-                  onClick={handleSkip}
-                  disabled={saving || currentIndex >= totalClients - 1}
-                  variant="ghost"
-                >
-                  <SkipForward className="h-4 w-4 ml-2" />
-                  تخطي
-                </Button>
+
+                {/* Secondary actions */}
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    onClick={handlePending}
+                    disabled={saving}
+                    variant="outline"
+                    size="sm"
+                    className="border-amber-500 text-amber-600 hover:bg-amber-50"
+                  >
+                    <Clock className="h-4 w-4 ml-1.5" />
+                    معلّق
+                  </Button>
+                  <Button
+                    onClick={() => setShowDeclineInput(true)}
+                    disabled={saving}
+                    variant="outline"
+                    size="sm"
+                    className="border-destructive text-destructive hover:bg-destructive/10"
+                  >
+                    <XCircle className="h-4 w-4 ml-1.5" />
+                    رفض التجديد
+                  </Button>
+                  <Button
+                    onClick={handleSkip}
+                    disabled={saving || currentIndex >= totalClients - 1}
+                    variant="ghost"
+                    size="sm"
+                  >
+                    <SkipForward className="h-4 w-4 ml-1.5" />
+                    تخطي
+                  </Button>
+                </div>
               </div>
             )}
 
