@@ -1618,11 +1618,11 @@ export default function Cheques() {
                   {customerGroups.length} عميل، {cheques.length} شيك من {totalCount}
                 </p>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
+                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                   <span className="text-sm text-muted-foreground">صفحة {currentPage} من {totalPages || 1}</span>
-                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>
+                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
                 </div>

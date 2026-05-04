@@ -518,8 +518,8 @@ export default function Cars() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage((p) => p + 1)}
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -529,8 +529,8 @@ export default function Cars() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => p - 1)}
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
