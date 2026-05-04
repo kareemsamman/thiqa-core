@@ -4,10 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
-    <!-- Default title/description. Per-page <PublicSEO> overrides these
-         for marketing/auth/legal pages with localized title + canonical. -->
+    <!-- Default <title> only. Per-page tags (description, og:title,
+         og:description, twitter:title, twitter:description) are
+         injected by <PublicSEO> via react-helmet-async. We deliberately
+         do NOT ship static defaults for those: helmet-async appends
+         alongside existing static tags rather than replacing them, so
+         a static default would leave every public page with two of
+         each tag and crawlers/social previews picking the wrong one.
+         Helmet handles <title> uniqueness natively (the browser
+         enforces a single title element), so keeping the static title
+         is safe and gives no-JS crawlers a sensible fallback. -->
     <title>Thiqa | نظام إدارة وكالات التأمين</title>
-    <meta name="description" content="نظام سحابي متكامل لإدارة وكالات التأمين: العملاء، الوثائق، الأقساط، التحصيل، التقارير، والتنبيهات. جرّب مجاناً.">
 
     <!-- Default crawl posture: index, follow. The previous default of
          noindex was a footgun: Google explicitly skips JS rendering
@@ -46,37 +53,24 @@
     </style>
     <script src="//cdn.asprise.com/scannerjs/scanner.js" type="text/javascript" defer></script>
 
-    <!-- Open Graph / Twitter defaults. PublicSEO overrides these
-         per page; the values here are what crawlers see if they
-         only fetch the static index.html (e.g. social previews
-         before JS hydrates). Image lives on the project CDN so
-         it stays put across deploys. -->
+    <!-- Open Graph / Twitter invariants only. og:title, og:description,
+         twitter:title, twitter:description are injected per-page by
+         PublicSEO via react-helmet-async — see the <title> comment
+         above for why static defaults for those are removed. -->
     <meta property="og:site_name" content="Thiqa" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="ar_AR" />
     <meta property="og:url" content="https://getthiqa.com/" />
-    
-    
+
     <meta property="og:image" content="https://thiqacrm.b-cdn.net/fav.png">
     <meta property="og:image:secure_url" content="https://thiqacrm.b-cdn.net/fav.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Thiqa | نظام إدارة وكالات التأمين" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@getthiqa" />
-    
-    
     <meta name="twitter:image" content="https://thiqacrm.b-cdn.net/fav.png">
-    
-  
-  
-  
-  <meta property="og:title" content="Thiqa | نظام إدارة وكالات التأمين">
-  <meta name="twitter:title" content="Thiqa | نظام إدارة وكالات التأمين">
-  <meta property="og:description" content="نظام سحابي متكامل لإدارة وكالات التأمين: العملاء، الوثائق، الأقساط، التحصيل، التقارير، والتنبيهات. جرّب مجاناً.">
-  <meta name="twitter:description" content="نظام سحابي متكامل لإدارة وكالات التأمين: العملاء، الوثائق، الأقساط، التحصيل، التقارير، والتنبيهات. جرّب مجاناً.">
 </head>
   <body>
     <div id="root"></div>
