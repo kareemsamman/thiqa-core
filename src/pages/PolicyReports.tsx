@@ -480,23 +480,29 @@ export default function PolicyReports() {
   // Fetch renewals - compute date range from month/days filter
   const getRenewalDateRange = () => {
     if (renewalsDaysFilter === 'month' && renewalsMonth) {
-      // Full month
+      // Format the month as YYYY-MM-DD strings directly so we don't go
+      // through Date().toISOString(), which shifts the day for clients
+      // east of UTC (e.g. May 1 local in Israel becomes 2026-04-30 in
+      // UTC). That shift was causing the renewals list to query the
+      // wrong window vs the summary.
       const [year, month] = renewalsMonth.split('-').map(Number);
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0);
+      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const mm = String(month).padStart(2, '0');
       return {
-        startDate: startDate.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0]
+        startDate: `${year}-${mm}-01`,
+        endDate: `${year}-${mm}-${String(lastDay).padStart(2, '0')}`,
       };
     } else {
-      // Next N days from today
+      // Next N days from today, using UTC date components to avoid the
+      // same off-by-one shift.
       const today = new Date();
       const daysAhead = parseInt(renewalsDaysFilter) || 30;
-      const endDate = new Date(today);
-      endDate.setDate(today.getDate() + daysAhead);
+      const startUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+      const endUtc = new Date(startUtc);
+      endUtc.setUTCDate(startUtc.getUTCDate() + daysAhead);
       return {
-        startDate: today.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0]
+        startDate: startUtc.toISOString().split('T')[0],
+        endDate: endUtc.toISOString().split('T')[0],
       };
     }
   };
