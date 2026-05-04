@@ -142,7 +142,7 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
   };
 
   const issuanceCols = useTableColumnVisibility(
-    'accounting-brokers-issuances-v4',
+    'accounting-brokers-issuances-v5',
     ISSUANCE_DEFAULT_VISIBLE,
     ISSUANCE_KEYS,
   );

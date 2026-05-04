@@ -323,7 +323,7 @@ export function CompanyIssuancesTable({
                   {showCol('payment_method') && <TableHead className="whitespace-nowrap min-w-[120px]">طريقة الدفع</TableHead>}
                   {showCol('company_name') && <TableHead className="whitespace-nowrap min-w-[160px]">{mode === 'broker' ? 'الوسيط / الشركة' : 'شركة التأمين'}</TableHead>}
                   {showCol('policy_type') && <TableHead className="whitespace-nowrap min-w-[110px]">نوع التأمين</TableHead>}
-                  {mode === 'company' && showCol('payed_for_company') && (
+                  {showCol('payed_for_company') && (
                     <TableHead className="whitespace-nowrap min-w-[140px]">المستحق للشركة</TableHead>
                   )}
                   {mode === 'broker' && showCol('broker_buy_price') && (
@@ -562,7 +562,7 @@ export function CompanyIssuancesTable({
                           </TableCell>
                         )}
 
-                        {mode === 'company' && showCol('payed_for_company') && (
+                        {showCol('payed_for_company') && (
                           <TableCell>
                             {isElzami ? (
                               <span className="text-xs text-muted-foreground">—</span>

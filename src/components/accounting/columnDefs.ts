@@ -36,6 +36,7 @@ export const BROKER_ISSUANCE_COLUMNS: ColumnOption[] = [
   { key: 'payment_method', label: 'طريقة الدفع' },
   { key: 'company_name', label: 'الوسيط / الشركة' },
   { key: 'policy_type', label: 'نوع التأمين' },
+  { key: 'payed_for_company', label: 'المستحق للشركة' },
   { key: 'broker_buy_price', label: 'سعر الشراء من الوسيط' },
   { key: 'insurance_price', label: 'سعر البيع للعميل' },
   { key: 'profit', label: 'الربح' },
