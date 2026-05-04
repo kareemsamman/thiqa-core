@@ -10,13 +10,25 @@ interface GenerateReportRequest {
   month: string;
   days_filter?: number | null;
   policy_type?: string | null;
+  created_by?: string | null;
+  search?: string | null;
+  branch_id?: string | null;
 }
 
 const POLICY_TYPE_LABELS: Record<string, string> = {
   ELZAMI: 'إلزامي',
   THIRD_FULL: 'ثالث/شامل',
+  FULL: 'شامل',
+  THIRD: 'ثالث',
   ROAD_SERVICE: 'خدمات الطريق',
   ACCIDENT_FEE_EXEMPTION: 'إعفاء رسوم حادث',
+  HEALTH: 'تأمين صحي',
+  LIFE: 'تأمين حياة',
+  PROPERTY: 'تأمين ممتلكات',
+  TRAVEL: 'تأمين سفر',
+  BUSINESS: 'تأمين أعمال',
+  OTHER: 'أخرى',
+  PACKAGE: 'باقة',
 };
 
 const RENEWAL_STATUS_LABELS: Record<string, string> = {
@@ -26,6 +38,35 @@ const RENEWAL_STATUS_LABELS: Record<string, string> = {
   renewed: 'تم التجديد',
   not_interested: 'غير مهتم',
 };
+
+interface RenewalClientRow {
+  client_id: string;
+  client_name: string;
+  client_file_number: string | null;
+  client_phone: string | null;
+  policies_count: number;
+  earliest_end_date: string;
+  days_remaining: number;
+  total_insurance_price: number;
+  policy_types: string[] | null;
+  policy_ids: string[] | null;
+  car_numbers: string[] | null;
+  worst_renewal_status: string;
+  renewal_notes: string | null;
+}
+
+interface PolicyRow {
+  id: string;
+  client_id: string;
+  group_id: string | null;
+  policy_type_parent: string;
+  policy_type_child: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  insurance_price: number | null;
+  cars: { car_number: string | null } | null;
+  insurance_companies: { name_ar: string | null; name: string | null } | null;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -43,16 +84,21 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const bunnyApiKey = Deno.env.get("BUNNY_API_KEY");
     const bunnyStorageZone = Deno.env.get("BUNNY_STORAGE_ZONE");
     const bunnyCdnUrl = Deno.env.get('BUNNY_CDN_URL') || 'https://kareem.b-cdn.net';
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Service-role client: direct table reads (policies, profiles).
+    const service = createClient(supabaseUrl, supabaseServiceKey);
+    // Caller client: carries the user JWT so report_renewals can resolve
+    // auth.uid() for is_super_admin / get_user_agent_id checks.
+    const caller = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
 
-    // Verify user
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
+    const { data: { user }, error: authError } = await service.auth.getUser(token);
     if (authError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid authentication" }),
@@ -60,7 +106,8 @@ serve(async (req) => {
       );
     }
 
-    const { month, days_filter, policy_type }: GenerateReportRequest = await req.json();
+    const body: GenerateReportRequest = await req.json();
+    const { month, days_filter, policy_type, created_by, search, branch_id } = body;
 
     if (!month) {
       return new Response(
@@ -69,101 +116,107 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[generate-renewals-report] Generating detailed report for month: ${month}`);
+    // Mirror the page's date-range logic exactly.
+    let startDate: string;
+    let endDate: string;
+    if (!days_filter) {
+      const [y, m] = month.split('-').map(Number);
+      const s = new Date(Date.UTC(y, m - 1, 1));
+      const e = new Date(Date.UTC(y, m, 0));
+      startDate = s.toISOString().slice(0, 10);
+      endDate = e.toISOString().slice(0, 10);
+    } else {
+      const today = new Date();
+      const e = new Date(today);
+      e.setDate(today.getDate() + days_filter);
+      startDate = today.toISOString().slice(0, 10);
+      endDate = e.toISOString().slice(0, 10);
+    }
 
-    // Fetch detailed renewals data - individual policies per client
-    const { data: policies, error: policiesError } = await supabase.rpc('report_renewals_service_detailed', {
-      p_end_month: `${month}-01`,
-      p_days_remaining: days_filter,
-      p_policy_type: policy_type
+    console.log(`[generate-renewals-report] range=${startDate}..${endDate} type=${policy_type ?? 'all'} branch=${branch_id ?? '-'} user=${user.id}`);
+
+    // Fetch all clients in one go (large page size). report_renewals
+    // already counts a package as ONE معاملة (DISTINCT group_id|id) and
+    // honours the new "renewed only via followup click" rule.
+    const { data: clientRows, error: rpcError } = await caller.rpc('report_renewals', {
+      p_start_date: startDate,
+      p_end_date: endDate,
+      p_policy_type: policy_type || null,
+      p_created_by: created_by || null,
+      p_search: search || null,
+      p_page_size: 5000,
+      p_page: 1,
+      p_branch_id: branch_id || null,
     });
 
-    if (policiesError) {
-      console.error('[generate-renewals-report] Error fetching policies:', policiesError);
-      throw policiesError;
-    }
-
-    console.log(`[generate-renewals-report] Found ${policies?.length || 0} policies`);
-
-    // Group policies by client
-    const clientsMap = new Map<string, {
-      client_id: string;
-      client_name: string;
-      client_file_number: string | null;
-      client_phone: string | null;
-      policies: Array<{
-        policy_id: string;
-        car_number: string | null;
-        policy_type_parent: string;
-        company_name_ar: string | null;
-        end_date: string;
-        days_remaining: number;
-        insurance_price: number;
-        renewal_status: string;
-      }>;
-      earliest_end_date: string;
-      min_days_remaining: number;
-      total_price: number;
-    }>();
-
-    for (const policy of (policies || [])) {
-      const clientId = policy.client_id;
-      
-      if (!clientsMap.has(clientId)) {
-        clientsMap.set(clientId, {
-          client_id: clientId,
-          client_name: policy.client_name,
-          client_file_number: policy.client_file_number,
-          client_phone: policy.client_phone,
-          policies: [],
-          earliest_end_date: policy.end_date,
-          min_days_remaining: policy.days_remaining,
-          total_price: 0
-        });
-      }
-      
-      const client = clientsMap.get(clientId)!;
-      client.policies.push({
-        policy_id: policy.policy_id,
-        car_number: policy.car_number,
-        policy_type_parent: policy.policy_type_parent,
-        company_name_ar: policy.company_name_ar,
-        end_date: policy.end_date,
-        days_remaining: policy.days_remaining,
-        insurance_price: policy.insurance_price,
-        renewal_status: policy.renewal_status
-      });
-      
-      client.total_price += policy.insurance_price || 0;
-      
-      if (policy.days_remaining < client.min_days_remaining) {
-        client.min_days_remaining = policy.days_remaining;
-        client.earliest_end_date = policy.end_date;
-      }
-    }
-
-    const clients = Array.from(clientsMap.values());
-    console.log(`[generate-renewals-report] Grouped into ${clients.length} unique clients`);
-
-    // Get user info for footer
-    const { data: userProfile } = await supabase
-      .from('profiles')
-      .select('full_name, email')
-      .eq('id', user.id)
-      .single();
-
-    // Generate HTML report with detailed policies
-    const monthName = new Date(`${month}-01`).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
-    const html = buildDetailedReportHtml(clients, policies?.length || 0, monthName, userProfile?.full_name || userProfile?.email || 'Unknown');
-
-    if (!bunnyApiKey || !bunnyStorageZone) {
+    if (rpcError) {
+      console.error('[generate-renewals-report] report_renewals failed:', rpcError);
       return new Response(
-        JSON.stringify({ error: 'Storage not configured' }),
+        JSON.stringify({ error: rpcError.message || 'Failed to load renewals' }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Upload to Bunny Storage
+    const clients = (clientRows || []) as RenewalClientRow[];
+    console.log(`[generate-renewals-report] ${clients.length} clients`);
+
+    // Batch-fetch every policy referenced by the report so we can render
+    // package vs single, with company / car / dates / price details.
+    const allPolicyIds = clients.flatMap(c => c.policy_ids || []).filter(Boolean);
+    let policiesById = new Map<string, PolicyRow>();
+    if (allPolicyIds.length > 0) {
+      const { data: policies, error: polError } = await service
+        .from('policies')
+        .select('id, client_id, group_id, policy_type_parent, policy_type_child, start_date, end_date, insurance_price, cars(car_number), insurance_companies(name_ar, name)')
+        .in('id', allPolicyIds);
+      if (polError) {
+        console.error('[generate-renewals-report] policies fetch failed:', polError);
+        return new Response(
+          JSON.stringify({ error: polError.message || 'Failed to load policy details' }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      policiesById = new Map((policies as unknown as PolicyRow[]).map(p => [p.id, p]));
+    }
+
+    // Resolve issuer name for the footer.
+    const { data: userProfile } = await service
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', user.id)
+      .single();
+    const generatedBy = userProfile?.full_name || userProfile?.email || 'Unknown';
+
+    // Branch label (optional — only when filter is applied).
+    let branchLabel: string | null = null;
+    if (branch_id) {
+      const { data: branchRow } = await service
+        .from('branches')
+        .select('name_ar, name')
+        .eq('id', branch_id)
+        .single();
+      branchLabel = (branchRow?.name_ar as string | null) || (branchRow?.name as string | null) || null;
+    }
+
+    const html = buildReportHtml({
+      clients,
+      policiesById,
+      month,
+      startDate,
+      endDate,
+      daysFilter: days_filter ?? null,
+      policyType: policy_type || null,
+      generatedBy,
+      branchLabel,
+    });
+
+    if (!bunnyApiKey || !bunnyStorageZone) {
+      return new Response(
+        JSON.stringify({ error: 'Storage not configured (BUNNY_API_KEY / BUNNY_STORAGE_ZONE missing)' }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const now = new Date();
     const year = now.getFullYear();
     const monthNum = String(now.getMonth() + 1).padStart(2, '0');
@@ -182,490 +235,541 @@ serve(async (req) => {
     });
 
     if (!uploadResponse.ok) {
-      throw new Error(`Failed to upload report: ${uploadResponse.status}`);
+      const text = await uploadResponse.text().catch(() => '');
+      console.error(`[generate-renewals-report] Bunny upload failed ${uploadResponse.status}: ${text}`);
+      return new Response(
+        JSON.stringify({ error: `Failed to upload report (Bunny ${uploadResponse.status})` }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const reportUrl = `${bunnyCdnUrl}/${storagePath}`;
-    console.log(`[generate-renewals-report] Report generated: ${reportUrl}`);
+    console.log(`[generate-renewals-report] OK ${reportUrl}`);
 
     return new Response(
       JSON.stringify({ success: true, url: reportUrl }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Internal server error';
     console.error("[generate-renewals-report] Error:", error);
     return new Response(
-      JSON.stringify({ error: error.message || "Internal server error" }),
+      JSON.stringify({ error: msg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
 
-interface ClientWithPolicies {
-  client_id: string;
-  client_name: string;
-  client_file_number: string | null;
-  client_phone: string | null;
-  policies: Array<{
-    policy_id: string;
-    car_number: string | null;
-    policy_type_parent: string;
-    company_name_ar: string | null;
-    end_date: string;
-    days_remaining: number;
-    insurance_price: number;
-    renewal_status: string;
-  }>;
-  earliest_end_date: string;
-  min_days_remaining: number;
-  total_price: number;
+function escapeHtml(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
-function buildDetailedReportHtml(clients: ClientWithPolicies[], totalPolicies: number, monthName: string, generatedBy: string): string {
-  const now = new Date().toLocaleDateString('en-GB', { 
-    year: 'numeric', month: '2-digit', day: '2-digit', 
-    hour: '2-digit', minute: '2-digit' 
+function formatDate(d: string | null | undefined): string {
+  if (!d) return '-';
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return '-';
+  return dt.toLocaleDateString('en-GB');
+}
+
+function formatMoney(n: number | null | undefined): string {
+  return `₪${(n || 0).toLocaleString('en-US')}`;
+}
+
+function policyTypeLabel(parent: string | null, child: string | null): string {
+  if (parent === 'THIRD_FULL' && child) {
+    return POLICY_TYPE_LABELS[child] || child;
+  }
+  return POLICY_TYPE_LABELS[parent || ''] || parent || '-';
+}
+
+function daysRemainingText(days: number): string {
+  if (days < 0) return `منتهية منذ ${Math.abs(days)} يوم`;
+  if (days === 0) return 'اليوم!';
+  if (days === 1) return 'غداً!';
+  return `${days} يوم`;
+}
+
+function urgencyClass(days: number): 'urgent' | 'warning' | 'normal' {
+  if (days <= 7) return 'urgent';
+  if (days <= 14) return 'warning';
+  return 'normal';
+}
+
+interface BuildArgs {
+  clients: RenewalClientRow[];
+  policiesById: Map<string, PolicyRow>;
+  month: string;
+  startDate: string;
+  endDate: string;
+  daysFilter: number | null;
+  policyType: string | null;
+  generatedBy: string;
+  branchLabel: string | null;
+}
+
+function buildReportHtml(args: BuildArgs): string {
+  const { clients, policiesById, month, startDate, endDate, daysFilter, policyType, generatedBy, branchLabel } = args;
+
+  const generatedAt = new Date().toLocaleString('en-GB', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
   });
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleDateString('en-GB');
-  };
+  const rangeLabel = daysFilter
+    ? `الـ ${daysFilter} يوم القادمة`
+    : new Date(`${month}-01`).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
 
-  // Calculate totals
-  const totalCustomers = clients.length;
-  const urgentCount = clients.filter(c => c.min_days_remaining <= 7).length;
-  const warningCount = clients.filter(c => c.min_days_remaining > 7 && c.min_days_remaining <= 14).length;
-  const totalPrice = clients.reduce((sum, c) => sum + (c.total_price || 0), 0);
+  // Summary stats — all derived from the same client rows so they match
+  // exactly what the page shows.
+  const totalClients = clients.length;
+  let totalTransactions = 0;     // packages count as 1
+  let totalPackages = 0;
+  let totalSingles = 0;
+  let totalValue = 0;
+  for (const c of clients) {
+    totalTransactions += c.policies_count || 0;
+    totalValue += Number(c.total_insurance_price || 0);
+    // Per-client package vs single: walk the policies, group by group_id.
+    const polIds = c.policy_ids || [];
+    const groupSet = new Set<string>();
+    let singles = 0;
+    for (const pid of polIds) {
+      const p = policiesById.get(pid);
+      if (!p) continue;
+      if (p.group_id) groupSet.add(p.group_id); else singles += 1;
+    }
+    totalPackages += groupSet.size;
+    totalSingles += singles;
+  }
 
-  // Build unified table rows - client header rows + policy rows
-  let policyCounter = 0;
-  const tableRows = clients.map((client, clientIndex) => {
-    const isUrgent = client.min_days_remaining <= 7;
-    const isWarning = client.min_days_remaining > 7 && client.min_days_remaining <= 14;
-    const urgentClass = isUrgent ? 'urgent' : isWarning ? 'warning' : 'normal';
-    const daysLabel = client.min_days_remaining === 0 ? 'اليوم!' : 
-                      client.min_days_remaining === 1 ? 'غداً!' : 
-                      `${client.min_days_remaining} يوم`;
-    
-    // Client header row
-    const clientRow = `
-      <tr class="client-row ${urgentClass}">
-        <td class="client-num">${clientIndex + 1}</td>
-        <td colspan="4" class="client-info">
-          <span class="client-name">${client.client_name}</span>
-          ${client.client_phone ? `<span class="client-phone" dir="ltr">${client.client_phone}</span>` : ''}
-          ${client.client_file_number ? `<span class="client-file">#${client.client_file_number}</span>` : ''}
-        </td>
-        <td class="client-days ${urgentClass}">${daysLabel}</td>
-        <td class="client-count">${client.policies.length} معاملة</td>
-        <td class="client-total">₪${(client.total_price || 0).toLocaleString('en-US')}</td>
-      </tr>`;
-    
-    // Policy rows under this client
-    const policyRows = client.policies.map((policy) => {
-      policyCounter++;
-      const policyUrgent = policy.days_remaining <= 7;
-      const policyWarning = policy.days_remaining > 7 && policy.days_remaining <= 14;
-      const policyDaysClass = policyUrgent ? 'urgent' : policyWarning ? 'warning' : 'normal';
-      const policyDaysLabel = policy.days_remaining === 0 ? 'اليوم!' : 
-                              policy.days_remaining === 1 ? 'غداً!' : 
-                              `${policy.days_remaining} يوم`;
-      
-      return `
-        <tr class="policy-row">
-          <td class="policy-num">${policyCounter}</td>
-          <td class="policy-car"><span class="car-badge" dir="ltr">${policy.car_number || '-'}</span></td>
-          <td class="policy-type"><span class="type-badge">${POLICY_TYPE_LABELS[policy.policy_type_parent] || policy.policy_type_parent}</span></td>
-          <td class="policy-company">${policy.company_name_ar || '-'}</td>
-          <td class="policy-date" dir="ltr">${formatDate(policy.end_date)}</td>
-          <td class="policy-days ${policyDaysClass}"><span class="days-badge">${policyDaysLabel}</span></td>
-          <td></td>
-          <td class="policy-price">₪${(policy.insurance_price || 0).toLocaleString('en-US')}</td>
-        </tr>`;
-    }).join('');
-    
-    return clientRow + policyRows;
-  }).join('');
+  const clientSections = clients.map((client, idx) => renderClientSection(client, policiesById, idx + 1)).join('\n');
+
+  const filtersBadges: string[] = [];
+  if (policyType) filtersBadges.push(`النوع: ${escapeHtml(POLICY_TYPE_LABELS[policyType] || policyType)}`);
+  if (branchLabel) filtersBadges.push(`الفرع: ${escapeHtml(branchLabel)}`);
 
   return `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html dir="rtl" lang="ar">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>تقرير التجديدات - ${monthName}</title>
+  <title>تقرير التجديدات - ${escapeHtml(rangeLabel)}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
-    
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
-    body {
-      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
-      background: #122143;
-      color: #1e293b;
-      line-height: 1.5;
-      min-height: 100vh;
-      padding: 24px 16px;
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    @page { size: A4; margin: 14mm; }
+    html, body {
+      font-family: 'IBM Plex Sans Arabic', 'Tajawal', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background: #f4f4f5;
+      direction: rtl;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
-    
-    .container {
-      max-width: 1200px;
+    body { padding: 32px 16px; }
+    .report {
+      max-width: 920px;
       margin: 0 auto;
-      background: white;
-      border-radius: 20px;
-      box-shadow: 0 8px 40px rgba(0,0,0,0.25);
-      overflow: hidden;
+      background: #ffffff;
+      padding: 40px 44px;
+      border: 1px solid #1a1a1a;
     }
-    
-    /* Header */
-    .report-header {
-      background: linear-gradient(135deg, #122143 0%, #1a3260 100%);
-      color: white;
-      padding: 24px 32px;
-      border-radius: 0;
+
+    /* ── Header ── */
+    .report-top {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 16px;
-    }
-    .header-title h1 {
-      font-size: 24px;
-      font-weight: 800;
-      margin-bottom: 2px;
-    }
-    .header-title p {
-      opacity: 0.9;
-      font-size: 14px;
-    }
-    .header-stats {
-      display: flex;
+      align-items: flex-start;
       gap: 24px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid #1a1a1a;
+      margin-bottom: 24px;
     }
-    .header-stat {
-      text-align: center;
+    .brand .name { font-size: 18px; font-weight: 700; }
+    .brand .sub { font-size: 12px; margin-top: 4px; font-weight: 500; }
+    .report-meta { text-align: left; min-width: 260px; }
+    .report-meta .doc-title {
+      font-size: 38px; font-weight: 800; letter-spacing: 0.5px; line-height: 1; margin-bottom: 4px;
     }
-    .header-stat .stat-value {
-      font-size: 28px;
-      font-weight: 800;
-      display: block;
+    .report-meta .subtitle {
+      font-size: 12px; font-weight: 600; margin-top: -6px; margin-bottom: 14px; letter-spacing: 0.5px;
     }
-    .header-stat .stat-label {
-      font-size: 11px;
-      opacity: 0.85;
+    .meta-rows { width: 100%; border: 1px solid #1a1a1a; font-size: 12px; }
+    .meta-rows .row { display: flex; }
+    .meta-rows .row + .row { border-top: 1px solid #1a1a1a; }
+    .meta-rows .label {
+      flex: 0 0 110px; padding: 7px 12px; background: #f4f4f5; font-weight: 700;
+      font-size: 11.5px; text-align: right; border-left: 1px solid #1a1a1a; letter-spacing: 0.3px;
     }
-    
-    /* Summary Bar */
-    .summary-bar {
-      background: white;
-      padding: 16px 24px;
-      display: flex;
-      gap: 32px;
-      border-bottom: 2px solid #e2e8f0;
-      flex-wrap: wrap;
+    .meta-rows .val {
+      flex: 1; padding: 7px 12px; text-align: left; direction: ltr; font-weight: 700;
+      font-variant-numeric: tabular-nums;
     }
-    .summary-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+
+    /* ── Section frame ── */
+    .section { margin-bottom: 20px; border: 1px solid #1a1a1a; }
+    .section-title {
+      padding: 8px 14px; border-bottom: 1px solid #1a1a1a; background: #f4f4f5;
+      font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
     }
-    .summary-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
+
+    /* ── Summary grid ── */
+    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+    .summary-grid .cell { padding: 10px 14px; text-align: center; }
+    .summary-grid .cell:not(:nth-child(4n+1)) { border-right: 1px solid #1a1a1a; }
+    .summary-grid .label {
+      font-size: 10px; font-weight: 700; margin-bottom: 4px;
+      letter-spacing: 0.8px; text-transform: uppercase; opacity: 0.85;
     }
-    .summary-dot.urgent { background: #dc2626; }
-    .summary-dot.warning { background: #f59e0b; }
-    .summary-dot.normal { background: #10b981; }
-    .summary-item span {
-      font-size: 13px;
-      color: #475569;
+    .summary-grid .value { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+    .filters-line {
+      padding: 8px 14px; border-top: 1px solid #1a1a1a; background: #fbfbfc;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
     }
-    .summary-item strong {
-      font-size: 15px;
-      color: #1e293b;
+    .filters-line .chip {
+      display: inline-block; border: 1px solid #1a1a1a; padding: 2px 8px; margin-left: 6px;
+      background: #fff; font-size: 10.5px;
     }
-    
-    /* Main Table */
-    .main-table {
-      width: 100%;
-      border-collapse: collapse;
-      background: white;
-      font-size: 13px;
+
+    /* ── Client section ── */
+    .client { margin-bottom: 20px; border: 1px solid #1a1a1a; page-break-inside: avoid; }
+    .client-head {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 10px 14px; background: #f4f4f5; border-bottom: 1px solid #1a1a1a; flex-wrap: wrap;
     }
-    
-    .main-table thead th {
-      background: #f1f5f9;
-      padding: 14px 12px;
-      text-align: right;
-      font-weight: 700;
-      color: #475569;
-      font-size: 12px;
-      border-bottom: 2px solid #e2e8f0;
-      position: sticky;
-      top: 0;
+    .client-head .left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .client-head .num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; background: #1a1a1a; color: #fff;
+      font-size: 12px; font-weight: 700; border-radius: 4px;
     }
-    .main-table thead th:first-child { width: 50px; text-align: center; }
-    .main-table thead th:nth-child(2) { width: 120px; }
-    .main-table thead th:nth-child(3) { width: 100px; }
-    .main-table thead th:nth-child(5) { width: 100px; }
-    .main-table thead th:nth-child(6) { width: 90px; }
-    .main-table thead th:nth-child(7) { width: 80px; }
-    .main-table thead th:last-child { width: 90px; text-align: left; }
-    
-    /* Client Row (Header) */
-    .client-row {
-      background: #f8fafc;
-      border-top: 2px solid #e2e8f0;
+    .client-head .name { font-size: 15px; font-weight: 700; }
+    .client-head .chip {
+      display: inline-block; border: 1px solid #1a1a1a; background: #fff;
+      padding: 2px 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.2px;
     }
-    .client-row.urgent {
-      background: linear-gradient(to left, #fef2f2, #fff5f5);
-      border-right: 4px solid #dc2626;
+    .client-head .chip.phone { font-variant-numeric: tabular-nums; direction: ltr; }
+    .client-head .chip.file { background: #fbfbfc; }
+    .client-head .right { display: flex; align-items: center; gap: 10px; }
+    .client-head .days {
+      padding: 4px 10px; border: 1px solid #1a1a1a; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.3px;
     }
-    .client-row.warning {
-      background: linear-gradient(to left, #fffbeb, #fefce8);
-      border-right: 4px solid #f59e0b;
+    .client-head .days.urgent { background: #1a1a1a; color: #fff; }
+    .client-head .days.warning { background: #fef3c7; }
+    .client-head .days.normal { background: #ecfdf5; }
+    .client-head .total {
+      font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; direction: ltr;
     }
-    .client-row.normal {
-      background: linear-gradient(to left, #f0fdf4, #f7fee7);
-      border-right: 4px solid #10b981;
+    .client-notes {
+      padding: 8px 14px; border-bottom: 1px solid #1a1a1a; background: #fffbeb;
+      font-size: 11.5px; font-weight: 500;
     }
-    .client-row td {
-      padding: 12px;
-      font-weight: 700;
+
+    /* ── Items table (policies) ── */
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table thead th {
+      background: #f4f4f5; padding: 8px 12px; text-align: right;
+      font-size: 11px; letter-spacing: 1.5px; font-weight: 700; text-transform: uppercase;
+      border-bottom: 1px solid #1a1a1a; border-left: 1px solid #1a1a1a;
     }
-    .client-row .client-num {
-      text-align: center;
-      font-size: 14px;
-      color: #64748b;
+    .data-table thead th:last-child { border-left: none; }
+    .data-table tbody td {
+      padding: 9px 12px; border-top: 1px solid #1a1a1a; border-left: 1px solid #1a1a1a;
+      font-size: 13px; text-align: right; font-weight: 500; vertical-align: top;
     }
-    .client-row .client-info {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
+    .data-table tbody td:last-child { border-left: none; }
+    .data-table tbody tr:first-child td { border-top: none; }
+    .data-table tbody td.num {
+      text-align: center; font-variant-numeric: tabular-nums; font-weight: 700;
     }
-    .client-row .client-name {
-      font-size: 15px;
-      color: #1e293b;
+    .data-table tbody td.tabular {
+      direction: ltr; text-align: right; font-variant-numeric: tabular-nums;
     }
-    .client-row .client-phone {
-      background: #ecfdf5;
-      color: #0f766e;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-family: 'Consolas', monospace;
+    .data-table tbody td.amount {
+      direction: ltr; text-align: left; font-variant-numeric: tabular-nums; font-weight: 700;
     }
-    .client-row .client-file {
-      background: #f1f5f9;
-      color: #64748b;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 11px;
+    .data-table tbody td.period {
+      direction: ltr; text-align: right; font-variant-numeric: tabular-nums;
+      font-size: 12px; white-space: nowrap;
     }
-    .client-row .client-days {
-      text-align: center;
-      font-size: 13px;
+    .item-title { font-weight: 700; font-size: 14px; }
+    .item-meta { font-size: 11.5px; margin-top: 3px; font-weight: 500; opacity: 0.85; }
+
+    /* Package row pattern — header row spans description, with indented
+       components beneath. Matches the invoice's items table. */
+    tr.package-header td {
+      background: #f4f4f5; padding: 10px 12px; border-top: 2px solid #1a1a1a !important;
     }
-    .client-row .client-days.urgent { color: #dc2626; }
-    .client-row .client-days.warning { color: #d97706; }
-    .client-row .client-days.normal { color: #059669; }
-    .client-row .client-count {
-      text-align: center;
-      color: #2563eb;
-      font-size: 12px;
+    tr.package-header + tr td { border-top: 1px solid #1a1a1a; }
+    tr.package-header .package-title {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      font-size: 13px; font-weight: 700;
     }
-    .client-row .client-total {
-      text-align: left;
-      color: #0f766e;
-      font-size: 14px;
-      font-family: 'Consolas', monospace;
+    .package-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #1a1a1a; color: #ffffff; padding: 3px 10px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
     }
-    
-    /* Policy Row */
-    .policy-row {
-      background: white;
+    tr.package-component td { background: #fbfbfc; padding-top: 8px; padding-bottom: 8px; }
+    tr.package-component td.num { font-size: 11px; opacity: 0.7; }
+
+    /* Empty state */
+    .empty {
+      padding: 40px; text-align: center; font-size: 13px; opacity: 0.7;
     }
-    .policy-row:hover {
-      background: #fafafa;
-    }
-    .policy-row td {
-      padding: 10px 12px;
-      border-bottom: 1px solid #f1f5f9;
-      vertical-align: middle;
-    }
-    .policy-row .policy-num {
-      text-align: center;
-      color: #94a3b8;
-      font-size: 12px;
-    }
-    .policy-row .car-badge {
-      background: linear-gradient(135deg, #0f766e, #14b8a6);
-      color: white;
-      padding: 3px 10px;
-      border-radius: 6px;
-      font-family: 'Consolas', monospace;
-      font-size: 12px;
-      font-weight: 600;
-      display: inline-block;
-    }
-    .policy-row .type-badge {
-      background: #eff6ff;
-      color: #2563eb;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-    .policy-row .policy-company {
-      color: #475569;
-    }
-    .policy-row .policy-date {
-      font-family: 'Consolas', monospace;
-      color: #64748b;
-      font-size: 12px;
-    }
-    .policy-row .policy-days {
-      text-align: center;
-    }
-    .policy-row .days-badge {
-      padding: 3px 10px;
-      border-radius: 12px;
-      font-size: 11px;
-      font-weight: 700;
-    }
-    .policy-row .policy-days.urgent .days-badge {
-      background: #fee2e2;
-      color: #dc2626;
-    }
-    .policy-row .policy-days.warning .days-badge {
-      background: #fef3c7;
-      color: #d97706;
-    }
-    .policy-row .policy-days.normal .days-badge {
-      background: #d1fae5;
-      color: #059669;
-    }
-    .policy-row .policy-price {
-      text-align: left;
-      font-weight: 600;
-      color: #0f766e;
-      font-family: 'Consolas', monospace;
-    }
-    
+
     /* Footer */
-    .report-footer {
-      background: #f8fafc;
-      padding: 16px 24px;
-      border-top: 2px solid #e2e8f0;
-      border-radius: 0 0 12px 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-    .report-footer p {
-      color: #64748b;
+    .footer {
+      margin-top: 28px; padding-top: 18px; border-top: 1px solid #1a1a1a;
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
       font-size: 12px;
     }
-    .report-footer strong {
-      color: #475569;
+    .footer strong { font-weight: 700; }
+
+    .actions { text-align: center; margin-top: 28px; }
+    .actions button {
+      background: #18181b; color: #fff; border: 1px solid #18181b;
+      padding: 10px 26px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+      cursor: pointer; font-family: inherit; margin: 0 5px; border-radius: 4px;
     }
-    
-    /* Print */
+    .actions button:hover { background: #fff; color: #18181b; }
+
     @media print {
-      body { padding: 0; background: white; }
-      .report-header { border-radius: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .report-footer { border-radius: 0; }
-      .client-row { page-break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .policy-row { page-break-inside: avoid; }
-      .main-table thead { display: table-header-group; }
+      @page { size: A4; margin: 10mm; }
+      html, body { background: #fff; }
+      body { padding: 0; }
+      .no-print { display: none !important; }
+      .report { max-width: 100%; padding: 16px 20px; border: 1px solid #1a1a1a; }
+      .client { page-break-inside: avoid; }
+      tr.package-header td, .package-badge, .section-title,
+      .meta-rows .label, .data-table thead th, .summary-grid .cell,
+      .client-head, .client-notes {
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
     }
-    
-    @media (max-width: 768px) {
-      body { padding: 8px; }
-      .report-header { padding: 16px; flex-direction: column; text-align: center; }
-      .header-title h1 { font-size: 20px; }
-      .header-stats { gap: 16px; }
-      .summary-bar { padding: 12px; gap: 16px; }
-      .main-table { font-size: 11px; }
-      .main-table thead th, .main-table td { padding: 8px 6px; }
-      .client-row .client-info { gap: 6px; }
-      .client-row .client-name { font-size: 13px; }
+
+    @media (max-width: 640px) {
+      body { padding: 14px 8px; font-size: 12px; }
+      .report { padding: 22px 18px; }
+      .report-top { flex-direction: column; align-items: stretch; gap: 16px; }
+      .report-meta { text-align: right; min-width: 0; }
+      .report-meta .doc-title { font-size: 32px; }
+      .summary-grid { grid-template-columns: repeat(2, 1fr); }
+      .summary-grid .cell:not(:nth-child(4n+1)) { border-right: none; }
+      .summary-grid .cell:nth-child(2n+1) { border-right: 1px solid #1a1a1a; }
+      .summary-grid .cell:nth-child(n+3) { border-top: 1px solid #1a1a1a; }
+      .client-head { flex-direction: column; align-items: stretch; }
+      .client-head .right { justify-content: space-between; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="report">
+
     <!-- Header -->
-    <div class="report-header">
-      <div class="header-title">
-        <h1>📋 تقرير المعاملات المنتهية</h1>
-        <p>${monthName}</p>
+    <div class="report-top">
+      <div class="brand">
+        <div class="name">تقرير التجديدات</div>
+        <div class="sub">${escapeHtml(rangeLabel)}</div>
       </div>
-      <div class="header-stats">
-        <div class="header-stat">
-          <span class="stat-value">${totalCustomers}</span>
-          <span class="stat-label">عميل</span>
-        </div>
-        <div class="header-stat">
-          <span class="stat-value">${totalPolicies}</span>
-          <span class="stat-label">معاملة</span>
-        </div>
-        <div class="header-stat">
-          <span class="stat-value">₪${totalPrice.toLocaleString('en-US')}</span>
-          <span class="stat-label">إجمالي</span>
+      <div class="report-meta">
+        <div class="doc-title">تقرير</div>
+        <div class="subtitle">المعاملات المنتهية</div>
+        <div class="meta-rows">
+          <div class="row">
+            <div class="label">من تاريخ</div>
+            <div class="val">${formatDate(startDate)}</div>
+          </div>
+          <div class="row">
+            <div class="label">إلى تاريخ</div>
+            <div class="val">${formatDate(endDate)}</div>
+          </div>
+          <div class="row">
+            <div class="label">تاريخ الإصدار</div>
+            <div class="val">${escapeHtml(generatedAt)}</div>
+          </div>
         </div>
       </div>
     </div>
-    
-    <!-- Summary Bar -->
-    <div class="summary-bar">
-      <div class="summary-item">
-        <span class="summary-dot urgent"></span>
-        <span>عاجل (≤7 أيام):</span>
-        <strong>${urgentCount}</strong>
+
+    <!-- Summary -->
+    <div class="section">
+      <div class="section-title">ملخص التقرير</div>
+      <div class="summary-grid">
+        <div class="cell">
+          <div class="label">العملاء</div>
+          <div class="value">${totalClients}</div>
+        </div>
+        <div class="cell">
+          <div class="label">المعاملات</div>
+          <div class="value">${totalTransactions}</div>
+        </div>
+        <div class="cell">
+          <div class="label">باقات</div>
+          <div class="value">${totalPackages}</div>
+        </div>
+        <div class="cell">
+          <div class="label">إجمالي</div>
+          <div class="value">${formatMoney(totalValue)}</div>
+        </div>
       </div>
-      <div class="summary-item">
-        <span class="summary-dot warning"></span>
-        <span>تحذير (8-14):</span>
-        <strong>${warningCount}</strong>
-      </div>
-      <div class="summary-item">
-        <span class="summary-dot normal"></span>
-        <span>عادي (15+):</span>
-        <strong>${totalCustomers - urgentCount - warningCount}</strong>
-      </div>
+      ${filtersBadges.length > 0 ? `<div class="filters-line">المرشحات: ${filtersBadges.map(b => `<span class="chip">${b}</span>`).join('')}</div>` : ''}
     </div>
-    
-    <!-- Unified Table -->
-    <table class="main-table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>رقم السيارة</th>
-          <th>النوع</th>
-          <th>الشركة</th>
-          <th>تاريخ الانتهاء</th>
-          <th>المتبقي</th>
-          <th></th>
-          <th>السعر</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${tableRows || '<tr><td colspan="8" style="text-align:center;padding:40px;color:#64748b;">لا يوجد معاملات منتهية في هذه الفترة</td></tr>'}
-      </tbody>
-    </table>
-    
+
+    <!-- Clients -->
+    ${clients.length === 0
+      ? `<div class="section"><div class="empty">لا يوجد معاملات منتهية في هذه الفترة</div></div>`
+      : clientSections}
+
     <!-- Footer -->
-    <div class="report-footer">
-      <p>تم إنشاء التقرير: <strong>${now}</strong></p>
-      <p>بواسطة: <strong>${generatedBy}</strong></p>
+    <div class="footer">
+      <div>تم إنشاء التقرير: <strong>${escapeHtml(generatedAt)}</strong></div>
+      <div>بواسطة: <strong>${escapeHtml(generatedBy)}</strong></div>
+    </div>
+
+    <div class="actions no-print">
+      <button type="button" onclick="window.print()">طباعة</button>
     </div>
   </div>
 </body>
 </html>`;
+}
+
+function renderClientSection(
+  client: RenewalClientRow,
+  policiesById: Map<string, PolicyRow>,
+  index: number,
+): string {
+  const days = client.days_remaining;
+  const urg = urgencyClass(days);
+  const daysLabel = daysRemainingText(days);
+
+  // Resolve and group policies for this client.
+  const policies = (client.policy_ids || [])
+    .map(id => policiesById.get(id))
+    .filter((p): p is PolicyRow => Boolean(p));
+
+  // Bucket: standalone[] + Map<group_id, PolicyRow[]>.
+  const groups = new Map<string, PolicyRow[]>();
+  const singles: PolicyRow[] = [];
+  for (const p of policies) {
+    if (p.group_id) {
+      const arr = groups.get(p.group_id) || [];
+      arr.push(p);
+      groups.set(p.group_id, arr);
+    } else {
+      singles.push(p);
+    }
+  }
+  // Stable order: earliest end_date first.
+  const earliest = (arr: PolicyRow[]) => arr.reduce((min, p) => {
+    const d = p.end_date || '9999-12-31';
+    return d < min ? d : min;
+  }, '9999-12-31');
+  const sortedGroups = Array.from(groups.entries()).sort((a, b) => earliest(a[1]).localeCompare(earliest(b[1])));
+  singles.sort((a, b) => (a.end_date || '').localeCompare(b.end_date || ''));
+
+  // Build rows. Counter is per-معاملة (package = 1, single = 1).
+  let counter = 0;
+  const rows: string[] = [];
+
+  // Render packages first to mirror the invoice convention.
+  for (const [, members] of sortedGroups) {
+    counter += 1;
+    const memberTypes = Array.from(new Set(members.map(m => policyTypeLabel(m.policy_type_parent, m.policy_type_child))));
+    const carNumbers = Array.from(new Set(members.map(m => m.cars?.car_number).filter(Boolean) as string[]));
+    const minStart = members.reduce((m, p) => (p.start_date && (!m || p.start_date < m)) ? p.start_date : m, '' as string);
+    const maxEnd = members.reduce((m, p) => (p.end_date && (!m || p.end_date > m)) ? p.end_date : m, '' as string);
+    const total = members.reduce((s, p) => s + Number(p.insurance_price || 0), 0);
+
+    rows.push(`
+      <tr class="package-header">
+        <td class="num">${counter}</td>
+        <td colspan="3">
+          <div class="package-title">
+            <span class="package-badge">باقة</span>
+            <span>${escapeHtml(memberTypes.join(' + '))}</span>
+            ${carNumbers.length > 0 ? `<span class="item-meta">السيارة: <span class="tabular">${escapeHtml(carNumbers.join(', '))}</span></span>` : ''}
+          </div>
+          <div class="item-meta">${formatDate(minStart)} → ${formatDate(maxEnd)} · المجموع ${formatMoney(total)}</div>
+        </td>
+      </tr>`);
+
+    for (const m of members) {
+      rows.push(`
+        <tr class="package-component">
+          <td class="num">·</td>
+          <td>
+            <div class="item-title">${escapeHtml(policyTypeLabel(m.policy_type_parent, m.policy_type_child))}</div>
+            <div class="item-meta">${escapeHtml(m.insurance_companies?.name_ar || m.insurance_companies?.name || '-')}</div>
+          </td>
+          <td class="period">${formatDate(m.start_date)} → ${formatDate(m.end_date)}</td>
+          <td class="amount">${formatMoney(m.insurance_price)}</td>
+        </tr>`);
+    }
+  }
+
+  // Then singles.
+  for (const p of singles) {
+    counter += 1;
+    rows.push(`
+      <tr>
+        <td class="num">${counter}</td>
+        <td>
+          <div class="item-title">${escapeHtml(policyTypeLabel(p.policy_type_parent, p.policy_type_child))}</div>
+          <div class="item-meta">${escapeHtml(p.insurance_companies?.name_ar || p.insurance_companies?.name || '-')}</div>
+          ${p.cars?.car_number ? `<div class="item-meta">السيارة: <span class="tabular">${escapeHtml(p.cars.car_number)}</span></div>` : ''}
+        </td>
+        <td class="period">${formatDate(p.start_date)} → ${formatDate(p.end_date)}</td>
+        <td class="amount">${formatMoney(p.insurance_price)}</td>
+      </tr>`);
+  }
+
+  const itemsTable = rows.length > 0
+    ? `<table class="data-table">
+        <thead>
+          <tr>
+            <th style="width:48px;">#</th>
+            <th>الوصف</th>
+            <th style="width:180px;">المدة</th>
+            <th style="width:110px;">المبلغ</th>
+          </tr>
+        </thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>`
+    : '<div class="empty">لا توجد تفاصيل</div>';
+
+  const statusLabel = RENEWAL_STATUS_LABELS[client.worst_renewal_status] || client.worst_renewal_status;
+
+  return `
+    <div class="client">
+      <div class="client-head">
+        <div class="left">
+          <span class="num">${index}</span>
+          <span class="name">${escapeHtml(client.client_name)}</span>
+          ${client.client_phone ? `<span class="chip phone">${escapeHtml(client.client_phone)}</span>` : ''}
+          ${client.client_file_number ? `<span class="chip file">#${escapeHtml(client.client_file_number)}</span>` : ''}
+          <span class="chip">${escapeHtml(statusLabel)}</span>
+        </div>
+        <div class="right">
+          <span class="days ${urg}">${escapeHtml(daysLabel)}</span>
+          <span class="chip">${client.policies_count} معاملة</span>
+          <span class="total">${formatMoney(client.total_insurance_price)}</span>
+        </div>
+      </div>
+      ${client.renewal_notes ? `<div class="client-notes">ملاحظات: ${escapeHtml(client.renewal_notes)}</div>` : ''}
+      ${itemsTable}
+    </div>`;
 }
