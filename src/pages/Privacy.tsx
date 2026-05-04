@@ -12,7 +12,7 @@ export default function Privacy() {
     <div className="min-h-screen bg-white text-foreground public-page-enter" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
       <PublicSEO
         title="سياسة الخصوصية Thiqa — حماية بيانات وكالات التأمين"
-        description="سياسة خصوصية Thiqa: كيف نجمع بياناتك ونحميها ونستخدمها داخل نظام إدارة وكالات التأمين، وحقوقك في الوصول والتحكم بهذه البيانات."
+        description="سياسة الخصوصية لمنصة Thiqa: كيف نجمع، نستخدم، ونحمي بيانات وكالات التأمين وعملائها وفقاً للمعايير الدولية."
         keywords="سياسة خصوصية Thiqa, حماية البيانات, خصوصية التأمين, GDPR, ثقة"
       />
       <BreadcrumbJsonLd

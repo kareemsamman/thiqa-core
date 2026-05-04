@@ -11,7 +11,7 @@ export default function TermsOfUse() {
     <div className="min-h-screen bg-white text-foreground public-page-enter" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
       <PublicSEO
         title="شروط الاستخدام Thiqa — اتفاقية خدمة وكالات التأمين"
-        description="شروط استخدام منصة Thiqa لإدارة وكالات التأمين: حقوق وواجبات المستخدم، الاشتراكات والمدفوعات، حدود المسؤولية، وسياسات الإلغاء."
+        description="الشروط والأحكام لاستخدام نظام Thiqa لإدارة وكالات التأمين: الاشتراكات، المدفوعات، الاستخدام المقبول، وإلغاء الحساب."
         keywords="شروط استخدام Thiqa, اتفاقية الخدمة, شروط الاشتراك, ثقة"
       />
       <BreadcrumbJsonLd

@@ -730,7 +730,7 @@ function LandingContent() {
     <div className="min-h-screen text-black overflow-x-hidden bg-white public-page-enter" dir="rtl" style={{ fontFamily: "'Cairo', sans-serif" }}>
       <PublicSEO
         title="Thiqa | نظام إدارة وكالات التأمين"
-        description="Thiqa — نظام سحابي متكامل لإدارة وكالات التأمين بالعربية: عملاء، معاملات، أقساط، تحصيل، شيكات، تقارير، وتنبيهات. جرّب 35 يوم مجاناً."
+        description="نظام Thiqa السحابي لإدارة وكالات التأمين بالكامل: العملاء، الوثائق، الأقساط، التحصيل، التقارير والتنبيهات. ابدأ مجاناً لمدة 35 يوماً بدون بطاقة ائتمان."
         keywords="نظام إدارة التأمين, برنامج وكالات التأمين, إدارة معاملات التأمين, CRM للتأمين, نظام تحصيل أقساط, إدارة شيكات التأمين, ثقة, Thiqa"
         pathname="/"
       />
