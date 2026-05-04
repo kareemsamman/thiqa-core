@@ -188,16 +188,29 @@ serve(async (req) => {
       .single();
     const generatedBy = userProfile?.full_name || userProfile?.email || 'Unknown';
 
+    // Logo lives in site_settings (where the Branding page writes it)
+    // with agents.logo_url as a fallback. Name comes from agents.
     let agentName: string | null = null;
     let agentLogoUrl: string | null = null;
     if (userProfile?.agent_id) {
-      const { data: agentRow } = await service
-        .from('agents')
-        .select('name, name_ar, logo_url')
-        .eq('id', userProfile.agent_id)
-        .single();
-      agentName = (agentRow?.name_ar as string | null) || (agentRow?.name as string | null) || null;
-      agentLogoUrl = (agentRow?.logo_url as string | null) || null;
+      const [{ data: agentRow }, { data: siteRow }] = await Promise.all([
+        service.from('agents')
+          .select('name, name_ar, logo_url')
+          .eq('id', userProfile.agent_id)
+          .single(),
+        service.from('site_settings')
+          .select('logo_url, owner_name')
+          .eq('agent_id', userProfile.agent_id)
+          .maybeSingle(),
+      ]);
+      agentName = (agentRow?.name_ar as string | null)
+        || (agentRow?.name as string | null)
+        || (siteRow?.owner_name as string | null)
+        || null;
+      agentLogoUrl = (siteRow?.logo_url as string | null)
+        || (agentRow?.logo_url as string | null)
+        || null;
+      console.log('[generate-renewals-report] agent', { agent_id: userProfile.agent_id, agentName, agentLogoUrl });
     }
 
     // Branch label (optional — only when filter is applied).
@@ -446,9 +459,9 @@ function buildReportHtml(args: BuildArgs): string {
     }
 
     /* ── Summary grid ── */
-    .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+    .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
     .summary-grid .cell { padding: 10px 14px; text-align: center; }
-    .summary-grid .cell:not(:nth-child(4n+1)) { border-right: 1px solid #1a1a1a; }
+    .summary-grid .cell:not(:nth-child(3n+1)) { border-right: 1px solid #1a1a1a; }
     .summary-grid .label {
       font-size: 10px; font-weight: 700; margin-bottom: 4px;
       letter-spacing: 0.8px; text-transform: uppercase; opacity: 0.85;
@@ -588,10 +601,9 @@ function buildReportHtml(args: BuildArgs): string {
       .report-top { flex-direction: column; align-items: stretch; gap: 16px; }
       .report-meta { text-align: right; min-width: 0; }
       .report-meta .doc-title { font-size: 32px; }
-      .summary-grid { grid-template-columns: repeat(2, 1fr); }
-      .summary-grid .cell:not(:nth-child(4n+1)) { border-right: none; }
-      .summary-grid .cell:nth-child(2n+1) { border-right: 1px solid #1a1a1a; }
-      .summary-grid .cell:nth-child(n+3) { border-top: 1px solid #1a1a1a; }
+      .summary-grid { grid-template-columns: 1fr; }
+      .summary-grid .cell { border-right: none !important; }
+      .summary-grid .cell + .cell { border-top: 1px solid #1a1a1a; }
       .client-head { flex-direction: column; align-items: stretch; }
       .client-head .right { justify-content: space-between; }
     }
@@ -640,10 +652,6 @@ function buildReportHtml(args: BuildArgs): string {
         <div class="cell">
           <div class="label">المعاملات</div>
           <div class="value">${totalTransactions}</div>
-        </div>
-        <div class="cell">
-          <div class="label">باقات</div>
-          <div class="value">${totalPackages}</div>
         </div>
         <div class="cell">
           <div class="label">إجمالي</div>
