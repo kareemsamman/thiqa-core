@@ -93,16 +93,27 @@ async function fetchVehicle(plate: string): Promise<CarInfo> {
 }
 
 function parseDate(s: string): string | null {
-  // Format: "17    10   2024" → "2024-10-17"
   if (!s) return null;
-  const parts = s.trim().split(/\s+/);
+  // Lenient parser. Accepts "17 10 2024", "17.10.2024", "16. 07. 2025",
+  // "10. 1.    2027", "26 1 2 027" (split year), "21    4   2026/", etc.
+  // Also clamps invalid days like 31/11 → 30/11 (instead of rejecting).
+  const cleaned = s.replace(/[.\s/]+/g, " ").trim();
+  let parts = cleaned.split(" ").filter(Boolean);
+  // Recombine split year like ["26","1","2","027"] → ["26","1","2027"]
+  if (parts.length === 4 && parts[2].length === 1 && parts[3].length === 3) {
+    parts = [parts[0], parts[1], parts[2] + parts[3]];
+  }
   if (parts.length !== 3) return null;
-  const [d, m, y] = parts;
-  const dn = parseInt(d, 10);
-  const mn = parseInt(m, 10);
-  const yn = parseInt(y, 10);
+  let dn = parseInt(parts[0], 10);
+  const mn = parseInt(parts[1], 10);
+  let yn = parseInt(parts[2], 10);
   if (!Number.isFinite(dn) || !Number.isFinite(mn) || !Number.isFinite(yn)) return null;
-  if (mn < 1 || mn > 12 || dn < 1 || dn > 31) return null;
+  if (yn < 100) yn += 2000;
+  if (mn < 1 || mn > 12) return null;
+  const isLeap = (yn % 4 === 0 && yn % 100 !== 0) || yn % 400 === 0;
+  const daysIn = [31, isLeap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (dn < 1) return null;
+  if (dn > daysIn[mn - 1]) dn = daysIn[mn - 1]; // clamp 31/11 → 30/11
   return `${yn}-${String(mn).padStart(2, "0")}-${String(dn).padStart(2, "0")}`;
 }
 
