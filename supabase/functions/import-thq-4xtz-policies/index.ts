@@ -253,38 +253,23 @@ Deno.serve(async (req) => {
       companyByHe.set(he, ins.id);
     }
 
-    // Pre-load road services (Hebrew code → service id) — create missing
+    // Pre-load existing road services for this agent. We DO NOT auto-create
+    // services — we only match the combined name (e.g. "جرار + زجاج") against
+    // what already exists. Missing combos are reported as manual.
     const { data: existingSvcs } = await admin
       .from("road_services")
       .select("id, name, name_ar")
       .eq("agent_id", AGENT_ID);
-    const svcByCode: Map<string, string> = new Map();
-    for (const [code, ar] of Object.entries(SERVICE_MAP)) {
-      const found = (existingSvcs || []).find(
-        (s) => s.name === ar || s.name_ar === ar,
+    // Lookup helper: combined Arabic name → service id
+    const findServiceIdByName = (combinedName: string): string | null => {
+      const norm = (x: string | null | undefined) =>
+        (x || "").replace(/\s+/g, " ").trim();
+      const target = norm(combinedName);
+      const hit = (existingSvcs || []).find(
+        (s) => norm(s.name_ar) === target || norm(s.name) === target,
       );
-      if (found) svcByCode.set(code, found.id);
-    }
-    for (const [code, ar] of Object.entries(SERVICE_MAP)) {
-      if (svcByCode.has(code)) continue;
-      if (dry_run) {
-        svcByCode.set(code, `<would-create:${ar}>`);
-        continue;
-      }
-      const { data: ins, error } = await admin
-        .from("road_services")
-        .insert({
-          agent_id: AGENT_ID,
-          name: ar,
-          name_ar: ar,
-          active: true,
-          allowed_car_types: ["car"],
-        })
-        .select("id")
-        .single();
-      if (error) return json({ error: `Failed to create service ${ar}: ${error.message}` }, 500);
-      svcByCode.set(code, ins.id);
-    }
+      return hit?.id ?? null;
+    };
 
     const results: RowResult[] = [];
     console.log("[import] running v2 with BRANCH_ID + file_number");
