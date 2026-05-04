@@ -2224,9 +2224,9 @@ function PackageComponentRow({
           so a long provider name in the previous column doesn't force
           the row to wrap. */}
       <div className="flex items-center gap-1.5 min-w-[110px] justify-center text-[10px] font-mono ltr-nums text-muted-foreground whitespace-nowrap">
-        <span>{formatDate(policy.start_date)}</span>
-        <span aria-hidden="true">→</span>
         <span>{formatDate(policy.end_date)}</span>
+        <span aria-hidden="true">←</span>
+        <span>{formatDate(policy.start_date)}</span>
       </div>
 
       {/* Price column */}
