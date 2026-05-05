@@ -2,7 +2,7 @@
 # Authenticated CRM and admin areas are not.
 
 User-agent: *
-Allow: /$
+Allow: /
 Allow: /landing
 Allow: /pricing
 Allow: /faq
