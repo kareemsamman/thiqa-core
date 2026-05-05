@@ -11,7 +11,7 @@ import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { cn } from "@/lib/utils";
 import { PublicSEO } from "@/components/public/PublicSEO";
 import { PublicFooter } from "@/components/public/PublicFooter";
-import { BreadcrumbJsonLd, FaqPageJsonLd } from "@/components/public/PublicJsonLd";
+import { FaqPageJsonLd } from "@/components/public/PublicJsonLd";
 import { PublicGradientBackground } from "@/components/public/PublicGradientBackground";
 import { FAQ_CATEGORIES, flattenFaq, type FlatFaqItem } from "@/lib/faqContent";
 
@@ -107,12 +107,6 @@ export default function FAQ() {
         title="الأسئلة الشائعة Thiqa — دليل نظام إدارة وكالات التأمين"
         description="إجابات على الأسئلة الشائعة حول نظام Thiqa لإدارة وكالات التأمين: التسعير، الميزات، الأمان، الدعم الفني، والبدء بالاستخدام."
         keywords="أسئلة Thiqa, مساعدة Thiqa, دليل النظام, أسئلة شائعة, دعم وكالات التأمين, ثقة"
-      />
-      <BreadcrumbJsonLd
-        crumbs={[
-          { label: "Thiqa", href: "/" },
-          { label: "أسئلة وأجوبة", href: "/faq" },
-        ]}
       />
       <FaqPageJsonLd items={allItems.map((it) => ({ q: it.q, a: it.a }))} />
 

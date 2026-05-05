@@ -20,74 +20,21 @@ import { smoothScrollToElement, smoothScrollToHash } from "@/lib/smoothScroll";
 import { GalleryImage, LandingGalleryProvider } from "@/components/landing/LandingGallery";
 import { Helmet } from "react-helmet-async";
 
-// JSON-LD structured data for the home page. Tells Google we are a
-// SaaS product (SoftwareApplication) tied to the Thiqa Organization
-// — this is what enables the rich-result card with logo + sitelinks.
-// Includes a FAQPage entity so the FAQ section is eligible for FAQ
-// rich results in search.
+// FAQPage JSON-LD for the home page only. Organization, WebSite, and
+// SoftwareApplication are sitewide and live in the static head of
+// index.html (one shared @graph) — this entity references them via
+// the implicit cross-page @id graph but doesn't need to redeclare them.
 const LANDING_JSON_LD = {
   "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "Organization",
-      "@id": "https://getthiqa.com/#org",
-      name: "Thiqa",
-      alternateName: "ثقة",
-      url: "https://getthiqa.com/",
-      logo: "https://thiqacrm.b-cdn.net/small_black.png",
-      image: "https://thiqacrm.b-cdn.net/fav.png",
-      email: "support@getthiqa.com",
-      contactPoint: [
-        {
-          "@type": "ContactPoint",
-          contactType: "customer support",
-          telephone: "+972-52-514-3581",
-          email: "support@getthiqa.com",
-          availableLanguage: ["Arabic", "Hebrew", "English"],
-          areaServed: ["IL", "PS"],
-        },
-      ],
-      sameAs: [
-        "https://www.facebook.com/getthiqa",
-        "https://www.instagram.com/getthiqa",
-      ],
+  "@type": "FAQPage",
+  mainEntity: LANDING_FAQS.map((f) => ({
+    "@type": "Question",
+    name: f.q,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: f.a,
     },
-    {
-      "@type": "SoftwareApplication",
-      name: "Thiqa",
-      applicationCategory: "BusinessApplication",
-      operatingSystem: "Web",
-      inLanguage: "ar",
-      description:
-        "نظام سحابي متكامل لإدارة وكالات التأمين: العملاء، المعاملات، الأقساط، التحصيل، الشيكات، التقارير، والتنبيهات.",
-      image: "https://thiqacrm.b-cdn.net/fav.png",
-      offers: {
-        "@type": "Offer",
-        price: "0",
-        priceCurrency: "ILS",
-      },
-      publisher: { "@id": "https://getthiqa.com/#org" },
-    },
-    {
-      "@type": "WebSite",
-      "@id": "https://getthiqa.com/#website",
-      url: "https://getthiqa.com/",
-      name: "Thiqa",
-      inLanguage: "ar",
-      publisher: { "@id": "https://getthiqa.com/#org" },
-    },
-    {
-      "@type": "FAQPage",
-      mainEntity: LANDING_FAQS.map((f) => ({
-        "@type": "Question",
-        name: f.q,
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: f.a,
-        },
-      })),
-    },
-  ],
+  })),
 };
 import dashboardMockupDefault from "@/assets/landing/dashboard-mockup.png";
 import featuresMockupDefault from "@/assets/landing/features-mockup.png";
@@ -734,13 +681,14 @@ function LandingContent() {
         keywords="نظام إدارة التأمين, برنامج وكالات التأمين, إدارة معاملات التأمين, CRM للتأمين, نظام تحصيل أقساط, إدارة شيكات التأمين, ثقة, Thiqa"
         pathname="/"
       />
-      {/* Homepage JSON-LD: Organization + SoftwareApplication + WebSite
-          + FAQPage in one @graph. Routed through Helmet so it lands in
-          <head>, where Google looks first. The script tag's text node
-          can produce a recoverable hydration warning (React 19 vs
-          react-helmet-async), but main.tsx's onRecoverableError filter
-          silences #418/#419 specifically — visible UI is identical
-          before and after recovery. */}
+      {/* Homepage-only FAQPage JSON-LD. The sitewide Organization +
+          WebSite + SoftwareApplication @graph lives in index.html's
+          static head; this entity stands alongside it for Google's
+          merge. Routed through Helmet so it lands in <head> where
+          Google looks first. The script tag's text node can produce a
+          recoverable hydration warning (React 19 vs react-helmet-async),
+          but main.tsx's onRecoverableError filter silences #418/#419
+          specifically — visible UI is identical before and after recovery. */}
       <Helmet>
         <script type="application/ld+json">
           {JSON.stringify(LANDING_JSON_LD)}

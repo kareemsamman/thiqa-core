@@ -7,6 +7,20 @@ const DEFAULT_OG_IMAGE = "https://thiqacrm.b-cdn.net/fav.png";
 const DEFAULT_OG_IMAGE_WIDTH = "1200";
 const DEFAULT_OG_IMAGE_HEIGHT = "630";
 
+// Arabic leaf-crumb label per public route. Routes not in this map
+// (incl. "/") emit no BreadcrumbList — Google flags single-item
+// breadcrumbs and transactional flow pages (verify-email, reset-password)
+// don't need the path either.
+const BREADCRUMB_LABELS: Record<string, string> = {
+  "/pricing": "الأسعار",
+  "/faq": "الأسئلة الشائعة",
+  "/contact": "تواصل معنا",
+  "/login": "تسجيل الدخول",
+  "/register": "إنشاء حساب",
+  "/privacy": "سياسة الخصوصية",
+  "/terms": "الشروط والأحكام",
+};
+
 type PublicSEOProps = {
   title: string;
   description: string;
@@ -42,6 +56,32 @@ export function PublicSEO({
   const location = useLocation();
   const path = pathname ?? location.pathname;
   const canonical = `${SITE_ORIGIN}${path === "/" ? "" : path}`;
+
+  // Per-route BreadcrumbList (Home → Current). Stringified once so the
+  // <script> child is a single text node; embedding raw JSX would let
+  // React try to interpret the JSON as children. JSON.stringify is
+  // safe for </script> here because we control all label values.
+  const leafLabel = BREADCRUMB_LABELS[path];
+  const breadcrumbJsonLd = leafLabel
+    ? JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "الرئيسية",
+            item: `${SITE_ORIGIN}/`,
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: leafLabel,
+            item: canonical,
+          },
+        ],
+      })
+    : null;
 
   return (
     <>
@@ -94,6 +134,10 @@ export function PublicSEO({
       <meta name="twitter:description" content={description} />
       <meta name="twitter:image" content={image} />
       <meta name="twitter:image:alt" content={title} />
+
+      {breadcrumbJsonLd && (
+        <script type="application/ld+json">{breadcrumbJsonLd}</script>
+      )}
     </Helmet>
     </>
   );

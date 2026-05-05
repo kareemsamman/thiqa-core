@@ -1,40 +1,14 @@
 import { Helmet } from "react-helmet-async";
 
-// JSON-LD helpers for the public pages. Landing.tsx already emits
-// Organization + SoftwareApplication + FAQPage on its own; this
-// component covers everything else: BreadcrumbList for non-home
-// pages, FAQPage for /faq, Offers for /pricing, ContactPage for
-// /contact. Each helper accepts plain data and emits a single
-// <script type="application/ld+json">.
+// JSON-LD helpers for the public pages. Sitewide Organization +
+// WebSite + SoftwareApplication live in index.html's static head;
+// per-page BreadcrumbList is emitted by PublicSEO via Helmet. This
+// module covers the remaining page-specific schemas: FAQPage for
+// /faq, Offers for /pricing, ContactPage for /contact, and a
+// generic WebPage anchor for legal/auth pages. Each helper accepts
+// plain data and emits a single <script type="application/ld+json">.
 
 const SITE_ORIGIN = "https://getthiqa.com";
-
-interface BreadcrumbCrumb {
-  label: string;
-  href: string;
-}
-
-// Renders a BreadcrumbList for the current page so search results
-// can show the path under the title. The home crumb is always
-// "ثقة → ..." in RTL reading order; in JSON-LD itemListElement is
-// LTR (root → leaf) regardless of page direction.
-export function BreadcrumbJsonLd({ crumbs }: { crumbs: BreadcrumbCrumb[] }) {
-  const data = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: crumbs.map((c, i) => ({
-      "@type": "ListItem",
-      position: i + 1,
-      name: c.label,
-      item: c.href.startsWith("http") ? c.href : `${SITE_ORIGIN}${c.href}`,
-    })),
-  };
-  return (
-    <Helmet>
-      <script type="application/ld+json">{JSON.stringify(data)}</script>
-    </Helmet>
-  );
-}
 
 // FAQPage schema for /faq. Pass the catalog flattened to {q, a}.
 export function FaqPageJsonLd({ items }: { items: { q: string; a: string }[] }) {

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { FileText, UserCheck, CreditCard, RefreshCw, Database, Ban, Wrench, AlertTriangle, ScrollText, Mail, ArrowLeft } from "lucide-react";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { PublicSEO } from "@/components/public/PublicSEO";
-import { BreadcrumbJsonLd, WebPageJsonLd } from "@/components/public/PublicJsonLd";
+import { WebPageJsonLd } from "@/components/public/PublicJsonLd";
 
 // Public legal page — no auth, no CRM chrome. Same layout as Privacy.tsx
 // so the two read as a single set.
@@ -13,12 +13,6 @@ export default function TermsOfUse() {
         title="شروط الاستخدام Thiqa — اتفاقية خدمة وكالات التأمين"
         description="الشروط والأحكام لاستخدام نظام Thiqa لإدارة وكالات التأمين: الاشتراكات، المدفوعات، الاستخدام المقبول، وإلغاء الحساب."
         keywords="شروط استخدام Thiqa, اتفاقية الخدمة, شروط الاشتراك, ثقة"
-      />
-      <BreadcrumbJsonLd
-        crumbs={[
-          { label: "Thiqa", href: "/" },
-          { label: "شروط الاستخدام", href: "/terms" },
-        ]}
       />
       <WebPageJsonLd
         name="شروط الاستخدام — Thiqa"

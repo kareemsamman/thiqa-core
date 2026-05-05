@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ThiqaLogoAnimation } from "@/components/shared/ThiqaLogoAnimation";
 import { cn } from "@/lib/utils";
 import { PublicSEO } from "@/components/public/PublicSEO";
-import { BreadcrumbJsonLd, PricingJsonLd } from "@/components/public/PublicJsonLd";
+import { PricingJsonLd } from "@/components/public/PublicJsonLd";
 import { PLAN_FEATURE_CATALOG } from "@/lib/planFeatureCatalog";
 import { FAQSection } from "@/components/public/FAQSection";
 import { DemoCallTrigger } from "@/components/public/DemoCallDialog";
@@ -245,12 +245,6 @@ export default function Pricing() {
         title="أسعار وخطط Thiqa — نظام إدارة وكالات التأمين"
         description="خطط وأسعار Thiqa الشفافة لوكالات التأمين. اختر الخطة المناسبة لحجم وكالتك وابدأ بفترة تجريبية مجانية 35 يوماً، بدون التزام."
         keywords="أسعار Thiqa, خطط اشتراك Thiqa, تكلفة نظام إدارة التأمين, اشتراك مجاني, خطة احترافية, ثقة"
-      />
-      <BreadcrumbJsonLd
-        crumbs={[
-          { label: "Thiqa", href: "/" },
-          { label: "الأسعار", href: "/pricing" },
-        ]}
       />
       {showPrices && (
         <PricingJsonLd
