@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { Layers, X, FileText, Maximize2 } from "lucide-react";
+import { Layers, X, FileText, Maximize2, Trash2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,13 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
 
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [confirmingCloseAll, setConfirmingCloseAll] = useState(false);
+
+  const handleCloseAll = useCallback(() => {
+    minimizedInstances.forEach((i) => closeInstance(i.id));
+    setConfirmingCloseAll(false);
+    setOpen(false);
+  }, [minimizedInstances, closeInstance]);
 
   // Shortcut opens the popover. If there are no minimized drafts the
   // button isn't rendered at all (see early return below) — that's the
@@ -102,7 +109,13 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
   if (minimizedInstances.length === 0) return null;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setConfirmingCloseAll(false);
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           ref={buttonRef}
@@ -137,9 +150,47 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
           height={7}
           className="fill-popover drop-shadow-sm"
         />
-        <p className="px-2 pt-1 pb-0.5 text-[11px] font-semibold text-muted-foreground">
-          المسودات المصغرة
-        </p>
+        {confirmingCloseAll ? (
+          <div className="flex items-center justify-between gap-2 px-2 pt-1 pb-0.5">
+            <span className="text-[11px] font-semibold text-foreground">
+              إغلاق كل المسودات؟
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-6 px-2 text-[11px]"
+                onClick={handleCloseAll}
+              >
+                تأكيد
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-[11px]"
+                onClick={() => setConfirmingCloseAll(false)}
+              >
+                إلغاء
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2 px-2 pt-1 pb-0.5">
+            <span className="text-[11px] font-semibold text-muted-foreground">
+              المسودات المصغرة
+            </span>
+            <button
+              type="button"
+              onClick={() => setConfirmingCloseAll(true)}
+              title="إغلاق الكل"
+              aria-label="إغلاق كل المسودات"
+              className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+            >
+              <Trash2 className="h-3 w-3" />
+              <span>إغلاق الكل</span>
+            </button>
+          </div>
+        )}
         {minimizedInstances.map((instance) => (
           <DraftRow
             key={instance.id}
