@@ -80,8 +80,14 @@ async function verifyRoute({ path, titleHas, bodyHas }) {
       /<meta[^>]*property="og:image"[^>]*content="https?:\/\//.test(html)),
     check("twitter:card summary_large_image",
       /<meta[^>]*name="twitter:card"[^>]*content="summary_large_image"/.test(html)),
-    check("JSON-LD block present",
-      /<script[^>]*type="application\/ld\+json"/.test(html)),
+    check("sitewide @graph JSON-LD present (Organization + WebSite + SoftwareApplication)",
+      /<script[^>]*id="schema-sitewide"[^>]*type="application\/ld\+json"[^>]*>[\s\S]*?"@graph"[\s\S]*?"Organization"[\s\S]*?"WebSite"[\s\S]*?"SoftwareApplication"/.test(html)),
+    // Per-page JSON-LD count check. Home gets sitewide + FAQPage (≥2);
+    // every inner public route gets sitewide + BreadcrumbList + page-
+    // specific (≥2, usually 3). One JSON-LD block means the per-page
+    // schema dropped — exactly the regression we're guarding against.
+    check("≥2 JSON-LD blocks (sitewide + per-page)",
+      ((html.match(/<script[^>]*type="application\/ld\+json"/g) ?? []).length >= 2)),
     check("Arabic body content",
       new RegExp(bodyHas).test(html)),
   ];

@@ -690,7 +690,7 @@ function LandingContent() {
           but main.tsx's onRecoverableError filter silences #418/#419
           specifically — visible UI is identical before and after recovery. */}
       <Helmet>
-        <script type="application/ld+json">
+        <script id="schema-faq" type="application/ld+json">
           {JSON.stringify(LANDING_JSON_LD)}
         </script>
       </Helmet>

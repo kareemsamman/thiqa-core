@@ -23,7 +23,7 @@ export function FaqPageJsonLd({ items }: { items: { q: string; a: string }[] }) 
   };
   return (
     <Helmet>
-      <script type="application/ld+json">{JSON.stringify(data)}</script>
+      <script id="schema-faq" type="application/ld+json">{JSON.stringify(data)}</script>
     </Helmet>
   );
 }
@@ -89,7 +89,7 @@ export function PricingJsonLd({ offers }: { offers: PricingOffer[] }) {
   };
   return (
     <Helmet>
-      <script type="application/ld+json">{JSON.stringify(data)}</script>
+      <script id="schema-pricing" type="application/ld+json">{JSON.stringify(data)}</script>
     </Helmet>
   );
 }
@@ -121,7 +121,7 @@ export function WebPageJsonLd({
   };
   return (
     <Helmet>
-      <script type="application/ld+json">{JSON.stringify(data)}</script>
+      <script id="schema-webpage" type="application/ld+json">{JSON.stringify(data)}</script>
     </Helmet>
   );
 }
@@ -158,7 +158,7 @@ export function ContactPageJsonLd() {
   };
   return (
     <Helmet>
-      <script type="application/ld+json">{JSON.stringify(data)}</script>
+      <script id="schema-contact" type="application/ld+json">{JSON.stringify(data)}</script>
     </Helmet>
   );
 }

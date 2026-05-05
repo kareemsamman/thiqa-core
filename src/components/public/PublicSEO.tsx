@@ -136,7 +136,7 @@ export function PublicSEO({
       <meta name="twitter:image:alt" content={title} />
 
       {breadcrumbJsonLd && (
-        <script type="application/ld+json">{breadcrumbJsonLd}</script>
+        <script id="schema-breadcrumb" type="application/ld+json">{breadcrumbJsonLd}</script>
       )}
     </Helmet>
     </>
