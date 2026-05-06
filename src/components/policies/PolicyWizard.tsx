@@ -33,6 +33,7 @@ import {
   Step4Payments,
   MotPriceLookupPanel,
 } from "./wizard";
+import { SigningCheckDialog } from "./wizard/SigningCheckDialog";
 import type { Database } from "@/integrations/supabase/types";
 
 type PolicyTypeParent = Database["public"]["Enums"]["policy_type_parent"];
@@ -207,6 +208,9 @@ export function PolicyWizard({
     loadingBranches,
     refetchBranches,
   } = wizardState;
+
+  // Signing check dialog for step 1
+  const [signingCheckOpen, setSigningCheckOpen] = useState(false);
 
   // Reset warning dialog state
   const [resetWarning, setResetWarning] = useState<{
@@ -469,16 +473,26 @@ export function PolicyWizard({
   const canGoNext = currentStepData?.isValid;
   const canGoPrev = currentStep > 1;
 
+  const doGoNext = () => {
+    const nextStep = Math.min(currentStep + 1, steps.length);
+    if (nextStep === 4) applyElzamiPaymentLogic();
+    goToStep(nextStep);
+  };
+
   const handleNext = () => {
     if (!validateStep(currentStep)) return;
-    const nextStep = Math.min(currentStep + 1, steps.length);
-    
-    // Apply ELZAMI payment logic when entering Step 4
-    if (nextStep === 4) {
-      applyElzamiPaymentLogic();
+
+    // Step 1: require signing check before advancing
+    if (currentStep === 1) {
+      const clientUnsigned = selectedClient && !selectedClient.signature_url;
+      const newClientUnsigned = createNewClient;
+      if (clientUnsigned || newClientUnsigned) {
+        setSigningCheckOpen(true);
+        return;
+      }
     }
-    
-    goToStep(nextStep);
+
+    doGoNext();
   };
 
   const handlePrev = () => {
@@ -2080,6 +2094,19 @@ export function PolicyWizard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Signing Check Dialog — shown when advancing from step 1 with an unsigned client */}
+      <SigningCheckDialog
+        open={signingCheckOpen}
+        onOpenChange={setSigningCheckOpen}
+        clientId={selectedClient?.id ?? null}
+        clientPhone={
+          selectedClient?.phone_number ??
+          (createNewClient ? newClient.phone_number || null : null)
+        }
+        onSkip={doGoNext}
+        onProceed={doGoNext}
+      />
 
       {/* Tranzila Payment Modal */}
       {tranzilaModalOpen && tempPolicyId && activeTranzilaPaymentId && (

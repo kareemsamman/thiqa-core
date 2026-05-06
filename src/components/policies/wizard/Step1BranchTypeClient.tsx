@@ -133,7 +133,7 @@ export function Step1BranchTypeClient({
     const normalized = normalizeArabic(query);
     const { data, error } = await supabase
       .from('clients')
-      .select('id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes')
+      .select('id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes, signature_url')
       .is('deleted_at', null)
       .or(`full_name_normalized.ilike.%${normalized}%,id_number.ilike.%${query}%,file_number.ilike.%${query}%,phone_number.ilike.%${query}%`)
       .limit(10);

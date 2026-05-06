@@ -111,7 +111,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
       setLoadingClients(true);
       const { data, error } = await supabase
         .from('clients')
-        .select('id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes')
+        .select('id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes, signature_url')
         .eq('id', preselectedClientId)
         .single();
       

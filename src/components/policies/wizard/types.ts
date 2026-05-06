@@ -24,6 +24,7 @@ export interface Client {
   under24_driver_id?: string | null;
   broker_id: string | null;
   accident_notes?: string | null;
+  signature_url?: string | null;
 }
 
 export interface CarRecord {
