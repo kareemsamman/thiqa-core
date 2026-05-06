@@ -329,7 +329,9 @@ function DraftRow({
           style={newestBadgeStyle}
         >
           <FileText className="h-4 w-4" />
-          <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-primary animate-pulse" />
+          {isNewest && (
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-primary animate-pulse" />
+          )}
         </span>
         <span className="flex flex-col items-start min-w-0 leading-tight flex-1">
           <span className="text-xs font-semibold truncate w-full">
