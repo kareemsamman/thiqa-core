@@ -2224,6 +2224,7 @@ export function PolicyWizard({
         onProceed={doGoNext}
         initialState={signingInitialStateRef.current}
         onStateChange={setSigningDialogState}
+        onMinimize={onMinimize ? () => { captureScroll(); onMinimize(); } : undefined}
       />
 
       {/* Tranzila Payment Modal */}

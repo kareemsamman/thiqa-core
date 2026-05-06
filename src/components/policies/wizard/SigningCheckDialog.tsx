@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
-import { AlertTriangle, CheckCircle2, Clock, Send, Loader2, ArrowLeft } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Send, Loader2, ArrowLeft, Minus } from "lucide-react";
 import { Lock } from "@phosphor-icons/react";
 
 type DialogState = "check" | "waiting" | "signed";
@@ -30,6 +30,8 @@ interface SigningCheckDialogProps {
   initialState?: DialogState;
   /** Notifies parent whenever the internal dialog state changes */
   onStateChange?: (state: DialogState) => void;
+  /** Minimize the whole wizard from within the dialog */
+  onMinimize?: () => void;
 }
 
 export function SigningCheckDialog({
@@ -43,6 +45,7 @@ export function SigningCheckDialog({
   onProceed,
   initialState,
   onStateChange,
+  onMinimize,
 }: SigningCheckDialogProps) {
   const { toast } = useToast();
   const { locked: smsLocked, loading: smsLoading, guardSend } = useSmsLock();
@@ -159,6 +162,16 @@ export function SigningCheckDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm" dir="rtl">
+        {onMinimize && (
+          <button
+            type="button"
+            onClick={onMinimize}
+            title="تصغير"
+            className="absolute left-4 top-4 flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
+          >
+            <Minus className="h-3 w-3" />
+          </button>
+        )}
         {state === "check" && (
           <>
             <DialogHeader>
