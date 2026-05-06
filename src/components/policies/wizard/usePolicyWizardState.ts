@@ -433,7 +433,8 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
       createNewClient &&
       newClient.full_name.trim().length > 0 &&
       digitsOnly(newClient.id_number).length === 9 &&
-      isValidPhoneNumber10(digitsOnly(newClient.phone_number));
+      isValidPhoneNumber10(digitsOnly(newClient.phone_number)) &&
+      !errors.id_number;
     const step1Valid = branchValid && !!(selectedClient || newClientValid);
     const step2Valid = isLightMode ? true : !!(selectedCar || existingCar || (createNewCar && newCar.car_number && !carConflict));
     
@@ -486,7 +487,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     selectedClient, createNewClient, newClient, selectedCategory, isLightMode,
     selectedCar, existingCar, createNewCar, newCar, carConflict,
     policy, paymentsExceedPrice, hasZeroPayment, hasIncompleteCheque,
-    packageMode, packageAddons,
+    packageMode, packageAddons, errors.id_number,
   ]);
 
   // Get current step index for the steps array
@@ -716,6 +717,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
           if (!id) newErrors.id_number = "رقم الهوية مطلوب";
           else if (id.length !== 9) newErrors.id_number = "رقم الهوية يجب أن يكون 9 أرقام";
           else if (!isValidIsraeliId(id)) newErrors.id_number = "رقم الهوية غير صحيح";
+          else if (errors.id_number) newErrors.id_number = errors.id_number; // preserve async duplicate error
           const phone = digitsOnly(newClient.phone_number);
           if (!phone) newErrors.phone_number = "رقم الهاتف مطلوب";
           else if (!isValidPhoneNumber10(phone)) newErrors.phone_number = "رقم الهاتف يجب أن يكون 10 أرقام";
@@ -816,7 +818,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     steps, selectedCategory, selectedClient, createNewClient, newClient,
     selectedCar, existingCar, createNewCar, newCar, carConflict,
     policy, policyBrokerId, brokerDirection, paymentsExceedPrice,
-    packageMode, packageAddons,
+    packageMode, packageAddons, errors,
   ]);
 
   // Navigate to step
