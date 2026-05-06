@@ -479,13 +479,12 @@ export function PolicyWizard({
   const handleCreateClientForSigning = useCallback(async (): Promise<string> => {
     const clientSelect = 'id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes, signature_url';
 
-    const { data: fileNumData } = await supabase.rpc('generate_file_number');
     const { data: newClientData, error: clientError } = await supabase
       .from('clients')
       .insert({
         full_name: newClient.full_name.trim(),
         id_number: newClient.id_number.trim(),
-        file_number: fileNumData || null,
+        file_number: null,
         phone_number: newClient.phone_number || null,
         phone_number_2: newClient.phone_number_2 || null,
         birth_date: newClient.birth_date || null,
