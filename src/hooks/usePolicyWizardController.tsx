@@ -37,9 +37,9 @@ export interface WizardInstance {
   id: string;
   preselectedClientId?: string;
   draftSummary: WizardDraftSummary | null;
-  // Timestamp of the FIRST time this draft was minimized. Stays fixed
-  // across later restore/minimize cycles so the drafts list can sort and
-  // label each chip by when the user parked it originally.
+  // Timestamp of the MOST RECENT minimize. Updated on every minimize so the
+  // drafts list always shows the just-parked draft at the top, both in
+  // memory and after a page refresh (the value is persisted to the DB).
   minimizedAt: number | null;
 }
 
@@ -188,20 +188,14 @@ export function PolicyWizardControllerProvider({ children }: { children: ReactNo
   const minimizeInstance = useCallback((id: string, origin?: DockOrigin) => {
     if (origin) dockOriginRef.current = origin;
     setActiveId((prev) => (prev === id ? null : prev));
-    let stamp: number | null = null;
+    const stamp = Date.now();
     setInstances((prev) =>
-      prev.map((i) => {
-        if (i.id !== id || i.minimizedAt != null) return i;
-        stamp = Date.now();
-        return { ...i, minimizedAt: stamp };
-      }),
+      prev.map((i) => (i.id === id ? { ...i, minimizedAt: stamp } : i)),
     );
-    if (stamp != null) {
-      drafts().update({ minimized_at: new Date(stamp).toISOString() }).eq("id", id)
-        .then(({ error }: { error: unknown }) => {
-          if (error) console.error("[PolicyWizardController] minimize failed:", error);
-        });
-    }
+    drafts().update({ minimized_at: new Date(stamp).toISOString() }).eq("id", id)
+      .then(({ error }: { error: unknown }) => {
+        if (error) console.error("[PolicyWizardController] minimize failed:", error);
+      });
   }, []);
 
   const restoreInstance = useCallback((id: string) => {
