@@ -13,9 +13,15 @@ type DialogState = "check" | "waiting" | "signed";
 interface SigningCheckDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** null for new (unsaved) clients — SMS sending is disabled in that case */
+  /** Existing client id, or null when the client hasn't been saved yet */
   clientId: string | null;
   clientPhone: string | null;
+  /**
+   * Called when Send is clicked and clientId is null.
+   * Should create the client record and return the new id (or null on failure).
+   * After this resolves, the dialog uses the returned id for SMS + realtime.
+   */
+  onCreateClient?: () => Promise<string | null>;
   onSkip: () => void;
   onProceed: () => void;
 }
@@ -25,6 +31,7 @@ export function SigningCheckDialog({
   onOpenChange,
   clientId,
   clientPhone,
+  onCreateClient,
   onSkip,
   onProceed,
 }: SigningCheckDialogProps) {
@@ -32,6 +39,14 @@ export function SigningCheckDialog({
   const { locked: smsLocked, loading: smsLoading, guardSend } = useSmsLock();
   const [state, setState] = useState<DialogState>("check");
   const [sending, setSending] = useState(false);
+  // Tracks the resolved client id — may differ from the prop when a new client
+  // is created on-the-fly before the SMS is sent.
+  const [resolvedClientId, setResolvedClientId] = useState<string | null>(clientId);
+
+  // Sync resolved id with prop changes (e.g. dialog reopened for a different client)
+  useEffect(() => {
+    setResolvedClientId(clientId);
+  }, [clientId]);
 
   // Reset to initial state each time the dialog opens
   useEffect(() => {
@@ -40,17 +55,17 @@ export function SigningCheckDialog({
 
   // Live subscription: detect when the client signs while we're waiting
   useEffect(() => {
-    if (!open || state !== "waiting" || !clientId) return;
+    if (!open || state !== "waiting" || !resolvedClientId) return;
 
     const channel = supabase
-      .channel(`signing-check-${clientId}`)
+      .channel(`signing-check-${resolvedClientId}`)
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
           table: "clients",
-          filter: `id=eq.${clientId}`,
+          filter: `id=eq.${resolvedClientId}`,
         },
         (payload) => {
           const updated = payload.new as { signature_url?: string | null };
@@ -64,16 +79,29 @@ export function SigningCheckDialog({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [open, state, clientId]);
+  }, [open, state, resolvedClientId]);
 
   const handleSend = async () => {
     if (!guardSend("click")) return;
-    if (!clientId) return;
 
     setSending(true);
     try {
+      let targetId = resolvedClientId;
+
+      // For new clients create the record first, then we'll have a real id
+      if (!targetId && onCreateClient) {
+        targetId = await onCreateClient();
+        if (!targetId) {
+          toast({ title: "خطأ", description: "فشل في حفظ بيانات العميل", variant: "destructive" });
+          return;
+        }
+        setResolvedClientId(targetId);
+      }
+
+      if (!targetId) return;
+
       const { data, error } = await supabase.functions.invoke("send-signature-sms", {
-        body: { client_id: clientId },
+        body: { client_id: targetId },
       });
 
       if (error) {
@@ -109,7 +137,9 @@ export function SigningCheckDialog({
     onProceed();
   };
 
-  const canSend = !!clientId && !!clientPhone;
+  // Send is available when there's a phone number and either an existing client
+  // or a creation callback for a new client.
+  const canSend = !!clientPhone && (!!clientId || !!onCreateClient);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -127,9 +157,9 @@ export function SigningCheckDialog({
               هذا العميل لم يوقّع على نموذج التفويض بعد. هل تريد إرسال رابط التوقيع إليه عبر SMS؟
             </p>
 
-            {!clientId && (
+            {!clientPhone && (
               <p className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
-                إرسال رسالة متاح فقط للعملاء المحفوظين مسبقًا
+                لا يوجد رقم هاتف — لا يمكن إرسال رسالة
               </p>
             )}
 
@@ -165,7 +195,6 @@ export function SigningCheckDialog({
             </DialogHeader>
 
             <div className="flex flex-col items-center gap-4 py-6">
-              {/* Animated waiting indicator */}
               <div className="relative w-20 h-20 flex items-center justify-center">
                 <div className="absolute inset-0 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
                 <Clock className="h-8 w-8 text-primary" />

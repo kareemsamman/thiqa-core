@@ -473,6 +473,57 @@ export function PolicyWizard({
   const canGoNext = currentStepData?.isValid;
   const canGoPrev = currentStep > 1;
 
+  // Creates the new client record immediately so the signing dialog can send SMS.
+  // On success, transitions the wizard from "create new client" mode to "selected client" mode.
+  const handleCreateClientForSigning = useCallback(async (): Promise<string | null> => {
+    try {
+      const { data: fileNumData } = await supabase.rpc('generate_file_number');
+      const { data: newClientData, error: clientError } = await supabase
+        .from('clients')
+        .insert({
+          full_name: newClient.full_name.trim(),
+          id_number: newClient.id_number.trim(),
+          file_number: fileNumData || null,
+          phone_number: newClient.phone_number || null,
+          phone_number_2: newClient.phone_number_2 || null,
+          birth_date: newClient.birth_date || null,
+          under24_type: newClient.under24_type || 'none',
+          under24_driver_name: newClient.under24_driver_name || null,
+          under24_driver_id: newClient.under24_driver_id || null,
+          notes: newClient.notes || null,
+          branch_id: effectiveBranchId || null,
+          created_by_admin_id: user?.id || null,
+        })
+        .select('id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes, signature_url')
+        .single();
+
+      if (clientError) {
+        // Duplicate id_number — look up the existing record
+        if (clientError.code === '23505' && clientError.message?.includes('id_number')) {
+          const { data: existing } = await supabase
+            .from('clients')
+            .select('id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes, signature_url')
+            .eq('id_number', newClient.id_number.trim())
+            .is('deleted_at', null)
+            .single();
+          if (existing) {
+            setSelectedClient(existing as any);
+            setCreateNewClient(false);
+            return existing.id;
+          }
+        }
+        throw clientError;
+      }
+
+      setSelectedClient(newClientData as any);
+      setCreateNewClient(false);
+      return newClientData.id;
+    } catch (err: any) {
+      toast({ title: "خطأ", description: err.message || "فشل في حفظ بيانات العميل", variant: "destructive" });
+      return null;
+    }
+  }, [newClient, effectiveBranchId, user, setSelectedClient, setCreateNewClient, toast]);
+
   const doGoNext = () => {
     const nextStep = Math.min(currentStep + 1, steps.length);
     if (nextStep === 4) applyElzamiPaymentLogic();
@@ -2104,6 +2155,7 @@ export function PolicyWizard({
           selectedClient?.phone_number ??
           (createNewClient ? newClient.phone_number || null : null)
         }
+        onCreateClient={createNewClient ? handleCreateClientForSigning : undefined}
         onSkip={doGoNext}
         onProceed={doGoNext}
       />
