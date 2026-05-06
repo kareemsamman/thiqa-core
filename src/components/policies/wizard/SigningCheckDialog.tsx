@@ -51,10 +51,6 @@ export function SigningCheckDialog({
   // is created on-the-fly before the SMS is sent.
   const [resolvedClientId, setResolvedClientId] = useState<string | null>(clientId);
 
-  // Keep initialState in a ref so the open-reset effect always reads the latest value
-  const initialStateRef = useRef<DialogState>(initialState ?? "check");
-  useEffect(() => { initialStateRef.current = initialState ?? "check"; }, [initialState]);
-
   // Notify parent whenever state changes
   const onStateChangeRef = useRef(onStateChange);
   useEffect(() => { onStateChangeRef.current = onStateChange; });
@@ -65,9 +61,15 @@ export function SigningCheckDialog({
     setResolvedClientId(clientId);
   }, [clientId]);
 
-  // Reset to initialState each time the dialog opens (handles restoring a minimized wizard)
+  // Reset to initialState each time the dialog opens (handles restoring a
+  // minimized wizard, including after a page refresh that hydrated the
+  // signing state from the form snapshot).
+  // We intentionally only depend on `open` so the state isn't clobbered when
+  // a parent's tracker updates initialState mid-dialog. The closure captures
+  // the latest initialState from the render where `open` flips.
   useEffect(() => {
-    if (open) setState(initialStateRef.current);
+    if (open) setState(initialState ?? "check");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Live subscription: detect when the client signs while we're waiting

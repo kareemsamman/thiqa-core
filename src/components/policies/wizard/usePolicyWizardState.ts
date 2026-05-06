@@ -92,6 +92,12 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
   const [loadingClients, setLoadingClients] = useState(false);
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
 
+  // Signing-check dialog state — lifted into the hook so it survives a page
+  // refresh (persisted via form_snapshot). Without this, a user who parks a
+  // wizard mid-signing loses the popup state on reload.
+  const [signingCheckOpen, setSigningCheckOpen] = useState(false);
+  const [signingDialogState, setSigningDialogState] = useState<'check' | 'waiting' | 'signed'>('check');
+
   // Reset state when wizard closes
   useEffect(() => {
     if (!open) {
@@ -866,6 +872,11 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
       if (typeof snap.packageMode === "boolean") setPackageMode(snap.packageMode);
       if (Array.isArray(snap.packageAddons)) setPackageAddons(snap.packageAddons as PackageAddon[]);
       if (Array.isArray(snap.payments)) setPayments(snap.payments as PaymentLine[]);
+      if (typeof snap.signingCheckOpen === "boolean") setSigningCheckOpen(snap.signingCheckOpen);
+      if (typeof snap.signingDialogState === "string"
+          && (snap.signingDialogState === 'check' || snap.signingDialogState === 'waiting' || snap.signingDialogState === 'signed')) {
+        setSigningDialogState(snap.signingDialogState);
+      }
       if (Array.isArray(snap.selectedChildIds)) setSelectedChildIds(snap.selectedChildIds as string[]);
       if (Array.isArray(snap.newChildren)) setNewChildren(snap.newChildren as NewChildForm[]);
 
@@ -953,6 +964,8 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
         }),
         selectedChildIds,
         newChildren,
+        signingCheckOpen,
+        signingDialogState,
       };
       draftsTable().update({ form_snapshot: snap }).eq("id", instanceId)
         .then(({ error }: { error: unknown }) => {
@@ -982,6 +995,8 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     payments,
     selectedChildIds,
     newChildren,
+    signingCheckOpen,
+    signingDialogState,
   ]);
 
   // Clear draft (called on explicit close / after save). The controller
@@ -1036,6 +1051,10 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     setLoadingClients,
     checkingDuplicate,
     setCheckingDuplicate,
+    signingCheckOpen,
+    setSigningCheckOpen,
+    signingDialogState,
+    setSigningDialogState,
 
     // Car
     clientCars,

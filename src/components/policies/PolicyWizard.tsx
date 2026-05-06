@@ -121,6 +121,10 @@ export function PolicyWizard({
     setNewClient,
     checkingDuplicate,
     setCheckingDuplicate,
+    signingCheckOpen,
+    setSigningCheckOpen,
+    signingDialogState,
+    setSigningDialogState,
     selectedCar,
     setSelectedCar,
     clientCars,
@@ -209,10 +213,8 @@ export function PolicyWizard({
     refetchBranches,
   } = wizardState;
 
-  // Signing check dialog for step 1
-  const [signingCheckOpen, setSigningCheckOpen] = useState(false);
-  // Tracks the internal state of SigningCheckDialog so we can persist "waiting" in the draft
-  const [signingDialogState, setSigningDialogState] = useState<'check' | 'waiting' | 'signed'>('check');
+  // signingCheckOpen and signingDialogState now live in usePolicyWizardState
+  // so they're persisted in the form snapshot — see the hook for setters.
   // Remembered state used when the wizard is restored after being minimized mid-signing
   const signingInitialStateRef = useRef<'check' | 'waiting' | 'signed'>('check');
   useEffect(() => {
