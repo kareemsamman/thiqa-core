@@ -1825,6 +1825,21 @@ export function PolicyWizard({
     onOpenChange(false);
   }, [resetForm, clearDraft, onOpenChange]);
 
+  // Browser-level guard: if the wizard has dirty data, show the native
+  // "Leave site?" confirmation when the user tries to refresh or close
+  // the tab. The actual message is controlled by Chrome — assigning a
+  // string to returnValue is what triggers the prompt in modern browsers.
+  useEffect(() => {
+    if (!open || isCollapsed) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!isDirty()) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [open, isCollapsed, isDirty]);
+
   // Close-button handler. Shows a confirm if there is unsaved data so the
   // user can't accidentally throw away a half-filled wizard.
   const handleCloseRequest = useCallback(() => {
