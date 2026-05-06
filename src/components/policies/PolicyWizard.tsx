@@ -476,6 +476,7 @@ export function PolicyWizard({
   // Creates the new client record immediately so the signing dialog can send SMS.
   // On success, transitions the wizard from "create new client" mode to "selected client" mode.
   const handleCreateClientForSigning = useCallback(async (): Promise<string | null> => {
+    const clientSelect = 'id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes, signature_url';
     try {
       const { data: fileNumData } = await supabase.rpc('generate_file_number');
       const { data: newClientData, error: clientError } = await supabase
@@ -494,17 +495,18 @@ export function PolicyWizard({
           branch_id: effectiveBranchId || null,
           created_by_admin_id: user?.id || null,
         })
-        .select('id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes, signature_url')
+        .select(clientSelect)
         .single();
 
       if (clientError) {
-        // Duplicate id_number — look up the existing record
-        if (clientError.code === '23505' && clientError.message?.includes('id_number')) {
+        // Unique violation on id_number — reuse the existing record (even if soft-deleted)
+        if (clientError.code === '23505') {
           const { data: existing } = await supabase
             .from('clients')
-            .select('id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes, signature_url')
+            .select(clientSelect)
             .eq('id_number', newClient.id_number.trim())
-            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .limit(1)
             .single();
           if (existing) {
             setSelectedClient(existing as any);
@@ -512,13 +514,15 @@ export function PolicyWizard({
             return existing.id;
           }
         }
-        throw clientError;
+        const msg = (clientError as any).message || (clientError as any).details || JSON.stringify(clientError);
+        throw new Error(msg || "فشل في حفظ بيانات العميل");
       }
 
       setSelectedClient(newClientData as any);
       setCreateNewClient(false);
       return newClientData.id;
     } catch (err: any) {
+      console.error('[handleCreateClientForSigning]', err);
       toast({ title: "خطأ", description: err.message || "فشل في حفظ بيانات العميل", variant: "destructive" });
       return null;
     }
