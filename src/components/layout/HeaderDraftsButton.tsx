@@ -313,7 +313,7 @@ function DraftRow({
   return (
     <div
       className={cn(
-        "group relative flex items-center rounded-xl overflow-hidden shrink-0 min-h-10",
+        "group relative flex items-stretch rounded-xl overflow-hidden shrink-0 min-h-10",
         "bg-primary text-primary-foreground",
         "hover:brightness-110 transition",
       )}
@@ -322,7 +322,7 @@ function DraftRow({
         type="button"
         onClick={() => onRestore(instance.id)}
         title={title}
-        className="relative flex flex-1 min-w-0 items-center gap-2 h-11 pr-3 pl-2 text-right"
+        className="relative flex flex-1 min-w-0 items-center gap-2 min-h-11 py-1.5 pr-3 pl-2 text-right"
       >
         <span
           className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15"
