@@ -475,58 +475,56 @@ export function PolicyWizard({
 
   // Creates the new client record immediately so the signing dialog can send SMS.
   // On success, transitions the wizard from "create new client" mode to "selected client" mode.
-  const handleCreateClientForSigning = useCallback(async (): Promise<string | null> => {
+  // Throws on failure (caller must catch and show the error).
+  const handleCreateClientForSigning = useCallback(async (): Promise<string> => {
     const clientSelect = 'id, full_name, id_number, file_number, phone_number, less_than_24, under24_type, under24_driver_name, under24_driver_id, broker_id, accident_notes, signature_url';
-    try {
-      const { data: fileNumData } = await supabase.rpc('generate_file_number');
-      const { data: newClientData, error: clientError } = await supabase
-        .from('clients')
-        .insert({
-          full_name: newClient.full_name.trim(),
-          id_number: newClient.id_number.trim(),
-          file_number: fileNumData || null,
-          phone_number: newClient.phone_number || null,
-          phone_number_2: newClient.phone_number_2 || null,
-          birth_date: newClient.birth_date || null,
-          under24_type: newClient.under24_type || 'none',
-          under24_driver_name: newClient.under24_driver_name || null,
-          under24_driver_id: newClient.under24_driver_id || null,
-          notes: newClient.notes || null,
-          branch_id: effectiveBranchId || null,
-          created_by_admin_id: user?.id || null,
-        })
-        .select(clientSelect)
-        .single();
 
-      if (clientError) {
-        // Unique violation on id_number — reuse the existing record (even if soft-deleted)
-        if (clientError.code === '23505') {
-          const { data: existing } = await supabase
-            .from('clients')
-            .select(clientSelect)
-            .eq('id_number', newClient.id_number.trim())
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
-          if (existing) {
-            setSelectedClient(existing as any);
-            setCreateNewClient(false);
-            return existing.id;
-          }
+    const { data: fileNumData } = await supabase.rpc('generate_file_number');
+    const { data: newClientData, error: clientError } = await supabase
+      .from('clients')
+      .insert({
+        full_name: newClient.full_name.trim(),
+        id_number: newClient.id_number.trim(),
+        file_number: fileNumData || null,
+        phone_number: newClient.phone_number || null,
+        phone_number_2: newClient.phone_number_2 || null,
+        birth_date: newClient.birth_date || null,
+        under24_type: newClient.under24_type || 'none',
+        under24_driver_name: newClient.under24_driver_name || null,
+        under24_driver_id: newClient.under24_driver_id || null,
+        notes: newClient.notes || null,
+        branch_id: effectiveBranchId || null,
+        created_by_admin_id: user?.id || null,
+      })
+      .select(clientSelect)
+      .single();
+
+    if (clientError) {
+      // Unique violation on id_number — reuse the existing record (even if soft-deleted)
+      if (clientError.code === '23505') {
+        const { data: existing } = await supabase
+          .from('clients')
+          .select(clientSelect)
+          .eq('id_number', newClient.id_number.trim())
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        if (existing) {
+          setSelectedClient(existing as any);
+          setCreateNewClient(false);
+          return existing.id;
         }
-        const msg = (clientError as any).message || (clientError as any).details || JSON.stringify(clientError);
-        throw new Error(msg || "فشل في حفظ بيانات العميل");
       }
-
-      setSelectedClient(newClientData as any);
-      setCreateNewClient(false);
-      return newClientData.id;
-    } catch (err: any) {
-      console.error('[handleCreateClientForSigning]', err);
-      toast({ title: "خطأ", description: err.message || "فشل في حفظ بيانات العميل", variant: "destructive" });
-      return null;
+      // Bubble a readable error — enumerate all own props so non-enumerable Error
+      // fields (like .message) are always included.
+      const detail = JSON.stringify(clientError, Object.getOwnPropertyNames(clientError));
+      throw new Error(detail || String(clientError));
     }
-  }, [newClient, effectiveBranchId, user, setSelectedClient, setCreateNewClient, toast]);
+
+    setSelectedClient(newClientData as any);
+    setCreateNewClient(false);
+    return newClientData.id;
+  }, [newClient, effectiveBranchId, user, setSelectedClient, setCreateNewClient]);
 
   const doGoNext = () => {
     const nextStep = Math.min(currentStep + 1, steps.length);

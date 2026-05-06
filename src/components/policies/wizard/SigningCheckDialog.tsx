@@ -18,10 +18,10 @@ interface SigningCheckDialogProps {
   clientPhone: string | null;
   /**
    * Called when Send is clicked and clientId is null.
-   * Should create the client record and return the new id (or null on failure).
-   * After this resolves, the dialog uses the returned id for SMS + realtime.
+   * Should create the client record and return the new id, or throw on failure.
+   * The dialog catches the error and shows it in a toast.
    */
-  onCreateClient?: () => Promise<string | null>;
+  onCreateClient?: () => Promise<string>;
   onSkip: () => void;
   onProceed: () => void;
 }
@@ -88,13 +88,9 @@ export function SigningCheckDialog({
     try {
       let targetId = resolvedClientId;
 
-      // For new clients create the record first, then we'll have a real id
+      // For new clients create the record first so we have a real id
       if (!targetId && onCreateClient) {
-        targetId = await onCreateClient();
-        if (!targetId) {
-          toast({ title: "خطأ", description: "فشل في حفظ بيانات العميل", variant: "destructive" });
-          return;
-        }
+        targetId = await onCreateClient(); // throws on failure
         setResolvedClientId(targetId);
       }
 
