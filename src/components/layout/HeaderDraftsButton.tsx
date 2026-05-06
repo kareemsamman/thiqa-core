@@ -188,7 +188,7 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
         side="bottom"
         align="end"
         sideOffset={8}
-        className="w-64 p-2 flex flex-col gap-1.5 max-h-[70vh] overflow-y-auto"
+        className="w-64 p-2 flex flex-col gap-1.5"
         dir="rtl"
       >
         <PopoverPrimitive.Arrow
@@ -237,18 +237,20 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
             </button>
           </div>
         )}
-        {minimizedInstances.map((instance) => (
-          <DraftRow
-            key={instance.id}
-            instance={instance}
-            isNewest={instance.id === newestMinimizedId}
-            onRestore={(id) => {
-              setOpen(false);
-              restoreInstance(id);
-            }}
-            onClose={closeInstance}
-          />
-        ))}
+        <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
+          {minimizedInstances.map((instance) => (
+            <DraftRow
+              key={instance.id}
+              instance={instance}
+              isNewest={instance.id === newestMinimizedId}
+              onRestore={(id) => {
+                setOpen(false);
+                restoreInstance(id);
+              }}
+              onClose={closeInstance}
+            />
+          ))}
+        </div>
       </PopoverContent>
     </Popover>
   );
