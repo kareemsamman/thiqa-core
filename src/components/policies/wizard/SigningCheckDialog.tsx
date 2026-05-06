@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
-import { AlertTriangle, CheckCircle2, Clock, Send, Loader2, ArrowLeft, Minus, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Send, Loader2, ArrowLeft, X } from "lucide-react";
 import { Lock } from "@phosphor-icons/react";
 
 type DialogState = "check" | "waiting" | "signed";
@@ -30,8 +31,6 @@ interface SigningCheckDialogProps {
   initialState?: DialogState;
   /** Notifies parent whenever the internal dialog state changes */
   onStateChange?: (state: DialogState) => void;
-  /** Minimize the whole wizard from within the dialog */
-  onMinimize?: () => void;
 }
 
 export function SigningCheckDialog({
@@ -45,7 +44,6 @@ export function SigningCheckDialog({
   onProceed,
   initialState,
   onStateChange,
-  onMinimize,
 }: SigningCheckDialogProps) {
   const { toast } = useToast();
   const { locked: smsLocked, loading: smsLoading, guardSend } = useSmsLock();
@@ -160,28 +158,24 @@ export function SigningCheckDialog({
   const canSend = !!clientPhone && (!!clientId || !!onCreateClient);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent hideCloseButton className="sm:max-w-sm" dir="rtl">
-        <div className="absolute left-4 top-4 flex items-center gap-1 z-10">
-          {onMinimize && (
-            <button
-              type="button"
-              onClick={onMinimize}
-              title="تصغير"
-              className="flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
-            >
-              <Minus className="h-3 w-3" />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            title="إغلاق"
-            className="flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </div>
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange} modal={false}>
+      <DialogPrimitive.Portal>
+        {/* Visual dim only — pointer-events: none so the wizard's controls
+            (minimize, close) underneath stay clickable. */}
+        <div
+          aria-hidden
+          className="fixed inset-0 z-50 bg-black/40 pointer-events-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+        />
+        <DialogPrimitive.Content
+          dir="rtl"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] sm:max-w-sm translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg"
+        >
+          <DialogPrimitive.Close className="absolute left-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
         {state === "check" && (
           <>
             <DialogHeader>
@@ -286,7 +280,8 @@ export function SigningCheckDialog({
             </div>
           </>
         )}
-      </DialogContent>
-    </Dialog>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
