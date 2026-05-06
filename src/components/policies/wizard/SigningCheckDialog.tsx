@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -26,6 +26,10 @@ interface SigningCheckDialogProps {
   onSigned?: (signatureUrl: string) => void;
   onSkip: () => void;
   onProceed: () => void;
+  /** Starting state when the dialog opens — defaults to "check" */
+  initialState?: DialogState;
+  /** Notifies parent whenever the internal dialog state changes */
+  onStateChange?: (state: DialogState) => void;
 }
 
 export function SigningCheckDialog({
@@ -37,6 +41,8 @@ export function SigningCheckDialog({
   onSigned,
   onSkip,
   onProceed,
+  initialState,
+  onStateChange,
 }: SigningCheckDialogProps) {
   const { toast } = useToast();
   const { locked: smsLocked, loading: smsLoading, guardSend } = useSmsLock();
@@ -46,14 +52,23 @@ export function SigningCheckDialog({
   // is created on-the-fly before the SMS is sent.
   const [resolvedClientId, setResolvedClientId] = useState<string | null>(clientId);
 
+  // Keep initialState in a ref so the open-reset effect always reads the latest value
+  const initialStateRef = useRef<DialogState>(initialState ?? "check");
+  useEffect(() => { initialStateRef.current = initialState ?? "check"; }, [initialState]);
+
+  // Notify parent whenever state changes
+  const onStateChangeRef = useRef(onStateChange);
+  useEffect(() => { onStateChangeRef.current = onStateChange; });
+  useEffect(() => { onStateChangeRef.current?.(state); }, [state]);
+
   // Sync resolved id with prop changes (e.g. dialog reopened for a different client)
   useEffect(() => {
     setResolvedClientId(clientId);
   }, [clientId]);
 
-  // Reset to initial state each time the dialog opens
+  // Reset to initialState each time the dialog opens (handles restoring a minimized wizard)
   useEffect(() => {
-    if (open) setState("check");
+    if (open) setState(initialStateRef.current);
   }, [open]);
 
   // Live subscription: detect when the client signs while we're waiting

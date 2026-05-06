@@ -211,6 +211,13 @@ export function PolicyWizard({
 
   // Signing check dialog for step 1
   const [signingCheckOpen, setSigningCheckOpen] = useState(false);
+  // Tracks the internal state of SigningCheckDialog so we can persist "waiting" in the draft
+  const [signingDialogState, setSigningDialogState] = useState<'check' | 'waiting' | 'signed'>('check');
+  // Remembered state used when the wizard is restored after being minimized mid-signing
+  const signingInitialStateRef = useRef<'check' | 'waiting' | 'signed'>('check');
+  useEffect(() => {
+    signingInitialStateRef.current = signingDialogState;
+  }, [signingDialogState]);
 
   // Reset warning dialog state
   const [resetWarning, setResetWarning] = useState<{
@@ -262,7 +269,8 @@ export function PolicyWizard({
   // what this wizard is working on. The host stores it per-instance, so we
   // only report updates while the wizard is the active one — that way the
   // last-known summary stays frozen on the tab while the user is busy in
-  // another minimized wizard.
+  // another minimized wizard. awaitingSignature is included so the draft
+  // badge can show "في انتظار التوقيع" while the wizard is parked.
   useEffect(() => {
     if (!open || isCollapsed) return;
     const clientName =
@@ -270,12 +278,19 @@ export function PolicyWizard({
       || (createNewClient && newClient.full_name)
       || "";
     const stepTitle = steps.find((s) => s.id === currentStep)?.title || "";
+    const awaitingClientId = selectedClient?.id ?? null;
+    const awaitingClientPhone = selectedClient?.phone_number
+      ?? (createNewClient ? newClient.phone_number || null : null);
     onDraftSummaryChangeRef.current?.({
       clientName,
       stepTitle,
       stepNumber: currentStep,
       totalSteps: steps.length,
       categoryName: selectedCategory?.name_ar || selectedCategory?.name || null,
+      awaitingSignature:
+        signingDialogState === 'waiting' && awaitingClientId
+          ? { clientId: awaitingClientId, clientPhone: awaitingClientPhone }
+          : null,
     });
   }, [
     open,
@@ -283,10 +298,28 @@ export function PolicyWizard({
     selectedClient,
     createNewClient,
     newClient.full_name,
+    newClient.phone_number,
     currentStep,
     steps,
     selectedCategory,
+    signingDialogState,
   ]);
+
+  // When the customer signs while this wizard is minimized, the background
+  // subscription in HeaderDraftsButton fires this event. We update the
+  // selected client's signature URL so they won't be prompted again when
+  // the wizard is restored.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { instanceId: evtId, signatureUrl } = (e as CustomEvent<{ instanceId: string; signatureUrl: string }>).detail;
+      if (evtId !== instanceId) return;
+      if (selectedClient) setSelectedClient({ ...selectedClient, signature_url: signatureUrl });
+      // Keep dialog open in 'signed' state so user sees confirmation on restore
+      signingInitialStateRef.current = 'signed';
+    };
+    window.addEventListener('thiqa:client-signed', handler);
+    return () => window.removeEventListener('thiqa:client-signed', handler);
+  }, [instanceId, selectedClient?.id]);
 
   // Success dialog state
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
@@ -2189,6 +2222,8 @@ export function PolicyWizard({
         }}
         onSkip={doGoNext}
         onProceed={doGoNext}
+        initialState={signingInitialStateRef.current}
+        onStateChange={setSigningDialogState}
       />
 
       {/* Tranzila Payment Modal */}

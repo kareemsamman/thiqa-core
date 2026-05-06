@@ -24,6 +24,8 @@ export interface WizardDraftSummary {
   stepNumber: number;
   totalSteps: number;
   categoryName: string | null;
+  /** Set while the wizard is waiting for the client to sign the authorization form */
+  awaitingSignature?: { clientId: string; clientPhone?: string | null } | null;
 }
 
 interface DockOrigin {

@@ -1,6 +1,6 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { Layers, X, FileText, Maximize2, Trash2 } from "lucide-react";
+import { Layers, X, FileText, Maximize2, Trash2, Clock } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,8 @@ import {
   type WizardInstance,
 } from "@/hooks/usePolicyWizardController";
 import { useShortcutAction } from "@/hooks/useShortcutAction";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface HeaderDraftsButtonProps {
   className?: string;
@@ -25,8 +27,10 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
     activeId,
     restoreInstance,
     closeInstance,
+    setInstanceDraft,
     consumeDockOrigin,
   } = usePolicyWizardController();
+  const { toast } = useToast();
 
   // Sort minimized drafts newest-first by their first-minimize timestamp
   // so the latest parked draft always tops the list. Missing timestamps
@@ -37,6 +41,48 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
     .sort((a, b) => (b.minimizedAt ?? 0) - (a.minimizedAt ?? 0));
   const newestMinimizedId = minimizedInstances[0]?.id ?? null;
   const lastMinimizedId = newestMinimizedId;
+
+  // Background realtime subscriptions: watch clients that are awaiting signature
+  // while their wizard is minimized. Fires a toast and notifies the wizard
+  // when the customer signs.
+  useEffect(() => {
+    const awaiting = minimizedInstances.filter(
+      (i) => i.draftSummary?.awaitingSignature?.clientId,
+    );
+    if (awaiting.length === 0) return;
+
+    const channels = awaiting.map((instance) => {
+      const { clientId } = instance.draftSummary!.awaitingSignature!;
+      return supabase
+        .channel(`hdr-sign-${instance.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'clients', filter: `id=eq.${clientId}` },
+          (payload) => {
+            const updated = payload.new as { signature_url?: string | null };
+            if (!updated.signature_url) return;
+            const clientName = instance.draftSummary?.clientName || 'العميل';
+            toast({ title: `وقّع ${clientName} ✓`, description: 'يمكنك الآن استئناف المعاملة والمتابعة' });
+            // Clear badge from draft summary
+            setInstanceDraft(instance.id, { ...instance.draftSummary!, awaitingSignature: null });
+            // Notify the wizard component (if still mounted) so it updates selectedClient
+            window.dispatchEvent(
+              new CustomEvent('thiqa:client-signed', {
+                detail: { instanceId: instance.id, signatureUrl: updated.signature_url },
+              }),
+            );
+          },
+        )
+        .subscribe();
+    });
+
+    return () => {
+      channels.forEach((ch) => supabase.removeChannel(ch));
+    };
+  }, [
+    // Re-subscribe when the set of awaiting instances changes
+    minimizedInstances.map((i) => `${i.id}:${i.draftSummary?.awaitingSignature?.clientId ?? ''}`).join(','),
+  ]);
 
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -142,7 +188,7 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
         side="bottom"
         align="end"
         sideOffset={8}
-        className="w-64 p-2 flex flex-col gap-1.5"
+        className="w-64 p-2 flex flex-col gap-1.5 max-h-[70vh] overflow-y-auto"
         dir="rtl"
       >
         <PopoverPrimitive.Arrow
@@ -288,6 +334,12 @@ function DraftRow({
               ? `${summary.stepNumber}/${summary.totalSteps} · ${summary.stepTitle}`
               : "اضغط للاستئناف"}
           </span>
+          {summary?.awaitingSignature && (
+            <span className="flex items-center gap-0.5 text-[9px] font-medium text-amber-300 mt-0.5">
+              <Clock className="h-2.5 w-2.5 shrink-0" />
+              في انتظار التوقيع
+            </span>
+          )}
           {stamp && (
             <span className="text-[9px] opacity-55 truncate w-full">
               {stamp}
