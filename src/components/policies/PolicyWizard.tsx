@@ -537,6 +537,19 @@ export function PolicyWizard({
     // Step 1: require signing check before advancing
     if (currentStep === 1) {
       if (createNewClient) {
+        // Block if this id_number already belongs to another client in the same agent
+        const idDigits = digitsOnly(newClient.id_number);
+        const { data: existing } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('id_number', idDigits)
+          .is('deleted_at', null)
+          .limit(1)
+          .maybeSingle();
+        if (existing) {
+          setErrors({ id_number: "رقم الهوية مستخدم مسبقاً لدى عميل آخر" });
+          return;
+        }
         // New clients are always unsigned until they go through the dialog
         setSigningCheckOpen(true);
         return;
