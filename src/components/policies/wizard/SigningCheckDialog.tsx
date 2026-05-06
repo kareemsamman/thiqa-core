@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
-import { AlertTriangle, CheckCircle2, Clock, Send, Loader2, ArrowLeft, Minus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Send, Loader2, ArrowLeft, Minus, X } from "lucide-react";
 import { Lock } from "@phosphor-icons/react";
 
 type DialogState = "check" | "waiting" | "signed";
@@ -161,17 +161,27 @@ export function SigningCheckDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm" dir="rtl">
-        {onMinimize && (
+      <DialogContent hideCloseButton className="sm:max-w-sm" dir="rtl">
+        <div className="absolute left-4 top-4 flex items-center gap-1 z-10">
+          {onMinimize && (
+            <button
+              type="button"
+              onClick={onMinimize}
+              title="تصغير"
+              className="flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+          )}
           <button
             type="button"
-            onClick={onMinimize}
-            title="تصغير"
-            className="absolute left-4 top-4 flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
+            onClick={() => onOpenChange(false)}
+            title="إغلاق"
+            className="flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
           >
-            <Minus className="h-3 w-3" />
+            <X className="h-3 w-3" />
           </button>
-        )}
+        </div>
         {state === "check" && (
           <>
             <DialogHeader>
