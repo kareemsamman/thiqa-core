@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import type { ClientChild, NewChildForm } from "@/types/clientChildren";
 import { BranchQuickFormDialog } from "@/components/branches/BranchQuickFormDialog";
 import { CategoryQuickFormDialog } from "@/components/insurance-categories/CategoryQuickFormDialog";
 import { normalizeArabic } from "@/lib/arabicNormalize";
+import { digitsOnly } from "@/lib/validation";
 
 interface Step1Props {
   // Branch
@@ -122,6 +123,30 @@ export function Step1BranchTypeClient({
     setCategoryDialogStartInCreate(true);
     setCategoryDialogOpen(true);
   };
+
+  // Check duplicate id_number on blur
+  const handleIdNumberBlur = useCallback(async () => {
+    const id = digitsOnly(newClient.id_number);
+    if (id.length !== 9) return; // let format validation handle this
+    setCheckingDuplicate(true);
+    const { data } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('id_number', id)
+      .is('deleted_at', null)
+      .limit(1)
+      .maybeSingle();
+    setCheckingDuplicate(false);
+    if (data) {
+      setErrors({ ...errors, id_number: "رقم الهوية مستخدم مسبقاً لدى عميل آخر" });
+    } else {
+      // Clear any stale duplicate error if the number is now unique
+      if (errors.id_number === "رقم الهوية مستخدم مسبقاً لدى عميل آخر") {
+        const { id_number: _, ...rest } = errors;
+        setErrors(rest);
+      }
+    }
+  }, [newClient.id_number, errors, setErrors, setCheckingDuplicate]);
 
   // Search clients
   const searchClients = async (query: string) => {
@@ -539,9 +564,16 @@ export function Step1BranchTypeClient({
             <div className="space-y-4">
               <CreateClientForm
                 form={newClient}
-                onChange={(field, value) => setNewClient({ ...newClient, [field]: value })}
+                onChange={(field, value) => {
+                  setNewClient({ ...newClient, [field]: value });
+                  if (field === 'id_number' && errors.id_number) {
+                    const { id_number: _, ...rest } = errors;
+                    setErrors(rest);
+                  }
+                }}
                 checkingDuplicate={checkingDuplicate}
                 errors={errors}
+                onIdNumberBlur={handleIdNumberBlur}
               />
               <Button variant="outline" size="sm" onClick={handleCancelCreate} className="w-full">
                 إلغاء

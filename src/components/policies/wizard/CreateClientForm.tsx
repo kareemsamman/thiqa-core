@@ -11,9 +11,10 @@ interface CreateClientFormProps {
   onChange: (field: keyof NewClientForm, value: string) => void;
   errors: ValidationErrors;
   checkingDuplicate?: boolean;
+  onIdNumberBlur?: () => void;
 }
 
-export function CreateClientForm({ form, onChange, errors, checkingDuplicate }: CreateClientFormProps) {
+export function CreateClientForm({ form, onChange, errors, checkingDuplicate, onIdNumberBlur }: CreateClientFormProps) {
   return (
     <div className="space-y-4 p-4 bg-muted/30 rounded-xl border">
       <h4 className="font-semibold text-sm">إنشاء عميل جديد</h4>
@@ -43,6 +44,7 @@ export function CreateClientForm({ form, onChange, errors, checkingDuplicate }: 
           <Input
             value={form.id_number}
             onChange={(e) => onChange('id_number', digitsOnly(e.target.value).slice(0, 9))}
+            onBlur={onIdNumberBlur}
             placeholder="9 أرقام"
             maxLength={9}
             className={cn("ltr-input", errors.id_number && "border-destructive")}
