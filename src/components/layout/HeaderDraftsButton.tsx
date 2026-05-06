@@ -313,7 +313,7 @@ function DraftRow({
   return (
     <div
       className={cn(
-        "group relative flex items-center rounded-xl overflow-hidden",
+        "group relative flex items-center rounded-xl overflow-hidden shrink-0 min-h-10",
         "bg-primary text-primary-foreground",
         "hover:brightness-110 transition",
       )}
