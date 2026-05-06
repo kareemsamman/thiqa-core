@@ -22,6 +22,8 @@ interface SigningCheckDialogProps {
    * The dialog catches the error and shows it in a toast.
    */
   onCreateClient?: () => Promise<string>;
+  /** Called when the realtime subscription detects that the client has signed */
+  onSigned?: (signatureUrl: string) => void;
   onSkip: () => void;
   onProceed: () => void;
 }
@@ -32,6 +34,7 @@ export function SigningCheckDialog({
   clientId,
   clientPhone,
   onCreateClient,
+  onSigned,
   onSkip,
   onProceed,
 }: SigningCheckDialogProps) {
@@ -71,6 +74,7 @@ export function SigningCheckDialog({
           const updated = payload.new as { signature_url?: string | null };
           if (updated.signature_url) {
             setState("signed");
+            onSigned?.(updated.signature_url);
           }
         }
       )

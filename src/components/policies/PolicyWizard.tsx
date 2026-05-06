@@ -531,16 +531,30 @@ export function PolicyWizard({
     goToStep(nextStep);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!validateStep(currentStep)) return;
 
     // Step 1: require signing check before advancing
     if (currentStep === 1) {
-      const clientUnsigned = selectedClient && !selectedClient.signature_url;
-      const newClientUnsigned = createNewClient;
-      if (clientUnsigned || newClientUnsigned) {
+      if (createNewClient) {
+        // New clients are always unsigned until they go through the dialog
         setSigningCheckOpen(true);
         return;
+      }
+      if (selectedClient && !selectedClient.signature_url) {
+        // Re-fetch in case the client signed since being loaded
+        const { data } = await supabase
+          .from('clients')
+          .select('signature_url')
+          .eq('id', selectedClient.id)
+          .single();
+        if (data?.signature_url) {
+          // Client signed since we loaded them — update state and skip the dialog
+          setSelectedClient({ ...selectedClient, signature_url: data.signature_url });
+        } else {
+          setSigningCheckOpen(true);
+          return;
+        }
       }
     }
 
@@ -2157,6 +2171,9 @@ export function PolicyWizard({
           (createNewClient ? newClient.phone_number || null : null)
         }
         onCreateClient={createNewClient ? handleCreateClientForSigning : undefined}
+        onSigned={(url) => {
+          if (selectedClient) setSelectedClient({ ...selectedClient, signature_url: url });
+        }}
         onSkip={doGoNext}
         onProceed={doGoNext}
       />
