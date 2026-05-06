@@ -1900,8 +1900,10 @@ export function PolicyWizard({
           onInteractOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
-          {/* Window-style controls: minimize + close on the same line */}
-          <div className="absolute left-4 top-4 flex items-center gap-1 z-10">
+          {/* Window-style controls: minimize + close on the same line.
+              z-[1000] keeps them above any in-wizard overlay (e.g. the
+              signing-check dim) so they remain clickable at all times. */}
+          <div className="absolute left-4 top-4 flex items-center gap-1 z-[1000]">
             <button
               type="button"
               onClick={(e) => {
