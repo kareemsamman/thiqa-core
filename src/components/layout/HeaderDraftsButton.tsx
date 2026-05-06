@@ -189,6 +189,7 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
         align="end"
         sideOffset={8}
         className="w-64 p-2 flex flex-col gap-1.5"
+        style={{ maxHeight: 'min(360px, calc(100vh - 80px))' }}
         dir="rtl"
       >
         <PopoverPrimitive.Arrow
@@ -237,7 +238,10 @@ export function HeaderDraftsButton({ className }: HeaderDraftsButtonProps) {
             </button>
           </div>
         )}
-        <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
+        <div
+          className="flex flex-col gap-1.5 min-h-0 flex-1"
+          style={{ overflowY: 'auto' }}
+        >
           {minimizedInstances.map((instance) => (
             <DraftRow
               key={instance.id}
