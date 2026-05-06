@@ -1901,9 +1901,13 @@ export function PolicyWizard({
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
           {/* Window-style controls: minimize + close on the same line.
-              z-[1000] keeps them above any in-wizard overlay (e.g. the
-              signing-check dim) so they remain clickable at all times. */}
-          <div className="absolute left-4 top-4 flex items-center gap-1 z-[1000]">
+              When the signing popup is open we lift them with z-index:100000,
+              white background, and full opacity so they pop above the
+              in-wizard dim overlay and stay clearly clickable. */}
+          <div
+            className="absolute left-4 top-4 flex items-center gap-1"
+            style={signingCheckOpen ? { zIndex: 100000 } : { zIndex: 1000 }}
+          >
             <button
               type="button"
               onClick={(e) => {
@@ -1919,6 +1923,7 @@ export function PolicyWizard({
               title="تصغير"
               aria-label="تصغير"
               className="h-7 w-7 flex items-center justify-center rounded-md border border-transparent opacity-70 hover:opacity-100 hover:bg-white hover:border-border hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              style={signingCheckOpen ? { background: 'white', opacity: 1 } : undefined}
             >
               <Minus className="h-4 w-4" strokeWidth={2.5} />
               <span className="sr-only">تصغير</span>
@@ -1929,6 +1934,7 @@ export function PolicyWizard({
               title="إغلاق"
               aria-label="إغلاق"
               className="h-7 w-7 flex items-center justify-center rounded-md border border-transparent opacity-70 hover:opacity-100 hover:bg-white hover:border-border hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              style={signingCheckOpen ? { background: 'white', opacity: 1 } : undefined}
             >
               <X className="h-4 w-4" strokeWidth={2.5} />
               <span className="sr-only">إغلاق</span>
