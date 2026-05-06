@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useSmsLock } from "@/hooks/useSmsLock";
@@ -157,33 +155,38 @@ export function SigningCheckDialog({
   // or a creation callback for a new client.
   const canSend = !!clientPhone && (!!clientId || !!onCreateClient);
 
+  if (!open) return null;
+
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange} modal={false}>
-      <DialogPrimitive.Portal>
-        {/* Visual dim only — pointer-events: none so the wizard's controls
-            (minimize, close) underneath stay clickable. */}
-        <div
-          aria-hidden
-          className="fixed inset-0 z-50 bg-black/40 pointer-events-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
-        />
-        <DialogPrimitive.Content
-          dir="rtl"
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}
-          className="fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] sm:max-w-sm translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg"
+    <>
+      {/* Overlay — fills the wizard's DialogContent (which is the positioned
+          ancestor). Stops at the wizard's bounds, leaving the page outside
+          the wizard untouched. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 z-[5] bg-black/40 animate-in fade-in-0"
+        onClick={(e) => e.stopPropagation()}
+      />
+      {/* Centered card */}
+      <div
+        dir="rtl"
+        className="absolute left-1/2 top-1/2 z-[6] grid w-[calc(100%-2rem)] sm:max-w-sm -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border bg-background p-6 shadow-lg animate-in fade-in-0 zoom-in-95"
+      >
+        <button
+          type="button"
+          onClick={() => onOpenChange(false)}
+          className="absolute left-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          title="إغلاق"
+          aria-label="إغلاق"
         >
-          <DialogPrimitive.Close className="absolute left-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-            <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
+          <X className="h-4 w-4" />
+        </button>
         {state === "check" && (
           <>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-amber-600">
-                <AlertTriangle className="h-5 w-5 shrink-0" />
-                العميل لم يوقّع
-              </DialogTitle>
-            </DialogHeader>
+            <h2 className="text-lg font-semibold leading-none tracking-tight flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              العميل لم يوقّع
+            </h2>
 
             <p className="text-sm text-muted-foreground py-2">
               هذا العميل لم يوقّع على نموذج التفويض بعد. هل تريد إرسال رابط التوقيع إليه عبر SMS؟
@@ -222,9 +225,7 @@ export function SigningCheckDialog({
 
         {state === "waiting" && (
           <>
-            <DialogHeader>
-              <DialogTitle>في انتظار التوقيع</DialogTitle>
-            </DialogHeader>
+            <h2 className="text-lg font-semibold leading-none tracking-tight">في انتظار التوقيع</h2>
 
             <div className="flex flex-col items-center gap-4 py-6">
               <div className="relative w-20 h-20 flex items-center justify-center">
@@ -253,12 +254,10 @@ export function SigningCheckDialog({
 
         {state === "signed" && (
           <>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-green-600">
-                <CheckCircle2 className="h-5 w-5 shrink-0" />
-                وقّع العميل
-              </DialogTitle>
-            </DialogHeader>
+            <h2 className="text-lg font-semibold leading-none tracking-tight flex items-center gap-2 text-green-600">
+              <CheckCircle2 className="h-5 w-5 shrink-0" />
+              وقّع العميل
+            </h2>
 
             <div className="flex flex-col items-center gap-3 py-4">
               <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
@@ -280,8 +279,7 @@ export function SigningCheckDialog({
             </div>
           </>
         )}
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+      </div>
+    </>
   );
 }

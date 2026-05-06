@@ -2170,6 +2170,27 @@ export function PolicyWizard({
               </div>
             </div>
           </div>
+
+          {/* Signing Check overlay+card — rendered INSIDE the wizard so its
+              dim overlay only covers the wizard area, not the whole page,
+              and the wizard's minimize/close controls stay above it. */}
+          <SigningCheckDialog
+            open={signingCheckOpen}
+            onOpenChange={setSigningCheckOpen}
+            clientId={selectedClient?.id ?? null}
+            clientPhone={
+              selectedClient?.phone_number ??
+              (createNewClient ? newClient.phone_number || null : null)
+            }
+            onCreateClient={createNewClient ? handleCreateClientForSigning : undefined}
+            onSigned={(url) => {
+              if (selectedClient) setSelectedClient({ ...selectedClient, signature_url: url });
+            }}
+            onSkip={doGoNext}
+            onProceed={doGoNext}
+            initialState={signingInitialStateRef.current}
+            onStateChange={setSigningDialogState}
+          />
         </DialogContent>
       </Dialog>
 
@@ -2206,25 +2227,6 @@ export function PolicyWizard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Signing Check Dialog — shown when advancing from step 1 with an unsigned client */}
-      <SigningCheckDialog
-        open={signingCheckOpen}
-        onOpenChange={setSigningCheckOpen}
-        clientId={selectedClient?.id ?? null}
-        clientPhone={
-          selectedClient?.phone_number ??
-          (createNewClient ? newClient.phone_number || null : null)
-        }
-        onCreateClient={createNewClient ? handleCreateClientForSigning : undefined}
-        onSigned={(url) => {
-          if (selectedClient) setSelectedClient({ ...selectedClient, signature_url: url });
-        }}
-        onSkip={doGoNext}
-        onProceed={doGoNext}
-        initialState={signingInitialStateRef.current}
-        onStateChange={setSigningDialogState}
-      />
 
       {/* Tranzila Payment Modal */}
       {tranzilaModalOpen && tempPolicyId && activeTranzilaPaymentId && (
