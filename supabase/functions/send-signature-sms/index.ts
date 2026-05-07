@@ -792,6 +792,7 @@ function buildSignaturePageHtml(
     
     let isDrawing = false;
     let hasDrawn = false;
+    let startPos = null;
     
     // Set canvas size
     function resizeCanvas() {
@@ -817,10 +818,11 @@ function buildSignaturePageHtml(
     function startDrawing(e) {
       e.preventDefault();
       isDrawing = true;
-      // NOTE: don't flip hasDrawn here — a click without a drag would
-      // wrongly enable the submit button. The flag is only set once the
-      // pointer actually moves (see draw() below).
+      // hasDrawn is flipped only after the pointer travels >3px from
+      // the down-point — see draw(). A bare click (or jitter <= 3px)
+      // does NOT count as a signature.
       const pos = getPos(e);
+      startPos = pos;
       ctx.beginPath();
       ctx.moveTo(pos.x, pos.y);
     }
@@ -831,11 +833,15 @@ function buildSignaturePageHtml(
       const pos = getPos(e);
       ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
-      if (!hasDrawn) {
-        hasDrawn = true;
-        hint.classList.add('hidden');
-        wrapper.classList.add('active');
-        updateSubmitButton();
+      if (!hasDrawn && startPos) {
+        const dx = pos.x - startPos.x;
+        const dy = pos.y - startPos.y;
+        if ((dx * dx + dy * dy) > 9) { // > 3px from start
+          hasDrawn = true;
+          hint.classList.add('hidden');
+          wrapper.classList.add('active');
+          updateSubmitButton();
+        }
       }
     }
     
@@ -855,6 +861,8 @@ function buildSignaturePageHtml(
     function clearCanvas() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       hasDrawn = false;
+      isDrawing = false; // safety: in case a touchend / mouseup was missed
+      startPos = null;
       hint.classList.remove('hidden');
       wrapper.classList.remove('active');
       updateSubmitButton();
