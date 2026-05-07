@@ -1076,7 +1076,12 @@ Deno.serve(async (req) => {
       return await handleDeterministic(r.reply, r.metadata);
     }
     if (lastAssistantMeta?.pending_action === "delete_confirm") {
-      const r = await handleDeleteConfirm(adminClient, lastAssistantMeta, message);
+      // Use the CALLER-authenticated client (carries the user's JWT)
+      // so delete_client_cascade()'s auth.uid() check matches the
+      // logged-in user and the "Not authorized" guard passes for users
+      // who actually have branch access. The service-role admin client
+      // would have auth.uid() = NULL → guard fails.
+      const r = await handleDeleteConfirm(callerClient, lastAssistantMeta, message);
       return await handleDeterministic(r.reply, r.metadata);
     }
     if (isDeleteIntent(message)) {
