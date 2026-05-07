@@ -1167,6 +1167,7 @@ export type Database = {
           phone: string | null
           plan: string
           policies_limit_override: number | null
+          policies_usage_offset: number
           short_code: string
           sms_limit_override: number | null
           subscription_expires_at: string | null
@@ -1197,6 +1198,7 @@ export type Database = {
           phone?: string | null
           plan?: string
           policies_limit_override?: number | null
+          policies_usage_offset?: number
           short_code: string
           sms_limit_override?: number | null
           subscription_expires_at?: string | null
@@ -1227,6 +1229,7 @@ export type Database = {
           phone?: string | null
           plan?: string
           policies_limit_override?: number | null
+          policies_usage_offset?: number
           short_code?: string
           sms_limit_override?: number | null
           subscription_expires_at?: string | null
@@ -7541,14 +7544,11 @@ export type Database = {
           p_search?: string
         }
         Returns: {
-          called: number
-          not_contacted: number
-          not_interested: number
+          declined: number
+          pending: number
           renewed: number
-          sms_sent: number
           total_expiring: number
-          total_packages: number
-          total_single: number
+          total_transactions: number
           total_value: number
         }[]
       }
