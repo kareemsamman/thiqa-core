@@ -1,0 +1,1 @@
+UPDATE policies SET skip_recalc = false WHERE id IN ('36c2841e-0d31-48af-8f5a-ebd81b5edccf','b57babad-0770-4d35-843c-13f30cf14b11','3165ba00-9f9e-4b9b-b2e4-0236af791339');
