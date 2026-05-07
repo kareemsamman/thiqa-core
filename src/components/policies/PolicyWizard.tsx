@@ -677,28 +677,41 @@ export function PolicyWizard({
 
       // Create new client if needed
       if (createNewClient && !clientId) {
-        // Generate file_number
+        // Generate file_number (best-effort — if the RPC returns a value
+        // that's already taken we retry with file_number=null below).
         const { data: fileNumData } = await supabase.rpc('generate_file_number');
         const generatedFileNumber = fileNumData || null;
 
-        const { data: newClientData, error: clientError } = await supabase
+        const baseClientPayload = {
+          full_name: newClient.full_name.trim(),
+          id_number: newClient.id_number.trim(),
+          phone_number: newClient.phone_number || null,
+          phone_number_2: newClient.phone_number_2 || null,
+          birth_date: newClient.birth_date || null,
+          under24_type: newClient.under24_type || 'none',
+          under24_driver_name: newClient.under24_driver_name || null,
+          under24_driver_id: newClient.under24_driver_id || null,
+          notes: newClient.notes || null,
+          branch_id: effectiveBranchId || null,
+          created_by_admin_id: user?.id || null,
+        };
+
+        let { data: newClientData, error: clientError } = await supabase
           .from('clients')
-          .insert({
-            full_name: newClient.full_name.trim(),
-            id_number: newClient.id_number.trim(),
-            file_number: generatedFileNumber,
-            phone_number: newClient.phone_number || null,
-            phone_number_2: newClient.phone_number_2 || null,
-            birth_date: newClient.birth_date || null,
-            under24_type: newClient.under24_type || 'none',
-            under24_driver_name: newClient.under24_driver_name || null,
-            under24_driver_id: newClient.under24_driver_id || null,
-            notes: newClient.notes || null,
-            branch_id: effectiveBranchId || null,
-            created_by_admin_id: user?.id || null,
-          })
+          .insert({ ...baseClientPayload, file_number: generatedFileNumber })
           .select()
           .single();
+
+        // generate_file_number() can return a value that's already in use
+        // (sequence drift, manual file_numbers, etc.). On that conflict
+        // retry once without a file_number — the user can fill it in later.
+        if (clientError?.code === '23505' && clientError.message?.includes('file_number')) {
+          ({ data: newClientData, error: clientError } = await supabase
+            .from('clients')
+            .insert({ ...baseClientPayload, file_number: null })
+            .select()
+            .single());
+        }
 
         if (clientError) {
           // If duplicate id_number, fetch the existing client instead
@@ -926,28 +939,39 @@ export function PolicyWizard({
         let carId = selectedCar?.id;
         
         if (createNewClient && !clientId) {
-          // Generate file_number for new client
+          // Generate file_number for new client (best-effort — if the RPC
+          // returns a value already in use we retry without it below).
           const { data: fileNumData } = await supabase.rpc('generate_file_number');
           const generatedFileNumber = fileNumData || null;
 
-          const { data: newClientData, error: clientError } = await supabase
+          const baseClientPayload = {
+            full_name: newClient.full_name.trim(),
+            id_number: newClient.id_number.trim(),
+            phone_number: newClient.phone_number || null,
+            phone_number_2: newClient.phone_number_2 || null,
+            birth_date: newClient.birth_date || null,
+            under24_type: newClient.under24_type || 'none',
+            under24_driver_name: newClient.under24_driver_name || null,
+            under24_driver_id: newClient.under24_driver_id || null,
+            notes: newClient.notes || null,
+            branch_id: effectiveBranchId || null,
+            created_by_admin_id: user?.id || null,
+          };
+
+          let { data: newClientData, error: clientError } = await supabase
             .from('clients')
-            .insert({
-              full_name: newClient.full_name.trim(),
-              id_number: newClient.id_number.trim(),
-              file_number: generatedFileNumber,
-              phone_number: newClient.phone_number || null,
-              phone_number_2: newClient.phone_number_2 || null,
-              birth_date: newClient.birth_date || null,
-              under24_type: newClient.under24_type || 'none',
-              under24_driver_name: newClient.under24_driver_name || null,
-              under24_driver_id: newClient.under24_driver_id || null,
-              notes: newClient.notes || null,
-              branch_id: effectiveBranchId || null,
-              created_by_admin_id: user?.id || null,
-            })
+            .insert({ ...baseClientPayload, file_number: generatedFileNumber })
             .select()
             .single();
+
+          // On file_number unique-constraint conflict, retry without one.
+          if (clientError?.code === '23505' && clientError.message?.includes('file_number')) {
+            ({ data: newClientData, error: clientError } = await supabase
+              .from('clients')
+              .insert({ ...baseClientPayload, file_number: null })
+              .select()
+              .single());
+          }
 
           if (clientError) {
             if (clientError.code === '23505' && clientError.message?.includes('id_number')) {
