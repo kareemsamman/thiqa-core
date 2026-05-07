@@ -393,7 +393,7 @@ export default function ActivityLog() {
         .from("cars")
         .select(`
           id, created_at, updated_at, car_number,
-          clients(full_name, file_number),
+          clients(id, full_name, file_number),
           created_by_profile:profiles!cars_created_by_admin_id_fkey(full_name)
         `)
         .order("updated_at", { ascending: false })
@@ -412,6 +412,7 @@ export default function ActivityLog() {
             createdBy: (car.created_by_profile as any)?.full_name || undefined,
             details: {
               car_number: car.car_number,
+              client_id: (car.clients as any)?.id,
               client_name: (car.clients as any)?.full_name || "",
               client_file_number: (car.clients as any)?.file_number || "",
             },
@@ -732,15 +733,20 @@ export default function ActivityLog() {
 
                             {/* Step content */}
                             <div className="flex-1 min-w-0 pt-1">
-                              {/* Top: action + actor + timestamp */}
+                              {/* Top: action + actor chip + timestamp */}
                               <div className="flex items-center justify-between gap-2 flex-wrap">
                                 <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0">
                                   <span className="font-semibold text-foreground">
                                     {activity.action}
                                   </span>
                                   {activity.createdBy && (
-                                    <span className="text-[11px] text-muted-foreground">
-                                      بواسطة <span className="font-medium text-foreground/80">{activity.createdBy}</span>
+                                    <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-full bg-primary/10 border border-primary/15 text-[11px]">
+                                      <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold uppercase shrink-0">
+                                        {activity.createdBy.trim().charAt(0)}
+                                      </span>
+                                      <span className="text-foreground/75">
+                                        بواسطة <span className="font-semibold text-foreground/95">{activity.createdBy}</span>
+                                      </span>
                                     </span>
                                   )}
                                 </div>
