@@ -25,6 +25,11 @@ interface SignatureInfo {
     footer_html?: string;
     logo_url?: string;
     direction?: string;
+    /** Hex color the agent picked in BrandingSettings (defaults to
+     *  Thiqa's primary if unset). Applied to the hero gradient. */
+    primary_color?: string;
+    /** Agent's company name, shown as the hero title. */
+    company_name?: string;
   } | null;
 }
 
@@ -288,69 +293,71 @@ export default function SignaturePage() {
     );
   }
 
-  const hasTemplate = !!signatureInfo?.template;
+  const tpl = signatureInfo?.template;
+  // Always render the Thiqa hero pattern; the agent's primary color
+  // tints the gradient and their logo (if any) replaces the default
+  // FileSignature icon. Title is the agent's company name when set,
+  // otherwise the generic "توقيع العميل".
+  const primaryColor = tpl?.primary_color || "#1e3a5f";
+  const heroTitle = tpl?.company_name || "توقيع العميل";
 
   return (
     <PageShell title="توقيع العميل | ثقة للتأمين">
       <Card className="w-full rounded-2xl border-border/60 shadow-xl shadow-primary/5 overflow-hidden">
-        {/* Hero — when no agent template is configured we render a clean
-            generic header. When a template IS configured the agent's branded
-            HTML takes center stage instead. */}
-        {!hasTemplate ? (
-          <div className="relative bg-gradient-to-br from-primary to-primary/80 text-primary-foreground px-6 sm:px-10 pt-10 pb-12 text-center">
-            <div className="mx-auto w-16 h-16 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center mb-4 ring-1 ring-white/20">
-              <FileSignature className="h-8 w-8" />
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">توقيع العميل</h1>
-            {signatureInfo?.client_name && (
-              <p className="mt-2 text-primary-foreground/80 text-sm sm:text-base">
-                مرحباً <span className="font-semibold text-primary-foreground">{signatureInfo.client_name}</span>
-              </p>
-            )}
-          </div>
-        ) : (
-          <div
-            className="border-b bg-gradient-to-b from-muted/40 to-transparent"
-            dir={signatureInfo?.template?.direction || "rtl"}
-          >
-            {signatureInfo?.template?.logo_url && (
-              <div className="pt-8 pb-4 text-center">
-                <img
-                  src={signatureInfo.template.logo_url}
-                  alt="شعار الشركة"
-                  className="h-16 mx-auto rounded-xl shadow-md"
-                  loading="lazy"
-                />
-              </div>
-            )}
-            {signatureInfo?.template?.header_html && (
-              <div
-                className="prose prose-sm max-w-none px-6 sm:px-10 pb-6 text-center"
-                dangerouslySetInnerHTML={createSafeHtml(signatureInfo.template.header_html)}
+        {/* Thiqa-style hero — same layout regardless of template; only the
+            background color, logo, and title come from the agent. */}
+        <div
+          className="relative px-6 sm:px-10 pt-10 pb-12 text-center text-white"
+          style={{
+            backgroundImage: `linear-gradient(to bottom right, ${primaryColor}, ${primaryColor}dd)`,
+          }}
+        >
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center mb-4 ring-1 ring-white/25 overflow-hidden">
+            {tpl?.logo_url ? (
+              <img
+                src={tpl.logo_url}
+                alt={heroTitle}
+                className="max-h-12 max-w-12 object-contain"
+                loading="lazy"
               />
-            )}
-            {signatureInfo?.client_name && (
-              <p className="text-center text-sm text-muted-foreground pb-6 px-6">
-                مرحباً <span className="font-semibold text-foreground">{signatureInfo.client_name}</span>
-              </p>
+            ) : (
+              <FileSignature className="h-8 w-8" />
             )}
           </div>
-        )}
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+            {heroTitle}
+          </h1>
+          {signatureInfo?.client_name && (
+            <p className="mt-2 text-white/80 text-sm sm:text-base">
+              مرحباً بك{" "}
+              <span className="font-semibold text-white">
+                {signatureInfo.client_name}
+              </span>
+            </p>
+          )}
+        </div>
 
         <CardContent className="px-6 sm:px-10 py-8 space-y-6">
-          {/* Body / footer template content (when present) */}
-          {hasTemplate && (signatureInfo?.template?.body_html || signatureInfo?.template?.footer_html) && (
+          {/* Body / header / footer agent HTML — rendered inside a
+              Thiqa-style soft card so it stays consistent visually. */}
+          {(tpl?.header_html || tpl?.body_html || tpl?.footer_html) && (
             <div
               className="prose prose-sm max-w-none rounded-xl bg-muted/40 border border-border/60 px-5 py-4"
-              dir={signatureInfo?.template?.direction || "rtl"}
+              dir={tpl?.direction || "rtl"}
             >
-              {signatureInfo?.template?.body_html && (
-                <div dangerouslySetInnerHTML={createSafeHtml(signatureInfo.template.body_html)} />
+              {tpl?.header_html && (
+                <div
+                  className="font-semibold text-foreground mb-3"
+                  dangerouslySetInnerHTML={createSafeHtml(tpl.header_html)}
+                />
               )}
-              {signatureInfo?.template?.footer_html && (
+              {tpl?.body_html && (
+                <div dangerouslySetInnerHTML={createSafeHtml(tpl.body_html)} />
+              )}
+              {tpl?.footer_html && (
                 <div
                   className="mt-4 pt-4 border-t border-border/60 text-xs text-muted-foreground"
-                  dangerouslySetInnerHTML={createSafeHtml(signatureInfo.template.footer_html)}
+                  dangerouslySetInnerHTML={createSafeHtml(tpl.footer_html)}
                 />
               )}
             </div>

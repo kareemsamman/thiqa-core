@@ -152,12 +152,20 @@ serve(async (req) => {
       footer_html: string;
       logo_url: string | null;
       direction: string;
+      // New: lets the customer page render the agent's branding inside
+      // the standard Thiqa hero (instead of replacing the layout with
+      // the agent's raw HTML). Falls back to defaults from
+      // DEFAULT_BRANDING when the agent hasn't customized.
+      primary_color: string;
+      company_name: string;
     } = {
       header_html: branding.signatureHeaderHtml,
       body_html: branding.signatureBodyHtml.replace(/الشركة/g, branding.companyName),
       footer_html: branding.signatureFooterHtml.replace(/جميع الحقوق محفوظة/g, `© ${branding.companyName} - جميع الحقوق محفوظة`),
       logo_url: branding.logoUrl,
       direction: "rtl",
+      primary_color: branding.signaturePrimaryColor,
+      company_name: branding.companyName,
     };
 
     if (clientAgentId) {
