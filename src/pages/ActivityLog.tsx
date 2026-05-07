@@ -23,8 +23,7 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { formatDistanceToNow, startOfDay, endOfDay, isWithinInterval, parseISO } from "date-fns";
-import { arDZ as ar } from "date-fns/locale";
+import { format, startOfDay, endOfDay, isWithinInterval, parseISO } from "date-fns";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { AgentBranchFilter } from "@/components/shared/AgentBranchFilter";
 import {
@@ -58,6 +57,11 @@ interface ActivityItem {
     transfer_to_car?: string;
     transfer_from_car?: string;
     transfer_note?: string;
+    /** For "policy" activities: total paid against this policy across all
+     *  recorded payments (ELZAMI auto-rows excluded). Set when the
+     *  activity loader can resolve the policy id. */
+    paid_amount?: number;
+    remaining_amount?: number;
   };
 }
 
@@ -179,6 +183,23 @@ export default function ActivityLog() {
         }
       }
 
+      // Total paid per policy — used to show "paid X / remaining Y" on
+      // each policy-creation activity. Excludes locked/system rows (the
+      // auto ELZAMI anchor isn't a real payment).
+      const paidByPolicyId = new Map<string, number>();
+      if (policies && policies.length > 0) {
+        const policyIds = policies.map((p) => p.id);
+        const { data: payRows } = await supabase
+          .from("policy_payments")
+          .select("policy_id, amount, locked, source")
+          .in("policy_id", policyIds);
+        for (const row of payRows || []) {
+          if ((row as any).locked === true || (row as any).source === "system") continue;
+          const prev = paidByPolicyId.get((row as any).policy_id) || 0;
+          paidByPolicyId.set((row as any).policy_id, prev + Number((row as any).amount || 0));
+        }
+      }
+
       if (policies) {
         for (const p of policies) {
           if ((p.clients as any)?.deleted_at) continue;
@@ -189,6 +210,8 @@ export default function ActivityLog() {
           const carNumber = (p.cars as any)?.car_number || "";
 
           // Original "policy created" event
+          const paidAmt = paidByPolicyId.get(p.id) || 0;
+          const remainingAmt = Math.max(0, Number(p.insurance_price || 0) - paidAmt);
           results.push({
             id: `policy-${p.id}`,
             type: "policy",
@@ -204,6 +227,8 @@ export default function ActivityLog() {
               client_name: clientName,
               client_file_number: fileNumber,
               insurance_price: p.insurance_price || undefined,
+              paid_amount: paidAmt,
+              remaining_amount: remainingAmt,
             },
           });
 
@@ -679,10 +704,12 @@ export default function ActivityLog() {
 
                   {/* Inner numbered timeline. Each step:
                       [step #] · [icon] · [action + details + timestamp]
-                      A vertical line connects the icons inside the card. */}
+                      A vertical line connects the icons through their
+                      centers. Layout: 24px step + 12px gap + 32px icon —
+                      icon center sits at 24+12+16 = 52px from the right. */}
                   <div className="relative">
                     {steps.length > 1 && (
-                      <div className="absolute right-[39px] top-6 bottom-6 w-px bg-border pointer-events-none" />
+                      <div className="absolute right-[52px] top-6 bottom-6 w-px bg-border pointer-events-none" />
                     )}
 
                     <ol className="space-y-4">
@@ -717,11 +744,8 @@ export default function ActivityLog() {
                                     </span>
                                   )}
                                 </div>
-                                <span className="text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap shrink-0">
-                                  {formatDistanceToNow(new Date(activity.created_at), {
-                                    addSuffix: true,
-                                    locale: ar,
-                                  })}
+                                <span className="text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap shrink-0 ltr-nums" dir="ltr">
+                                  {format(new Date(activity.created_at), "dd/MM/yyyy HH:mm")}
                                 </span>
                               </div>
 
@@ -767,6 +791,28 @@ export default function ActivityLog() {
                                     </div>
                                   </div>
                                 )}
+
+                                {/* Payment status — only on policy-creation rows.
+                                    "0 paid" reads as "لم يدفع شيئاً بعد"; otherwise
+                                    show paid + remaining. */}
+                                {activity.type === "policy" && activity.details.insurance_price ? (
+                                  <div className="flex items-center gap-x-2 gap-y-1 flex-wrap pt-0.5">
+                                    {(activity.details.paid_amount || 0) === 0 ? (
+                                      <Badge variant="outline" className="text-[11px] border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/5">
+                                        لم يدفع شيئاً بعد
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-[11px] border-success/40 text-success bg-success/5">
+                                        مدفوع: ₪{(activity.details.paid_amount || 0).toLocaleString()}
+                                      </Badge>
+                                    )}
+                                    {(activity.details.remaining_amount || 0) > 0 && (
+                                      <Badge variant="outline" className="text-[11px] border-destructive/40 text-destructive bg-destructive/5">
+                                        متبقي: ₪{(activity.details.remaining_amount || 0).toLocaleString()}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                ) : null}
 
                                 {activity.details.car_number && activity.type !== "transfer" && (
                                   <div className="flex items-center gap-2">
