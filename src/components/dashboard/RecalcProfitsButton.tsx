@@ -53,7 +53,8 @@ export function RecalcProfitsButton() {
       const { count, error: countError } = await supabase
         .from("policies")
         .select("*", { count: "exact", head: true })
-        .is("deleted_at", null);
+        .is("deleted_at", null)
+        .eq("skip_recalc", false);
       if (countError) throw countError;
       if (!count) {
         toast({ title: "لا توجد معاملات", description: "لا توجد معاملات لإعادة حسابها" });
@@ -69,6 +70,7 @@ export function RecalcProfitsButton() {
           .from("policies")
           .select("id")
           .is("deleted_at", null)
+          .eq("skip_recalc", false)
           .range(offset, offset + batch - 1);
         if (error) throw error;
         if (data) ids = ids.concat(data.map((p) => p.id));
