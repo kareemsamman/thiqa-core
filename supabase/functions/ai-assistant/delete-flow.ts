@@ -203,10 +203,9 @@ export async function handleDeleteIntent(
     return {
       reply: [
         `هل أنت متأكد أنك تريد حذف العميل "${c.full_name}"${idLine}؟`,
+        "⚠️ سيتم حذف كل بياناته (المعاملات، السيارات، المدفوعات) نهائياً.",
         "",
-        "⚠️ سيتم حذف العميل وكل بياناته (المعاملات، السيارات، المدفوعات) نهائياً ولا يمكن التراجع.",
-        "",
-        "اكتب \"نعم\" أو \"تأكيد\" للحذف، أو \"إلغاء\" للتراجع.",
+        "نعم أو لا؟",
       ].join("\n"),
       metadata: {
         pending_action: "delete_confirm",
@@ -264,10 +263,9 @@ export async function handleDeletePick(
   return {
     reply: [
       `هل أنت متأكد أنك تريد حذف العميل "${chosen.full_name}"${idLine}؟`,
+      "⚠️ سيتم حذف كل بياناته (المعاملات، السيارات، المدفوعات) نهائياً.",
       "",
-      "⚠️ سيتم حذف العميل وكل بياناته (المعاملات، السيارات، المدفوعات) نهائياً ولا يمكن التراجع.",
-      "",
-      "اكتب \"نعم\" أو \"تأكيد\" للحذف، أو \"إلغاء\" للتراجع.",
+      "نعم أو لا؟",
     ].join("\n"),
     metadata: { pending_action: "delete_confirm", client: chosen },
   };
@@ -297,7 +295,7 @@ export async function handleDeleteConfirm(
     return { reply: "تم إلغاء عملية الحذف.", metadata: null };
   }
   return {
-    reply: "للحذف اكتب \"نعم\" أو \"تأكيد\". للتراجع اكتب \"إلغاء\".",
+    reply: "نعم أو لا؟",
     metadata: meta,
   };
 }
