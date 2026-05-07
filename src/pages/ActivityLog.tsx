@@ -510,12 +510,16 @@ export default function ActivityLog() {
   // card with their own internal numbered timeline. Activities without
   // a client_id (e.g. some delete-notification rows) get their own card
   // keyed by activity id so they still appear in the feed.
+  // singleActor is set when every activity in the group was done by
+  // the same worker — lets the UI hoist "بواسطة <name>" up to the card
+  // header instead of repeating it on every step.
   type CustomerGroup = {
     key: string;
     clientId: string | null;
     clientName: string;
     clientFileNumber: string | null;
     activities: ActivityItem[]; // newest-first; reverse for numbered display
+    singleActor: string | null;
   };
   const groupedByCustomer = useMemo<CustomerGroup[]>(() => {
     const groups = new Map<string, CustomerGroup>();
@@ -532,10 +536,23 @@ export default function ActivityLog() {
           clientName: activity.details.client_name || "—",
           clientFileNumber: activity.details.client_file_number || null,
           activities: [activity],
+          singleActor: null, // computed below
         });
       }
     }
-    return Array.from(groups.values());
+    // Resolve singleActor per group: the unique creator across all steps,
+    // or null if any step has a different creator (or none).
+    return Array.from(groups.values()).map((g) => {
+      const actors = new Set<string>();
+      let missing = false;
+      for (const a of g.activities) {
+        if (a.createdBy) actors.add(a.createdBy);
+        else missing = true;
+      }
+      const singleActor =
+        actors.size === 1 && !missing ? Array.from(actors)[0] : null;
+      return { ...g, singleActor };
+    });
   }, [displayedActivities]);
 
   const clearFilters = () => {
@@ -677,9 +694,12 @@ export default function ActivityLog() {
                   key={group.key}
                   className="rounded-2xl border bg-card p-5 sm:p-6 shadow-sm hover:shadow-md hover:border-primary/30 transition-all"
                 >
-                  {/* Customer name header — big + clickable */}
+                  {/* Customer name header — big + clickable. When every
+                      activity in the card was performed by the same
+                      worker, hoist the "بواسطة" chip up here so it
+                      doesn't repeat on every step. */}
                   <div className="flex items-baseline justify-between gap-3 flex-wrap mb-5 pb-4 border-b">
-                    <div className="flex items-baseline gap-2 min-w-0">
+                    <div className="flex items-baseline gap-3 min-w-0 flex-wrap">
                       {group.clientId ? (
                         <Link
                           to={`/clients/${group.clientId}`}
@@ -695,6 +715,16 @@ export default function ActivityLog() {
                       {group.clientFileNumber && (
                         <span className="text-sm text-muted-foreground">
                           ({group.clientFileNumber})
+                        </span>
+                      )}
+                      {group.singleActor && (
+                        <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-full bg-primary/10 border border-primary/15 text-[11px]">
+                          <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold uppercase shrink-0">
+                            {group.singleActor.trim().charAt(0)}
+                          </span>
+                          <span className="text-foreground/75">
+                            بواسطة <span className="font-semibold text-foreground/95">{group.singleActor}</span>
+                          </span>
                         </span>
                       )}
                     </div>
@@ -739,7 +769,11 @@ export default function ActivityLog() {
                                   <span className="font-semibold text-foreground">
                                     {activity.action}
                                   </span>
-                                  {activity.createdBy && (
+                                  {/* Per-step actor — only when the card
+                                      has multiple workers; otherwise the
+                                      header already shows it for the
+                                      whole group. */}
+                                  {!group.singleActor && activity.createdBy && (
                                     <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-full bg-primary/10 border border-primary/15 text-[11px]">
                                       <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold uppercase shrink-0">
                                         {activity.createdBy.trim().charAt(0)}
