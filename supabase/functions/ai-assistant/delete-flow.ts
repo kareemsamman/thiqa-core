@@ -43,40 +43,57 @@ function normalizeArabic(input: string): string {
 }
 
 const DELETE_VERBS = [
-  // Arabic
+  // Arabic — root verbs (any conjugation containing these substrings counts)
   "احذف",
+  "حذف",
   "امسح",
+  "مسح عميل",
   "الغي",
   "ألغي",
   "الغ",
+  // Common compound forms
   "بدي الغي",
   "بدي احذف",
   "بدي امسح",
   "بدي ألغي",
-  "حذف عميل",
-  "حذف الزبون",
+  "ابي احذف",
+  "اريد حذف",
   // Latin
   "delete",
   "remove",
-  "drop",
 ];
+
+/** Strip whitespace and apply Arabic normalization so partial-letter
+ *  typos like "ا لغيه" still match "الغي". */
+function normalizeForMatch(s: string): string {
+  return normalizeArabic(s).replace(/\s+/g, "");
+}
 
 /** Heuristic: does this message look like a "delete a client" request? */
 export function isDeleteIntent(message: string): boolean {
-  const m = (message || "").toLowerCase();
-  return DELETE_VERBS.some((v) => m.includes(v));
+  const compact = normalizeForMatch(message);
+  return DELETE_VERBS.some((v) => compact.includes(normalizeForMatch(v)));
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Try to extract the client name the user typed. Falls back to the
- *  whole message minus the delete verb. */
+ *  whole message minus the delete verbs and common filler words.
+ *  Verb regex allows OPTIONAL whitespace between every character so
+ *  the "ا لغيه" / "الـغي" typo cases still get stripped. Trailing
+ *  pronoun suffixes (ه / ها / هم / هما) are also consumed so
+ *  "الغيه" reduces to nothing instead of leaving a stray "ه". */
 function extractTargetName(message: string): string {
   let s = message;
   for (const v of DELETE_VERBS) {
-    s = s.replace(new RegExp(v, "gi"), " ");
+    const flexible = v.split("").map(escapeRegex).join("\\s*") + "(?:\\s*(?:ها|هما|هم|ه))?";
+    s = s.replace(new RegExp(flexible, "gi"), " ");
   }
-  // Strip common filler words
+  // Strip common filler / connector words.
   s = s
-    .replace(/\b(عميل|الزبون|client|customer|اسمه|باسم|اللي|التي|الذي|please|من فضلك)\b/gi, " ")
+    .replace(/\b(في|على|عند|عميل|الزبون|زبون|client|customer|اسمه|باسم|اسمها|اللي|التي|الذي|please|من فضلك|بدي|ابي|اريد|ممكن|لو سمحت|من|له|لها|اسم)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
   return s;
