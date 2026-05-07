@@ -1109,15 +1109,12 @@ Deno.serve(async (req) => {
       settingsRows?.find((r: any) => r.setting_key === "ai_assistant_prompt")?.setting_value || null;
     const modelOverride =
       settingsRows?.find((r: any) => r.setting_key === "ai_assistant_model")?.setting_value || null;
-    // Default = OpenAI GPT-5 via Lovable. Anthropic Claude isn't on
-    // Lovable's gateway — only Google Gemini + OpenAI families. GPT-5
-    // handles dialectal Arabic well (Palestinian/Levantine), which is
-    // what the previous Gemini Flash tier was fumbling on.
-    // Override by inserting a row into thiqa_platform_settings
-    // (setting_key = "ai_assistant_model"); see Lovable docs for the
-    // current list of valid IDs (e.g. "openai/gpt-5.5",
-    // "google/gemini-3.1-pro").
-    const model = modelOverride?.trim() || "openai/gpt-5";
+    // Default = Anthropic Claude Sonnet 4.5 via Lovable. The user
+    // confirmed Claude works on their gateway even though it's not
+    // listed in the public Lovable docs (the docs page lags behind
+    // gateway routing). Override by inserting a row into
+    // thiqa_platform_settings (setting_key = "ai_assistant_model").
+    const model = modelOverride?.trim() || "anthropic/claude-sonnet-4-5";
     console.log(`[ai-assistant] Using model: ${model}`);
 
     // Build system prompt — append identity context LAST so it wins
