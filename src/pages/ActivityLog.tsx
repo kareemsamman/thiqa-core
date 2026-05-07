@@ -589,44 +589,50 @@ export default function ActivityLog() {
           </CardContent>
         </Card>
 
-        {/* Activity List */}
-        <div className="space-y-3">
-          {isLoading ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent className="py-4">
-                  <div className="flex items-start gap-4">
-                    <Skeleton className="h-10 w-10 rounded-lg" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-4 w-1/3" />
-                      <Skeleton className="h-3 w-2/3" />
-                      <Skeleton className="h-3 w-1/2" />
-                    </div>
+        {/* Activity Timeline. Single vertical line behind all icons
+            connects every event into one chronological chain. Icons get
+            a ring of bg-background so the line appears to "stop" cleanly
+            at each marker rather than slicing through it. */}
+        <div className="relative">
+          {/* The continuous track — runs from the first marker to the last */}
+          {!isLoading && displayedActivities.length > 1 && (
+            <div className="absolute right-[19px] top-7 bottom-7 w-px bg-border pointer-events-none" />
+          )}
+
+          <div className="space-y-5">
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-start gap-3 sm:gap-4">
+                  <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <Skeleton className="h-4 w-1/3" />
+                    <Skeleton className="h-3 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
                   </div>
+                </div>
+              ))
+            ) : displayedActivities.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  لا توجد نتائج مطابقة للبحث
                 </CardContent>
               </Card>
-            ))
-          ) : displayedActivities.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                لا توجد نتائج مطابقة للبحث
-              </CardContent>
-            </Card>
-          ) : (
-            displayedActivities.map((activity) => {
-              const Icon = typeIcons[activity.type];
-              return (
-                <Card key={activity.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-3 sm:px-6 sm:py-4">
-                    <div className="flex items-start gap-3 sm:gap-4">
-                      {/* Icon — smaller on mobile so the content area
-                          gets every available pixel of width. */}
-                      <div className={cn("rounded-lg p-2 sm:p-2.5 shrink-0", typeColors[activity.type])}>
-                        <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
-                      </div>
+            ) : (
+              displayedActivities.map((activity) => {
+                const Icon = typeIcons[activity.type];
+                return (
+                  <div key={activity.id} className="relative flex items-start gap-3 sm:gap-4 group">
+                    {/* Icon marker — ring-background masks the timeline
+                        line so it visually stops at each marker. */}
+                    <div className={cn(
+                      "relative z-10 rounded-lg p-2 sm:p-2.5 shrink-0 ring-4 ring-background transition-transform group-hover:scale-105",
+                      typeColors[activity.type],
+                    )}>
+                      <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </div>
 
                       {/* Content */}
-                      <div className="flex-1 min-w-0 space-y-1.5">
+                      <div className="flex-1 min-w-0 space-y-1.5 pt-0.5">
                         {/* Header row. `items-start` keeps the timestamp
                             aligned to the title's first line even when
                             the action+badge group wraps onto two rows
@@ -704,7 +710,7 @@ export default function ActivityLog() {
                                 <span>
                                   {activity.details.policy_type}
                                   {activity.details.company_name && (
-                                    <span className="mr-1">→ {activity.details.company_name}</span>
+                                    <span className="mr-1">← {activity.details.company_name}</span>
                                   )}
                                 </span>
                                 {activity.details.insurance_price && activity.type === "policy" && (
@@ -758,16 +764,15 @@ export default function ActivityLog() {
                           )}
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
-          )}
+                  </div>
+                );
+              })
+            )}
+          </div>
 
           {/* Load More */}
           {hasMore && (
-            <div className="flex justify-center pt-4">
+            <div className="flex justify-center pt-6">
               <Button
                 variant="outline"
                 onClick={() => setDisplayLimit((prev) => prev + 20)}
