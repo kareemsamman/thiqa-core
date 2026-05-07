@@ -192,6 +192,7 @@ export function useAccountingData(
            insurance_companies(id, name, name_ar, broker_id)`,
         )
         .is('deleted_at', null)
+        .eq('skip_recalc', false)
         .order('issue_date', { ascending: false, nullsFirst: false });
 
       if (agentId) policyQuery = policyQuery.eq('agent_id', agentId);
