@@ -43,6 +43,11 @@ export default function SignaturePage() {
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [alreadySigned, setAlreadySigned] = useState(false);
+  // True only after the user has actually drawn at least one stroke on
+  // the canvas. A bare click without dragging does NOT count — Fabric's
+  // path:created fires only on drag-release, so the submit button stays
+  // disabled until there's a real signature.
+  const [hasSignature, setHasSignature] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -65,9 +70,16 @@ export default function SignaturePage() {
     canvas.freeDrawingBrush.color = "#000000";
     canvas.freeDrawingBrush.width = 2;
 
+    // Track whether the canvas has any actual drawn paths. path:created
+    // fires once per stroke (after mouseup), so a single click without
+    // a drag won't flip this on.
+    const onPathCreated = () => setHasSignature(true);
+    canvas.on("path:created", onPathCreated);
+
     setFabricCanvas(canvas);
 
     return () => {
+      canvas.off("path:created", onPathCreated);
       canvas.dispose();
     };
   }, [signatureInfo?.valid]);
@@ -113,6 +125,7 @@ export default function SignaturePage() {
       fabricCanvas.backgroundColor = "#ffffff";
       fabricCanvas.renderAll();
     }
+    setHasSignature(false);
   };
 
   const handleSubmit = async () => {
@@ -385,11 +398,13 @@ export default function SignaturePage() {
             </span>
           </label>
 
-          {/* Submit */}
+          {/* Submit. Disabled until the user has actually drawn a
+              signature AND accepted the consent — a stray click on the
+              canvas is not enough. */}
           <Button
             onClick={handleSubmit}
             className="w-full h-12 text-base shadow-lg shadow-primary/20"
-            disabled={submitting || !accepted}
+            disabled={submitting || !accepted || !hasSignature}
           >
             {submitting ? (
               <>
@@ -403,6 +418,11 @@ export default function SignaturePage() {
               </>
             )}
           </Button>
+          {!hasSignature && (
+            <p className="text-[11px] text-muted-foreground text-center -mt-2">
+              يرجى رسم توقيعك في المربع أعلاه قبل التأكيد
+            </p>
+          )}
 
           {/* Expiry notice */}
           {signatureInfo?.expires_at && (
