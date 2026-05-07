@@ -27,7 +27,7 @@ export const DEFAULT_BRANDING: AgentBranding = {
   signatureHeaderHtml: '<h2>نموذج الموافقة على الخصوصية</h2>',
   signatureBodyHtml: '<p>مرحباً.</p><p>أقرّ بأنني قرأت وفهمت سياسة الخصوصية، وأوافق على قيام الشركة بجمع واستخدام ومعالجة بياناتي الشخصية للأغراض المتعلقة بخدمات التأمين والتواصل وإتمام الإجراءات اللازمة.</p><p>بالتوقيع أدناه، أؤكد صحة البيانات وأمنح موافقتي على ما ورد أعلاه.</p>',
   signatureFooterHtml: '<p>جميع الحقوق محفوظة</p>',
-  signaturePrimaryColor: '#1e3a5f',
+  signaturePrimaryColor: '#455ebb',
   ownerName: '',
   taxNumber: '',
   invoicePrivacyText: '',

@@ -191,9 +191,18 @@ export default function SignaturePage() {
     }
   };
 
-  // Shared page shell: subtle gradient background, centered content, RTL,
-  // Thiqa attribution footer. Used by every state (loading/error/signed/etc.)
-  const PageShell = ({ children, title }: { children: React.ReactNode; title: string }) => (
+  // Shared page shell. The accent color (when known) tints the
+  // ambient background blobs so the agent's brand color "leaks" subtly
+  // into the page even though the card itself is white.
+  const PageShell = ({
+    children,
+    title,
+    accent,
+  }: {
+    children: React.ReactNode;
+    title: string;
+    accent?: string;
+  }) => (
     <>
       <Helmet>
         <title>{title}</title>
@@ -203,11 +212,23 @@ export default function SignaturePage() {
         <meta name="googlebot" content="noindex, nofollow" />
       </Helmet>
       <div
-        className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/5 via-background to-muted/40 flex flex-col items-center px-4 py-8 sm:py-12"
+        className="min-h-screen relative overflow-hidden flex flex-col items-center px-4 py-10 sm:py-16 bg-[#fafbff]"
         dir="rtl"
       >
-        <main className="w-full max-w-2xl flex-1 flex flex-col">{children}</main>
-        <footer className="mt-8 text-center text-[11px] text-muted-foreground/70">
+        {/* Ambient blurred blobs in the brand color — modern, airy feel */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-40 -right-32 h-[420px] w-[420px] rounded-full opacity-25 blur-3xl"
+          style={{ backgroundColor: accent || "#455ebb" }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-40 -left-32 h-[420px] w-[420px] rounded-full opacity-15 blur-3xl"
+          style={{ backgroundColor: accent || "#455ebb" }}
+        />
+
+        <main className="w-full max-w-xl flex-1 flex flex-col relative z-10">{children}</main>
+        <footer className="mt-10 text-center text-[11px] text-muted-foreground/70 relative z-10">
           مدعوم بواسطة{" "}
           <span className="font-semibold text-foreground/70">Thiqa</span>
         </footer>
@@ -218,13 +239,11 @@ export default function SignaturePage() {
   if (loading) {
     return (
       <PageShell title="توقيع العميل | ثقة للتأمين">
-        <Card className="w-full rounded-2xl border-border/60 shadow-xl shadow-primary/5">
-          <CardHeader>
-            <Skeleton className="h-8 w-40 mx-auto" />
-            <Skeleton className="h-4 w-56 mx-auto mt-2" />
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="h-48 w-full rounded-xl" />
+        <Card className="w-full rounded-3xl border-0 bg-white shadow-xl">
+          <CardContent className="pt-10 pb-8 space-y-4">
+            <Skeleton className="h-20 w-20 rounded-3xl mx-auto" />
+            <Skeleton className="h-7 w-48 mx-auto" />
+            <Skeleton className="h-48 w-full rounded-xl mt-6" />
           </CardContent>
         </Card>
       </PageShell>
@@ -233,15 +252,16 @@ export default function SignaturePage() {
 
   if (error) {
     return (
-      <PageShell title="رابط توقيع غير صالح | ثقة للتأمين">
-        <Card className="w-full rounded-2xl border-border/60 shadow-xl shadow-destructive/5 text-center">
-          <CardHeader className="pt-10 pb-8">
-            <div className="mx-auto w-20 h-20 rounded-full bg-destructive/10 flex items-center justify-center mb-5 ring-8 ring-destructive/5">
+      <PageShell title="رابط توقيع غير صالح | ثقة للتأمين" accent="#ef4444">
+        <Card className="w-full rounded-3xl border-0 bg-white shadow-xl text-center overflow-hidden">
+          <div className="h-1.5 w-full bg-destructive" />
+          <CardContent className="pt-10 pb-10">
+            <div className="mx-auto w-20 h-20 rounded-3xl bg-destructive/10 flex items-center justify-center mb-5 ring-8 ring-destructive/5">
               <AlertCircle className="h-10 w-10 text-destructive" />
             </div>
-            <CardTitle className="text-2xl text-destructive">رابط غير صالح</CardTitle>
-            <CardDescription className="text-base mt-2">{error}</CardDescription>
-          </CardHeader>
+            <h2 className="text-2xl font-bold text-destructive">رابط غير صالح</h2>
+            <p className="text-base text-muted-foreground mt-2">{error}</p>
+          </CardContent>
         </Card>
       </PageShell>
     );
@@ -252,24 +272,26 @@ export default function SignaturePage() {
       ? new Date(signatureInfo.signed_at).toLocaleString("en-GB")
       : null;
     return (
-      <PageShell title="تم التوقيع مسبقاً | ثقة للتأمين">
-        <Card className="w-full rounded-2xl border-border/60 shadow-xl shadow-success/5 text-center">
-          <CardHeader className="pt-10 pb-8">
-            <div className="mx-auto w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mb-5 ring-8 ring-success/5">
+      <PageShell title="تم التوقيع مسبقاً | ثقة للتأمين" accent="#10b981">
+        <Card className="w-full rounded-3xl border-0 bg-white shadow-xl text-center overflow-hidden">
+          <div className="h-1.5 w-full bg-success" />
+          <CardContent className="pt-10 pb-10">
+            <div className="mx-auto w-20 h-20 rounded-3xl bg-success/10 flex items-center justify-center mb-5 ring-8 ring-success/5">
               <Check className="h-10 w-10 text-success" />
             </div>
-            <CardTitle className="text-2xl text-success">لقد وقّعت مسبقاً</CardTitle>
-            <CardDescription className="text-base mt-2 leading-relaxed">
+            <h2 className="text-2xl font-bold text-success">لقد وقّعت مسبقاً</h2>
+            <p className="text-base text-muted-foreground mt-2 leading-relaxed">
               {signatureInfo?.client_name
                 ? `شكراً لك ${signatureInfo.client_name}، تم استلام توقيعك مسبقاً ولا حاجة للتوقيع مرة أخرى.`
                 : "تم استلام توقيعك مسبقاً ولا حاجة للتوقيع مرة أخرى."}
-            </CardDescription>
+            </p>
             {signedAtText && (
               <p className="mt-4 text-xs text-muted-foreground">
-                تاريخ التوقيع: <span className="font-medium">{signedAtText}</span>
+                تاريخ التوقيع:{" "}
+                <span className="font-medium ltr-nums" dir="ltr">{signedAtText}</span>
               </p>
             )}
-          </CardHeader>
+          </CardContent>
         </Card>
       </PageShell>
     );
@@ -277,122 +299,139 @@ export default function SignaturePage() {
 
   if (submitted) {
     return (
-      <PageShell title="تم التوقيع | ثقة للتأمين">
-        <Card className="w-full rounded-2xl border-border/60 shadow-xl shadow-success/5 text-center">
-          <CardHeader className="pt-10 pb-8">
-            <div className="mx-auto w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mb-5 ring-8 ring-success/5">
+      <PageShell title="تم التوقيع | ثقة للتأمين" accent="#10b981">
+        <Card className="w-full rounded-3xl border-0 bg-white shadow-xl text-center overflow-hidden">
+          <div className="h-1.5 w-full bg-success" />
+          <CardContent className="pt-10 pb-10">
+            <div className="mx-auto w-20 h-20 rounded-3xl bg-success/10 flex items-center justify-center mb-5 ring-8 ring-success/5">
               <Check className="h-10 w-10 text-success" />
             </div>
-            <CardTitle className="text-2xl text-success">تم التوقيع بنجاح</CardTitle>
-            <CardDescription className="text-base mt-2 leading-relaxed">
+            <h2 className="text-2xl font-bold text-success">تم التوقيع بنجاح</h2>
+            <p className="text-base text-muted-foreground mt-2 leading-relaxed">
               شكراً لك {signatureInfo?.client_name}، تم حفظ توقيعك بنجاح.
-            </CardDescription>
-          </CardHeader>
+            </p>
+          </CardContent>
         </Card>
       </PageShell>
     );
   }
 
   const tpl = signatureInfo?.template;
-  // Always render the Thiqa hero pattern; the agent's primary color
-  // tints the gradient and their logo (if any) replaces the default
-  // FileSignature icon. Title is the agent's company name when set,
-  // otherwise the generic "توقيع العميل".
-  const primaryColor = tpl?.primary_color || "#1e3a5f";
+  // Default color matches Thiqa's primary (rgb(69 94 187) = #455ebb).
+  // The agent's primary_color overrides it.
+  const primaryColor = tpl?.primary_color || "#455ebb";
   const heroTitle = tpl?.company_name || "توقيع العميل";
 
   return (
-    <PageShell title="توقيع العميل | ثقة للتأمين">
-      <Card className="w-full rounded-2xl border-border/60 shadow-xl shadow-primary/5 overflow-hidden">
-        {/* Thiqa-style hero — same layout regardless of template; only the
-            background color, logo, and title come from the agent. */}
+    <PageShell title="توقيع العميل | ثقة للتأمين" accent={primaryColor}>
+      {/* Floating logo above the card — modern, airy. The brand color
+          shows up only as: subtle background blobs, the logo ring, the
+          accent bar at the top of the card, and the submit button. */}
+      <div className="flex flex-col items-center text-center mb-6 sm:mb-8">
         <div
-          className="relative px-6 sm:px-10 pt-10 pb-12 text-center text-white"
-          style={{
-            backgroundImage: `linear-gradient(to bottom right, ${primaryColor}, ${primaryColor}dd)`,
-          }}
+          className="w-20 h-20 rounded-3xl bg-white shadow-lg flex items-center justify-center mb-4 overflow-hidden ring-1 ring-black/5"
+          style={{ boxShadow: `0 12px 40px -12px ${primaryColor}55` }}
         >
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center mb-4 ring-1 ring-white/25 overflow-hidden">
-            {tpl?.logo_url ? (
-              <img
-                src={tpl.logo_url}
-                alt={heroTitle}
-                className="max-h-12 max-w-12 object-contain"
-                loading="lazy"
-              />
-            ) : (
-              <FileSignature className="h-8 w-8" />
-            )}
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-            {heroTitle}
-          </h1>
-          {signatureInfo?.client_name && (
-            <p className="mt-2 text-white/80 text-sm sm:text-base">
-              مرحباً بك{" "}
-              <span className="font-semibold text-white">
-                {signatureInfo.client_name}
-              </span>
-            </p>
+          {tpl?.logo_url ? (
+            <img
+              src={tpl.logo_url}
+              alt={heroTitle}
+              className="max-h-14 max-w-14 object-contain"
+              loading="lazy"
+            />
+          ) : (
+            <FileSignature className="h-9 w-9" style={{ color: primaryColor }} />
           )}
         </div>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+          {heroTitle}
+        </h1>
+        {signatureInfo?.client_name && (
+          <p className="mt-1.5 text-sm sm:text-base text-muted-foreground">
+            مرحباً بك،{" "}
+            <span className="font-semibold text-foreground">
+              {signatureInfo.client_name}
+            </span>
+          </p>
+        )}
+      </div>
 
-        <CardContent className="px-6 sm:px-10 py-8 space-y-6">
-          {/* Body / header / footer agent HTML — rendered inside a
-              Thiqa-style soft card so it stays consistent visually. */}
+      {/* Main card — clean white, soft shadow tinted with brand color */}
+      <Card
+        className="w-full rounded-3xl border-0 overflow-hidden bg-white"
+        style={{ boxShadow: `0 24px 60px -20px ${primaryColor}33, 0 4px 16px -8px rgba(0,0,0,0.06)` }}
+      >
+        {/* Thin accent bar in brand color */}
+        <div className="h-1.5 w-full" style={{ backgroundColor: primaryColor }} />
+
+        <CardContent className="px-6 sm:px-10 py-8 space-y-7">
+          {/* Privacy / consent text */}
           {(tpl?.header_html || tpl?.body_html || tpl?.footer_html) && (
-            <div
-              className="prose prose-sm max-w-none rounded-xl bg-muted/40 border border-border/60 px-5 py-4"
-              dir={tpl?.direction || "rtl"}
-            >
+            <section dir={tpl?.direction || "rtl"} className="space-y-3">
               {tpl?.header_html && (
                 <div
-                  className="font-semibold text-foreground mb-3"
+                  className="text-base font-bold text-foreground"
                   dangerouslySetInnerHTML={createSafeHtml(tpl.header_html)}
                 />
               )}
               {tpl?.body_html && (
-                <div dangerouslySetInnerHTML={createSafeHtml(tpl.body_html)} />
+                <div
+                  className="prose prose-sm max-w-none text-sm leading-relaxed text-foreground/85"
+                  dangerouslySetInnerHTML={createSafeHtml(tpl.body_html)}
+                />
               )}
               {tpl?.footer_html && (
                 <div
-                  className="mt-4 pt-4 border-t border-border/60 text-xs text-muted-foreground"
+                  className="text-xs text-muted-foreground pt-3 mt-1 border-t border-dashed border-border/70"
                   dangerouslySetInnerHTML={createSafeHtml(tpl.footer_html)}
                 />
               )}
-            </div>
+            </section>
           )}
 
           {/* Signature pad */}
-          <div className="space-y-2">
+          <section className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-semibold">توقيعك</Label>
+              <Label className="text-sm font-bold text-foreground">
+                ارسم توقيعك أدناه
+              </Label>
               <button
                 type="button"
                 onClick={handleClear}
-                disabled={submitting}
-                className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors disabled:opacity-50"
+                disabled={submitting || !hasSignature}
+                className="text-xs inline-flex items-center gap-1 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                style={{ color: primaryColor }}
               >
                 <RotateCcw className="h-3 w-3" />
                 مسح
               </button>
             </div>
-            <div className="rounded-xl border-2 border-dashed border-primary/40 bg-gradient-to-b from-background to-muted/20 p-2 transition-colors hover:border-primary/60">
+            <div
+              className="relative rounded-2xl p-3 transition-all"
+              style={{
+                backgroundColor: `${primaryColor}08`,
+                border: `2px dashed ${primaryColor}55`,
+              }}
+            >
               <canvas
                 ref={canvasRef}
-                className="w-full touch-none rounded-lg"
+                className="w-full touch-none rounded-xl bg-white"
                 style={{ maxWidth: "100%", height: "200px" }}
               />
+              {!hasSignature && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <p className="text-xs text-muted-foreground/60">
+                    ارسم هنا
+                  </p>
+                </div>
+              )}
             </div>
-            <p className="text-[11px] text-muted-foreground text-center">
-              استخدم الماوس أو إصبعك للتوقيع في المربع أعلاه
-            </p>
-          </div>
+          </section>
 
           {/* Consent checkbox */}
           <label
             htmlFor="accept"
-            className="flex items-start gap-3 rounded-xl border bg-muted/30 hover:bg-muted/50 transition-colors p-4 cursor-pointer"
+            className="flex items-start gap-3 rounded-2xl border border-border/70 hover:border-border bg-muted/20 hover:bg-muted/40 transition-colors p-4 cursor-pointer"
           >
             <Checkbox
               id="accept"
@@ -408,34 +447,42 @@ export default function SignaturePage() {
           {/* Submit. Disabled until the user has actually drawn a
               signature AND accepted the consent — a stray click on the
               canvas is not enough. */}
-          <Button
-            onClick={handleSubmit}
-            className="w-full h-12 text-base shadow-lg shadow-primary/20"
-            disabled={submitting || !accepted || !hasSignature}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin ml-2" />
-                جاري الحفظ...
-              </>
-            ) : (
-              <>
-                <Check className="h-5 w-5 ml-2" />
-                تأكيد التوقيع
-              </>
+          <div className="space-y-2 pt-1">
+            <button
+              onClick={handleSubmit}
+              className="w-full h-12 rounded-2xl text-base font-bold text-white inline-flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:pointer-events-none hover:brightness-110 active:scale-[0.99]"
+              style={{
+                backgroundColor: primaryColor,
+                boxShadow: `0 8px 24px -6px ${primaryColor}66`,
+              }}
+              disabled={submitting || !accepted || !hasSignature}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  جاري الحفظ...
+                </>
+              ) : (
+                <>
+                  <Check className="h-5 w-5" />
+                  تأكيد التوقيع
+                </>
+              )}
+            </button>
+            {(!hasSignature || !accepted) && (
+              <p className="text-[11px] text-muted-foreground text-center">
+                {!hasSignature
+                  ? "يرجى رسم توقيعك في المربع أعلاه"
+                  : "يرجى الموافقة على المحتوى قبل التأكيد"}
+              </p>
             )}
-          </Button>
-          {!hasSignature && (
-            <p className="text-[11px] text-muted-foreground text-center -mt-2">
-              يرجى رسم توقيعك في المربع أعلاه قبل التأكيد
-            </p>
-          )}
+          </div>
 
           {/* Expiry notice */}
           {signatureInfo?.expires_at && (
-            <p className="text-[11px] text-muted-foreground text-center pt-2 border-t border-border/40">
+            <p className="text-[11px] text-muted-foreground text-center pt-3 border-t border-border/40">
               ينتهي هذا الرابط في:{" "}
-              <span className="font-medium">
+              <span className="font-medium ltr-nums" dir="ltr">
                 {new Date(signatureInfo.expires_at).toLocaleString("en-GB")}
               </span>
             </p>

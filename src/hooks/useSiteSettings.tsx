@@ -84,7 +84,7 @@ export function useUpdateSiteSettings() {
           signature_header_html: updates.signature_header_html ?? null,
           signature_body_html: updates.signature_body_html ?? null,
           signature_footer_html: updates.signature_footer_html ?? null,
-          signature_primary_color: updates.signature_primary_color ?? '#1e3a5f',
+          signature_primary_color: updates.signature_primary_color ?? '#455ebb',
           owner_name: updates.owner_name ?? null,
           tax_number: updates.tax_number ?? null,
           invoice_privacy_text: updates.invoice_privacy_text ?? null,

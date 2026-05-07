@@ -24,7 +24,8 @@ const SIGNATURE_DEFAULTS = {
   body:
     "مرحباً.\n\nأقرّ بأنني قرأت وفهمت سياسة الخصوصية، وأوافق على قيام الشركة بجمع واستخدام ومعالجة بياناتي الشخصية للأغراض المتعلقة بخدمات التأمين والتواصل وإتمام الإجراءات اللازمة.\n\nبالتوقيع أدناه، أؤكد صحة البيانات وأمنح موافقتي على ما ورد أعلاه.",
   footer: "جميع الحقوق محفوظة",
-  color: "#1e3a5f",
+  // Matches Thiqa primary (rgb 69 94 187 = #455ebb)
+  color: "#455ebb",
 } as const;
 
 // Resolve the current user's agent_id, used to scope uploads under the
@@ -354,7 +355,7 @@ export default function BrandingSettings() {
   const [sigHeader, setSigHeader] = useState("");
   const [sigBody, setSigBody] = useState("");
   const [sigFooter, setSigFooter] = useState("");
-  const [sigColor, setSigColor] = useState("#1e3a5f");
+  const [sigColor, setSigColor] = useState(SIGNATURE_DEFAULTS.color);
   // Invoice fields
   const [ownerName, setOwnerName] = useState("");
   const [taxNumber, setTaxNumber] = useState("");
