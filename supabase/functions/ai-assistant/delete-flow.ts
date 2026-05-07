@@ -44,23 +44,36 @@ function normalizeArabic(input: string): string {
 
 const DELETE_VERBS = [
   // Arabic — root verbs (any conjugation containing these substrings counts)
+  // حذف root
   "احذف",
   "حذف",
+  // مسح root
   "امسح",
   "مسح عميل",
+  // محا root (yamhi / amha — common in Levantine for "wipe / erase")
+  "امحي",
+  "امح",
+  "محي",
+  "محى",
+  // الغى root
   "الغي",
   "ألغي",
   "الغ",
-  // Common compound forms
+  // Common compound forms with "بدي / ابي / اريد"
   "بدي الغي",
   "بدي احذف",
   "بدي امسح",
   "بدي ألغي",
+  "بدي امحي",
+  "بدي امح",
   "ابي احذف",
+  "ابي امحي",
   "اريد حذف",
+  "اريد محو",
   // Latin
   "delete",
   "remove",
+  "erase",
 ];
 
 /** Strip whitespace and apply Arabic normalization so partial-letter
