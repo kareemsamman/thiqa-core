@@ -1109,9 +1109,15 @@ Deno.serve(async (req) => {
       settingsRows?.find((r: any) => r.setting_key === "ai_assistant_prompt")?.setting_value || null;
     const modelOverride =
       settingsRows?.find((r: any) => r.setting_key === "ai_assistant_model")?.setting_value || null;
-    // Default = Claude Sonnet 4.5 via Lovable. Override by inserting a
-    // row into thiqa_platform_settings (setting_key = "ai_assistant_model").
-    const model = modelOverride?.trim() || "anthropic/claude-sonnet-4-5";
+    // Default = OpenAI GPT-5 via Lovable. Anthropic Claude isn't on
+    // Lovable's gateway — only Google Gemini + OpenAI families. GPT-5
+    // handles dialectal Arabic well (Palestinian/Levantine), which is
+    // what the previous Gemini Flash tier was fumbling on.
+    // Override by inserting a row into thiqa_platform_settings
+    // (setting_key = "ai_assistant_model"); see Lovable docs for the
+    // current list of valid IDs (e.g. "openai/gpt-5.5",
+    // "google/gemini-3.1-pro").
+    const model = modelOverride?.trim() || "openai/gpt-5";
     console.log(`[ai-assistant] Using model: ${model}`);
 
     // Build system prompt — append identity context LAST so it wins
@@ -1158,9 +1164,15 @@ Deno.serve(async (req) => {
 
     if (!aiResponse.ok) {
       const errText = await aiResponse.text();
-      console.error("[ai-assistant] AI Gateway error:", aiResponse.status, errText);
+      console.error("[ai-assistant] AI Gateway error:", aiResponse.status, "model:", model, "body:", errText);
       if (aiResponse.status === 429) throw new Error("تم تجاوز حد الطلبات. يرجى المحاولة بعد قليل.");
       if (aiResponse.status === 402) throw new Error("يرجى تجديد رصيد الذكاء الاصطناعي.");
+      // 400 from the gateway usually means a bad model id. Surface it
+      // so the operator can pick a valid model from
+      // thiqa_platform_settings.ai_assistant_model.
+      if (aiResponse.status === 400) {
+        throw new Error(`خطأ في إعداد النموذج (${model}). يرجى التواصل مع الإدارة.`);
+      }
       throw new Error("حدث خطأ في خدمة الذكاء الاصطناعي. يرجى المحاولة لاحقاً.");
     }
 
