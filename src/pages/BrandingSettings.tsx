@@ -16,6 +16,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { createSafeHtml } from "@/lib/sanitize";
 import { ShortcutsTabContent } from "@/components/admin/ShortcutsTabContent";
 
+// Defaults for the signature-page settings — same values used to seed
+// the form on first load. The "إعادة للافتراضي" button writes these
+// back into the form (the user still has to click "حفظ" to persist).
+const SIGNATURE_DEFAULTS = {
+  header: "نموذج الموافقة على الخصوصية",
+  body:
+    "مرحباً.\n\nأقرّ بأنني قرأت وفهمت سياسة الخصوصية، وأوافق على قيام الشركة بجمع واستخدام ومعالجة بياناتي الشخصية للأغراض المتعلقة بخدمات التأمين والتواصل وإتمام الإجراءات اللازمة.\n\nبالتوقيع أدناه، أؤكد صحة البيانات وأمنح موافقتي على ما ورد أعلاه.",
+  footer: "جميع الحقوق محفوظة",
+  color: "#1e3a5f",
+} as const;
+
 // Resolve the current user's agent_id, used to scope uploads under the
 // `{agent_id}/...` folder that the `branding` bucket's RLS policy
 // requires.
@@ -359,10 +370,10 @@ export default function BrandingSettings() {
     setLogoUrl(settings.logo_url);
     setFaviconUrl(settings.favicon_url);
     setOgImageUrl(settings.og_image_url);
-    setSigHeader(htmlToPlain(settings.signature_header_html) || 'نموذج الموافقة على الخصوصية');
-    setSigBody(htmlToPlain(settings.signature_body_html) || 'مرحباً.\n\nأقرّ بأنني قرأت وفهمت سياسة الخصوصية، وأوافق على قيام الشركة بجمع واستخدام ومعالجة بياناتي الشخصية للأغراض المتعلقة بخدمات التأمين والتواصل وإتمام الإجراءات اللازمة.\n\nبالتوقيع أدناه، أؤكد صحة البيانات وأمنح موافقتي على ما ورد أعلاه.');
-    setSigFooter(htmlToPlain(settings.signature_footer_html) || 'جميع الحقوق محفوظة');
-    setSigColor(settings.signature_primary_color || '#1e3a5f');
+    setSigHeader(htmlToPlain(settings.signature_header_html) || SIGNATURE_DEFAULTS.header);
+    setSigBody(htmlToPlain(settings.signature_body_html) || SIGNATURE_DEFAULTS.body);
+    setSigFooter(htmlToPlain(settings.signature_footer_html) || SIGNATURE_DEFAULTS.footer);
+    setSigColor(settings.signature_primary_color || SIGNATURE_DEFAULTS.color);
     setOwnerName(settings.owner_name || '');
     setTaxNumber(settings.tax_number || '');
     setInvoicePrivacyText(settings.invoice_privacy_text || '');
@@ -611,7 +622,7 @@ export default function BrandingSettings() {
                     <Palette className="h-4 w-4" />
                     اللون الرئيسي لصفحة التوقيع
                   </Label>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <input
                       id="sig-color"
                       type="color"
@@ -622,11 +633,34 @@ export default function BrandingSettings() {
                     <Input
                       value={sigColor}
                       onChange={(e) => setSigColor(e.target.value)}
-                      placeholder="#1e3a5f"
+                      placeholder={SIGNATURE_DEFAULTS.color}
                       className="ltr-input w-32 font-mono"
                       dir="ltr"
                     />
+                    {sigColor.toLowerCase() !== SIGNATURE_DEFAULTS.color.toLowerCase() && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSigColor(SIGNATURE_DEFAULTS.color);
+                          toast.success("تم استرجاع اللون الافتراضي — اضغط حفظ لتثبيته");
+                        }}
+                        className="gap-1.5 h-9 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        إعادة للون الافتراضي
+                      </Button>
+                    )}
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    اللون الافتراضي:{" "}
+                    <span
+                      className="inline-block h-3 w-3 rounded-sm align-middle border ltr-nums font-mono"
+                      style={{ backgroundColor: SIGNATURE_DEFAULTS.color }}
+                    />{" "}
+                    <span className="font-mono ltr-nums" dir="ltr">{SIGNATURE_DEFAULTS.color}</span>
+                  </p>
                 </div>
 
                 {/* Preview */}
