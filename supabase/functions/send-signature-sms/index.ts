@@ -337,8 +337,8 @@ serve(async (req) => {
 });
 
 function buildSignaturePageHtml(
-  clientName: string, 
-  token: string, 
+  clientName: string,
+  token: string,
   expiresAt: string | null,
   template: TemplateContent,
   supabaseUrl: string,
@@ -348,8 +348,9 @@ function buildSignaturePageHtml(
 
   // Logo section: prefer branding logo, fall back to template logo
   const logoUrl = branding.logoUrl || template.logo_url;
+  const accent = branding.signaturePrimaryColor || '#455ebb';
   const logoSection = logoUrl
-    ? `<img src="${logoUrl}" alt="${branding.companyName}" class="logo" style="max-height: 60px; margin-bottom: 15px;" />`
+    ? `<img src="${logoUrl}" alt="${branding.companyName}" class="logo-img" />`
     : '';
 
   return `<!DOCTYPE html>
@@ -360,103 +361,146 @@ function buildSignaturePageHtml(
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
   <title>توقيع العميل | ثقة للتأمين</title>
   <style>
+    :root {
+      --accent: ${accent};
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif;
       min-height: 100vh;
-      background: linear-gradient(135deg, #1e3a5f 0%, #2d4a6f 50%, #3d5a7f 100%);
-      padding: 20px;
+      background: #fafbff;
+      padding: 40px 16px 32px;
       display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      position: relative;
+      overflow-x: hidden;
+      color: #0f172a;
+    }
+    /* Ambient blurred blobs in the brand color */
+    body::before, body::after {
+      content: "";
+      position: absolute;
+      width: 420px;
+      height: 420px;
+      border-radius: 50%;
+      filter: blur(80px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    body::before {
+      top: -160px;
+      right: -130px;
+      background: var(--accent);
+      opacity: 0.20;
+    }
+    body::after {
+      bottom: -160px;
+      left: -130px;
+      background: var(--accent);
+      opacity: 0.12;
+    }
+    main {
+      width: 100%;
+      max-width: 520px;
+      position: relative;
+      z-index: 1;
+    }
+    /* Floating logo + title sit ABOVE the card on the page background */
+    .hero {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .hero .logo-wrap {
+      width: 80px;
+      height: 80px;
+      border-radius: 24px;
+      background: white;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
+      margin-bottom: 16px;
+      box-shadow: 0 12px 40px -12px ${accent}55, 0 0 0 1px rgba(0,0,0,0.05);
+      overflow: hidden;
     }
+    .hero .logo-img {
+      max-width: 56px;
+      max-height: 56px;
+      object-fit: contain;
+    }
+    .hero .logo-fallback {
+      width: 36px;
+      height: 36px;
+      color: var(--accent);
+    }
+    .hero h1 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
+    .hero .welcome {
+      font-size: 15px;
+      color: #64748b;
+    }
+    .hero .welcome strong {
+      color: #0f172a;
+      font-weight: 700;
+    }
+
     .container {
       background: white;
       border-radius: 24px;
-      max-width: 500px;
-      width: 100%;
-      box-shadow: 0 30px 60px rgba(0,0,0,0.3);
+      box-shadow: 0 24px 60px -20px ${accent}33, 0 4px 16px -8px rgba(0,0,0,0.06);
       overflow: hidden;
     }
-    .header {
-      background: linear-gradient(135deg, #1e3a5f 0%, #2d4a6f 100%);
-      color: white;
-      padding: 30px 25px;
-      text-align: center;
+    .accent-bar {
+      height: 6px;
+      width: 100%;
+      background: var(--accent);
     }
-    .header .logo { 
-      background: white; 
-      padding: 10px; 
-      border-radius: 10px;
-      display: inline-block;
+    .content {
+      padding: 28px 24px;
     }
-    .header h1 { 
-      font-size: 28px; 
-      font-weight: 800;
-      margin-bottom: 5px;
-    }
-    .header .english { 
-      font-size: 14px; 
-      letter-spacing: 3px;
-      opacity: 0.8;
-      margin-bottom: 15px;
-    }
-    .header .welcome {
-      font-size: 16px;
-      opacity: 0.9;
-    }
-    .header .client-name {
-      font-size: 22px;
-      font-weight: 700;
-      margin-top: 5px;
-    }
-    .content { padding: 25px; }
-    
+
     /* Template content styling */
     .template-content {
-      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-      border-radius: 16px;
-      padding: 20px;
-      margin-bottom: 25px;
+      margin-bottom: 24px;
     }
-    .template-content h2, .template-content h3 {
-      color: #1e3a5f;
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 15px;
-      padding-bottom: 10px;
-      border-bottom: 2px solid #e2e8f0;
+    .template-content h2, .template-content h3, .template-header {
+      color: #0f172a;
+      font-size: 17px;
+      font-weight: 800;
+      margin-bottom: 12px;
     }
-    .template-content p {
+    .template-content p, .template-body {
       color: #475569;
       font-size: 14px;
-      line-height: 1.8;
+      line-height: 1.85;
+      margin-bottom: 8px;
+    }
+    .template-content strong { color: #0f172a; font-weight: 700; }
+
+    .signature-section { margin-bottom: 20px; }
+    .signature-section h3 {
+      color: #0f172a;
+      font-size: 14px;
+      font-weight: 700;
       margin-bottom: 10px;
     }
-    .template-content strong {
-      color: #1e3a5f;
-    }
-    
-    .signature-section {
-      margin-bottom: 20px;
-    }
-    .signature-section h3 {
-      color: #1e3a5f;
-      font-size: 16px;
-      font-weight: 700;
-      margin-bottom: 15px;
-      text-align: center;
-    }
     .canvas-wrapper {
-      border: 3px dashed #cbd5e1;
-      border-radius: 16px;
-      background: #fafbfc;
+      border: 2px dashed ${accent}55;
+      border-radius: 18px;
+      background: ${accent}08;
+      padding: 10px;
       position: relative;
       overflow: hidden;
       touch-action: none;
     }
     .canvas-wrapper.active {
-      border-color: #1e3a5f;
+      border-color: var(--accent);
       border-style: solid;
     }
     #signatureCanvas {
@@ -465,6 +509,8 @@ function buildSignaturePageHtml(
       height: 200px;
       cursor: crosshair;
       touch-action: none;
+      background: white;
+      border-radius: 12px;
     }
     .canvas-hint {
       position: absolute;
@@ -556,10 +602,12 @@ function buildSignaturePageHtml(
     }
     .btn-clear:hover { background: #e2e8f0; }
     .btn-submit {
-      background: linear-gradient(135deg, #1e3a5f 0%, #2d4a6f 100%);
+      background: var(--accent);
       color: white;
+      box-shadow: 0 8px 24px -6px ${accent}66;
     }
-    .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(30,58,95,0.3); }
+    .btn-submit:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .btn-submit:active { transform: translateY(0); }
     .btn-submit:disabled {
       background: #cbd5e1;
       cursor: not-allowed;
@@ -574,12 +622,19 @@ function buildSignaturePageHtml(
     }
     .footer {
       text-align: center;
-      padding: 15px 25px;
-      background: #f8fafc;
-      border-top: 1px solid #e2e8f0;
+      padding: 14px 24px;
+      background: #fafbff;
+      border-top: 1px solid #eef0f7;
       font-size: 12px;
-      color: #64748b;
+      color: #94a3b8;
     }
+    .powered-by {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .powered-by strong { color: #475569; font-weight: 700; }
     .loading {
       display: none;
       align-items: center;
@@ -646,56 +701,69 @@ function buildSignaturePageHtml(
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      ${logoSection}
+  <main>
+    <!-- Floating logo + title above the card -->
+    <div class="hero">
+      <div class="logo-wrap">
+        ${logoSection || `
+          <svg class="logo-fallback" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M14 2v4a2 2 0 0 0 2 2h4" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10 9H8M16 13H8M16 17H8" />
+          </svg>
+        `}
+      </div>
       <h1>${branding.companyName}</h1>
-      ${branding.companyNameEn ? `<div class="english">${branding.companyNameEn}</div>` : ''}
-      <div class="welcome">مرحباً بك</div>
-      <div class="client-name">${clientName}</div>
+      <div class="welcome">مرحباً بك، <strong>${clientName}</strong></div>
     </div>
-    
-    <div class="content">
-      <!-- Admin-configured template content -->
-      <div class="template-content">
-        <div class="template-header">${template.header_html}</div>
-        <div class="template-body">${template.body_html}</div>
-      </div>
-      
-      <div class="signature-section">
-        <h3>يرجى التوقيع في المربع أدناه</h3>
-        <div class="canvas-wrapper" id="canvasWrapper">
-          <canvas id="signatureCanvas"></canvas>
-          <span class="canvas-hint" id="canvasHint">ارسم توقيعك هنا</span>
+
+    <div class="container">
+      <div class="accent-bar"></div>
+
+      <div class="content">
+        <!-- Admin-configured template content -->
+        <div class="template-content">
+          <div class="template-header">${template.header_html}</div>
+          <div class="template-body">${template.body_html}</div>
         </div>
+
+        <div class="signature-section">
+          <h3>ارسم توقيعك أدناه</h3>
+          <div class="canvas-wrapper" id="canvasWrapper">
+            <canvas id="signatureCanvas"></canvas>
+            <span class="canvas-hint" id="canvasHint">ارسم هنا</span>
+          </div>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <div class="toggle-wrapper" id="toggleWrapper">
+          <label class="toggle-switch">
+            <input type="checkbox" id="acceptTerms">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="terms-text">أقرّ أنني قرأت وأوافق على جميع الشروط والأحكام المذكورة أعلاه</span>
+        </div>
+
+        <div class="buttons">
+          <button class="btn btn-clear" onclick="clearCanvas()">مسح</button>
+          <button class="btn btn-submit" id="submitBtn" onclick="submitSignature()" disabled>
+            <span class="btn-text">تأكيد التوقيع</span>
+            <span class="loading" id="loadingSpinner">
+              <span class="spinner"></span>
+              جاري الإرسال...
+            </span>
+          </button>
+        </div>
+
+        ${expiryText ? `<p class="expiry">ينتهي هذا الرابط في: ${expiryText}</p>` : ''}
       </div>
 
-      <div class="error-message" id="errorMessage"></div>
-
-      <div class="toggle-wrapper" id="toggleWrapper">
-        <label class="toggle-switch">
-          <input type="checkbox" id="acceptTerms">
-          <span class="toggle-slider"></span>
-        </label>
-        <span class="terms-text">أقرّ أنني قرأت وأوافق على جميع الشروط والأحكام المذكورة أعلاه</span>
-      </div>
-
-      <div class="buttons">
-        <button class="btn btn-clear" onclick="clearCanvas()">مسح</button>
-        <button class="btn btn-submit" id="submitBtn" onclick="submitSignature()" disabled>
-          <span class="btn-text">تأكيد التوقيع</span>
-          <span class="loading" id="loadingSpinner">
-            <span class="spinner"></span>
-            جاري الإرسال...
-          </span>
-        </button>
-      </div>
-
-      ${expiryText ? `<p class="expiry">ينتهي هذا الرابط في: ${expiryText}</p>` : ''}
+      <div class="footer">${template.footer_html}</div>
     </div>
-    
-    <div class="footer">${template.footer_html}</div>
-  </div>
+
+    <div class="powered-by">مدعوم بواسطة <strong>Thiqa</strong></div>
+  </main>
 
   <div class="success-overlay" id="successOverlay">
     <div class="success-card">
@@ -730,7 +798,7 @@ function buildSignaturePageHtml(
       const rect = wrapper.getBoundingClientRect();
       canvas.width = rect.width;
       canvas.height = 200;
-      ctx.strokeStyle = '#1e3a5f';
+      ctx.strokeStyle = '${accent}';
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
