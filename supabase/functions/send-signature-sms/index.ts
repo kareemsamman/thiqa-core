@@ -817,21 +817,26 @@ function buildSignaturePageHtml(
     function startDrawing(e) {
       e.preventDefault();
       isDrawing = true;
-      hasDrawn = true;
-      hint.classList.add('hidden');
-      wrapper.classList.add('active');
+      // NOTE: don't flip hasDrawn here — a click without a drag would
+      // wrongly enable the submit button. The flag is only set once the
+      // pointer actually moves (see draw() below).
       const pos = getPos(e);
       ctx.beginPath();
       ctx.moveTo(pos.x, pos.y);
-      updateSubmitButton();
     }
-    
+
     function draw(e) {
       if (!isDrawing) return;
       e.preventDefault();
       const pos = getPos(e);
       ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
+      if (!hasDrawn) {
+        hasDrawn = true;
+        hint.classList.add('hidden');
+        wrapper.classList.add('active');
+        updateSubmitButton();
+      }
     }
     
     function stopDrawing() {
