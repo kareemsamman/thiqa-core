@@ -365,6 +365,10 @@ function buildSignaturePageHtml(
       --accent: ${accent};
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      max-width: 100%;
+      overflow-x: hidden;
+    }
     body {
       font-family: 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif;
       min-height: 100vh;
@@ -375,13 +379,14 @@ function buildSignaturePageHtml(
       align-items: center;
       justify-content: flex-start;
       position: relative;
-      overflow-x: hidden;
       color: #0f172a;
     }
-    /* Ambient blurred blobs in the brand color */
+    /* Ambient blurred blobs in the brand color. position: fixed so the
+       viewport (not the body) clips them — prevents horizontal scroll
+       on mobile when the blob extends past the right edge. */
     body::before, body::after {
       content: "";
-      position: absolute;
+      position: fixed;
       width: 420px;
       height: 420px;
       border-radius: 50%;
