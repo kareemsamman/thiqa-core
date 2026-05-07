@@ -307,7 +307,10 @@ export function CompanyIssuancesTable({
   };
 
   const updateDateField = (row: IssuanceRow, field: 'issue_date' | 'start_date' | 'end_date', raw: string) => {
-    if (row.is_grouped) return;
+    // Dates aren't aggregated like money fields — just write through to
+    // the main sub. For packages this targets the non-ELZAMI main
+    // (e.g. THIRD/FULL); ELZAMI's own dates are still editable via the
+    // package details drawer.
     onPatch(row.id, { [field]: raw });
     policyDebounced.schedule(row.main.id, { [field]: raw || null });
   };
@@ -435,12 +438,13 @@ export function CompanyIssuancesTable({
                     const isElzami = row.main.policy_type_parent === 'ELZAMI';
                     const isToBroker = row.main.broker_direction === 'to_broker';
                     const editable = !row.is_grouped;
-                    // Package-aware editability for money columns: even
-                    // grouped rows now allow inline edits because the
-                    // updateNumericField/updateCarValue helpers know how
-                    // to derive the right main-sub value from the typed
-                    // total. Date and car-number cells stay locked.
-                    const moneyEditable = true;
+                    // Package-aware editability: even grouped rows allow
+                    // inline edits to money + date cells. The update
+                    // helpers route the write to the main (non-ELZAMI)
+                    // sub-policy. ELZAMI's own values stay reachable via
+                    // the package details drawer. Only car_number (text
+                    // display) keeps the simple per-sub lock via editable.
+                    const mainEditable = true;
                     const rowNumber = (safePage - 1) * pageSize + idx + 1;
                     return (
                       <TableRow
@@ -502,9 +506,8 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             <DateCell
                               value={row.main.issue_date ?? ''}
-                              disabled={!editable}
+                              disabled={!mainEditable}
                               onChange={(v) => updateDateField(rawRow, 'issue_date', v)}
-                              tip={disabledTip}
                             />
                           </TableCell>
                         )}
@@ -512,9 +515,8 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             <DateCell
                               value={row.main.start_date}
-                              disabled={!editable}
+                              disabled={!mainEditable}
                               onChange={(v) => updateDateField(rawRow, 'start_date', v)}
-                              tip={disabledTip}
                             />
                           </TableCell>
                         )}
@@ -522,9 +524,8 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             <DateCell
                               value={row.main.end_date}
-                              disabled={!editable}
+                              disabled={!mainEditable}
                               onChange={(v) => updateDateField(rawRow, 'end_date', v)}
-                              tip={disabledTip}
                             />
                           </TableCell>
                         )}
@@ -536,7 +537,7 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             <NumberCell
                               value={row.main.car_value ?? 0}
-                              disabled={!moneyEditable || !row.main.car_id}
+                              disabled={!mainEditable || !row.main.car_id}
                               onChange={(v) => updateCarValue(rawRow, v)}
                               tip={!row.main.car_id ? 'لا توجد سيارة مرتبطة' : undefined}
                             />
@@ -650,7 +651,7 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             <NumberCell
                               value={row.broker_buy_price ?? 0}
-                              disabled={!moneyEditable || isToBroker}
+                              disabled={!mainEditable || isToBroker}
                               onChange={(v) => updateNumericField(rawRow, 'broker_buy_price', v)}
                               tone="amber"
                               tip={
@@ -666,7 +667,7 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             <NumberCell
                               value={row.insurance_price ?? 0}
-                              disabled={!moneyEditable}
+                              disabled={!mainEditable}
                               onChange={(v) => updateNumericField(rawRow, 'insurance_price', v)}
                               tone="strong"
                             />
@@ -685,7 +686,7 @@ export function CompanyIssuancesTable({
                             ) : (
                               <NumberCell
                                 value={isElzami ? row.office_commission ?? 0 : row.profit ?? 0}
-                                disabled={!moneyEditable}
+                                disabled={!mainEditable}
                                 onChange={(v) =>
                                   updateNumericField(
                                     rawRow,
@@ -703,7 +704,7 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             <NumberCell
                               value={row.insurance_price ?? 0}
-                              disabled={!moneyEditable}
+                              disabled={!mainEditable}
                               onChange={(v) => updateNumericField(rawRow, 'insurance_price', v)}
                               tone="strong"
                             />
