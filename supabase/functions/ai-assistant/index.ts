@@ -1109,12 +1109,14 @@ Deno.serve(async (req) => {
       settingsRows?.find((r: any) => r.setting_key === "ai_assistant_prompt")?.setting_value || null;
     const modelOverride =
       settingsRows?.find((r: any) => r.setting_key === "ai_assistant_model")?.setting_value || null;
-    // Default = Anthropic Claude Sonnet 4.5 via Lovable. The user
-    // confirmed Claude works on their gateway even though it's not
-    // listed in the public Lovable docs (the docs page lags behind
-    // gateway routing). Override by inserting a row into
-    // thiqa_platform_settings (setting_key = "ai_assistant_model").
-    const model = modelOverride?.trim() || "anthropic/claude-sonnet-4-5";
+    // Default = OpenAI GPT-5.5 (non-Pro = fastest in the 5.5 tier on
+    // Lovable). Anthropic Claude isn't on Lovable's gateway. The
+    // standard 5.5 keeps the smarts users want for Palestinian Arabic
+    // dialect while staying snappy. Override by inserting a row into
+    // thiqa_platform_settings (setting_key = "ai_assistant_model")
+    // — e.g. "openai/gpt-5.5-pro", "openai/gpt-5-mini", or
+    // "google/gemini-3.1-pro".
+    const model = modelOverride?.trim() || "openai/gpt-5.5";
     console.log(`[ai-assistant] Using model: ${model}`);
 
     // Build system prompt — append identity context LAST so it wins
