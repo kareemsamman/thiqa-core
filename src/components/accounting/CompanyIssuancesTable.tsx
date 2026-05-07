@@ -264,14 +264,18 @@ export function CompanyIssuancesTable({
     onPatch(row.id, overlayPatch);
 
     // The DB save targets row.main.id. For packages the displayed
-    // payed_for_company is the SUM across subs (ELZAMI subs store
-    // payed_for_company = insurance_price), so we subtract non-main
-    // subs' contribution before writing — that way the on-disk sum
-    // matches what the user typed once aggregates rebuild. الربح on
+    // payed_for_company is the SUM across visible subs, so we subtract
+    // non-main subs' contribution before writing — that way the on-disk
+    // sum matches what the user typed once aggregates rebuild. الربح on
     // the main sub follows from its own insurance_price.
+    // When the group has any non-ELZAMI member, ELZAMI subs are excluded
+    // from the displayed aggregate (see useAccountingData) — they must
+    // also be excluded from this subtraction so the math lines up.
+    const hasNonElzami = row.sub_policies.some((s) => s.policy_type_parent !== 'ELZAMI');
     const nonMainPayed = row.is_grouped
       ? row.sub_policies
           .filter((s) => s.id !== row.main.id)
+          .filter((s) => !(hasNonElzami && s.policy_type_parent === 'ELZAMI'))
           .reduce((sum, s) => sum + Number(s.payed_for_company ?? 0), 0)
       : 0;
     const mainPayedNew = num - nonMainPayed;

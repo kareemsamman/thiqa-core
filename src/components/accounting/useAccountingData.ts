@@ -290,14 +290,32 @@ export function useAccountingData(
       const issuances: IssuanceRow[] = Array.from(groupBuckets.values()).map(
         (group) => {
           const main = pickMainSubPolicy(group);
+          // When a group contains both ELZAMI and a non-ELZAMI policy
+          // (THIRD/FULL/ROAD_SERVICE/etc.), the table's money columns —
+          // insurance_price, payed_for_company, profit, office_commission,
+          // broker_buy_price — should reflect ONLY the non-ELZAMI sides.
+          // ELZAMI is the auto-attached mandatory part; its own numbers are
+          // visible by drilling into the package details drawer.
+          // Standalone ELZAMI rows (no other type in the group) keep their
+          // own values so they aren't blanked out.
+          const hasNonElzami = group.some((s) => s.policy_type_parent !== 'ELZAMI');
+          const moneySubs = hasNonElzami
+            ? group.filter((s) => s.policy_type_parent !== 'ELZAMI')
+            : group;
           const aggregate = group.reduce(
             (acc, s) => {
               const recs = receiptsByPolicy.get(s.id);
-              acc.insurance_price += s.insurance_price;
-              acc.payed_for_company += Number(s.payed_for_company ?? 0);
-              acc.profit += Number(s.profit ?? 0);
-              acc.office_commission += Number(s.office_commission ?? 0);
-              acc.broker_buy_price += Number(s.broker_buy_price ?? 0);
+              const includeMoney = moneySubs.includes(s);
+              if (includeMoney) {
+                acc.insurance_price += s.insurance_price;
+                acc.payed_for_company += Number(s.payed_for_company ?? 0);
+                acc.profit += Number(s.profit ?? 0);
+                acc.office_commission += Number(s.office_commission ?? 0);
+                acc.broker_buy_price += Number(s.broker_buy_price ?? 0);
+              }
+              // Receipts are payments from the client — count them across
+              // every sub since they represent the customer's payment
+              // against the whole package.
               acc.receipts_count += recs?.count ?? 0;
               acc.receipts_total += recs?.total ?? 0;
               if (acc.primary_payment_method == null && recs?.primaryType) {

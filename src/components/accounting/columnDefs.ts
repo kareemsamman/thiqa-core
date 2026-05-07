@@ -2,9 +2,9 @@ import { ColumnOption } from './ManageColumnsDropdown';
 
 export const COMPANY_ISSUANCE_COLUMNS: ColumnOption[] = [
   { key: 'row_number', label: '#' },
+  { key: 'client_name', label: 'العميل' },
   { key: 'document_number', label: 'رقم المعاملة', required: true },
   { key: 'receipts', label: 'سندات القبض' },
-  { key: 'client_name', label: 'العميل' },
   { key: 'client_id_number', label: 'رقم هوية العميل' },
   { key: 'client_phone', label: 'رقم الهاتف' },
   { key: 'issue_date', label: 'تاريخ الإصدار' },
@@ -23,9 +23,9 @@ export const COMPANY_ISSUANCE_COLUMNS: ColumnOption[] = [
 
 export const BROKER_ISSUANCE_COLUMNS: ColumnOption[] = [
   { key: 'row_number', label: '#' },
+  { key: 'client_name', label: 'العميل' },
   { key: 'document_number', label: 'رقم المعاملة', required: true },
   { key: 'receipts', label: 'سندات القبض' },
-  { key: 'client_name', label: 'العميل' },
   { key: 'client_id_number', label: 'رقم هوية العميل' },
   { key: 'client_phone', label: 'رقم الهاتف' },
   { key: 'issue_date', label: 'تاريخ الإصدار' },
