@@ -1,5 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkUsageLimit, limitReachedResponse, logUsage } from "../_shared/usage-limits.ts";
+import {
+  isDeleteIntent,
+  handleDeleteIntent,
+  handleDeletePick,
+  handleDeleteConfirm,
+  type DeleteFlowMetadata,
+} from "./delete-flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1010,13 +1017,58 @@ Deno.serve(async (req) => {
       sessionId = newSession.id;
     }
 
-    // Load chat history (last 10 messages)
+    // Load chat history (last 10 messages). metadata carries the
+    // pending_action for the delete flow so the next user turn can
+    // be interpreted as "pick a number" / "confirm".
     const { data: history } = await adminClient
       .from("ai_chat_messages")
-      .select("role, content")
+      .select("role, content, metadata")
       .eq("session_id", sessionId)
       .order("created_at", { ascending: true })
       .limit(10);
+
+    // ─── Stateful delete flow (admin only) ───
+    // Reads the LAST assistant message's metadata to decide if we're
+    // mid-flow. Resolves deterministically and bypasses the LLM so
+    // there's no risk of the AI hallucinating a delete confirmation.
+    const lastAssistantMeta = (() => {
+      for (let i = (history?.length ?? 0) - 1; i >= 0; i--) {
+        const m = history![i] as any;
+        if (m.role === "assistant") return m.metadata as any;
+      }
+      return null;
+    })();
+
+    const handleDeterministic = async (reply: string, metadata: DeleteFlowMetadata | null) => {
+      await adminClient.from("ai_chat_messages").insert([
+        { session_id: sessionId, role: "user", content: message },
+        { session_id: sessionId, role: "assistant", content: reply, metadata: metadata ?? {} },
+      ]);
+      await adminClient.from("ai_chat_sessions")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", sessionId);
+      return new Response(
+        JSON.stringify({ reply, session_id: sessionId }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    };
+
+    if (lastAssistantMeta?.pending_action === "delete_pick") {
+      const r = await handleDeletePick(lastAssistantMeta, message);
+      return await handleDeterministic(r.reply, r.metadata);
+    }
+    if (lastAssistantMeta?.pending_action === "delete_confirm") {
+      const r = await handleDeleteConfirm(adminClient, lastAssistantMeta, message);
+      return await handleDeterministic(r.reply, r.metadata);
+    }
+    if (isDeleteIntent(message)) {
+      if (!isAdmin) {
+        const reply = "حذف العملاء صلاحية للمدير فقط. تواصل مع مديرك.";
+        return await handleDeterministic(reply, null);
+      }
+      const r = await handleDeleteIntent(adminClient, agentId, branchId, message);
+      return await handleDeterministic(r.reply, r.metadata);
+    }
 
     // Classify intent and fetch data
     const intent = classifyIntent(message);
