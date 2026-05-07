@@ -480,6 +480,38 @@ export default function ActivityLog() {
   const displayedActivities = filteredActivities.slice(0, displayLimit);
   const hasMore = filteredActivities.length > displayLimit;
 
+  // Group activities by customer so one customer renders as a single
+  // card with their own internal numbered timeline. Activities without
+  // a client_id (e.g. some delete-notification rows) get their own card
+  // keyed by activity id so they still appear in the feed.
+  type CustomerGroup = {
+    key: string;
+    clientId: string | null;
+    clientName: string;
+    clientFileNumber: string | null;
+    activities: ActivityItem[]; // newest-first; reverse for numbered display
+  };
+  const groupedByCustomer = useMemo<CustomerGroup[]>(() => {
+    const groups = new Map<string, CustomerGroup>();
+    for (const activity of displayedActivities) {
+      const clientId = activity.details.client_id ?? null;
+      const key = clientId ?? `__no_client_${activity.id}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.activities.push(activity);
+      } else {
+        groups.set(key, {
+          key,
+          clientId,
+          clientName: activity.details.client_name || "—",
+          clientFileNumber: activity.details.client_file_number || null,
+          activities: [activity],
+        });
+      }
+    }
+    return Array.from(groups.values());
+  }, [displayedActivities]);
+
   const clearFilters = () => {
     setSearch("");
     setDateFrom("");
@@ -590,195 +622,196 @@ export default function ActivityLog() {
           </CardContent>
         </Card>
 
-        {/* Activity Timeline. Single vertical line behind all icons
-            connects every event into one chronological chain. Icons get
-            a ring of bg-background so the line appears to "stop" cleanly
-            at each marker rather than slicing through it. */}
-        <div className="relative">
-          {/* The continuous track — runs from the first marker to the last */}
-          {!isLoading && displayedActivities.length > 1 && (
-            <div className="absolute right-[19px] top-7 bottom-7 w-px bg-border pointer-events-none" />
-          )}
-
-          <div className="space-y-5">
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex items-start gap-3 sm:gap-4">
-                  <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
-                  <div className="flex-1 space-y-2 pt-1">
-                    <Skeleton className="h-4 w-1/3" />
-                    <Skeleton className="h-3 w-2/3" />
-                    <Skeleton className="h-3 w-1/2" />
-                  </div>
+        {/* Customer cards. Each card represents one customer and shows
+            their activities as a numbered inner timeline (1, 2, 3, ...
+            in chronological order, oldest first → newest). */}
+        <div className="space-y-4">
+          {isLoading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-xl border bg-card p-5 shadow-sm">
+                <Skeleton className="h-7 w-48 mb-4" />
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-4 w-1/2" />
                 </div>
-              ))
-            ) : displayedActivities.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  لا توجد نتائج مطابقة للبحث
-                </CardContent>
-              </Card>
-            ) : (
-              displayedActivities.map((activity) => {
-                const Icon = typeIcons[activity.type];
-                return (
-                  <div key={activity.id} className="relative flex items-start gap-3 sm:gap-4 group">
-                    {/* Icon marker — ring-background masks the timeline
-                        line so it visually stops at each marker. */}
-                    <div className={cn(
-                      "relative z-10 rounded-lg p-2 sm:p-2.5 shrink-0 ring-4 ring-background transition-transform group-hover:scale-105",
-                      typeColors[activity.type],
-                    )}>
-                      <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+              </div>
+            ))
+          ) : groupedByCustomer.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                لا توجد نتائج مطابقة للبحث
+              </CardContent>
+            </Card>
+          ) : (
+            groupedByCustomer.map((group) => {
+              // Reverse so step #1 = oldest activity for this customer
+              const steps = [...group.activities].reverse();
+              return (
+                <div
+                  key={group.key}
+                  className="rounded-2xl border bg-card p-5 sm:p-6 shadow-sm hover:shadow-md hover:border-primary/30 transition-all"
+                >
+                  {/* Customer name header — big + clickable */}
+                  <div className="flex items-baseline justify-between gap-3 flex-wrap mb-5 pb-4 border-b">
+                    <div className="flex items-baseline gap-2 min-w-0">
+                      {group.clientId ? (
+                        <Link
+                          to={`/clients/${group.clientId}`}
+                          className="text-xl sm:text-2xl font-bold text-foreground hover:text-primary hover:underline underline-offset-4 transition-colors truncate"
+                        >
+                          {group.clientName}
+                        </Link>
+                      ) : (
+                        <span className="text-xl sm:text-2xl font-bold text-foreground truncate">
+                          {group.clientName}
+                        </span>
+                      )}
+                      {group.clientFileNumber && (
+                        <span className="text-sm text-muted-foreground">
+                          ({group.clientFileNumber})
+                        </span>
+                      )}
                     </div>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {steps.length} نشاط
+                    </span>
+                  </div>
 
-                      {/* Content card — white card per event, sitting
-                          alongside the timeline track. The action label
-                          becomes a small badge; the customer name is the
-                          headline (clickable link to the client page). */}
-                      <div className="flex-1 min-w-0">
-                        <div className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/30 transition-all">
-                          {/* Top row: action label + actor + timestamp */}
-                          <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                            <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0">
-                              <Badge variant="secondary" className="text-[11px] h-5 px-2">
-                                {activity.action}
-                              </Badge>
-                              {activity.createdBy && (
-                                <span className="text-[11px] text-muted-foreground">
-                                  بواسطة <span className="font-medium text-foreground/80">{activity.createdBy}</span>
-                                </span>
-                              )}
+                  {/* Inner numbered timeline. Each step:
+                      [step #] · [icon] · [action + details + timestamp]
+                      A vertical line connects the icons inside the card. */}
+                  <div className="relative">
+                    {steps.length > 1 && (
+                      <div className="absolute right-[39px] top-6 bottom-6 w-px bg-border pointer-events-none" />
+                    )}
+
+                    <ol className="space-y-4">
+                      {steps.map((activity, idx) => {
+                        const Icon = typeIcons[activity.type];
+                        return (
+                          <li key={activity.id} className="relative flex items-start gap-3 group">
+                            {/* Step number */}
+                            <div className="shrink-0 w-6 h-6 mt-1 rounded-full bg-muted text-foreground/70 text-xs font-bold flex items-center justify-center">
+                              {idx + 1}
                             </div>
-                            <span className="text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap shrink-0">
-                              {formatDistanceToNow(new Date(activity.created_at), {
-                                addSuffix: true,
-                                locale: ar,
-                              })}
-                            </span>
-                          </div>
 
-                          {/* Headline: customer name — large + clickable */}
-                          {activity.details.client_name && activity.details.client_id ? (
-                            <Link
-                              to={`/clients/${activity.details.client_id}`}
-                              className="inline-flex items-baseline gap-2 text-lg sm:text-xl font-bold text-foreground hover:text-primary hover:underline underline-offset-4 transition-colors"
-                            >
-                              <span className="truncate">{activity.details.client_name}</span>
-                              {activity.details.client_file_number && (
-                                <span className="text-xs font-normal text-muted-foreground">
-                                  ({activity.details.client_file_number})
-                                </span>
-                              )}
-                            </Link>
-                          ) : activity.details.client_name ? (
-                            <span className="inline-flex items-baseline gap-2 text-lg sm:text-xl font-bold text-foreground">
-                              <span className="truncate">{activity.details.client_name}</span>
-                              {activity.details.client_file_number && (
-                                <span className="text-xs font-normal text-muted-foreground">
-                                  ({activity.details.client_file_number})
-                                </span>
-                              )}
-                            </span>
-                          ) : null}
-
-                          {/* Details */}
-                          <div className="text-sm space-y-1.5 mt-2">
-                          {/* Payment specific */}
-                          {activity.type === "payment" && (
-                            <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
-                              <span className="font-semibold text-success">
-                                ₪{(activity.details.amount || 0).toLocaleString()}
-                              </span>
-                              {activity.details.payment_type && (
-                                <Badge
-                                  variant="outline"
-                                  className={cn(
-                                    "text-xs",
-                                    PAYMENT_TYPE_COLORS[activity.details.payment_type] ||
-                                      PAYMENT_TYPE_COLORS.cash
-                                  )}
-                                >
-                                  {PAYMENT_TYPE_LABELS[activity.details.payment_type] ||
-                                    activity.details.payment_type}
-                                </Badge>
-                              )}
-                              {activity.details.cheque_number && (
-                                <span className="text-xs text-muted-foreground">
-                                  شيك #{activity.details.cheque_number}
-                                </span>
-                              )}
+                            {/* Icon marker on the inner timeline track */}
+                            <div className={cn(
+                              "relative z-10 rounded-lg p-2 shrink-0 ring-4 ring-card transition-transform group-hover:scale-105",
+                              typeColors[activity.type],
+                            )}>
+                              <Icon className="h-4 w-4" />
                             </div>
-                          )}
 
-                          {/* Policy/Insurance Info */}
-                          {(activity.details.policy_type || activity.details.company_name) && (
-                            <div className="flex items-start gap-2 text-muted-foreground">
-                              <FileText className="h-3.5 w-3.5 mt-1 shrink-0" />
-                              <div className="flex-1 min-w-0 flex items-center gap-x-2 gap-y-1 flex-wrap">
-                                <span>
-                                  {activity.details.policy_type}
-                                  {activity.details.company_name && (
-                                    <span className="mr-1">← {activity.details.company_name}</span>
+                            {/* Step content */}
+                            <div className="flex-1 min-w-0 pt-1">
+                              {/* Top: action + actor + timestamp */}
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0">
+                                  <span className="font-semibold text-foreground">
+                                    {activity.action}
+                                  </span>
+                                  {activity.createdBy && (
+                                    <span className="text-[11px] text-muted-foreground">
+                                      بواسطة <span className="font-medium text-foreground/80">{activity.createdBy}</span>
+                                    </span>
                                   )}
+                                </div>
+                                <span className="text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                                  {formatDistanceToNow(new Date(activity.created_at), {
+                                    addSuffix: true,
+                                    locale: ar,
+                                  })}
                                 </span>
-                                {activity.details.insurance_price && activity.type === "policy" && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    ₪{activity.details.insurance_price.toLocaleString()}
-                                  </Badge>
+                              </div>
+
+                              {/* Details */}
+                              <div className="text-sm space-y-1 mt-1.5 text-muted-foreground">
+                                {activity.type === "payment" && (
+                                  <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
+                                    <span className="font-semibold text-success">
+                                      ₪{(activity.details.amount || 0).toLocaleString()}
+                                    </span>
+                                    {activity.details.payment_type && (
+                                      <Badge
+                                        variant="outline"
+                                        className={cn(
+                                          "text-xs",
+                                          PAYMENT_TYPE_COLORS[activity.details.payment_type] || PAYMENT_TYPE_COLORS.cash,
+                                        )}
+                                      >
+                                        {PAYMENT_TYPE_LABELS[activity.details.payment_type] || activity.details.payment_type}
+                                      </Badge>
+                                    )}
+                                    {activity.details.cheque_number && (
+                                      <span className="text-xs">شيك #{activity.details.cheque_number}</span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {(activity.details.policy_type || activity.details.company_name) && (
+                                  <div className="flex items-start gap-2">
+                                    <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                                    <div className="flex-1 min-w-0 flex items-center gap-x-2 gap-y-1 flex-wrap">
+                                      <span>
+                                        {activity.details.policy_type}
+                                        {activity.details.company_name && (
+                                          <span className="mr-1">← {activity.details.company_name}</span>
+                                        )}
+                                      </span>
+                                      {activity.details.insurance_price && activity.type === "policy" && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          ₪{activity.details.insurance_price.toLocaleString()}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {activity.details.car_number && activity.type !== "transfer" && (
+                                  <div className="flex items-center gap-2">
+                                    <Car className="h-3.5 w-3.5 shrink-0" />
+                                    <span className="ltr-nums">{activity.details.car_number}</span>
+                                  </div>
+                                )}
+
+                                {activity.type === "cancel" && (
+                                  <div className="flex items-center gap-3 flex-wrap">
+                                    {(activity.details.refund_amount || 0) > 0 && (
+                                      <Badge variant="destructive" className="text-xs">
+                                        مرتجع للعميل: ₪{activity.details.refund_amount!.toLocaleString()}
+                                      </Badge>
+                                    )}
+                                    {activity.details.cancellation_note && (
+                                      <span className="text-xs">{activity.details.cancellation_note}</span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {activity.type === "transfer" && (
+                                  <>
+                                    <div className="flex items-center gap-2">
+                                      <ArrowLeftRight className="h-3.5 w-3.5" />
+                                      <span className="font-mono text-xs ltr-nums">
+                                        {activity.details.transfer_from_car || "—"} ← {activity.details.transfer_to_car || "—"}
+                                      </span>
+                                    </div>
+                                    {activity.details.transfer_note && (
+                                      <div className="text-xs">{activity.details.transfer_note}</div>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             </div>
-                          )}
-
-                          {/* Car Info (hidden for transfer — shown in dedicated row below) */}
-                          {activity.details.car_number && activity.type !== "transfer" && (
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Car className="h-3.5 w-3.5 shrink-0" />
-                              <span className="ltr-nums">{activity.details.car_number}</span>
-                            </div>
-                          )}
-
-                          {/* Cancel specific */}
-                          {activity.type === "cancel" && (
-                            <div className="flex items-center gap-3 flex-wrap">
-                              {(activity.details.refund_amount || 0) > 0 && (
-                                <Badge variant="destructive" className="text-xs">
-                                  مرتجع للعميل: ₪{activity.details.refund_amount!.toLocaleString()}
-                                </Badge>
-                              )}
-                              {activity.details.cancellation_note && (
-                                <span className="text-xs text-muted-foreground">
-                                  {activity.details.cancellation_note}
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Transfer specific */}
-                          {activity.type === "transfer" && (
-                            <>
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <ArrowLeftRight className="h-3.5 w-3.5" />
-                                <span className="font-mono text-xs ltr-nums">
-                                  {activity.details.transfer_from_car || "—"} ← {activity.details.transfer_to_car || "—"}
-                                </span>
-                              </div>
-                              {activity.details.transfer_note && (
-                                <div className="text-xs text-muted-foreground">
-                                  {activity.details.transfer_note}
-                                </div>
-                              )}
-                            </>
-                          )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                </div>
+              );
+            })
+          )}
 
           {/* Load More */}
           {hasMore && (
