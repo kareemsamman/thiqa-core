@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -631,50 +632,58 @@ export default function ActivityLog() {
                       <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
                     </div>
 
-                      {/* Content */}
-                      <div className="flex-1 min-w-0 space-y-1.5 pt-0.5">
-                        {/* Header row. `items-start` keeps the timestamp
-                            aligned to the title's first line even when
-                            the action+badge group wraps onto two rows
-                            on mobile. */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0">
-                            <span className="font-semibold text-foreground">{activity.action}</span>
-                            {activity.createdBy && (
-                              <Badge variant="outline" className="text-[11px] h-5 px-2">
-                                بواسطة {activity.createdBy}
+                      {/* Content card — white card per event, sitting
+                          alongside the timeline track. The action label
+                          becomes a small badge; the customer name is the
+                          headline (clickable link to the client page). */}
+                      <div className="flex-1 min-w-0">
+                        <div className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/30 transition-all">
+                          {/* Top row: action label + actor + timestamp */}
+                          <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                            <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0">
+                              <Badge variant="secondary" className="text-[11px] h-5 px-2">
+                                {activity.action}
                               </Badge>
-                            )}
-                          </div>
-                          <span className="text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap shrink-0 pt-0.5">
-                            {formatDistanceToNow(new Date(activity.created_at), {
-                              addSuffix: true,
-                              locale: ar,
-                            })}
-                          </span>
-                        </div>
-
-                        {/* Details — every detail row is icon-aligned-
-                            to-top so trailing badges (price, payment
-                            type) wrap onto a clean second line via
-                            `flex-wrap` on the inner content wrapper,
-                            instead of floating mid-row. */}
-                        <div className="text-sm space-y-1">
-                          {/* Client Info */}
-                          {activity.details.client_name && (
-                            <div className="flex items-start gap-2 text-muted-foreground">
-                              <Users className="h-3.5 w-3.5 mt-1 shrink-0" />
-                              <span className="min-w-0">
-                                {activity.details.client_name}
-                                {activity.details.client_file_number && (
-                                  <span className="text-xs mr-1">
-                                    ({activity.details.client_file_number})
-                                  </span>
-                                )}
-                              </span>
+                              {activity.createdBy && (
+                                <span className="text-[11px] text-muted-foreground">
+                                  بواسطة <span className="font-medium text-foreground/80">{activity.createdBy}</span>
+                                </span>
+                              )}
                             </div>
-                          )}
+                            <span className="text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                              {formatDistanceToNow(new Date(activity.created_at), {
+                                addSuffix: true,
+                                locale: ar,
+                              })}
+                            </span>
+                          </div>
 
+                          {/* Headline: customer name — large + clickable */}
+                          {activity.details.client_name && activity.details.client_id ? (
+                            <Link
+                              to={`/clients/${activity.details.client_id}`}
+                              className="inline-flex items-baseline gap-2 text-lg sm:text-xl font-bold text-foreground hover:text-primary hover:underline underline-offset-4 transition-colors"
+                            >
+                              <span className="truncate">{activity.details.client_name}</span>
+                              {activity.details.client_file_number && (
+                                <span className="text-xs font-normal text-muted-foreground">
+                                  ({activity.details.client_file_number})
+                                </span>
+                              )}
+                            </Link>
+                          ) : activity.details.client_name ? (
+                            <span className="inline-flex items-baseline gap-2 text-lg sm:text-xl font-bold text-foreground">
+                              <span className="truncate">{activity.details.client_name}</span>
+                              {activity.details.client_file_number && (
+                                <span className="text-xs font-normal text-muted-foreground">
+                                  ({activity.details.client_file_number})
+                                </span>
+                              )}
+                            </span>
+                          ) : null}
+
+                          {/* Details */}
+                          <div className="text-sm space-y-1.5 mt-2">
                           {/* Payment specific */}
                           {activity.type === "payment" && (
                             <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
@@ -762,13 +771,14 @@ export default function ActivityLog() {
                               )}
                             </>
                           )}
+                          </div>
                         </div>
                       </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
 
           {/* Load More */}
           {hasMore && (
