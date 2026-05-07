@@ -232,20 +232,49 @@ export function CompanyIssuancesTable({
   const showCol = (key: string) => visible.includes(key);
   const visibleCount = visible.length;
 
+  // Helper for package edits: when the displayed value is the sum of
+  // visible (non-ELZAMI when applicable) subs, derive what to write to
+  // the main sub by subtracting OTHER non-ELZAMI subs' values for the
+  // same field.
+  const visibleNonMainSum = (
+    row: IssuanceRow,
+    field: keyof IssuanceRow,
+  ): number => {
+    if (!row.is_grouped) return 0;
+    const hasNonElzami = row.sub_policies.some((s) => s.policy_type_parent !== 'ELZAMI');
+    return row.sub_policies
+      .filter((s) => s.id !== row.main.id)
+      .filter((s) => !(hasNonElzami && s.policy_type_parent === 'ELZAMI'))
+      .reduce((sum, s) => sum + Number((s as any)[field] ?? 0), 0);
+  };
+
   const updateNumericField = (
     row: IssuanceRow,
     field: keyof PolicyPatch,
     raw: string,
   ) => {
-    // Other fields stay locked for packages — use the details drawer.
-    // المستحق للشركة is the one exception (handled below).
-    if (row.is_grouped && field !== 'payed_for_company') return;
     const num = raw === '' ? 0 : Number(raw);
     if (Number.isNaN(num)) return;
 
+    // Fields the user can edit even when the row is a package. The edit
+    // targets row.main with the OTHER-subs' value subtracted out so the
+    // displayed sum matches what was typed once aggregates rebuild.
+    const PACKAGE_EDITABLE_FIELDS: Array<keyof PolicyPatch> = [
+      'payed_for_company',
+      'insurance_price',
+      'profit',
+      'broker_buy_price',
+      'office_commission',
+    ];
+    if (row.is_grouped && !PACKAGE_EDITABLE_FIELDS.includes(field)) return;
+
     if (field !== 'payed_for_company') {
+      // Single-sub field: just write through.
+      // Package field: subtract other visible subs' contribution.
+      const otherSum = visibleNonMainSum(row, field as keyof IssuanceRow);
+      const mainNew = num - otherSum;
       onPatch(row.id, { [field]: num });
-      policyDebounced.schedule(row.main.id, { [field]: num });
+      policyDebounced.schedule(row.main.id, { [field]: mainNew });
       return;
     }
 
@@ -264,20 +293,11 @@ export function CompanyIssuancesTable({
     onPatch(row.id, overlayPatch);
 
     // The DB save targets row.main.id. For packages the displayed
-    // payed_for_company is the SUM across visible subs, so we subtract
-    // non-main subs' contribution before writing — that way the on-disk
-    // sum matches what the user typed once aggregates rebuild. الربح on
-    // the main sub follows from its own insurance_price.
-    // When the group has any non-ELZAMI member, ELZAMI subs are excluded
-    // from the displayed aggregate (see useAccountingData) — they must
-    // also be excluded from this subtraction so the math lines up.
-    const hasNonElzami = row.sub_policies.some((s) => s.policy_type_parent !== 'ELZAMI');
-    const nonMainPayed = row.is_grouped
-      ? row.sub_policies
-          .filter((s) => s.id !== row.main.id)
-          .filter((s) => !(hasNonElzami && s.policy_type_parent === 'ELZAMI'))
-          .reduce((sum, s) => sum + Number(s.payed_for_company ?? 0), 0)
-      : 0;
+    // payed_for_company is the SUM across visible subs (ELZAMI excluded
+    // when the group has any non-ELZAMI member), so we subtract other
+    // visible subs' contribution before writing — that way the on-disk
+    // sum matches what the user typed once aggregates rebuild.
+    const nonMainPayed = visibleNonMainSum(row, 'payed_for_company');
     const mainPayedNew = num - nonMainPayed;
     const dbPatch: PolicyPatch = { payed_for_company: mainPayedNew };
     if (!isFromBroker) {
@@ -293,7 +313,9 @@ export function CompanyIssuancesTable({
   };
 
   const updateCarValue = (row: IssuanceRow, raw: string) => {
-    if (!row.main.car_id || row.is_grouped) return;
+    // Cars belong to the client, not the policy — every sub in a package
+    // shares one car_id, so editing it on a grouped row is fine.
+    if (!row.main.car_id) return;
     const num = raw === '' ? 0 : Number(raw);
     if (Number.isNaN(num)) return;
     onPatch(row.id, { car_value: num });
@@ -413,6 +435,12 @@ export function CompanyIssuancesTable({
                     const isElzami = row.main.policy_type_parent === 'ELZAMI';
                     const isToBroker = row.main.broker_direction === 'to_broker';
                     const editable = !row.is_grouped;
+                    // Package-aware editability for money columns: even
+                    // grouped rows now allow inline edits because the
+                    // updateNumericField/updateCarValue helpers know how
+                    // to derive the right main-sub value from the typed
+                    // total. Date and car-number cells stay locked.
+                    const moneyEditable = true;
                     const rowNumber = (safePage - 1) * pageSize + idx + 1;
                     return (
                       <TableRow
@@ -508,9 +536,9 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             <NumberCell
                               value={row.main.car_value ?? 0}
-                              disabled={!editable || !row.main.car_id}
+                              disabled={!moneyEditable || !row.main.car_id}
                               onChange={(v) => updateCarValue(rawRow, v)}
-                              tip={!row.main.car_id ? 'لا توجد سيارة مرتبطة' : disabledTip}
+                              tip={!row.main.car_id ? 'لا توجد سيارة مرتبطة' : undefined}
                             />
                           </TableCell>
                         )}
@@ -622,13 +650,13 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             <NumberCell
                               value={row.broker_buy_price ?? 0}
-                              disabled={!editable || isToBroker}
+                              disabled={!moneyEditable || isToBroker}
                               onChange={(v) => updateNumericField(rawRow, 'broker_buy_price', v)}
                               tone="amber"
                               tip={
                                 isToBroker
                                   ? 'البوليصة مباعة للوسيط — لا يوجد سعر شراء'
-                                  : disabledTip
+                                  : undefined
                               }
                             />
                           </TableCell>
@@ -638,10 +666,9 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             <NumberCell
                               value={row.insurance_price ?? 0}
-                              disabled={!editable}
+                              disabled={!moneyEditable}
                               onChange={(v) => updateNumericField(rawRow, 'insurance_price', v)}
                               tone="strong"
-                              tip={disabledTip}
                             />
                           </TableCell>
                         )}
@@ -658,7 +685,7 @@ export function CompanyIssuancesTable({
                             ) : (
                               <NumberCell
                                 value={isElzami ? row.office_commission ?? 0 : row.profit ?? 0}
-                                disabled={!editable}
+                                disabled={!moneyEditable}
                                 onChange={(v) =>
                                   updateNumericField(
                                     rawRow,
@@ -667,7 +694,6 @@ export function CompanyIssuancesTable({
                                   )
                                 }
                                 tone="emerald"
-                                tip={disabledTip}
                               />
                             )}
                           </TableCell>
@@ -677,10 +703,9 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             <NumberCell
                               value={row.insurance_price ?? 0}
-                              disabled={!editable}
+                              disabled={!moneyEditable}
                               onChange={(v) => updateNumericField(rawRow, 'insurance_price', v)}
                               tone="strong"
-                              tip={disabledTip}
                             />
                           </TableCell>
                         )}
