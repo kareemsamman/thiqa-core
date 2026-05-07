@@ -4411,6 +4411,7 @@ export type Database = {
           policy_type_parent: Database["public"]["Enums"]["policy_type_parent"]
           profit: number | null
           road_service_id: string | null
+          skip_recalc: boolean
           start_date: string
           transferred: boolean | null
           transferred_car_number: string | null
@@ -4460,6 +4461,7 @@ export type Database = {
           policy_type_parent: Database["public"]["Enums"]["policy_type_parent"]
           profit?: number | null
           road_service_id?: string | null
+          skip_recalc?: boolean
           start_date: string
           transferred?: boolean | null
           transferred_car_number?: string | null
@@ -4509,6 +4511,7 @@ export type Database = {
           policy_type_parent?: Database["public"]["Enums"]["policy_type_parent"]
           profit?: number | null
           road_service_id?: string | null
+          skip_recalc?: boolean
           start_date?: string
           transferred?: boolean | null
           transferred_car_number?: string | null
