@@ -452,6 +452,15 @@ export function useAccountingData(
     fetchAll();
   }, [fetchAll]);
 
+  // Refetch when external actions (e.g. RecalcProfitsButton, policy create
+  // from the wizard) signal that policy data has changed. Avoids the user
+  // having to manually reload the accounting page to see fresh numbers.
+  useEffect(() => {
+    const handler = () => fetchAll();
+    window.addEventListener('thiqa:policy-created', handler);
+    return () => window.removeEventListener('thiqa:policy-created', handler);
+  }, [fetchAll]);
+
   const patchSubPolicy = useCallback((subId: string, patch: Partial<SubPolicy>) => {
     setPolicies((prev) =>
       prev.map((row) => {
