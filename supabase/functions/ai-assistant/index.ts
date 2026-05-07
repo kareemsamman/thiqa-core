@@ -1073,16 +1073,23 @@ Deno.serve(async (req) => {
     // Classify intent and fetch data
     const intent = classifyIntent(message);
     console.log(`[ai-assistant] Agent: ${agentId}, Role: ${isAdmin ? 'admin' : 'worker'}, Intent: ${JSON.stringify(intent.tables)}`);
+    // model is resolved AFTER this — log it where it's available below.
     const contextData = await fetchContextData(adminClient, agentId, intent, isAdmin, branchId, message, user.id);
     console.log(`[ai-assistant] Context data length: ${contextData.length}`);
 
-    // Fetch global custom prompt
-    const { data: promptSetting } = await adminClient
+    // Fetch global custom prompt + model override
+    const { data: settingsRows } = await adminClient
       .from("thiqa_platform_settings")
-      .select("setting_value")
-      .eq("setting_key", "ai_assistant_prompt")
-      .maybeSingle();
-    const customPrompt = promptSetting?.setting_value || null;
+      .select("setting_key, setting_value")
+      .in("setting_key", ["ai_assistant_prompt", "ai_assistant_model"]);
+    const customPrompt =
+      settingsRows?.find((r: any) => r.setting_key === "ai_assistant_prompt")?.setting_value || null;
+    const modelOverride =
+      settingsRows?.find((r: any) => r.setting_key === "ai_assistant_model")?.setting_value || null;
+    // Default = Claude Sonnet 4.5 via Lovable. Override by inserting a
+    // row into thiqa_platform_settings (setting_key = "ai_assistant_model").
+    const model = modelOverride?.trim() || "anthropic/claude-sonnet-4-5";
+    console.log(`[ai-assistant] Using model: ${model}`);
 
     // Build system prompt — append identity context LAST so it wins
     // over the static prompt on recency. The AI now knows who's
@@ -1121,7 +1128,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model,
         messages,
       }),
     });
