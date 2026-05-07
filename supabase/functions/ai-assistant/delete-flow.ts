@@ -79,6 +79,22 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Single-token Arabic / Latin filler words that get dropped after the
+ *  verbs are stripped. Stored as a Set since JS regex \b is ASCII-only
+ *  and won't word-segment Arabic — token-based filtering is correct here. */
+const FILLER_WORDS = new Set([
+  // Arabic prepositions / connectors / fillers
+  "في", "على", "عند", "من", "إلى", "الى", "ل",
+  "اسم", "باسم", "اسمه", "اسمها", "اسمهم",
+  "عميل", "العميل", "زبون", "الزبون",
+  "اللي", "التي", "الذي",
+  "بدي", "أبي", "ابي", "اريد", "أريد", "ممكن",
+  "هذا", "هذه", "ذاك", "تلك",
+  "له", "لها", "لهم",
+  // Latin
+  "client", "customer", "please", "the", "a", "an",
+]);
+
 /** Try to extract the client name the user typed. Falls back to the
  *  whole message minus the delete verbs and common filler words.
  *  Verb regex allows OPTIONAL whitespace between every character so
@@ -87,16 +103,21 @@ function escapeRegex(s: string): string {
  *  "الغيه" reduces to nothing instead of leaving a stray "ه". */
 function extractTargetName(message: string): string {
   let s = message;
+  // 1. Strip delete verbs.
   for (const v of DELETE_VERBS) {
     const flexible = v.split("").map(escapeRegex).join("\\s*") + "(?:\\s*(?:ها|هما|هم|ه))?";
     s = s.replace(new RegExp(flexible, "gi"), " ");
   }
-  // Strip common filler / connector words.
-  s = s
-    .replace(/\b(في|على|عند|عميل|الزبون|زبون|client|customer|اسمه|باسم|اسمها|اللي|التي|الذي|please|من فضلك|بدي|ابي|اريد|ممكن|لو سمحت|من|له|لها|اسم)\b/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return s;
+  // 2. Strip multi-word fillers explicitly (single-word approach below
+  //    can't catch them once tokenized).
+  s = s.replace(/من\s+فضلك/gi, " ").replace(/لو\s+سمحت/gi, " ");
+  // 3. Tokenize on whitespace and drop filler words. \b doesn't work
+  //    for Arabic letters in JS, so this is the reliable path.
+  const tokens = s
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t && !FILLER_WORDS.has(t.toLowerCase()));
+  return tokens.join(" ").trim();
 }
 
 interface CandidateRow {
