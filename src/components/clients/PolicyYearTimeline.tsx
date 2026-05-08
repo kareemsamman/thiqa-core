@@ -1248,12 +1248,28 @@ function PolicyPackageCard({
     return getDisplayLabel(policy);
   };
 
+  // Whole-card click → open policy details. We let the click bubble up
+  // from any non-interactive surface inside the card, but bail when the
+  // click originated on a button/link/input/menu trigger so the existing
+  // inline actions (kebab menu, pay, send, edit notes, copy chip…) keep
+  // working without a pile of stopPropagation calls. data-no-card-click
+  // is an opt-out hatch for future widgets that need it.
+  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+    if (target.closest('button, a, input, textarea, select, label, [role="button"], [role="menuitem"], [data-no-card-click]')) {
+      return;
+    }
+    onPolicyClick(policy.id);
+  };
+
   return (
     <Card
       ref={cardRef}
       data-policy-ids={pkg.allPolicyIds.join(' ')}
+      onClick={handleCardClick}
       className={cn(
-        "overflow-hidden transition-all duration-200",
+        "overflow-hidden transition-all duration-200 cursor-pointer",
         // Active: Highlight and strong border
         isActive && "bg-card border-2 border-primary/40 shadow-md shadow-primary/5",
         // Ended: Neutral
