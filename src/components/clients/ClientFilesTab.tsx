@@ -369,6 +369,7 @@ export function ClientFilesTab({ policies, kind, clientId, onCountChange }: Clie
         body: { fileIds: [deletingFile.id] },
       });
       if (error) throw new Error(error.message || 'Delete failed');
+      toast({ title: 'تم الحذف', description: 'تم حذف الملف بنجاح' });
       await fetchAll();
     } catch (error: any) {
       console.error('Error deleting:', error);
