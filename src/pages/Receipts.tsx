@@ -74,7 +74,16 @@ import {
   type ReceiptRow,
 } from "@/components/receipts/ReceiptGroupDetailsDialog";
 import { printAccountingReport } from "@/components/accounting/printAccountingReport";
-import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
+import {
+  AccountingFilters,
+  type AccountingFiltersValue,
+} from "@/components/accounting/AccountingFilters";
+import {
+  ManageColumnsDropdown,
+  type ColumnOption,
+} from "@/components/accounting/ManageColumnsDropdown";
+import { POLICY_TYPE_DISPLAY } from "@/components/accounting/accountingTypes";
+import { useTableColumnVisibility } from "@/hooks/useTableColumnVisibility";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -87,6 +96,9 @@ interface ReceiptRecord extends ReceiptRow {
 
 interface ReceiptGroup extends ReceiptGroupView {
   created_minute: string;
+  // Pulled from the first policy in the group; nullable for manual receipts.
+  company_name: string | null;
+  policy_type_label: string | null;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────
@@ -108,6 +120,51 @@ const PAYMENT_METHOD_OPTIONS = [
 ];
 
 const PAGE_SIZE = 50;
+
+// ─── Columns ─────────────────────────────────────────────────────────
+//
+// Schema for the manage-columns dropdown. document_number and actions
+// are required (the row would lose its identity / interactivity without
+// them). Default visibility excludes ملاحظات / رقم الشيك since those
+// only matter to a subset of users — they can opt in via the dropdown.
+const RECEIPTS_COLUMNS: ColumnOption[] = [
+  { key: "document_number", label: "رقم المعاملة", required: true },
+  { key: "receipt_number", label: "رقم سند القبض" },
+  { key: "amount", label: "المبلغ" },
+  { key: "receipt_date", label: "التاريخ" },
+  { key: "client_name", label: "اسم العميل" },
+  { key: "car_number", label: "رقم السيارة" },
+  { key: "company_name", label: "شركة التأمين" },
+  { key: "policy_type", label: "نوع التأمين" },
+  { key: "payment_method", label: "طريقة الدفع" },
+  { key: "cheque_number", label: "رقم الشيك" },
+  { key: "notes", label: "ملاحظات" },
+  { key: "actions", label: "إجراءات", required: true },
+];
+
+const RECEIPTS_DEFAULT_VISIBLE = [
+  "document_number",
+  "receipt_number",
+  "amount",
+  "receipt_date",
+  "client_name",
+  "car_number",
+  "payment_method",
+  "actions",
+];
+
+const RECEIPTS_COLUMN_KEYS = RECEIPTS_COLUMNS.map((c) => c.key);
+
+// Map a UI policy-type key (ELZAMI / THIRD / FULL / ROAD_SERVICE / ...)
+// back to the (parent, child?) tuple stored on the policies table. THIRD
+// and FULL share parent THIRD_FULL; everything else lives directly on
+// the parent column.
+function typeKeyToFilterClause(key: string): string {
+  if (key === "THIRD" || key === "FULL") {
+    return `and(policy_type_parent.eq.THIRD_FULL,policy_type_child.eq.${key})`;
+  }
+  return `policy_type_parent.eq.${key}`;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -408,13 +465,70 @@ export default function Receipts() {
   // query stays so legacy accident_fee rows don't mix in.
   const activeTab = "payment";
 
-  // Filters
+  // Filters — search stays inline in the toolbar; everything else lives
+  // in the AccountingFilters popover so we get one canonical filter UI
+  // across the app (date range / month, companies, types, payment
+  // methods).
   const [searchQuery, setSearchQuery] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState("all");
+  const [filters, setFilters] = useState<AccountingFiltersValue>({
+    dateFrom: "",
+    dateTo: "",
+    companies: [],
+    types: [],
+    paymentMethods: [],
+  });
   // Page-level branch filter — global admins only.
   const [branchFilter, setBranchFilter] = useState<string | null>(null);
+
+  // Insurance companies — loaded once for the filter dropdown options.
+  const [companyOptions, setCompanyOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("insurance_companies")
+        .select("id, name, name_ar")
+        .eq("active", true)
+        .order("name");
+      if (cancelled) return;
+      setCompanyOptions(
+        (data ?? []).map((c: any) => ({
+          value: c.id,
+          label: c.name_ar || c.name,
+        })),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const typeOptions = useMemo(
+    () =>
+      Object.entries(POLICY_TYPE_DISPLAY).map(([value, label]) => ({
+        value,
+        label,
+      })),
+    [],
+  );
+
+  const paymentMethodOptions = useMemo(
+    () => PAYMENT_METHOD_OPTIONS.filter((o) => o.value !== "all"),
+    [],
+  );
+
+  // Column visibility for the receipts table. Bumped to v1 so existing
+  // localStorage from earlier (no manage-columns dropdown) starts fresh
+  // with the documented defaults.
+  const colsState = useTableColumnVisibility(
+    "receipts-table-v1",
+    RECEIPTS_DEFAULT_VISIBLE,
+    RECEIPTS_COLUMN_KEYS,
+  );
+  const isCol = (key: string) => colsState.visible.includes(key);
 
   // Pagination
   const [page, setPage] = useState(0);
@@ -455,65 +569,61 @@ export default function Receipts() {
     if (!agentId) return;
     setLoading(true);
     try {
+      const { dateFrom, dateTo, companies, types, paymentMethods } = filters;
+
+      // Company / type filters live on the joined policies row, so we
+      // switch the join to !inner when either is active. That means
+      // manual receipts (no policy_id) drop out of the result — which
+      // is the right behavior: "show me only receipts for company X"
+      // can't include rows that aren't tied to any policy.
+      const needsPolicyInnerJoin = companies.length > 0 || types.length > 0;
+      const policyJoin = needsPolicyInnerJoin
+        ? "policy:policies!inner(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_companies(id, name, name_ar))"
+        : "policy:policies(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_companies(id, name, name_ar))";
+
       // Sort by created_at DESC first, so the receipt that was just
       // entered surfaces at the top even if the user back-dated it.
-      // receipt_date is the document's "as of" date (often a few days
-      // in the past for paperwork catch-up) and shouldn't be the
-      // primary key for "newest first" — created_at is.
       let query = (supabase as any)
         .from("receipts")
-        .select("*, policy:policies(id, document_number, group_id)")
+        .select(`*, ${policyJoin}`)
         .eq("agent_id", agentId)
         .eq("receipt_type", activeTab)
         .order("created_at", { ascending: false })
         .order("receipt_date", { ascending: false })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-      // Date filters
-      if (dateFrom) {
-        query = query.gte("receipt_date", dateFrom);
-      }
-      if (dateTo) {
-        query = query.lte("receipt_date", dateTo);
-      }
-
-      // Payment method filter
-      if (paymentMethodFilter !== "all") {
-        query = query.eq("payment_method", paymentMethodFilter);
-      }
-
-      // Branch filter (global admins). receipts.branch_id is auto-set
-      // from the parent policy by the existing trigger; filtering here
-      // narrows the receipts list to that branch's rows.
-      if (branchFilter) {
-        query = query.eq("branch_id", branchFilter);
-      }
-
-      // Search filter (client_name or car_number)
-      if (searchQuery.trim()) {
-        const term = searchQuery.trim();
-        query = query.or(
-          `client_name.ilike.%${term}%,car_number.ilike.%${term}%`
-        );
-      }
-
-      // Fire the page query and a separate count-only query in
-      // parallel. The page query is paginated (PAGE_SIZE rows max);
-      // the count query gives the real total across all pages so
-      // the stat tile and the printed report header don't lie.
       let countQuery = (supabase as any)
         .from("receipts")
-        .select("id", { count: "exact", head: true })
+        .select(
+          needsPolicyInnerJoin ? "id, policies!inner(id)" : "id",
+          { count: "exact", head: true },
+        )
         .eq("agent_id", agentId)
         .eq("receipt_type", activeTab);
-      if (dateFrom) countQuery = countQuery.gte("receipt_date", dateFrom);
-      if (dateTo) countQuery = countQuery.lte("receipt_date", dateTo);
-      if (paymentMethodFilter !== "all") countQuery = countQuery.eq("payment_method", paymentMethodFilter);
-      if (branchFilter) countQuery = countQuery.eq("branch_id", branchFilter);
-      if (searchQuery.trim()) {
-        const term = searchQuery.trim();
-        countQuery = countQuery.or(`client_name.ilike.%${term}%,car_number.ilike.%${term}%`);
-      }
+
+      const applyShared = (q: any) => {
+        if (dateFrom) q = q.gte("receipt_date", dateFrom);
+        if (dateTo) q = q.lte("receipt_date", dateTo);
+        if (paymentMethods.length > 0) q = q.in("payment_method", paymentMethods);
+        if (branchFilter) q = q.eq("branch_id", branchFilter);
+        if (searchQuery.trim()) {
+          const term = searchQuery.trim();
+          q = q.or(`client_name.ilike.%${term}%,car_number.ilike.%${term}%`);
+        }
+        if (companies.length > 0) {
+          q = q.in("policy.company_id", companies);
+        }
+        if (types.length > 0) {
+          // Build an OR clause across (parent) and (parent + child) tuples.
+          // Applied on the joined policies table via the `policy` alias.
+          const clause = types.map(typeKeyToFilterClause).join(",");
+          q = q.or(clause, { foreignTable: "policy" });
+        }
+        return q;
+      };
+
+      query = applyShared(query);
+      countQuery = applyShared(countQuery);
 
       const [{ data, error }, { count: total, error: countErr }] = await Promise.all([
         query,
@@ -523,12 +633,8 @@ export default function Receipts() {
       if (countErr) throw countErr;
 
       const rows = (data || []) as ReceiptRecord[];
-      setReceipts(rows);
       setHasMore(rows.length > PAGE_SIZE);
-      // Trim to page size if we fetched one extra
-      if (rows.length > PAGE_SIZE) {
-        setReceipts(rows.slice(0, PAGE_SIZE));
-      }
+      setReceipts(rows.length > PAGE_SIZE ? rows.slice(0, PAGE_SIZE) : rows);
       setTotalCount(total ?? 0);
     } catch (err: any) {
       console.error("Error fetching receipts:", err);
@@ -536,7 +642,7 @@ export default function Receipts() {
     } finally {
       setLoading(false);
     }
-  }, [agentId, activeTab, page, dateFrom, dateTo, paymentMethodFilter, branchFilter, searchQuery]);
+  }, [agentId, activeTab, page, filters, branchFilter, searchQuery]);
 
   useEffect(() => {
     if (!agentLoading && agentId) {
@@ -547,7 +653,7 @@ export default function Receipts() {
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
-  }, [activeTab, dateFrom, dateTo, paymentMethodFilter, branchFilter, searchQuery]);
+  }, [activeTab, filters, branchFilter, searchQuery]);
 
   // ─── Grouping ──────────────────────────────────────────────────
   //
@@ -567,6 +673,10 @@ export default function Receipts() {
       // one-element array depending on server version, so normalize.
       const rawPolicy = (r as any).policy;
       const policy = Array.isArray(rawPolicy) ? rawPolicy[0] ?? null : rawPolicy ?? null;
+      const rawCompany = policy?.insurance_companies;
+      const company = Array.isArray(rawCompany)
+        ? rawCompany[0] ?? null
+        : rawCompany ?? null;
       let key: string;
       if (policy?.group_id) {
         key = `grp:${policy.group_id}`;
@@ -578,6 +688,11 @@ export default function Receipts() {
       }
 
       if (!map.has(key)) {
+        const typeKey = policy
+          ? policy.policy_type_parent === "THIRD_FULL" && policy.policy_type_child
+            ? policy.policy_type_child
+            : policy.policy_type_parent
+          : null;
         map.set(key, {
           key,
           client_name: r.client_name,
@@ -586,6 +701,10 @@ export default function Receipts() {
           receipts: [],
           total: 0,
           document_numbers: [],
+          company_name: company?.name_ar || company?.name || null,
+          policy_type_label: typeKey
+            ? POLICY_TYPE_DISPLAY[typeKey] || typeKey
+            : null,
         });
       }
       const g = map.get(key)!;
@@ -879,9 +998,29 @@ export default function Receipts() {
         .reduce((s, r) => s + r.amount, 0);
 
       const filterBits: string[] = [];
-      if (dateFrom || dateTo) filterBits.push(`التاريخ: ${dateFrom || "—"} → ${dateTo || "—"}`);
-      if (paymentMethodFilter !== "all") {
-        filterBits.push(`طريقة الدفع: ${paymentLabelShort(paymentMethodFilter)}`);
+      if (filters.dateFrom || filters.dateTo) {
+        filterBits.push(
+          `التاريخ: ${filters.dateFrom || "—"} → ${filters.dateTo || "—"}`,
+        );
+      }
+      if (filters.paymentMethods.length > 0) {
+        filterBits.push(
+          `طريقة الدفع: ${filters.paymentMethods
+            .map((m) => paymentLabelShort(m))
+            .join(" / ")}`,
+        );
+      }
+      if (filters.companies.length > 0) {
+        const labels = filters.companies
+          .map((id) => companyOptions.find((c) => c.value === id)?.label || id)
+          .join(" / ");
+        filterBits.push(`الشركة: ${labels}`);
+      }
+      if (filters.types.length > 0) {
+        const labels = filters.types
+          .map((t) => POLICY_TYPE_DISPLAY[t] || t)
+          .join(" / ");
+        filterBits.push(`نوع التأمين: ${labels}`);
       }
       if (searchQuery) filterBits.push(`بحث: "${searchQuery}"`);
 
@@ -948,101 +1087,68 @@ export default function Receipts() {
         />
 
         <div className="p-3 md:p-6 space-y-4">
-          {/* Toolbar */}
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={handleOpenDialog}
-              className="gap-2"
-            >
-              <Plus className="h-4 w-4" />
+          {/* Toolbar — single row: primary actions on the right (RTL),
+              search + count + manage columns + filter on the left, same
+              pattern as /accounting. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={handleOpenDialog} className="h-8 gap-1.5">
+              <Plus className="h-3.5 w-3.5" />
               إضافة إيصال
             </Button>
             <Button
               size="sm"
               variant="outline"
-              className="gap-2"
+              className="h-8 gap-1.5"
               disabled={printingAll || loading || receipts.length === 0}
               onClick={handlePrintAll}
               title="طباعة كل الإيصالات حسب الفلتر الحالي"
             >
               {printingAll ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Printer className="h-4 w-4" />
+                <Printer className="h-3.5 w-3.5" />
               )}
-              طباعة الكل
+              <span className="hidden sm:inline">طباعة الكل</span>
             </Button>
+
+            <div className="flex items-center gap-2 flex-wrap mr-auto">
+              <div className="relative w-full sm:w-72 md:w-96">
+                <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="بحث باسم العميل أو رقم السيارة..."
+                  className="h-8 w-full pr-8 text-sm"
+                />
+              </div>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {loading ? "..." : `${totalCount} إيصال`}
+              </span>
+              <ManageColumnsDropdown
+                columns={RECEIPTS_COLUMNS}
+                visible={colsState.visible}
+                onToggle={colsState.toggle}
+                onReset={colsState.reset}
+              />
+              <AccountingFilters
+                value={filters}
+                onChange={setFilters}
+                companyOptions={companyOptions}
+                typeOptions={typeOptions}
+                paymentMethodOptions={paymentMethodOptions}
+                show={{
+                  dateRange: true,
+                  companies: true,
+                  types: true,
+                  paymentMethods: true,
+                }}
+              />
+              <AgentBranchFilter value={branchFilter} onChange={setBranchFilter} />
+            </div>
           </div>
 
-          {/* Filters */}
           <div>
-            <Card className="mt-4">
-              <CardContent className="p-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* Search */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">بحث</Label>
-                    <div className="relative">
-                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      <Input
-                        placeholder="اسم العميل أو رقم السيارة..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pr-9"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Date from */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">من تاريخ</Label>
-                    <ArabicDatePicker
-                      value={dateFrom}
-                      onChange={setDateFrom}
-                      placeholder="من تاريخ"
-                    />
-                  </div>
-
-                  {/* Date to */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">إلى تاريخ</Label>
-                    <ArabicDatePicker
-                      value={dateTo}
-                      onChange={setDateTo}
-                      placeholder="إلى تاريخ"
-                      min={dateFrom || undefined}
-                    />
-                  </div>
-
-                  {/* Payment method */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">طريقة الدفع</Label>
-                    <Select
-                      value={paymentMethodFilter}
-                      onValueChange={setPaymentMethodFilter}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="طريقة الدفع" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAYMENT_METHOD_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                {/* Branch filter — global admins only. Sits below the
-                    main filter row so the four-column grid stays even
-                    when the dropdown is hidden for branch-scoped users. */}
-                <div className="mt-3 flex justify-end">
-                  <AgentBranchFilter value={branchFilter} onChange={setBranchFilter} />
-                </div>
-              </CardContent>
-            </Card>
 
             {/* Summary card */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
@@ -1281,37 +1387,51 @@ export default function Receipts() {
       );
     }
 
+    // Per-column widths so table-fixed has something stable to size to.
+    // Anything not listed gets `auto` (the client_name column flexes).
+    const colWidths: Record<string, string | undefined> = {
+      document_number: "110px",
+      receipt_number: "160px",
+      amount: "180px",
+      receipt_date: "110px",
+      client_name: undefined,
+      car_number: "120px",
+      company_name: "160px",
+      policy_type: "100px",
+      payment_method: "170px",
+      cheque_number: "110px",
+      notes: "180px",
+      actions: "60px",
+    };
+    const visibleCols = RECEIPTS_COLUMNS.filter((c) => isCol(c.key));
+
     return (
       <div className="space-y-4">
         <Card>
           <div className="overflow-x-auto">
             {/* table-fixed + explicit widths on every column so the layout
-                stops flex-sizing on content. Previously "17" in رقم سند
-                القبض collapsed its column narrower than the header and
-                everything to the left drifted. With a fixed layout + a
-                <colgroup> the column boundaries are locked and the header
-                always sits directly above its data. */}
+                stops flex-sizing on content. The colgroup is rebuilt from
+                visibleCols so toggling a column off in Manage Columns
+                actually shortens the table. */}
             <Table className="table-fixed w-full min-w-[1000px]">
               <colgroup>
-                <col style={{ width: "110px" }} />
-                <col style={{ width: "160px" }} />
-                <col style={{ width: "180px" }} />
-                <col style={{ width: "110px" }} />
-                <col />
-                <col style={{ width: "120px" }} />
-                <col style={{ width: "170px" }} />
-                <col style={{ width: "60px" }} />
+                {visibleCols.map((c) => (
+                  <col
+                    key={c.key}
+                    style={colWidths[c.key] ? { width: colWidths[c.key] } : undefined}
+                  />
+                ))}
               </colgroup>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right whitespace-nowrap">رقم المعاملة</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">رقم سند القبض</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">المبلغ</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">التاريخ</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">اسم العميل</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">رقم السيارة</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">طريقة الدفع</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">إجراءات</TableHead>
+                  {visibleCols.map((c) => (
+                    <TableHead
+                      key={c.key}
+                      className="text-right whitespace-nowrap"
+                    >
+                      {c.label}
+                    </TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1330,139 +1450,198 @@ export default function Receipts() {
                       ),
                     ),
                   ).join(" + ");
+                  // Cheque number for the row — only meaningful when the
+                  // group is a single cheque receipt.
+                  const chequeNumber =
+                    group.receipts.length === 1 && firstReceipt?.payment_method === "cheque"
+                      ? firstReceipt.cheque_number || "-"
+                      : "-";
+                  const notesPreview =
+                    group.receipts.length === 1
+                      ? firstReceipt?.notes || "-"
+                      : group.receipts
+                          .map((r) => r.notes)
+                          .filter(Boolean)
+                          .join(" · ") || "-";
                   return (
                     <TableRow
                       key={group.key}
                       className="cursor-pointer hover:bg-muted/40"
                       onClick={() => handleOpenGroupDetails(group)}
                     >
-                      <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
-                        {group.document_numbers.length > 0 ? (
-                          <div className="flex items-center gap-1.5">
-                            <span>{group.document_numbers.join(" · ")}</span>
-                            {group.document_numbers.length > 1 && (
-                              <Badge
-                                variant="outline"
-                                className="text-[9px] px-1.5 py-0 h-4 font-sans bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-300"
-                                title="هذه المعاملات ضمن باقة واحدة"
+                      {isCol("document_number") && (
+                        <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                          {group.document_numbers.length > 0 ? (
+                            <div className="flex items-center gap-1.5">
+                              <span>{group.document_numbers.join(" · ")}</span>
+                              {group.document_numbers.length > 1 && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] px-1.5 py-0 h-4 font-sans bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-300"
+                                  title="هذه المعاملات ضمن باقة واحدة"
+                                >
+                                  📦 باقة
+                                </Badge>
+                              )}
+                            </div>
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                      )}
+                      {isCol("receipt_number") && (
+                        <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                          {group.receipts.length <= 1 ? (
+                            <span>{firstReceipt?.receipt_number ?? "-"}</span>
+                          ) : (
+                            <Tooltip delayDuration={100}>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-semibold cursor-help hover:bg-primary/15 transition-colors">
+                                  <Eye className="h-3 w-3" />
+                                  عرض الكل
+                                  <span className="bg-primary/20 rounded-full px-1.5 py-0 text-[9px]">
+                                    {group.receipts.length}
+                                  </span>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="bottom"
+                                align="end"
+                                className="p-2"
+                                dir="rtl"
                               >
-                                📦 باقة
+                                <p className="text-[10px] text-muted-foreground mb-1.5 px-1">
+                                  أرقام السندات ({group.receipts.length})
+                                </p>
+                                <ul className="flex flex-col gap-0.5">
+                                  {group.receipts.map((r) => (
+                                    <li
+                                      key={r.id}
+                                      className="px-2 py-1 rounded font-mono text-xs ltr-nums flex items-center gap-3 justify-between min-w-[140px]"
+                                    >
+                                      <span>{r.receipt_number ?? "-"}</span>
+                                      <span className="text-muted-foreground">
+                                        {paymentLabelShort(r.payment_method)}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                      )}
+                      {isCol("amount") && (
+                        <TableCell className="font-semibold whitespace-nowrap">
+                          <div className="flex items-center gap-1">
+                            ₪
+                            {group.total.toLocaleString("en-US", {
+                              minimumFractionDigits: 2,
+                            })}
+                            {group.receipts.length > 1 && (
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] px-1.5 py-0"
+                              >
+                                {group.receipts.length} سندات
                               </Badge>
                             )}
                           </div>
-                        ) : (
-                          "-"
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
-                        {group.receipts.length <= 1 ? (
-                          <span>{firstReceipt?.receipt_number ?? "-"}</span>
-                        ) : (
-                          <Tooltip delayDuration={100}>
-                            <TooltipTrigger asChild>
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-semibold cursor-help hover:bg-primary/15 transition-colors">
-                                <Eye className="h-3 w-3" />
-                                عرض الكل
-                                <span className="bg-primary/20 rounded-full px-1.5 py-0 text-[9px]">
-                                  {group.receipts.length}
-                                </span>
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent
-                              side="bottom"
-                              align="end"
-                              className="p-2"
-                              dir="rtl"
-                            >
-                              <p className="text-[10px] text-muted-foreground mb-1.5 px-1">
-                                أرقام السندات ({group.receipts.length})
-                              </p>
-                              <ul className="flex flex-col gap-0.5">
-                                {group.receipts.map((r) => (
-                                  <li
-                                    key={r.id}
-                                    className="px-2 py-1 rounded font-mono text-xs ltr-nums flex items-center gap-3 justify-between min-w-[140px]"
-                                  >
-                                    <span>{r.receipt_number ?? "-"}</span>
-                                    <span className="text-muted-foreground">
-                                      {paymentLabelShort(r.payment_method)}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-semibold whitespace-nowrap">
-                        <div className="flex items-center gap-1">
-                          ₪
-                          {group.total.toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                          })}
-                          {group.receipts.length > 1 && (
-                            <Badge
-                              variant="secondary"
-                              className="text-[10px] px-1.5 py-0"
-                            >
-                              {group.receipts.length} سندات
-                            </Badge>
+                        </TableCell>
+                      )}
+                      {isCol("receipt_date") && (
+                        <TableCell className="ltr-nums whitespace-nowrap">
+                          {formatDate(firstReceipt?.receipt_date || "")}
+                        </TableCell>
+                      )}
+                      {isCol("client_name") && (
+                        <TableCell className="truncate" title={group.client_name}>
+                          {group.client_name}
+                        </TableCell>
+                      )}
+                      {isCol("car_number") && (
+                        <TableCell className="whitespace-nowrap">
+                          {group.car_number || "-"}
+                        </TableCell>
+                      )}
+                      {isCol("company_name") && (
+                        <TableCell className="whitespace-nowrap text-sm">
+                          {group.company_name || "-"}
+                        </TableCell>
+                      )}
+                      {isCol("policy_type") && (
+                        <TableCell className="whitespace-nowrap text-sm">
+                          {group.policy_type_label || "-"}
+                        </TableCell>
+                      )}
+                      {isCol("payment_method") && (
+                        <TableCell className="whitespace-nowrap">
+                          {group.receipts.length === 1 ? (
+                            getPaymentBadge(firstReceipt.payment_method)
+                          ) : (
+                            <Badge variant="outline">{combinedMethodLabel}</Badge>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="ltr-nums whitespace-nowrap">
-                        {formatDate(firstReceipt?.receipt_date || "")}
-                      </TableCell>
-                      <TableCell className="truncate" title={group.client_name}>{group.client_name}</TableCell>
-                      <TableCell className="whitespace-nowrap">{group.car_number || "-"}</TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {group.receipts.length === 1 ? (
-                          getPaymentBadge(firstReceipt.payment_method)
-                        ) : (
-                          <Badge variant="outline">{combinedMethodLabel}</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => handlePrintGroup(group)}
-                            >
-                              <Printer className="h-4 w-4 ml-2" />
-                              {group.receipts.length > 1
-                                ? "طباعة السندات"
-                                : "طباعة السند"}
-                            </DropdownMenuItem>
-                            {/* For single-receipt rows expose edit/delete
-                                inline; for multi-receipt groups the user
-                                clicks the row itself, opens the details
-                                popup, and edits any individual card from
-                                there — no more per-receipt dropdown spam. */}
-                            {group.receipts.length === 1 && (
-                              <>
-                                <DropdownMenuItem
-                                  onClick={() => handleEditReceipt(group.receipts[0])}
-                                >
-                                  <Pencil className="h-4 w-4 ml-2" />
-                                  تعديل
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onClick={() => setDeleteReceipt(group.receipts[0])}
-                                >
-                                  <Trash2 className="h-4 w-4 ml-2" />
-                                  حذف
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
+                        </TableCell>
+                      )}
+                      {isCol("cheque_number") && (
+                        <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                          {chequeNumber}
+                        </TableCell>
+                      )}
+                      {isCol("notes") && (
+                        <TableCell
+                          className="text-sm text-muted-foreground truncate"
+                          title={notesPreview}
+                        >
+                          {notesPreview}
+                        </TableCell>
+                      )}
+                      {isCol("actions") && (
+                        <TableCell
+                          className="whitespace-nowrap"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => handlePrintGroup(group)}
+                              >
+                                <Printer className="h-4 w-4 ml-2" />
+                                {group.receipts.length > 1
+                                  ? "طباعة السندات"
+                                  : "طباعة السند"}
+                              </DropdownMenuItem>
+                              {/* For single-receipt rows expose edit/delete
+                                  inline; for multi-receipt groups the user
+                                  clicks the row itself, opens the details
+                                  popup, and edits any individual card from
+                                  there — no more per-receipt dropdown spam. */}
+                              {group.receipts.length === 1 && (
+                                <>
+                                  <DropdownMenuItem
+                                    onClick={() => handleEditReceipt(group.receipts[0])}
+                                  >
+                                    <Pencil className="h-4 w-4 ml-2" />
+                                    تعديل
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => setDeleteReceipt(group.receipts[0])}
+                                  >
+                                    <Trash2 className="h-4 w-4 ml-2" />
+                                    حذف
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
