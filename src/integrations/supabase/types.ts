@@ -4180,6 +4180,8 @@ export type Database = {
           original_name: string
           size: number
           storage_path: string | null
+          stream_library_id: string | null
+          stream_video_guid: string | null
           uploaded_by: string | null
         }
         Insert: {
@@ -4195,6 +4197,8 @@ export type Database = {
           original_name: string
           size: number
           storage_path?: string | null
+          stream_library_id?: string | null
+          stream_video_guid?: string | null
           uploaded_by?: string | null
         }
         Update: {
@@ -4210,6 +4214,8 @@ export type Database = {
           original_name?: string
           size?: number
           storage_path?: string | null
+          stream_library_id?: string | null
+          stream_video_guid?: string | null
           uploaded_by?: string | null
         }
         Relationships: [
