@@ -1014,28 +1014,6 @@ serve(async (req) => {
       serviceKey,
     };
 
-    // (1) Already inside a quote flow → run the state machine. Active
-    // flow takes priority over greetings: if a customer mid-flow types
-    // "مرحبا", continue the flow rather than restart.
-    if (inProgressFlow === "quote" && inProgressStep) {
-      const handled = await dispatchQuoteFlow(quoteCtx, inProgressStep, inProgressData, text);
-      if (handled) {
-        return new Response(JSON.stringify({ ok: true, quote_step: inProgressStep }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    }
-
-    // (2) Pure greeting → deterministic welcome line.
-    if (isPureGreeting) {
-      return await greetingHandler();
-    }
-
-    // (3) Quote flow ENTRY. Customer typed any of the obvious request
-    // triggers and there's no active flow yet. Fire startQuoteFlow,
-    // which asks for the car number and sets state =
-    // awaiting_car_number. Subsequent turns dispatch through (1).
     const QUOTE_TRIGGERS = [
       "عرض سعر",
       "عرض الأسعار",
@@ -1058,11 +1036,35 @@ serve(async (req) => {
       "تأمين جديد",
       "تامين جديد",
     ];
-    const isQuoteEntry =
-      inProgressFlow !== "quote" &&
-      QUOTE_TRIGGERS.some((t) => trimmedText.includes(t));
+    const matchesQuoteTrigger = QUOTE_TRIGGERS.some((t) => trimmedText.includes(t));
 
-    if (isQuoteEntry) {
+    // Escape hatch: a customer stuck mid-flow can break out by sending a
+    // pure greeting or a fresh quote-trigger phrase. Without this, a
+    // wrong turn (e.g. car lookup failed → bot is now in awaiting_type
+    // and any plate number reads as a bad type answer) traps them.
+    const wantsReset = isPureGreeting || matchesQuoteTrigger;
+
+    // (1) Already inside a quote flow → run the state machine, unless
+    // the customer is explicitly trying to restart.
+    if (inProgressFlow === "quote" && inProgressStep && !wantsReset) {
+      const handled = await dispatchQuoteFlow(quoteCtx, inProgressStep, inProgressData, text);
+      if (handled) {
+        return new Response(JSON.stringify({ ok: true, quote_step: inProgressStep }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // (2) Pure greeting → deterministic welcome line.
+    if (isPureGreeting) {
+      return await greetingHandler();
+    }
+
+    // (3) Quote flow ENTRY. Customer typed any of the obvious request
+    // triggers — fires whether or not there's an active flow, so a
+    // stuck customer can restart by re-asking for a quote.
+    if (matchesQuoteTrigger) {
       await startQuoteFlow(quoteCtx);
       return new Response(JSON.stringify({ ok: true, deterministic: "quote_entry" }), {
         status: 200,
