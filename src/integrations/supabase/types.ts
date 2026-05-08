@@ -2751,6 +2751,172 @@ export type Database = {
           },
         ]
       }
+      customer_chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          metadata: Json
+          role: string
+          session_id: string
+          whatsapp_message_id: string | null
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          role: string
+          session_id: string
+          whatsapp_message_id?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          role?: string
+          session_id?: string
+          whatsapp_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_chat_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "customer_chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_chat_sessions: {
+        Row: {
+          agent_id: string
+          branch_id: string | null
+          client_id: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          last_message_at: string
+          phone_number: string
+        }
+        Insert: {
+          agent_id: string
+          branch_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          last_message_at?: string
+          phone_number: string
+        }
+        Update: {
+          agent_id?: string
+          branch_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          last_message_at?: string
+          phone_number?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_chat_sessions_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_chat_sessions_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_chat_sessions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_requests: {
+        Row: {
+          agent_id: string
+          assigned_to: string | null
+          branch_id: string | null
+          client_id: string | null
+          content: string
+          created_at: string
+          handled_at: string | null
+          handled_by: string | null
+          id: string
+          phone_number: string
+          request_type: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          assigned_to?: string | null
+          branch_id?: string | null
+          client_id?: string | null
+          content: string
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          phone_number: string
+          request_type: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          assigned_to?: string | null
+          branch_id?: string | null
+          client_id?: string | null
+          content?: string
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          phone_number?: string
+          request_type?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_requests_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_requests_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_requests_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_signatures: {
         Row: {
           agent_id: string | null
@@ -3189,6 +3355,66 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "form_template_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      green_api_settings: {
+        Row: {
+          agent_id: string
+          api_token_instance: string
+          branch_id: string | null
+          created_at: string
+          custom_prompt: string | null
+          enabled: boolean
+          fallback_message: string | null
+          id: string
+          instance_id: string
+          phone_label: string | null
+          phone_number: string | null
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          api_token_instance: string
+          branch_id?: string | null
+          created_at?: string
+          custom_prompt?: string | null
+          enabled?: boolean
+          fallback_message?: string | null
+          id?: string
+          instance_id: string
+          phone_label?: string | null
+          phone_number?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          api_token_instance?: string
+          branch_id?: string | null
+          created_at?: string
+          custom_prompt?: string | null
+          enabled?: boolean
+          fallback_message?: string | null
+          id?: string
+          instance_id?: string
+          phone_label?: string | null
+          phone_number?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "green_api_settings_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "green_api_settings_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
             referencedColumns: ["id"]
           },
         ]
