@@ -2002,7 +2002,7 @@ export function PolicyWizard({
           </div>
 
           {/* Step Content */}
-          <div ref={stepScrollRef} className="flex-1 overflow-y-auto px-1 min-h-0">
+          <div ref={stepScrollRef} className="flex-1 overflow-y-auto overflow-x-hidden px-1 min-h-0">
             {currentStep === 1 && (
               <Step1BranchTypeClient
                 isAdmin={isAdmin}
