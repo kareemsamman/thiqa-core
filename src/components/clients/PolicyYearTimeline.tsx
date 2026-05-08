@@ -32,6 +32,7 @@ import {
   Copy,
   Hash,
   Baby,
+  MessageCircle,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -856,6 +857,37 @@ export function PolicyYearTimeline({
     }
   };
 
+  // WhatsApp variant: ask the same edge function to assemble the SMS
+  // body (so the customer gets the same text), then open a wa.me URL
+  // prefilled with that text. No SMS is sent and no quota consumed.
+  const handleCardSendInvoiceWhatsapp = async (policyIds: string[]): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('send-package-invoice-sms', {
+        body: { policy_ids: policyIds, whatsapp_mode: true },
+      });
+      if (error) {
+        await toastFunctionError(error, 'فشل في تجهيز رسالة WhatsApp');
+        return false;
+      }
+      if (data?.error) {
+        toast.error(data.error);
+        return false;
+      }
+      const phone = data?.whatsapp_phone as string | undefined;
+      const text = data?.message_text as string | undefined;
+      if (!phone || !text) {
+        toast.error('فشل في تجهيز رسالة WhatsApp');
+        return false;
+      }
+      const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return true;
+    } catch (err: any) {
+      toast.error(err?.message || 'فشل في تجهيز رسالة WhatsApp');
+      return false;
+    }
+  };
+
   const refreshPaymentInfo = async () => {
     // If using external data, call onPaymentAdded to refresh parent
     if (hasExternalData) {
@@ -992,6 +1024,7 @@ export function PolicyYearTimeline({
                         onPaymentClick={(e) => handlePackagePayment(e, pkg.allPolicyIds, pkg.mainPolicy?.branch_id || pkg.addons[0]?.branch_id || null)}
                         onPrintInvoice={() => handleCardPrintInvoice(pkg.allPolicyIds, pkg.allPolicyIds.length > 1)}
                         onSendInvoiceSms={() => handleCardSendInvoiceSms(pkg.allPolicyIds, pkg.allPolicyIds.length > 1)}
+                        onSendInvoiceWhatsapp={() => handleCardSendInvoiceWhatsapp(pkg.allPolicyIds)}
                         isPackage={pkg.allPolicyIds.length > 1}
                         onTransfer={onTransferPolicy}
                         onCancel={onCancelPolicy}
@@ -1109,6 +1142,7 @@ function PolicyPackageCard({
   onPaymentClick,
   onPrintInvoice,
   onSendInvoiceSms,
+  onSendInvoiceWhatsapp,
   isPackage: isPackageProp,
   onTransfer,
   onCancel,
@@ -1152,6 +1186,7 @@ function PolicyPackageCard({
   onPaymentClick: (e: React.MouseEvent) => void;
   onPrintInvoice: () => Promise<boolean>;
   onSendInvoiceSms: () => Promise<boolean>;
+  onSendInvoiceWhatsapp: () => Promise<boolean>;
   isPackage: boolean;
   onTransfer?: (id: string) => void;
   onCancel?: (id: string) => void;
@@ -1202,7 +1237,7 @@ function PolicyPackageCard({
         ? `صُدرت هذه المعاملة للوسيط ${brokerCardPolicy.broker?.name ?? ''} — المبلغ يُتابع في حساب الوسيط`
         : `تمت هذه المعاملة عبر الوسيط ${brokerCardPolicy.broker?.name ?? ''} — المبلغ يُتابع في حساب الوسيط`)
     : '';
-  const [invoiceBusy, setInvoiceBusy] = useState<'print' | 'sms' | null>(null);
+  const [invoiceBusy, setInvoiceBusy] = useState<'print' | 'sms' | 'whatsapp' | null>(null);
 
   // Ref on the coverage-period cell so clicking the status badge can flash
   // the date to tell the user "this is what سارية is referring to".
@@ -1579,6 +1614,67 @@ function PolicyPackageCard({
                     {clientPhone ? (
                       <p className="text-xs text-muted-foreground leading-tight mt-0.5">
                         سيتم إرسال رابط المعاملة للرقم{' '}
+                        <span className="font-mono font-semibold text-foreground ltr-nums">
+                          {clientPhone}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-xs text-destructive leading-tight mt-0.5">
+                        لا يوجد رقم هاتف للعميل
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </HoverCardContent>
+            </HoverCard>
+
+            {/* Send via WhatsApp — opens wa.me with the same message body
+                the SMS would carry. No SMS quota is consumed; the user
+                still has to tap "send" inside WhatsApp. */}
+            <HoverCard openDelay={120} closeDelay={80}>
+              <HoverCardTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="relative h-8 w-8 p-0 text-muted-foreground hover:text-green-600 hover:bg-green-500/10 transition-colors"
+                  disabled={invoiceBusy !== null || !clientPhone}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (invoiceBusy) return;
+                    if (!clientPhone) {
+                      toast.error('لا يوجد رقم هاتف للعميل');
+                      return;
+                    }
+                    setInvoiceBusy('whatsapp');
+                    try {
+                      await onSendInvoiceWhatsapp();
+                    } finally {
+                      setInvoiceBusy(null);
+                    }
+                  }}
+                  aria-label="إرسال WhatsApp للعميل"
+                >
+                  {invoiceBusy === 'whatsapp' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <MessageCircle className="h-4 w-4" />
+                  )}
+                </Button>
+              </HoverCardTrigger>
+              <HoverCardContent
+                side="top"
+                align="end"
+                className="w-auto min-w-[260px] p-3 border-green-500/20 shadow-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-green-500/10 text-green-600 flex items-center justify-center shrink-0">
+                    <MessageCircle className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">إرسال WhatsApp للعميل</p>
+                    {clientPhone ? (
+                      <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+                        سيتم فتح WhatsApp للرقم{' '}
                         <span className="font-mono font-semibold text-foreground ltr-nums">
                           {clientPhone}
                         </span>

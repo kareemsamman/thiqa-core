@@ -16,6 +16,12 @@ const corsHeaders = {
 interface SendPackageInvoiceSmsRequest {
   policy_ids: string[];
   skip_sms?: boolean;
+  // When true, build the same message body that an SMS would carry, but
+  // do NOT actually send anything. Returns the message text + a
+  // wa.me-ready phone so the client can open WhatsApp with the prefilled
+  // text instead. Skips SMS settings/quota and does not mark the policy
+  // as sent.
+  whatsapp_mode?: boolean;
 }
 
 const POLICY_TYPE_LABELS: Record<string, string> = {
@@ -185,7 +191,7 @@ serve(async (req) => {
     const agentId = await resolveAgentId(supabase, user.id);
     const branding = await getAgentBranding(supabase, agentId);
 
-    const { policy_ids, skip_sms }: SendPackageInvoiceSmsRequest = await req.json();
+    const { policy_ids, skip_sms, whatsapp_mode }: SendPackageInvoiceSmsRequest = await req.json();
 
     if (!policy_ids || policy_ids.length === 0) {
       return new Response(
@@ -221,10 +227,11 @@ serve(async (req) => {
     // All policies should have the same client
     const client = policies[0].client;
     
-    // Only require phone number when actually sending SMS
-    if (!skip_sms && !client?.phone_number) {
+    // Only require phone number when actually sending SMS or building a
+    // WhatsApp link (wa.me URL needs a destination number).
+    if ((!skip_sms || whatsapp_mode) && !client?.phone_number) {
       return new Response(
-        JSON.stringify({ error: "رقم هاتف العميل مطلوب لإرسال SMS" }),
+        JSON.stringify({ error: "رقم هاتف العميل مطلوب" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -251,8 +258,9 @@ serve(async (req) => {
     const packageAgentId = policies?.[0]?.agent_id;
     const smsSettingsData = await resolveSmsSettings(supabase, packageAgentId);
 
-    // For SMS sending, require enabled settings
-    if (!skip_sms) {
+    // For SMS sending, require enabled settings + quota. WhatsApp mode
+    // bypasses both since no SMS leaves our system.
+    if (!skip_sms && !whatsapp_mode) {
       if (!smsSettingsData) {
         return new Response(
           JSON.stringify({ error: "خدمة الرسائل غير مفعلة" }),
@@ -503,6 +511,27 @@ serve(async (req) => {
     smsMessage += `\n\nمعاملة التأمين: ${packageInvoiceUrl}`;
 
     smsMessage = appendSmsFooter(smsMessage, branding);
+
+    // WhatsApp mode: hand the prepared text + wa.me-ready phone back to
+    // the client and exit. No SMS goes out, no quota is consumed, and
+    // the policy is not marked as sent (the user may still want to
+    // follow up over real SMS).
+    if (whatsapp_mode) {
+      const duration = Date.now() - startTime;
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: 'whatsapp',
+          message_text: smsMessage,
+          whatsapp_phone: normalizePhoneForWhatsapp(client.phone_number),
+          policy_count: policy_ids.length,
+          file_count: policyFileUrls.length,
+          package_invoice_url: packageInvoiceUrl,
+          duration_ms: duration,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Re-assert (TS narrowing was lost across earlier branches above)
     if (!smsSettingsData) {
