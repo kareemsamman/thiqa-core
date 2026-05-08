@@ -530,6 +530,39 @@ export default function Receipts() {
   );
   const isCol = (key: string) => colsState.visible.includes(key);
 
+  // Imported-from-exe policies are flagged with `skip_recalc=true`.
+  // Receipts attached to them shouldn't appear on this page (the user
+  // doesn't want imported transactions polluting the live receipt view).
+  // We pre-fetch the IDs once per agent and exclude them via .or() so
+  // pagination + count both stay accurate. Manual receipts (policy_id
+  // IS NULL) are kept regardless.
+  const [skipPolicyIds, setSkipPolicyIds] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!agentId) {
+      setSkipPolicyIds(null);
+      return;
+    }
+    (async () => {
+      const { data, error } = await (supabase as any)
+        .from("policies")
+        .select("id")
+        .eq("agent_id", agentId)
+        .eq("skip_recalc", true);
+      if (cancelled) return;
+      if (error) {
+        console.error("[Receipts] failed to load skip policy ids:", error);
+        setSkipPolicyIds([]);
+        return;
+      }
+      setSkipPolicyIds((data ?? []).map((p: { id: string }) => p.id));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId]);
+
   // Pagination
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -619,6 +652,14 @@ export default function Receipts() {
           const clause = types.map(typeKeyToFilterClause).join(",");
           q = q.or(clause, { foreignTable: "policy" });
         }
+        // Hide imported-from-exe rows: drop receipts whose policy is
+        // flagged skip_recalc=true. Manual receipts (policy_id IS NULL)
+        // are kept because they aren't in the skip list.
+        if (skipPolicyIds && skipPolicyIds.length > 0) {
+          q = q.or(
+            `policy_id.is.null,policy_id.not.in.(${skipPolicyIds.join(",")})`,
+          );
+        }
         return q;
       };
 
@@ -642,13 +683,15 @@ export default function Receipts() {
     } finally {
       setLoading(false);
     }
-  }, [agentId, activeTab, page, filters, branchFilter, searchQuery]);
+  }, [agentId, activeTab, page, filters, branchFilter, searchQuery, skipPolicyIds]);
 
   useEffect(() => {
-    if (!agentLoading && agentId) {
+    // Wait until skipPolicyIds has resolved (null = still loading) so the
+    // first paint already excludes imported rows instead of flashing them.
+    if (!agentLoading && agentId && skipPolicyIds !== null) {
       fetchReceipts();
     }
-  }, [fetchReceipts, agentLoading, agentId]);
+  }, [fetchReceipts, agentLoading, agentId, skipPolicyIds]);
 
   // Reset page when filters change
   useEffect(() => {
