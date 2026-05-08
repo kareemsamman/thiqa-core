@@ -92,29 +92,34 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Verify user
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'رمز غير صالح' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    // Service-role callers (e.g. the green-api-webhook WhatsApp quote flow,
+    // which has no end-user context) bypass the user/profile check.
+    if (token !== supabaseKey) {
+      // Verify user
+      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
-    // Check if user is active
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('status')
-      .eq('id', user.id)
-      .single();
+      if (userError || !user) {
+        return new Response(JSON.stringify({ error: 'رمز غير صالح' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
-    if (!profile || profile.status !== 'active') {
-      return new Response(JSON.stringify({ error: 'المستخدم غير نشط' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      // Check if user is active
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('status')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile || profile.status !== 'active') {
+        return new Response(JSON.stringify({ error: 'المستخدم غير نشط' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // Parse request body
