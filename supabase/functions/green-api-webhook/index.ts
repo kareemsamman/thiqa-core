@@ -515,6 +515,15 @@ serve(async (req) => {
     // row id — the debounce check below uses it to decide "am I still the
     // latest customer message in this session, or did a newer one arrive
     // during the wait window?"
+    const customerMetadata: Record<string, any> = {
+      typeMessage,
+      sender_name: senderName,
+    };
+    // Tag voice-transcription-failed turns so we can filter them out of
+    // the AI's history later. Otherwise the model parrots the previous
+    // "اكتبلي طلبك" reply for the next text message.
+    if (voiceTranscriptionFailed) customerMetadata.voice_transcription_failed = true;
+
     const { data: insertedMsg, error: insertErr } = await supabase
       .from("customer_chat_messages")
       .insert({
@@ -522,7 +531,7 @@ serve(async (req) => {
         role: "customer",
         content: text,
         whatsapp_message_id: body?.idMessage ?? null,
-        metadata: { typeMessage, sender_name: senderName },
+        metadata: customerMetadata,
       })
       .select("id")
       .single();
@@ -532,6 +541,36 @@ serve(async (req) => {
       .from("customer_chat_sessions")
       .update({ last_message_at: new Date().toISOString() })
       .eq("id", session.id);
+
+    // Voice that couldn't be transcribed: short-circuit the AI flow with
+    // a deterministic reply. Skipping the AI here is faster (no 10s
+    // debounce, no model call), cheaper (no quota burn), and prevents the
+    // "ما قدرت أفهم التسجيل" loop from leaking into the conversation
+    // history that the model sees on later turns.
+    if (voiceTranscriptionFailed) {
+      const failureReply = "ما قدرت أفهم التسجيل. اكتبلي طلبك برسالة نصية لو سمحت وبساعدك فوراً.";
+      const sendResult = await sendWhatsAppText(
+        instanceId,
+        gaSettings.api_token_instance,
+        senderId,
+        failureReply,
+      );
+      await supabase.from("customer_chat_messages").insert({
+        session_id: session.id,
+        role: "bot",
+        content: failureReply,
+        whatsapp_message_id: sendResult.idMessage,
+        metadata: { voice_failure_response: true, send_ok: sendResult.ok },
+      });
+      await supabase
+        .from("customer_chat_sessions")
+        .update({ last_message_at: new Date().toISOString() })
+        .eq("id", session.id);
+      return new Response(JSON.stringify({ ok: true, voice_failure: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Debounce: customers often send 2-3 messages in quick succession
     // ("مرحبا" → "كيف الحال؟" → "بدي عرض سعر"). Replying to each
@@ -615,12 +654,25 @@ serve(async (req) => {
     // tool calls + follow-up questions.
     const { data: recentMessages } = await supabase
       .from("customer_chat_messages")
-      .select("role, content")
+      .select("role, content, metadata")
       .eq("session_id", session.id)
       .order("created_at", { ascending: true })
       .limit(20);
     const aiHistory = (recentMessages ?? [])
       .filter((m: any) => m.role === "customer" || m.role === "bot")
+      // Hide voice-failure exchanges from the model — both the
+      // "[تسجيل صوتي]" placeholder customer turn and the
+      // "اكتبلي طلبك" bot reply. Without this, the model copies the
+      // failure reply when the customer types something fresh next.
+      // Filter on metadata flags (new path) AND content patterns
+      // (catches pre-existing rows from before this fix).
+      .filter((m: any) => {
+        if (m.metadata?.voice_transcription_failed) return false;
+        if (m.metadata?.voice_failure_response) return false;
+        if (m.role === "customer" && (m.content ?? "").startsWith("[تسجيل صوتي")) return false;
+        if (m.role === "bot" && /(?:ما قدرت أفهم التسجيل|تعذّر فهمه|التسجيل ?(?:مش|غير) ?واضح|ما وصلني الصوت)/.test(m.content ?? "")) return false;
+        return true;
+      })
       .map((m: any) => ({
         role: m.role === "customer" ? "user" : "assistant",
         content: m.content,
