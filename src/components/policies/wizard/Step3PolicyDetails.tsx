@@ -158,6 +158,7 @@ export function Step3PolicyDetails({
   const [loadingPrice, setLoadingPrice] = useState(false);
 
   const [scanning, setScanning] = useState<'insurance' | 'crm' | null>(null);
+  const [isDragging, setIsDragging] = useState<'insurance' | 'crm' | null>(null);
 
   // Convert base64 to Blob for scanner
   const base64ToBlob = (base64: string): Blob => {
@@ -289,6 +290,75 @@ export function Step3PolicyDetails({
       setInsuranceFiles(insuranceFiles.filter((_, i) => i !== index));
     } else {
       setCrmFiles(crmFiles.filter((_, i) => i !== index));
+    }
+  };
+
+  const isAcceptedFile = (file: File): boolean => {
+    if (file.type.startsWith('image/')) return true;
+    if (file.type === 'application/pdf') return true;
+    if (file.type.startsWith('video/')) return true;
+    return /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif|pdf|mp4|mov|avi|webm|mkv|m4v|3gp)$/i.test(file.name);
+  };
+
+  /** Walk a DataTransfer that may contain folders. Falls back to
+   *  dt.files when items aren't available — covers Windows Explorer
+   *  folder drops where dataTransfer.files is empty. */
+  const gatherFilesFromDataTransfer = async (dt: DataTransfer): Promise<File[]> => {
+    const out: File[] = [];
+    const items = dt.items ? Array.from(dt.items) : [];
+    if (items.length === 0) return Array.from(dt.files ?? []);
+
+    const traverse = async (entry: any): Promise<void> => {
+      if (entry.isFile) {
+        const f: File = await new Promise((resolve, reject) =>
+          entry.file(resolve, reject),
+        );
+        out.push(f);
+        return;
+      }
+      if (entry.isDirectory) {
+        const reader = entry.createReader();
+        const readBatch = (): Promise<any[]> =>
+          new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+        let batch = await readBatch();
+        while (batch.length > 0) {
+          for (const child of batch) await traverse(child);
+          batch = await readBatch();
+        }
+      }
+    };
+
+    for (const item of items) {
+      if (item.kind !== 'file') continue;
+      // @ts-ignore — webkitGetAsEntry is widely supported
+      const entry = item.webkitGetAsEntry?.();
+      if (entry) {
+        await traverse(entry);
+      } else {
+        const f = item.getAsFile();
+        if (f) out.push(f);
+      }
+    }
+    return out;
+  };
+
+  const handleDrop = async (event: React.DragEvent<HTMLDivElement>, type: 'insurance' | 'crm') => {
+    event.preventDefault();
+    setIsDragging(null);
+    const collected = await gatherFilesFromDataTransfer(event.dataTransfer);
+    const accepted = collected.filter(isAcceptedFile);
+    const rejectedCount = collected.length - accepted.length;
+    if (accepted.length === 0) {
+      toast.error('لا توجد ملفات مدعومة (الصور و PDF والفيديو فقط).');
+      return;
+    }
+    if (rejectedCount > 0) {
+      toast.message(`تم تجاهل ${rejectedCount} ملف غير مدعوم`);
+    }
+    if (type === 'insurance') {
+      setInsuranceFiles([...insuranceFiles, ...accepted]);
+    } else {
+      setCrmFiles([...crmFiles, ...accepted]);
     }
   };
 
@@ -1194,10 +1264,25 @@ export function Step3PolicyDetails({
           </TabsList>
 
           {/* Insurance Files Tab */}
-          <TabsContent value="insurance" className="mt-3 space-y-3">
+          <TabsContent
+            value="insurance"
+            className={cn(
+              'relative mt-3 space-y-3 rounded-lg p-2 transition-colors',
+              isDragging === 'insurance' ? 'ring-2 ring-primary ring-offset-2 bg-primary/5' : '',
+            )}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging('insurance');
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+              setIsDragging(null);
+            }}
+            onDrop={(e) => handleDrop(e, 'insurance')}
+          >
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                فواتير وإيصالات ترسل للعميل
+                فواتير وإيصالات ترسل للعميل — اسحب وأفلت ملفات هنا
               </p>
               <div className="flex items-center gap-1.5 shrink-0">
                 <Button
@@ -1262,13 +1347,36 @@ export function Step3PolicyDetails({
                 ))
               )}
             </div>
+            {isDragging === 'insurance' && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-lg">
+                <div className="bg-background/95 px-4 py-2 rounded-md shadow-md text-sm font-semibold text-primary flex items-center gap-2">
+                  <Upload className="h-4 w-4" />
+                  أفلت الملفات للإضافة
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           {/* CRM Files Tab */}
-          <TabsContent value="crm" className="mt-3 space-y-3">
+          <TabsContent
+            value="crm"
+            className={cn(
+              'relative mt-3 space-y-3 rounded-lg p-2 transition-colors',
+              isDragging === 'crm' ? 'ring-2 ring-primary ring-offset-2 bg-primary/5' : '',
+            )}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging('crm');
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+              setIsDragging(null);
+            }}
+            onDrop={(e) => handleDrop(e, 'crm')}
+          >
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                هوية، رخصة، صور سيارة - ملفات للاستخدام الداخلي فقط
+                هوية، رخصة، صور سيارة - ملفات للاستخدام الداخلي فقط — اسحب وأفلت ملفات هنا
               </p>
               <div className="flex items-center gap-1.5 shrink-0">
                 <Button
@@ -1333,6 +1441,14 @@ export function Step3PolicyDetails({
                 ))
               )}
             </div>
+            {isDragging === 'crm' && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-lg">
+                <div className="bg-background/95 px-4 py-2 rounded-md shadow-md text-sm font-semibold text-primary flex items-center gap-2">
+                  <Upload className="h-4 w-4" />
+                  أفلت الملفات للإضافة
+                </div>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </Card>
