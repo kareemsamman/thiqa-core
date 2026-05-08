@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -79,48 +78,12 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'غير مصرح' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    const token = authHeader.replace('Bearer ', '');
-
-    // Service-role callers (e.g. the green-api-webhook WhatsApp quote flow,
-    // which has no end-user context) bypass the user/profile check.
-    if (token !== supabaseKey) {
-      // Verify user
-      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
-      if (userError || !user) {
-        return new Response(JSON.stringify({ error: 'رمز غير صالح' }), {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      // Check if user is active
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('status')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile || profile.status !== 'active') {
-        return new Response(JSON.stringify({ error: 'المستخدم غير نشط' }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    }
+    // No auth check: the data this function returns is just the public
+    // Israeli vehicle registry from data.gov.il, and the function has
+    // verify_jwt=false at the gateway. Both the legacy and new
+    // service-role token formats end up here, and pinning the comparison
+    // to a single env var format proved fragile (different callers — the
+    // wizard, the WhatsApp webhook — were sending different formats).
 
     // Parse request body
     const { car_number } = await req.json();
