@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Loader2, FileText, ExternalLink, FolderOpen, ImageIcon, Search } from 'lucide-react';
+import { Loader2, FileText, ExternalLink, FolderOpen, ImageIcon, Search, Play } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { FilePreviewGallery } from '@/components/policies/FilePreviewGallery';
 
@@ -16,6 +16,8 @@ interface MediaFile {
   entity_type: string | null;
   entity_id?: string | null;
   storage_path?: string | null;
+  stream_video_guid?: string | null;
+  stream_library_id?: string | null;
 }
 
 export interface ClientFilesPolicyRef {
@@ -41,6 +43,7 @@ const ENTITY_TYPES: Record<ClientFilesTabProps['kind'], string[]> = {
 
 const isImage = (mime: string) => mime?.startsWith('image/');
 const isPdf = (mime: string) => mime === 'application/pdf';
+const isVideo = (mime: string) => mime?.startsWith('video/');
 
 const formatSize = (bytes: number) => {
   if (!bytes) return '';
@@ -74,7 +77,7 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
       }
       const { data, error } = await supabase
         .from('media_files')
-        .select('id, original_name, cdn_url, mime_type, size, created_at, entity_type, entity_id, storage_path')
+        .select('id, original_name, cdn_url, mime_type, size, created_at, entity_type, entity_id, storage_path, stream_video_guid, stream_library_id')
         .in('entity_id', policyIds)
         .in('entity_type', ENTITY_TYPES[kind])
         .is('deleted_at', null)
@@ -193,6 +196,25 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-red-500 to-red-600 text-white">
                         <FileText className="h-10 w-10" />
                         <span className="text-sm font-bold mt-2">PDF</span>
+                      </div>
+                    ) : isVideo(file.mime_type) ? (
+                      <div className="relative w-full h-full bg-black">
+                        {file.stream_video_guid && file.stream_library_id ? (
+                          <img
+                            src={`https://vz-${file.stream_library_id}.b-cdn.net/${file.stream_video_guid}/thumbnail.jpg`}
+                            alt={file.original_name}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        ) : (
+                          <video src={file.cdn_url} className="w-full h-full object-cover" muted preload="metadata" />
+                        )}
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="bg-black/60 rounded-full p-2">
+                            <Play className="h-6 w-6 text-white fill-white" />
+                          </div>
+                        </div>
                       </div>
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground">
