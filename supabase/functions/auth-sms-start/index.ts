@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { crypto } from "https://deno.land/std@0.190.0/crypto/mod.ts";
 import { checkUsageLimit, logUsage } from "../_shared/usage-limits.ts";
+import { resolveSmsSettings } from "../_shared/sms-settings.ts";
+import { sendSms } from "../_shared/sms-sender.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,7 +30,9 @@ async function hashOTP(otp: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Normalize phone number
+// Normalize phone for our DB lookup (Israeli local format).
+// The SMS provider helper normalizes again to its own provider-specific
+// format right before send.
 function normalizePhone(phone: string): string {
   let normalized = phone.replace(/\D/g, '');
   if (normalized.startsWith('972')) {
@@ -41,65 +45,6 @@ function normalizePhone(phone: string): string {
     normalized = '0' + normalized;
   }
   return normalized;
-}
-
-// XML escape helper
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-// Send SMS via 019
-async function sendSmsOTP(
-  smsUser: string,
-  smsToken: string,
-  smsSource: string,
-  phone: string,
-  message: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
-<sms>
-  <user>
-    <username>${escapeXml(smsUser)}</username>
-  </user>
-  <source>${escapeXml(smsSource)}</source>
-  <destinations>
-    <phone>${escapeXml(phone)}</phone>
-  </destinations>
-  <message>${escapeXml(message)}</message>
-</sms>`;
-
-    console.log("Sending SMS to:", phone);
-
-    const response = await fetch("https://019sms.co.il/api", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/xml; charset=utf-8",
-        "Authorization": `Bearer ${smsToken}`,
-      },
-      body: xmlPayload,
-    });
-
-    const responseText = await response.text();
-    console.log("019 SMS Response:", responseText);
-
-    if (responseText.includes("<status>0</status>") || responseText.includes("OK")) {
-      return { success: true };
-    }
-
-    const errorMatch = responseText.match(/<message>(.*?)<\/message>/);
-    const errorMsg = errorMatch ? errorMatch[1] : "Unknown SMS error";
-    
-    return { success: false, error: errorMsg };
-  } catch (error: unknown) {
-    console.error("SMS sending error:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-  }
 }
 
 // Generate a random password
@@ -303,7 +248,19 @@ serve(async (req) => {
       );
     }
 
-    if (!authSettings.sms_019_user || !authSettings.sms_019_token || !authSettings.sms_019_source) {
+    // Resolve which SMS provider + creds to use. Priority:
+    //   1. agent's sms_settings (HTD or 019, plus sender name)
+    //   2. platform defaults (default_sms_provider + creds)
+    // If neither path produces complete creds for the chosen
+    // provider, resolveSmsSettings returns null.
+    if (!agentId) {
+      return new Response(
+        JSON.stringify({ success: false, error: "لا يمكن تحديد الوكالة لهذا الحساب." }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+    const smsSettings = await resolveSmsSettings(supabase, agentId);
+    if (!smsSettings) {
       return new Response(
         JSON.stringify({ success: false, error: "إعدادات الرسائل النصية غير مكتملة. يرجى التواصل مع المدير." }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -314,18 +271,16 @@ serve(async (req) => {
     // monthly quota. If the agent is out of quota the client is told
     // to fall back to password login instead of OTP — Login.tsx
     // handles `error_code: "sms_quota_exhausted"` specifically.
-    if (agentId) {
-      const quota = await checkUsageLimit(supabase, agentId, "sms");
-      if (!quota.allowed) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error_code: "sms_quota_exhausted",
-            error: "تم استنفاد رصيد الرسائل النصية. يرجى استخدام كلمة المرور.",
-          }),
-          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-        );
-      }
+    const quota = await checkUsageLimit(supabase, agentId, "sms");
+    if (!quota.allowed) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error_code: "sms_quota_exhausted",
+          error: "تم استنفاد رصيد الرسائل النصية. يرجى استخدام كلمة المرور.",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
     }
 
     // Generate OTP
@@ -355,17 +310,13 @@ serve(async (req) => {
     const message = (authSettings.sms_message_template || "رمز التحقق الخاص بك هو: {code}")
       .replace(/{code}/g, otp);
 
-    // Send SMS
-    const smsResult = await sendSmsOTP(
-      authSettings.sms_019_user,
-      authSettings.sms_019_token,
-      authSettings.sms_019_source,
-      normalizedPhone,
-      message
-    );
+    // Send SMS via the unified sender (HTD or 019 — picked by
+    // resolveSmsSettings above). The helper handles provider-specific
+    // phone normalization (HTD wants 972…, 019 wants 0…).
+    const smsResult = await sendSms(smsSettings, normalizedPhone, message);
 
     if (!smsResult.success) {
-      console.error("SMS send failed:", smsResult.error);
+      console.error("SMS send failed:", smsResult.error, "provider:", smsResult.provider);
       return new Response(
         JSON.stringify({ success: false, error: "فشل في إرسال الرسالة النصية" }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -375,11 +326,9 @@ serve(async (req) => {
     // Each successful OTP send counts +1 against the agent's monthly
     // SMS quota. Fire-and-forget — if bookkeeping fails it must not
     // block the user from receiving the code they're already getting.
-    if (agentId) {
-      logUsage(supabase, agentId, "sms").catch((err) =>
-        console.warn("[auth-sms-start] logUsage failed:", err),
-      );
-    }
+    logUsage(supabase, agentId, "sms").catch((err) =>
+      console.warn("[auth-sms-start] logUsage failed:", err),
+    );
 
     // Get IP and User-Agent from request for OTP
     const ip_address_otp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() 

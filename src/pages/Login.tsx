@@ -180,12 +180,28 @@ export default function Login() {
   const [otpStep, setOtpStep] = useState<"idle" | "checking" | "otp">("idle");
   const [otpDigits, setOtpDigits] = useState<string[]>(["", "", "", ""]);
   const [otpVerifying, setOtpVerifying] = useState(false);
+  // While the SMS request is in flight after the user lands on the OTP
+  // page, the inputs are disabled and a spinner shows. Cleared when
+  // the send returns (success or the quota-exhausted/error fallback).
+  const [otpSending, setOtpSending] = useState(false);
+  // Resend cooldown: 60s after each successful send. When this drops
+  // to 0 the "Resend code" link becomes clickable.
+  const [otpResendIn, setOtpResendIn] = useState(0);
   const otpCredsRef = useRef<{ email: string; password: string; phone: string } | null>(null);
   const otpInputsRef = useRef<Array<HTMLInputElement | null>>([]);
+
+  // Tick the resend cooldown down every second.
+  useEffect(() => {
+    if (otpResendIn <= 0) return;
+    const id = setTimeout(() => setOtpResendIn((s) => Math.max(0, s - 1)), 1000);
+    return () => clearTimeout(id);
+  }, [otpResendIn]);
 
   const resetOtpState = () => {
     setOtpStep("idle");
     setOtpDigits(["", "", "", ""]);
+    setOtpSending(false);
+    setOtpResendIn(0);
     otpCredsRef.current = null;
   };
 
@@ -477,44 +493,48 @@ export default function Login() {
   // stop and not navigate), "skipped" otherwise (caller proceeds as
   // normal). Quota-exhausted is treated as skipped — password alone
   // is enough when the agency is out of SMS.
+  //
+  // Speed: a single SECURITY DEFINER RPC bundles the "OTP required +
+  // phone" lookup, so the gate is one round-trip instead of three.
+  // Once we know OTP is needed we transition to the OTP UI right
+  // away (with a "sending..." spinner) and run signOut + sendSMS in
+  // parallel — the user sees the screen change in ~200ms instead of
+  // waiting for the SMS provider to round-trip first.
   const maybeStartOtpStep = async (
     userEmail: string,
     userPassword: string,
   ): Promise<"shown" | "skipped"> => {
     try {
-      const { data: { user: signedIn } } = await supabase.auth.getUser();
-      if (!signedIn) return "skipped";
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("phone, agent_id")
-        .eq("id", signedIn.id)
+      const { data: stateRow } = await (supabase as any)
+        .rpc("get_otp_login_state")
         .maybeSingle();
 
-      if (!profile?.agent_id || !profile.phone) return "skipped";
+      const otpRequired = stateRow?.otp_required === true;
+      const phone = stateRow?.phone as string | null;
 
-      const { data: settings } = await supabase
-        .from("auth_settings")
-        .select("sms_otp_enabled")
-        .eq("agent_id", profile.agent_id)
-        .maybeSingle();
+      if (!otpRequired || !phone) return "skipped";
 
-      if (!(settings as any)?.sms_otp_enabled) return "skipped";
+      // Stash creds + jump to the OTP UI immediately. The send + signOut
+      // happen in the background; the user sees the screen change before
+      // the SMS network round-trip completes.
+      otpCredsRef.current = { email: userEmail, password: userPassword, phone };
+      setOtpDigits(["", "", "", ""]);
+      setOtpSending(true);
+      setOtpStep("otp");
+      setTimeout(() => otpInputsRef.current[0]?.focus(), 50);
 
-      // Drop the freshly-created session so it can't be used until
-      // the OTP step completes. Stash credentials in memory so we
-      // can re-sign-in after verify (or after a quota-exhausted skip).
-      await supabase.auth.signOut();
-      otpCredsRef.current = { email: userEmail, password: userPassword, phone: profile.phone };
+      // Sign out so the freshly-created session can't be used until
+      // the OTP completes. Fire-and-forget; we don't need to wait.
+      supabase.auth.signOut().catch(() => {});
 
       const { data: smsRes } = await supabase.functions.invoke("auth-sms-start", {
-        body: { phone: profile.phone },
+        body: { phone },
       });
 
       if ((smsRes as any)?.error_code === "sms_quota_exhausted") {
         // Quota out → re-sign-in with password and let the user through.
         const { error: reErr } = await supabase.auth.signInWithPassword({ email: userEmail, password: userPassword });
-        otpCredsRef.current = null;
+        resetOtpState();
         if (reErr) {
           toast.error("تعذر استئناف تسجيل الدخول");
           return "skipped";
@@ -527,19 +547,54 @@ export default function Login() {
         // SMS failed for some other reason — re-sign-in so the user
         // isn't stranded.
         await supabase.auth.signInWithPassword({ email: userEmail, password: userPassword });
-        otpCredsRef.current = null;
+        resetOtpState();
         toast.error((smsRes as any)?.error || "فشل في إرسال رمز التحقق");
         return "skipped";
       }
 
-      setOtpStep("otp");
-      setOtpDigits(["", "", "", ""]);
-      setTimeout(() => otpInputsRef.current[0]?.focus(), 50);
+      setOtpSending(false);
+      setOtpResendIn(60);
       toast.success("تم إرسال رمز التحقق إلى هاتفك");
       return "shown";
     } catch (err) {
       console.warn("[login] OTP gate failed:", err);
+      // If we'd already shown the OTP UI (creds stashed), roll back —
+      // re-sign-in with password so the user isn't stranded.
+      if (otpCredsRef.current) {
+        await supabase.auth.signInWithPassword({ email: userEmail, password: userPassword }).catch(() => {});
+        resetOtpState();
+      }
       return "skipped";
+    }
+  };
+
+  // Resend the OTP. Disabled until the cooldown reaches 0. The edge
+  // function has its own server-side rate limit (3 sends per 10
+  // minutes) — once that's hit the resend will surface its error.
+  const handleResendOtp = async () => {
+    const creds = otpCredsRef.current;
+    if (!creds || otpResendIn > 0 || otpSending) return;
+    setOtpSending(true);
+    try {
+      const { data: smsRes } = await supabase.functions.invoke("auth-sms-start", {
+        body: { phone: creds.phone },
+      });
+      if ((smsRes as any)?.error_code === "sms_quota_exhausted") {
+        await supabase.auth.signInWithPassword({ email: creds.email, password: creds.password }).catch(() => {});
+        resetOtpState();
+        toast.info("تم استنفاد رصيد الرسائل النصية، تم تسجيل دخولك بكلمة المرور");
+        return;
+      }
+      if (!(smsRes as any)?.success) {
+        toast.error((smsRes as any)?.error || "فشل في إرسال رمز التحقق");
+        return;
+      }
+      setOtpDigits(["", "", "", ""]);
+      otpInputsRef.current[0]?.focus();
+      setOtpResendIn(60);
+      toast.success("تم إعادة إرسال الرمز");
+    } finally {
+      setOtpSending(false);
     }
   };
 
@@ -840,12 +895,16 @@ export default function Login() {
                 /* 4-digit OTP step — shown after the password is correct
                    for an agency that has OTP-login enabled. The 4 boxes
                    auto-advance and accept paste. Cancel signs out the
-                   transient session and returns to the login form. */
+                   transient session and returns to the login form. The
+                   "sending..." spinner is visible while the SMS is in
+                   flight (the screen flips immediately after password
+                   verify, before the SMS round-trip completes). */
                 <>
                   <div className="text-center lg:pt-4 lg:mb-6">
                     <h1 className="text-2xl sm:text-4xl font-bold text-foreground">رمز التحقق</h1>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      أدخل الرمز المكوّن من 4 أرقام المرسل إلى هاتفك
+                    <p className="text-sm text-muted-foreground mt-2 flex items-center justify-center gap-2">
+                      {otpSending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      {otpSending ? "جاري إرسال الرمز إلى هاتفك..." : "أدخل الرمز المكوّن من 4 أرقام المرسل إلى هاتفك"}
                     </p>
                   </div>
 
@@ -861,7 +920,7 @@ export default function Login() {
                         onChange={(e) => handleOtpDigitChange(i, e.target.value)}
                         onKeyDown={(e) => handleOtpKeyDown(i, e)}
                         onPaste={i === 0 ? handleOtpPaste : undefined}
-                        disabled={otpVerifying}
+                        disabled={otpVerifying || otpSending}
                         className="h-14 w-14 rounded-xl bg-[#f6f6f9] border border-transparent text-center text-2xl font-bold text-foreground transition-all focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/30 disabled:opacity-50"
                       />
                     ))}
@@ -870,17 +929,34 @@ export default function Login() {
                   <Button
                     className="w-full h-12 text-sm gap-2 rounded-xl shadow-lg flex-row-reverse"
                     onClick={handleVerifyOtp}
-                    disabled={otpVerifying || otpDigits.some((d) => !d)}
+                    disabled={otpVerifying || otpSending || otpDigits.some((d) => !d)}
                   >
                     {otpVerifying ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5 rotate-180" />}
                     {otpVerifying ? "جاري التحقق ..." : "تأكيد"}
                   </Button>
 
+                  <div className="text-center text-xs sm:text-sm">
+                    {otpResendIn > 0 ? (
+                      <span className="text-muted-foreground">
+                        إعادة إرسال الرمز خلال {otpResendIn} ثانية
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleResendOtp}
+                        disabled={otpSending || otpVerifying}
+                        className="text-primary hover:underline disabled:opacity-50 disabled:no-underline"
+                      >
+                        إعادة إرسال الرمز
+                      </button>
+                    )}
+                  </div>
+
                   <button
                     type="button"
                     onClick={handleCancelOtp}
-                    disabled={otpVerifying}
-                    className="block w-full text-center text-xs sm:text-sm text-muted-foreground hover:text-foreground hover:underline"
+                    disabled={otpVerifying || otpSending}
+                    className="block w-full text-center text-xs sm:text-sm text-muted-foreground hover:text-foreground hover:underline disabled:opacity-50"
                   >
                     إلغاء والعودة لتسجيل الدخول
                   </button>
