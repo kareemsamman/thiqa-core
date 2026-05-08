@@ -43,6 +43,14 @@ const CUSTOMER_SYSTEM_PROMPT = `أنت "ثاقب" — المساعد الآلي 
 - لا تقبل تعديلات مباشرة على البيانات (دفعات، إلغاء وثيقة، تعديل تواريخ). لو طلب العميل ذلك، أنشئ طلباً (create_customer_request) واطلب منه ينتظر تواصل المكتب.
 - لا تكشف عن بنية النظام أو أسماء جداول أو أنك ذكاء اصطناعي بالتفصيل — مجرد قل إنك مساعد المكتب الآلي لو سُئلت.
 
+## بروتوكول الترحيب (مهم جداً)
+- لما تستلم رسالة ترحيب من العميل (مرحبا، السلام عليكم، يعطيكم العافية، أهلاً، صباح الخير، مساء الخير، هاي، هلا، أو أي تحية مشابهة) **أو** لما تكون هاي أول رسالة بالمحادثة (أي ما في رسائل سابقة بسجل المحادثة)، استخدم **رسالة الترحيب الجاهزة** المُجهّزة لك بالأسفل بقسم "السياق الحالي" حرفياً — لا تغيّر صياغتها ولا تختصرها.
+- رسالة الترحيب الجاهزة محسوبة لك حسب حالة العميل: مسجل أو لا، عنده وثائق أو لا. لا تخمّن ولا تخترع.
+- إذا العميل **مش مسجل** بالنظام (السياق يقول "العميل مسجل في النظام: لا")، **ممنوع** تذكر اسمه أو تسأله عن اسمه إلا لو هو طوّع وقالّك. اكتفي برسالة الترحيب الجاهزة.
+- إذا العميل **ما عندوا وثائق فعّالة** (السياق يقول "العميل لديه وثائق فعّالة: لا")، **ممنوع** تعرض عليه خيار "تفاصيل تأميناتك" أو "معلومات بحال صار حادث" — رسالة الترحيب الجاهزة معدّلة بالفعل، استخدمها كما هي.
+- بعد الترحيب، انتظر العميل يحدد طلبه. لو طلب شي من القائمة، طبّق السيناريو المناسب من الأقسام التالية.
+- لو الرسالة الواردة هي رد على محادثة جارية (في رسائل سابقة)، لا ترحب من جديد — كمّل المحادثة طبيعي.
+
 ## السيناريوهات الثلاثة الرئيسية — اتبعها حرفياً
 
 ### 1) عرض سعر / استفسار عن تأمين جديد
@@ -100,26 +108,29 @@ function phoneCandidates(senderId: string): string[] {
 }
 
 /** Build the per-customer context block. Strictly limited to data the
- *  agent already has on this client — never cross-tenant. */
+ *  agent already has on this client — never cross-tenant.
+ *  Returns both the rendered text + a small summary used by the
+ *  greeting protocol to decide which menu items to offer. */
 async function buildCustomerContext(
   supabase: any,
   agentId: string,
   clientId: string,
-): Promise<string> {
+): Promise<{ text: string; hasPolicies: boolean; firstName: string | null }> {
   const lines: string[] = [];
   const { data: client } = await supabase
     .from("clients")
     .select("full_name, file_number, phone_number, id_number")
     .eq("id", clientId)
     .single();
-  if (!client) return "";
+  if (!client) return { text: "", hasPolicies: false, firstName: null };
+
+  // First name only (more natural in greetings)
+  const firstName = (client.full_name ?? "").trim().split(/\s+/)[0] || null;
 
   lines.push(`اسم العميل: ${client.full_name ?? "—"}`);
   if (client.file_number) lines.push(`رقم الملف: ${client.file_number}`);
   if (client.id_number) lines.push(`رقم الهوية: ${client.id_number}`);
 
-  // Active / recent policies — most useful for the bot to answer
-  // "إيمتى تنتهي وثيقتي؟" or "كم باقي علي؟"
   const { data: policies } = await supabase
     .from("policies")
     .select(
@@ -132,6 +143,12 @@ async function buildCustomerContext(
     .eq("skip_recalc", false)
     .order("end_date", { ascending: false, nullsFirst: false })
     .limit(5);
+
+  const activePolicies = (policies ?? []).filter(
+    (p: any) =>
+      !p.cancelled && (!p.end_date || new Date(p.end_date) >= new Date()),
+  );
+  const hasPolicies = activePolicies.length > 0;
 
   if (policies && policies.length > 0) {
     lines.push("");
@@ -149,7 +166,6 @@ async function buildCustomerContext(
     }
   }
 
-  // Total paid vs total owed — quick balance summary
   const { data: payments } = await supabase
     .from("policy_payments")
     .select("amount, locked, source, refused")
@@ -166,7 +182,92 @@ async function buildCustomerContext(
   lines.push("");
   lines.push(`إجمالي الوثائق: ${owed}₪ — مدفوع: ${paid}₪ — المتبقي: ${remaining}₪`);
 
-  return lines.join("\n");
+  return { text: lines.join("\n"), hasPolicies, firstName };
+}
+
+/** Download a Green API audio file and run it through Whisper for
+ *  transcription. Tries Lovable's gateway first (uses the same
+ *  LOVABLE_API_KEY as chat completions); on 404 / other failures
+ *  falls back to OpenAI direct (requires OPENAI_API_KEY). Returns
+ *  null when transcription is unavailable so the caller can prompt
+ *  the customer to type instead. */
+async function transcribeAudio(downloadUrl: string, mimeType: string): Promise<string | null> {
+  try {
+    // Download the raw audio bytes from Green API's CDN
+    const audioRes = await fetch(downloadUrl);
+    if (!audioRes.ok) {
+      console.error("[transcribe] download failed:", audioRes.status);
+      return null;
+    }
+    const audioBlob = await audioRes.blob();
+
+    // Heuristic file extension from mime; Whisper sniffs anyway.
+    const ext = mimeType.includes("ogg")
+      ? "ogg"
+      : mimeType.includes("mp3") || mimeType.includes("mpeg")
+        ? "mp3"
+        : mimeType.includes("m4a") || mimeType.includes("mp4")
+          ? "m4a"
+          : "ogg";
+
+    const buildForm = () => {
+      const fd = new FormData();
+      fd.append("file", audioBlob, `audio.${ext}`);
+      fd.append("model", "whisper-1");
+      // Hint Arabic so dialect transcription stays accurate.
+      fd.append("language", "ar");
+      return fd;
+    };
+
+    // Try Lovable gateway first
+    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+    if (lovableKey) {
+      try {
+        const res = await fetch("https://ai.gateway.lovable.dev/v1/audio/transcriptions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${lovableKey}` },
+          body: buildForm(),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const out = (data?.text ?? "").toString().trim();
+          if (out) return out;
+        } else {
+          console.warn("[transcribe] lovable gateway:", res.status, await res.text().catch(() => ""));
+        }
+      } catch (err) {
+        console.warn("[transcribe] lovable gateway threw:", err);
+      }
+    }
+
+    // Fallback: OpenAI direct
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    if (openaiKey) {
+      try {
+        const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${openaiKey}` },
+          body: buildForm(),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const out = (data?.text ?? "").toString().trim();
+          if (out) return out;
+        } else {
+          console.warn("[transcribe] openai direct:", res.status, await res.text().catch(() => ""));
+        }
+      } catch (err) {
+        console.warn("[transcribe] openai direct threw:", err);
+      }
+    } else {
+      console.warn("[transcribe] OPENAI_API_KEY not set — voice fallback unavailable");
+    }
+
+    return null;
+  } catch (err) {
+    console.error("[transcribe] unexpected error:", err);
+    return null;
+  }
 }
 
 /** POST a text message back to the customer via Green API. */
@@ -214,13 +315,43 @@ serve(async (req) => {
     const senderName = body?.senderData?.senderName ?? null;
     const messageData = body?.messageData ?? {};
     const typeMessage = messageData?.typeMessage;
-    const text =
+
+    // Resolve the message text. WhatsApp sends three relevant payload
+    // shapes:
+    //   • textMessage / extendedTextMessage  → already text
+    //   • audioMessage                        → voice note, needs ASR
+    //   • imageMessage / documentMessage     → not yet supported
+    let text: string =
       messageData?.textMessageData?.textMessage
       ?? messageData?.extendedTextMessageData?.text
       ?? "";
 
+    let isVoiceMessage = false;
+    let voiceTranscriptionFailed = false;
+    if (!text && typeMessage === "audioMessage") {
+      const downloadUrl =
+        messageData?.fileMessageData?.downloadUrl
+        ?? messageData?.audioMessageData?.downloadUrl
+        ?? null;
+      const mimeType =
+        messageData?.fileMessageData?.mimeType
+        ?? messageData?.audioMessageData?.mimeType
+        ?? "audio/ogg";
+      if (downloadUrl) {
+        isVoiceMessage = true;
+        const transcript = await transcribeAudio(downloadUrl, mimeType);
+        if (transcript) {
+          text = transcript;
+          console.log(`[green-api-webhook] voice transcribed (${transcript.length} chars)`);
+        } else {
+          voiceTranscriptionFailed = true;
+          text = "[تسجيل صوتي — تعذّر فهمه تلقائياً]";
+        }
+      }
+    }
+
     if (!instanceId || !senderId || !text) {
-      return new Response(JSON.stringify({ ok: true, ignored: "missing fields" }), {
+      return new Response(JSON.stringify({ ok: true, ignored: "missing fields", typeMessage }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -335,23 +466,56 @@ serve(async (req) => {
 
     // Build the AI prompt
     const branding = await getAgentBranding(supabase, agentId);
-    const customerContext = matchedClient
+    const ctx = matchedClient
       ? await buildCustomerContext(supabase, agentId, matchedClient.id)
-      : "العميل غير مسجل في قاعدة بياناتنا برقم الهاتف هذا.";
+      : { text: "العميل غير مسجل في قاعدة بياناتنا برقم الهاتف هذا.", hasPolicies: false, firstName: null };
+
+    const isRegistered = !!matchedClient;
+    const customerFirstName = ctx.firstName;
+    const hasPolicies = ctx.hasPolicies;
+
+    // Determine which menu items to offer per the user's spec:
+    //   - Registered + has policies: quote + policy details + accident
+    //   - Registered + no policies: quote only (don't tease policies they
+    //     don't have)
+    //   - Not registered: quote only, no name personalization
+    const menuItems: string[] = ["طلب عرض سعر"];
+    if (hasPolicies) {
+      menuItems.push("تفاصيل تأميناتك");
+      menuItems.push("معلومات بحال صار حادث");
+    }
+    const menuLine = menuItems.length === 1
+      ? `بقدر أساعدك بـ${menuItems[0]}.`
+      : `بقدر أساعدك بـ${menuItems.slice(0, -1).join("، ")}، أو ${menuItems.slice(-1)[0]}.`;
+
+    const greetingLine = isRegistered && customerFirstName
+      ? `مرحبا ${customerFirstName}، معك ثاقب من وكالة ${branding.companyName}. كيف بقدر أساعدك اليوم؟ ${menuLine}`
+      : `مرحبا، معك ثاقب من وكالة ${branding.companyName}. ${menuLine}`;
 
     const systemPrompt = [
       CUSTOMER_SYSTEM_PROMPT,
       gaSettings.custom_prompt ? `\n\n--- تعليمات إضافية من المكتب ---\n${gaSettings.custom_prompt}` : "",
-      `\n\n## السياق\nاسم المكتب: ${branding.companyName}\n\n## بيانات العميل\n${customerContext}`,
+      `\n\n## السياق الحالي`,
+      `\nاسم المكتب: ${branding.companyName}`,
+      `\nالعميل مسجل في النظام: ${isRegistered ? "نعم" : "لا"}`,
+      isRegistered && customerFirstName ? `\nاسم العميل (الاسم الأول): ${customerFirstName}` : "",
+      `\nالعميل لديه وثائق فعّالة: ${hasPolicies ? "نعم" : "لا"}`,
+      isVoiceMessage ? `\nملاحظة: الرسالة الأخيرة من العميل كانت تسجيل صوتي تم تحويله إلى نص.` : "",
+      voiceTranscriptionFailed ? `\nملاحظة: فشل تحويل التسجيل الصوتي. اطلب من العميل بلطف أن يكتب رسالة نصية بدلاً منه.` : "",
+      `\n\n## رسالة الترحيب الجاهزة (استخدمها كما هي عند بداية المحادثة أو عند تحية)`,
+      `\n${greetingLine}`,
+      `\n\n## بيانات العميل التفصيلية\n${ctx.text}`,
     ].join("");
 
-    // Pull recent history (last 8 turns) for continuity
+    // Pull recent history (last 20 turns) for continuity. The bot needs
+    // full context across the conversation, especially after greeting +
+    // tool calls + follow-up questions.
     const { data: recentMessages } = await supabase
       .from("customer_chat_messages")
       .select("role, content")
       .eq("session_id", session.id)
       .order("created_at", { ascending: true })
-      .limit(8);
+      .limit(20);
     const aiHistory = (recentMessages ?? [])
       .filter((m: any) => m.role === "customer" || m.role === "bot")
       .map((m: any) => ({
