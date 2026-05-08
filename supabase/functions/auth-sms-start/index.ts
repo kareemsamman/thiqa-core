@@ -85,13 +85,20 @@ serve(async (req) => {
 
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
-    // Fetch profile and rate limit in parallel first
-    const [profileResult, rateLimitResult] = await Promise.all([
+    // Fetch profile and rate limit in parallel first.
+    //
+    // Multiple profiles can share a phone number when the same number
+    // got registered via the SMS-registration flow before being claimed
+    // by an email/password user. `.single()` on that scenario throws
+    // and silently dropped the request into the "create new pending"
+    // branch, which broke OTP-2FA. Pull all matches and prefer the
+    // active + agent-linked one, falling back to active, then pending.
+    const [profilesResult, rateLimitResult] = await Promise.all([
       supabase
         .from("profiles")
         .select("id, status, phone, full_name, agent_id")
         .eq("phone", normalizedPhone)
-        .single(),
+        .order("created_at", { ascending: true }),
       supabase
         .from("otp_codes")
         .select("id")
@@ -100,7 +107,14 @@ serve(async (req) => {
         .gte("created_at", tenMinutesAgo)
     ]);
 
-    const { data: existingProfile } = profileResult;
+    const profiles = (profilesResult.data ?? []) as Array<{
+      id: string; status: string; phone: string; full_name: string | null; agent_id: string | null;
+    }>;
+    const existingProfile =
+      profiles.find((p) => p.status === "active" && p.agent_id) ??
+      profiles.find((p) => p.status === "active") ??
+      profiles.find((p) => p.status === "pending") ??
+      null;
     const { data: recentOtps } = rateLimitResult;
 
     // Case 1: Profile exists
