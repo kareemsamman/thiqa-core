@@ -355,7 +355,7 @@ export default function BrandingSettings() {
   const [sigHeader, setSigHeader] = useState("");
   const [sigBody, setSigBody] = useState("");
   const [sigFooter, setSigFooter] = useState("");
-  const [sigColor, setSigColor] = useState(SIGNATURE_DEFAULTS.color);
+  const [sigColor, setSigColor] = useState<string>(SIGNATURE_DEFAULTS.color);
   // Invoice fields
   const [ownerName, setOwnerName] = useState("");
   const [taxNumber, setTaxNumber] = useState("");
