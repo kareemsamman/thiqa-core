@@ -44,6 +44,11 @@ const CUSTOMER_SYSTEM_PROMPT = `أنت "ثاقب" — المساعد الآلي 
 - لا تقبل تعديلات مباشرة على البيانات (دفعات، إلغاء وثيقة، تعديل تواريخ). لو طلب العميل ذلك، أنشئ طلباً (create_customer_request) واطلب منه ينتظر تواصل المكتب.
 - لا تكشف عن بنية النظام أو أسماء جداول أو أنك ذكاء اصطناعي بالتفصيل — مجرد قل إنك مساعد المكتب الآلي لو سُئلت.
 
+## مهم جداً: التعامل مع الرسالة الحالية
+- ردّك دائماً يكون على **آخر رسالة من العميل بالنص** (آخر "user message" بالسجل). تجاهل أي ردود سابقة منك ممكن تكون مالها علاقة بالرسالة الحالية.
+- **مثال خاطئ ومنبّه عليه**: لو ردك السابق كان "ما قدرت أفهم التسجيل، اكتبلي طلبك"، والعميل بعدها كتب "مرحبا" أو "كيف الحال" أو أي رسالة نصية، **ممنوع** تكرّر نفس الرد. الرسالة النصية الجديدة هي طلب عادي — طبّق بروتوكول الترحيب أو السيناريو المناسب.
+- لا تنادي "ما قدرت أفهم التسجيل" إلا لو الرسالة الحالية فعلاً تسجيل صوتي فشل تحويله (السياق راح يخبرك بوضوح "فشل تحويل التسجيل الصوتي").
+
 ## بروتوكول الترحيب (مهم جداً)
 - لما تستلم رسالة ترحيب من العميل (مرحبا، السلام عليكم، يعطيكم العافية، أهلاً، صباح الخير، مساء الخير، هاي، هلا، أو أي تحية مشابهة) **أو** لما تكون هاي أول رسالة بالمحادثة (أي ما في رسائل سابقة بسجل المحادثة)، استخدم **رسالة الترحيب الجاهزة** المُجهّزة لك بالأسفل بقسم "السياق الحالي" حرفياً — لا تغيّر صياغتها ولا تختصرها.
 - رسالة الترحيب الجاهزة محسوبة لك حسب حالة العميل: مسجل أو لا، عنده وثائق أو لا. لا تخمّن ولا تخترع.
@@ -530,7 +535,7 @@ serve(async (req) => {
 
     // Debounce: customers often send 2-3 messages in quick succession
     // ("مرحبا" → "كيف الحال؟" → "بدي عرض سعر"). Replying to each
-    // message individually feels robotic, so we wait 30s after the last
+    // message individually feels robotic, so we wait 10s after the last
     // customer message before responding. Implementation: every
     // invocation schedules a deferred response after a sleep — only the
     // one whose message is still the latest after the sleep actually
@@ -540,7 +545,7 @@ serve(async (req) => {
 
     const respondAfterDebounce = async () => {
       try {
-        await new Promise((r) => setTimeout(r, 30_000));
+        await new Promise((r) => setTimeout(r, 10_000));
 
         const { data: latest } = await supabase
           .from("customer_chat_messages")
