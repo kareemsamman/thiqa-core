@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { X, Download, ChevronLeft, ChevronRight, FileText, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
+import { X, Download, ChevronLeft, ChevronRight, FileText, ZoomIn, ZoomOut, Loader2, Play } from "lucide-react";
 import { PdfJsViewer } from "./PdfJsViewer";
 import { toast } from "sonner";
 
@@ -25,6 +25,7 @@ interface FilePreviewGalleryProps {
 
 const isImage = (mimeType: string) => mimeType?.startsWith('image/');
 const isPdf = (mimeType: string) => mimeType === 'application/pdf';
+const isVideo = (mimeType: string) => mimeType?.startsWith('video/');
 
 export function FilePreviewGallery({ file, allFiles, onClose, onNavigate }: FilePreviewGalleryProps) {
   const [zoom, setZoom] = useState(1);
@@ -64,7 +65,7 @@ export function FilePreviewGallery({ file, allFiles, onClose, onNavigate }: File
   
   // Get viewable files (images and PDFs only)
   const viewableFiles = useMemo(() => 
-    allFiles.filter(f => isImage(f.mime_type) || isPdf(f.mime_type)), 
+    allFiles.filter(f => isImage(f.mime_type) || isPdf(f.mime_type) || isVideo(f.mime_type)), 
     [allFiles]
   );
   
@@ -108,6 +109,7 @@ export function FilePreviewGallery({ file, allFiles, onClose, onNavigate }: File
 
   const fileIsImage = isImage(file.mime_type);
   const fileIsPdf = isPdf(file.mime_type);
+  const fileIsVideo = isVideo(file.mime_type);
 
   return (
     <Dialog open={!!file} onOpenChange={() => onClose()}>
@@ -220,6 +222,16 @@ export function FilePreviewGallery({ file, allFiles, onClose, onNavigate }: File
               className="w-full h-full"
             />
           )}
+
+          {fileIsVideo && (
+            <video
+              src={file.cdn_url}
+              controls
+              autoPlay
+              playsInline
+              className="max-w-full max-h-full"
+            />
+          )}
         </div>
 
         {/* Bottom thumbnails strip */}
@@ -244,6 +256,16 @@ export function FilePreviewGallery({ file, allFiles, onClose, onNavigate }: File
                     alt={f.original_name}
                     className="w-full h-full object-cover"
                   />
+                ) : isVideo(f.mime_type) ? (
+                  <div className="w-full h-full bg-black flex items-center justify-center relative">
+                    <video
+                      src={f.cdn_url}
+                      className="w-full h-full object-cover"
+                      muted
+                      preload="metadata"
+                    />
+                    <Play className="h-5 w-5 text-white absolute fill-white" />
+                  </div>
                 ) : (
                   <div className="w-full h-full bg-destructive flex items-center justify-center">
                     <FileText className="h-6 w-6 text-white" />
