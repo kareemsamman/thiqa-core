@@ -180,29 +180,9 @@ serve(async (req) => {
     currentStep = "create supabase client";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    currentStep = "auth header";
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    currentStep = "verify user";
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
-
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     currentStep = "parse body";
-    const { client_id }: ClientReportRequest = await req.json();
+    const body = await req.json();
+    const { client_id, internal_token }: ClientReportRequest & { internal_token?: string } = body;
 
     if (!client_id) {
       return new Response(JSON.stringify({ error: "client_id is required" }), {
@@ -211,11 +191,60 @@ serve(async (req) => {
       });
     }
 
+    // Two auth paths:
+    //   • External callers (the agent wizard) send a user JWT in the
+    //     Authorization header — we resolve the agent from that user.
+    //   • Internal callers (the green-api-webhook WhatsApp flow) have no
+    //     user, so they pass the service-role key as `internal_token` in
+    //     the body. Body field rather than Authorization header because
+    //     the platform mangles auth headers for cross-function calls in a
+    //     way that defeats a header-based comparison.
+    let agentId: string | null = null;
+    const isInternalCall = !!internal_token && internal_token === supabaseServiceKey;
+
+    if (isInternalCall) {
+      currentStep = "internal call: derive agent from client";
+      const { data: clientRow, error: clientLookupError } = await supabase
+        .from("clients")
+        .select("agent_id")
+        .eq("id", client_id)
+        .single();
+      if (clientLookupError || !clientRow) {
+        return new Response(
+          JSON.stringify({ error: "Client not found", detail: clientLookupError?.message }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      agentId = clientRow.agent_id;
+    } else {
+      currentStep = "auth header";
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader) {
+        return new Response(JSON.stringify({ error: "No authorization header" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      currentStep = "verify user";
+      const { data: { user }, error: authError } = await supabase.auth.getUser(
+        authHeader.replace("Bearer ", ""),
+      );
+
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      agentId = await resolveAgentId(supabase, user.id);
+    }
+
     // Resolve branding the same way the package invoice does — logo,
     // owner name, tax number, invoice phones/address all come from
     // site_settings for this agent.
     currentStep = "resolve agent branding";
-    const agentId = await resolveAgentId(supabase, user.id);
     const branding = await getAgentBranding(supabase, agentId);
 
     // Fetch client

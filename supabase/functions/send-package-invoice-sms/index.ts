@@ -159,14 +159,6 @@ serve(async (req) => {
   const startTime = Date.now();
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const bunnyApiKey = Deno.env.get('BUNNY_API_KEY');
@@ -176,22 +168,9 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify user
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid authentication" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Resolve agent branding
-    const agentId = await resolveAgentId(supabase, user.id);
-    const branding = await getAgentBranding(supabase, agentId);
-
-    const { policy_ids, skip_sms, whatsapp_mode }: SendPackageInvoiceSmsRequest = await req.json();
+    const body = await req.json();
+    const { policy_ids, skip_sms, whatsapp_mode, internal_token }:
+      SendPackageInvoiceSmsRequest & { internal_token?: string } = body;
 
     if (!policy_ids || policy_ids.length === 0) {
       return new Response(
@@ -199,6 +178,54 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Two auth paths:
+    //   • External callers (the wizard) send a user JWT in Authorization
+    //     and we resolve the agent from that user.
+    //   • Internal callers (the green-api-webhook) send the service-role
+    //     key as `internal_token` in the body — body field rather than
+    //     header because the platform mangles auth headers for
+    //     cross-function calls in a way that defeated header comparison.
+    let agentId: string | null = null;
+    const isInternalCall = !!internal_token && internal_token === supabaseServiceKey;
+
+    if (isInternalCall) {
+      // Derive agent from the first policy's client's agent_id. All
+      // policies in a package belong to one client (and therefore one
+      // agent), so the first policy is enough.
+      const { data: firstPolicyClient } = await supabase
+        .from("policies")
+        .select("client:clients(agent_id)")
+        .eq("id", policy_ids[0])
+        .single();
+      const derivedAgentId = (firstPolicyClient?.client as any)?.agent_id;
+      if (!derivedAgentId) {
+        return new Response(
+          JSON.stringify({ error: "Could not resolve agent from policy_ids" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      agentId = derivedAgentId;
+    } else {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: "Missing authorization header" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: "Invalid authentication" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      agentId = await resolveAgentId(supabase, user.id);
+    }
+
+    const branding = await getAgentBranding(supabase, agentId);
 
     console.log(`[send-package-invoice-sms] Processing ${policy_ids.length} policies, skip_sms: ${skip_sms}`);
 

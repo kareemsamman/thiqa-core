@@ -693,6 +693,389 @@ async function dispatchQuoteFlow(
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Policy lookup flow
+// ─────────────────────────────────────────────────────────────────────
+//
+// Triggered when a customer asks about their existing policy ("تفاصيل
+// تأميني", "بوليصتي", "فاتورة", …). Resolves the customer to a row in
+// the agent's `clients` table — first by sender phone, then by national
+// ID if the phone match misses — and routes based on how many active
+// policies they have:
+//
+//   • 0 active   → ask if they'd like a full client report
+//   • 1 active   → send the invoice link, then offer a full report
+//   • 2+ active  → send the full report link directly (one invoice
+//                  wouldn't represent the situation)
+//
+// If neither phone nor ID matches, ask whether they want an agent to
+// reach out — and if yes, file a customer_requests row of type "help"
+// so the dashboard picks it up.
+
+interface PolicyFlowData {
+  client_id?: string;
+}
+
+const YES_RX = /(^|\s)(ايه|أيه|ايوا|أيوا|نعم|أكيد|اكيد|تمام|اوكي|أوكي|ok|okay|yes|بدي|ابعت|ابعتلي|أبعتلي)(\s|$|[.!؟،,])/i;
+const NO_RX = /(^|\s)(لأ|لا|لاء|مش|مو|كلا|no)(\s|$|[.!؟،,])/i;
+
+function parseYesNo(text: string): "yes" | "no" | null {
+  const t = (text || "").trim();
+  if (YES_RX.test(t)) return "yes";
+  if (NO_RX.test(t)) return "no";
+  return null;
+}
+
+async function sendPolicyStep(
+  ctx: QuoteFlowCtx,
+  reply: string,
+  flowStep: string | null,
+  flowData: PolicyFlowData,
+  extraMetadata: Record<string, any> = {},
+) {
+  const sendResult = await sendWhatsAppText(ctx.instanceId, ctx.apiToken, ctx.senderId, reply);
+  const metadata: Record<string, any> = {
+    deterministic: "policy_flow",
+    send_ok: sendResult.ok,
+    ...extraMetadata,
+  };
+  if (flowStep) {
+    metadata.flow = "policy";
+    metadata.flow_step = flowStep;
+    metadata.flow_data = flowData;
+  }
+  await ctx.supabase.from("customer_chat_messages").insert({
+    session_id: ctx.sessionId,
+    role: "bot",
+    content: reply,
+    whatsapp_message_id: sendResult.idMessage,
+    metadata,
+  });
+  await ctx.supabase
+    .from("customer_chat_sessions")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", ctx.sessionId);
+}
+
+async function lookupActivePolicies(ctx: QuoteFlowCtx, clientId: string) {
+  const { data: policies } = await ctx.supabase
+    .from("policies")
+    .select("id, end_date, cancelled, policy_type, start_date")
+    .eq("client_id", clientId);
+  const today = new Date();
+  return (policies ?? []).filter(
+    (p: any) => !p.cancelled && (!p.end_date || new Date(p.end_date) >= today),
+  );
+}
+
+async function getInvoiceLink(ctx: QuoteFlowCtx, policyIds: string[]): Promise<string | null> {
+  try {
+    const res = await fetch(`${ctx.supabaseUrl}/functions/v1/send-package-invoice-sms`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ctx.serviceKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        policy_ids: policyIds,
+        skip_sms: true,
+        internal_token: ctx.serviceKey,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("[policy-flow] invoice gen failed:", data);
+      return null;
+    }
+    return data.package_invoice_url ?? data.invoice_url ?? null;
+  } catch (err) {
+    console.error("[policy-flow] invoice fetch threw:", err);
+    return null;
+  }
+}
+
+async function getClientReportLink(ctx: QuoteFlowCtx, clientId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${ctx.supabaseUrl}/functions/v1/generate-client-report`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ctx.serviceKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        internal_token: ctx.serviceKey,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("[policy-flow] report gen failed:", data);
+      return null;
+    }
+    return data.url ?? null;
+  } catch (err) {
+    console.error("[policy-flow] report fetch threw:", err);
+    return null;
+  }
+}
+
+async function fileHandoffRequest(ctx: QuoteFlowCtx, reason: string) {
+  try {
+    await ctx.supabase.from("customer_requests").insert({
+      agent_id: ctx.agentId,
+      branch_id: ctx.branchId,
+      client_id: ctx.clientId,
+      phone_number: ctx.customerPhone,
+      request_type: "help",
+      title: "طلب تواصل من العميل",
+      content: reason.slice(0, 5000),
+      status: "open",
+    });
+  } catch (err) {
+    console.error("[policy-flow] handoff insert failed:", err);
+  }
+}
+
+/** Branch on active-policy count and reply with the right artifact. */
+async function respondWithPolicies(ctx: QuoteFlowCtx, clientId: string) {
+  const active = await lookupActivePolicies(ctx, clientId);
+
+  if (active.length === 0) {
+    await sendPolicyStep(
+      ctx,
+      "ما لقيتلك بوليصة فعّالة حالياً. بدك تقرير كامل عن ملفك (المدفوعات، الحوادث، إلخ)؟",
+      "awaiting_report_for_zero",
+      { client_id: clientId },
+    );
+    return;
+  }
+
+  if (active.length === 1) {
+    const link = await getInvoiceLink(ctx, [active[0].id]);
+    if (!link) {
+      await sendPolicyStep(
+        ctx,
+        "في عندي بوليصة فعّالة بس صار في مشكلة بتجهيز الفاتورة. رح يتواصل معك الوكيل.",
+        null,
+        {},
+      );
+      await fileHandoffRequest(ctx, "تعذّر توليد رابط الفاتورة لبوليصة فعّالة وحيدة.");
+      return;
+    }
+    await sendPolicyStep(
+      ctx,
+      `تفضل، هاي فاتورتك:\n${link}\n\nبدك كمان تقرير كامل عن ملفك؟`,
+      "awaiting_report_after_invoice",
+      { client_id: clientId },
+    );
+    return;
+  }
+
+  // 2+ active → comprehensive report is the right artifact.
+  const link = await getClientReportLink(ctx, clientId);
+  if (!link) {
+    await sendPolicyStep(
+      ctx,
+      "عندك أكثر من بوليصة فعّالة. صار في مشكلة بتجهيز التقرير، رح يتواصل معك الوكيل.",
+      null,
+      {},
+    );
+    await fileHandoffRequest(ctx, `العميل لديه ${active.length} بوليصات فعّالة وفشل توليد التقرير.`);
+    return;
+  }
+  await sendPolicyStep(
+    ctx,
+    `عندك ${active.length} بوليصات فعّالة. هاي تقرير كامل عن ملفك:\n${link}`,
+    null,
+    {},
+    { policy_completed: true },
+  );
+}
+
+/** Entry point — fired when a POLICY_TRIGGERS phrase is detected. */
+async function startPolicyFlow(ctx: QuoteFlowCtx) {
+  if (ctx.clientId) {
+    await respondWithPolicies(ctx, ctx.clientId);
+    return;
+  }
+  // Sender's phone isn't on our books — ask for ID number to try again.
+  await sendPolicyStep(
+    ctx,
+    "ما لقيت رقم هاتفك بقاعدة البيانات. لمين بدك التأمين؟ ابعتلي رقم الهوية (٩ أرقام).",
+    "awaiting_id_for_policy",
+    {},
+  );
+}
+
+async function processPolicyIdLookup(
+  ctx: QuoteFlowCtx,
+  flowData: PolicyFlowData,
+  text: string,
+) {
+  const idDigits = (text || "").replace(/[^0-9]/g, "");
+  if (idDigits.length < 8 || idDigits.length > 9) {
+    await sendPolicyStep(
+      ctx,
+      "ما لقيت رقم هوية صحيح بالرسالة. ابعتلي رقم الهوية (٩ أرقام) لو سمحت.",
+      "awaiting_id_for_policy",
+      flowData,
+    );
+    return;
+  }
+
+  // Lookup by id_number scoped to this agent. Pad to 9 digits if needed
+  // — id_number is stored as a string and may or may not have a leading
+  // zero in the DB.
+  const padded = idDigits.padStart(9, "0");
+  const candidates = Array.from(new Set([idDigits, padded]));
+  const { data: clientRow } = await ctx.supabase
+    .from("clients")
+    .select("id, full_name")
+    .eq("agent_id", ctx.agentId)
+    .is("deleted_at", null)
+    .in("id_number", candidates)
+    .limit(1)
+    .maybeSingle();
+
+  if (!clientRow?.id) {
+    await sendPolicyStep(
+      ctx,
+      "ما لقيت حساب بهالرقم. بدك أحوّلك للوكيل يساعدك؟",
+      "awaiting_handoff_confirm",
+      flowData,
+    );
+    return;
+  }
+
+  await respondWithPolicies(ctx, clientRow.id);
+}
+
+async function processReportConfirm(
+  ctx: QuoteFlowCtx,
+  flowData: PolicyFlowData,
+  text: string,
+  context: "zero" | "after_invoice",
+) {
+  const yn = parseYesNo(text);
+  if (yn === "yes") {
+    if (!flowData.client_id) {
+      await sendPolicyStep(ctx, "صار في مشكلة، رح يتواصل معك الوكيل.", null, {});
+      await fileHandoffRequest(ctx, "Lost client_id while confirming report.");
+      return;
+    }
+    const link = await getClientReportLink(ctx, flowData.client_id);
+    if (!link) {
+      await sendPolicyStep(ctx, "صار في مشكلة بتجهيز التقرير. رح يتواصل معك الوكيل.", null, {});
+      await fileHandoffRequest(ctx, "Failed to generate client report on confirm.");
+      return;
+    }
+    await sendPolicyStep(
+      ctx,
+      `تفضل، تقرير ملفك:\n${link}`,
+      null,
+      {},
+      { policy_completed: true },
+    );
+    return;
+  }
+
+  if (yn === "no") {
+    const closing = context === "zero"
+      ? "تمام. لو احتجت شي ثاني احكيلي."
+      : "تمام، شكراً. لو احتجت شي ثاني احكيلي.";
+    await sendPolicyStep(ctx, closing, null, {}, { policy_completed: true });
+    return;
+  }
+
+  // Couldn't parse — ask once more, stay in same step.
+  const stepName = context === "zero" ? "awaiting_report_for_zero" : "awaiting_report_after_invoice";
+  await sendPolicyStep(
+    ctx,
+    "ما فهمت قصدك. بدك تقرير كامل؟ جاوبني آه أو لا لو سمحت.",
+    stepName,
+    flowData,
+  );
+}
+
+async function processHandoffConfirm(
+  ctx: QuoteFlowCtx,
+  flowData: PolicyFlowData,
+  text: string,
+) {
+  const yn = parseYesNo(text);
+  if (yn === "yes") {
+    await fileHandoffRequest(ctx, "العميل طلب تأمين/بوليصة بس ما تعرّف عليه النظام بالهاتف ولا برقم الهوية.");
+    await sendPolicyStep(
+      ctx,
+      "تمام، سجلت طلبك. رح يتواصل معك الوكيل بأسرع وقت.",
+      null,
+      {},
+      { policy_completed: true },
+    );
+    return;
+  }
+
+  if (yn === "no") {
+    await sendPolicyStep(ctx, "تمام، شكراً.", null, {}, { policy_completed: true });
+    return;
+  }
+
+  await sendPolicyStep(
+    ctx,
+    "ما فهمت قصدك. بدك أحوّلك للوكيل؟ جاوبني آه أو لا لو سمحت.",
+    "awaiting_handoff_confirm",
+    flowData,
+  );
+}
+
+async function dispatchPolicyFlow(
+  ctx: QuoteFlowCtx,
+  step: string,
+  flowData: PolicyFlowData,
+  customerText: string,
+): Promise<boolean> {
+  switch (step) {
+    case "awaiting_id_for_policy":
+      await processPolicyIdLookup(ctx, flowData, customerText);
+      return true;
+    case "awaiting_report_for_zero":
+      await processReportConfirm(ctx, flowData, customerText, "zero");
+      return true;
+    case "awaiting_report_after_invoice":
+      await processReportConfirm(ctx, flowData, customerText, "after_invoice");
+      return true;
+    case "awaiting_handoff_confirm":
+      await processHandoffConfirm(ctx, flowData, customerText);
+      return true;
+    default:
+      return false;
+  }
+}
+
+const POLICY_TRIGGERS = [
+  "تفاصيل تأميني",
+  "تفاصيل تأمينات",
+  "تفاصيل تأميناتي",
+  "تفاصيل التأمين",
+  "تفاصيل البوليصة",
+  "تأميناتي",
+  "تأميني",
+  "بوليصتي",
+  "بوليصة تأمين",
+  "البوليصة",
+  "بوليصة",
+  "ابعتلي البوليصة",
+  "بدي بوليصتي",
+  "بدي البوليصة",
+  "فاتورتي",
+  "الفاتورة",
+  "فاتورة",
+  "إيصال",
+  "الإيصال",
+  "معاملاتي",
+  "معاملتي",
+];
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") {
@@ -1041,19 +1424,37 @@ serve(async (req) => {
       "تامين جديد",
     ];
     const matchesQuoteTrigger = QUOTE_TRIGGERS.some((t) => trimmedText.includes(t));
+    const matchesPolicyTrigger = POLICY_TRIGGERS.some((t) => trimmedText.includes(t));
 
     // Escape hatch: a customer stuck mid-flow can break out by sending a
-    // pure greeting or a fresh quote-trigger phrase. Without this, a
-    // wrong turn (e.g. car lookup failed → bot is now in awaiting_type
-    // and any plate number reads as a bad type answer) traps them.
-    const wantsReset = isPureGreeting || matchesQuoteTrigger;
+    // pure greeting, a fresh quote-trigger, or a fresh policy-trigger
+    // phrase. Without this, a wrong turn traps them inside the active
+    // flow (e.g. car lookup failed → bot is now in awaiting_type and
+    // any plate number reads as a bad type answer).
+    const wantsReset = isPureGreeting || matchesQuoteTrigger || matchesPolicyTrigger;
 
-    // (1) Already inside a quote flow → run the state machine, unless
+    // (1a) Already inside a quote flow → run the state machine, unless
     // the customer is explicitly trying to restart.
     if (inProgressFlow === "quote" && inProgressStep && !wantsReset) {
       const handled = await dispatchQuoteFlow(quoteCtx, inProgressStep, inProgressData, text);
       if (handled) {
         return new Response(JSON.stringify({ ok: true, quote_step: inProgressStep }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // (1b) Already inside a policy flow → run its state machine.
+    if (inProgressFlow === "policy" && inProgressStep && !wantsReset) {
+      const handled = await dispatchPolicyFlow(
+        quoteCtx,
+        inProgressStep,
+        (lastBotMsg?.metadata?.flow_data ?? {}) as PolicyFlowData,
+        text,
+      );
+      if (handled) {
+        return new Response(JSON.stringify({ ok: true, policy_step: inProgressStep }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -1071,6 +1472,17 @@ serve(async (req) => {
     if (matchesQuoteTrigger) {
       await startQuoteFlow(quoteCtx);
       return new Response(JSON.stringify({ ok: true, deterministic: "quote_entry" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // (4) Policy flow ENTRY. Customer asked about their existing policy
+    // / invoice / "تفاصيل تأميني". Resolves the customer and replies
+    // with the right artifact (invoice / report / agent handoff).
+    if (matchesPolicyTrigger) {
+      await startPolicyFlow(quoteCtx);
+      return new Response(JSON.stringify({ ok: true, deterministic: "policy_entry" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
