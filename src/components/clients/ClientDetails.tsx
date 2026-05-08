@@ -1372,34 +1372,47 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     [clientFilesPolicyRefs],
   );
   useEffect(() => {
-    if (!policyIdsKey) {
-      setSystemFilesCount(0);
-      setClientFilesCount(0);
-      return;
-    }
-    const policyIds = policyIdsKey.split(',');
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from('media_files')
-        .select('entity_type')
-        .in('entity_id', policyIds)
-        .in('entity_type', ['policy_crm', 'policy', 'policy_insurance'])
-        .is('deleted_at', null);
-      if (cancelled || error) return;
       let sys = 0;
       let cli = 0;
-      for (const row of data || []) {
-        if (row.entity_type === 'policy_crm') sys++;
-        else cli++;
+
+      if (policyIdsKey) {
+        const policyIds = policyIdsKey.split(',');
+        const { data, error } = await supabase
+          .from('media_files')
+          .select('entity_type')
+          .in('entity_id', policyIds)
+          .in('entity_type', ['policy_crm', 'policy', 'policy_insurance'])
+          .is('deleted_at', null);
+        if (cancelled) return;
+        if (!error) {
+          for (const row of data || []) {
+            if (row.entity_type === 'policy_crm') sys++;
+            else cli++;
+          }
+        }
       }
+
+      if (client?.id) {
+        const { count, error } = await supabase
+          .from('media_files')
+          .select('id', { count: 'exact', head: true })
+          .eq('entity_id', client.id)
+          .eq('entity_type', 'client_system')
+          .is('deleted_at', null);
+        if (cancelled) return;
+        if (!error && typeof count === 'number') sys += count;
+      }
+
+      if (cancelled) return;
       setSystemFilesCount(sys);
       setClientFilesCount(cli);
     })();
     return () => {
       cancelled = true;
     };
-  }, [policyIdsKey]);
+  }, [policyIdsKey, client?.id]);
 
   // Group payments by batch_id for unified display
   const groupedPayments = useMemo((): GroupedPayment[] => {
@@ -2696,6 +2709,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             <ClientFilesTab
               policies={clientFilesPolicyRefs}
               kind="system"
+              clientId={client.id}
               onCountChange={setSystemFilesCount}
             />
           </TabsContent>

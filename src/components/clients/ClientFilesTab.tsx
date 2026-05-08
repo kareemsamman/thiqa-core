@@ -1,10 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, FileText, ExternalLink, FolderOpen, ImageIcon, Search, Play } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import {
+  Loader2, FileText, ExternalLink, FolderOpen, ImageIcon, Search, Play,
+  Plus, Trash2, Download, Upload,
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import { FilePreviewGallery } from '@/components/policies/FilePreviewGallery';
+import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 
 interface MediaFile {
   id: string;
@@ -31,8 +38,11 @@ export interface ClientFilesPolicyRef {
 interface ClientFilesTabProps {
   policies: ClientFilesPolicyRef[];
   kind: 'system' | 'client';
+  clientId?: string;
   onCountChange?: (count: number) => void;
 }
+
+const CLIENT_SYSTEM_ENTITY_TYPE = 'client_system';
 
 const ENTITY_TYPES: Record<ClientFilesTabProps['kind'], string[]> = {
   // ملفات النظام = internal/CRM docs (matches policy_crm in PolicyFilesSection)
@@ -52,11 +62,26 @@ const formatSize = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTabProps) {
+export function ClientFilesTab({ policies, kind, clientId, onCountChange }: ClientFilesTabProps) {
+  const { toast } = useToast();
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<MediaFile | null>(null);
   const [search, setSearch] = useState('');
+
+  const showManualUpload = kind === 'system' && !!clientId;
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    name: string;
+    pct: number;
+    current: number;
+    total: number;
+  } | null>(null);
+  const [deletingFile, setDeletingFile] = useState<MediaFile | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const policyIds = useMemo(() => policies.map((p) => p.id), [policies]);
   const policyMap = useMemo(() => {
@@ -65,40 +90,63 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
     return m;
   }, [policies]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      setLoading(true);
-      if (policyIds.length === 0) {
-        setFiles([]);
-        setLoading(false);
-        onCountChange?.(0);
-        return;
-      }
-      const { data, error } = await supabase
-        .from('media_files')
-        .select('id, original_name, cdn_url, mime_type, size, created_at, entity_type, entity_id, storage_path, stream_video_guid, stream_library_id')
-        .in('entity_id', policyIds)
-        .in('entity_type', ENTITY_TYPES[kind])
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
-      if (cancelled) return;
-      if (error) {
-        console.error('Error fetching client files:', error);
-        setFiles([]);
-        onCountChange?.(0);
-      } else {
-        setFiles(data || []);
-        onCountChange?.((data || []).length);
-      }
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+
+    const queries: Promise<{ data: MediaFile[] | null; error: any }>[] = [];
+
+    if (policyIds.length > 0) {
+      queries.push(
+        supabase
+          .from('media_files')
+          .select('id, original_name, cdn_url, mime_type, size, created_at, entity_type, entity_id, storage_path, stream_video_guid, stream_library_id')
+          .in('entity_id', policyIds)
+          .in('entity_type', ENTITY_TYPES[kind])
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .then((r) => ({ data: r.data as MediaFile[] | null, error: r.error })),
+      );
+    }
+
+    if (showManualUpload && clientId) {
+      queries.push(
+        supabase
+          .from('media_files')
+          .select('id, original_name, cdn_url, mime_type, size, created_at, entity_type, entity_id, storage_path, stream_video_guid, stream_library_id')
+          .eq('entity_id', clientId)
+          .eq('entity_type', CLIENT_SYSTEM_ENTITY_TYPE)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .then((r) => ({ data: r.data as MediaFile[] | null, error: r.error })),
+      );
+    }
+
+    if (queries.length === 0) {
+      setFiles([]);
       setLoading(false);
-    };
-    run();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [policyIds.join(','), kind]);
+      onCountChange?.(0);
+      return;
+    }
+
+    const results = await Promise.all(queries);
+    const firstError = results.find((r) => r.error)?.error;
+    if (firstError) {
+      console.error('Error fetching client files:', firstError);
+      setFiles([]);
+      onCountChange?.(0);
+    } else {
+      const merged = results
+        .flatMap((r) => r.data || [])
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setFiles(merged);
+      onCountChange?.(merged.length);
+    }
+    setLoading(false);
+  }, [policyIds.join(','), kind, clientId, showManualUpload, onCountChange]);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
   const filteredFiles = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -119,6 +167,126 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
   }, [files, search, policyMap]);
 
   const isExternalLink = (file: MediaFile) => !file.storage_path && file.size === 0;
+  const isManualFile = (file: MediaFile) => file.entity_type === CLIENT_SYSTEM_ENTITY_TYPE;
+
+  const uploadOne = (file: File, accessToken: string | undefined): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('entity_type', CLIENT_SYSTEM_ENTITY_TYPE);
+      formData.append('entity_id', clientId!);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-media`);
+      xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          setUploadProgress((prev) => (prev ? { ...prev, pct } : prev));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+        } else {
+          let msg = 'Upload failed';
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (parsed?.error) msg = parsed.error;
+          } catch {}
+          reject(new Error(msg));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.send(formData);
+    });
+  };
+
+  const uploadFiles = async (toUpload: File[]) => {
+    if (!showManualUpload || toUpload.length === 0) return;
+    setUploading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      for (let i = 0; i < toUpload.length; i++) {
+        const f = toUpload[i];
+        setUploadProgress({ name: f.name, pct: 0, current: i + 1, total: toUpload.length });
+        await uploadOne(f, session?.access_token);
+      }
+      toast({ title: 'تم الرفع', description: 'تم رفع الملفات بنجاح' });
+      await fetchAll();
+    } catch (error: any) {
+      console.error('Error uploading:', error);
+      toast({
+        title: 'خطأ',
+        description: error.message || 'فشل في رفع الملفات',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploading(false);
+      setUploadProgress(null);
+    }
+  };
+
+  const handleUploadInput = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const list = event.target.files;
+    if (!list || list.length === 0) return;
+    await uploadFiles(Array.from(list));
+    event.target.value = '';
+  };
+
+  const isAcceptedFile = (file: File): boolean => {
+    if (file.type.startsWith('image/')) return true;
+    if (file.type === 'application/pdf') return true;
+    return /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif|pdf)$/i.test(file.name);
+  };
+
+  const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragging(false);
+    if (!showManualUpload || uploading) return;
+    const dropped = Array.from(event.dataTransfer.files ?? []);
+    const accepted = dropped.filter(isAcceptedFile);
+    const rejectedCount = dropped.length - accepted.length;
+    if (accepted.length === 0) {
+      toast({
+        title: 'لا توجد ملفات مدعومة',
+        description: 'ادعم الصور و PDF فقط.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (rejectedCount > 0) {
+      toast({
+        title: `تم تجاهل ${rejectedCount} ملف غير مدعوم`,
+        description: 'تم قبول الصور و PDF فقط.',
+      });
+    }
+    await uploadFiles(accepted);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingFile) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase.functions.invoke('delete-media', {
+        body: { fileIds: [deletingFile.id] },
+      });
+      if (error) throw new Error(error.message || 'Delete failed');
+      toast({ title: 'تم الحذف', description: 'تم حذف الملف بنجاح' });
+      await fetchAll();
+    } catch (error: any) {
+      console.error('Error deleting:', error);
+      toast({
+        title: 'خطأ',
+        description: error.message || 'فشل في حذف الملف',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+      setDeletingFile(null);
+    }
+  };
 
   const heading = kind === 'system' ? 'ملفات النظام' : 'ملفات العميل';
   const HeadingIcon = kind === 'system' ? FolderOpen : ImageIcon;
@@ -129,15 +297,59 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
 
   return (
     <>
-      <Card className="p-4 space-y-4">
-        <div className="flex items-center gap-2 text-primary font-semibold">
-          <HeadingIcon className="h-4 w-4" />
-          <span>{heading}</span>
-          <Badge variant="secondary" className="ml-auto">
-            {search.trim() ? `${filteredFiles.length} / ${files.length}` : files.length}
-          </Badge>
+      <Card
+        className={`relative p-4 space-y-4 transition-colors ${
+          isDragging ? 'ring-2 ring-primary ring-offset-2 bg-primary/5' : ''
+        }`}
+        onDragOver={(e) => {
+          if (!showManualUpload) return;
+          e.preventDefault();
+          if (!uploading) setIsDragging(true);
+        }}
+        onDragLeave={(e) => {
+          if (!showManualUpload) return;
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setIsDragging(false);
+        }}
+        onDrop={(e) => {
+          if (!showManualUpload) return;
+          handleDrop(e);
+        }}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 text-primary font-semibold">
+            <HeadingIcon className="h-4 w-4" />
+            <span>{heading}</span>
+            <Badge variant="secondary">
+              {search.trim() ? `${filteredFiles.length} / ${files.length}` : files.length}
+            </Badge>
+          </div>
+          {showManualUpload && (
+            <div className="ms-auto relative">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.pdf"
+                onChange={handleUploadInput}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                disabled={uploading}
+              />
+              <Button size="sm" variant="outline" disabled={uploading}>
+                {uploading ? (
+                  <Loader2 className="h-4 w-4 ml-1 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4 ml-1" />
+                )}
+                رفع ملف
+              </Button>
+            </div>
+          )}
         </div>
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <p className="text-xs text-muted-foreground">
+          {description}
+          {showManualUpload ? ' — يمكنك رفع ملفات يدوياً هنا أيضاً (اسحب وأفلت).' : ''}
+        </p>
 
         {!loading && files.length > 0 && (
           <div className="relative">
@@ -163,8 +375,9 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {filteredFiles.map((file) => {
-              const policy = file.entity_id ? policyMap.get(file.entity_id) : null;
-              const policyLabel = policy?.label ?? 'معاملة';
+              const manual = isManualFile(file);
+              const policy = file.entity_id && !manual ? policyMap.get(file.entity_id) : null;
+              const policyLabel = policy?.label ?? (manual ? 'يدوي' : 'معاملة');
               const carNumber = policy?.car_number;
               const onClick = () => {
                 if (isExternalLink(file)) {
@@ -176,7 +389,7 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
               return (
                 <div
                   key={file.id}
-                  className="group rounded-lg border overflow-hidden bg-muted/30 cursor-pointer hover:border-primary/50 transition-colors flex flex-col"
+                  className="group relative rounded-lg border overflow-hidden bg-muted/30 cursor-pointer hover:border-primary/50 transition-colors flex flex-col"
                   onClick={onClick}
                 >
                   <div className="relative aspect-square bg-muted/40">
@@ -228,7 +441,10 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
                     )}
                   </div>
                   <div className="p-2 space-y-1 border-t bg-background">
-                    <Badge variant="outline" className="text-[10px] w-full justify-center truncate">
+                    <Badge
+                      variant={manual ? 'secondary' : 'outline'}
+                      className="text-[10px] w-full justify-center truncate"
+                    >
                       {policyLabel}
                       {carNumber ? ` · ${carNumber}` : ''}
                     </Badge>
@@ -239,9 +455,43 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
                       {file.original_name}
                     </p>
                   </div>
+                  <div className="absolute inset-x-0 top-0 h-10 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-b from-black/50 to-transparent pointer-events-none flex items-start justify-end gap-1 p-1">
+                    <a
+                      href={file.cdn_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download={file.original_name}
+                      className="pointer-events-auto inline-flex items-center justify-center h-7 w-7 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </a>
+                    {manual && (
+                      <Button
+                        size="icon"
+                        variant="destructive"
+                        className="h-7 w-7 pointer-events-auto"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeletingFile(file);
+                          setDeleteOpen(true);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               );
             })}
+          </div>
+        )}
+        {showManualUpload && isDragging && (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-lg">
+            <div className="bg-background/95 px-4 py-2 rounded-md shadow-md text-sm font-semibold text-primary flex items-center gap-2">
+              <Upload className="h-4 w-4" />
+              أفلت الملفات للرفع
+            </div>
           </div>
         )}
       </Card>
@@ -252,6 +502,36 @@ export function ClientFilesTab({ policies, kind, onCountChange }: ClientFilesTab
         onClose={() => setSelectedFile(null)}
         onNavigate={(f) => setSelectedFile(f)}
       />
+
+      <DeleteConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onConfirm={handleDelete}
+        title="حذف الملف"
+        description={`هل أنت متأكد من حذف "${deletingFile?.original_name}"؟`}
+        loading={deleting}
+      />
+
+      {uploadProgress && (
+        <div
+          dir="rtl"
+          className="fixed bottom-4 right-4 z-50 w-80 max-w-[90vw] rounded-lg border bg-background shadow-lg p-3 space-y-2"
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span>
+              جاري رفع{' '}
+              {String(uploadProgress.current).padStart(2, '0')} من{' '}
+              {String(uploadProgress.total).padStart(2, '0')}
+            </span>
+            <span className="ms-auto text-muted-foreground">{uploadProgress.pct}%</span>
+          </div>
+          <p className="text-xs text-muted-foreground truncate" title={uploadProgress.name}>
+            {uploadProgress.name}
+          </p>
+          <Progress value={uploadProgress.pct} className="h-2" />
+        </div>
+      )}
     </>
   );
 }
