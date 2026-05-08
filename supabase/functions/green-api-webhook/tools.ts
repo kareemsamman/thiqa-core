@@ -88,6 +88,24 @@ export const TOOL_DEFS = [
   {
     type: "function",
     function: {
+      name: "lookup_vehicle",
+      description:
+        "Look up vehicle details (manufacturer, model, year, color) from the Israeli government open-data API by license plate. MUST be used during the quote flow after the customer gives their car number, so you can confirm the vehicle with them before filing the request.",
+      parameters: {
+        type: "object",
+        properties: {
+          car_number: {
+            type: "string",
+            description: "License plate digits only. Typically 7 or 8 digits.",
+          },
+        },
+        required: ["car_number"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "create_customer_request",
       description:
         "Create a follow-up request for the office staff. Use this when the customer needs human attention: asking for a price quote, reporting an accident, or any inquiry the bot can't handle directly. The customer should be told the staff will contact them.",
@@ -323,6 +341,52 @@ async function getInvoiceUrl(ctx: ToolContext, args: { policy_ids: string[] }) {
   };
 }
 
+async function lookupVehicle(ctx: ToolContext, args: { car_number: string }) {
+  const carNumber = digitsOnly(args.car_number ?? "");
+  if (!carNumber || carNumber.length < 6) {
+    return {
+      found: false,
+      car_number: carNumber,
+      message: "رقم السيارة قصير. لازم 7 أو 8 أرقام.",
+    };
+  }
+  try {
+    const res = await fetch(`${ctx.supabaseUrl}/functions/v1/fetch-vehicle`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ctx.authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ car_number: carNumber }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.success || !data?.found) {
+      return {
+        found: false,
+        car_number: carNumber,
+        message: data?.error ?? "ما لقينا بيانات لهالرقم بقاعدة البيانات الحكومية.",
+      };
+    }
+    return {
+      found: true,
+      car_number: data.data.car_number,
+      manufacturer: data.data.manufacturer_name,
+      model: data.data.model,
+      year: data.data.year,
+      color: data.data.color,
+      car_type: data.data.car_type,
+      trim_level: data.data.trim_level,
+    };
+  } catch (err) {
+    console.error("[whatsapp-tools] lookup_vehicle threw:", err);
+    return {
+      found: false,
+      car_number: carNumber,
+      message: "تعذّر الوصول لقاعدة البيانات الحكومية حالياً.",
+    };
+  }
+}
+
 async function createCustomerRequest(
   ctx: ToolContext,
   args: { request_type: "quote" | "accident" | "general"; title: string; content: string },
@@ -362,6 +426,8 @@ export async function executeTool(
         return await listClientPolicies(ctx, args);
       case "get_invoice_url":
         return await getInvoiceUrl(ctx, args);
+      case "lookup_vehicle":
+        return await lookupVehicle(ctx, args);
       case "create_customer_request":
         return await createCustomerRequest(ctx, args);
       default:

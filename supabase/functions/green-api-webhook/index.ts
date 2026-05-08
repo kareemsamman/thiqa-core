@@ -54,11 +54,48 @@ const CUSTOMER_SYSTEM_PROMPT = `أنت "ثاقب" — المساعد الآلي 
 
 ## السيناريوهات الثلاثة الرئيسية — اتبعها حرفياً
 
-### 1) عرض سعر / استفسار عن تأمين جديد
-لو العميل طلب سعر تأمين جديد (إلزامي، شامل، طرف ثالث، خدمات الطريق، ...) أو سأل "بكم؟":
-- لا تعطي أسعار من رأسك أبداً.
-- نادي create_customer_request بـ request_type="quote"، title يلخّص الطلب (مثلاً "عرض سعر تأمين شامل لسيارة 2018")، content يحتوي كلام العميل بالحرف.
-- بعدها رد: "تمام، رح يتواصل معك المسؤول قريباً مع عرض السعر."
+### 1) عرض سعر / استفسار عن تأمين جديد — فلو متعدد الخطوات
+لو العميل طلب سعر تأمين جديد أو سأل "بكم؟" أو "كم سعر التأمين":
+- **ممنوع** تعطي أسعار من رأسك.
+- **ممنوع** تنادي create_customer_request قبل ما تجمع كل المعلومات اللازمة.
+- اتبع الخطوات بالترتيب التالي. كل خطوة برسالة قصيرة، وانتظر رد العميل قبل الانتقال للتالية:
+
+**الخطوة 1 — نوع التأمين**:
+اسأل: "بدك تأمين إلزامي، طرف ثالث، ولا شامل (مع خدمات الطريق)؟"
+
+**الخطوة 2 — رقم السيارة**:
+لما يجاوب على نوع التأمين، اسأل: "تمام. شو رقم سيارتك؟"
+
+**الخطوة 3 — تأكيد بيانات السيارة**:
+لما يبعت رقم السيارة، نادي **lookup_vehicle** بهالرقم.
+- إذا found=true: ابعت تأكيد بصيغة:
+  "سيارتك [manufacturer] [model] موديل [year]، مظبوط؟"
+- إذا found=false: قول للعميل "ما لقيت بيانات للرقم. متأكد منه؟ ابعتلي إياه مرة ثانية لو سمحت" — وحاول مرة وحدة كمان.
+- إذا فضل ما لقي بعد محاولتين، أكمل بدون بيانات السيارة (لا تضيع وقت العميل).
+
+**الخطوة 4 — عمر السائق**:
+لما يأكد السيارة (نعم/أيوه/تمام/مظبوط) أو لما تعدّيت خطوة 3، اسأل:
+"كم عمر السائق؟ أكثر من 24 ولا أقل؟"
+
+**الخطوة 5 — تسجيل الطلب**:
+لما تجمع: نوع التأمين + رقم السيارة + بيانات السيارة (لو متوفرة) + عمر السائق، نادي **create_customer_request** بـ:
+- request_type="quote"
+- title: ملخّص سطر واحد، مثلاً: "عرض سعر شامل — مزدا 3 موديل 2018"
+- content: نص منظّم على شكل قائمة:
+  • نوع التأمين المطلوب: ...
+  • رقم السيارة: ...
+  • بيانات السيارة: [manufacturer] [model] [year] [color] (لو توفرت من lookup_vehicle)
+  • عمر السائق: أكثر من 24 / أقل من 24
+  • ملاحظات إضافية ذكرها العميل: ...
+
+**الخطوة 6 — الرد النهائي**:
+بعد ما تنشئ الطلب، رد:
+"تمام، سجلنا طلبك. المسؤول رح يتواصل معك قريباً مع عرض السعر."
+
+**ملاحظات تنفيذية**:
+- لو العميل بعت كل المعلومات بمسج واحد ("بدي شامل لسيارة 1234567 السائق فوق 24")، اقفز مباشرة لخطوة 3 (lookup_vehicle) وأكمل بقية التأكيدات.
+- لو فاتك أي معلومة من الخمسة (نوع التأمين، رقم السيارة، تأكيد السيارة، عمر السائق)، **ممنوع** تنشئ الطلب — اسأل عن الناقص أولاً.
+- لا تخترع بيانات السيارة لو lookup_vehicle رجع found=false. سجل الطلب بدونها.
 
 ### 2) استفسار عن وثيقة موجودة
 لو العميل سأل عن وثيقته (تاريخ انتهاء، نوع التأمين، الشركة، فاتورة، رصيد):
@@ -193,16 +230,16 @@ async function buildCustomerContext(
  *  null when transcription is unavailable so the caller can prompt
  *  the customer to type instead. */
 async function transcribeAudio(downloadUrl: string, mimeType: string): Promise<string | null> {
+  console.log(`[transcribe] start url=${downloadUrl.slice(0, 80)}... mime=${mimeType}`);
   try {
-    // Download the raw audio bytes from Green API's CDN
     const audioRes = await fetch(downloadUrl);
     if (!audioRes.ok) {
-      console.error("[transcribe] download failed:", audioRes.status);
+      console.error(`[transcribe] download failed: status=${audioRes.status}`);
       return null;
     }
     const audioBlob = await audioRes.blob();
+    console.log(`[transcribe] downloaded ${audioBlob.size} bytes type=${audioBlob.type || mimeType}`);
 
-    // Heuristic file extension from mime; Whisper sniffs anyway.
     const ext = mimeType.includes("ogg")
       ? "ogg"
       : mimeType.includes("mp3") || mimeType.includes("mpeg")
@@ -215,12 +252,13 @@ async function transcribeAudio(downloadUrl: string, mimeType: string): Promise<s
       const fd = new FormData();
       fd.append("file", audioBlob, `audio.${ext}`);
       fd.append("model", "whisper-1");
-      // Hint Arabic so dialect transcription stays accurate.
       fd.append("language", "ar");
       return fd;
     };
 
-    // Try Lovable gateway first
+    // Lovable's gateway is OpenAI-compatible for chat but doesn't proxy
+    // /v1/audio/transcriptions yet. We try it first for environments that
+    // do support it; on any non-2xx we fall through to OpenAI direct.
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
     if (lovableKey) {
       try {
@@ -232,19 +270,26 @@ async function transcribeAudio(downloadUrl: string, mimeType: string): Promise<s
         if (res.ok) {
           const data = await res.json();
           const out = (data?.text ?? "").toString().trim();
-          if (out) return out;
+          if (out) {
+            console.log(`[transcribe] lovable success: ${out.length} chars`);
+            return out;
+          }
+          console.warn("[transcribe] lovable returned 2xx but no text");
         } else {
-          console.warn("[transcribe] lovable gateway:", res.status, await res.text().catch(() => ""));
+          const errBody = await res.text().catch(() => "");
+          console.warn(`[transcribe] lovable status=${res.status} body=${errBody.slice(0, 200)}`);
         }
       } catch (err) {
-        console.warn("[transcribe] lovable gateway threw:", err);
+        console.warn("[transcribe] lovable threw:", err);
       }
+    } else {
+      console.warn("[transcribe] LOVABLE_API_KEY not set");
     }
 
-    // Fallback: OpenAI direct
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
     if (openaiKey) {
       try {
+        console.log("[transcribe] calling OpenAI Whisper direct");
         const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
           method: "POST",
           headers: { Authorization: `Bearer ${openaiKey}` },
@@ -253,15 +298,20 @@ async function transcribeAudio(downloadUrl: string, mimeType: string): Promise<s
         if (res.ok) {
           const data = await res.json();
           const out = (data?.text ?? "").toString().trim();
-          if (out) return out;
+          if (out) {
+            console.log(`[transcribe] openai success: ${out.length} chars`);
+            return out;
+          }
+          console.warn("[transcribe] openai returned 2xx but no text");
         } else {
-          console.warn("[transcribe] openai direct:", res.status, await res.text().catch(() => ""));
+          const errBody = await res.text().catch(() => "");
+          console.error(`[transcribe] openai status=${res.status} body=${errBody.slice(0, 300)}`);
         }
       } catch (err) {
-        console.warn("[transcribe] openai direct threw:", err);
+        console.error("[transcribe] openai threw:", err);
       }
     } else {
-      console.warn("[transcribe] OPENAI_API_KEY not set — voice fallback unavailable");
+      console.error("[transcribe] OPENAI_API_KEY not set — cannot transcribe");
     }
 
     return null;
@@ -452,19 +502,62 @@ serve(async (req) => {
     }
 
     // Log the inbound message immediately so the conversation is in
-    // the DB even if the AI / Green API call fails below.
-    await supabase.from("customer_chat_messages").insert({
-      session_id: session.id,
-      role: "customer",
-      content: text,
-      whatsapp_message_id: body?.idMessage ?? null,
-      metadata: { typeMessage, sender_name: senderName },
-    });
+    // the DB even if the AI / Green API call fails below. We capture the
+    // row id — the debounce check below uses it to decide "am I still the
+    // latest customer message in this session, or did a newer one arrive
+    // during the wait window?"
+    const { data: insertedMsg, error: insertErr } = await supabase
+      .from("customer_chat_messages")
+      .insert({
+        session_id: session.id,
+        role: "customer",
+        content: text,
+        whatsapp_message_id: body?.idMessage ?? null,
+        metadata: { typeMessage, sender_name: senderName },
+      })
+      .select("id")
+      .single();
+    if (insertErr) throw insertErr;
+    const myMessageId: string = insertedMsg.id;
     await supabase
       .from("customer_chat_sessions")
       .update({ last_message_at: new Date().toISOString() })
       .eq("id", session.id);
 
+    // Debounce: customers often send 2-3 messages in quick succession
+    // ("مرحبا" → "كيف الحال؟" → "بدي عرض سعر"). Replying to each
+    // message individually feels robotic, so we wait 30s after the last
+    // customer message before responding. Implementation: every
+    // invocation schedules a deferred response after a sleep — only the
+    // one whose message is still the latest after the sleep actually
+    // fires the AI call. Earlier invocations exit silently when they
+    // detect a newer message.
+    const sessionId: string = session.id;
+
+    const respondAfterDebounce = async () => {
+      try {
+        await new Promise((r) => setTimeout(r, 30_000));
+
+        const { data: latest } = await supabase
+          .from("customer_chat_messages")
+          .select("id")
+          .eq("session_id", sessionId)
+          .eq("role", "customer")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!latest || latest.id !== myMessageId) {
+          console.log(`[debounce] session ${sessionId}: newer message arrived, skipping reply for ${myMessageId}`);
+          return;
+        }
+
+        await processAndReply();
+      } catch (err) {
+        console.error("[debounce] deferred response failed:", err);
+      }
+    };
+
+    const processAndReply = async () => {
     // Build the AI prompt
     const branding = await getAgentBranding(supabase, agentId);
     const ctx = matchedClient
@@ -679,8 +772,16 @@ serve(async (req) => {
       .from("customer_chat_sessions")
       .update({ last_message_at: new Date().toISOString() })
       .eq("id", session.id);
+    }; // end processAndReply
 
-    return new Response(JSON.stringify({ ok: true }), {
+    // Defer the actual AI work for 30 seconds. We return 200 to Green API
+    // immediately — they'd retry if we held the connection that long, and
+    // EdgeRuntime.waitUntil keeps the function alive until the deferred
+    // task resolves.
+    // @ts-ignore — EdgeRuntime is a Supabase Edge Runtime global
+    EdgeRuntime.waitUntil(respondAfterDebounce());
+
+    return new Response(JSON.stringify({ ok: true, queued: true }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
