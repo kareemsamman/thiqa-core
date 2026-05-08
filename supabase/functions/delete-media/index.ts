@@ -50,15 +50,37 @@ serve(async (req) => {
       });
     }
 
-    // Check if user is admin
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('role', 'admin')
-      .single();
+    // Authorization model — match the rest of the system (RLS-style):
+    //  1. Thiqa super admins can delete anything (same as the React app).
+    //  2. Admins (user_roles.role='admin') can delete anything within
+    //     their account.
+    //  3. Anyone else may delete files belonging to their own agent.
+    //     This mirrors the agent_data_delete RLS policy on media_files
+    //     and matches what the UI promises ("delete enabled on all
+    //     files"). Restricting to uploaded_by would block deletion of
+    //     WhatsApp-ingested files, files uploaded by a co-worker, etc.
+    const [{ data: superAdminRow }, { data: roleData }, { data: agentUserRow }] = await Promise.all([
+      supabase
+        .from('thiqa_super_admins')
+        .select('email')
+        .eq('email', (user.email || '').toLowerCase())
+        .maybeSingle(),
+      supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle(),
+      supabase
+        .from('agent_users')
+        .select('agent_id')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+    ]);
 
+    const isSuperAdmin = !!superAdminRow;
     const isAdmin = !!roleData;
+    const userAgentId = agentUserRow?.agent_id ?? null;
 
     // Get file IDs from request body
     const { fileIds } = await req.json();
@@ -70,15 +92,23 @@ serve(async (req) => {
       });
     }
 
-    // Get files to delete (check ownership if not admin)
     let query = supabase
       .from('media_files')
-      .select('id, storage_path, uploaded_by')
+      .select('id, storage_path, uploaded_by, agent_id')
       .in('id', fileIds)
       .is('deleted_at', null);
 
-    if (!isAdmin) {
-      query = query.eq('uploaded_by', user.id);
+    if (!isSuperAdmin && !isAdmin) {
+      // Non-admin users are scoped to their own agent's files. If we
+      // don't know the user's agent, refuse — better than silently
+      // matching agent_id IS NULL rows.
+      if (!userAgentId) {
+        return new Response(JSON.stringify({ error: 'No files found or unauthorized' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      query = query.eq('agent_id', userAgentId);
     }
 
     const { data: files, error: fetchError } = await query;
