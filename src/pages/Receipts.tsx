@@ -99,6 +99,7 @@ interface ReceiptGroup extends ReceiptGroupView {
   // Pulled from the first policy in the group; nullable for manual receipts.
   company_name: string | null;
   policy_type_label: string | null;
+  client_id_number: string | null;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────
@@ -133,6 +134,7 @@ const RECEIPTS_COLUMNS: ColumnOption[] = [
   { key: "amount", label: "المبلغ" },
   { key: "receipt_date", label: "التاريخ" },
   { key: "client_name", label: "اسم العميل" },
+  { key: "client_id_number", label: "رقم هوية العميل" },
   { key: "car_number", label: "رقم السيارة" },
   { key: "company_name", label: "شركة التأمين" },
   { key: "policy_type", label: "نوع التأمين" },
@@ -610,15 +612,22 @@ export default function Receipts() {
       // is the right behavior: "show me only receipts for company X"
       // can't include rows that aren't tied to any policy.
       const needsPolicyInnerJoin = companies.length > 0 || types.length > 0;
-      const policyJoin = needsPolicyInnerJoin
-        ? "policy:policies!inner(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_companies(id, name, name_ar))"
-        : "policy:policies(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_companies(id, name, name_ar))";
+      // Both queries reuse the same `policy:policies` alias so the
+      // foreign-table filters below ("policy.company_id", or() with
+      // foreignTable:"policy") resolve identically against either.
+      // Inner-join only when company/type filters are active.
+      const policyJoinFull = needsPolicyInnerJoin
+        ? "policy:policies!inner(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_companies(id, name, name_ar), clients(id_number))"
+        : "policy:policies(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_companies(id, name, name_ar), clients(id_number))";
+      const policyJoinCount = needsPolicyInnerJoin
+        ? "policy:policies!inner(id)"
+        : "policy:policies(id)";
 
       // Sort by created_at DESC first, so the receipt that was just
       // entered surfaces at the top even if the user back-dated it.
       let query = (supabase as any)
         .from("receipts")
-        .select(`*, ${policyJoin}`)
+        .select(`*, ${policyJoinFull}`)
         .eq("agent_id", agentId)
         .eq("receipt_type", activeTab)
         .order("created_at", { ascending: false })
@@ -627,10 +636,7 @@ export default function Receipts() {
 
       let countQuery = (supabase as any)
         .from("receipts")
-        .select(
-          needsPolicyInnerJoin ? "id, policies!inner(id)" : "id",
-          { count: "exact", head: true },
-        )
+        .select(`id, ${policyJoinCount}`, { count: "exact", head: true })
         .eq("agent_id", agentId)
         .eq("receipt_type", activeTab);
 
@@ -720,6 +726,10 @@ export default function Receipts() {
       const company = Array.isArray(rawCompany)
         ? rawCompany[0] ?? null
         : rawCompany ?? null;
+      const rawClient = policy?.clients;
+      const client = Array.isArray(rawClient)
+        ? rawClient[0] ?? null
+        : rawClient ?? null;
       let key: string;
       if (policy?.group_id) {
         key = `grp:${policy.group_id}`;
@@ -748,6 +758,7 @@ export default function Receipts() {
           policy_type_label: typeKey
             ? POLICY_TYPE_DISPLAY[typeKey] || typeKey
             : null,
+          client_id_number: client?.id_number || null,
         });
       }
       const g = map.get(key)!;
@@ -1438,6 +1449,7 @@ export default function Receipts() {
       amount: "180px",
       receipt_date: "110px",
       client_name: undefined,
+      client_id_number: "130px",
       car_number: "120px",
       company_name: "160px",
       policy_type: "100px",
@@ -1600,6 +1612,11 @@ export default function Receipts() {
                       {isCol("client_name") && (
                         <TableCell className="truncate" title={group.client_name}>
                           {group.client_name}
+                        </TableCell>
+                      )}
+                      {isCol("client_id_number") && (
+                        <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                          {group.client_id_number || "-"}
                         </TableCell>
                       )}
                       {isCol("car_number") && (
