@@ -634,6 +634,82 @@ serve(async (req) => {
       });
     }
 
+    // Deterministic quote-flow ENTRY. Customer typed any of the obvious
+    // quote-request triggers ("عرض سعر", "بدي عرض سعر", "كم السعر",
+    // ...) → reply with step 1 of the flow verbatim. The AI was
+    // unreliable here too — kept menu-ing back "كيف بقدر أساعدك؟ بدك
+    // تفاصيل وثيقة، فاتورة، عرض سعر، ..." instead of jumping in.
+    //
+    // Only fire when there isn't already an active quote flow (the AI
+    // continues steps 2+ from history), and only on the entry message
+    // itself — once we've sent step 1, subsequent turns ("شامل") go to
+    // the AI which has full scenario context in the system prompt.
+    const { data: lastBotMsg } = await supabase
+      .from("customer_chat_messages")
+      .select("metadata")
+      .eq("session_id", session.id)
+      .eq("role", "bot")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const inProgressFlow = lastBotMsg?.metadata?.flow ?? null;
+
+    const QUOTE_TRIGGERS = [
+      "عرض سعر",
+      "عرض الأسعار",
+      "عرض اسعار",
+      "كم السعر",
+      "كم سعر التأمين",
+      "كم سعر التامين",
+      "بكم",
+      "بدي تأمين",
+      "بدي تامين",
+      "أسعار التأمين",
+      "اسعار التامين",
+      "كم بدفع",
+      "كم بكلف",
+      "كم بكلّف",
+      "بدي اسعر",
+      "بدي أسعر",
+      "بدي اسعار",
+      "بدي أسعار",
+      "تأمين جديد",
+      "تامين جديد",
+    ];
+    const isQuoteEntry =
+      inProgressFlow !== "quote" &&
+      QUOTE_TRIGGERS.some((t) => trimmedText.includes(t));
+
+    if (isQuoteEntry) {
+      const reply = "إلزامي، طرف ثالث، ولا شامل وخدمات طريق؟";
+      const sendResult = await sendWhatsAppText(
+        instanceId,
+        gaSettings.api_token_instance,
+        senderId,
+        reply,
+      );
+      await supabase.from("customer_chat_messages").insert({
+        session_id: session.id,
+        role: "bot",
+        content: reply,
+        whatsapp_message_id: sendResult.idMessage,
+        metadata: {
+          deterministic: "quote_entry",
+          flow: "quote",
+          flow_step: "awaiting_type",
+          send_ok: sendResult.ok,
+        },
+      });
+      await supabase
+        .from("customer_chat_sessions")
+        .update({ last_message_at: new Date().toISOString() })
+        .eq("id", session.id);
+      return new Response(JSON.stringify({ ok: true, deterministic: "quote_entry" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Debounce: customers often send 2-3 messages in quick succession
     // ("مرحبا" → "كيف الحال؟" → "بدي عرض سعر"). Replying to each
     // message individually feels robotic, so we wait 10s after the last
