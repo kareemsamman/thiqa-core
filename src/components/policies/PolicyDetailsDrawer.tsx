@@ -891,7 +891,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
               </div>
 
               {/* Navigation Pills */}
-              <div className="px-4 sm:px-6 py-3 border-b bg-muted/30 flex gap-2 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="px-4 sm:px-6 py-3 border-b bg-muted/30 flex gap-2 overflow-x-auto whitespace-nowrap [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
                 <button
                   onClick={() => setActiveSection('main')}
                   className={cn(
