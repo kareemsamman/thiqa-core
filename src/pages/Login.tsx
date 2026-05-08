@@ -345,31 +345,35 @@ export default function Login() {
     if (!email || !email.includes("@")) { toast.error("يرجى إدخال بريد إلكتروني صحيح"); return; }
     if (!password || password.length < 6) { toast.error("كلمة المرور 6 أحرف على الأقل"); return; }
 
-    // Authoritative server-side rate limit check. localStorage is just
-    // UX feedback and can be cleared by the user, so we always confirm
-    // with the edge function before attempting auth.
-    try {
-      const { data: rl } = await supabase.functions.invoke("log-login-attempt", {
-        body: { action: "check", email: email.trim() },
-      });
-      if (rl?.locked) {
-        const mins = rl.remaining_minutes || 15;
-        setLockoutMessage(`تم تجاوز عدد المحاولات المسموح. حاول مجدداً بعد ${mins} دقيقة.`);
-        return;
-      }
-    } catch (e) {
-      // If the check fails (network), fall back to client-side hint
-      // and let signInWithPassword + Supabase's own rate limiting
-      // backstop us.
-      const { locked, remainingMinutes } = isLoginLocked();
-      if (locked) {
-        setLockoutMessage(`تم تجاوز عدد المحاولات المسموح. حاول مجدداً بعد ${remainingMinutes} دقيقة.`);
-        return;
-      }
-    }
-
+    // Disable the button immediately so the user sees feedback during
+    // the rate-limit check + the auth call (can take seconds on slow
+    // connections). Without this, the button looks idle until
+    // signInWithPassword starts, which is confusing.
     setLoading(true);
     try {
+      // Authoritative server-side rate limit check. localStorage is just
+      // UX feedback and can be cleared by the user, so we always confirm
+      // with the edge function before attempting auth.
+      try {
+        const { data: rl } = await supabase.functions.invoke("log-login-attempt", {
+          body: { action: "check", email: email.trim() },
+        });
+        if (rl?.locked) {
+          const mins = rl.remaining_minutes || 15;
+          setLockoutMessage(`تم تجاوز عدد المحاولات المسموح. حاول مجدداً بعد ${mins} دقيقة.`);
+          return;
+        }
+      } catch (e) {
+        // If the check fails (network), fall back to client-side hint
+        // and let signInWithPassword + Supabase's own rate limiting
+        // backstop us.
+        const { locked, remainingMinutes } = isLoginLocked();
+        if (locked) {
+          setLockoutMessage(`تم تجاوز عدد المحاولات المسموح. حاول مجدداً بعد ${remainingMinutes} دقيقة.`);
+          return;
+        }
+      }
+
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
 
       // Log the attempt to login_attempts (also drives server-side
@@ -703,7 +707,7 @@ export default function Login() {
                     />
                     <Button className="w-full h-12 text-sm gap-2 rounded-xl shadow-lg flex-row-reverse" onClick={handleEmailPasswordLogin} disabled={loading || !email || !!lockoutMessage}>
                       {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5 rotate-180" />}
-                      {loading ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
+                      {loading ? "تسجيل الدخول ..." : "تسجيل الدخول"}
                     </Button>
 
                     <Link
