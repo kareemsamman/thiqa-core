@@ -489,7 +489,7 @@ export function ClientFilesTab({ policies, kind, clientId, onCountChange }: Clie
                   className="group relative rounded-lg border overflow-hidden bg-muted/30 cursor-pointer hover:border-primary/50 transition-colors flex flex-col"
                   onClick={onClick}
                 >
-                  <div className="relative aspect-square bg-muted/40">
+                  <div className="relative h-44 bg-muted/40">
                     {isExternalLink(file) ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-500 to-blue-600 text-white">
                         <ExternalLink className="h-10 w-10" />
@@ -563,20 +563,18 @@ export function ClientFilesTab({ policies, kind, clientId, onCountChange }: Clie
                     >
                       <Download className="h-3.5 w-3.5" />
                     </a>
-                    {manual && (
-                      <Button
-                        size="icon"
-                        variant="destructive"
-                        className="h-7 w-7 pointer-events-auto"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeletingFile(file);
-                          setDeleteOpen(true);
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
+                    <Button
+                      size="icon"
+                      variant="destructive"
+                      className="h-7 w-7 pointer-events-auto"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingFile(file);
+                        setDeleteOpen(true);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </div>
               );
