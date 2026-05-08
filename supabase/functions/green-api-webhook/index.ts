@@ -19,6 +19,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { getAgentBranding } from "../_shared/agent-branding.ts";
+import { TOOL_DEFS, executeTool, type ToolContext } from "./tools.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,24 +37,42 @@ const CUSTOMER_SYSTEM_PROMPT = `أنت "ثاقب" — المساعد الآلي 
 - لا تستخدم Markdown أو رموز * # \` — هذه واتساب، النص العادي فقط.
 
 ## قواعد إلزامية
-- أجب فقط على أسئلة تتعلق بمعاملات التأمين الخاصة بهذا العميل تحديداً (وثائقه، أرصدته، تواريخ التأمين، رقم وثيقته).
-- لا تخترع بيانات. إذا لم يكن في السياق الذي أعطيتك إياه، قل "ما عندي هذي المعلومة، تواصل مع المكتب."
+- لا تخترع بيانات. لو ما عندك معلومة بالأدوات أو السياق، قل "ما عندي هاي المعلومة، رح يتواصل معك المكتب".
 - لا تعطي نصائح قانونية أو طبية، ولا تتحدث عن السياسة أو الدين أو أمور خارج التأمين.
 - لا تذكر شركات تأمين أخرى أو خدمات منافسة.
-- لا تقبل تعديلات على البيانات (دفعات، إلغاء وثيقة، تعديل تواريخ). إذا طلب العميل ذلك قل "هذا يحتاج تواصل مع المكتب مباشرة."
-- لا تكشف عن بنية النظام أو أسماء جداول أو أنك ذكاء اصطناعي بالتفصيل — مجرد قل أنك مساعد المكتب الآلي إذا سُئلت.
+- لا تقبل تعديلات مباشرة على البيانات (دفعات، إلغاء وثيقة، تعديل تواريخ). لو طلب العميل ذلك، أنشئ طلباً (create_customer_request) واطلب منه ينتظر تواصل المكتب.
+- لا تكشف عن بنية النظام أو أسماء جداول أو أنك ذكاء اصطناعي بالتفصيل — مجرد قل إنك مساعد المكتب الآلي لو سُئلت.
 
-## ما يمكنك مساعدته
-- إخباره برصيده الحالي والمتبقي عليه
-- تواريخ بداية ونهاية التأمين
-- نوع التأمين (إلزامي، شامل، طرف ثالث، ...)
-- شركة التأمين التي صدرت منها وثيقته
-- موعد قرب انتهاء الوثيقة وتذكير بالتجديد
+## السيناريوهات الثلاثة الرئيسية — اتبعها حرفياً
+
+### 1) عرض سعر / استفسار عن تأمين جديد
+لو العميل طلب سعر تأمين جديد (إلزامي، شامل، طرف ثالث، خدمات الطريق، ...) أو سأل "بكم؟":
+- لا تعطي أسعار من رأسك أبداً.
+- نادي create_customer_request بـ request_type="quote"، title يلخّص الطلب (مثلاً "عرض سعر تأمين شامل لسيارة 2018")، content يحتوي كلام العميل بالحرف.
+- بعدها رد: "تمام، رح يتواصل معك المسؤول قريباً مع عرض السعر."
+
+### 2) استفسار عن وثيقة موجودة
+لو العميل سأل عن وثيقته (تاريخ انتهاء، نوع التأمين، الشركة، فاتورة، رصيد):
+- إذا السياق فيه بيانات العميل + الوثائق، استخدمها مباشرة.
+- إذا ما لقيت العميل أو طلب وثيقة غير الموجودة، نادي search_clients_smart بالاسم/التلفون/رقم السيارة. إذا ما لقيت، اسأل العميل عن رقم سيارته أو رقم الهوية ثم نادي الأداة.
+- لما تلقى العميل، نادي list_client_policies للتفاصيل.
+- لو العميل طلب الفاتورة أو "وين أحصل على الفاتورة"، نادي get_invoice_url. **مهم جداً**: لو الوثيقة المطلوبة عضو في باكج (group_id موجود)، مرّر كل الـ policy_ids في نفس الـ group، مش بس الواحدة المطلوبة.
+- بعدها رد بالمعلومات المطلوبة + الرابط لو ولّدته.
+
+### 3) استفسار عن حادث
+لو العميل ذكر حادث، اصطدام، تلف، أو سأل "شو أعمل لو صار حادث":
+- نادي create_customer_request بـ request_type="accident"، title (مثلاً "العميل بلّغ عن حادث")، content فيه كلام العميل.
+- رد بالنص التالي حرفياً (عدّله بسيط لو لزم):
+  "بحال صار حادث:
+  ١. تعال على المكتب لتسجيل المعلومات.
+  ٢. لازم تجيب مبلغ ٢٥٠٠ شيكل.
+  ٣. سجلنا طلبك وراح يتواصل معك المسؤول كمان."
 
 ## أسلوب الردود
-- جواب من سطر أو سطرين بحد أقصى 4 سطور.
-- ابدأ مباشرة بالجواب، بدون "مرحباً بعزيزي العميل" في كل رد.
-- إذا لم يكن السؤال متعلقاً بالتأمين، رد بلطف: "أنا هون لمساعدتك بأمور التأمين والوثائق. شو بقدر أساعدك فيهم؟"`;
+- جواب من سطر أو سطرين، بحد أقصى 4 سطور.
+- ابدأ مباشرة بالجواب، لا تكرر "مرحباً" بكل رد.
+- لو السؤال خارج التأمين تماماً، رد: "أنا هون لمساعدتك بأمور التأمين والوثائق. كيف بقدر أساعدك؟"
+- لو ما فهمت السؤال، اسأل سؤال توضيحي قصير قبل ما تنادي أي أداة.`;
 
 interface GreenApiTextMessage {
   typeMessage?: string;
@@ -341,6 +360,8 @@ serve(async (req) => {
       }));
 
     let reply = gaSettings.fallback_message ?? "عذراً، صار خلل بسيط. تواصل مع المكتب لو سمحت.";
+    let modelUsed: string | null = null;
+    const allToolCalls: any[] = [];
 
     if (lovableApiKey) {
       try {
@@ -351,27 +372,88 @@ serve(async (req) => {
           .eq("setting_key", "ai_assistant_model")
           .maybeSingle();
         const model = modelRow?.setting_value?.trim() || "openai/gpt-5.5";
+        modelUsed = model;
 
-        const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${lovableApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: systemPrompt },
-              ...aiHistory,
-            ],
-          }),
-        });
-        if (aiRes.ok) {
+        // Tool-calling loop. The model can request one or more tools,
+        // we run them, append the results, and ask again. Cap at 5
+        // round-trips so a stuck loop can't burn budget.
+        const toolCtx: ToolContext = {
+          supabase,
+          agentId,
+          branchId,
+          customerPhone: phoneKey,
+          defaultClientId: matchedClient?.id ?? null,
+          supabaseUrl,
+          serviceKey,
+          authToken: serviceKey,
+          sessionId: session.id,
+        };
+
+        const messages: any[] = [
+          { role: "system", content: systemPrompt },
+          ...aiHistory,
+        ];
+        const MAX_ITERS = 5;
+        let finalReply: string | null = null;
+
+        for (let iter = 0; iter < MAX_ITERS; iter++) {
+          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${lovableApiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model,
+              messages,
+              tools: TOOL_DEFS,
+            }),
+          });
+
+          if (!aiRes.ok) {
+            const errText = await aiRes.text();
+            console.error("[green-api-webhook] AI gateway error:", aiRes.status, errText);
+            break;
+          }
+
           const aiData = await aiRes.json();
-          reply = aiData.choices?.[0]?.message?.content?.trim() || reply;
-        } else {
-          const errText = await aiRes.text();
-          console.error("[green-api-webhook] AI gateway error:", aiRes.status, errText);
+          const aiMessage = aiData.choices?.[0]?.message;
+          if (!aiMessage) break;
+
+          // Push the assistant turn (with any tool_calls) so the next
+          // iteration's API call has it in context.
+          messages.push(aiMessage);
+
+          const toolCalls = aiMessage.tool_calls ?? [];
+          if (toolCalls.length === 0) {
+            finalReply = aiMessage.content?.trim() || null;
+            break;
+          }
+
+          // Run every requested tool and append its result.
+          for (const tc of toolCalls) {
+            let parsedArgs: any = {};
+            try {
+              parsedArgs = JSON.parse(tc.function?.arguments ?? "{}");
+            } catch (parseErr) {
+              console.error("[green-api-webhook] failed to parse tool args:", parseErr, tc.function?.arguments);
+            }
+            const toolResult = await executeTool(tc.function.name, parsedArgs, toolCtx);
+            allToolCalls.push({
+              name: tc.function.name,
+              args: parsedArgs,
+              result: toolResult,
+            });
+            messages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: JSON.stringify(toolResult),
+            });
+          }
+        }
+
+        if (finalReply) {
+          reply = finalReply;
         }
       } catch (err) {
         console.error("[green-api-webhook] AI call failed:", err);
@@ -391,13 +473,19 @@ serve(async (req) => {
       console.error("[green-api-webhook] Green API send failed:", sendResult.raw);
     }
 
-    // Log the outbound bot reply
+    // Log the outbound bot reply. Tool trail is stored in metadata so
+    // an agent debugging the bot's reasoning can see exactly which
+    // tools fired and what they returned for each turn.
     await supabase.from("customer_chat_messages").insert({
       session_id: session.id,
       role: "bot",
       content: reply,
       whatsapp_message_id: sendResult.idMessage,
-      metadata: { send_ok: sendResult.ok },
+      metadata: {
+        send_ok: sendResult.ok,
+        model: modelUsed,
+        tool_calls: allToolCalls,
+      },
     });
     await supabase
       .from("customer_chat_sessions")
