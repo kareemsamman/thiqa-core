@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { FilePreviewGallery } from '@/components/policies/FilePreviewGallery';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
+import * as tus from 'tus-js-client';
 
 interface MediaFile {
   id: string;
@@ -202,6 +203,50 @@ export function ClientFilesTab({ policies, kind, clientId, onCountChange }: Clie
     });
   };
 
+  const uploadVideo = async (file: File, current: number, total: number) => {
+    if (file.size > 1024 * 1024 * 1024) {
+      throw new Error('الفيديو أكبر من 1GB');
+    }
+    const { data, error } = await supabase.functions.invoke('create-stream-video', {
+      body: {
+        title: file.name,
+        file_size: file.size,
+        mime_type: file.type,
+        entity_type: CLIENT_SYSTEM_ENTITY_TYPE,
+        entity_id: clientId!,
+      },
+    });
+    if (error || !data?.video_guid) {
+      throw new Error(error?.message || 'فشل في تجهيز رفع الفيديو');
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const upload = new tus.Upload(file, {
+        endpoint: data.endpoint,
+        retryDelays: [0, 2000, 5000, 10000, 20000, 30000],
+        chunkSize: 50 * 1024 * 1024,
+        headers: {
+          AuthorizationSignature: data.authorization_signature,
+          AuthorizationExpire: String(data.authorization_expire),
+          VideoId: data.video_guid,
+          LibraryId: String(data.library_id),
+        },
+        metadata: { filetype: file.type, title: file.name },
+        onError: (err) => reject(err),
+        onProgress: (sent, totalBytes) => {
+          setUploadProgress({
+            name: file.name,
+            pct: Math.round((sent / totalBytes) * 100),
+            current,
+            total,
+          });
+        },
+        onSuccess: () => resolve(),
+      });
+      upload.start();
+    });
+  };
+
   const uploadFiles = async (toUpload: File[]) => {
     if (!showManualUpload || toUpload.length === 0) return;
     setUploading(true);
@@ -210,7 +255,16 @@ export function ClientFilesTab({ policies, kind, clientId, onCountChange }: Clie
       for (let i = 0; i < toUpload.length; i++) {
         const f = toUpload[i];
         setUploadProgress({ name: f.name, pct: 0, current: i + 1, total: toUpload.length });
-        await uploadOne(f, session?.access_token);
+
+        const looksLikeVideo =
+          f.type.startsWith('video/') ||
+          /\.(mp4|mov|avi|webm|mkv|m4v|3gp)$/i.test(f.name);
+
+        if (looksLikeVideo) {
+          await uploadVideo(f, i + 1, toUpload.length);
+        } else {
+          await uploadOne(f, session?.access_token);
+        }
       }
       toast({ title: 'تم الرفع', description: 'تم رفع الملفات بنجاح' });
       await fetchAll();
@@ -237,20 +291,63 @@ export function ClientFilesTab({ policies, kind, clientId, onCountChange }: Clie
   const isAcceptedFile = (file: File): boolean => {
     if (file.type.startsWith('image/')) return true;
     if (file.type === 'application/pdf') return true;
-    return /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif|pdf)$/i.test(file.name);
+    if (file.type.startsWith('video/')) return true;
+    return /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif|pdf|mp4|mov|avi|webm|mkv|m4v|3gp)$/i.test(file.name);
+  };
+
+  /** Walk a DataTransfer that may contain folders. Falls back to
+   *  dt.files when items aren't available — covers Windows Explorer
+   *  folder drops where dataTransfer.files is empty / unhelpful. */
+  const gatherFilesFromDataTransfer = async (dt: DataTransfer): Promise<File[]> => {
+    const out: File[] = [];
+    const items = dt.items ? Array.from(dt.items) : [];
+    if (items.length === 0) return Array.from(dt.files ?? []);
+
+    const traverse = async (entry: any): Promise<void> => {
+      if (entry.isFile) {
+        const file: File = await new Promise((resolve, reject) =>
+          entry.file(resolve, reject),
+        );
+        out.push(file);
+        return;
+      }
+      if (entry.isDirectory) {
+        const reader = entry.createReader();
+        const readBatch = (): Promise<any[]> =>
+          new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+        let batch = await readBatch();
+        while (batch.length > 0) {
+          for (const child of batch) await traverse(child);
+          batch = await readBatch();
+        }
+      }
+    };
+
+    for (const item of items) {
+      if (item.kind !== 'file') continue;
+      // @ts-ignore — webkitGetAsEntry is widely supported
+      const entry = item.webkitGetAsEntry?.();
+      if (entry) {
+        await traverse(entry);
+      } else {
+        const file = item.getAsFile();
+        if (file) out.push(file);
+      }
+    }
+    return out;
   };
 
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragging(false);
     if (!showManualUpload || uploading) return;
-    const dropped = Array.from(event.dataTransfer.files ?? []);
-    const accepted = dropped.filter(isAcceptedFile);
-    const rejectedCount = dropped.length - accepted.length;
+    const collected = await gatherFilesFromDataTransfer(event.dataTransfer);
+    const accepted = collected.filter(isAcceptedFile);
+    const rejectedCount = collected.length - accepted.length;
     if (accepted.length === 0) {
       toast({
         title: 'لا توجد ملفات مدعومة',
-        description: 'ادعم الصور و PDF فقط.',
+        description: 'ادعم الصور و PDF والفيديو فقط.',
         variant: 'destructive',
       });
       return;
@@ -258,7 +355,7 @@ export function ClientFilesTab({ policies, kind, clientId, onCountChange }: Clie
     if (rejectedCount > 0) {
       toast({
         title: `تم تجاهل ${rejectedCount} ملف غير مدعوم`,
-        description: 'تم قبول الصور و PDF فقط.',
+        description: 'تم قبول الصور و PDF والفيديو فقط.',
       });
     }
     await uploadFiles(accepted);
@@ -330,7 +427,7 @@ export function ClientFilesTab({ policies, kind, clientId, onCountChange }: Clie
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept="image/*,.pdf"
+                accept="image/*,.pdf,video/*"
                 onChange={handleUploadInput}
                 className="absolute inset-0 opacity-0 cursor-pointer"
                 disabled={uploading}
