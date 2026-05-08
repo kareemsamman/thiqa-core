@@ -119,6 +119,12 @@ export default function Login() {
   // OAuth branch is skipped because profile.agent_id now exists, and
   // the fall-through navigates to "/" → Landing fallback → /subscription.
   const handledUserIdRef = useRef<string | null>(null);
+  // Sync gate: set true the instant a password attempt starts and held
+  // until we know whether OTP is needed. Refs are read synchronously,
+  // so this closes any race where the user state from signInWithPassword
+  // commits before our otpStep="checking" update reaches the redirect
+  // useEffect — which would have let the redirect fire and bypass OTP.
+  const otpGateActiveRef = useRef(false);
 
   const location = useLocation();
 
@@ -203,6 +209,7 @@ export default function Login() {
     setOtpSending(false);
     setOtpResendIn(0);
     otpCredsRef.current = null;
+    otpGateActiveRef.current = false;
   };
 
   useEffect(() => {
@@ -229,9 +236,12 @@ export default function Login() {
   useEffect(() => {
     // The 2FA OTP gate signs the user in transiently to verify the
     // password, then signs them out until the SMS code is entered.
-    // While that gate is active (otpStep !== "idle"), don't redirect
-    // — the user has to complete or cancel the OTP step first.
-    if (otpStep !== "idle") return;
+    // While that gate is active (otpStep !== "idle" OR the sync ref
+    // is set), don't redirect — the user has to complete or cancel
+    // the OTP step first. The ref guard handles the race window
+    // between setOtpStep("checking") being queued and the user state
+    // from signInWithPassword being committed.
+    if (otpGateActiveRef.current || otpStep !== "idle") return;
     if (!authLoading && user) {
       if (!isSuperAdmin) {
         sessionStorage.setItem('admin_session_active', 'true');
@@ -396,6 +406,7 @@ export default function Login() {
     // Hold the redirect-on-login useEffect until we've decided
     // whether this agent requires the 2FA OTP step. Cleared in the
     // finally block (and in maybeStartOtpStep when it moves to "otp").
+    otpGateActiveRef.current = true;
     setOtpStep("checking");
     try {
       // Authoritative server-side rate limit check. localStorage is just
@@ -484,7 +495,13 @@ export default function Login() {
       setLoading(false);
       // Only release the redirect gate if the OTP step isn't actually
       // showing. If it is, it'll be released after verify (or cancel).
-      setOtpStep((s) => (s === "otp" ? s : "idle"));
+      setOtpStep((s) => {
+        if (s === "otp") return s;
+        // No OTP step — release the sync ref gate too so the redirect
+        // useEffect can navigate.
+        otpGateActiveRef.current = false;
+        return "idle";
+      });
     }
   };
 
@@ -624,6 +641,7 @@ export default function Login() {
         return;
       }
       otpCredsRef.current = null;
+      otpGateActiveRef.current = false;
       resetLoginAttempts();
       setOtpStep("idle");
       toast.success("تم تسجيل الدخول بنجاح");

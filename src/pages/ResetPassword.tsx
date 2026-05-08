@@ -67,6 +67,11 @@ export default function ResetPassword() {
       }
       setSuccess(true);
       toast.success("تم تغيير كلمة المرور بنجاح");
+      // Drop the recovery session so the user can't slip past the
+      // OTP gate on /login. Without this, the active session would
+      // trigger the auto-redirect to /dashboard, bypassing the
+      // password + 4-digit SMS step entirely.
+      await supabase.auth.signOut();
       setTimeout(() => navigate("/login", { replace: true }), 2000);
     } catch (e: any) {
       const msg = e.message || "";
