@@ -11,12 +11,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
   ImageIcon, Plus, Trash2, Download, X, Loader2, FileText, FolderOpen, 
   Save, Hash, CheckCircle2, Send, AlertTriangle, Printer, ChevronLeft, ChevronRight,
-  ExternalLink
+  ExternalLink, Play
 } from "lucide-react";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { FilePreviewGallery } from "./FilePreviewGallery";
+import * as tus from "tus-js-client";
 
 interface MediaFile {
   id: string;
@@ -27,6 +28,8 @@ interface MediaFile {
   created_at: string;
   entity_type: string | null;
   storage_path?: string | null;
+  stream_video_guid?: string | null;
+  stream_library_id?: string | null;
 }
 
 interface PolicyFilesSectionProps {
@@ -55,6 +58,7 @@ export function PolicyFilesSection({
   const [crmFiles, setCrmFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
   const [selectedFile, setSelectedFile] = useState<MediaFile | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingImage, setDeletingImage] = useState<MediaFile | null>(null);
@@ -131,27 +135,30 @@ export function PolicyFilesSection({
     setUploading(fileType);
     try {
       for (const file of Array.from(files)) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('entity_type', fileType === 'insurance' ? 'policy_insurance' : 'policy_crm');
-        formData.append('entity_id', policyId);
+        const entityType = fileType === 'insurance' ? 'policy_insurance' : 'policy_crm';
 
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-media`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session?.access_token}`,
-            },
-            body: formData,
+        if (file.type.startsWith('video/')) {
+          // Bunny Stream resumable upload (up to 1GB)
+          await uploadVideoToStream(file, entityType);
+        } else {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('entity_type', entityType);
+          formData.append('entity_id', policyId);
+
+          const { data: { session } } = await supabase.auth.getSession();
+          const response = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-media`,
+            {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${session?.access_token}` },
+              body: formData,
+            }
+          );
+          if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || 'Upload failed');
           }
-        );
-
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Upload failed');
         }
       }
 
@@ -186,8 +193,48 @@ export function PolicyFilesSection({
       });
     } finally {
       setUploading(null);
+      setUploadProgress(null);
       event.target.value = '';
     }
+  };
+
+  const uploadVideoToStream = async (file: File, entityType: string) => {
+    if (file.size > 1024 * 1024 * 1024) {
+      throw new Error('الفيديو أكبر من 1GB');
+    }
+    const { data, error } = await supabase.functions.invoke('create-stream-video', {
+      body: {
+        title: file.name,
+        file_size: file.size,
+        mime_type: file.type,
+        entity_type: entityType,
+        entity_id: policyId,
+      },
+    });
+    if (error || !data?.video_guid) {
+      throw new Error(error?.message || 'فشل في تجهيز رفع الفيديو');
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const upload = new tus.Upload(file, {
+        endpoint: data.endpoint,
+        retryDelays: [0, 2000, 5000, 10000, 20000, 30000],
+        chunkSize: 50 * 1024 * 1024,
+        headers: {
+          AuthorizationSignature: data.authorization_signature,
+          AuthorizationExpire: String(data.authorization_expire),
+          VideoId: data.video_guid,
+          LibraryId: String(data.library_id),
+        },
+        metadata: { filetype: file.type, title: file.name },
+        onError: (err) => reject(err),
+        onProgress: (sent, total) => {
+          setUploadProgress({ name: file.name, pct: Math.round((sent / total) * 100) });
+        },
+        onSuccess: () => resolve(),
+      });
+      upload.start();
+    });
   };
 
   const handleSendToClient = async () => {
@@ -506,6 +553,7 @@ export function PolicyFilesSection({
 
   const isImage = (mimeType: string) => mimeType.startsWith('image/');
   const isPdf = (mimeType: string) => mimeType === 'application/pdf';
+  const isVideo = (mimeType: string) => mimeType.startsWith('video/');
   const isExternalLink = (file: MediaFile) => !file.storage_path && file.size === 0;
 
   const renderFileGrid = (files: MediaFile[]) => {
@@ -548,6 +596,32 @@ export function PolicyFilesSection({
                 <p className="text-[10px] mt-1 px-2 truncate w-full text-center opacity-80">
                   {file.original_name}
                 </p>
+              </div>
+            ) : isVideo(file.mime_type) ? (
+              <div
+                className="relative w-full h-full bg-black cursor-pointer"
+                onClick={() => setSelectedFile(file)}
+              >
+                {file.stream_video_guid && file.stream_library_id ? (
+                  <img
+                    src={`https://vz-${file.stream_library_id}.b-cdn.net/${file.stream_video_guid}/thumbnail.jpg`}
+                    alt={file.original_name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  />
+                ) : (
+                  <video
+                    src={file.cdn_url}
+                    className="w-full h-full object-cover"
+                    muted
+                    preload="metadata"
+                  />
+                )}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="bg-black/60 rounded-full p-2">
+                    <Play className="h-6 w-6 text-white fill-white" />
+                  </div>
+                </div>
               </div>
             ) : (
               <div 
@@ -640,6 +714,15 @@ export function PolicyFilesSection({
 
   return (
     <>
+      {uploadProgress && (
+        <Card className="p-3 mb-3 space-y-2 border-primary/40">
+          <div className="flex items-center justify-between text-xs">
+            <span className="truncate max-w-[70%]">جاري رفع الفيديو: {uploadProgress.name}</span>
+            <span className="font-mono">{uploadProgress.pct}%</span>
+          </div>
+          <Progress value={uploadProgress.pct} className="h-2" />
+        </Card>
+      )}
       {/* Policy Number Section - Always visible at top */}
       <Card className="p-4 mb-4 border-2 border-primary/20">
         <div className="flex items-center gap-2 mb-3">
