@@ -41,6 +41,7 @@ export const PLAN_FEATURE_CATALOG: PlanFeatureGroup[] = [
       { key: 'sms', label: 'إرسال SMS' },
       { key: 'marketing_sms', label: 'SMS تسويقية' },
       { key: 'ai_assistant', label: 'المساعد الذكي (ثاقب)' },
+      { key: 'whatsapp_ai_agent', label: 'بوت الواتساب للعملاء' },
     ],
   },
   {

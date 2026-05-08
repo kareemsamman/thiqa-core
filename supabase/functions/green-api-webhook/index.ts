@@ -212,10 +212,14 @@ serve(async (req) => {
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Resolve agent from instance_id
+    // Resolve agent + branch from instance_id. After the Phase 1
+    // refactor, green_api_settings is keyed by (agent_id, branch_id),
+    // so a single instance maps to at most one row. branch_id may be
+    // NULL — that's the "agency-wide" rule and propagates down to the
+    // chat session / any requests we create from this conversation.
     const { data: gaSettings } = await supabase
       .from("green_api_settings")
-      .select("agent_id, api_token_instance, enabled, custom_prompt, fallback_message")
+      .select("agent_id, branch_id, api_token_instance, enabled, custom_prompt, fallback_message")
       .eq("instance_id", instanceId)
       .maybeSingle();
 
@@ -234,6 +238,24 @@ serve(async (req) => {
       });
     }
     const agentId = gaSettings.agent_id;
+    const branchId: string | null = gaSettings.branch_id ?? null;
+
+    // Feature-flag gate. The number can be configured by Thiqa admin
+    // independently of the per-agency feature switch — both have to be
+    // ON for the bot to actually reply.
+    const { data: featureFlag } = await supabase
+      .from("agent_feature_flags")
+      .select("enabled")
+      .eq("agent_id", agentId)
+      .eq("feature_key", "whatsapp_ai_agent")
+      .maybeSingle();
+    if (!featureFlag?.enabled) {
+      console.log(`[green-api-webhook] Agent ${agentId} feature whatsapp_ai_agent is off`);
+      return new Response(JSON.stringify({ ok: true, ignored: "feature_off" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Match the sender phone to a clients row
     const phones = phoneCandidates(senderId);
@@ -261,6 +283,7 @@ serve(async (req) => {
         .from("customer_chat_sessions")
         .insert({
           agent_id: agentId,
+          branch_id: branchId, // propagated from the receiving WhatsApp number
           client_id: matchedClient?.id ?? null,
           phone_number: phoneKey,
           display_name: matchedClient?.full_name ?? senderName,

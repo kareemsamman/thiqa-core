@@ -35,6 +35,7 @@ import { SubscriptionStateTester } from "@/components/thiqa/SubscriptionStateTes
 import { AgentDiscountManager } from "@/components/thiqa/AgentDiscountManager";
 import { AgentLimitOverrides } from "@/components/thiqa/AgentLimitOverrides";
 import { SmsProviderConfig, type SmsProviderChoice } from "@/components/sms/SmsProviderConfig";
+import { AgentWhatsAppSettings } from "@/components/admin/AgentWhatsAppSettings";
 import { RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -1301,6 +1302,7 @@ export default function ThiqaAgentDetail() {
                 { v: 'users', icon: Users, label: 'المستخدمون' },
                 { v: 'branding', icon: Palette, label: 'العلامة' },
                 { v: 'sms', icon: MessageSquare, label: 'SMS' },
+                { v: 'whatsapp', icon: MessageSquare, label: 'WhatsApp' },
                 { v: 'auth', icon: Shield, label: 'المصادقة' },
                 { v: 'tranzila', icon: CreditCard, label: 'Tranzila' },
                 { v: 'features', icon: Settings, label: 'الميزات' },
@@ -1733,6 +1735,11 @@ export default function ThiqaAgentDetail() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ═══════════ WHATSAPP TAB ═══════════ */}
+          <TabsContent value="whatsapp">
+            {agentId && <AgentWhatsAppSettings agentId={agentId} />}
           </TabsContent>
 
           {/* ═══════════ AUTH TAB ═══════════ */}
