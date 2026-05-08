@@ -71,6 +71,7 @@ export const AGENT_FEATURES: AgentFeatureDef[] = [
 
   // ─── Advanced ────────────────────────────────────────────────
   { key: "ai_assistant",       label: "المساعد الذكي (ثاقب)",   description: "مساعد AI للاستعلام عن بيانات النظام",     group: "ميزات متقدمة" },
+  { key: "whatsapp_ai_agent",  label: "بوت الواتساب للعملاء",   description: "بوت ذكي يردّ على رسائل العملاء عبر WhatsApp ويفتح طلبات للمكتب", group: "ميزات متقدمة" },
 
   // ─── Admin-gated (default OFF, never set by plan defaults) ───
   { key: "visa_payment",       label: "الدفع بفيزا (Tranzila)", description: "تفعيل بطاقات Visa عبر Tranzila — يتطلب موافقة إدارية", group: "بموافقة إدارية" },
