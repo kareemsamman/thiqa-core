@@ -14,6 +14,8 @@ interface MediaFile {
   created_at: string;
   entity_type: string | null;
   storage_path?: string | null;
+  stream_video_guid?: string | null;
+  stream_library_id?: string | null;
 }
 
 interface FilePreviewGalleryProps {
@@ -224,13 +226,23 @@ export function FilePreviewGallery({ file, allFiles, onClose, onNavigate }: File
           )}
 
           {fileIsVideo && (
-            <video
-              src={file.cdn_url}
-              controls
-              autoPlay
-              playsInline
-              className="max-w-full max-h-full"
-            />
+            file.stream_video_guid && file.stream_library_id ? (
+              <iframe
+                src={`https://iframe.mediadelivery.net/embed/${file.stream_library_id}/${file.stream_video_guid}?autoplay=true`}
+                allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;"
+                allowFullScreen
+                className="w-full h-full border-0"
+                title={file.original_name}
+              />
+            ) : (
+              <video
+                src={file.cdn_url}
+                controls
+                autoPlay
+                playsInline
+                className="max-w-full max-h-full"
+              />
+            )
           )}
         </div>
 
@@ -258,12 +270,21 @@ export function FilePreviewGallery({ file, allFiles, onClose, onNavigate }: File
                   />
                 ) : isVideo(f.mime_type) ? (
                   <div className="w-full h-full bg-black flex items-center justify-center relative">
-                    <video
-                      src={f.cdn_url}
-                      className="w-full h-full object-cover"
-                      muted
-                      preload="metadata"
-                    />
+                    {f.stream_video_guid && f.stream_library_id ? (
+                      <img
+                        src={`https://vz-${f.stream_library_id}.b-cdn.net/${f.stream_video_guid}/thumbnail.jpg`}
+                        alt={f.original_name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    ) : (
+                      <video
+                        src={f.cdn_url}
+                        className="w-full h-full object-cover"
+                        muted
+                        preload="metadata"
+                      />
+                    )}
                     <Play className="h-5 w-5 text-white absolute fill-white" />
                   </div>
                 ) : (
