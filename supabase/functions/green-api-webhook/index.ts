@@ -597,10 +597,14 @@ async function processAge(
   text: string,
 ) {
   let ageBand: "above_24" | "below_24" | null = null;
-  if (/(فوق|أكثر|اكثر|أعلى|اعلى|أكبر|اكبر|كبير)/.test(text)) ageBand = "above_24";
+  // Accept fusha (أكثر/أقل) and the colloquial Levantine "اكتر/اقل"
+  // (with ت instead of ث) — customers type the dialect form far more
+  // often than the standard.
+  if (/(فوق|أكثر|اكثر|أكتر|اكتر|أعلى|اعلى|أكبر|اكبر|كبير)/.test(text)) ageBand = "above_24";
   else if (/(تحت|أقل|اقل|أصغر|اصغر|صغير)/.test(text)) ageBand = "below_24";
   else {
-    const numMatch = text.match(/(\d{2})/);
+    // Bare number reply — also accept 1-digit (e.g. "9" stripped from "29").
+    const numMatch = text.match(/(\d{2,3})/);
     if (numMatch) {
       const age = parseInt(numMatch[1], 10);
       if (age >= 24 && age <= 90) ageBand = "above_24";

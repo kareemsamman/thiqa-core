@@ -146,6 +146,7 @@ const RepairClaims = lazyWithSuspense(() => import("./pages/RepairClaims"));
 const RepairClaimDetail = lazyWithSuspense(() => import("./pages/RepairClaimDetail"));
 const CorrespondenceLetters = lazyWithSuspense(() => import("./pages/CorrespondenceLetters"));
 const Leads = lazyWithSuspense(() => import("./pages/Leads"));
+const CustomerRequests = lazyWithSuspense(() => import("./pages/CustomerRequests"));
 const FormTemplates = lazyWithSuspense(() => import("./pages/FormTemplates"));
 const FormTemplateEditor = lazyWithSuspense(() => import("./pages/FormTemplateEditor"));
 const ActivityLog = lazyWithSuspense(() => import("./pages/ActivityLog"));
@@ -718,6 +719,12 @@ const App = () => (
               <Route path="/leads" element={
                 <PermissionRoute permission="page.leads">
                   <Leads />
+                </PermissionRoute>
+              } />
+              {/* AI quote requests from the WhatsApp deterministic flow */}
+              <Route path="/customer-requests" element={
+                <PermissionRoute permission="page.customer_requests">
+                  <CustomerRequests />
                 </PermissionRoute>
               } />
               {/* Claims routes */}

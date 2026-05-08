@@ -32,6 +32,7 @@ import {
   Palette,
   Crown,
   Headset,
+  Robot,
 } from "@phosphor-icons/react";
 
 export interface NavItem {
@@ -113,6 +114,7 @@ export const navigationGroups: NavGroup[] = [
     name: "أخرى",
     icon: Image,
     items: [
+      { name: "طلبات الذكاء الاصطناعي", href: "/customer-requests", icon: Robot, permissionKey: 'page.customer_requests' },
       { name: "جهات الاتصال", href: "/contacts", icon: AddressBook, featureKey: 'contacts', permissionKey: 'page.contacts' },
       { name: "المطالبات", href: "/admin/claims", icon: FileX, badge: 'claims', featureKey: 'repair_claims', permissionKey: 'page.repair_claims' },
       { name: "الوسائط", href: "/media", icon: Image, featureKey: 'files_upload', permissionKey: 'page.media' },
