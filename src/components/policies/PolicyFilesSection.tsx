@@ -463,32 +463,17 @@ export function PolicyFilesSection({
         setUploading(fileType);
         try {
           const { data: { session } } = await supabase.auth.getSession();
-          
+          const entityType = fileType === 'insurance' ? 'policy_insurance' : 'policy_crm';
+
           for (let i = 0; i < scannedImages.length; i++) {
             const img = scannedImages[i];
             const blob = base64ToBlob(img.src);
             const file = new File([blob], `scan_${Date.now()}_${i}.jpg`, { type: 'image/jpeg' });
-            
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('entity_type', fileType === 'insurance' ? 'policy_insurance' : 'policy_crm');
-            formData.append('entity_id', policyId);
 
-            const uploadResponse = await fetch(
-              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-media`,
-              {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${session?.access_token}`,
-                },
-                body: formData,
-              }
-            );
-
-            if (!uploadResponse.ok) {
-              const err = await uploadResponse.json();
-              throw new Error(err.error || 'Upload failed');
-            }
+            setUploadProgress({ name: file.name, pct: 0, current: i + 1, total: scannedImages.length });
+            await uploadFileWithXhr(file, entityType, session?.access_token, (pct) => {
+              setUploadProgress((prev) => (prev ? { ...prev, pct } : prev));
+            });
           }
 
           toast({ title: "تم", description: `تم مسح ورفع ${scannedImages.length} صورة بنجاح` });
@@ -521,6 +506,7 @@ export function PolicyFilesSection({
         } finally {
           setUploading(null);
           setScanning(null);
+          setUploadProgress(null);
         }
       },
       scanRequest
@@ -910,6 +896,28 @@ export function PolicyFilesSection({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Upload progress toast — fixed bottom-right while uploading */}
+      {uploadProgress && (
+        <div
+          dir="rtl"
+          className="fixed bottom-4 right-4 z-50 w-80 max-w-[90vw] rounded-lg border bg-background shadow-lg p-3 space-y-2"
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span>
+              جاري رفع{' '}
+              {String(uploadProgress.current).padStart(2, '0')} من{' '}
+              {String(uploadProgress.total).padStart(2, '0')}
+            </span>
+            <span className="ms-auto text-muted-foreground">{uploadProgress.pct}%</span>
+          </div>
+          <p className="text-xs text-muted-foreground truncate" title={uploadProgress.name}>
+            {uploadProgress.name}
+          </p>
+          <Progress value={uploadProgress.pct} className="h-2" />
+        </div>
+      )}
 
     </>
   );
