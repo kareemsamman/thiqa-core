@@ -232,7 +232,7 @@ serve(async (req) => {
     // Get insurance files for all policies (main + add-ons)
     const { data: insuranceFiles, error: filesError } = await supabase
       .from("media_files")
-      .select("id, cdn_url, original_name, mime_type, entity_id")
+      .select("id, cdn_url, original_name, mime_type, entity_id, stream_video_guid, stream_library_id")
       .in("entity_id", policy_ids)
       .in("entity_type", ["policy", "policy_insurance"])
       .is("deleted_at", null)
@@ -607,7 +607,7 @@ function buildPackageInvoiceHtml(
   totalPrice: number,
   totalPaid: number,
   remaining: number,
-  policyFiles: { cdn_url: string; original_name: string; mime_type: string; entity_id: string }[],
+  policyFiles: { cdn_url: string; original_name: string; mime_type: string; entity_id: string; stream_video_guid?: string | null; stream_library_id?: string | null }[],
   policyChildren: any[] = [],
   companySettings: { company_email?: string; company_phones?: string[]; company_whatsapp?: string; company_location?: string },
   branding: AgentBranding = DEFAULT_BRANDING,
@@ -944,11 +944,24 @@ function buildPackageInvoiceHtml(
       <div class="files-grid">
         ${normalizedFiles.map((file) => {
           const isImage = file.mime_type?.startsWith('image/');
+          const isVideo = file.mime_type?.startsWith('video/');
+          const hasStreamThumb = isVideo && file.stream_video_guid && file.stream_library_id;
+          const thumbUrl = hasStreamThumb
+            ? `https://vz-${file.stream_library_id}.b-cdn.net/${file.stream_video_guid}/thumbnail.jpg`
+            : '';
+          let preview: string;
+          if (isImage) {
+            preview = `<img src="${file.cdn_url}" alt="${file.original_name}" />`;
+          } else if (isVideo) {
+            preview = hasStreamThumb
+              ? `<div class="file-video"><img src="${thumbUrl}" alt="${file.original_name}" /><span class="file-video-badge">▶ فيديو</span></div>`
+              : `<div class="file-placeholder">فيديو</div>`;
+          } else {
+            preview = `<div class="file-placeholder">PDF</div>`;
+          }
           return `
             <a href="${file.cdn_url}" target="_blank" class="file-link" ${isImage ? `onclick="event.preventDefault();openLightbox('${file.cdn_url}')"` : ''}>
-              ${isImage
-                ? `<img src="${file.cdn_url}" alt="${file.original_name}" />`
-                : `<div class="file-placeholder">PDF</div>`}
+              ${preview}
               <span>${file.original_name}</span>
             </a>
           `;
@@ -1557,6 +1570,34 @@ function buildPackageInvoiceHtml(
       letter-spacing: 1px;
       color: #ffffff;
       background: #1a1a1a;
+    }
+    .file-video {
+      position: relative;
+      width: 100%;
+      height: 88px;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .file-video img {
+      max-width: 100%;
+      max-height: 88px;
+      object-fit: cover;
+      width: 100%;
+      height: 100%;
+    }
+    .file-video-badge {
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 700;
     }
 
     /* ── Footer ── */
