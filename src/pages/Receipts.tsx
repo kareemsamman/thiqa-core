@@ -1046,57 +1046,150 @@ export default function Receipts() {
 
   const [printingAll, setPrintingAll] = useState(false);
   const handlePrintAll = async () => {
+    if (!agentId) return;
     setPrintingAll(true);
     try {
       const fmtMoney = (n: number) =>
         `₪${Math.round(n).toLocaleString("en-US")}`;
-      const cashTotal = receipts.filter((r) => r.payment_method === "cash").reduce((s, r) => s + r.amount, 0);
-      const chequeTotal = receipts.filter((r) => r.payment_method === "cheque").reduce((s, r) => s + r.amount, 0);
-      const otherTotal = receipts
+      const { dateFrom, dateTo, companies, types, paymentMethods } = filters;
+      const needsPolicyInnerJoin = companies.length > 0 || types.length > 0;
+      const policyJoin = needsPolicyInnerJoin
+        ? "policy:policies!inner(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_companies(id, name, name_ar), clients(id_number))"
+        : "policy:policies(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_companies(id, name, name_ar), clients(id_number))";
+
+      // Pull every matching row (not just the current page) so طباعة الكل
+      // actually reflects "all" — pagination is a screen affordance, not
+      // a print one. Filters mirror fetchReceipts exactly so the print
+      // and the table can't disagree.
+      let q = (supabase as any)
+        .from("receipts")
+        .select(`*, ${policyJoin}`)
+        .eq("agent_id", agentId)
+        .eq("receipt_type", activeTab)
+        .gt("amount", 0)
+        .order("created_at", { ascending: false })
+        .order("receipt_date", { ascending: false });
+      if (dateFrom) q = q.gte("receipt_date", dateFrom);
+      if (dateTo) q = q.lte("receipt_date", dateTo);
+      if (paymentMethods.length > 0) q = q.in("payment_method", paymentMethods);
+      if (branchFilter) q = q.eq("branch_id", branchFilter);
+      if (searchQuery.trim()) {
+        const term = searchQuery.trim();
+        q = q.or(`client_name.ilike.%${term}%,car_number.ilike.%${term}%`);
+      }
+      if (companies.length > 0) q = q.in("policy.company_id", companies);
+      if (types.length > 0) {
+        const clause = types.map(typeKeyToFilterClause).join(",");
+        q = q.or(clause, { foreignTable: "policy" });
+      }
+      if (skipPolicyIds && skipPolicyIds.length > 0) {
+        q = q.or(
+          `policy_id.is.null,policy_id.not.in.(${skipPolicyIds.join(",")})`,
+        );
+      }
+
+      const { data, error } = await q;
+      if (error) throw error;
+      const allReceipts = (data || []) as ReceiptRecord[];
+
+      if (allReceipts.length === 0) {
+        toast.error("لا توجد إيصالات للطباعة");
+        return;
+      }
+
+      const allTotal = allReceipts.reduce((s, r) => s + Number(r.amount || 0), 0);
+      const cashTotal = allReceipts
+        .filter((r) => r.payment_method === "cash")
+        .reduce((s, r) => s + r.amount, 0);
+      const chequeTotal = allReceipts
+        .filter((r) => r.payment_method === "cheque")
+        .reduce((s, r) => s + r.amount, 0);
+      const otherTotal = allReceipts
         .filter((r) => r.payment_method !== "cash" && r.payment_method !== "cheque")
         .reduce((s, r) => s + r.amount, 0);
 
       const filterBits: string[] = [];
-      if (filters.dateFrom || filters.dateTo) {
-        filterBits.push(
-          `التاريخ: ${filters.dateFrom || "—"} → ${filters.dateTo || "—"}`,
-        );
+      if (dateFrom || dateTo) {
+        filterBits.push(`التاريخ: ${dateFrom || "—"} → ${dateTo || "—"}`);
       }
-      if (filters.paymentMethods.length > 0) {
+      if (paymentMethods.length > 0) {
         filterBits.push(
-          `طريقة الدفع: ${filters.paymentMethods
+          `طريقة الدفع: ${paymentMethods
             .map((m) => paymentLabelShort(m))
             .join(" / ")}`,
         );
       }
-      if (filters.companies.length > 0) {
-        const labels = filters.companies
+      if (companies.length > 0) {
+        const labels = companies
           .map((id) => companyOptions.find((c) => c.value === id)?.label || id)
           .join(" / ");
         filterBits.push(`الشركة: ${labels}`);
       }
-      if (filters.types.length > 0) {
-        const labels = filters.types
+      if (types.length > 0) {
+        const labels = types
           .map((t) => POLICY_TYPE_DISPLAY[t] || t)
           .join(" / ");
         filterBits.push(`نوع التأمين: ${labels}`);
       }
       if (searchQuery) filterBits.push(`بحث: "${searchQuery}"`);
 
-      const rows = receipts.map((r, i) => {
-        // PostgREST may shape the FK join as object or single-element
-        // array depending on server version, so normalize.
-        const rawPolicy = (r as { policy?: unknown }).policy;
+      // Build print columns from the on-screen Manage-Columns toggle
+      // (minus the actions cell, which has no print equivalent), with
+      // the row index pinned in front. Toggling شركة التأمين on screen
+      // toggles it in print too — one knob, both surfaces.
+      const PRINT_LABELS: Record<string, string> = {
+        document_number: "رقم المعاملة",
+        receipt_number: "رقم السند",
+        amount: "المبلغ",
+        receipt_date: "التاريخ",
+        client_name: "العميل",
+        client_id_number: "رقم هوية العميل",
+        car_number: "رقم السيارة",
+        company_name: "شركة التأمين",
+        policy_type: "نوع التأمين",
+        payment_method: "طريقة الدفع",
+        cheque_number: "رقم الشيك",
+        notes: "ملاحظات",
+      };
+      const printColumns = [
+        { key: "idx", label: "#", align: "center" as const },
+        ...RECEIPTS_COLUMNS.filter(
+          (c) => c.key !== "actions" && isCol(c.key),
+        ).map((c) => ({
+          key: c.key,
+          label: PRINT_LABELS[c.key] ?? c.label,
+          align: "right" as const,
+        })),
+      ];
+
+      const rows = allReceipts.map((r, i) => {
+        const rawPolicy = (r as any).policy;
         const policy = Array.isArray(rawPolicy)
-          ? (rawPolicy[0] as { document_number?: string | null } | undefined)
-          : (rawPolicy as { document_number?: string | null } | null | undefined);
+          ? rawPolicy[0] ?? null
+          : rawPolicy ?? null;
+        const rawCompany = policy?.insurance_companies;
+        const company = Array.isArray(rawCompany)
+          ? rawCompany[0] ?? null
+          : rawCompany ?? null;
+        const rawClient = policy?.clients;
+        const client = Array.isArray(rawClient)
+          ? rawClient[0] ?? null
+          : rawClient ?? null;
+        const typeKey = policy
+          ? policy.policy_type_parent === "THIRD_FULL" && policy.policy_type_child
+            ? policy.policy_type_child
+            : policy.policy_type_parent
+          : null;
         return {
           idx: i + 1,
           document_number: policy?.document_number ?? "",
           receipt_number: r.receipt_number ?? "",
           receipt_date: formatDate(r.receipt_date),
           client_name: r.client_name,
+          client_id_number: client?.id_number ?? "",
           car_number: r.car_number ?? "",
+          company_name: company?.name_ar || company?.name || "",
+          policy_type: typeKey ? POLICY_TYPE_DISPLAY[typeKey] || typeKey : "",
           payment_method: paymentLabelShort(r.payment_method),
           cheque_number: r.cheque_number ?? "",
           notes: r.notes ?? "",
@@ -1108,28 +1201,21 @@ export default function Receipts() {
         title: "تقرير الإيصالات",
         subtitle: filterBits.length > 0 ? filterBits.join(" · ") : undefined,
         stats: [
-          { label: "عدد الإيصالات", value: String(totalCount), tone: "primary" },
-          { label: "المجموع", value: fmtMoney(totalAmount), tone: "emerald" },
+          { label: "عدد الإيصالات", value: String(allReceipts.length), tone: "primary" },
+          { label: "المجموع", value: fmtMoney(allTotal), tone: "emerald" },
           { label: "نقدي", value: fmtMoney(cashTotal), tone: "success" },
           { label: "شيك", value: fmtMoney(chequeTotal), tone: "amber" },
           { label: "تحويل / فيزا", value: fmtMoney(otherTotal), tone: "primary" },
         ],
-        columns: [
-          { key: "idx", label: "#", align: "center" },
-          { key: "document_number", label: "رقم المعاملة", align: "right" },
-          { key: "receipt_number", label: "رقم السند", align: "right" },
-          { key: "receipt_date", label: "التاريخ", align: "right" },
-          { key: "client_name", label: "العميل", align: "right" },
-          { key: "car_number", label: "رقم السيارة", align: "right" },
-          { key: "payment_method", label: "طريقة الدفع", align: "right" },
-          { key: "cheque_number", label: "رقم الشيك", align: "right" },
-          { key: "notes", label: "ملاحظات", align: "right" },
-          { key: "amount", label: "المبلغ", align: "right" },
-        ],
+        columns: printColumns,
         rows,
-        total_key: "amount",
-        total_label: "إجمالي الإيصالات",
+        // No total_key / total_label on purpose — the المجموع stat above
+        // already tells the operator the grand total; the bottom black
+        // strip was redundant and visually heavy.
       });
+    } catch (err: any) {
+      console.error("Print all error:", err);
+      toast.error("فشل في توليد التقرير");
     } finally {
       setPrintingAll(false);
     }
