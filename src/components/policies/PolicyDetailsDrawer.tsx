@@ -718,7 +718,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           hideCloseButton
-          className="max-w-6xl max-h-[95vh] p-0 overflow-hidden gap-0"
+          className="w-[calc(100vw-1rem)] max-w-6xl max-h-[95vh] p-0 overflow-hidden gap-0"
           dir="rtl"
         >
           {loading ? (
@@ -1253,7 +1253,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                     )}
 
                     {/* Policy Details - Company & Period (after prices, before package) */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Insurance Company */}
                       {(policy.insurance_companies || policy.brokers) && (
                         <Section title="شركة التأمين" icon={Building2}>
@@ -1271,7 +1271,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                       {/* Period */}
                       <Section title="فترة التأمين" icon={Calendar}>
                         <div className="bg-muted/30 rounded-xl p-4 border">
-                          <div className={cn("grid gap-2 text-center", (policy as any).issue_date ? "grid-cols-4" : "grid-cols-3")}>
+                          <div className={cn("grid gap-2 text-center", (policy as any).issue_date ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
                             <div>
                               <p className="text-xs text-muted-foreground mb-1">من</p>
                               <p className="font-semibold text-sm">{formatDate(policy.start_date)}</p>
@@ -1370,7 +1370,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                     })()}
 
                     {/* Client & Car Info */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Client */}
                       <Section title="بيانات العميل" icon={User}>
                         <div className="bg-muted/30 rounded-xl p-4 border space-y-3">
