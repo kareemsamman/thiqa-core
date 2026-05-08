@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { ImageIcon, Plus, Trash2, Download, Loader2, FileText, FolderOpen } from "lucide-react";
+import { ImageIcon, Plus, Trash2, Download, Loader2, FileText, FolderOpen, Play } from "lucide-react";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { FilePreviewGallery } from "./FilePreviewGallery";
 interface MediaFile {
@@ -147,7 +147,7 @@ export function PolicyImagesSection({ policyId }: PolicyImagesSectionProps) {
   };
 
   const isViewable = (mimeType: string) => 
-    mimeType.startsWith('image/') || mimeType === 'application/pdf';
+    mimeType.startsWith('image/') || mimeType === 'application/pdf' || mimeType.startsWith('video/');
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -156,6 +156,7 @@ export function PolicyImagesSection({ policyId }: PolicyImagesSectionProps) {
   };
 
   const isImage = (mimeType: string) => mimeType.startsWith('image/');
+  const isVideo = (mimeType: string) => mimeType.startsWith('video/');
 
   const renderFileGrid = (files: MediaFile[]) => {
     if (files.length === 0) {
@@ -180,6 +181,20 @@ export function PolicyImagesSection({ policyId }: PolicyImagesSectionProps) {
                 alt={file.original_name}
                 className="w-full h-full object-cover"
               />
+            ) : isVideo(file.mime_type) ? (
+              <div className="relative w-full h-full bg-black">
+                <video
+                  src={file.cdn_url}
+                  className="w-full h-full object-cover"
+                  muted
+                  preload="metadata"
+                />
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="bg-black/60 rounded-full p-2">
+                    <Play className="h-6 w-6 text-white fill-white" />
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center">
                 <FileText className="h-8 w-8 text-muted-foreground" />
