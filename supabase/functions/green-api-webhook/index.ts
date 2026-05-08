@@ -752,11 +752,6 @@ serve(async (req) => {
               model,
               messages,
               tools: TOOL_DEFS,
-              // Lower randomness → more reliable adherence to the
-              // explicit decision-priority rules in the system prompt.
-              // Was defaulting to 1.0, which let the model copy prior
-              // turns / hallucinate greetings on quote requests.
-              temperature: 0.3,
             }),
           });
 
