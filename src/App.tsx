@@ -120,6 +120,7 @@ const RoadServices = lazyWithSuspense(() => import("./pages/RoadServices"));
 const AccidentFeeServices = lazyWithSuspense(() => import("./pages/AccidentFeeServices"));
 const PaymentSettings = lazyWithSuspense(() => import("./pages/PaymentSettings"));
 const SmsSettings = lazyWithSuspense(() => import("./pages/SmsSettings"));
+const GreenApiSettings = lazyWithSuspense(() => import("./pages/GreenApiSettings"));
 const CustomerSignatures = lazyWithSuspense(() => import("./pages/CustomerSignatures"));
 const PaymentSuccess = lazyWithSuspense(() => import("./pages/PaymentSuccess"));
 const PaymentFail = lazyWithSuspense(() => import("./pages/PaymentFail"));
@@ -553,6 +554,11 @@ const App = () => (
               <Route path="/admin/sms-settings" element={
                 <PermissionRoute permission="page.sms_settings">
                   <SmsOnboarding />
+                </PermissionRoute>
+              } />
+              <Route path="/admin/green-api" element={
+                <PermissionRoute permission="page.sms_settings">
+                  <GreenApiSettings />
                 </PermissionRoute>
               } />
               <Route path="/receipts" element={

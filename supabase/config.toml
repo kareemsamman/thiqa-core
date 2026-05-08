@@ -85,3 +85,6 @@ verify_jwt = false
 
 [functions.enhance-logo]
 verify_jwt = false
+
+[functions.green-api-webhook]
+verify_jwt = false
