@@ -723,7 +723,7 @@ const App = () => (
               } />
               {/* AI quote requests from the WhatsApp deterministic flow */}
               <Route path="/customer-requests" element={
-                <PermissionRoute permission="page.customer_requests">
+                <PermissionRoute permission="page.customer_requests" feature="whatsapp_ai_agent">
                   <CustomerRequests />
                 </PermissionRoute>
               } />
