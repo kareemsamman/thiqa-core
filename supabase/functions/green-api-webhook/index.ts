@@ -345,6 +345,350 @@ async function sendWhatsAppText(
   return { ok: res.ok, idMessage, raw };
 }
 
+// ─── Deterministic quote-flow state machine ───────────────────────────
+//
+// The AI was unreliable at running the quote intake step-by-step — it
+// kept menu-ing back, paraphrasing the question, or jumping straight
+// to create_customer_request without gathering all the fields. So the
+// entire flow is now driven server-side. The model never sees an
+// in-progress quote turn; once the customer triggers an entry phrase
+// like "بدي عرض سعر", every subsequent step is matched + dispatched
+// here until the request is filed.
+//
+// State is carried across turns on the bot message's metadata:
+//   metadata.flow      = "quote"
+//   metadata.flow_step = "awaiting_car_number" | "awaiting_car_number_retry"
+//                      | "awaiting_car_confirm" | "awaiting_type"
+//                      | "awaiting_age"
+//   metadata.flow_data = { car_number?, car_details?, insurance_type? }
+//
+// Each step handler either advances the state (writes a new bot turn
+// with the next step + accumulated data) or stays in the same step
+// when it can't parse the customer's reply.
+
+interface QuoteFlowCtx {
+  supabase: any;
+  agentId: string;
+  branchId: string | null;
+  sessionId: string;
+  clientId: string | null;
+  customerPhone: string;
+  instanceId: string;
+  apiToken: string;
+  senderId: string;
+  supabaseUrl: string;
+  serviceKey: string;
+}
+
+interface QuoteFlowData {
+  car_number?: string;
+  car_details?: {
+    manufacturer: string | null;
+    model: string | null;
+    year: number | null;
+    color: string | null;
+  };
+  insurance_type?: string;
+}
+
+async function sendQuoteStep(
+  ctx: QuoteFlowCtx,
+  reply: string,
+  flowStep: string | null,
+  flowData: QuoteFlowData,
+  extraMetadata: Record<string, any> = {},
+) {
+  const sendResult = await sendWhatsAppText(ctx.instanceId, ctx.apiToken, ctx.senderId, reply);
+  const metadata: Record<string, any> = {
+    deterministic: "quote_flow",
+    send_ok: sendResult.ok,
+    ...extraMetadata,
+  };
+  if (flowStep) {
+    metadata.flow = "quote";
+    metadata.flow_step = flowStep;
+    metadata.flow_data = flowData;
+  }
+  await ctx.supabase.from("customer_chat_messages").insert({
+    session_id: ctx.sessionId,
+    role: "bot",
+    content: reply,
+    whatsapp_message_id: sendResult.idMessage,
+    metadata,
+  });
+  await ctx.supabase
+    .from("customer_chat_sessions")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", ctx.sessionId);
+}
+
+/** Send the very first step of the flow — ask which car the quote is for. */
+async function startQuoteFlow(ctx: QuoteFlowCtx) {
+  await sendQuoteStep(
+    ctx,
+    "تمام. شو رقم سيارتك اللي بدك تعملها تأمين؟",
+    "awaiting_car_number",
+    {},
+  );
+}
+
+/** Look up a car number on the gov data API. */
+async function lookupCarNumber(ctx: QuoteFlowCtx, carNumber: string) {
+  try {
+    const res = await fetch(`${ctx.supabaseUrl}/functions/v1/fetch-vehicle`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ctx.serviceKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ car_number: carNumber }),
+    });
+    return await res.json();
+  } catch (err) {
+    console.error("[quote-flow] lookup_vehicle threw:", err);
+    return { success: false, found: false };
+  }
+}
+
+async function processCarNumber(
+  ctx: QuoteFlowCtx,
+  flowData: QuoteFlowData,
+  text: string,
+  isRetry: boolean,
+) {
+  // Strip everything but digits from the customer's text. Customers
+  // sometimes type "رقمها 1234567" or send the number with dashes.
+  const digits = (text || "").replace(/[^0-9]/g, "");
+  if (!digits || digits.length < 6) {
+    if (isRetry) {
+      // Already retried once — give up on car details, move on.
+      await sendQuoteStep(
+        ctx,
+        "تمام، رح أكمل بدون بيانات السيارة. إيش نوع التأمين؟ إلزامي، طرف ثالث، ولا شامل وخدمات طريق؟",
+        "awaiting_type",
+        flowData,
+      );
+    } else {
+      await sendQuoteStep(
+        ctx,
+        "ما لقيت رقم سيارة بالرسالة. ابعتلي رقم سيارتك (٧ أو ٨ أرقام).",
+        "awaiting_car_number_retry",
+        flowData,
+      );
+    }
+    return;
+  }
+
+  const result = await lookupCarNumber(ctx, digits);
+  if (result?.success && result?.found && result?.data) {
+    const d = result.data;
+    const modelStr = [d.manufacturer_name, d.model, d.year ? `موديل ${d.year}` : null]
+      .filter(Boolean)
+      .join(" ");
+    const reply = modelStr
+      ? `سيارتك ${modelStr}، صحيح؟`
+      : `سيارتك رقم ${digits}، صحيح؟`;
+    await sendQuoteStep(ctx, reply, "awaiting_car_confirm", {
+      ...flowData,
+      car_number: digits,
+      car_details: {
+        manufacturer: d.manufacturer_name ?? null,
+        model: d.model ?? null,
+        year: d.year ?? null,
+        color: d.color ?? null,
+      },
+    });
+    return;
+  }
+
+  // Not found
+  if (isRetry) {
+    await sendQuoteStep(
+      ctx,
+      "ما لقيت بيانات هالرقم بقاعدة البيانات. رح أكمل بدونه. إيش نوع التأمين؟ إلزامي، طرف ثالث، ولا شامل وخدمات طريق؟",
+      "awaiting_type",
+      { ...flowData, car_number: digits },
+    );
+  } else {
+    await sendQuoteStep(
+      ctx,
+      "ما لقيت بيانات لهالرقم. متأكد منه؟ ابعتلي إياه مرة ثانية لو سمحت.",
+      "awaiting_car_number_retry",
+      flowData,
+    );
+  }
+}
+
+const POSITIVE_RE = /(نعم|أيوه|ايوه|أيوا|اي\b|ايه|إيه|تمام|مظبوط|مضبوط|صح|صحيح|اوكي|أوكي|اوك|أوك|ok|yes|yeh|yeah|أكيد|اكيد)/i;
+const NEGATIVE_RE = /(^|\s)(لا|مش|مو|غلط|خطأ|no|nope|not)(\s|$)/i;
+
+async function processCarConfirm(
+  ctx: QuoteFlowCtx,
+  flowData: QuoteFlowData,
+  text: string,
+) {
+  if (POSITIVE_RE.test(text)) {
+    await sendQuoteStep(
+      ctx,
+      "تمام. إيش نوع التأمين؟ إلزامي، طرف ثالث، ولا شامل وخدمات طريق؟",
+      "awaiting_type",
+      flowData,
+    );
+  } else if (NEGATIVE_RE.test(text)) {
+    await sendQuoteStep(
+      ctx,
+      "تمام، ابعتلي رقم سيارتك مرة ثانية لو سمحت.",
+      "awaiting_car_number",
+      { ...flowData, car_number: undefined, car_details: undefined },
+    );
+  } else {
+    const carDesc = flowData.car_details
+      ? `${flowData.car_details.manufacturer ?? ""} ${flowData.car_details.model ?? ""}`.trim()
+      : "هالسيارة";
+    await sendQuoteStep(
+      ctx,
+      `ما فهمت. ${carDesc} صحيحة؟ جاوبني نعم أو لا.`,
+      "awaiting_car_confirm",
+      flowData,
+    );
+  }
+}
+
+async function processType(
+  ctx: QuoteFlowCtx,
+  flowData: QuoteFlowData,
+  text: string,
+) {
+  let insuranceType: string | null = null;
+  const hasShamel = /شامل/.test(text);
+  const hasRoadServices = /(خدمات\s*طريق|خدمة\s*الطريق|خدمات\s*الطريق)/.test(text);
+  const hasThird = /(طرف\s*ثالث|ثالث)/.test(text);
+  const hasMandatory = /(إلزامي|الزامي)/.test(text);
+
+  if (hasShamel) {
+    insuranceType = hasRoadServices ? "شامل وخدمات طريق" : "شامل";
+  } else if (hasThird) {
+    insuranceType = "طرف ثالث";
+  } else if (hasMandatory) {
+    insuranceType = "إلزامي";
+  }
+
+  if (!insuranceType) {
+    await sendQuoteStep(
+      ctx,
+      "ما عرفت أي نوع تختار. اختار واحد: إلزامي، طرف ثالث، أو شامل وخدمات طريق.",
+      "awaiting_type",
+      flowData,
+    );
+    return;
+  }
+
+  await sendQuoteStep(
+    ctx,
+    "تمام. السائق عمره أكثر من ٢٤ ولا أقل؟",
+    "awaiting_age",
+    { ...flowData, insurance_type: insuranceType },
+  );
+}
+
+async function processAge(
+  ctx: QuoteFlowCtx,
+  flowData: QuoteFlowData,
+  text: string,
+) {
+  let ageBand: "above_24" | "below_24" | null = null;
+  if (/(فوق|أكثر|اكثر|أعلى|اعلى|أكبر|اكبر|كبير)/.test(text)) ageBand = "above_24";
+  else if (/(تحت|أقل|اقل|أصغر|اصغر|صغير)/.test(text)) ageBand = "below_24";
+  else {
+    const numMatch = text.match(/(\d{2})/);
+    if (numMatch) {
+      const age = parseInt(numMatch[1], 10);
+      if (age >= 24 && age <= 90) ageBand = "above_24";
+      else if (age >= 16 && age < 24) ageBand = "below_24";
+    }
+  }
+
+  if (!ageBand) {
+    await sendQuoteStep(
+      ctx,
+      "ما فهمت. السائق فوق ٢٤ ولا تحت؟",
+      "awaiting_age",
+      flowData,
+    );
+    return;
+  }
+
+  // File the customer request
+  const carDesc = flowData.car_details
+    ? `${flowData.car_details.manufacturer ?? ""} ${flowData.car_details.model ?? ""}${flowData.car_details.year ? " موديل " + flowData.car_details.year : ""}`.trim()
+    : "";
+  const titleSummary = carDesc || flowData.car_number || "—";
+  const title = `عرض سعر ${flowData.insurance_type ?? ""} — ${titleSummary}`.slice(0, 200);
+
+  const lines = [
+    `نوع التأمين: ${flowData.insurance_type ?? "—"}`,
+    `رقم السيارة: ${flowData.car_number ?? "—"}`,
+    flowData.car_details
+      ? `بيانات السيارة: ${carDesc || "—"}${flowData.car_details.color ? " (" + flowData.car_details.color + ")" : ""}`
+      : "بيانات السيارة: غير متوفرة",
+    `عمر السائق: ${ageBand === "above_24" ? "أكثر من ٢٤" : "أقل من ٢٤"}`,
+  ];
+
+  try {
+    await ctx.supabase.from("customer_requests").insert({
+      agent_id: ctx.agentId,
+      branch_id: ctx.branchId,
+      client_id: ctx.clientId,
+      phone_number: ctx.customerPhone,
+      request_type: "quote",
+      title,
+      content: lines.join("\n").slice(0, 5000),
+      status: "open",
+    });
+  } catch (err) {
+    console.error("[quote-flow] insert customer_requests failed:", err);
+  }
+
+  // Send confirmation. Don't keep flow state — quote is done. Subsequent
+  // turns from the customer flow back through the AI normally.
+  await sendQuoteStep(
+    ctx,
+    "تمام، سجلنا طلبك. رح نرد عليك بأسرع وقت بعرض السعر.",
+    null,
+    {},
+    { quote_completed: true },
+  );
+}
+
+/** Main dispatcher — call after we detect metadata.flow === "quote" on
+ *  the latest bot message. Returns true if a step was handled. */
+async function dispatchQuoteFlow(
+  ctx: QuoteFlowCtx,
+  step: string,
+  flowData: QuoteFlowData,
+  customerText: string,
+): Promise<boolean> {
+  switch (step) {
+    case "awaiting_car_number":
+      await processCarNumber(ctx, flowData, customerText, false);
+      return true;
+    case "awaiting_car_number_retry":
+      await processCarNumber(ctx, flowData, customerText, true);
+      return true;
+    case "awaiting_car_confirm":
+      await processCarConfirm(ctx, flowData, customerText);
+      return true;
+    case "awaiting_type":
+      await processType(ctx, flowData, customerText);
+      return true;
+    case "awaiting_age":
+      await processAge(ctx, flowData, customerText);
+      return true;
+    default:
+      return false;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") {
@@ -572,6 +916,13 @@ serve(async (req) => {
       });
     }
 
+    const trimmedText = text.trim();
+
+    // Pure greeting regex used below — defined here so the flow check
+    // can also reference it if needed.
+    const GREETING_REGEX = /^(?:مرحبا(?:ً)?|السلام\s+عليكم|وعليكم\s+السلام|سلام\s+عليكم|سلام|أهلا(?:ً)?|هلا|هاي|hi|hello|hey|صباح\s+الخير|مساء\s+الخير|يعطيكم\s+العافية|الله\s+يعطيكم\s+العافية)[\s!.؟،,]*$/i;
+    const isPureGreeting = trimmedText.length <= 40 && GREETING_REGEX.test(trimmedText);
+
     // Deterministic greeting handler. Pure greetings ("مرحبا", "السلام
     // عليكم", "hi", ...) get a fixed reply that always uses the prepared
     // welcome line. We don't trust the AI for this — even with explicit
@@ -579,11 +930,11 @@ serve(async (req) => {
     // truncating the greeting to "كيف بقدر أساعدك؟" because it had
     // "already greeted." A regex match + DB-driven personalization is
     // 100% reliable, instant, and doesn't burn AI quota.
-    const trimmedText = text.trim();
-    const GREETING_REGEX = /^(?:مرحبا(?:ً)?|السلام\s+عليكم|وعليكم\s+السلام|سلام\s+عليكم|سلام|أهلا(?:ً)?|هلا|هاي|hi|hello|hey|صباح\s+الخير|مساء\s+الخير|يعطيكم\s+العافية|الله\s+يعطيكم\s+العافية)[\s!.؟،,]*$/i;
-    const isPureGreeting = trimmedText.length <= 40 && GREETING_REGEX.test(trimmedText);
-
-    if (isPureGreeting) {
+    //
+    // Note: this runs AFTER the quote-flow check below — if the
+    // customer is mid-flow and just types "مرحبا", we continue the flow
+    // instead of greeting them again.
+    const greetingHandler = async () => {
       const branding = await getAgentBranding(supabase, agentId);
       let firstName: string | null = null;
       let hasActivePolicies = false;
@@ -634,16 +985,9 @@ serve(async (req) => {
       });
     }
 
-    // Deterministic quote-flow ENTRY. Customer typed any of the obvious
-    // quote-request triggers ("عرض سعر", "بدي عرض سعر", "كم السعر",
-    // ...) → reply with step 1 of the flow verbatim. The AI was
-    // unreliable here too — kept menu-ing back "كيف بقدر أساعدك؟ بدك
-    // تفاصيل وثيقة، فاتورة، عرض سعر، ..." instead of jumping in.
-    //
-    // Only fire when there isn't already an active quote flow (the AI
-    // continues steps 2+ from history), and only on the entry message
-    // itself — once we've sent step 1, subsequent turns ("شامل") go to
-    // the AI which has full scenario context in the system prompt.
+    // Look up the latest bot message ONCE — used both to detect an
+    // in-progress deterministic flow (quote state machine) and to know
+    // whether we're at the start of a conversation (greeting handler).
     const { data: lastBotMsg } = await supabase
       .from("customer_chat_messages")
       .select("metadata")
@@ -653,7 +997,45 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
     const inProgressFlow = lastBotMsg?.metadata?.flow ?? null;
+    const inProgressStep = lastBotMsg?.metadata?.flow_step ?? null;
+    const inProgressData: QuoteFlowData = lastBotMsg?.metadata?.flow_data ?? {};
 
+    const quoteCtx: QuoteFlowCtx = {
+      supabase,
+      agentId,
+      branchId,
+      sessionId: session.id,
+      clientId: matchedClient?.id ?? null,
+      customerPhone: phoneKey,
+      instanceId,
+      apiToken: gaSettings.api_token_instance,
+      senderId,
+      supabaseUrl,
+      serviceKey,
+    };
+
+    // (1) Already inside a quote flow → run the state machine. Active
+    // flow takes priority over greetings: if a customer mid-flow types
+    // "مرحبا", continue the flow rather than restart.
+    if (inProgressFlow === "quote" && inProgressStep) {
+      const handled = await dispatchQuoteFlow(quoteCtx, inProgressStep, inProgressData, text);
+      if (handled) {
+        return new Response(JSON.stringify({ ok: true, quote_step: inProgressStep }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // (2) Pure greeting → deterministic welcome line.
+    if (isPureGreeting) {
+      return await greetingHandler();
+    }
+
+    // (3) Quote flow ENTRY. Customer typed any of the obvious request
+    // triggers and there's no active flow yet. Fire startQuoteFlow,
+    // which asks for the car number and sets state =
+    // awaiting_car_number. Subsequent turns dispatch through (1).
     const QUOTE_TRIGGERS = [
       "عرض سعر",
       "عرض الأسعار",
@@ -681,29 +1063,7 @@ serve(async (req) => {
       QUOTE_TRIGGERS.some((t) => trimmedText.includes(t));
 
     if (isQuoteEntry) {
-      const reply = "إلزامي، طرف ثالث، ولا شامل وخدمات طريق؟";
-      const sendResult = await sendWhatsAppText(
-        instanceId,
-        gaSettings.api_token_instance,
-        senderId,
-        reply,
-      );
-      await supabase.from("customer_chat_messages").insert({
-        session_id: session.id,
-        role: "bot",
-        content: reply,
-        whatsapp_message_id: sendResult.idMessage,
-        metadata: {
-          deterministic: "quote_entry",
-          flow: "quote",
-          flow_step: "awaiting_type",
-          send_ok: sendResult.ok,
-        },
-      });
-      await supabase
-        .from("customer_chat_sessions")
-        .update({ last_message_at: new Date().toISOString() })
-        .eq("id", session.id);
+      await startQuoteFlow(quoteCtx);
       return new Response(JSON.stringify({ ok: true, deterministic: "quote_entry" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
