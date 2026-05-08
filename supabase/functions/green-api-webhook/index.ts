@@ -1423,8 +1423,19 @@ serve(async (req) => {
       "تأمين جديد",
       "تامين جديد",
     ];
-    const matchesQuoteTrigger = QUOTE_TRIGGERS.some((t) => trimmedText.includes(t));
-    const matchesPolicyTrigger = POLICY_TRIGGERS.some((t) => trimmedText.includes(t));
+    // Normalize Arabic for trigger matching: strip hamza variants
+    // (أ/إ/آ → ا) and tashkeel diacritics. Customers freely drop the
+    // hamza ("تاميناتي" instead of "تأميناتي") and fusha keyboards
+    // sometimes carry diacritics, so a literal includes() misses both.
+    const arNormalize = (s: string) =>
+      (s || "")
+        .replace(/[أإآ]/g, "ا")
+        .replace(/ى/g, "ي")
+        .replace(/ة/g, "ه")
+        .replace(/[ً-ٰٟ]/g, ""); // tashkeel range
+    const normalizedText = arNormalize(trimmedText);
+    const matchesQuoteTrigger = QUOTE_TRIGGERS.some((t) => normalizedText.includes(arNormalize(t)));
+    const matchesPolicyTrigger = POLICY_TRIGGERS.some((t) => normalizedText.includes(arNormalize(t)));
 
     // Escape hatch: a customer stuck mid-flow can break out by sending a
     // pure greeting, a fresh quote-trigger, or a fresh policy-trigger
