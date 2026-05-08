@@ -718,7 +718,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           hideCloseButton
-          className="w-[calc(100vw-1rem)] max-w-6xl max-h-[95vh] p-0 overflow-hidden gap-0"
+          className="!left-2 !right-2 !top-2 !bottom-2 !translate-x-0 !translate-y-0 !w-auto !max-w-none !max-h-none sm:!left-[50%] sm:!right-auto sm:!top-[50%] sm:!bottom-auto sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:!w-full sm:!max-w-6xl sm:!max-h-[95vh] p-0 overflow-hidden gap-0"
           dir="rtl"
         >
           {loading ? (
@@ -733,7 +733,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
               <Skeleton className="h-40 w-full" />
             </div>
           ) : policy ? (
-            <div className="flex flex-col h-full max-h-[95vh]">
+            <div className="flex flex-col h-full overflow-hidden">
               {/* Hero Header */}
               <div className="relative overflow-hidden hero-gradient"
               >
