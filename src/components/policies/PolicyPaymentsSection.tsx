@@ -814,8 +814,8 @@ export function PolicyPaymentsSection({
 
   return (
     <>
-      <Card className="p-4 space-y-4">
-        <div className="flex items-center justify-between">
+      <Card className="p-3 sm:p-4 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-primary font-semibold">
             <CreditCard className="h-4 w-4" />
             <span>سجل الدفعات ({payments.length})</span>
@@ -827,18 +827,18 @@ export function PolicyPaymentsSection({
         </div>
 
         {/* Summary */}
-        <div className="grid grid-cols-3 gap-2 text-center text-sm">
-          <div className="bg-muted/50 rounded-lg p-2">
-            <p className="text-muted-foreground text-xs">سعر التأمين</p>
-            <p className="font-bold">{formatCurrency(insurancePrice)}</p>
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-center text-sm">
+          <div className="bg-muted/50 rounded-lg p-2 min-w-0">
+            <p className="text-muted-foreground text-[10px] sm:text-xs truncate">سعر التأمين</p>
+            <p className="font-bold text-sm sm:text-base ltr-nums break-words">{formatCurrency(insurancePrice)}</p>
           </div>
-          <div className="bg-success/10 rounded-lg p-2">
-            <p className="text-muted-foreground text-xs">المدفوع</p>
-            <p className="font-bold text-success">{formatCurrency(totalPaid)}</p>
+          <div className="bg-success/10 rounded-lg p-2 min-w-0">
+            <p className="text-muted-foreground text-[10px] sm:text-xs truncate">المدفوع</p>
+            <p className="font-bold text-sm sm:text-base text-success ltr-nums break-words">{formatCurrency(totalPaid)}</p>
           </div>
-          <div className={cn("rounded-lg p-2", remaining > 0 ? "bg-destructive/10" : "bg-success/10")}>
-            <p className="text-muted-foreground text-xs">المتبقي</p>
-            <p className={cn("font-bold", remaining > 0 ? "text-destructive" : "text-success")}>
+          <div className={cn("rounded-lg p-2 min-w-0", remaining > 0 ? "bg-destructive/10" : "bg-success/10")}>
+            <p className="text-muted-foreground text-[10px] sm:text-xs truncate">المتبقي</p>
+            <p className={cn("font-bold text-sm sm:text-base ltr-nums break-words", remaining > 0 ? "text-destructive" : "text-success")}>
               {formatCurrency(remaining)}
             </p>
           </div>
@@ -864,7 +864,7 @@ export function PolicyPaymentsSection({
                       : "border-border/60 hover:border-border",
                   )}
                 >
-                  <div className="flex items-center gap-4 px-4 py-3 min-h-[76px]">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-3 sm:flex-nowrap sm:gap-4 sm:px-4 sm:min-h-[76px]">
                     {/* Icon */}
                     <div
                       className={cn(
@@ -875,7 +875,7 @@ export function PolicyPaymentsSection({
                       <Icon className="h-5 w-5" />
                     </div>
                     {/* Amount + type + status badges */}
-                    <div className="flex flex-col gap-1 shrink-0 min-w-[140px]">
+                    <div className="flex flex-col gap-1 min-w-0 flex-1 sm:flex-initial sm:shrink-0 sm:min-w-[140px]">
                       <span className="font-bold text-xl ltr-nums text-foreground leading-none text-right">
                         {formatCurrency(payment.amount)}
                       </span>
@@ -896,38 +896,8 @@ export function PolicyPaymentsSection({
                         )}
                       </div>
                     </div>
-                    {/* Divider */}
-                    <div className="h-10 w-px bg-border/70 shrink-0" />
-                    {/* Meta (date + cheque# inline) */}
-                    <div className="flex-1 min-w-0 flex items-center gap-4 flex-wrap text-xs">
-                      <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <span className="text-[10px] uppercase tracking-wide">التاريخ</span>
-                        <span className="font-semibold text-foreground ltr-nums">
-                          {formatDate(payment.payment_date)}
-                        </span>
-                      </div>
-                      {payment.cheque_number && (
-                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                          <span className="text-[10px] uppercase tracking-wide">رقم الشيك</span>
-                          <span className="font-mono font-semibold text-foreground ltr-nums">
-                            {payment.cheque_number}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    {/* Attachments chip */}
-                    {imageCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => openGallery(payment)}
-                        className="flex items-center gap-1.5 text-[11px] text-primary bg-primary/10 hover:bg-primary/15 rounded-full px-2.5 py-1 shrink-0 transition-colors"
-                      >
-                        <ImageIcon className="h-3 w-3" />
-                        <span>{imageCount} ملف</span>
-                      </button>
-                    )}
-                    {/* Actions */}
-                    <div className="flex items-center gap-1 shrink-0 border-r border-border/60 pr-3">
+                    {/* Actions — on mobile sit next to the amount; on desktop they end the row. */}
+                    <div className="flex items-center gap-1 shrink-0 sm:order-last sm:border-r sm:border-border/60 sm:pr-3">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -963,6 +933,36 @@ export function PolicyPaymentsSection({
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
+                    </div>
+                    {/* Divider — desktop only */}
+                    <div className="hidden sm:block h-10 w-px bg-border/70 shrink-0" />
+                    {/* Meta (date + cheque# inline). On mobile this row breaks
+                        to its own line below the amount/actions via basis-full. */}
+                    <div className="basis-full sm:basis-auto sm:flex-1 min-w-0 flex items-center gap-3 sm:gap-4 flex-wrap text-xs sm:border-0 border-t border-border/40 pt-2 sm:pt-0">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <span className="text-[10px] uppercase tracking-wide">التاريخ</span>
+                        <span className="font-semibold text-foreground ltr-nums">
+                          {formatDate(payment.payment_date)}
+                        </span>
+                      </div>
+                      {payment.cheque_number && (
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <span className="text-[10px] uppercase tracking-wide">رقم الشيك</span>
+                          <span className="font-mono font-semibold text-foreground ltr-nums">
+                            {payment.cheque_number}
+                          </span>
+                        </div>
+                      )}
+                      {imageCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => openGallery(payment)}
+                          className="flex items-center gap-1.5 text-[11px] text-primary bg-primary/10 hover:bg-primary/15 rounded-full px-2.5 py-1 shrink-0 transition-colors mr-auto"
+                        >
+                          <ImageIcon className="h-3 w-3" />
+                          <span>{imageCount} ملف</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
