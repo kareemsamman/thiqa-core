@@ -68,6 +68,7 @@ const paymentIcon: Record<string, typeof Banknote> = {
   cash: Banknote,
   cheque: FileText,
   visa: CreditCard,
+  visa_external: CreditCard,
   transfer: Wallet,
 };
 
@@ -75,6 +76,7 @@ const paymentLabel: Record<string, string> = {
   cash: "نقدي",
   cheque: "شيك",
   visa: "فيزا",
+  visa_external: "فيزا خارجي",
   transfer: "تحويل",
 };
 
@@ -82,6 +84,7 @@ const paymentTint: Record<string, string> = {
   cash: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30",
   cheque: "bg-blue-500/10 text-blue-700 border-blue-500/30",
   visa: "bg-purple-500/10 text-purple-700 border-purple-500/30",
+  visa_external: "bg-purple-500/10 text-purple-700 border-purple-500/30",
   transfer: "bg-amber-500/10 text-amber-700 border-amber-500/30",
 };
 
@@ -196,8 +199,9 @@ export function ReceiptGroupDetailsDialog({
                           {paymentLabel[r.payment_method] || r.payment_method}
                         </Badge>
                         {r.receipt_number && (
-                          <Badge variant="secondary" className="text-[10px] font-mono">
-                            {r.receipt_number}
+                          <Badge variant="secondary" className="text-[10px] gap-1">
+                            <span>رقم السند</span>
+                            <span className="font-mono ltr-nums">{r.receipt_number}</span>
                           </Badge>
                         )}
                       </div>

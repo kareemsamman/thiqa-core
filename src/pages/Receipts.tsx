@@ -1461,7 +1461,7 @@ export default function Receipts() {
       payment_method: "170px",
       cheque_number: "110px",
       notes: "180px",
-      actions: "60px",
+      actions: "90px",
     };
     const visibleCols = RECEIPTS_COLUMNS.filter((c) => isCol(c.key));
 
