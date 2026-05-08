@@ -189,6 +189,7 @@ function paymentLabelShort(method: string): string {
     cash: "نقدي",
     cheque: "شيك",
     visa: "فيزا",
+    visa_external: "فيزا خارجي",
     transfer: "تحويل",
   }[method] || method;
 }
@@ -641,6 +642,10 @@ export default function Receipts() {
         .eq("receipt_type", activeTab);
 
       const applyShared = (q: any) => {
+        // Hide ₪0 receipts — they have no print value and only confuse
+        // the operator. Live receipts always carry a positive amount;
+        // zero rows tend to be migration artifacts or aborted entries.
+        q = q.gt("amount", 0);
         if (dateFrom) q = q.gte("receipt_date", dateFrom);
         if (dateTo) q = q.lte("receipt_date", dateTo);
         if (paymentMethods.length > 0) q = q.in("payment_method", paymentMethods);
@@ -1493,17 +1498,7 @@ export default function Receipts() {
                 {groups.map((group) => {
                   const firstReceipt = group.receipts[0];
                   const combinedMethodLabel = Array.from(
-                    new Set(
-                      group.receipts.map(
-                        (r) =>
-                          ({
-                            cash: "نقدي",
-                            cheque: "شيك",
-                            visa: "فيزا",
-                            transfer: "تحويل",
-                          }[r.payment_method] || r.payment_method),
-                      ),
-                    ),
+                    new Set(group.receipts.map((r) => paymentLabelShort(r.payment_method))),
                   ).join(" + ");
                   // Cheque number for the row — only meaningful when the
                   // group is a single cheque receipt.
