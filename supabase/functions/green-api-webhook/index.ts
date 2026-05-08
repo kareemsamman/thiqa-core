@@ -393,7 +393,11 @@ serve(async (req) => {
         const transcript = await transcribeAudio(downloadUrl, mimeType);
         if (transcript) {
           text = transcript;
-          console.log(`[green-api-webhook] voice transcribed (${transcript.length} chars)`);
+          // Log a preview so we can spot Whisper hallucinations on silence /
+          // poor audio — those tend to be very short, repeated, or generic
+          // training-set artefacts. Truncate to keep PII out of long logs.
+          const preview = transcript.slice(0, 200).replace(/\n/g, " ");
+          console.log(`[green-api-webhook] voice transcribed (${transcript.length} chars): "${preview}"`);
         } else {
           voiceTranscriptionFailed = true;
           text = "[تسجيل صوتي — تعذّر فهمه تلقائياً]";
@@ -594,7 +598,7 @@ serve(async (req) => {
       `\nالعميل مسجل في النظام: ${isRegistered ? "نعم" : "لا"}`,
       isRegistered && customerFirstName ? `\nاسم العميل (الاسم الأول): ${customerFirstName}` : "",
       `\nالعميل لديه وثائق فعّالة: ${hasPolicies ? "نعم" : "لا"}`,
-      isVoiceMessage ? `\nملاحظة: الرسالة الأخيرة من العميل كانت تسجيل صوتي تم تحويله إلى نص.` : "",
+      isVoiceMessage && !voiceTranscriptionFailed ? `\nملاحظة: الرسالة الأخيرة من العميل كانت تسجيل صوتي تم تحويله إلى نص بنجاح. تعامل مع النص كأنه رسالة عادية — لا تطلب من العميل يكتبها مرة ثانية، وردّ على محتواها مباشرة. الترجمة قد تحتوي أخطاء بسيطة باللهجة، استنتج المعنى من السياق.` : "",
       voiceTranscriptionFailed ? `\nملاحظة: فشل تحويل التسجيل الصوتي. اطلب من العميل بلطف أن يكتب رسالة نصية بدلاً منه.` : "",
       `\n\n## رسالة الترحيب الجاهزة (استخدمها كما هي عند بداية المحادثة أو عند تحية)`,
       `\n${greetingLine}`,
