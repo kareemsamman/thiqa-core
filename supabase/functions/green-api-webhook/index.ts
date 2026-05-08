@@ -19,6 +19,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 import { getAgentBranding } from "../_shared/agent-branding.ts";
+import { checkUsageLimit, logUsage } from "../_shared/usage-limits.ts";
 import { TOOL_DEFS, executeTool, type ToolContext } from "./tools.ts";
 
 const corsHeaders = {
@@ -525,9 +526,18 @@ serve(async (req) => {
 
     let reply = gaSettings.fallback_message ?? "عذراً، صار خلل بسيط. تواصل مع المكتب لو سمحت.";
     let modelUsed: string | null = null;
+    let aiAnswered = false;
     const allToolCalls: any[] = [];
 
-    if (lovableApiKey) {
+    // Quota gate. WhatsApp turns count toward the same `ai_chat` bucket
+    // the in-app assistant uses. If the agent is out of allowance + credits
+    // we still reply, but with a quota-exhausted message — and we don't
+    // increment usage.
+    const quotaCheck = await checkUsageLimit(supabase, agentId, "ai_chat");
+    if (!quotaCheck.allowed) {
+      console.log(`[green-api-webhook] Agent ${agentId} ai_chat quota exhausted — used=${quotaCheck.used}, limit=${quotaCheck.limit}, credits=${quotaCheck.credit_balance}`);
+      reply = "عذراً، نفدت طلبات المساعد الذكي لهذا الشهر. تواصل مع المكتب مباشرة وراح يساعدك.";
+    } else if (lovableApiKey) {
       try {
         // Pull model setting same way ai-assistant does
         const { data: modelRow } = await supabase
@@ -618,12 +628,26 @@ serve(async (req) => {
 
         if (finalReply) {
           reply = finalReply;
+          aiAnswered = true;
         }
       } catch (err) {
         console.error("[green-api-webhook] AI call failed:", err);
       }
     } else {
       console.warn("[green-api-webhook] LOVABLE_API_KEY missing — sending fallback reply only");
+    }
+
+    // Charge the agent's ai_chat quota only when the AI actually answered.
+    // We don't charge for: quota-exhausted replies, missing API key, AI
+    // gateway errors, or pure fallback messages — none of those used a
+    // model turn the user should pay for.
+    if (aiAnswered) {
+      try {
+        await logUsage(supabase, agentId, "ai_chat");
+      } catch (err) {
+        // Bookkeeping must never block the customer reply.
+        console.warn("[green-api-webhook] logUsage(ai_chat) failed:", err);
+      }
     }
 
     // Send back via Green API
