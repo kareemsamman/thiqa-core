@@ -489,7 +489,7 @@ export function ClientFilesTab({ policies, kind, clientId, onCountChange }: Clie
                   className="group relative rounded-lg border overflow-hidden bg-muted/30 cursor-pointer hover:border-primary/50 transition-colors flex flex-col"
                   onClick={onClick}
                 >
-                  <div className="relative h-44 bg-muted/40">
+                  <div className="relative h-64 bg-muted/40">
                     {isExternalLink(file) ? (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-500 to-blue-600 text-white">
                         <ExternalLink className="h-10 w-10" />
