@@ -58,7 +58,12 @@ export function PolicyFilesSection({
   const [crmFiles, setCrmFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{
+    name: string;
+    pct: number;
+    current: number;
+    total: number;
+  } | null>(null);
   const [selectedFile, setSelectedFile] = useState<MediaFile | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingImage, setDeletingImage] = useState<MediaFile | null>(null);
@@ -79,6 +84,10 @@ export function PolicyFilesSection({
 
   // Scanner state
   const [scanning, setScanning] = useState<'insurance' | 'crm' | null>(null);
+
+  // Drag-and-drop state — tracks which tab card is currently being
+  // dragged over so we can show the drop ring + overlay.
+  const [isDragging, setIsDragging] = useState<'insurance' | 'crm' | null>(null);
 
   useEffect(() => {
     setPolicyNumber(initialPolicyNumber || "");
@@ -128,37 +137,64 @@ export function PolicyFilesSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [policyId, packagePolicyIds?.join(',')]);
 
+  const uploadFileWithXhr = (
+    file: File,
+    entityType: string,
+    accessToken: string | undefined,
+    onPct: (pct: number) => void
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('entity_type', entityType);
+      formData.append('entity_id', policyId);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-media`);
+      xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onPct(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onPct(100);
+          resolve();
+        } else {
+          let msg = 'Upload failed';
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (parsed?.error) msg = parsed.error;
+          } catch {}
+          reject(new Error(msg));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.send(formData);
+    });
+  };
+
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>, fileType: 'insurance' | 'crm') => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
     setUploading(fileType);
     try {
-      for (const file of Array.from(files)) {
+      const fileArray = Array.from(files);
+      const { data: { session } } = await supabase.auth.getSession();
+
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
         const entityType = fileType === 'insurance' ? 'policy_insurance' : 'policy_crm';
+        setUploadProgress({ name: file.name, pct: 0, current: i + 1, total: fileArray.length });
 
         if (file.type.startsWith('video/')) {
           // Bunny Stream resumable upload (up to 1GB)
-          await uploadVideoToStream(file, entityType);
+          await uploadVideoToStream(file, entityType, i + 1, fileArray.length);
         } else {
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('entity_type', entityType);
-          formData.append('entity_id', policyId);
-
-          const { data: { session } } = await supabase.auth.getSession();
-          const response = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-media`,
-            {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${session?.access_token}` },
-              body: formData,
-            }
-          );
-          if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.error || 'Upload failed');
-          }
+          await uploadFileWithXhr(file, entityType, session?.access_token, (pct) => {
+            setUploadProgress((prev) => (prev ? { ...prev, pct } : prev));
+          });
         }
       }
 
@@ -198,7 +234,7 @@ export function PolicyFilesSection({
     }
   };
 
-  const uploadVideoToStream = async (file: File, entityType: string) => {
+  const uploadVideoToStream = async (file: File, entityType: string, current: number, total: number) => {
     if (file.size > 1024 * 1024 * 1024) {
       throw new Error('الفيديو أكبر من 1GB');
     }
@@ -228,8 +264,13 @@ export function PolicyFilesSection({
         },
         metadata: { filetype: file.type, title: file.name },
         onError: (err) => reject(err),
-        onProgress: (sent, total) => {
-          setUploadProgress({ name: file.name, pct: Math.round((sent / total) * 100) });
+        onProgress: (sent, totalBytes) => {
+          setUploadProgress({
+            name: file.name,
+            pct: Math.round((sent / totalBytes) * 100),
+            current,
+            total,
+          });
         },
         onSuccess: () => resolve(),
       });
@@ -781,7 +822,7 @@ export function PolicyFilesSection({
         {/* Insurance Files Tab */}
         <TabsContent value="insurance" className="m-0">
           <Card className="p-4 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-primary font-semibold">
                 <ImageIcon className="h-4 w-4" />
                 <span>ملفات البوليصة</span>
@@ -802,7 +843,7 @@ export function PolicyFilesSection({
         {/* CRM Files Tab */}
         <TabsContent value="crm" className="m-0">
           <Card className="p-4 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-secondary-foreground font-semibold">
                 <FolderOpen className="h-4 w-4" />
                 <span>ملفات داخلية</span>

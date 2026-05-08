@@ -756,16 +756,16 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                   <X className="h-4 w-4" />
                 </button>
                 
-                <div className="relative px-6 py-5">
-                  <div className="flex items-start justify-between gap-4">
+                <div className="relative px-4 sm:px-6 py-4 sm:py-5">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
                     {/* Right side - Policy Type & Title */}
-                    <div className="flex items-start gap-4">
-                      <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                        <PolicyIcon className="h-7 w-7 text-white" />
+                    <div className="flex items-start gap-3 sm:gap-4 min-w-0">
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
+                        <PolicyIcon className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <h1 className="text-xl font-bold text-white">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <h1 className="text-lg sm:text-xl font-bold text-white">
                             {hasPackage ? "باقة تأمين" : getPolicyTypeName()}
                           </h1>
                           <Badge className={cn(
@@ -799,21 +799,21 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                         )}
                         
                         {/* Client & Car Info */}
-                        <div className="flex items-center gap-4 mt-2 text-white/80 text-sm">
-                          <div className="flex items-center gap-1">
-                            <User className="h-3.5 w-3.5" />
-                            <span>{policy.clients.full_name}</span>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-white/80 text-sm min-w-0">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <User className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{policy.clients.full_name}</span>
                           </div>
                           {policy.cars && (
-                            <div className="flex items-center gap-1">
-                              <Car className="h-3.5 w-3.5" />
-                              <span className="font-mono"><bdi>{policy.cars.car_number}</bdi></span>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <Car className="h-3.5 w-3.5 shrink-0" />
+                              <span className="font-mono truncate"><bdi>{policy.cars.car_number}</bdi></span>
                             </div>
                           )}
                           {policy.insurance_companies && (
-                            <div className="flex items-center gap-1">
-                              <Building2 className="h-3.5 w-3.5" />
-                              <span>{policy.insurance_companies.name_ar || policy.insurance_companies.name}</span>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <Building2 className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{policy.insurance_companies.name_ar || policy.insurance_companies.name}</span>
                             </div>
                           )}
                         </div>
@@ -821,7 +821,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                     </div>
 
                     {/* Left side - Actions - with spacing from close button */}
-                    <div className="flex gap-2 ml-14">
+                    <div className="flex flex-wrap gap-2 sm:ml-14">
                       {/* SMS Button - only show if there are files */}
                       {policyFilesCount > 0 && policy.clients.phone_number && (
                         <Button
@@ -891,13 +891,13 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
               </div>
 
               {/* Navigation Pills */}
-              <div className="px-6 py-3 border-b bg-muted/30 flex gap-2">
+              <div className="px-4 sm:px-6 py-3 border-b bg-muted/30 flex gap-2 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <button
                   onClick={() => setActiveSection('main')}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                    activeSection === 'main' 
-                      ? "bg-primary text-primary-foreground shadow-sm" 
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all shrink-0",
+                    activeSection === 'main'
+                      ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:bg-muted"
                   )}
                 >
@@ -907,9 +907,9 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                 <button
                   onClick={() => setActiveSection('payments')}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5",
-                    activeSection === 'payments' 
-                      ? "bg-primary text-primary-foreground shadow-sm" 
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 shrink-0",
+                    activeSection === 'payments'
+                      ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:bg-muted"
                   )}
                 >
@@ -925,9 +925,9 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                 <button
                   onClick={() => setActiveSection('files')}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                    activeSection === 'files' 
-                      ? "bg-primary text-primary-foreground shadow-sm" 
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all shrink-0",
+                    activeSection === 'files'
+                      ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:bg-muted"
                   )}
                 >
@@ -945,7 +945,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
               {/* Content Area */}
               <ScrollArea className="flex-1">
                 {activeSection === 'main' && (
-                  <div className="p-6 space-y-6">
+                  <div className="p-4 sm:p-6 space-y-6">
                     {/* Signature Warning */}
                     {!policy.clients.signature_url && (
                       <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
@@ -1542,7 +1542,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                 )}
 
                 {activeSection === 'payments' && (
-                  <div className="p-6">
+                  <div className="p-4 sm:p-6">
                     <PolicyPaymentsSection
                       policyId={policy.id}
                       payments={hasPackage ? packagePayments : payments}
@@ -1558,7 +1558,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                 )}
 
                 {activeSection === 'files' && (
-                  <div className="p-6">
+                  <div className="p-4 sm:p-6">
                     <PolicyFilesSection 
                       policyId={policy.id} 
                       policyNumber={policy.policy_number}
