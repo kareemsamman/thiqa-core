@@ -74,6 +74,7 @@ import {
   type ReceiptRow,
 } from "@/components/receipts/ReceiptGroupDetailsDialog";
 import { printAccountingReport } from "@/components/accounting/printAccountingReport";
+import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -978,56 +979,61 @@ export default function Receipts() {
           <div>
             <Card className="mt-4">
               <CardContent className="p-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Search */}
-                  <div className="relative">
-                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="بحث باسم العميل أو رقم السيارة..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pr-9"
-                    />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">بحث</Label>
+                    <div className="relative">
+                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        placeholder="اسم العميل أو رقم السيارة..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pr-9"
+                      />
+                    </div>
                   </div>
 
                   {/* Date from */}
-                  <div>
-                    <Input
-                      type="date"
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">من تاريخ</Label>
+                    <ArabicDatePicker
                       value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
+                      onChange={setDateFrom}
                       placeholder="من تاريخ"
-                      className="w-full"
                     />
                   </div>
 
                   {/* Date to */}
-                  <div>
-                    <Input
-                      type="date"
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">إلى تاريخ</Label>
+                    <ArabicDatePicker
                       value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
+                      onChange={setDateTo}
                       placeholder="إلى تاريخ"
-                      className="w-full"
+                      min={dateFrom || undefined}
                     />
                   </div>
 
                   {/* Payment method */}
-                  <Select
-                    value={paymentMethodFilter}
-                    onValueChange={setPaymentMethodFilter}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="طريقة الدفع" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PAYMENT_METHOD_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">طريقة الدفع</Label>
+                    <Select
+                      value={paymentMethodFilter}
+                      onValueChange={setPaymentMethodFilter}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="طريقة الدفع" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_METHOD_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 {/* Branch filter — global admins only. Sits below the
                     main filter row so the four-column grid stays even
