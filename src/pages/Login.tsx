@@ -167,6 +167,28 @@ export default function Login() {
   const [googleHintOpen, setGoogleHintOpen] = useState(false);
   const lastCheckedEmailRef = useRef<string>("");
 
+  // OTP-login 2FA step. After a correct password we send a 4-digit
+  // SMS code to the user's phone and require it before completing
+  // sign-in. Triggered only when the user's agency has flipped
+  // `sms_otp_enabled` in /subscription. Credentials are kept in
+  // memory just long enough to re-sign-in after verify; nothing
+  // touches storage so a refresh ends the attempt.
+  // States: idle (default) | checking (right after signInWithPassword,
+  // before we know whether OTP is required) | otp (4-digit input shown).
+  // The redirect-on-login useEffect bails out for any non-idle state
+  // so it doesn't navigate away mid-gate.
+  const [otpStep, setOtpStep] = useState<"idle" | "checking" | "otp">("idle");
+  const [otpDigits, setOtpDigits] = useState<string[]>(["", "", "", ""]);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const otpCredsRef = useRef<{ email: string; password: string; phone: string } | null>(null);
+  const otpInputsRef = useRef<Array<HTMLInputElement | null>>([]);
+
+  const resetOtpState = () => {
+    setOtpStep("idle");
+    setOtpDigits(["", "", "", ""]);
+    otpCredsRef.current = null;
+  };
+
   useEffect(() => {
     try { setIsInIframe(window.self !== window.top); } catch { setIsInIframe(true); }
     // Check if already locked out
@@ -189,6 +211,11 @@ export default function Login() {
   }, []);
 
   useEffect(() => {
+    // The 2FA OTP gate signs the user in transiently to verify the
+    // password, then signs them out until the SMS code is entered.
+    // While that gate is active (otpStep !== "idle"), don't redirect
+    // — the user has to complete or cancel the OTP step first.
+    if (otpStep !== "idle") return;
     if (!authLoading && user) {
       if (!isSuperAdmin) {
         sessionStorage.setItem('admin_session_active', 'true');
@@ -263,7 +290,7 @@ export default function Login() {
 
       checkAndSetupUser();
     }
-  }, [user, isActive, isSuperAdmin, authLoading, navigate, tryBypassEmailVerification]);
+  }, [user, isActive, isSuperAdmin, authLoading, navigate, tryBypassEmailVerification, otpStep]);
 
   // On email blur, ask the backend whether this email is a Google-only
   // account. If so, show a dialog nudging the user toward "Sign in with
@@ -350,6 +377,10 @@ export default function Login() {
     // connections). Without this, the button looks idle until
     // signInWithPassword starts, which is confusing.
     setLoading(true);
+    // Hold the redirect-on-login useEffect until we've decided
+    // whether this agent requires the 2FA OTP step. Cleared in the
+    // finally block (and in maybeStartOtpStep when it moves to "otp").
+    setOtpStep("checking");
     try {
       // Authoritative server-side rate limit check. localStorage is just
       // UX feedback and can be cleared by the user, so we always confirm
@@ -408,6 +439,8 @@ export default function Login() {
             if (retryError) {
               toast.error("فشل تسجيل الدخول بعد التفعيل");
             } else {
+              const otpHandled = await maybeStartOtpStep(email.trim(), password);
+              if (otpHandled === "shown") return;
               resetLoginAttempts();
               toast.success("تم تسجيل الدخول بنجاح");
               return;
@@ -422,10 +455,160 @@ export default function Login() {
         return;
       }
       resetLoginAttempts();
+      // Password is correct. If the agency has OTP-login enabled for
+      // its users, send a 4-digit SMS code and gate the session on
+      // it. If the agency's SMS quota is drained the OTP step is
+      // skipped — the user is logged in with password alone (Q3-c).
+      const otpHandled = await maybeStartOtpStep(email.trim(), password);
+      if (otpHandled === "shown") return;
       toast.success("تم تسجيل الدخول بنجاح");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "حدث خطأ غير متوقع");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+      // Only release the redirect gate if the OTP step isn't actually
+      // showing. If it is, it'll be released after verify (or cancel).
+      setOtpStep((s) => (s === "otp" ? s : "idle"));
+    }
+  };
+
+  // Resolve whether the just-signed-in user must enter an OTP code.
+  // Returns "shown" if the OTP step is now displayed (caller should
+  // stop and not navigate), "skipped" otherwise (caller proceeds as
+  // normal). Quota-exhausted is treated as skipped — password alone
+  // is enough when the agency is out of SMS.
+  const maybeStartOtpStep = async (
+    userEmail: string,
+    userPassword: string,
+  ): Promise<"shown" | "skipped"> => {
+    try {
+      const { data: { user: signedIn } } = await supabase.auth.getUser();
+      if (!signedIn) return "skipped";
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("phone, agent_id")
+        .eq("id", signedIn.id)
+        .maybeSingle();
+
+      if (!profile?.agent_id || !profile.phone) return "skipped";
+
+      const { data: settings } = await supabase
+        .from("auth_settings")
+        .select("sms_otp_enabled")
+        .eq("agent_id", profile.agent_id)
+        .maybeSingle();
+
+      if (!(settings as any)?.sms_otp_enabled) return "skipped";
+
+      // Drop the freshly-created session so it can't be used until
+      // the OTP step completes. Stash credentials in memory so we
+      // can re-sign-in after verify (or after a quota-exhausted skip).
+      await supabase.auth.signOut();
+      otpCredsRef.current = { email: userEmail, password: userPassword, phone: profile.phone };
+
+      const { data: smsRes } = await supabase.functions.invoke("auth-sms-start", {
+        body: { phone: profile.phone },
+      });
+
+      if ((smsRes as any)?.error_code === "sms_quota_exhausted") {
+        // Quota out → re-sign-in with password and let the user through.
+        const { error: reErr } = await supabase.auth.signInWithPassword({ email: userEmail, password: userPassword });
+        otpCredsRef.current = null;
+        if (reErr) {
+          toast.error("تعذر استئناف تسجيل الدخول");
+          return "skipped";
+        }
+        toast.info("تم استنفاد رصيد الرسائل النصية، تم تسجيل دخولك بكلمة المرور");
+        return "skipped";
+      }
+
+      if (!(smsRes as any)?.success) {
+        // SMS failed for some other reason — re-sign-in so the user
+        // isn't stranded.
+        await supabase.auth.signInWithPassword({ email: userEmail, password: userPassword });
+        otpCredsRef.current = null;
+        toast.error((smsRes as any)?.error || "فشل في إرسال رمز التحقق");
+        return "skipped";
+      }
+
+      setOtpStep("otp");
+      setOtpDigits(["", "", "", ""]);
+      setTimeout(() => otpInputsRef.current[0]?.focus(), 50);
+      toast.success("تم إرسال رمز التحقق إلى هاتفك");
+      return "shown";
+    } catch (err) {
+      console.warn("[login] OTP gate failed:", err);
+      return "skipped";
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const code = otpDigits.join("");
+    const creds = otpCredsRef.current;
+    if (code.length !== 4 || !creds) return;
+    setOtpVerifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("auth-sms-verify", {
+        body: { phone: creds.phone, code },
+      });
+      if (error || !(data as any)?.success) {
+        toast.error((data as any)?.error || "رمز التحقق غير صحيح");
+        setOtpDigits(["", "", "", ""]);
+        otpInputsRef.current[0]?.focus();
+        return;
+      }
+      // OTP good — re-sign-in with the stashed password to materialize
+      // the session.
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: creds.email,
+        password: creds.password,
+      });
+      if (signInErr) {
+        toast.error("تعذر استئناف تسجيل الدخول");
+        return;
+      }
+      otpCredsRef.current = null;
+      resetLoginAttempts();
+      setOtpStep("idle");
+      toast.success("تم تسجيل الدخول بنجاح");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "حدث خطأ غير متوقع");
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
+
+  const handleOtpDigitChange = (index: number, raw: string) => {
+    const digit = raw.replace(/\D/g, "").slice(-1);
+    setOtpDigits((prev) => {
+      const next = [...prev];
+      next[index] = digit;
+      return next;
+    });
+    if (digit && index < 3) otpInputsRef.current[index + 1]?.focus();
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !otpDigits[index] && index > 0) {
+      otpInputsRef.current[index - 1]?.focus();
+    } else if (e.key === "Enter" && otpDigits.every(Boolean)) {
+      handleVerifyOtp();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4);
+    if (pasted.length === 4) {
+      e.preventDefault();
+      setOtpDigits(pasted.split(""));
+      otpInputsRef.current[3]?.focus();
+    }
+  };
+
+  const handleCancelOtp = async () => {
+    resetOtpState();
+    await supabase.auth.signOut().catch(() => {});
   };
 
   const extractFunctionMessage = (raw: string) => {
@@ -653,7 +836,56 @@ export default function Login() {
                 </Alert>
               )}
 
-              {pageView === "login" ? (
+              {otpStep === "otp" ? (
+                /* 4-digit OTP step — shown after the password is correct
+                   for an agency that has OTP-login enabled. The 4 boxes
+                   auto-advance and accept paste. Cancel signs out the
+                   transient session and returns to the login form. */
+                <>
+                  <div className="text-center lg:pt-4 lg:mb-6">
+                    <h1 className="text-2xl sm:text-4xl font-bold text-foreground">رمز التحقق</h1>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      أدخل الرمز المكوّن من 4 أرقام المرسل إلى هاتفك
+                    </p>
+                  </div>
+
+                  <div className="flex justify-center gap-3 pt-2" dir="ltr">
+                    {[0, 1, 2, 3].map((i) => (
+                      <input
+                        key={i}
+                        ref={(el) => { otpInputsRef.current[i] = el; }}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={otpDigits[i]}
+                        onChange={(e) => handleOtpDigitChange(i, e.target.value)}
+                        onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                        onPaste={i === 0 ? handleOtpPaste : undefined}
+                        disabled={otpVerifying}
+                        className="h-14 w-14 rounded-xl bg-[#f6f6f9] border border-transparent text-center text-2xl font-bold text-foreground transition-all focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/30 disabled:opacity-50"
+                      />
+                    ))}
+                  </div>
+
+                  <Button
+                    className="w-full h-12 text-sm gap-2 rounded-xl shadow-lg flex-row-reverse"
+                    onClick={handleVerifyOtp}
+                    disabled={otpVerifying || otpDigits.some((d) => !d)}
+                  >
+                    {otpVerifying ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5 rotate-180" />}
+                    {otpVerifying ? "جاري التحقق ..." : "تأكيد"}
+                  </Button>
+
+                  <button
+                    type="button"
+                    onClick={handleCancelOtp}
+                    disabled={otpVerifying}
+                    className="block w-full text-center text-xs sm:text-sm text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    إلغاء والعودة لتسجيل الدخول
+                  </button>
+                </>
+              ) : pageView === "login" ? (
                 <>
                   {/* Page heading — centered on both mobile and desktop.
                       `lg:pt-4` gives the desktop card extra top room

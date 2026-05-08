@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { crypto } from "https://deno.land/std@0.190.0/crypto/mod.ts";
+import { checkUsageLimit, logUsage } from "../_shared/usage-limits.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,11 +12,11 @@ interface SmsStartRequest {
   phone: string;
 }
 
-// Generate a 6-digit OTP
+// Generate a 4-digit OTP
 function generateOTP(): string {
   const array = new Uint32Array(1);
   crypto.getRandomValues(array);
-  return String(array[0] % 1000000).padStart(6, '0');
+  return String(array[0] % 10000).padStart(4, '0');
 }
 
 // Hash OTP for storage
@@ -309,6 +310,24 @@ serve(async (req) => {
       );
     }
 
+    // SMS quota gate: each OTP send consumes one SMS from the agent's
+    // monthly quota. If the agent is out of quota the client is told
+    // to fall back to password login instead of OTP — Login.tsx
+    // handles `error_code: "sms_quota_exhausted"` specifically.
+    if (agentId) {
+      const quota = await checkUsageLimit(supabase, agentId, "sms");
+      if (!quota.allowed) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error_code: "sms_quota_exhausted",
+            error: "تم استنفاد رصيد الرسائل النصية. يرجى استخدام كلمة المرور.",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    }
+
     // Generate OTP
     const otp = generateOTP();
     const otpHash = await hashOTP(otp);
@@ -350,6 +369,15 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: "فشل في إرسال الرسالة النصية" }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Each successful OTP send counts +1 against the agent's monthly
+    // SMS quota. Fire-and-forget — if bookkeeping fails it must not
+    // block the user from receiving the code they're already getting.
+    if (agentId) {
+      logUsage(supabase, agentId, "sms").catch((err) =>
+        console.warn("[auth-sms-start] logUsage failed:", err),
       );
     }
 

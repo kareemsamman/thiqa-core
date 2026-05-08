@@ -10,12 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
   Crown, CreditCard, Calendar, Clock, AlertTriangle, Check, X, MessageCircle,
   Sparkles, ShieldCheck, Pause, Info, ArrowUp, ArrowDown,
   Rocket, Shield, Trash2, XCircle, Loader2, Settings, BarChart3, Receipt, UserCog, Plus, ChevronDown,
-  ShoppingCart,
+  ShoppingCart, KeyRound,
 } from "lucide-react";
 import { AddQuotaDialog, type OverageUsageType } from "@/components/subscription/AddQuotaDialog";
 import { AgentPlanOverview, UsageRow } from "@/components/subscription/AgentPlanOverview";
@@ -235,6 +236,14 @@ export default function Subscription() {
   // false, the "الخطط المتاحة" PlanLadder below renders without prices
   // — same behaviour as the public /pricing page and the upgrade popup.
   const [hidePrices, setHidePrices] = useState(false);
+  // OTP-login toggle: only the agent owner (earliest agent_users row
+  // for this agent) can flip this. The owner check is server-side —
+  // is_agent_owner() resolves auth.uid() against agent_users — so any
+  // attempt to write through the dev tools still bounces off
+  // set_sms_otp_enabled's owner gate.
+  const [isAgentOwner, setIsAgentOwner] = useState(false);
+  const [smsOtpEnabled, setSmsOtpEnabled] = useState(false);
+  const [smsOtpSaving, setSmsOtpSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -248,6 +257,40 @@ export default function Subscription() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Owner check + current sms_otp_enabled value. The toggle row is
+  // hidden entirely for non-owners so other admins don't see a
+  // disabled control they can't use.
+  useEffect(() => {
+    if (!agentId) return;
+    let cancelled = false;
+    (async () => {
+      const [ownerRes, settingsRes] = await Promise.all([
+        (supabase as any).rpc("is_agent_owner"),
+        supabase.from("auth_settings").select("sms_otp_enabled").eq("agent_id", agentId).maybeSingle(),
+      ]);
+      if (cancelled) return;
+      setIsAgentOwner(ownerRes.data === true);
+      setSmsOtpEnabled(((settingsRes.data as any)?.sms_otp_enabled) === true);
+    })();
+    return () => { cancelled = true; };
+  }, [agentId]);
+
+  const handleToggleSmsOtp = async (next: boolean) => {
+    setSmsOtpSaving(true);
+    const prev = smsOtpEnabled;
+    setSmsOtpEnabled(next);
+    try {
+      const { error } = await (supabase as any).rpc("set_sms_otp_enabled", { p_enabled: next });
+      if (error) throw error;
+      toast.success(next ? "تم تفعيل تسجيل الدخول بـ OTP" : "تم تعطيل تسجيل الدخول بـ OTP");
+    } catch (err: any) {
+      setSmsOtpEnabled(prev);
+      toast.error(err?.message || "فشل تحديث الإعدادات");
+    } finally {
+      setSmsOtpSaving(false);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -1234,6 +1277,37 @@ export default function Subscription() {
               </h2>
               <p className="text-xs text-muted-foreground mt-1">إدارة حالة حسابك ومعلومات التواصل مع الدعم</p>
             </div>
+
+            {/* OTP-login toggle — owner of the agent only. When ON,
+                every user of this agency must enter a 4-digit code
+                sent via the agency's own SMS sender after their
+                password. Each send +1's the SMS quota; if quota is
+                drained, login falls back to password-only. */}
+            {isAgentOwner && (
+              <Card className="shadow-sm">
+                <CardContent className="py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <KeyRound className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold">تسجيل الدخول برمز OTP</h3>
+                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                        عند التفعيل، يُطلب من جميع مستخدمي الوكالة إدخال رمز مكوّن من 4 أرقام يُرسل عبر الرسائل النصية بعد كلمة المرور. كل رسالة تُحتسب من رصيد الرسائل الشهري لوكالتك.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="shrink-0 flex items-center gap-2">
+                    {smsOtpSaving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                    <Switch
+                      checked={smsOtpEnabled}
+                      onCheckedChange={handleToggleSmsOtp}
+                      disabled={smsOtpSaving}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Support card */}
             <Card className="shadow-sm">
