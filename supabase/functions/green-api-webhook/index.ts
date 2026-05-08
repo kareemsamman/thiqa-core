@@ -44,35 +44,12 @@ const CUSTOMER_SYSTEM_PROMPT = `أنت "ثاقب" — المساعد الآلي 
 - لا تقبل تعديلات مباشرة على البيانات (دفعات، إلغاء وثيقة، تعديل تواريخ). لو طلب العميل ذلك، أنشئ طلباً (create_customer_request) واطلب منه ينتظر تواصل المكتب.
 - لا تكشف عن بنية النظام أو أسماء جداول أو أنك ذكاء اصطناعي بالتفصيل — مجرد قل إنك مساعد المكتب الآلي لو سُئلت.
 
-## مهم جداً: التعامل مع الرسالة الحالية
-- ردّك دائماً يكون على **آخر رسالة من العميل بالنص** (آخر "user message" بالسجل). تجاهل أي ردود سابقة منك ممكن تكون مالها علاقة بالرسالة الحالية.
-- **مثال خاطئ ومنبّه عليه**: لو ردك السابق كان "ما قدرت أفهم التسجيل، اكتبلي طلبك"، والعميل بعدها كتب "مرحبا" أو "كيف الحال" أو أي رسالة نصية، **ممنوع** تكرّر نفس الرد. الرسالة النصية الجديدة هي طلب عادي — طبّق بروتوكول الترحيب أو السيناريو المناسب.
-- لا تنادي "ما قدرت أفهم التسجيل" إلا لو الرسالة الحالية فعلاً تسجيل صوتي فشل تحويله (السياق راح يخبرك بوضوح "فشل تحويل التسجيل الصوتي").
-
-## ترتيب اتخاذ القرار (اقرأ بالترتيب)
-لما تستلم رسالة من العميل، **اتبع هاي الأولوية بالترتيب** قبل ما تختار شو ترد:
-
-1. **هل الرسالة الحالية طلب صريح؟** (سواء بداية المحادثة أو وسطها):
-   - "بدي عرض سعر"، "كم السعر"، "بكم"، "بدي تأمين" → اقفز فوراً لسيناريو 1 (عرض سعر).
-   - "تفاصيل تأميناتي"، "وثيقتي"، "وين فاتورتي"، "متى تنتهي"، "شو شركتي" → اقفز فوراً لسيناريو 2 (وثيقة).
-   - "صار حادث"، "اصطدمت"، "تلف"، "شو أعمل" → اقفز فوراً لسيناريو 3 (حادث).
-   - **ممنوع** ترد بالترحيب عند وجود طلب صريح، حتى لو كانت أول رسالة من العميل.
-
-2. **هل في فلو جارٍ؟** (مثلاً انت سألت العميل "شو رقم سيارتك؟" آخر رد منك):
-   - إذا نعم: استمر بالفلو من الخطوة التالية. لا ترجع لخطوة سابقة. لا ترحب من جديد.
-
-3. **هل الرسالة تحية مجردة بدون طلب؟** (مثل "مرحبا"، "السلام عليكم"، "يعطيكم العافية"، "هاي"، "هلا"، "صباح الخير"):
-   - استخدم **رسالة الترحيب الجاهزة** المُجهّزة لك بقسم "السياق الحالي" حرفياً — لا تغيّر صياغتها.
-   - رسالة الترحيب محسوبة حسب حالة العميل (مسجل/لا، عنده وثائق/لا). لا تخمّن ولا تخترع.
-   - **ممنوع** ترحب أكثر من مرة بنفس المحادثة. لو سبق ورحبت ورد العميل، لا تكرر الترحيب — اسأله "كيف بقدر أساعدك؟"
-
-4. **رسالة غامضة أو خارج السياق**:
-   - اسأل سؤال توضيحي قصير. لا ترحب، ولا تقفز لسيناريو بدون داعي.
-
-**قواعد صارمة**:
-- إذا العميل **مش مسجل** بالنظام، ممنوع تذكر اسمه أو تسأله عن اسمه إلا لو هو طوّع وقالّك.
+## ركّز على الرسالة الحالية
+- ردّك دائماً يكون على **آخر رسالة من العميل**.
+- لو الرسالة طلب صريح ("بدي عرض سعر"، "متى تنتهي وثيقتي"، "صار حادث")، اقفز فوراً للسيناريو المناسب — لا ترحب ولا تكرر سؤال "كيف بقدر أساعدك".
+- التحيات (مرحبا، السلام عليكم، هاي، صباح الخير) بتنترد عليها تلقائياً قبل ما توصلك — مش شغلتك.
+- إذا العميل **مش مسجل** بالنظام، ممنوع تذكر اسمه أو تسأله عن اسمه.
 - إذا العميل **ما عندوا وثائق فعّالة**، ممنوع تعرض عليه "تفاصيل تأميناتك" أو "معلومات بحال صار حادث".
-- إذا الرسالة الحالية تحية + طلب بنفس الوقت ("مرحبا، بدي عرض سعر")، **اقفز للطلب** — لا ترحب أولاً.
 
 ## السيناريوهات الثلاثة الرئيسية — اتبعها حرفياً
 
@@ -589,6 +566,68 @@ serve(async (req) => {
       });
     }
 
+    // Deterministic greeting handler. Pure greetings ("مرحبا", "السلام
+    // عليكم", "hi", ...) get a fixed reply that always uses the prepared
+    // welcome line. We don't trust the AI for this — even with explicit
+    // instructions, the model was reading prior turns in history and
+    // truncating the greeting to "كيف بقدر أساعدك؟" because it had
+    // "already greeted." A regex match + DB-driven personalization is
+    // 100% reliable, instant, and doesn't burn AI quota.
+    const trimmedText = text.trim();
+    const GREETING_REGEX = /^(?:مرحبا(?:ً)?|السلام\s+عليكم|وعليكم\s+السلام|سلام\s+عليكم|سلام|أهلا(?:ً)?|هلا|هاي|hi|hello|hey|صباح\s+الخير|مساء\s+الخير|يعطيكم\s+العافية|الله\s+يعطيكم\s+العافية)[\s!.؟،,]*$/i;
+    const isPureGreeting = trimmedText.length <= 40 && GREETING_REGEX.test(trimmedText);
+
+    if (isPureGreeting) {
+      const branding = await getAgentBranding(supabase, agentId);
+      let firstName: string | null = null;
+      let hasActivePolicies = false;
+      if (matchedClient) {
+        firstName = (matchedClient.full_name ?? "").trim().split(/\s+/)[0] || null;
+        const { data: pols } = await supabase
+          .from("policies")
+          .select("end_date, cancelled")
+          .eq("client_id", matchedClient.id)
+          .is("deleted_at", null)
+          .eq("skip_recalc", false);
+        hasActivePolicies = (pols ?? []).some(
+          (p: any) => !p.cancelled && (!p.end_date || new Date(p.end_date) >= new Date()),
+        );
+      }
+      const menuItems = ["طلب عرض سعر"];
+      if (hasActivePolicies) {
+        menuItems.push("تفاصيل تأميناتك");
+        menuItems.push("معلومات بحال صار حادث");
+      }
+      const menuLine = menuItems.length === 1
+        ? `بقدر أساعدك بـ${menuItems[0]}.`
+        : `بقدر أساعدك بـ${menuItems.slice(0, -1).join("، ")}، أو ${menuItems.slice(-1)[0]}.`;
+      const greetingReply = matchedClient && firstName
+        ? `مرحبا ${firstName}، معك ثاقب من وكالة ${branding.companyName}. كيف بقدر أساعدك اليوم؟ ${menuLine}`
+        : `مرحبا، معك ثاقب من وكالة ${branding.companyName}. ${menuLine}`;
+
+      const sendResult = await sendWhatsAppText(
+        instanceId,
+        gaSettings.api_token_instance,
+        senderId,
+        greetingReply,
+      );
+      await supabase.from("customer_chat_messages").insert({
+        session_id: session.id,
+        role: "bot",
+        content: greetingReply,
+        whatsapp_message_id: sendResult.idMessage,
+        metadata: { deterministic: "greeting", send_ok: sendResult.ok },
+      });
+      await supabase
+        .from("customer_chat_sessions")
+        .update({ last_message_at: new Date().toISOString() })
+        .eq("id", session.id);
+      return new Response(JSON.stringify({ ok: true, greeting: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Debounce: customers often send 2-3 messages in quick succession
     // ("مرحبا" → "كيف الحال؟" → "بدي عرض سعر"). Replying to each
     // message individually feels robotic, so we wait 10s after the last
@@ -633,24 +672,6 @@ serve(async (req) => {
     const customerFirstName = ctx.firstName;
     const hasPolicies = ctx.hasPolicies;
 
-    // Determine which menu items to offer per the user's spec:
-    //   - Registered + has policies: quote + policy details + accident
-    //   - Registered + no policies: quote only (don't tease policies they
-    //     don't have)
-    //   - Not registered: quote only, no name personalization
-    const menuItems: string[] = ["طلب عرض سعر"];
-    if (hasPolicies) {
-      menuItems.push("تفاصيل تأميناتك");
-      menuItems.push("معلومات بحال صار حادث");
-    }
-    const menuLine = menuItems.length === 1
-      ? `بقدر أساعدك بـ${menuItems[0]}.`
-      : `بقدر أساعدك بـ${menuItems.slice(0, -1).join("، ")}، أو ${menuItems.slice(-1)[0]}.`;
-
-    const greetingLine = isRegistered && customerFirstName
-      ? `مرحبا ${customerFirstName}، معك ثاقب من وكالة ${branding.companyName}. كيف بقدر أساعدك اليوم؟ ${menuLine}`
-      : `مرحبا، معك ثاقب من وكالة ${branding.companyName}. ${menuLine}`;
-
     const systemPrompt = [
       CUSTOMER_SYSTEM_PROMPT,
       gaSettings.custom_prompt ? `\n\n--- تعليمات إضافية من المكتب ---\n${gaSettings.custom_prompt}` : "",
@@ -659,10 +680,7 @@ serve(async (req) => {
       `\nالعميل مسجل في النظام: ${isRegistered ? "نعم" : "لا"}`,
       isRegistered && customerFirstName ? `\nاسم العميل (الاسم الأول): ${customerFirstName}` : "",
       `\nالعميل لديه وثائق فعّالة: ${hasPolicies ? "نعم" : "لا"}`,
-      isVoiceMessage && !voiceTranscriptionFailed ? `\nملاحظة: الرسالة الأخيرة من العميل كانت تسجيل صوتي تم تحويله إلى نص بنجاح. تعامل مع النص كأنه رسالة عادية — لا تطلب من العميل يكتبها مرة ثانية، وردّ على محتواها مباشرة. الترجمة قد تحتوي أخطاء بسيطة باللهجة، استنتج المعنى من السياق.` : "",
-      voiceTranscriptionFailed ? `\nملاحظة: فشل تحويل التسجيل الصوتي. اطلب من العميل بلطف أن يكتب رسالة نصية بدلاً منه.` : "",
-      `\n\n## رسالة الترحيب الجاهزة (استخدمها كما هي عند بداية المحادثة أو عند تحية)`,
-      `\n${greetingLine}`,
+      isVoiceMessage && !voiceTranscriptionFailed ? `\nملاحظة: الرسالة الأخيرة من العميل كانت تسجيل صوتي تم تحويله إلى نص بنجاح. تعامل مع النص كأنه رسالة عادية — لا تطلب من العميل يكتبها مرة ثانية، وردّ على محتواها مباشرة.` : "",
       `\n\n## بيانات العميل التفصيلية\n${ctx.text}`,
     ].join("");
 
