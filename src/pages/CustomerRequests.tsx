@@ -2,12 +2,13 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
-import { Loader2, RefreshCw, CheckCircle2, Phone, Inbox, Clock, FileText, HelpCircle, Sparkles, MessageCircle, UserCog, Trash2, Calendar } from "lucide-react";
+import { Loader2, RefreshCw, CheckCircle2, Phone, Inbox, Clock, FileText, HelpCircle, Sparkles, MessageCircle, UserCog, Trash2, Calendar, Search, X } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -43,6 +44,15 @@ const REQUEST_TYPE_META: Record<string, { label: string; icon: typeof FileText }
   help: { label: "طلب مساعدة", icon: HelpCircle },
   support: { label: "طلب مساعدة", icon: HelpCircle },
   manager: { label: "طلب التواصل مع الإدارة", icon: UserCog },
+};
+
+// Filter groups: "help" and "support" both surface as "طلب مساعدة" in
+// the UI so the dropdown collapses them under one option that matches
+// either underlying request_type value.
+const REQUEST_TYPE_GROUPS: Record<string, string[]> = {
+  quote: ["quote"],
+  help: ["help", "support"],
+  manager: ["manager"],
 };
 
 // Israeli mobile numbers come in from WhatsApp as "972XXXXXXXXX". Drop
@@ -98,6 +108,8 @@ function playNotificationChime() {
 export default function CustomerRequests() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [deleteTarget, setDeleteTarget] = useState<CustomerRequest | null>(null);
 
   const { data: requests, isLoading, refetch, isFetching } = useQuery({
@@ -114,9 +126,29 @@ export default function CustomerRequests() {
 
   const filtered = useMemo(() => {
     if (!requests) return [];
-    if (statusFilter === "all") return requests;
-    return requests.filter((r) => r.status === statusFilter);
-  }, [requests, statusFilter]);
+    // Free-text query: digits are matched against the normalized phone
+    // number (strip "972"/"0" so "525143581" hits both "0525..." and
+    // "972525..."), while non-digit input matches anywhere in the title
+    // or content (case-insensitive). Searching "קיה" finds Hebrew car
+    // descriptions, searching "525" finds the phone — same input box.
+    const q = searchQuery.trim();
+    const qDigits = q.replace(/\D/g, "");
+    const qLower = q.toLowerCase();
+    return requests.filter((r) => {
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (typeFilter !== "all") {
+        const group = REQUEST_TYPE_GROUPS[typeFilter];
+        if (group && !group.includes(r.request_type)) return false;
+      }
+      if (!q) return true;
+      const phoneDigits = (r.phone_number || "").replace(/\D/g, "");
+      const phoneMatch = qDigits.length > 0 && phoneDigits.includes(qDigits);
+      const textMatch =
+        r.title?.toLowerCase().includes(qLower) ||
+        r.content?.toLowerCase().includes(qLower);
+      return phoneMatch || textMatch;
+    });
+  }, [requests, statusFilter, typeFilter, searchQuery]);
 
   const stats = useMemo(() => {
     const all = requests ?? [];
@@ -232,9 +264,39 @@ export default function CustomerRequests() {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="بحث برقم العميل أو نص الطلب (مثال: קיה أو 0525)"
+              className="pr-9 pl-9"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title="مسح البحث"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="w-full sm:w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الأنواع</SelectItem>
+              <SelectItem value="quote">عرض سعر</SelectItem>
+              <SelectItem value="help">طلب مساعدة</SelectItem>
+              <SelectItem value="manager">طلب الإدارة</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-44">
+            <SelectTrigger className="w-full sm:w-44">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -244,7 +306,13 @@ export default function CustomerRequests() {
               <SelectItem value="closed">مغلق</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="shrink-0"
+          >
             <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
           </Button>
         </div>
