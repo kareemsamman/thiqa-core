@@ -786,8 +786,10 @@ function generateReportHtml(args: GenerateReportArgs): string {
   const transferPortionFor = (p: any) => transferAdjustmentByNewPolicyId[p.id]?.amount || 0;
   const officeCommissionFor = (p: any) => Math.max(0, (p.office_commission || 0) - transferPortionFor(p));
   const lineTotalFor = (p: any) => (p.insurance_price || 0) + officeCommissionFor(p);
+  // RTL period: end-date on the left, start-date on the right, arrow ←
+  // pointing in the Arabic reading direction (right-to-left).
   const periodFor = (p: any) => (p.start_date && p.end_date)
-    ? `${formatDate(p.start_date)} → ${formatDate(p.end_date)}`
+    ? `${formatDate(p.end_date)} ← ${formatDate(p.start_date)}`
     : '-';
 
   // Shared renderer for the standalone "عمولة التحويل" row. Used after
@@ -1805,8 +1807,10 @@ function generateReportHtml(args: GenerateReportArgs): string {
 
       /* Tables: cells overflow on narrow viewports because of inline column
          widths (170px / 120px) and white-space:nowrap on dates/amounts.
-         Drop the fixed widths, shrink padding/fonts, and let the long
-         strings wrap so nothing pokes past the table border. */
+         Drop the fixed widths and shrink padding/fonts so المعاملات /
+         cars / drivers tables fit inside narrow viewports. Word-break is
+         only allowed on text cells — numeric/date/amount cells stay
+         intact so prices don't render character-by-character. */
       .data-table, .drivers-table, .payments { table-layout: auto; width: 100%; }
       .data-table th, .drivers-table th, .payments th { width: auto !important; }
       .data-table thead th,
@@ -1818,6 +1822,10 @@ function generateReportHtml(args: GenerateReportArgs): string {
         padding: 6px 5px;
         font-size: 11px;
         letter-spacing: 0.3px;
+      }
+      .data-table tbody td:not(.num):not(.tabular):not(.period),
+      .drivers-table tbody td:not(.num):not(.tabular),
+      .payments tbody td:not(.num):not(.date):not(.amount) {
         word-break: break-word;
         overflow-wrap: anywhere;
       }
@@ -1829,7 +1837,6 @@ function generateReportHtml(args: GenerateReportArgs): string {
         white-space: normal;
         font-size: 10.5px;
       }
-      .items tbody td.num { white-space: normal; }
       .items tbody .item-title { font-size: 12px; }
       .items tbody .item-meta,
       .items tbody .item-commission { font-size: 10.5px; }
