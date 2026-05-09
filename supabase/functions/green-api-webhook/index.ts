@@ -1087,6 +1087,63 @@ const POLICY_TRIGGERS = [
   "معاملتي",
 ];
 
+// ─────────────────────────────────────────────────────────────────────
+// Accident-info handler
+// ─────────────────────────────────────────────────────────────────────
+//
+// One-shot informational reply when a customer asks what to do after a
+// car accident. No state machine — the bot returns the agency's
+// instructions in one message and ends. Customers who want to actually
+// open a claim are told to come to the office, since the claim file
+// requires photos + the other driver's details + signatures that aren't
+// practical to collect over WhatsApp.
+
+const ACCIDENT_TRIGGERS = [
+  "حادث",
+  "صار حادث",
+  "وقع حادث",
+  "بحال حادث",
+  "بحالة حادث",
+  "إذا صار حادث",
+  "اذا صار حادث",
+  "إذا وقع حادث",
+  "اذا وقع حادث",
+  "تبليغ حادث",
+  "بلاغ حادث",
+  "حدثت حادثة",
+  "صدمت",
+  "اصطدمت",
+];
+
+const ACCIDENT_INFO_MESSAGE =
+  "بحالة وقوع حادث، اتبع هالخطوات لو سمحت:\n\n" +
+  "١. صوّر مكان الحادث وكل المركبات اللي اشتركت فيه بشكل واضح ومن أكثر من زاوية.\n" +
+  "٢. خذ معلومات السائق الثاني — الاسم، رقم الهوية، رقم رخصة السواقة، رقم السيارة، وشركة التأمين تبعته.\n" +
+  "٣. إذا الحادث صار بالضفة الغربية، لازم تتواصل مع شركة التأمين والشرطة الفلسطينية بأسرع وقت.\n" +
+  "٤. التبليغ عن الحادث لازم يصير خلال ٤٨ ساعة من وقوعه.\n\n" +
+  "وعشان نقدر نفتحلك ملف الحادث رسمياً، لازم تيجي على المكتب لتعبي الطلب وتسلّم الصور والمعلومات. " +
+  "احكيلي إيمتى يناسبك وبنرتبلك موعد.";
+
+async function handleAccidentInfo(ctx: QuoteFlowCtx) {
+  const sendResult = await sendWhatsAppText(
+    ctx.instanceId,
+    ctx.apiToken,
+    ctx.senderId,
+    ACCIDENT_INFO_MESSAGE,
+  );
+  await ctx.supabase.from("customer_chat_messages").insert({
+    session_id: ctx.sessionId,
+    role: "bot",
+    content: ACCIDENT_INFO_MESSAGE,
+    whatsapp_message_id: sendResult.idMessage,
+    metadata: { deterministic: "accident_info", send_ok: sendResult.ok },
+  });
+  await ctx.supabase
+    .from("customer_chat_sessions")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", ctx.sessionId);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") {
@@ -1447,13 +1504,15 @@ serve(async (req) => {
     const normalizedText = arNormalize(trimmedText);
     const matchesQuoteTrigger = QUOTE_TRIGGERS.some((t) => normalizedText.includes(arNormalize(t)));
     const matchesPolicyTrigger = POLICY_TRIGGERS.some((t) => normalizedText.includes(arNormalize(t)));
+    const matchesAccidentTrigger = ACCIDENT_TRIGGERS.some((t) => normalizedText.includes(arNormalize(t)));
 
     // Escape hatch: a customer stuck mid-flow can break out by sending a
-    // pure greeting, a fresh quote-trigger, or a fresh policy-trigger
-    // phrase. Without this, a wrong turn traps them inside the active
-    // flow (e.g. car lookup failed → bot is now in awaiting_type and
-    // any plate number reads as a bad type answer).
-    const wantsReset = isPureGreeting || matchesQuoteTrigger || matchesPolicyTrigger;
+    // pure greeting, a fresh quote-trigger, a fresh policy-trigger, or
+    // an accident-trigger phrase. Without this, a wrong turn traps them
+    // inside the active flow (e.g. car lookup failed → bot is now in
+    // awaiting_type and any plate number reads as a bad type answer).
+    const wantsReset =
+      isPureGreeting || matchesQuoteTrigger || matchesPolicyTrigger || matchesAccidentTrigger;
 
     // (1a) Already inside a quote flow → run the state machine, unless
     // the customer is explicitly trying to restart.
@@ -1505,6 +1564,17 @@ serve(async (req) => {
     if (matchesPolicyTrigger) {
       await startPolicyFlow(quoteCtx);
       return new Response(JSON.stringify({ ok: true, deterministic: "policy_entry" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // (5) Accident-info — one-shot reply with the agency's instructions
+    // for what to do after a car accident. No state machine; the answer
+    // tells the customer to come into the office to file the claim.
+    if (matchesAccidentTrigger) {
+      await handleAccidentInfo(quoteCtx);
+      return new Response(JSON.stringify({ ok: true, deterministic: "accident_info" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
