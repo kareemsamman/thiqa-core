@@ -144,10 +144,12 @@ export function AddSettlementDialog({
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<PaymentLine[]>([makeLine('cash')]);
   const [saving, setSaving] = useState(false);
-  // تقسيط — split a single amount into N cheque lines spaced monthly.
+  // تقسيط — split a single amount into N lines spaced monthly.
+  // The user picks the line type (cash/cheque/customer_cheque/bank_transfer/visa).
   const [splitAmount, setSplitAmount] = useState('');
   const [splitCount, setSplitCount] = useState(2);
   const [splitOpen, setSplitOpen] = useState(false);
+  const [splitType, setSplitType] = useState<PaymentLineType>('cheque');
   // Lazy-loaded cheque scanner — keeps the dialog bundle small.
   const [scannerOpen, setScannerOpen] = useState(false);
   const [ScannerComp, setScannerComp] = useState<React.ComponentType<{
@@ -165,6 +167,7 @@ export function AddSettlementDialog({
     setLines([makeLine('cash')]);
     setSplitAmount('');
     setSplitCount(2);
+    setSplitType('cheque');
   }, [open, defaultEntityId, mode, kind]);
 
   const total = useMemo(
@@ -194,8 +197,10 @@ export function AddSettlementDialog({
       return [...stripped, makeLine(t)];
     });
 
-  // تقسيط — N equal cheque lines spaced monthly. Uses today's date as
-  // the issue and the i-th month as the due, mirroring the wallet flow.
+  // تقسيط — N equal lines of the chosen type spaced monthly. For
+  // cheque lines we set issue=today and due=month i+1 (matching wallet).
+  // For non-cheque lines we set payment_date=month i+1 — first installment
+  // is one month out, mirroring how postdated cheques are scheduled.
   const handleSplit = () => {
     const amount = parseFloat(splitAmount);
     const count = Math.max(2, Math.min(24, Math.floor(splitCount)));
@@ -206,12 +211,20 @@ export function AddSettlementDialog({
     const per = Math.round((amount / count) * 100) / 100;
     const issued = today();
     const next = Array.from({ length: count }).map((_, i) => {
-      const due = format(addMonths(new Date(), i + 1), 'yyyy-MM-dd');
+      const monthly = format(addMonths(new Date(), i + 1), 'yyyy-MM-dd');
+      const base = makeLine(splitType);
+      if (splitType === 'cheque') {
+        return {
+          ...base,
+          amount: per,
+          cheque_issue_date: issued,
+          cheque_due_date: monthly,
+        };
+      }
       return {
-        ...makeLine('cheque'),
+        ...base,
         amount: per,
-        cheque_issue_date: issued,
-        cheque_due_date: due,
+        payment_date: monthly,
       };
     });
     setLines((prev) => {
@@ -221,7 +234,7 @@ export function AddSettlementDialog({
     setSplitAmount('');
     setSplitCount(2);
     setSplitOpen(false);
-    toast.success(`أُضيفت ${count} دفعات شيكات`);
+    toast.success(`أُضيفت ${count} دفعات`);
   };
 
   const openScanner = async () => {
@@ -466,6 +479,24 @@ export function AddSettlementDialog({
                     </PopoverTrigger>
                     <PopoverContent dir="rtl" className="w-72 space-y-3" align="end">
                       <div className="space-y-1.5">
+                        <Label className="text-xs">نوع الدفعة</Label>
+                        <Select
+                          value={splitType}
+                          onValueChange={(v) => setSplitType(v as PaymentLineType)}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(Object.keys(PAYMENT_TYPE_LABEL) as PaymentLineType[]).map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {PAYMENT_TYPE_LABEL[t]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
                         <Label className="text-xs">المبلغ الإجمالي</Label>
                         <Input
                           type="number"
@@ -487,7 +518,7 @@ export function AddSettlementDialog({
                         />
                       </div>
                       <Button onClick={handleSplit} className="w-full" size="sm">
-                        إنشاء {Math.max(2, Math.min(24, Math.floor(splitCount)))} شيكات
+                        إنشاء {Math.max(2, Math.min(24, Math.floor(splitCount)))} دفعات
                       </Button>
                     </PopoverContent>
                   </Popover>

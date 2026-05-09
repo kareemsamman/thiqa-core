@@ -119,6 +119,7 @@ export function AddExpenseDialog({ open, onOpenChange, onSaved }: Props) {
   const [splitAmount, setSplitAmount] = useState('');
   const [splitCount, setSplitCount] = useState(2);
   const [splitOpen, setSplitOpen] = useState(false);
+  const [splitType, setSplitType] = useState<PaymentLineType>('cheque');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [ScannerComp, setScannerComp] = useState<React.ComponentType<{
     open: boolean;
@@ -136,6 +137,7 @@ export function AddExpenseDialog({ open, onOpenChange, onSaved }: Props) {
     setLines([makeLine('cash')]);
     setSplitAmount('');
     setSplitCount(2);
+    setSplitType('cheque');
   }, [open]);
 
   const total = useMemo(
@@ -167,19 +169,27 @@ export function AddExpenseDialog({ open, onOpenChange, onSaved }: Props) {
     const per = Math.round((amount / count) * 100) / 100;
     const issued = today();
     const next = Array.from({ length: count }).map((_, i) => {
-      const due = format(addMonths(new Date(), i + 1), 'yyyy-MM-dd');
+      const monthly = format(addMonths(new Date(), i + 1), 'yyyy-MM-dd');
+      const base = makeLine(splitType);
+      if (splitType === 'cheque') {
+        return {
+          ...base,
+          amount: per,
+          cheque_issue_date: issued,
+          cheque_due_date: monthly,
+        };
+      }
       return {
-        ...makeLine('cheque'),
+        ...base,
         amount: per,
-        cheque_issue_date: issued,
-        cheque_due_date: due,
+        payment_date: monthly,
       };
     });
     setLines((prev) => [...prev, ...next]);
     setSplitAmount('');
     setSplitCount(2);
     setSplitOpen(false);
-    toast.success(`أُضيفت ${count} دفعات شيكات`);
+    toast.success(`أُضيفت ${count} دفعات`);
   };
 
   const openScanner = async () => {
@@ -400,6 +410,24 @@ export function AddExpenseDialog({ open, onOpenChange, onSaved }: Props) {
                     </PopoverTrigger>
                     <PopoverContent dir="rtl" className="w-72 space-y-3" align="end">
                       <div className="space-y-1.5">
+                        <Label className="text-xs">نوع الدفعة</Label>
+                        <Select
+                          value={splitType}
+                          onValueChange={(v) => setSplitType(v as PaymentLineType)}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(Object.keys(PAYMENT_TYPE_LABEL) as PaymentLineType[]).map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {PAYMENT_TYPE_LABEL[t]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
                         <Label className="text-xs">المبلغ الإجمالي</Label>
                         <Input
                           type="number"
@@ -421,7 +449,7 @@ export function AddExpenseDialog({ open, onOpenChange, onSaved }: Props) {
                         />
                       </div>
                       <Button onClick={handleSplit} className="w-full" size="sm">
-                        إنشاء {Math.max(2, Math.min(24, Math.floor(splitCount)))} شيكات
+                        إنشاء {Math.max(2, Math.min(24, Math.floor(splitCount)))} دفعات
                       </Button>
                     </PopoverContent>
                   </Popover>
