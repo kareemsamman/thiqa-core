@@ -7260,6 +7260,13 @@ export type Database = {
       }
       get_my_agent_id: { Args: never; Returns: string }
       get_my_branch_id: { Args: never; Returns: string }
+      get_otp_login_state: {
+        Args: never
+        Returns: {
+          otp_required: boolean
+          phone: string
+        }[]
+      }
       get_payment_provider_enabled: {
         Args: { p_provider: string }
         Returns: boolean
@@ -7348,6 +7355,7 @@ export type Database = {
       }
       is_active_user: { Args: { _user_id: string }; Returns: boolean }
       is_agent_active: { Args: { _user_id: string }; Returns: boolean }
+      is_agent_owner: { Args: never; Returns: boolean }
       is_my_agent_admin: { Args: never; Returns: boolean }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       list_pbx_extensions_safe: {
@@ -7826,6 +7834,7 @@ export type Database = {
         Args: { p_agent_id: string; p_plan: string }
         Returns: undefined
       }
+      set_sms_otp_enabled: { Args: { p_enabled: boolean }; Returns: boolean }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       start_impersonation: { Args: { p_agent_id: string }; Returns: undefined }
