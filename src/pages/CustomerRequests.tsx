@@ -4,6 +4,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
 import { Loader2, RefreshCw, CheckCircle2, Phone, Inbox, Clock, FileText, HelpCircle, Sparkles, MessageCircle, UserCog, Trash2, Calendar } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -128,22 +129,12 @@ export default function CustomerRequests() {
 
   return (
     <MainLayout>
-      <div className="p-4 md:p-6 space-y-6" dir="rtl">
-        {/* Header */}
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-primary/10 p-2.5">
-              <Sparkles className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">طلبات الذكاء الاصطناعي</h1>
-              <p className="text-sm text-muted-foreground">
-                طلبات العملاء القادمة من بوت واتساب — عروض الأسعار، طلبات المساعدة، وغيرها
-              </p>
-            </div>
-          </div>
-        </div>
+      <Header
+        title="طلبات الذكاء الاصطناعي"
+        subtitle="طلبات العملاء القادمة من بوت واتساب — عروض الأسعار، طلبات المساعدة، وغيرها"
+      />
 
+      <div className="p-3 md:p-6 space-y-6" dir="rtl">
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard
