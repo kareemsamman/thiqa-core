@@ -44,7 +44,7 @@ export function SigningCheckDialog({
   onStateChange,
 }: SigningCheckDialogProps) {
   const { toast } = useToast();
-  const { locked: smsLocked, loading: smsLoading, guardSend } = useSmsLock();
+  const { locked: smsLocked, loading: smsLoading, openUpgradeDialog: openSmsUpgrade, guardSend } = useSmsLock();
   const [state, setState] = useState<DialogState>("check");
   const [sending, setSending] = useState(false);
   // Tracks the resolved client id — may differ from the prop when a new client
@@ -207,20 +207,25 @@ export function SigningCheckDialog({
               </Button>
               <Button
                 size="sm"
-                onClick={handleSend}
+                onClick={() => {
+                  if (smsLoading) return;
+                  if (smsLocked) { openSmsUpgrade(); return; }
+                  handleSend();
+                }}
                 disabled={!canSend || sending || smsLoading}
                 className="relative gap-2"
               >
                 {sending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
-                ) : smsLocked ? (
-                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-white text-amber-600 ring-2 ring-amber-500">
-                    <Lock className="h-2.5 w-2.5" weight="fill" />
-                  </span>
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
                 إرسال رسالة
+                {smsLocked && (
+                  <span className="absolute -top-1 -left-1 h-4 w-4 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                    <Lock className="h-2.5 w-2.5" weight="fill" />
+                  </span>
+                )}
               </Button>
             </div>
           </>
