@@ -154,10 +154,15 @@ Deno.serve(async (req) => {
       console.error("Role assignment error:", roleError);
     }
 
-    // Initialize feature flags for trial (all features enabled)
+    // Initialize feature flags from the free_trial plan's default_features.
+    // Must match the plan_key the agent was inserted with above —
+    // set_features_for_plan looks up subscription_plans by plan_key and
+    // returns silently (no flags seeded) if the key doesn't exist.
+    // Using "trial" here was a regression after migration
+    // 20260503120000 made the RPC source-of-truth-driven.
     await adminClient.rpc("set_features_for_plan", {
       p_agent_id: agentData.id,
-      p_plan: "trial",
+      p_plan: "free_trial",
     }).then(({ error: featErr }: { error: any }) => {
       if (featErr) console.error("Feature flags init error:", featErr);
     });
