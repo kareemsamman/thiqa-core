@@ -44,6 +44,7 @@ export interface ReportContext {
 
 interface CompanyTotals {
   insuranceSum: number;
+  dueGrossSum: number;
   dueSum: number;
   profitSum: number;
   disbursedSum: number;
@@ -57,11 +58,12 @@ interface BrokerTotals {
   receivedSum: number;
 }
 
-/** Five KPI pills mirroring the on-screen company summary bar. */
+/** KPI pills mirroring the on-screen company summary bar. */
 export function buildCompanyStats(totals: CompanyTotals): ReportPayload['stats'] {
   return [
     { label: 'إجمالي سعر التأمين', value: fmtMoney(totals.insuranceSum), tone: 'primary' },
-    { label: 'المستحق للشركات', value: fmtMoney(totals.dueSum), tone: 'destructive' },
+    { label: 'المستحق للشركات (إجمالي)', value: fmtMoney(totals.dueGrossSum), tone: 'destructive' },
+    { label: 'المستحق للشركات (صافي)', value: fmtMoney(totals.dueSum), tone: 'destructive' },
     { label: 'الأرباح + العمولات', value: fmtMoney(totals.profitSum), tone: 'success' },
     { label: 'مدفوع للشركات', value: fmtMoney(totals.disbursedSum), tone: 'amber' },
     {

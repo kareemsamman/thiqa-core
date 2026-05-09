@@ -250,33 +250,64 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
     const profitOnly = overlayed.reduce((s, r) => s + Number(r.profit || 0), 0);
     const commissionOnly = overlayed.reduce((s, r) => s + Number(r.office_commission || 0), 0);
     const profitSum = profitOnly + commissionOnly;
+    // Returns adjustments — a cancelled policy with payed_for_company
+    // entered as a negative number represents money the company refunds
+    // to us (per the QuickIssuanceDialog convention). Summing returns'
+    // payed_for_company directly into totalDue therefore reduces the
+    // net debt naturally. Same idea for profit/commission on returns —
+    // they fold into الأرباح الصافية so the user sees their effect.
+    const returnsDueDelta = returns.reduce(
+      (s, r) => s + Number(r.payed_for_company || 0),
+      0,
+    );
+    const returnsProfitDelta = returns.reduce(
+      (s, r) => s + Number(r.profit || 0) + Number(r.office_commission || 0),
+      0,
+    );
     // Disbursed = money we actually paid the companies (outgoing
     // settlements only, refused excluded).
     const disbursedSum = companySettlements
       .filter((r) => !r.refused)
       .reduce((s, r) => s + Number(r.total_amount || 0), 0);
-    // Net "still owe the companies" — what the user actually wants to
-    // see on the pill: today's debt, not the lifetime gross.
-    const dueSum = Math.max(0, totalDue - disbursedSum);
-    // Net profit = (companies profit + commission + brokers profit) −
-    // expenses. issuancesActive already excludes cancelled policies, so
-    // the cancellation rule ("no profit on cancelled") falls out
-    // automatically. brokerProfit also derives from data.issuances which
-    // is post-cancelled-filter.
-    const netProfitSum = profitSum + brokerProfit - data.expensesTotal;
+    // Gross "owed to companies" — lifetime obligation across active
+    // policies, after netting in the returns delta but BEFORE we
+    // subtract what we've already paid them.
+    const dueGrossSum = Math.max(0, totalDue + returnsDueDelta);
+    // Net "still owe the companies" — today's debt, after also
+    // subtracting outgoing settlements.
+    const dueSum = Math.max(0, totalDue + returnsDueDelta - disbursedSum);
+    // Net profit = (companies profit + commission + brokers profit +
+    // returns adjustments) − expenses. issuancesActive already excludes
+    // cancelled policies, so the cancellation rule ("no profit on
+    // cancelled") still holds for active rows; returnsProfitDelta then
+    // re-adds whatever ربح/خسارة the user explicitly logged on the
+    // مرتجع row. brokerProfit derives from data.issuances which is
+    // post-cancelled-filter.
+    const netProfitSum =
+      profitSum + brokerProfit + returnsProfitDelta - data.expensesTotal;
     return {
       insuranceSum,
       dueSum,
+      dueGrossSum,
       profitSum,
       disbursedSum,
       totalDue,
+      returnsDueDelta,
+      returnsProfitDelta,
       profitOnly,
       commissionOnly,
       brokerProfit,
       netProfitSum,
       activeCount: overlayed.length,
     };
-  }, [issuancesActive, companySettlements, editLocal, data.expensesTotal, brokerProfit]);
+  }, [
+    issuancesActive,
+    returns,
+    companySettlements,
+    editLocal,
+    data.expensesTotal,
+    brokerProfit,
+  ]);
 
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
@@ -350,14 +381,48 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
           />
           <Sep />
           <SummaryPill
-            label="المستحق للشركات"
+            label="المستحق للشركات (إجمالي)"
+            value={fmt(totals.dueGrossSum)}
+            tone="destructive"
+            tooltip={
+              <BreakdownLines
+                title="المستحق للشركات (إجمالي)"
+                lines={[
+                  { label: 'إجمالي مستحق من البوالص النشطة', value: fmt(totals.totalDue) },
+                  {
+                    label: 'تعديل المرتجعات',
+                    value:
+                      totals.returnsDueDelta >= 0
+                        ? `+ ${fmt(totals.returnsDueDelta)}`
+                        : `− ${fmt(Math.abs(totals.returnsDueDelta))}`,
+                  },
+                  { label: 'الإجمالي قبل المدفوعات', value: fmt(totals.dueGrossSum), strong: true },
+                  {
+                    label: 'ملاحظة',
+                    value: 'لا يطرح ما تم دفعه — راجع pill "صافي"',
+                    muted: true,
+                  },
+                ]}
+              />
+            }
+          />
+          <Sep />
+          <SummaryPill
+            label="المستحق للشركات (صافي)"
             value={fmt(totals.dueSum)}
             tone="destructive"
             tooltip={
               <BreakdownLines
-                title="المستحق للشركات (الصافي)"
+                title="المستحق للشركات (صافي)"
                 lines={[
-                  { label: 'إجمالي مستحق', value: fmt(totals.totalDue) },
+                  { label: 'إجمالي مستحق من البوالص النشطة', value: fmt(totals.totalDue) },
+                  {
+                    label: 'تعديل المرتجعات',
+                    value:
+                      totals.returnsDueDelta >= 0
+                        ? `+ ${fmt(totals.returnsDueDelta)}`
+                        : `− ${fmt(Math.abs(totals.returnsDueDelta))}`,
+                  },
                   { label: 'مدفوع للشركات', value: `− ${fmt(totals.disbursedSum)}` },
                   { label: 'المتبقي', value: fmt(totals.dueSum), strong: true },
                 ]}
@@ -410,13 +475,15 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
                   { label: 'ربح الشركات', value: fmt(totals.profitOnly) },
                   { label: 'عمولة المكتب', value: `+ ${fmt(totals.commissionOnly)}` },
                   { label: 'ربح الوسطاء', value: `+ ${fmt(totals.brokerProfit)}` },
+                  {
+                    label: 'المرتجع من الشركات',
+                    value:
+                      totals.returnsProfitDelta >= 0
+                        ? `+ ${fmt(totals.returnsProfitDelta)}`
+                        : `− ${fmt(Math.abs(totals.returnsProfitDelta))}`,
+                  },
                   { label: 'المصاريف', value: `− ${fmt(data.expensesTotal)}` },
                   { label: 'الصافي', value: fmt(totals.netProfitSum), strong: true },
-                  {
-                    label: 'ملاحظة',
-                    value: 'المعاملات الملغاة لا تُحتسب',
-                    muted: true,
-                  },
                 ]}
               />
             }
