@@ -1144,6 +1144,81 @@ async function handleAccidentInfo(ctx: QuoteFlowCtx) {
     .eq("id", ctx.sessionId);
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Manager handoff
+// ─────────────────────────────────────────────────────────────────────
+//
+// When a customer explicitly asks to speak to a person ("بدي احكي مع
+// المدير", "وصلني للوكيل"), thank them, file a customer_requests row of
+// type "manager" so the dashboard can pick it up, and stop. No
+// follow-up state — the agent calls the customer back.
+
+const MANAGER_TRIGGERS = [
+  "احكي مع المدير",
+  "احكي مع المديرة",
+  "احكي مع الإدارة",
+  "احكي مع الادارة",
+  "احكي مع موظف",
+  "احكي مع وكيل",
+  "احكي مع حدا",
+  "بدي احكي مع المدير",
+  "بدي احكي مع موظف",
+  "بدي احكي مع وكيل",
+  "بدي احكي مع حدا",
+  "بدي اتكلم مع حدا",
+  "بدي اتكلم مع موظف",
+  "بدي اتكلم مع المدير",
+  "بدي مدير",
+  "بدي وكيل",
+  "وصلني للمدير",
+  "وصلني لموظف",
+  "وصلني للوكيل",
+  "بدي حدا يتواصل معي",
+  "بدي حدا يحكي معي",
+  "بدي اتصل بحدا",
+  "تواصلوا معي",
+];
+
+const MANAGER_HANDOFF_MESSAGE =
+  "تمام، سجلت طلبك ورح يتواصل معك حدا من الإدارة بأسرع وقت ممكن. شكراً لتواصلك معنا.";
+
+async function handleManagerHandoff(ctx: QuoteFlowCtx, customerText: string) {
+  // File the help request first so the agent has context even if the
+  // outgoing WhatsApp send fails.
+  try {
+    await ctx.supabase.from("customer_requests").insert({
+      agent_id: ctx.agentId,
+      branch_id: ctx.branchId,
+      client_id: ctx.clientId,
+      phone_number: ctx.customerPhone,
+      request_type: "manager",
+      title: "طلب تواصل مع الإدارة",
+      content: `العميل طلب التواصل مع الإدارة.\nنص الرسالة: ${(customerText || "").slice(0, 1000)}`,
+      status: "open",
+    });
+  } catch (err) {
+    console.error("[manager-handoff] insert customer_requests failed:", err);
+  }
+
+  const sendResult = await sendWhatsAppText(
+    ctx.instanceId,
+    ctx.apiToken,
+    ctx.senderId,
+    MANAGER_HANDOFF_MESSAGE,
+  );
+  await ctx.supabase.from("customer_chat_messages").insert({
+    session_id: ctx.sessionId,
+    role: "bot",
+    content: MANAGER_HANDOFF_MESSAGE,
+    whatsapp_message_id: sendResult.idMessage,
+    metadata: { deterministic: "manager_handoff", send_ok: sendResult.ok },
+  });
+  await ctx.supabase
+    .from("customer_chat_sessions")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", ctx.sessionId);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") {
@@ -1505,6 +1580,7 @@ serve(async (req) => {
     const matchesQuoteTrigger = QUOTE_TRIGGERS.some((t) => normalizedText.includes(arNormalize(t)));
     const matchesPolicyTrigger = POLICY_TRIGGERS.some((t) => normalizedText.includes(arNormalize(t)));
     const matchesAccidentTrigger = ACCIDENT_TRIGGERS.some((t) => normalizedText.includes(arNormalize(t)));
+    const matchesManagerTrigger = MANAGER_TRIGGERS.some((t) => normalizedText.includes(arNormalize(t)));
 
     // Escape hatch: a customer stuck mid-flow can break out by sending a
     // pure greeting, a fresh quote-trigger, a fresh policy-trigger, or
@@ -1512,7 +1588,11 @@ serve(async (req) => {
     // inside the active flow (e.g. car lookup failed → bot is now in
     // awaiting_type and any plate number reads as a bad type answer).
     const wantsReset =
-      isPureGreeting || matchesQuoteTrigger || matchesPolicyTrigger || matchesAccidentTrigger;
+      isPureGreeting
+      || matchesQuoteTrigger
+      || matchesPolicyTrigger
+      || matchesAccidentTrigger
+      || matchesManagerTrigger;
 
     // (1a) Already inside a quote flow → run the state machine, unless
     // the customer is explicitly trying to restart.
@@ -1575,6 +1655,17 @@ serve(async (req) => {
     if (matchesAccidentTrigger) {
       await handleAccidentInfo(quoteCtx);
       return new Response(JSON.stringify({ ok: true, deterministic: "accident_info" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // (6) Manager handoff — customer explicitly asked to speak to a
+    // human. File a customer_requests row of type "manager" so it shows
+    // up in the dashboard, and acknowledge.
+    if (matchesManagerTrigger) {
+      await handleManagerHandoff(quoteCtx, text);
+      return new Response(JSON.stringify({ ok: true, deterministic: "manager_handoff" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

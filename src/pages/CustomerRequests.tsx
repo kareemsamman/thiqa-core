@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
-import { Loader2, RefreshCw, CheckCircle2, Phone, Inbox, Clock, FileText, HelpCircle, Sparkles } from "lucide-react";
+import { Loader2, RefreshCw, CheckCircle2, Phone, Inbox, Clock, FileText, HelpCircle, Sparkles, MessageCircle, UserCog } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,7 @@ const REQUEST_TYPE_META: Record<string, { label: string; icon: typeof FileText }
   quote: { label: "عرض سعر", icon: FileText },
   help: { label: "طلب مساعدة", icon: HelpCircle },
   support: { label: "طلب مساعدة", icon: HelpCircle },
+  manager: { label: "طلب التواصل مع الإدارة", icon: UserCog },
 };
 
 // Israeli mobile numbers come in from WhatsApp as "972XXXXXXXXX". Drop
@@ -59,6 +60,15 @@ function formatLocalPhone(phone: string): string {
   if (digits.startsWith("972")) return "0" + digits.slice(3);
   if (digits.startsWith("0")) return digits;
   return phone;
+}
+
+// wa.me requires international digits with no plus or dashes. Customers
+// stored as "0XXXXXXXXX" need the country code; "972XXXXXXXXX" rows
+// come straight through.
+function toWhatsAppDigits(phone: string): string {
+  const digits = (phone || "").replace(/[^\d]/g, "");
+  if (digits.startsWith("0")) return "972" + digits.slice(1);
+  return digits;
 }
 
 export default function CustomerRequests() {
@@ -216,13 +226,24 @@ export default function CustomerRequests() {
                           </TableCell>
                           <TableCell className="font-medium max-w-xs">{r.title}</TableCell>
                           <TableCell>
-                            <a
-                              href={`tel:${localPhone}`}
-                              className="inline-flex items-center gap-1.5 text-primary hover:underline whitespace-nowrap font-mono text-sm"
-                            >
-                              <Phone className="h-3.5 w-3.5" />
-                              {localPhone}
-                            </a>
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                              <a
+                                href={`tel:${localPhone}`}
+                                className="inline-flex items-center gap-1.5 text-primary hover:underline font-mono text-sm"
+                              >
+                                <Phone className="h-3.5 w-3.5" />
+                                {localPhone}
+                              </a>
+                              <a
+                                href={`https://wa.me/${toWhatsAppDigits(r.phone_number)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center justify-center rounded-md bg-emerald-500 hover:bg-emerald-600 text-white h-7 w-7 transition-colors"
+                                title="فتح محادثة واتساب"
+                              >
+                                <MessageCircle className="h-3.5 w-3.5" />
+                              </a>
+                            </div>
                           </TableCell>
                           <TableCell className="max-w-md whitespace-pre-line text-sm text-muted-foreground">
                             {r.content}
