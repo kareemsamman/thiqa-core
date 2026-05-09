@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useSmsLock } from "@/hooks/useSmsLock";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Save, ArrowRight, ArrowLeft, Minus, X } from "lucide-react";
@@ -77,7 +76,6 @@ export function PolicyWizard({
 }: PolicyWizardProps) {
   const { toast } = useToast();
   const { handleLimitError } = useUpgradePrompt();
-  const { guardSend: guardSmsSend } = useSmsLock();
   const navigate = useNavigate();
 
   // Use the centralized wizard state hook. In the multi-instance model
@@ -1710,48 +1708,7 @@ export function PolicyWizard({
           }
         }
       }
-      // Send signature and invoice SMS to client
       const clientPhone = selectedClient?.phone_number || newClient.phone_number;
-      
-      // Get the actual client ID (could be from temp policy creation or normal flow)
-      let finalClientId = selectedClient?.id;
-      if (!finalClientId && policyIdToUse) {
-        // Fetch client_id from the policy we just created
-        const { data: policyData } = await supabase
-          .from('policies')
-          .select('client_id')
-          .eq('id', policyIdToUse)
-          .single();
-        finalClientId = policyData?.client_id;
-      }
-      
-      if (clientPhone && policyIdToUse && finalClientId) {
-        // Fire-and-forget SMS sending (don't await - for speed)
-        // Signature SMS
-        supabase
-          .from('clients')
-          .select('signature_url')
-          .eq('id', finalClientId)
-          .single()
-          .then(({ data: clientData }) => {
-            if (!clientData?.signature_url) {
-              if (!guardSmsSend('auto')) return;
-              console.log('[PolicyWizard] Sending signature SMS...');
-              supabase.functions.invoke('send-signature-sms', {
-                body: { 
-                  client_id: finalClientId,
-                  policy_id: policyIdToUse
-                },
-              }).then(({ error }) => {
-                if (error) console.error('[PolicyWizard] Signature SMS error:', error);
-                else console.log('[PolicyWizard] Signature SMS sent');
-              });
-            }
-          });
-
-        // Invoice SMS is now handled by PolicySuccessDialog
-        // Removed automatic fire-and-forget call - user chooses from dialog
-      }
 
       clearDraft();
       setTempPolicyId(null);
