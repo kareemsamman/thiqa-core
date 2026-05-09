@@ -689,30 +689,29 @@ export function SinglePolicyPaymentModal({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Convention: تاريخ الاستحقاق فوق، تاريخ الإصدار تحت. */}
+                    <div>
+                      <Label className="text-xs">
+                        {payment.paymentType === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
+                      </Label>
+                      <ArabicDatePicker
+                        value={payment.paymentDate}
+                        onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
+                        disabled={payment.tranzilaPaid}
+                        compact
+                      />
+                    </div>
+                    {payment.paymentType === 'cheque' && (
                       <div>
-                        <Label className="text-xs">
-                          {payment.paymentType === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
-                        </Label>
+                        <Label className="text-xs">تاريخ الإصدار</Label>
                         <ArabicDatePicker
-                          value={payment.paymentDate}
-                          onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
+                          value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
+                          onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
                           disabled={payment.tranzilaPaid}
                           compact
                         />
                       </div>
-                      {payment.paymentType === 'cheque' && (
-                        <div>
-                          <Label className="text-xs">تاريخ الإصدار</Label>
-                          <ArabicDatePicker
-                            value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
-                            onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
-                            disabled={payment.tranzilaPaid}
-                            compact
-                          />
-                        </div>
-                      )}
-                    </div>
+                    )}
 
                     {/* Cheque-only row: bank → branch → رقم الشيك, same
                         order and field widths as every other cheque

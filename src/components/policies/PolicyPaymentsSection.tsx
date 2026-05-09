@@ -1187,25 +1187,24 @@ export function PolicyPaymentsSection({
                           </>
                         }
                       />
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-xs">تاريخ الاستحقاق</Label>
-                          <ArabicDatePicker
-                            value={payment.paymentDate}
-                            onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
-                            disabled={payment.tranzilaPaid}
-                            compact
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">تاريخ الإصدار</Label>
-                          <ArabicDatePicker
-                            value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
-                            onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
-                            disabled={payment.tranzilaPaid}
-                            compact
-                          />
-                        </div>
+                      {/* Convention: تاريخ الاستحقاق فوق، تاريخ الإصدار تحت. */}
+                      <div>
+                        <Label className="text-xs">تاريخ الاستحقاق</Label>
+                        <ArabicDatePicker
+                          value={payment.paymentDate}
+                          onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
+                          disabled={payment.tranzilaPaid}
+                          compact
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">تاريخ الإصدار</Label>
+                        <ArabicDatePicker
+                          value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
+                          onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
+                          disabled={payment.tranzilaPaid}
+                          compact
+                        />
                       </div>
                     </>
                   )}

@@ -677,7 +677,9 @@ function ChequeLineEditor({
         </p>
       )}
 
-      <div className={gridCls}>
+      {/* Amount + due date on a 2-col row, issue date below in its
+          own row. Layout convention: استحقاق فوق، إصدار تحت. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="space-y-1.5 min-w-0">
           <Label className="text-[11px]">المبلغ</Label>
           <Input
@@ -697,14 +699,14 @@ function ChequeLineEditor({
             compact
           />
         </div>
-        <div className="space-y-1.5 min-w-0">
-          <Label className="text-[11px]">تاريخ الإصدار</Label>
-          <ArabicDatePicker
-            value={line.cheque_issue_date ?? ''}
-            onChange={(v) => onChange({ cheque_issue_date: v ?? '' })}
-            compact
-          />
-        </div>
+      </div>
+      <div className="space-y-1.5 min-w-0">
+        <Label className="text-[11px]">تاريخ الإصدار</Label>
+        <ArabicDatePicker
+          value={line.cheque_issue_date ?? ''}
+          onChange={(v) => onChange({ cheque_issue_date: v ?? '' })}
+          compact
+        />
       </div>
 
       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">

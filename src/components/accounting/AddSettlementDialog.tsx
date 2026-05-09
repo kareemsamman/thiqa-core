@@ -847,9 +847,10 @@ function ChequeLineEditor({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Amount + due date + issue date — same 3-column grid as the
-          bank row so columns align across both rows. */}
-      <div className={gridCls}>
+      {/* Amount + due date on a 2-col row, issue date drops to its
+          own full-width row below. Convention requested by staff:
+          تاريخ الاستحقاق دائماً فوق، تاريخ الإصدار تحت. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="space-y-1.5 min-w-0">
           <Label className="text-[11px]">المبلغ</Label>
           <Input
@@ -868,13 +869,13 @@ function ChequeLineEditor({
             onChange={(v) => onChange({ cheque_due_date: v ?? '' })}
           />
         </div>
-        <div className="space-y-1.5 min-w-0">
-          <Label className="text-[11px]">تاريخ الإصدار</Label>
-          <ArabicDatePicker
-            value={line.cheque_issue_date ?? ''}
-            onChange={(v) => onChange({ cheque_issue_date: v ?? '' })}
-          />
-        </div>
+      </div>
+      <div className="space-y-1.5 min-w-0">
+        <Label className="text-[11px]">تاريخ الإصدار</Label>
+        <ArabicDatePicker
+          value={line.cheque_issue_date ?? ''}
+          onChange={(v) => onChange({ cheque_issue_date: v ?? '' })}
+        />
       </div>
 
       {/* Multi-image picker — agents asked to attach multiple shots

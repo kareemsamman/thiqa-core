@@ -377,21 +377,22 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-1.5 min-w-0">
-                      <Label className="text-[11px]">تاريخ الاستحقاق</Label>
-                      <ArabicDatePicker
-                        value={state.cheque_due_date}
-                        onChange={(v) => setState({ ...state, cheque_due_date: v ?? '' })}
-                      />
-                    </div>
-                    <div className="space-y-1.5 min-w-0">
-                      <Label className="text-[11px]">تاريخ الإصدار</Label>
-                      <ArabicDatePicker
-                        value={state.cheque_issue_date}
-                        onChange={(v) => setState({ ...state, cheque_issue_date: v ?? '' })}
-                      />
-                    </div>
+                  {/* Convention: تاريخ الاستحقاق فوق، تاريخ الإصدار تحت
+                      — keep them stacked even on wide screens so the
+                      order stays unambiguous. */}
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-[11px]">تاريخ الاستحقاق</Label>
+                    <ArabicDatePicker
+                      value={state.cheque_due_date}
+                      onChange={(v) => setState({ ...state, cheque_due_date: v ?? '' })}
+                    />
+                  </div>
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-[11px]">تاريخ الإصدار</Label>
+                    <ArabicDatePicker
+                      value={state.cheque_issue_date}
+                      onChange={(v) => setState({ ...state, cheque_issue_date: v ?? '' })}
+                    />
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                     <MultiImagePicker

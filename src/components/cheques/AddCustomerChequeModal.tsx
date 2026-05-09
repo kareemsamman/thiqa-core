@@ -546,8 +546,10 @@ export function AddCustomerChequeModal({
                               </>
                             }
                           />
-                          {/* Amount + due date + issue date on a second row */}
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {/* Amount + due date side-by-side, issue date
+                              drops below in its own row (convention:
+                              استحقاق فوق، إصدار تحت). */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
                               <Label className="text-xs">المبلغ *</Label>
                               <Input
@@ -566,14 +568,14 @@ export function AddCustomerChequeModal({
                                 compact
                               />
                             </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">تاريخ الإصدار</Label>
-                              <ArabicDatePicker
-                                value={cheque.issue_date}
-                                onChange={(date) => updateChequeLine(cheque.id, { issue_date: date })}
-                                compact
-                              />
-                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">تاريخ الإصدار</Label>
+                            <ArabicDatePicker
+                              value={cheque.issue_date}
+                              onChange={(date) => updateChequeLine(cheque.id, { issue_date: date })}
+                              compact
+                            />
                           </div>
                         </div>
                         {cheque.cheque_image_url && (
