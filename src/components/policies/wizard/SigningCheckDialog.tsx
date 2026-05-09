@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
-import { AlertTriangle, CheckCircle2, Clock, Send, Loader2, ArrowLeft, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Send, Loader2, ArrowLeft, X, SkipForward } from "lucide-react";
 import { Lock } from "@phosphor-icons/react";
 
 type DialogState = "check" | "waiting" | "signed";
@@ -201,7 +201,8 @@ export function SigningCheckDialog({
             )}
 
             <div className="flex gap-2 justify-end pt-2">
-              <Button variant="outline" size="sm" onClick={handleSkip}>
+              <Button variant="secondary" size="sm" onClick={handleSkip} className="gap-2">
+                <SkipForward className="h-4 w-4" />
                 تخطي
               </Button>
               <Button
@@ -243,7 +244,8 @@ export function SigningCheckDialog({
             </div>
 
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={handleSkip}>
+              <Button variant="secondary" size="sm" onClick={handleSkip} className="gap-2">
+                <SkipForward className="h-4 w-4" />
                 تخطي
               </Button>
               <Button size="sm" disabled>
@@ -271,7 +273,8 @@ export function SigningCheckDialog({
             </div>
 
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={handleSkip}>
+              <Button variant="secondary" size="sm" onClick={handleSkip} className="gap-2">
+                <SkipForward className="h-4 w-4" />
                 تخطي
               </Button>
               <Button size="sm" onClick={handleProceed} className="gap-2">
