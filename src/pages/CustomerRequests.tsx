@@ -353,10 +353,11 @@ export default function CustomerRequests() {
           </Card>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {filtered.map((r) => (
+            {filtered.map((r, idx) => (
               <RequestCard
                 key={r.id}
                 request={r}
+                isNewest={idx === 0}
                 onMarkHandled={() => markHandled.mutate(r.id)}
                 onDelete={() => setDeleteTarget(r)}
                 markHandledPending={markHandled.isPending}
@@ -384,12 +385,13 @@ export default function CustomerRequests() {
 
 interface RequestCardProps {
   request: CustomerRequest;
+  isNewest: boolean;
   onMarkHandled: () => void;
   onDelete: () => void;
   markHandledPending: boolean;
 }
 
-function RequestCard({ request: r, onMarkHandled, onDelete, markHandledPending }: RequestCardProps) {
+function RequestCard({ request: r, isNewest, onMarkHandled, onDelete, markHandledPending }: RequestCardProps) {
   const meta = REQUEST_TYPE_META[r.request_type] ?? {
     label: r.request_type,
     icon: FileText,
@@ -415,6 +417,15 @@ function RequestCard({ request: r, onMarkHandled, onDelete, markHandledPending }
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {isNewest && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2.5 py-1 text-xs font-semibold ring-1 ring-rose-500/20">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75 animate-ping" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
+                </span>
+                جديد
+              </span>
+            )}
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
                 isOpen
@@ -428,7 +439,7 @@ function RequestCard({ request: r, onMarkHandled, onDelete, markHandledPending }
             <Button
               size="icon"
               variant="ghost"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
               onClick={onDelete}
               title="حذف الطلب"
             >
@@ -458,8 +469,10 @@ function RequestCard({ request: r, onMarkHandled, onDelete, markHandledPending }
           </a>
         </div>
 
-        {/* Details */}
-        <div className="rounded-xl bg-muted/40 px-4 py-3 text-sm whitespace-pre-line text-foreground/85 leading-relaxed">
+        {/* Details — fixed min-height so cards in the grid line up
+            even when one request has a short message and another has
+            four lines of car info. */}
+        <div className="rounded-xl bg-muted/40 px-4 py-3 text-sm whitespace-pre-line text-foreground/85 leading-relaxed min-h-[7.5rem]">
           {r.content}
         </div>
 
