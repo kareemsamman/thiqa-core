@@ -716,8 +716,8 @@ interface PolicyFlowData {
   client_id?: string;
 }
 
-const YES_RX = /(^|\s)(ايه|أيه|ايوا|أيوا|نعم|أكيد|اكيد|تمام|اوكي|أوكي|ok|okay|yes|بدي|ابعت|ابعتلي|أبعتلي)(\s|$|[.!؟،,])/i;
-const NO_RX = /(^|\s)(لأ|لا|لاء|مش|مو|كلا|no)(\s|$|[.!؟،,])/i;
+const YES_RX = /(^|\s)(اه|آه|ايه|أيه|ايوا|أيوا|اي|نعم|أكيد|اكيد|تمام|اوكي|أوكي|ok|okay|yes|y|بدي|ابعت|ابعتلي|أبعتلي|طيب)(\s|$|[.!؟،,])/i;
+const NO_RX = /(^|\s)(لأ|لا|لاء|مش|مو|كلا|no|n)(\s|$|[.!؟،,])/i;
 
 function parseYesNo(text: string): "yes" | "no" | null {
   const t = (text || "").trim();
@@ -892,16 +892,17 @@ async function respondWithPolicies(ctx: QuoteFlowCtx, clientId: string) {
   );
 }
 
-/** Entry point — fired when a POLICY_TRIGGERS phrase is detected. */
+/** Entry point — fired when a POLICY_TRIGGERS phrase is detected.
+ *
+ *  Always asks for the customer's ID number rather than trusting the
+ *  sender phone. Multiple clients in the agent's books can share a phone
+ *  (family members, business owners, etc.), so the safer disambiguator
+ *  is the national ID. Lookup is scoped to ctx.agentId.
+ */
 async function startPolicyFlow(ctx: QuoteFlowCtx) {
-  if (ctx.clientId) {
-    await respondWithPolicies(ctx, ctx.clientId);
-    return;
-  }
-  // Sender's phone isn't on our books — ask for ID number to try again.
   await sendPolicyStep(
     ctx,
-    "ما لقيت رقم هاتفك بقاعدة البيانات. لمين بدك التأمين؟ ابعتلي رقم الهوية (٩ أرقام).",
+    "للتأكد إنك صاحب الحساب، ابعتلي رقم الهوية (٩ أرقام) لو سمحت.",
     "awaiting_id_for_policy",
     {},
   );
