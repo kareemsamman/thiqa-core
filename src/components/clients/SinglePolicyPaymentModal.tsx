@@ -25,7 +25,10 @@ interface PaymentLine {
   id: string;
   amount: number;
   paymentType: 'cash' | 'cheque' | 'transfer' | 'visa';
+  /** For cheque rows = تاريخ الاستحقاق. */
   paymentDate: string;
+  /** Cheque-only: تاريخ الإصدار. Defaults to today. */
+  chequeIssueDate?: string;
   chequeNumber?: string;
   bankCode?: string | null;
   branchCode?: string | null;
@@ -369,11 +372,13 @@ export function SinglePolicyPaymentModal({
     
     for (const cheque of cheques) {
       const paymentId = crypto.randomUUID();
+      const today = new Date().toISOString().split('T')[0];
       const payment: PaymentLine = {
         id: paymentId,
         amount: cheque.amount || 0,
         paymentType: 'cheque' as const,
-        paymentDate: cheque.payment_date || new Date().toISOString().split('T')[0],
+        paymentDate: cheque.payment_date || today,
+        chequeIssueDate: today,
         chequeNumber: cheque.cheque_number || '',
         bankCode: cheque.bank_code || null,
         branchCode: cheque.branch_code || cheque.branch_number || null,
@@ -467,6 +472,7 @@ export function SinglePolicyPaymentModal({
           continue;
         }
 
+        const todayIso = new Date().toISOString().split('T')[0];
         const { data, error } = await supabase
           .from('policy_payments')
           .insert({
@@ -474,6 +480,12 @@ export function SinglePolicyPaymentModal({
             amount: paymentLine.amount,
             payment_type: paymentLine.paymentType as Enums<'payment_type'>,
             payment_date: paymentLine.paymentDate,
+            cheque_due_date:
+              paymentLine.paymentType === 'cheque' ? paymentLine.paymentDate : null,
+            cheque_issue_date:
+              paymentLine.paymentType === 'cheque'
+                ? paymentLine.chequeIssueDate ?? todayIso
+                : null,
             cheque_number: paymentLine.paymentType === 'cheque' ? paymentLine.chequeNumber : null,
             cheque_status: paymentLine.paymentType === 'cheque' ? 'pending' : null,
             bank_code: paymentLine.paymentType === 'cheque' ? (paymentLine.bankCode || null) : null,
@@ -679,7 +691,9 @@ export function SinglePolicyPaymentModal({
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <Label className="text-xs">تاريخ الدفع</Label>
+                        <Label className="text-xs">
+                          {payment.paymentType === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
+                        </Label>
                         <ArabicDatePicker
                           value={payment.paymentDate}
                           onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
@@ -687,6 +701,17 @@ export function SinglePolicyPaymentModal({
                           compact
                         />
                       </div>
+                      {payment.paymentType === 'cheque' && (
+                        <div>
+                          <Label className="text-xs">تاريخ الإصدار</Label>
+                          <ArabicDatePicker
+                            value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
+                            onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
+                            disabled={payment.tranzilaPaid}
+                            compact
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Cheque-only row: bank → branch → رقم الشيك, same

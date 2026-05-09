@@ -446,9 +446,14 @@ export function Step4Payments({
                       />
                     </div>
 
-                    {/* Date */}
+                    {/* Date — for cheques this is تاريخ الاستحقاق
+                        (when the cheque can be cashed); the separate
+                        issue date sits in the cheque-identifiers grid
+                        below. */}
                     <div className={cn("col-span-2 lg:col-span-1", !hasActionsColumn && "lg:col-span-2")}>
-                      <Label className="text-[10px] mb-1 block text-muted-foreground">التاريخ</Label>
+                      <Label className="text-[10px] mb-1 block text-muted-foreground">
+                        {payment.payment_type === 'cheque' ? 'تاريخ الاستحقاق' : 'التاريخ'}
+                      </Label>
                       <ArabicDatePicker
                         value={payment.payment_date}
                         onChange={(date) => updatePayment(payment.id, 'payment_date', date)}
@@ -537,6 +542,20 @@ export function Step4Payments({
                           disabled={isMetaDisabled}
                         />
                       </div>
+                    </div>
+                  )}
+
+                  {/* Cheque issue date — separate from due date so the
+                      Cheques page can display the right "تاريخ الاستحقاق". */}
+                  {payment.payment_type === 'cheque' && (
+                    <div className="mt-2 pl-8">
+                      <Label className="text-[10px] mb-1 block text-muted-foreground">تاريخ الإصدار</Label>
+                      <ArabicDatePicker
+                        value={payment.cheque_issue_date || new Date().toISOString().split('T')[0]}
+                        onChange={(date) => updatePayment(payment.id, 'cheque_issue_date', date)}
+                        className="h-10"
+                        disabled={isMetaDisabled}
+                      />
                     </div>
                   )}
 

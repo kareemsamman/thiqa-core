@@ -88,7 +88,15 @@ interface ChequeRecord {
   id: string;
   policy_id: string;
   amount: number;
+  /** Mirror of cheque_due_date for legacy code that still keys off
+   *  payment_date. The "تاريخ الاستحقاق" column on the page reads
+   *  cheque_due_date directly. */
   payment_date: string;
+  /** تاريخ الاستحقاق — when the cheque can be cashed. Falls back to
+   *  payment_date for rows written before the column existed. */
+  cheque_due_date?: string | null;
+  /** تاريخ الإصدار — when the customer wrote / we issued the cheque. */
+  cheque_issue_date?: string | null;
   cheque_number: string | null;
   cheque_date: string | null;
   bank_code: string | null;
@@ -231,7 +239,8 @@ export default function Cheques() {
         .from('policy_payments')
         .select(`
           id, amount, payment_date, payment_type, cheque_number,
-          cheque_date, bank_code, branch_code, cheque_image_url,
+          cheque_date, cheque_due_date, cheque_issue_date,
+          bank_code, branch_code, cheque_image_url,
           card_last_four, refused, notes, locked, policy_id,
           policies!policy_payments_policy_id_fkey(
             id, policy_type_parent, policy_type_child, insurance_price
@@ -258,6 +267,8 @@ export default function Cheques() {
         payment_type: (data as any).payment_type,
         cheque_number: (data as any).cheque_number,
         cheque_date: (data as any).cheque_date,
+        cheque_due_date: (data as any).cheque_due_date,
+        cheque_issue_date: (data as any).cheque_issue_date,
         bank_code: (data as any).bank_code,
         branch_code: (data as any).branch_code,
         cheque_image_url: (data as any).cheque_image_url,
@@ -464,7 +475,8 @@ export default function Cheques() {
       let query = supabase
         .from('policy_payments')
         .select(`
-          id, policy_id, amount, payment_date, cheque_number, cheque_date,
+          id, policy_id, amount, payment_date, cheque_due_date, cheque_issue_date,
+          cheque_number, cheque_date,
           bank_code, branch_code, cheque_image_url,
           cheque_status, refused, notes, transferred_to_type, transferred_to_id, transferred_payment_id,
           policies!policy_payments_policy_id_fkey(
@@ -1030,8 +1042,12 @@ export default function Cheques() {
           <bdi>{formatCurrency(cheque.amount)}</bdi>
         </TableCell>
         <TableCell className={cn(isOverdueCheck && "text-destructive font-medium")}>
+          {/* Source of truth for the "تاريخ الاستحقاق" column is
+              cheque_due_date. New rows always populate it; old rows
+              had it backfilled to payment_date in the
+              20260509200000_cheque_due_and_issue_dates migration. */}
           <div className="flex items-center gap-1">
-            {formatDate(cheque.payment_date)}
+            {formatDate(cheque.cheque_due_date || cheque.payment_date)}
             {isOverdueCheck && (
               <Badge variant="destructive" className="text-[10px] px-1 py-0">متأخر</Badge>
             )}
@@ -1806,19 +1822,19 @@ async function fetchOutgoingCheques(): Promise<ChequeRecord[]> {
     supabase
       .from('company_settlements')
       .select(
-        'id, settlement_date, total_amount, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, status, refused, notes, company_id, insurance_companies(name, name_ar)',
+        'id, settlement_date, cheque_due_date, cheque_issue_date, total_amount, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, status, refused, notes, company_id, insurance_companies(name, name_ar)',
       )
       .eq('payment_type', 'cheque'),
     supabase
       .from('broker_settlements')
       .select(
-        'id, settlement_date, total_amount, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, status, refused, notes, broker_id, brokers(name)',
+        'id, settlement_date, cheque_due_date, cheque_issue_date, total_amount, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, status, refused, notes, broker_id, brokers(name)',
       )
       .eq('payment_type', 'cheque'),
     supabase
       .from('expenses')
       .select(
-        'id, expense_date, amount, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, cheque_status, notes, contact_name, category, description',
+        'id, expense_date, cheque_due_date, cheque_issue_date, amount, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, cheque_status, notes, contact_name, category, description',
       )
       .eq('payment_method', 'cheque'),
   ]);
@@ -1846,6 +1862,8 @@ async function fetchOutgoingCheques(): Promise<ChequeRecord[]> {
 interface RawExpenseCheque {
   id: string;
   expense_date: string;
+  cheque_due_date: string | null;
+  cheque_issue_date: string | null;
   amount: number | null;
   cheque_number: string | null;
   bank_code: string | null;
@@ -1871,11 +1889,17 @@ function buildExpenseChequeRecord(row: RawExpenseCheque): ChequeRecord {
     (Array.isArray(row.cheque_image_urls) && row.cheque_image_urls[0]) ||
     row.cheque_image_url ||
     null;
+  // Same fix as buildOutgoingChequeRecord — surface the explicit due
+  // date so the "تاريخ الاستحقاق" column doesn't fall back to the
+  // expense_date (which is the issue date).
+  const due = row.cheque_due_date || row.expense_date;
   return {
     id: `ex-${row.id}`,
     policy_id: '',
     amount: Number(row.amount ?? 0),
-    payment_date: row.expense_date,
+    payment_date: due,
+    cheque_due_date: due,
+    cheque_issue_date: row.cheque_issue_date || row.expense_date,
     cheque_number: row.cheque_number ?? null,
     cheque_date: row.expense_date,
     bank_code: row.bank_code ?? null,
@@ -1909,6 +1933,8 @@ function buildExpenseChequeRecord(row: RawExpenseCheque): ChequeRecord {
 interface RawOutgoingSettlement {
   id: string;
   settlement_date: string;
+  cheque_due_date: string | null;
+  cheque_issue_date: string | null;
   total_amount: number | null;
   cheque_number: string | null;
   bank_code: string | null;
@@ -1942,11 +1968,21 @@ function buildOutgoingChequeRecord(
     (Array.isArray(row.cheque_image_urls) && row.cheque_image_urls[0]) ||
     row.cheque_image_url ||
     null;
+  // The "تاريخ الاستحقاق" column on the Cheques page reads
+  // `payment_date`. For outgoing settlements that field used to mirror
+  // settlement_date (= the issue date), which is exactly the bug staff
+  // reported: a cheque entered today with a future due date showed as
+  // "today" because settlement_date won the race. Surface the explicit
+  // due date instead, falling back to settlement_date for old rows
+  // that pre-date the column.
+  const due = row.cheque_due_date || row.settlement_date;
   return {
     id: syntheticId,
     policy_id: '',
     amount: Number(row.total_amount ?? 0),
-    payment_date: row.settlement_date,
+    payment_date: due,
+    cheque_due_date: due,
+    cheque_issue_date: row.cheque_issue_date || row.settlement_date,
     cheque_number: row.cheque_number ?? null,
     cheque_date: row.settlement_date ?? null,
     bank_code: row.bank_code ?? null,

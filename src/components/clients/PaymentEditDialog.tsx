@@ -36,6 +36,10 @@ interface PaymentRecord {
   payment_type: string;
   cheque_number: string | null;
   cheque_date?: string | null;
+  /** تاريخ الاستحقاق — falls back to payment_date for legacy rows. */
+  cheque_due_date?: string | null;
+  /** تاريخ الإصدار — falls back to payment_date for legacy rows. */
+  cheque_issue_date?: string | null;
   bank_code?: string | null;
   branch_code?: string | null;
   cheque_image_url: string | null;
@@ -106,7 +110,10 @@ export function PaymentEditDialog({
   const [formData, setFormData] = useState({
     amount: 0,
     payment_type: 'cash',
+    /** For cheques this picker maps to تاريخ الاستحقاق. */
     payment_date: '',
+    /** Cheque-only: تاريخ الإصدار. */
+    cheque_issue_date: '',
     cheque_number: '',
     bank_code: '' as string | null,
     branch_code: '' as string | null,
@@ -150,10 +157,19 @@ export function PaymentEditDialog({
   // Reset form when payment changes
   useEffect(() => {
     if (payment) {
+      const isCheque = payment.payment_type === 'cheque';
       setFormData({
         amount: payment.amount || 0,
         payment_type: payment.payment_type || 'cash',
-        payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
+        // For cheques, the visible date picker is تاريخ الاستحقاق —
+        // prefer the new column, fall back to payment_date for legacy
+        // rows that pre-date the split.
+        payment_date: isCheque
+          ? (payment.cheque_due_date || payment.payment_date || new Date().toISOString().split('T')[0])
+          : (payment.payment_date || new Date().toISOString().split('T')[0]),
+        cheque_issue_date: isCheque
+          ? (payment.cheque_issue_date || payment.payment_date || new Date().toISOString().split('T')[0])
+          : '',
         cheque_number: payment.cheque_number || '',
         bank_code: payment.bank_code || null,
         branch_code: payment.branch_code || null,
@@ -289,6 +305,11 @@ export function PaymentEditDialog({
         updateData.cheque_number = formData.cheque_number.trim();
         updateData.bank_code = formData.bank_code || null;
         updateData.branch_code = formData.branch_code || null;
+        // Persist the two cheque dates side by side — payment_date
+        // mirrors cheque_due_date so legacy code that filters/orders
+        // by payment_date keeps behaving the same after the split.
+        updateData.cheque_due_date = formData.payment_date;
+        updateData.cheque_issue_date = formData.cheque_issue_date || formData.payment_date;
 
         // Marking a cheque as رفض implicitly returns it — staff asked
         // that راجع/مرفوض on the edit dialog drive the cheque status so
@@ -300,6 +321,8 @@ export function PaymentEditDialog({
         updateData.cheque_number = null;
         updateData.bank_code = null;
         updateData.branch_code = null;
+        updateData.cheque_due_date = null;
+        updateData.cheque_issue_date = null;
       }
 
       const { error } = await supabase
@@ -460,7 +483,9 @@ export function PaymentEditDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">تاريخ الدفع</Label>
+              <Label className="text-xs font-semibold">
+                {formData.payment_type === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
+              </Label>
               <ArabicDatePicker
                 value={formData.payment_date}
                 onChange={(date) => setFormData({
@@ -471,6 +496,20 @@ export function PaymentEditDialog({
               />
             </div>
           </div>
+
+          {formData.payment_type === 'cheque' && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">تاريخ الإصدار</Label>
+              <ArabicDatePicker
+                value={formData.cheque_issue_date}
+                onChange={(date) => setFormData({
+                  ...formData,
+                  cheque_issue_date: date || ''
+                })}
+                disabled={isLocked}
+              />
+            </div>
+          )}
 
           {/* Cheque-specific fields on one row: bank → branch → رقم الشيك.
               The picker takes the cheque-number input as a slot so the

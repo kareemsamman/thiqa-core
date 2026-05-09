@@ -1503,11 +1503,19 @@ export function PolicyWizard({
       // Still avoid re-inserting a real Tranzila visa row that the flow handled.
       const paymentsToInsert = insertablePayments.filter(p => p.payment_type !== 'visa' || p.locked);
       if (paymentsToInsert.length > 0 && !skipPaymentInsert) {
+        const todayIso = new Date().toISOString().split('T')[0];
         const paymentInserts = paymentsToInsert.map(p => ({
           policy_id: policyIdToUse,
           payment_type: p.payment_type as PaymentType,
           amount: p.amount,
           payment_date: p.payment_date,
+          // Cheques carry both تاريخ الاستحقاق (= payment_date) and
+          // تاريخ الإصدار (= cheque_issue_date, defaults to today).
+          cheque_due_date: p.payment_type === 'cheque' ? p.payment_date : null,
+          cheque_issue_date:
+            p.payment_type === 'cheque'
+              ? (p.cheque_issue_date || todayIso)
+              : null,
           cheque_number: p.cheque_number || null,
           cheque_status: p.payment_type === 'cheque' ? 'pending' : null,
           bank_code: p.payment_type === 'cheque' ? (p.bank_code || null) : null,

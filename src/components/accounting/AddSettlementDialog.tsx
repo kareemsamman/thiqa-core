@@ -322,7 +322,8 @@ export function AddSettlementDialog({
           : Number(line.amount || 0);
 
         // Settlement_date: we use the issue date for cheques (when money
-        // logically left), and payment_date for everything else.
+        // logically left), and payment_date for everything else. The
+        // separate due date is persisted alongside in cheque_due_date.
         const settlementDate =
           line.payment_type === 'cheque'
             ? line.cheque_issue_date ?? line.payment_date
@@ -339,6 +340,14 @@ export function AddSettlementDialog({
           cheque_number: line.payment_type === 'cheque' ? line.cheque_number ?? null : null,
           bank_code: line.payment_type === 'cheque' ? line.bank_code ?? null : null,
           branch_code: line.payment_type === 'cheque' ? line.branch_code ?? null : null,
+          cheque_due_date:
+            line.payment_type === 'cheque'
+              ? line.cheque_due_date ?? line.cheque_issue_date ?? settlementDate
+              : null,
+          cheque_issue_date:
+            line.payment_type === 'cheque'
+              ? line.cheque_issue_date ?? settlementDate
+              : null,
           cheque_image_url:
             line.payment_type === 'cheque' ? line.cheque_image_urls?.[0] ?? null : null,
           cheque_image_urls:

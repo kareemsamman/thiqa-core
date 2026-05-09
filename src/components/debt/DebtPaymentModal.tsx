@@ -58,7 +58,12 @@ interface PaymentLine {
   id: string;
   amount: number;
   paymentType: 'cash' | 'cheque' | 'transfer' | 'visa';
+  /** For cash/transfer/visa: the day money flowed.
+   *  For cheque: تاريخ الاستحقاق (when the cheque can be cashed). */
   paymentDate: string;
+  /** Cheque-only: تاريخ الإصدار (when the customer wrote the cheque).
+   *  Defaults to today; can be earlier than paymentDate for postdated. */
+  chequeIssueDate?: string;
   chequeNumber?: string;
   bankCode?: string | null;
   branchCode?: string | null;
@@ -617,11 +622,13 @@ export function DebtPaymentModal({
     
     for (const cheque of cheques) {
       const paymentId = crypto.randomUUID();
+      const today = new Date().toISOString().split('T')[0];
       const payment: PaymentLine = {
         id: paymentId,
         amount: cheque.amount || 0,
         paymentType: 'cheque' as const,
-        paymentDate: cheque.payment_date || new Date().toISOString().split('T')[0],
+        paymentDate: cheque.payment_date || today,
+        chequeIssueDate: today,
         chequeNumber: cheque.cheque_number || '',
         bankCode: cheque.bank_code || null,
         branchCode: cheque.branch_code || cheque.branch_number || null,
@@ -814,11 +821,18 @@ export function DebtPaymentModal({
             // This links all payments from a single debt payment action
             const batchId = splits.length > 1 ? crypto.randomUUID() : null;
             
+            const todayIso = new Date().toISOString().split('T')[0];
             const paymentsToInsert = splits.map(split => ({
               policy_id: split.policyId,
               amount: split.amount,
               payment_type: paymentLine.paymentType,
               payment_date: paymentLine.paymentDate,
+              cheque_due_date:
+                paymentLine.paymentType === 'cheque' ? paymentLine.paymentDate : null,
+              cheque_issue_date:
+                paymentLine.paymentType === 'cheque'
+                  ? paymentLine.chequeIssueDate ?? todayIso
+                  : null,
               cheque_number: paymentLine.paymentType === 'cheque' ? paymentLine.chequeNumber : null,
               cheque_image_url: paymentLine.paymentType === 'cheque' ? paymentLine.cheque_image_url : null,
               bank_code: paymentLine.paymentType === 'cheque' ? (paymentLine.bankCode || null) : null,
@@ -1257,14 +1271,25 @@ export function DebtPaymentModal({
                             </>
                           }
                         />
-                        <div>
-                          <Label className="text-xs">تاريخ الاستحقاق</Label>
-                          <ArabicDatePicker
-                            value={payment.paymentDate}
-                            onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
-                            disabled={payment.tranzilaPaid}
-                            compact
-                          />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs">تاريخ الاستحقاق</Label>
+                            <ArabicDatePicker
+                              value={payment.paymentDate}
+                              onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
+                              disabled={payment.tranzilaPaid}
+                              compact
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">تاريخ الإصدار</Label>
+                            <ArabicDatePicker
+                              value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
+                              onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
+                              disabled={payment.tranzilaPaid}
+                              compact
+                            />
+                          </div>
                         </div>
                       </>
                     )}

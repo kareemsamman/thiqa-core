@@ -46,6 +46,12 @@ interface Payment {
   payment_date: string;
   cheque_number: string | null;
   cheque_date?: string | null;
+  /** تاريخ الاستحقاق — when the cheque can be cashed. Falls back to
+   *  payment_date for legacy rows written before the column existed. */
+  cheque_due_date?: string | null;
+  /** تاريخ الإصدار — when the customer wrote the cheque. Falls back
+   *  to payment_date for legacy rows. */
+  cheque_issue_date?: string | null;
   bank_code?: string | null;
   branch_code?: string | null;
   cheque_image_url: string | null;
@@ -73,7 +79,10 @@ interface PaymentLine {
   id: string;
   amount: number;
   paymentType: 'cash' | 'cheque' | 'transfer' | 'visa';
+  /** For cheque rows this is تاريخ الاستحقاق (when the cheque can be cashed). */
   paymentDate: string;
+  /** Cheque-only: تاريخ الإصدار. Defaults to today. */
+  chequeIssueDate?: string;
   chequeNumber?: string;
   bankCode?: string | null;
   branchCode?: string | null;
@@ -159,6 +168,7 @@ export function PolicyPaymentsSection({
     amount: "",
     payment_type: "cash",
     payment_date: new Date().toISOString().split('T')[0],
+    cheque_issue_date: new Date().toISOString().split('T')[0],
     cheque_number: "",
     bank_code: null as string | null,
     branch_code: null as string | null,
@@ -325,11 +335,13 @@ export function PolicyPaymentsSection({
     
     for (const cheque of cheques) {
       const paymentId = crypto.randomUUID();
+      const today = new Date().toISOString().split('T')[0];
       const payment: PaymentLine = {
         id: paymentId,
         amount: cheque.amount || 0,
         paymentType: 'cheque' as const,
-        paymentDate: cheque.payment_date || new Date().toISOString().split('T')[0],
+        paymentDate: cheque.payment_date || today,
+        chequeIssueDate: today,
         chequeNumber: cheque.cheque_number || '',
         bankCode: cheque.bank_code || null,
         branchCode: cheque.branch_code || cheque.branch_number || null,
@@ -499,6 +511,7 @@ export function PolicyPaymentsSection({
           continue;
         }
 
+        const todayIso = new Date().toISOString().split('T')[0];
         const { data, error } = await supabase
           .from('policy_payments')
           .insert({
@@ -506,6 +519,12 @@ export function PolicyPaymentsSection({
             amount: paymentLine.amount,
             payment_type: paymentLine.paymentType as Enums<'payment_type'>,
             payment_date: paymentLine.paymentDate,
+            cheque_due_date:
+              paymentLine.paymentType === 'cheque' ? paymentLine.paymentDate : null,
+            cheque_issue_date:
+              paymentLine.paymentType === 'cheque'
+                ? paymentLine.chequeIssueDate ?? todayIso
+                : null,
             cheque_number: paymentLine.paymentType === 'cheque' ? paymentLine.chequeNumber : null,
             cheque_image_url: paymentLine.paymentType === 'cheque' ? paymentLine.cheque_image_url : null,
             cheque_status: paymentLine.paymentType === 'cheque' ? 'pending' : null,
@@ -544,10 +563,12 @@ export function PolicyPaymentsSection({
 
   // Edit payment functions
   const resetEditForm = () => {
+    const today = new Date().toISOString().split('T')[0];
     setEditFormData({
       amount: "",
       payment_type: "cash",
-      payment_date: new Date().toISOString().split('T')[0],
+      payment_date: today,
+      cheque_issue_date: today,
       cheque_number: "",
       bank_code: null,
       branch_code: null,
@@ -655,6 +676,12 @@ export function PolicyPaymentsSection({
           amount: amount,
           payment_type: editFormData.payment_type as Enums<'payment_type'>,
           payment_date: editFormData.payment_date,
+          cheque_due_date:
+            editFormData.payment_type === 'cheque' ? editFormData.payment_date : null,
+          cheque_issue_date:
+            editFormData.payment_type === 'cheque'
+              ? (editFormData.cheque_issue_date || editFormData.payment_date)
+              : null,
           cheque_number: editFormData.payment_type === 'cheque' ? editFormData.cheque_number : null,
           bank_code: editFormData.payment_type === 'cheque' ? (editFormData.bank_code || null) : null,
           branch_code: editFormData.payment_type === 'cheque' ? (editFormData.branch_code || null) : null,
@@ -718,7 +745,14 @@ export function PolicyPaymentsSection({
     setEditFormData({
       amount: payment.amount.toString(),
       payment_type: payment.payment_type,
-      payment_date: payment.payment_date,
+      // For cheques the "تاريخ الدفع" picker maps to cheque_due_date.
+      // For everything else it stays the generic payment_date.
+      payment_date:
+        payment.payment_type === 'cheque'
+          ? (payment.cheque_due_date || payment.payment_date)
+          : payment.payment_date,
+      cheque_issue_date:
+        payment.cheque_issue_date || payment.payment_date,
       cheque_number: payment.cheque_number || "",
       bank_code: payment.bank_code || null,
       branch_code: payment.branch_code || null,
@@ -1153,14 +1187,25 @@ export function PolicyPaymentsSection({
                           </>
                         }
                       />
-                      <div>
-                        <Label className="text-xs">تاريخ الاستحقاق</Label>
-                        <ArabicDatePicker
-                          value={payment.paymentDate}
-                          onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
-                          disabled={payment.tranzilaPaid}
-                          compact
-                        />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs">تاريخ الاستحقاق</Label>
+                          <ArabicDatePicker
+                            value={payment.paymentDate}
+                            onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
+                            disabled={payment.tranzilaPaid}
+                            compact
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">تاريخ الإصدار</Label>
+                          <ArabicDatePicker
+                            value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
+                            onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
+                            disabled={payment.tranzilaPaid}
+                            compact
+                          />
+                        </div>
                       </div>
                     </>
                   )}
@@ -1351,6 +1396,15 @@ export function PolicyPaymentsSection({
                 </Label>
                 <ArabicDatePicker value={editFormData.payment_date} onChange={(v) => setEditFormData(f => ({ ...f, payment_date: v }))} />
               </div>
+              {editFormData.payment_type === 'cheque' && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">تاريخ الإصدار</Label>
+                  <ArabicDatePicker
+                    value={editFormData.cheque_issue_date}
+                    onChange={(v) => setEditFormData(f => ({ ...f, cheque_issue_date: v }))}
+                  />
+                </div>
+              )}
               {editFormData.payment_type === 'cheque' && (
                 <div className="sm:col-span-2">
                   <BankBranchPicker

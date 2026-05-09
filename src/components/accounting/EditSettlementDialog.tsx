@@ -59,6 +59,12 @@ interface Props {
 interface EditableState {
   total_amount: number;
   settlement_date: string;
+  /** Cheque-only: تاريخ الاستحقاق (when the cheque can be cashed). */
+  cheque_due_date: string;
+  /** Cheque-only: تاريخ الإصدار (when we wrote it / money left).
+   *  Mirrored back into settlement_date on save so the ledger logic
+   *  (which keys off settlement_date) keeps working unchanged. */
+  cheque_issue_date: string;
   payment_type: string;
   cheque_number: string;
   bank_code: string | null;
@@ -71,6 +77,8 @@ interface EditableState {
 const empty: EditableState = {
   total_amount: 0,
   settlement_date: '',
+  cheque_due_date: '',
+  cheque_issue_date: '',
   payment_type: 'cash',
   cheque_number: '',
   bank_code: null,
@@ -101,7 +109,7 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
       const { data, error } = await supabase
         .from(table)
         .select(
-          'total_amount, settlement_date, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, bank_reference, notes',
+          'total_amount, settlement_date, cheque_due_date, cheque_issue_date, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, bank_reference, notes',
         )
         .eq('id', row.id)
         .maybeSingle();
@@ -119,9 +127,14 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
             : [];
           const single = (d.cheque_image_url as string) ?? null;
           const merged = arr.length > 0 ? arr : single ? [single] : [];
+          const settlementDate = (d.settlement_date as string) ?? '';
           setState({
             total_amount: Number(d.total_amount ?? 0),
-            settlement_date: (d.settlement_date as string) ?? '',
+            settlement_date: settlementDate,
+            // Pre-2026-05 rows have NULL in the new columns — fall back
+            // to settlement_date so the picker isn't empty on legacy data.
+            cheque_due_date: (d.cheque_due_date as string) ?? settlementDate,
+            cheque_issue_date: (d.cheque_issue_date as string) ?? settlementDate,
             payment_type: (d.payment_type as string) ?? 'cash',
             cheque_number: (d.cheque_number as string) ?? '',
             bank_code: (d.bank_code as string) ?? null,
@@ -154,15 +167,28 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
     }
     setSaving(true);
     try {
+      // For cheques, the issue date is the canonical "money left on this
+      // day" timestamp — keep settlement_date in sync so the ledger and
+      // any non-cheque-aware view keep showing the same date.
+      const finalSettlementDate =
+        state.payment_type === 'cheque'
+          ? state.cheque_issue_date || state.settlement_date
+          : state.settlement_date;
       const { error } = await supabase
         .from(table)
         .update({
           total_amount: state.total_amount,
-          settlement_date: state.settlement_date,
+          settlement_date: finalSettlementDate,
           payment_type: state.payment_type,
           cheque_number: state.payment_type === 'cheque' ? state.cheque_number || null : null,
           bank_code: state.payment_type === 'cheque' ? state.bank_code : null,
           branch_code: state.payment_type === 'cheque' ? state.branch_code : null,
+          cheque_due_date:
+            state.payment_type === 'cheque'
+              ? state.cheque_due_date || finalSettlementDate
+              : null,
+          cheque_issue_date:
+            state.payment_type === 'cheque' ? finalSettlementDate : null,
           // Mirror first image into the legacy single column so older
           // viewers (list thumbnail, exports) keep working.
           cheque_image_url:
@@ -237,10 +263,20 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
 
                 <div className="space-y-1.5">
                   <Label className="text-[11px]">التاريخ</Label>
-                  <ArabicDatePicker
-                    value={state.settlement_date}
-                    onChange={(v) => setState({ ...state, settlement_date: v ?? '' })}
-                  />
+                  {state.payment_type === 'cheque' ? (
+                    // Cheques get split issue/due pickers down in the
+                    // cheque-specific section. Show the resolved issue
+                    // date here as a read-only badge so the row still
+                    // visually balances at 3 columns.
+                    <div className="h-10 flex items-center px-3 rounded-md border border-input bg-muted/40 text-xs text-muted-foreground">
+                      <span className="ltr-nums">{state.cheque_issue_date || '—'}</span>
+                    </div>
+                  ) : (
+                    <ArabicDatePicker
+                      value={state.settlement_date}
+                      onChange={(v) => setState({ ...state, settlement_date: v ?? '' })}
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -299,6 +335,22 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
                         inputMode="numeric"
                         dir="ltr"
                         className="h-10 tabular-nums"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1.5 min-w-0">
+                      <Label className="text-[11px]">تاريخ الاستحقاق</Label>
+                      <ArabicDatePicker
+                        value={state.cheque_due_date}
+                        onChange={(v) => setState({ ...state, cheque_due_date: v ?? '' })}
+                      />
+                    </div>
+                    <div className="space-y-1.5 min-w-0">
+                      <Label className="text-[11px]">تاريخ الإصدار</Label>
+                      <ArabicDatePicker
+                        value={state.cheque_issue_date}
+                        onChange={(v) => setState({ ...state, cheque_issue_date: v ?? '' })}
                       />
                     </div>
                   </div>

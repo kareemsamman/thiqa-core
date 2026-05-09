@@ -412,7 +412,8 @@ function ConsumedChequesRow({
       const { data, error } = await supabase
         .from('policy_payments')
         .select(
-          `id, amount, payment_date, payment_type, cheque_number,
+          `id, amount, payment_date, cheque_due_date, cheque_issue_date,
+           payment_type, cheque_number,
            cheque_date, bank_code, branch_code, cheque_image_url,
            card_last_four, refused, notes, locked, policy_id,
            policies!policy_payments_policy_id_fkey(
@@ -432,6 +433,8 @@ function ConsumedChequesRow({
         id: raw.id,
         amount: raw.amount,
         payment_date: raw.payment_date,
+        cheque_due_date: raw.cheque_due_date,
+        cheque_issue_date: raw.cheque_issue_date,
         payment_type: raw.payment_type,
         cheque_number: raw.cheque_number,
         cheque_date: raw.cheque_date,
@@ -860,6 +863,8 @@ interface PaymentEditRecord {
   id: string;
   amount: number;
   payment_date: string;
+  cheque_due_date?: string | null;
+  cheque_issue_date?: string | null;
   payment_type: string;
   cheque_number: string | null;
   cheque_date: string | null;
@@ -883,6 +888,8 @@ interface RawPaymentForEdit {
   id: string;
   amount: number;
   payment_date: string;
+  cheque_due_date?: string | null;
+  cheque_issue_date?: string | null;
   payment_type: string;
   cheque_number: string | null;
   cheque_date: string | null;

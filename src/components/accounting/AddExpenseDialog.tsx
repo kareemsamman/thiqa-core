@@ -257,6 +257,9 @@ export function AddExpenseDialog({ open, onOpenChange, onSaved }: Props) {
         const amount = isCustomerCheque
           ? (line.selected_cheques ?? []).reduce((s, c) => s + Number(c.amount || 0), 0)
           : Number(line.amount || 0);
+        // expense_date acts as the issue date for cheques (when money
+        // logically left). cheque_due_date is persisted alongside so the
+        // cheques page shows the right "تاريخ الاستحقاق".
         const expenseDate =
           line.payment_type === 'cheque'
             ? line.cheque_issue_date ?? line.payment_date
@@ -278,6 +281,14 @@ export function AddExpenseDialog({ open, onOpenChange, onSaved }: Props) {
             cheque_number: line.payment_type === 'cheque' ? line.cheque_number ?? null : null,
             bank_code: line.payment_type === 'cheque' ? line.bank_code ?? null : null,
             branch_code: line.payment_type === 'cheque' ? line.branch_code ?? null : null,
+            cheque_due_date:
+              line.payment_type === 'cheque'
+                ? line.cheque_due_date ?? line.cheque_issue_date ?? expenseDate
+                : null,
+            cheque_issue_date:
+              line.payment_type === 'cheque'
+                ? line.cheque_issue_date ?? expenseDate
+                : null,
             cheque_image_url:
               line.payment_type === 'cheque' ? line.cheque_image_url ?? null : null,
             bank_reference:

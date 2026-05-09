@@ -42,7 +42,15 @@ interface ChequeLine {
   id: string;
   amount: number;
   cheque_number: string;
+  /** تاريخ الاستحقاق — when the customer's cheque can be cashed.
+   *  Stored on policy_payments.cheque_due_date AND mirrored to
+   *  payment_date so existing cheque-status / overdue logic
+   *  (which still keys off payment_date) keeps working. */
   payment_date: string;
+  /** تاريخ الإصدار — when the customer wrote/handed over the
+   *  cheque. Defaults to today; for postdated cheques this stays
+   *  today while payment_date moves to a future month. */
+  issue_date: string;
   bank_code: string | null;
   branch_code: string | null;
   cheque_image_url?: string;
@@ -115,11 +123,13 @@ export function AddCustomerChequeModal({
   }, [clients, clientSearch]);
 
   const addChequeLine = () => {
+    const today = new Date().toISOString().split('T')[0];
     setChequeLines(prev => [...prev, {
       id: crypto.randomUUID(),
       amount: 0,
       cheque_number: '',
-      payment_date: new Date().toISOString().split('T')[0],
+      payment_date: today,
+      issue_date: today,
       bank_code: null,
       branch_code: null,
     }]);
@@ -138,11 +148,15 @@ export function AddCustomerChequeModal({
     // — keep whatever it gave us as `branch_code` (it's typically a
     // numeric branch id), and leave `bank_code` null unless the scanner
     // later starts returning a 2-digit MICR code.
+    const today = new Date().toISOString().split('T')[0];
     const newLines: ChequeLine[] = scannedCheques.map(cheque => ({
       id: crypto.randomUUID(),
       amount: cheque.amount || 0,
       cheque_number: cheque.cheque_number || '',
-      payment_date: cheque.payment_date || new Date().toISOString().split('T')[0],
+      // Date written on the cheque face = when it can be cashed = due date.
+      payment_date: cheque.payment_date || today,
+      // Issue date = today (the cheque is being recorded right now).
+      issue_date: today,
       bank_code: cheque.bank_code || null,
       branch_code: cheque.branch_code || cheque.branch_number || null,
       cheque_image_url: cheque.image_url,
@@ -301,6 +315,8 @@ export function AddCustomerChequeModal({
             amount: assignable,
             payment_type: 'cheque',
             payment_date: cheque.payment_date,
+            cheque_due_date: cheque.payment_date,
+            cheque_issue_date: cheque.issue_date,
             cheque_number: cheque.cheque_number,
             cheque_image_url: cheque.cheque_image_url || null,
             cheque_status: 'pending',
@@ -323,6 +339,8 @@ export function AddCustomerChequeModal({
             amount: remainingAmount,
             payment_type: 'cheque',
             payment_date: cheque.payment_date,
+            cheque_due_date: cheque.payment_date,
+            cheque_issue_date: cheque.issue_date,
             cheque_number: cheque.cheque_number,
             cheque_image_url: cheque.cheque_image_url || null,
             cheque_status: 'pending',
@@ -528,8 +546,8 @@ export function AddCustomerChequeModal({
                               </>
                             }
                           />
-                          {/* Amount + due date on a second row */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Amount + due date + issue date on a second row */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div className="space-y-1">
                               <Label className="text-xs">المبلغ *</Label>
                               <Input
@@ -545,6 +563,14 @@ export function AddCustomerChequeModal({
                               <ArabicDatePicker
                                 value={cheque.payment_date}
                                 onChange={(date) => updateChequeLine(cheque.id, { payment_date: date })}
+                                compact
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">تاريخ الإصدار</Label>
+                              <ArabicDatePicker
+                                value={cheque.issue_date}
+                                onChange={(date) => updateChequeLine(cheque.id, { issue_date: date })}
                                 compact
                               />
                             </div>

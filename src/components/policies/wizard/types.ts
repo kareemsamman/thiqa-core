@@ -95,7 +95,11 @@ export interface PaymentLine {
   id: string;
   payment_type: string;
   amount: number;
+  /** For cheques this is تاريخ الاستحقاق (when the cheque can be cashed). */
   payment_date: string;
+  /** Cheque-only: تاريخ الإصدار. Defaults to today; can stay today
+   *  even when payment_date is moved to a future month for postdated. */
+  cheque_issue_date?: string;
   cheque_number?: string;
   /** MICR bank code (e.g. "12" = Hapoalim). Only set when payment_type === 'cheque'. */
   bank_code?: string | null;

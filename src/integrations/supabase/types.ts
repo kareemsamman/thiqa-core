@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -11,6 +12,31 @@ export type Database = {
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -1653,8 +1679,10 @@ export type Database = {
           broker_id: string
           card_expiry: string | null
           card_last_four: string | null
+          cheque_due_date: string | null
           cheque_image_url: string | null
           cheque_image_urls: string[] | null
+          cheque_issue_date: string | null
           cheque_number: string | null
           created_at: string
           created_by_admin_id: string | null
@@ -1683,8 +1711,10 @@ export type Database = {
           broker_id: string
           card_expiry?: string | null
           card_last_four?: string | null
+          cheque_due_date?: string | null
           cheque_image_url?: string | null
           cheque_image_urls?: string[] | null
+          cheque_issue_date?: string | null
           cheque_number?: string | null
           created_at?: string
           created_by_admin_id?: string | null
@@ -1713,8 +1743,10 @@ export type Database = {
           broker_id?: string
           card_expiry?: string | null
           card_last_four?: string | null
+          cheque_due_date?: string | null
           cheque_image_url?: string | null
           cheque_image_urls?: string[] | null
+          cheque_issue_date?: string | null
           cheque_number?: string | null
           created_at?: string
           created_by_admin_id?: string | null
@@ -2587,8 +2619,10 @@ export type Database = {
           branch_id: string | null
           card_expiry: string | null
           card_last_four: string | null
+          cheque_due_date: string | null
           cheque_image_url: string | null
           cheque_image_urls: string[] | null
+          cheque_issue_date: string | null
           cheque_number: string | null
           company_id: string
           created_at: string
@@ -2613,8 +2647,10 @@ export type Database = {
           branch_id?: string | null
           card_expiry?: string | null
           card_last_four?: string | null
+          cheque_due_date?: string | null
           cheque_image_url?: string | null
           cheque_image_urls?: string[] | null
+          cheque_issue_date?: string | null
           cheque_number?: string | null
           company_id: string
           created_at?: string
@@ -2639,8 +2675,10 @@ export type Database = {
           branch_id?: string | null
           card_expiry?: string | null
           card_last_four?: string | null
+          cheque_due_date?: string | null
           cheque_image_url?: string | null
           cheque_image_urls?: string[] | null
+          cheque_issue_date?: string | null
           cheque_number?: string | null
           company_id?: string
           created_at?: string
@@ -3127,8 +3165,10 @@ export type Database = {
           branch_id: string | null
           broker_id: string | null
           category: string
+          cheque_due_date: string | null
           cheque_image_url: string | null
           cheque_image_urls: string[] | null
+          cheque_issue_date: string | null
           cheque_number: string | null
           cheque_status: string | null
           company_id: string | null
@@ -3156,8 +3196,10 @@ export type Database = {
           branch_id?: string | null
           broker_id?: string | null
           category: string
+          cheque_due_date?: string | null
           cheque_image_url?: string | null
           cheque_image_urls?: string[] | null
+          cheque_issue_date?: string | null
           cheque_number?: string | null
           cheque_status?: string | null
           company_id?: string | null
@@ -3185,8 +3227,10 @@ export type Database = {
           branch_id?: string | null
           broker_id?: string | null
           category?: string
+          cheque_due_date?: string | null
           cheque_image_url?: string | null
           cheque_image_urls?: string[] | null
+          cheque_issue_date?: string | null
           cheque_number?: string | null
           cheque_status?: string | null
           company_id?: string | null
@@ -4957,7 +5001,9 @@ export type Database = {
           card_expiry: string | null
           card_last_four: string | null
           cheque_date: string | null
+          cheque_due_date: string | null
           cheque_image_url: string | null
+          cheque_issue_date: string | null
           cheque_number: string | null
           cheque_status: string | null
           created_at: string
@@ -4993,7 +5039,9 @@ export type Database = {
           card_expiry?: string | null
           card_last_four?: string | null
           cheque_date?: string | null
+          cheque_due_date?: string | null
           cheque_image_url?: string | null
+          cheque_issue_date?: string | null
           cheque_number?: string | null
           cheque_status?: string | null
           created_at?: string
@@ -5029,7 +5077,9 @@ export type Database = {
           card_expiry?: string | null
           card_last_four?: string | null
           cheque_date?: string | null
+          cheque_due_date?: string | null
           cheque_image_url?: string | null
+          cheque_issue_date?: string | null
           cheque_number?: string | null
           cheque_status?: string | null
           created_at?: string
@@ -8061,6 +8111,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       age_band: ["UNDER_24", "UP_24", "ANY"],
@@ -8143,3 +8196,4 @@ export const Constants = {
     },
   },
 } as const
+<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
