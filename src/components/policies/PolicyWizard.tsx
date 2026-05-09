@@ -675,11 +675,8 @@ export function PolicyWizard({
 
       // Create new client if needed
       if (createNewClient && !clientId) {
-        // Generate file_number (best-effort — if the RPC returns a value
-        // that's already taken we retry with file_number=null below).
-        const { data: fileNumData } = await supabase.rpc('generate_file_number');
-        const generatedFileNumber = fileNumData || null;
-
+        // file_number is filled in by trg_set_client_file_number on the DB
+        // side, so we don't need to ask for one here.
         const baseClientPayload = {
           full_name: newClient.full_name.trim(),
           id_number: newClient.id_number.trim(),
@@ -694,22 +691,11 @@ export function PolicyWizard({
           created_by_admin_id: user?.id || null,
         };
 
-        let { data: newClientData, error: clientError } = await supabase
+        const { data: newClientData, error: clientError } = await supabase
           .from('clients')
-          .insert({ ...baseClientPayload, file_number: generatedFileNumber })
+          .insert(baseClientPayload)
           .select()
           .single();
-
-        // generate_file_number() can return a value that's already in use
-        // (sequence drift, manual file_numbers, etc.). On that conflict
-        // retry once without a file_number — the user can fill it in later.
-        if (clientError?.code === '23505' && clientError.message?.includes('file_number')) {
-          ({ data: newClientData, error: clientError } = await supabase
-            .from('clients')
-            .insert({ ...baseClientPayload, file_number: null })
-            .select()
-            .single());
-        }
 
         if (clientError) {
           // If duplicate id_number, fetch the existing client instead
@@ -937,11 +923,8 @@ export function PolicyWizard({
         let carId = selectedCar?.id;
         
         if (createNewClient && !clientId) {
-          // Generate file_number for new client (best-effort — if the RPC
-          // returns a value already in use we retry without it below).
-          const { data: fileNumData } = await supabase.rpc('generate_file_number');
-          const generatedFileNumber = fileNumData || null;
-
+          // file_number is filled in by trg_set_client_file_number on the
+          // DB side, so we don't pass one here.
           const baseClientPayload = {
             full_name: newClient.full_name.trim(),
             id_number: newClient.id_number.trim(),
@@ -956,20 +939,11 @@ export function PolicyWizard({
             created_by_admin_id: user?.id || null,
           };
 
-          let { data: newClientData, error: clientError } = await supabase
+          const { data: newClientData, error: clientError } = await supabase
             .from('clients')
-            .insert({ ...baseClientPayload, file_number: generatedFileNumber })
+            .insert(baseClientPayload)
             .select()
             .single();
-
-          // On file_number unique-constraint conflict, retry without one.
-          if (clientError?.code === '23505' && clientError.message?.includes('file_number')) {
-            ({ data: newClientData, error: clientError } = await supabase
-              .from('clients')
-              .insert({ ...baseClientPayload, file_number: null })
-              .select()
-              .single());
-          }
 
           if (clientError) {
             if (clientError.code === '23505' && clientError.message?.includes('id_number')) {
