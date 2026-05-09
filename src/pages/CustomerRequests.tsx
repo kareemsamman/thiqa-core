@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
@@ -65,6 +65,36 @@ function toWhatsAppDigits(phone: string): string {
   return digits;
 }
 
+// Short notification chime synthesised on the fly via Web Audio API —
+// no asset to ship, no autoplay headaches once the user has interacted
+// with the page at least once. Two quick beeps so it cuts through.
+function playNotificationChime() {
+  try {
+    const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx: AudioContext = new Ctx();
+    const beep = (freq: number, start: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const t0 = ctx.currentTime + start;
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(0.18, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+      osc.start(t0);
+      osc.stop(t0 + duration + 0.01);
+    };
+    beep(880, 0, 0.18);
+    beep(1175, 0.18, 0.22);
+    setTimeout(() => ctx.close().catch(() => {}), 1000);
+  } catch {
+    // Audio failure is harmless — the toast still fires.
+  }
+}
+
 export default function CustomerRequests() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -96,6 +126,44 @@ export default function CustomerRequests() {
       handled: all.filter((r) => r.status === "handled").length,
     };
   }, [requests]);
+
+  // Realtime: chime + toast whenever a new request lands. RLS on
+  // customer_requests scopes the channel to the current agent's rows,
+  // so we don't get noise from other tenants. We use a ref to skip the
+  // first event after a hard refresh — without it, the optimistic
+  // refetch double-toasts.
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (requests) {
+      requests.forEach((r) => seenIdsRef.current.add(r.id));
+    }
+  }, [requests]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("customer_requests_inserts")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "customer_requests" },
+        (payload) => {
+          const row = payload.new as CustomerRequest;
+          if (!row?.id || seenIdsRef.current.has(row.id)) return;
+          seenIdsRef.current.add(row.id);
+          playNotificationChime();
+          const typeLabel =
+            REQUEST_TYPE_META[row.request_type]?.label ?? row.request_type;
+          toast({
+            title: "طلب جديد من بوت واتساب",
+            description: `${typeLabel} — ${formatLocalPhone(row.phone_number)}`,
+          });
+          queryClient.invalidateQueries({ queryKey: ["customer_requests"] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const markHandled = useMutation({
     mutationFn: async (id: string) => {
