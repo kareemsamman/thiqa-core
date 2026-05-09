@@ -1802,6 +1802,43 @@ function generateReportHtml(args: GenerateReportArgs): string {
       .bottom { flex-direction: column; }
       .totals { width: 100%; }
       .files-grid { grid-template-columns: repeat(2, 1fr); }
+
+      /* Tables: cells overflow on narrow viewports because of inline column
+         widths (170px / 120px) and white-space:nowrap on dates/amounts.
+         Drop the fixed widths, shrink padding/fonts, and let the long
+         strings wrap so nothing pokes past the table border. */
+      .data-table, .drivers-table, .payments { table-layout: auto; width: 100%; }
+      .data-table th, .drivers-table th, .payments th { width: auto !important; }
+      .data-table thead th,
+      .data-table tbody td,
+      .drivers-table thead th,
+      .drivers-table tbody td,
+      .payments thead th,
+      .payments tbody td {
+        padding: 6px 5px;
+        font-size: 11px;
+        letter-spacing: 0.3px;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      .data-table thead th:first-child,
+      .drivers-table thead th:first-child,
+      .data-table tbody td.num,
+      .drivers-table tbody td.num { width: 24px; }
+      .items tbody td.period {
+        white-space: normal;
+        font-size: 10.5px;
+      }
+      .items tbody td.num { white-space: normal; }
+      .items tbody .item-title { font-size: 12px; }
+      .items tbody .item-meta,
+      .items tbody .item-commission { font-size: 10.5px; }
+      .items tbody .item-broker { font-size: 10px; padding: 2px 6px; }
+      .items tbody tr.package-header td { padding: 8px 6px; }
+      .items tbody tr.package-header .package-title { gap: 6px; font-size: 12px; }
+      .items tbody tr.package-header .package-types { font-size: 12px; }
+      .doc-number-chip { font-size: 9px; padding: 1px 5px; margin-left: 4px; }
+      .cancelled-tag { font-size: 8px; padding: 1px 4px; margin-right: 4px; }
     }
   </style>
 </head>
