@@ -37,13 +37,34 @@ const STATUS_LABELS: Record<string, string> = {
   closed: "مغلق",
 };
 
-// Map request_type → friendly Arabic label + icon. Falls back to the raw
-// string for any future request kind we haven't categorised yet.
-const REQUEST_TYPE_META: Record<string, { label: string; icon: typeof FileText }> = {
-  quote: { label: "عرض سعر", icon: FileText },
-  help: { label: "طلب مساعدة", icon: HelpCircle },
-  support: { label: "طلب مساعدة", icon: HelpCircle },
-  manager: { label: "طلب التواصل مع الإدارة", icon: UserCog },
+// Map request_type → friendly Arabic label, icon, and tone. Tones drive
+// the card's accent (icon box + status pill colour) so the eye can spot
+// quote vs. manager vs. help requests at a glance. Falls back to the raw
+// string + neutral tone for any future request kind we haven't catalogued.
+type RequestTone = "primary" | "blue" | "amber";
+const REQUEST_TYPE_META: Record<string, { label: string; icon: typeof FileText; tone: RequestTone }> = {
+  quote: { label: "عرض سعر", icon: FileText, tone: "amber" },
+  help: { label: "طلب مساعدة", icon: HelpCircle, tone: "primary" },
+  support: { label: "طلب مساعدة", icon: HelpCircle, tone: "primary" },
+  manager: { label: "طلب التواصل مع الإدارة", icon: UserCog, tone: "blue" },
+};
+
+const TONE_CLASSES: Record<RequestTone, { iconBox: string; iconColor: string; ring: string }> = {
+  primary: {
+    iconBox: "bg-primary/10",
+    iconColor: "text-primary",
+    ring: "ring-primary/15",
+  },
+  blue: {
+    iconBox: "bg-blue-500/10",
+    iconColor: "text-blue-600 dark:text-blue-400",
+    ring: "ring-blue-500/15",
+  },
+  amber: {
+    iconBox: "bg-amber-500/10",
+    iconColor: "text-amber-600 dark:text-amber-400",
+    ring: "ring-amber-500/15",
+  },
 };
 
 // Filter groups: "help" and "support" both surface as "طلب مساعدة" in
@@ -372,58 +393,64 @@ function RequestCard({ request: r, onMarkHandled, onDelete, markHandledPending }
   const meta = REQUEST_TYPE_META[r.request_type] ?? {
     label: r.request_type,
     icon: FileText,
+    tone: "primary" as RequestTone,
   };
   const Icon = meta.icon;
+  const tone = TONE_CLASSES[meta.tone];
   const localPhone = formatLocalPhone(r.phone_number);
   const isOpen = r.status === "open";
 
   return (
-    <Card className="overflow-hidden transition-shadow hover:shadow-md">
-      <div className={`h-1 w-full ${isOpen ? "bg-primary" : "bg-emerald-500"}`} />
-      <CardContent className="p-4 space-y-4">
-        {/* Header: type + status */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className="gap-1 font-normal">
-              <Icon className="h-3 w-3" />
-              {meta.label}
-            </Badge>
-            <Badge
-              variant={isOpen ? "default" : "secondary"}
-              className={`gap-1 ${!isOpen ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15" : ""}`}
+    <Card className={`group relative rounded-2xl border shadow-sm hover:shadow-md transition-all overflow-hidden ${isOpen ? "" : "bg-muted/20"}`}>
+      <CardContent className="p-5 space-y-4">
+        {/* Top row: icon + type, status pill, delete */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`shrink-0 rounded-xl p-2.5 ${tone.iconBox}`}>
+              <Icon className={`h-5 w-5 ${tone.iconColor}`} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground font-medium">{meta.label}</p>
+              <h3 className="font-semibold text-[15px] leading-snug truncate">{r.title}</h3>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                isOpen
+                  ? "bg-primary/10 text-primary"
+                  : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+              }`}
             >
               {isOpen ? <Clock className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
               {STATUS_LABELS[r.status] ?? r.status}
-            </Badge>
+            </span>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+              onClick={onDelete}
+              title="حذف الطلب"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 -mt-1 -ml-1"
-            onClick={onDelete}
-            title="حذف الطلب"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
         </div>
 
-        {/* Title */}
-        <h3 className="font-semibold text-base leading-snug">{r.title}</h3>
-
-        {/* Phone row */}
+        {/* Phone + WhatsApp */}
         <div className="flex items-center gap-2 flex-wrap">
           <a
             href={`tel:${localPhone}`}
-            className="inline-flex items-center gap-1.5 text-primary hover:underline font-mono text-sm"
+            className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 hover:bg-muted px-3 py-1.5 text-sm font-mono transition-colors"
           >
-            <Phone className="h-3.5 w-3.5" />
-            {localPhone}
+            <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-foreground">{localPhone}</span>
           </a>
           <a
             href={`https://wa.me/${toWhatsAppDigits(r.phone_number)}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium px-2.5 py-1 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium px-3 py-1.5 transition-colors"
             title="فتح محادثة واتساب"
           >
             <MessageCircle className="h-3.5 w-3.5" />
@@ -432,12 +459,12 @@ function RequestCard({ request: r, onMarkHandled, onDelete, markHandledPending }
         </div>
 
         {/* Details */}
-        <div className="rounded-md bg-muted/40 border border-border/50 p-3 text-sm whitespace-pre-line text-foreground/80">
+        <div className="rounded-xl bg-muted/40 px-4 py-3 text-sm whitespace-pre-line text-foreground/85 leading-relaxed">
           {r.content}
         </div>
 
-        {/* Footer: date + actions */}
-        <div className="flex items-center justify-between gap-2 pt-1 border-t">
+        {/* Footer: date + action */}
+        <div className="flex items-center justify-between gap-2 pt-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Calendar className="h-3.5 w-3.5" />
             <span>{format(new Date(r.created_at), "d MMM yyyy", { locale: ar })}</span>
@@ -445,7 +472,12 @@ function RequestCard({ request: r, onMarkHandled, onDelete, markHandledPending }
             <span>{formatDistanceToNow(new Date(r.created_at), { locale: ar, addSuffix: true })}</span>
           </div>
           {isOpen && (
-            <Button size="sm" onClick={onMarkHandled} disabled={markHandledPending}>
+            <Button
+              size="sm"
+              onClick={onMarkHandled}
+              disabled={markHandledPending}
+              className="rounded-full shadow-sm"
+            >
               <CheckCircle2 className="h-4 w-4 ml-1" />
               تم التواصل
             </Button>
@@ -467,26 +499,26 @@ interface StatCardProps {
 
 function StatCard({ label, value, icon: Icon, tone, onClick, active }: StatCardProps) {
   const toneClasses = {
-    primary: "bg-primary/10 text-primary",
-    success: "bg-emerald-500/10 text-emerald-600",
-    muted: "bg-muted text-muted-foreground",
+    primary: { card: "bg-primary/5 border-primary/15", iconBox: "bg-primary/10", iconColor: "text-primary" },
+    success: { card: "bg-emerald-500/5 border-emerald-500/15", iconBox: "bg-emerald-500/10", iconColor: "text-emerald-600 dark:text-emerald-400" },
+    muted: { card: "bg-card border-border", iconBox: "bg-muted", iconColor: "text-muted-foreground" },
   }[tone];
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`text-right rounded-lg border bg-card p-4 transition-all hover:shadow-sm ${
-        active ? "ring-2 ring-primary/40 border-primary/30" : ""
+      className={`text-right rounded-2xl border p-5 shadow-sm hover:shadow-md transition-all ${toneClasses.card} ${
+        active ? "ring-2 ring-primary/40" : ""
       }`}
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground mb-1">{label}</p>
-          <p className="text-2xl font-bold">{value}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1.5 min-w-0">
+          <p className="text-sm font-medium text-muted-foreground truncate">{label}</p>
+          <p className="text-3xl font-bold ltr-nums">{value}</p>
         </div>
-        <div className={`rounded-md p-2 ${toneClasses}`}>
-          <Icon className="h-5 w-5" />
+        <div className={`rounded-xl p-3 shrink-0 ${toneClasses.iconBox}`}>
+          <Icon className={`h-5 w-5 ${toneClasses.iconColor}`} />
         </div>
       </div>
     </button>
