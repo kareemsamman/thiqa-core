@@ -180,9 +180,13 @@ export function Header({ title, subtitle }: HeaderProps) {
             centered in whatever space remains between title and
             cluster. Hidden between md and lg — too cramped there;
             users fall back to the sidebar for sibling navigation at
-            those widths. */}
-        <nav className="hidden lg:flex flex-1 min-w-0 overflow-x-auto overflow-y-hidden justify-center">
-          <div className="flex items-center gap-2 w-max pb-1">
+            those widths. `mx-auto` on the inner strip (instead of
+            `justify-center` on the nav) centers the strip when it
+            fits but collapses to zero when content overflows — that
+            way the first/last tab in RTL doesn't get pushed beyond
+            the lane edge and clipped behind the title divider. */}
+        <nav className="hidden lg:flex flex-1 min-w-0 overflow-x-auto overflow-y-hidden">
+          <div className="flex items-center gap-2 w-max pb-1 mx-auto">
             {siblingTabs.map((tab) => {
               const active = isTabActive(tab.href);
               return (
