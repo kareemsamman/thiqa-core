@@ -758,10 +758,20 @@ async function sendPolicyStep(
 }
 
 async function lookupActivePolicies(ctx: QuoteFlowCtx, clientId: string) {
-  const { data: policies } = await ctx.supabase
+  // Filters mirror the dashboard's "ساري" badge: not soft-deleted, not
+  // cancelled, and end_date still in the future. policy_type doesn't
+  // exist on this table — the columns are policy_type_parent /
+  // policy_type_child — and we don't need either since we only branch
+  // on the count.
+  const { data: policies, error } = await ctx.supabase
     .from("policies")
-    .select("id, end_date, cancelled, policy_type, start_date")
-    .eq("client_id", clientId);
+    .select("id, end_date, cancelled, start_date")
+    .eq("client_id", clientId)
+    .is("deleted_at", null);
+  if (error) {
+    console.error("[policy-flow] active policies query failed:", error);
+    return [];
+  }
   const today = new Date();
   return (policies ?? []).filter(
     (p: any) => !p.cancelled && (!p.end_date || new Date(p.end_date) >= today),
@@ -902,7 +912,7 @@ async function respondWithPolicies(ctx: QuoteFlowCtx, clientId: string) {
 async function startPolicyFlow(ctx: QuoteFlowCtx) {
   await sendPolicyStep(
     ctx,
-    "للتأكد إنك صاحب الحساب، ابعتلي رقم الهوية (٩ أرقام) لو سمحت.",
+    "شو رقم هويتك؟",
     "awaiting_id_for_policy",
     {},
   );
