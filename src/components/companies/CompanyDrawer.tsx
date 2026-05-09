@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -22,7 +21,8 @@ import {
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, Loader2 } from 'lucide-react';
+import { Trash2, Loader2, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { Tables, Enums } from '@/integrations/supabase/types';
 
 type Company = Tables<'insurance_companies'>;
@@ -284,22 +284,38 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
 
             <div className="space-y-3">
               <Label className="text-right block">أنواع التأمين *</Label>
-              <div className="grid grid-cols-2 gap-3">
-                {POLICY_TYPES.map(type => (
-                  <div key={type.value} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`type-${type.value}`}
-                      checked={formData.category_parents.includes(type.value)}
-                      onCheckedChange={(checked) => handleTypeToggle(type.value, checked as boolean)}
-                    />
-                    <Label 
-                      htmlFor={`type-${type.value}`} 
-                      className="text-sm cursor-pointer"
+              <div className="grid grid-cols-2 gap-2">
+                {POLICY_TYPES.map(type => {
+                  const selected = formData.category_parents.includes(type.value);
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={selected}
+                      onClick={() => handleTypeToggle(type.value, !selected)}
+                      className={cn(
+                        "group flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        selected
+                          ? "border-primary bg-primary/5 text-foreground shadow-sm"
+                          : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground",
+                      )}
                     >
-                      {type.label}
-                    </Label>
-                  </div>
-                ))}
+                      <span>{type.label}</span>
+                      <span
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all",
+                          selected
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-input bg-background group-hover:border-primary/50",
+                        )}
+                      >
+                        {selected && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
               <p className="text-xs text-muted-foreground">
                 يمكنك اختيار أكثر من نوع تأمين للشركة الواحدة
