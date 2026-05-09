@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
-import { Loader2, RefreshCw, CheckCircle2, Phone, Inbox, Clock, FileText, HelpCircle, Sparkles, MessageCircle, UserCog, Trash2, Calendar, Search, X } from "lucide-react";
+import { Loader2, RefreshCw, CheckCircle2, Phone, Inbox, Clock, FileText, HelpCircle, Sparkles, MessageCircle, UserCog, Trash2, Calendar, Search, X, CalendarClock } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -41,12 +41,13 @@ const STATUS_LABELS: Record<string, string> = {
 // the card's accent (icon box + status pill colour) so the eye can spot
 // quote vs. manager vs. help requests at a glance. Falls back to the raw
 // string + neutral tone for any future request kind we haven't catalogued.
-type RequestTone = "primary" | "blue" | "amber";
+type RequestTone = "primary" | "blue" | "amber" | "rose";
 const REQUEST_TYPE_META: Record<string, { label: string; icon: typeof FileText; tone: RequestTone }> = {
   quote: { label: "عرض سعر", icon: FileText, tone: "amber" },
   help: { label: "طلب مساعدة", icon: HelpCircle, tone: "primary" },
   support: { label: "طلب مساعدة", icon: HelpCircle, tone: "primary" },
   manager: { label: "طلب التواصل مع الإدارة", icon: UserCog, tone: "blue" },
+  accident_appointment: { label: "تحديد موعد — حادث طرق", icon: CalendarClock, tone: "rose" },
 };
 
 const TONE_CLASSES: Record<RequestTone, { iconBox: string; iconColor: string; ring: string }> = {
@@ -65,6 +66,11 @@ const TONE_CLASSES: Record<RequestTone, { iconBox: string; iconColor: string; ri
     iconColor: "text-amber-600 dark:text-amber-400",
     ring: "ring-amber-500/15",
   },
+  rose: {
+    iconBox: "bg-rose-500/10",
+    iconColor: "text-rose-600 dark:text-rose-400",
+    ring: "ring-rose-500/15",
+  },
 };
 
 // Filter groups: "help" and "support" both surface as "طلب مساعدة" in
@@ -74,6 +80,7 @@ const REQUEST_TYPE_GROUPS: Record<string, string[]> = {
   quote: ["quote"],
   help: ["help", "support"],
   manager: ["manager"],
+  accident_appointment: ["accident_appointment"],
 };
 
 // Israeli mobile numbers come in from WhatsApp as "972XXXXXXXXX". Drop
@@ -313,6 +320,8 @@ export default function CustomerRequests() {
               <SelectItem value="all">كل الأنواع</SelectItem>
               <SelectItem value="quote">عرض سعر</SelectItem>
               <SelectItem value="manager">طلب الإدارة</SelectItem>
+              <SelectItem value="accident_appointment">تحديد موعد — حادث طرق</SelectItem>
+              <SelectItem value="help">طلب مساعدة</SelectItem>
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>

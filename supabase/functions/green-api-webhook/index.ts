@@ -1216,17 +1216,106 @@ async function handleAccidentInfo(ctx: QuoteFlowCtx) {
     ctx.senderId,
     ACCIDENT_INFO_MESSAGE,
   );
+  // Set awaiting_appointment state so the customer's next reply (their
+  // proposed time to come into the office) gets captured as an
+  // accident_appointment request. The message ends with "احكيلي إيمتى
+  // يناسبك"; the next turn is the answer.
   await ctx.supabase.from("customer_chat_messages").insert({
     session_id: ctx.sessionId,
     role: "bot",
     content: ACCIDENT_INFO_MESSAGE,
     whatsapp_message_id: sendResult.idMessage,
-    metadata: { deterministic: "accident_info", send_ok: sendResult.ok },
+    metadata: {
+      deterministic: "accident_info",
+      send_ok: sendResult.ok,
+      flow: "accident",
+      flow_step: "awaiting_appointment",
+      flow_data: {},
+    },
   });
   await ctx.supabase
     .from("customer_chat_sessions")
     .update({ last_message_at: new Date().toISOString() })
     .eq("id", ctx.sessionId);
+}
+
+/** File the customer's proposed appointment time as an
+ *  accident_appointment request and acknowledge. The customer's reply is
+ *  free-form ("بكره ع ساعة 5", "اليوم بعد الظهر", "يوم الخميس")—we don't
+ *  parse it, just store the raw text so the agent can read and confirm. */
+async function processAccidentAppointment(ctx: QuoteFlowCtx, text: string) {
+  const proposed = (text || "").trim();
+  // Skip filing for trivial acknowledgements that aren't a real
+  // appointment proposal — "شكراً", "ok", "اوكي", a single emoji.
+  const trivialReplyRx = /^(شكرا|شكراً|ok|okay|تمام|اوكي|أوكي|طيب|👍|🙏|❤️|✅)[\s.!؟،,]*$/i;
+  if (!proposed || trivialReplyRx.test(proposed)) {
+    const sendResult = await sendWhatsAppText(
+      ctx.instanceId,
+      ctx.apiToken,
+      ctx.senderId,
+      "تمام. أي وقت تخبّرني فيه بنرتبلك موعد.",
+    );
+    await ctx.supabase.from("customer_chat_messages").insert({
+      session_id: ctx.sessionId,
+      role: "bot",
+      content: "تمام. أي وقت تخبّرني فيه بنرتبلك موعد.",
+      whatsapp_message_id: sendResult.idMessage,
+      metadata: { deterministic: "accident_appointment_skipped", send_ok: sendResult.ok },
+    });
+    await ctx.supabase
+      .from("customer_chat_sessions")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("id", ctx.sessionId);
+    return;
+  }
+
+  try {
+    await ctx.supabase.from("customer_requests").insert({
+      agent_id: ctx.agentId,
+      branch_id: ctx.branchId,
+      client_id: ctx.clientId,
+      phone_number: ctx.customerPhone,
+      request_type: "accident_appointment",
+      title: "تحديد موعد — حادث طرق",
+      content: `الموعد المقترح من العميل: ${proposed.slice(0, 1000)}`,
+      status: "open",
+    });
+  } catch (err) {
+    console.error("[accident-appointment] insert failed:", err);
+  }
+
+  const reply = "تمام، سجّلت الموعد ورح نرجعلك للتأكيد بأسرع وقت. شكراً.";
+  const sendResult = await sendWhatsAppText(
+    ctx.instanceId,
+    ctx.apiToken,
+    ctx.senderId,
+    reply,
+  );
+  await ctx.supabase.from("customer_chat_messages").insert({
+    session_id: ctx.sessionId,
+    role: "bot",
+    content: reply,
+    whatsapp_message_id: sendResult.idMessage,
+    metadata: { deterministic: "accident_appointment_filed", send_ok: sendResult.ok },
+  });
+  await ctx.supabase
+    .from("customer_chat_sessions")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", ctx.sessionId);
+}
+
+async function dispatchAccidentFlow(
+  ctx: QuoteFlowCtx,
+  step: string,
+  customerText: string,
+): Promise<boolean> {
+  switch (step) {
+    case "awaiting_appointment":
+      await processAccidentAppointment(ctx, customerText);
+      return true;
+    default:
+      return false;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -1847,6 +1936,18 @@ serve(async (req) => {
       );
       if (handled) {
         return new Response(JSON.stringify({ ok: true, policy_step: inProgressStep }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // (1c) Already inside an accident flow (waiting for the customer's
+    // proposed appointment time after we sent the accident-info reply).
+    if (inProgressFlow === "accident" && inProgressStep && !wantsReset) {
+      const handled = await dispatchAccidentFlow(quoteCtx, inProgressStep, text);
+      if (handled) {
+        return new Response(JSON.stringify({ ok: true, accident_step: inProgressStep }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

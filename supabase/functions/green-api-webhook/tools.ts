@@ -114,9 +114,9 @@ export const TOOL_DEFS = [
         properties: {
           request_type: {
             type: "string",
-            enum: ["quote", "accident", "general", "help", "manager", "support"],
+            enum: ["quote", "accident", "general", "help", "manager", "support", "accident_appointment"],
             description:
-              "Category of the request. Use 'manager' when the customer asked to speak to a person (manager / secretary / مسؤول) or after the bot couldn't understand the customer and offered to escalate.",
+              "Category of the request. Use 'manager' when the customer asked to speak to a person (manager / secretary / مسؤول) or after the bot couldn't understand the customer and offered to escalate. Use 'accident_appointment' when the customer is proposing a time to come into the office to file a road-accident claim.",
           },
           title: {
             type: "string",
