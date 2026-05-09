@@ -65,6 +65,7 @@ interface RawPolicy {
   policy_type_child: Enums<'policy_type_child'> | null;
   cancelled: boolean | null;
   is_under_24: boolean | null;
+  manual_override: boolean | null;
   company_id: string | null;
   broker_id: string | null;
   broker_direction: 'from_broker' | 'to_broker' | null;
@@ -186,6 +187,7 @@ export function useAccountingData(
            issue_date, start_date, end_date,
            insurance_price, payed_for_company, profit, office_commission, broker_buy_price,
            policy_type_parent, policy_type_child, cancelled, is_under_24,
+           manual_override,
            company_id, broker_id, broker_direction,
            clients(full_name, id_number, phone_number),
            cars(id, car_number, car_type, car_value, year),
@@ -262,6 +264,7 @@ export function useAccountingData(
         broker_id: p.broker_id ?? p.insurance_companies?.broker_id ?? null,
         broker_direction: p.broker_direction,
         group_id: p.group_id,
+        manual_override: !!p.manual_override,
       }));
 
       // Group: standalone (no group_id) → each sub is its own معاملة;
@@ -362,6 +365,7 @@ export function useAccountingData(
             receipts_count: aggregate.receipts_count,
             receipts_total: aggregate.receipts_total,
             primary_payment_method: aggregate.primary_payment_method,
+            manual_override: group.some((s) => s.manual_override),
           };
         },
       );
@@ -488,7 +492,13 @@ export function useAccountingData(
           },
         );
         const main = pickMainSubPolicy(nextSubs);
-        return { ...row, sub_policies: nextSubs, main, ...aggregate };
+        return {
+          ...row,
+          sub_policies: nextSubs,
+          main,
+          ...aggregate,
+          manual_override: nextSubs.some((s) => s.manual_override),
+        };
       }),
     );
   }, []);
@@ -629,6 +639,7 @@ function narrowByType(row: IssuanceRow, allowed: Set<string>): IssuanceRow | nul
     profit,
     office_commission,
     broker_buy_price,
+    manual_override: matched.some((s) => s.manual_override),
     // receipts/payment_method are still group-level — they're linked to
     // policies so a per-sub recompute would need the receipts map. The
     // table column shows the package's payment method anyway; narrowing

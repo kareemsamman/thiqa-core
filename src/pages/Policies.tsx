@@ -255,7 +255,8 @@ export default function Policies() {
       const { count: totalCount, error: countError } = await supabase
         .from('policies')
         .select('*', { count: 'exact', head: true })
-        .is('deleted_at', null);
+        .is('deleted_at', null)
+        .eq('manual_override', false);
 
       if (countError) throw countError;
       if (!totalCount || totalCount === 0) {
@@ -265,17 +266,20 @@ export default function Policies() {
 
       setRecalcProgress({ done: 0, total: totalCount, startTime, avgTime: 0 });
 
-      // Fetch all policy IDs in batches to avoid the 1000 limit
+      // Fetch all policy IDs in batches to avoid the 1000 limit. Rows
+      // marked manual_override=true are skipped so user-edited values
+      // (insurance_price/payed_for_company/profit) aren't overwritten.
       const batchSize = 1000;
       let allPolicyIds: string[] = [];
-      
+
       for (let offset = 0; offset < totalCount; offset += batchSize) {
         const { data: batchPolicies, error: batchError } = await supabase
           .from('policies')
           .select('id')
           .is('deleted_at', null)
+          .eq('manual_override', false)
           .range(offset, offset + batchSize - 1);
-        
+
         if (batchError) throw batchError;
         if (batchPolicies) {
           allPolicyIds = [...allPolicyIds, ...batchPolicies.map(p => p.id)];

@@ -28,6 +28,7 @@ interface SubPatch {
   profit?: number;
   office_commission?: number;
   broker_buy_price?: number;
+  manual_override?: boolean;
 }
 
 export function PackageDetailsDrawer({ open, onOpenChange, row, mode, onSubPolicySaved }: Props) {
@@ -61,10 +62,12 @@ export function PackageDetailsDrawer({ open, onOpenChange, row, mode, onSubPolic
   };
 
   const update = (sub: SubPolicy, field: keyof SubPatch, raw: string) => {
+    if (field === 'manual_override') return;
     const num = raw === '' ? 0 : Number(raw);
     if (Number.isNaN(num)) return;
-    merge(sub.id, { [field]: num });
-    debounced.schedule(sub.id, { [field]: num });
+    // Money edits auto-lock the sub-policy from bulk recalculation.
+    merge(sub.id, { [field]: num, manual_override: true });
+    debounced.schedule(sub.id, { [field]: num, manual_override: true });
   };
 
   const valueOf = (sub: SubPolicy, field: keyof SubPatch, fallback: number) => {

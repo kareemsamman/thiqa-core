@@ -50,6 +50,11 @@ export interface SubPolicy {
   broker_id: string | null;
   broker_direction: BrokerDirection | null;
   group_id: string | null;
+  /** True when a user has manually edited a money cell (insurance_price,
+   *  payed_for_company, profit, office_commission, broker_buy_price).
+   *  The bulk "Recalculate profits" action skips these rows so the
+   *  manual values aren't overwritten. */
+  manual_override: boolean;
 }
 
 export interface IssuanceRow {
@@ -76,6 +81,9 @@ export interface IssuanceRow {
   receipts_count: number;
   receipts_total: number;
   primary_payment_method: string | null;
+  /** True when ANY sub-policy in the row is manually overridden. Drives
+   *  the lock badge in the table; unlocking clears it on every sub. */
+  manual_override: boolean;
 }
 
 export const POLICY_TYPE_DISPLAY: Record<string, string> = {
@@ -127,6 +135,7 @@ export interface IssuanceEditPatch {
   start_date?: string;
   end_date?: string;
   car_value?: number;
+  manual_override?: boolean;
 }
 
 export type IssuanceEditOverlay = Record<string, IssuanceEditPatch>;
@@ -163,6 +172,10 @@ export function applyOverlay(
   if ('broker_buy_price' in local) {
     next.broker_buy_price = Number(local.broker_buy_price ?? row.broker_buy_price);
     next.main.broker_buy_price = next.broker_buy_price;
+  }
+  if ('manual_override' in local) {
+    next.manual_override = !!local.manual_override;
+    next.main.manual_override = !!local.manual_override;
   }
   if ('issue_date' in local) next.main.issue_date = local.issue_date ?? null;
   if ('start_date' in local && local.start_date) next.main.start_date = local.start_date;

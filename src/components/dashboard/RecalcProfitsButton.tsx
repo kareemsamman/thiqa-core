@@ -35,13 +35,23 @@ export function RecalcProfitsButton() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [lockedCount, setLockedCount] = useState<number | null>(null);
   const cancelRef = useRef(false);
 
-  const onClick = () => {
+  const onClick = async () => {
     if (!canAccounting) {
       showUpgradePrompt({ featureKey: "accounting", featureLabel: "المحاسبة" });
       return;
     }
+    // Pre-fetch the count of manually-overridden rows so the confirm
+    // dialog can warn the user that those rows will be skipped.
+    const { count } = await supabase
+      .from("policies")
+      .select("*", { count: "exact", head: true })
+      .is("deleted_at", null)
+      .eq("skip_recalc", false)
+      .eq("manual_override", true);
+    setLockedCount(count ?? 0);
     setConfirmOpen(true);
   };
 
@@ -54,7 +64,8 @@ export function RecalcProfitsButton() {
         .from("policies")
         .select("*", { count: "exact", head: true })
         .is("deleted_at", null)
-        .eq("skip_recalc", false);
+        .eq("skip_recalc", false)
+        .eq("manual_override", false);
       if (countError) throw countError;
       if (!count) {
         toast({ title: "لا توجد معاملات", description: "لا توجد معاملات لإعادة حسابها" });
@@ -71,6 +82,7 @@ export function RecalcProfitsButton() {
           .select("id")
           .is("deleted_at", null)
           .eq("skip_recalc", false)
+          .eq("manual_override", false)
           .range(offset, offset + batch - 1);
         if (error) throw error;
         if (data) ids = ids.concat(data.map((p) => p.id));
@@ -167,6 +179,11 @@ export function RecalcProfitsButton() {
             <AlertDialogDescription>
               سيتم إعادة حساب الأرباح والمستحق للشركة لجميع المعاملات باستخدام قواعد التسعير الحالية.
               هذه العملية قد تستغرق دقائق عدة حسب عدد المعاملات.
+              {lockedCount && lockedCount > 0 ? (
+                <span className="mt-2 block text-amber-700 dark:text-amber-300">
+                  سيتم تجاوز {lockedCount} معاملة معدّلة يدوياً (محمية بقفل) — لن تتأثر قيمها.
+                </span>
+              ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -4633,6 +4633,7 @@ export type Database = {
           is_under_24: boolean | null
           issue_date: string | null
           legacy_wp_id: number | null
+          manual_override: boolean
           notes: string | null
           office_commission: number
           payed_for_company: number | null
@@ -4683,6 +4684,7 @@ export type Database = {
           is_under_24?: boolean | null
           issue_date?: string | null
           legacy_wp_id?: number | null
+          manual_override?: boolean
           notes?: string | null
           office_commission?: number
           payed_for_company?: number | null
@@ -4733,6 +4735,7 @@ export type Database = {
           is_under_24?: boolean | null
           issue_date?: string | null
           legacy_wp_id?: number | null
+          manual_override?: boolean
           notes?: string | null
           office_commission?: number
           payed_for_company?: number | null

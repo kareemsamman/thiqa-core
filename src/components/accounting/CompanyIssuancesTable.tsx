@@ -11,7 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { ChevronLeft, ChevronRight, Eye, FileText, Layers, Receipt } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, FileText, Layers, Lock, Receipt } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -65,7 +65,16 @@ type PolicyPatch = Pick<
   | 'issue_date'
   | 'start_date'
   | 'end_date'
+  | 'manual_override'
 >;
+
+const MONEY_FIELDS: ReadonlyArray<keyof PolicyPatch> = [
+  'insurance_price',
+  'payed_for_company',
+  'profit',
+  'office_commission',
+  'broker_buy_price',
+];
 
 type CarPatch = Pick<IssuanceEditPatch, 'car_value'>;
 
@@ -273,8 +282,8 @@ export function CompanyIssuancesTable({
       // Package field: subtract other visible subs' contribution.
       const otherSum = visibleNonMainSum(row, field as keyof IssuanceRow);
       const mainNew = num - otherSum;
-      onPatch(row.id, { [field]: num });
-      policyDebounced.schedule(row.main.id, { [field]: mainNew });
+      onPatch(row.id, { [field]: num, manual_override: true });
+      policyDebounced.schedule(row.main.id, { [field]: mainNew, manual_override: true });
       return;
     }
 
@@ -288,7 +297,7 @@ export function CompanyIssuancesTable({
 
     // Overlay reflects displayed totals so the profit cell on this row
     // updates in real time as the user types.
-    const overlayPatch: IssuanceEditPatch = { payed_for_company: num };
+    const overlayPatch: IssuanceEditPatch = { payed_for_company: num, manual_override: true };
     if (!isFromBroker) overlayPatch.profit = viewed.insurance_price - num;
     onPatch(row.id, overlayPatch);
 
@@ -299,7 +308,7 @@ export function CompanyIssuancesTable({
     // sum matches what the user typed once aggregates rebuild.
     const nonMainPayed = visibleNonMainSum(row, 'payed_for_company');
     const mainPayedNew = num - nonMainPayed;
-    const dbPatch: PolicyPatch = { payed_for_company: mainPayedNew };
+    const dbPatch: PolicyPatch = { payed_for_company: mainPayedNew, manual_override: true };
     if (!isFromBroker) {
       dbPatch.profit = Number(viewed.main.insurance_price ?? 0) - mainPayedNew;
     }
@@ -326,6 +335,25 @@ export function CompanyIssuancesTable({
   };
 
   const view = (row: IssuanceRow): IssuanceRow => applyOverlay(row, editLocal);
+
+  // Clears the manual_override flag on every sub-policy in the row so
+  // the next bulk recalc will rewrite the row's profit/payed_for_company
+  // again. We update DB + local overlay + parent in-memory state so the
+  // lock badge disappears immediately, no refetch needed.
+  const unlockRow = async (row: IssuanceRow) => {
+    const subIds = row.sub_policies.map((s) => s.id);
+    const { error } = await supabase
+      .from('policies')
+      .update({ manual_override: false })
+      .in('id', subIds);
+    if (error) {
+      toast.error(`فشل فك القفل: ${error.message}`);
+      return;
+    }
+    onPatch(row.id, { manual_override: false });
+    subIds.forEach((id) => onSubPolicySaved?.(id, { manual_override: false }));
+    toast.success('تم فك القفل', { duration: 1200 });
+  };
 
   const calcCompany = useMemo(() => {
     if (!calcRow?.main.company_id) return null;
@@ -408,7 +436,7 @@ export function CompanyIssuancesTable({
                     <TableHead className="whitespace-nowrap min-w-[140px]">سعر التأمين</TableHead>
                   )}
                   {showCol('actions') && (
-                    <TableHead className="whitespace-nowrap text-center sticky left-0 bg-slate-100/95 z-10 w-20 min-w-[80px] px-1 shadow-[1px_0_0_0_hsl(var(--border))]">
+                    <TableHead className="whitespace-nowrap text-center sticky left-0 bg-slate-100/95 z-10 w-28 min-w-[112px] px-1 shadow-[1px_0_0_0_hsl(var(--border))]">
                       إجراءات
                     </TableHead>
                   )}
@@ -712,8 +740,25 @@ export function CompanyIssuancesTable({
                         )}
 
                         {showCol('actions') && (
-                          <TableCell className="sticky left-0 bg-slate-50/95 z-10 px-1 w-20 min-w-[80px] shadow-[1px_0_0_0_hsl(var(--border))]">
+                          <TableCell className="sticky left-0 bg-slate-50/95 z-10 px-1 w-28 min-w-[112px] shadow-[1px_0_0_0_hsl(var(--border))]">
                             <div className="flex items-center justify-center gap-0.5">
+                              {row.manual_override && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-amber-600 hover:bg-amber-100/60 hover:text-amber-700"
+                                      onClick={() => unlockRow(rawRow)}
+                                    >
+                                      <Lock className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-[240px] text-center">
+                                    تم تعديل القيم يدوياً — محمية من إعادة حساب الأرباح. اضغط لفك القفل.
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                               {row.is_grouped ? (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
