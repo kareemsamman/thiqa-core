@@ -43,17 +43,37 @@ const PAYMENT_TYPE_LABEL = {
   visa: 'فيزا',
 } as const;
 
-export type SettlementTable = 'company_settlements' | 'broker_settlements';
+export type SettlementTable = 'company_settlements' | 'broker_settlements' | 'expenses';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Which table the row lives in. */
+  /** Which table the row lives in. expenses uses different column
+   *  names (amount/expense_date/payment_method) but the dialog maps
+   *  them onto the same shared editable state. */
   table: SettlementTable;
   /** Row to edit. Most fields aren't on SettlementRow, so we lazy-load
    *  the full record when the dialog opens. */
   row: SettlementRow | null;
   onSaved: () => void;
+}
+
+// Column-name differences between settlement tables and expenses.
+// Centralised here so the rest of the dialog can keep working in
+// "settlement" terms regardless of which table is being edited.
+function tableColumns(t: SettlementTable) {
+  if (t === 'expenses') {
+    return {
+      amountCol: 'amount',
+      dateCol: 'expense_date',
+      typeCol: 'payment_method',
+    } as const;
+  }
+  return {
+    amountCol: 'total_amount',
+    dateCol: 'settlement_date',
+    typeCol: 'payment_type',
+  } as const;
 }
 
 interface EditableState {
@@ -106,11 +126,24 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
     let cancelled = false;
     setLoading(true);
     (async () => {
+      const cols = tableColumns(table);
+      const selectList = [
+        `${cols.amountCol} as amount_val`,
+        `${cols.dateCol} as date_val`,
+        `${cols.typeCol} as type_val`,
+        'cheque_due_date',
+        'cheque_issue_date',
+        'cheque_number',
+        'bank_code',
+        'branch_code',
+        'cheque_image_url',
+        'cheque_image_urls',
+        'bank_reference',
+        'notes',
+      ].join(', ');
       const { data, error } = await supabase
         .from(table)
-        .select(
-          'total_amount, settlement_date, cheque_due_date, cheque_issue_date, payment_type, cheque_number, bank_code, branch_code, cheque_image_url, cheque_image_urls, bank_reference, notes',
-        )
+        .select(selectList)
         .eq('id', row.id)
         .maybeSingle();
       if (!cancelled) {
@@ -127,15 +160,15 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
             : [];
           const single = (d.cheque_image_url as string) ?? null;
           const merged = arr.length > 0 ? arr : single ? [single] : [];
-          const settlementDate = (d.settlement_date as string) ?? '';
+          const settlementDate = (d.date_val as string) ?? '';
           setState({
-            total_amount: Number(d.total_amount ?? 0),
+            total_amount: Number(d.amount_val ?? 0),
             settlement_date: settlementDate,
             // Pre-2026-05 rows have NULL in the new columns — fall back
             // to settlement_date so the picker isn't empty on legacy data.
             cheque_due_date: (d.cheque_due_date as string) ?? settlementDate,
             cheque_issue_date: (d.cheque_issue_date as string) ?? settlementDate,
-            payment_type: (d.payment_type as string) ?? 'cash',
+            payment_type: (d.type_val as string) ?? 'cash',
             cheque_number: (d.cheque_number as string) ?? '',
             bank_code: (d.bank_code as string) ?? null,
             branch_code: (d.branch_code as string) ?? null,
@@ -174,31 +207,33 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
         state.payment_type === 'cheque'
           ? state.cheque_issue_date || state.settlement_date
           : state.settlement_date;
+      const cols = tableColumns(table);
+      const updatePayload: Record<string, unknown> = {
+        [cols.amountCol]: state.total_amount,
+        [cols.dateCol]: finalSettlementDate,
+        [cols.typeCol]: state.payment_type,
+        cheque_number: state.payment_type === 'cheque' ? state.cheque_number || null : null,
+        bank_code: state.payment_type === 'cheque' ? state.bank_code : null,
+        branch_code: state.payment_type === 'cheque' ? state.branch_code : null,
+        cheque_due_date:
+          state.payment_type === 'cheque'
+            ? state.cheque_due_date || finalSettlementDate
+            : null,
+        cheque_issue_date:
+          state.payment_type === 'cheque' ? finalSettlementDate : null,
+        // Mirror first image into the legacy single column so older
+        // viewers (list thumbnail, exports) keep working.
+        cheque_image_url:
+          state.payment_type === 'cheque' ? state.cheque_image_urls[0] ?? null : null,
+        cheque_image_urls:
+          state.payment_type === 'cheque' ? state.cheque_image_urls : [],
+        bank_reference:
+          state.payment_type === 'bank_transfer' ? state.bank_reference || null : null,
+        notes: state.notes || null,
+      };
       const { error } = await supabase
         .from(table)
-        .update({
-          total_amount: state.total_amount,
-          settlement_date: finalSettlementDate,
-          payment_type: state.payment_type,
-          cheque_number: state.payment_type === 'cheque' ? state.cheque_number || null : null,
-          bank_code: state.payment_type === 'cheque' ? state.bank_code : null,
-          branch_code: state.payment_type === 'cheque' ? state.branch_code : null,
-          cheque_due_date:
-            state.payment_type === 'cheque'
-              ? state.cheque_due_date || finalSettlementDate
-              : null,
-          cheque_issue_date:
-            state.payment_type === 'cheque' ? finalSettlementDate : null,
-          // Mirror first image into the legacy single column so older
-          // viewers (list thumbnail, exports) keep working.
-          cheque_image_url:
-            state.payment_type === 'cheque' ? state.cheque_image_urls[0] ?? null : null,
-          cheque_image_urls:
-            state.payment_type === 'cheque' ? state.cheque_image_urls : [],
-          bank_reference:
-            state.payment_type === 'bank_transfer' ? state.bank_reference || null : null,
-          notes: state.notes || null,
-        } as never)
+        .update(updatePayload as never)
         .eq('id', row.id);
       if (error) throw error;
       toast.success('تم الحفظ');

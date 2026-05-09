@@ -69,6 +69,8 @@ import { AgentBranchFilter } from "@/components/shared/AgentBranchFilter";
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH, getEffectiveChequeStatus, isChequeOverdue } from "@/lib/chequeUtils";
 import { AddCustomerChequeModal } from "@/components/cheques/AddCustomerChequeModal";
 import { PaymentEditDialog } from "@/components/clients/PaymentEditDialog";
+import { EditSettlementDialog, type SettlementTable } from "@/components/accounting/EditSettlementDialog";
+import type { SettlementRow } from "@/components/accounting/SettlementsTable";
 import { getBankName } from "@/lib/banks";
 import {
   DropdownMenu,
@@ -228,6 +230,54 @@ export default function Cheques() {
   const [paymentEditRecord, setPaymentEditRecord] = useState<any>(null);
   const [paymentEditOpen, setPaymentEditOpen] = useState(false);
   const [loadingPaymentEdit, setLoadingPaymentEdit] = useState(false);
+
+  // Outgoing-cheque edit dialog — companies / brokers / expenses.
+  // Reuses EditSettlementDialog so the same fields the accounting
+  // surface exposes (amount, date, cheque triple, dates, images,
+  // notes) are editable from the cheques page too. Edits land on
+  // the underlying *_settlements / expenses row, so the accounting
+  // tab reflects the change immediately.
+  const [outgoingEditRow, setOutgoingEditRow] = useState<SettlementRow | null>(null);
+  const [outgoingEditTable, setOutgoingEditTable] = useState<SettlementTable>('company_settlements');
+  const [outgoingEditOpen, setOutgoingEditOpen] = useState(false);
+
+  const openOutgoingEditFor = (cheque: ChequeRecord) => {
+    // Synthetic IDs follow `cs-<uuid>` / `bs-<uuid>` / `ex-<uuid>`
+    // — strip the prefix to get the real row id.
+    const id = cheque.id.startsWith('cs-')
+      ? cheque.id.slice(3)
+      : cheque.id.startsWith('bs-')
+      ? cheque.id.slice(3)
+      : cheque.id.startsWith('ex-')
+      ? cheque.id.slice(3)
+      : cheque.id;
+    const table: SettlementTable =
+      cheque.source === 'broker'
+        ? 'broker_settlements'
+        : cheque.source === 'expense'
+        ? 'expenses'
+        : 'company_settlements';
+    // EditSettlementDialog only needs `id` to fetch the rest. Pass a
+    // minimal SettlementRow shaped object — the dialog re-fetches
+    // every field on open.
+    setOutgoingEditRow({
+      id,
+      settlement_date: cheque.payment_date,
+      total_amount: cheque.amount,
+      payment_type: 'cheque',
+      cheque_number: cheque.cheque_number,
+      bank_code: cheque.bank_code,
+      branch_code: cheque.branch_code,
+      cheque_image_urls: cheque.cheque_image_url ? [cheque.cheque_image_url] : [],
+      status: cheque.cheque_status ?? 'pending',
+      refused: cheque.refused ?? false,
+      notes: cheque.notes,
+      entity_id: null,
+      entity_name: null,
+    } as SettlementRow);
+    setOutgoingEditTable(table);
+    setOutgoingEditOpen(true);
+  };
 
   const openPaymentEditFor = async (cheque: ChequeRecord) => {
     setLoadingPaymentEdit(true);
@@ -1135,6 +1185,18 @@ export default function Cheques() {
                   </DropdownMenuItem>
                 </>
               )}
+              {/* Outgoing cheques (شيكات صادرة) — same edit surface as
+                  the accounting page, opens against the underlying
+                  settlement / expense row so changes stay in sync
+                  across both pages. */}
+              {(cheque.source === 'company' ||
+                cheque.source === 'broker' ||
+                cheque.source === 'expense') && (
+                <DropdownMenuItem onClick={() => openOutgoingEditFor(cheque)}>
+                  <Pencil className="h-4 w-4 ml-2" />
+                  تعديل الشيك
+                </DropdownMenuItem>
+              )}
               {cheque.cheque_status !== 'cashed' &&
                 cheque.cheque_status !== 'returned' &&
                 cheque.cheque_status !== 'transferred_out' && (
@@ -1801,6 +1863,26 @@ export default function Cheques() {
         onSuccess={() => {
           setPaymentEditOpen(false);
           setPaymentEditRecord(null);
+          fetchCheques();
+          fetchSummaryStats();
+        }}
+      />
+
+      {/* Outgoing-cheque editor — covers company / broker settlements
+          and expense cheques. The dialog writes back to the underlying
+          *_settlements / expenses row so the accounting page sees the
+          same data immediately. */}
+      <EditSettlementDialog
+        open={outgoingEditOpen}
+        onOpenChange={(o) => {
+          setOutgoingEditOpen(o);
+          if (!o) setOutgoingEditRow(null);
+        }}
+        table={outgoingEditTable}
+        row={outgoingEditRow}
+        onSaved={() => {
+          setOutgoingEditOpen(false);
+          setOutgoingEditRow(null);
           fetchCheques();
           fetchSummaryStats();
         }}

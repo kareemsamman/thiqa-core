@@ -621,6 +621,10 @@ Deno.serve(async (req) => {
               payment_type: paymentType,
               amount: amount,
               payment_date: paymentDate,
+              // Imported cheques have no separate issue date in the
+              // legacy data, so both columns mirror payment_date.
+              cheque_due_date: paymentType === 'cheque' ? paymentDate : null,
+              cheque_issue_date: paymentType === 'cheque' ? paymentDate : null,
               cheque_number: checkNum || null,
               cheque_image_url: payment.check_image_url || payment.cheque_image_url || null,
               refused: payment.refused_status === 'refused',
@@ -1165,6 +1169,8 @@ Deno.serve(async (req) => {
                     payment_type: paymentType,
                     amount: amount,
                     payment_date: paymentDate,
+                    cheque_due_date: paymentType === 'cheque' ? paymentDate : null,
+                    cheque_issue_date: paymentType === 'cheque' ? paymentDate : null,
                     cheque_number: payment.check_number || null,
                     cheque_image_url: payment.check_image_url || null,
                     refused: payment.refused_status === 'refused',
