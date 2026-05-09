@@ -326,6 +326,78 @@ async function transcribeAudio(downloadUrl: string, mimeType: string): Promise<s
   }
 }
 
+/** OCR an Israeli vehicle plate from a customer-sent photo (the car
+ *  itself, the plate close-up, or the registration card / רישיון רכב).
+ *  Uses gpt-4o-mini via the OpenAI API. Returns the digits (7–9 chars)
+ *  on success, null on any failure or when the model couldn't read a
+ *  confident plate. */
+async function extractPlateFromImage(downloadUrl: string, mimeType: string): Promise<string | null> {
+  try {
+    const imgRes = await fetch(downloadUrl);
+    if (!imgRes.ok) {
+      console.error(`[plate-vision] download failed: status=${imgRes.status}`);
+      return null;
+    }
+    const bytes = new Uint8Array(await imgRes.arrayBuffer());
+    // Chunked btoa — String.fromCharCode(...) hits stack limits over
+    // ~125k bytes, which kicks in for any non-thumbnail JPEG.
+    let binary = "";
+    const CHUNK = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
+    }
+    const base64 = btoa(binary);
+    const dataUrl = `data:${mimeType || "image/jpeg"};base64,${base64}`;
+
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!openaiKey) {
+      console.error("[plate-vision] OPENAI_API_KEY missing");
+      return null;
+    }
+
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openaiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        max_tokens: 16,
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                "Extract the Israeli vehicle plate number from this image. The image may show the car itself, a close-up of the plate, or a vehicle registration card (רישיון רכב). Israeli plates are 7 or 8 digits. Reply with ONLY the digits, no spaces, no dashes, no other words. If you cannot read a confident plate number, reply with the single word NONE.",
+            },
+            { type: "image_url", image_url: { url: dataUrl } },
+          ],
+        }],
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[plate-vision] api error: status=${res.status} body=${errText.slice(0, 200)}`);
+      return null;
+    }
+    const data = await res.json();
+    const out = String(data?.choices?.[0]?.message?.content ?? "").trim();
+    if (!out || /^NONE$/i.test(out)) return null;
+    const digits = out.replace(/\D/g, "");
+    if (digits.length < 6 || digits.length > 9) {
+      console.warn(`[plate-vision] discarding implausible output: "${out}"`);
+      return null;
+    }
+    console.log(`[plate-vision] extracted ${digits}`);
+    return digits;
+  } catch (err) {
+    console.error("[plate-vision] threw:", err);
+    return null;
+  }
+}
+
 /** POST a text message back to the customer via Green API. */
 async function sendWhatsAppText(
   instanceId: string,
@@ -1284,7 +1356,25 @@ serve(async (req) => {
       }
     }
 
-    if (!instanceId || !senderId || !text) {
+    // Image messages (e.g. customer sends a photo of the registration
+    // card when the bot asks for their plate number). We capture the
+    // download URL here but defer OCR until after the session +
+    // in-progress flow are resolved — we only OCR when it makes sense
+    // for the current step (today: awaiting_car_number).
+    let pendingImage: { downloadUrl: string; mimeType: string } | null = null;
+    if (!text && typeMessage === "imageMessage") {
+      const downloadUrl =
+        messageData?.fileMessageData?.downloadUrl
+        ?? messageData?.imageMessageData?.downloadUrl
+        ?? null;
+      const mimeType =
+        messageData?.fileMessageData?.mimeType
+        ?? messageData?.imageMessageData?.mimeType
+        ?? "image/jpeg";
+      if (downloadUrl) pendingImage = { downloadUrl, mimeType };
+    }
+
+    if (!instanceId || !senderId || (!text && !pendingImage)) {
       return new Response(JSON.stringify({ ok: true, ignored: "missing fields", typeMessage }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1397,13 +1487,17 @@ serve(async (req) => {
     // the AI's history later. Otherwise the model parrots the previous
     // "اكتبلي طلبك" reply for the next text message.
     if (voiceTranscriptionFailed) customerMetadata.voice_transcription_failed = true;
+    if (pendingImage) {
+      customerMetadata.image_message = true;
+      customerMetadata.image_download_url = pendingImage.downloadUrl;
+    }
 
     const { data: insertedMsg, error: insertErr } = await supabase
       .from("customer_chat_messages")
       .insert({
         session_id: session.id,
         role: "customer",
-        content: text,
+        content: text || (pendingImage ? "[صورة]" : ""),
         whatsapp_message_id: body?.idMessage ?? null,
         metadata: customerMetadata,
       })
@@ -1543,6 +1637,59 @@ serve(async (req) => {
       supabaseUrl,
       serviceKey,
     };
+
+    // Image-only message (no text) — only the awaiting_car_number step
+    // knows what to do with a picture today: try to OCR the plate from
+    // it and feed the digits into the existing flow. Anywhere else, ask
+    // the customer to write their request as text.
+    if (pendingImage && !text) {
+      const inCarStep =
+        inProgressFlow === "quote" &&
+        (inProgressStep === "awaiting_car_number" || inProgressStep === "awaiting_car_number_retry");
+      if (inCarStep) {
+        const plate = await extractPlateFromImage(pendingImage.downloadUrl, pendingImage.mimeType);
+        if (plate) {
+          // Treat the OCR result as if the customer had typed it. The
+          // existing (1a) dispatch below will run processCarNumber on
+          // this text and continue the flow naturally.
+          text = plate;
+        } else {
+          await sendQuoteStep(
+            quoteCtx,
+            "ما قدرت أقرأ رقم السيارة من الصورة. ابعتلي رقم سيارتك مكتوب لو سمحت.",
+            "awaiting_car_number_retry",
+            inProgressData,
+          );
+          return new Response(JSON.stringify({ ok: true, image_plate_ocr: "failed" }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } else {
+        const reply = "ابعتلي طلبك مكتوب بالنص لو سمحت، وبساعدك فوراً.";
+        const sendResult = await sendWhatsAppText(
+          instanceId,
+          gaSettings.api_token_instance,
+          senderId,
+          reply,
+        );
+        await supabase.from("customer_chat_messages").insert({
+          session_id: session.id,
+          role: "bot",
+          content: reply,
+          whatsapp_message_id: sendResult.idMessage,
+          metadata: { image_unsupported: true, send_ok: sendResult.ok },
+        });
+        await supabase
+          .from("customer_chat_sessions")
+          .update({ last_message_at: new Date().toISOString() })
+          .eq("id", session.id);
+        return new Response(JSON.stringify({ ok: true, image_unsupported: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     const QUOTE_TRIGGERS = [
       "عرض سعر",
