@@ -291,7 +291,6 @@ export default function CustomerRequests() {
             <SelectContent>
               <SelectItem value="all">كل الأنواع</SelectItem>
               <SelectItem value="quote">عرض سعر</SelectItem>
-              <SelectItem value="help">طلب مساعدة</SelectItem>
               <SelectItem value="manager">طلب الإدارة</SelectItem>
             </SelectContent>
           </Select>
