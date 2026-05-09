@@ -127,10 +127,14 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
     setLoading(true);
     (async () => {
       const cols = tableColumns(table);
+      // PostgREST aliasing syntax is `alias:column`, NOT SQL `AS`.
+      // Without this the request 400s and the dialog shows
+      // "فشل تحميل السند" — that's the bug staff hit on outgoing
+      // cheques the first time edit was opened.
       const selectList = [
-        `${cols.amountCol} as amount_val`,
-        `${cols.dateCol} as date_val`,
-        `${cols.typeCol} as type_val`,
+        `amount_val:${cols.amountCol}`,
+        `date_val:${cols.dateCol}`,
+        `type_val:${cols.typeCol}`,
         'cheque_due_date',
         'cheque_issue_date',
         'cheque_number',
