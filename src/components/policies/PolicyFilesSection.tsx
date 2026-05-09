@@ -1,17 +1,15 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  ImageIcon, Plus, Trash2, Download, X, Loader2, FileText, FolderOpen, 
-  Save, Hash, CheckCircle2, Send, AlertTriangle, Printer, ChevronLeft, ChevronRight,
-  ExternalLink, Play
+import {
+  ImageIcon, Plus, Trash2, Download, X, Loader2, FileText, FolderOpen,
+  Save, Hash, CheckCircle2, Printer, ChevronLeft, ChevronRight,
+  ExternalLink, Play, Upload
 } from "lucide-react";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { Badge } from "@/components/ui/badge";
@@ -53,7 +51,6 @@ export function PolicyFilesSection({
   packagePolicyIds 
 }: PolicyFilesSectionProps) {
   const { toast } = useToast();
-  const { guardSend: guardSmsSend } = useSmsLock();
   const [insuranceFiles, setInsuranceFiles] = useState<MediaFile[]>([]);
   const [crmFiles, setCrmFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,19 +65,15 @@ export function PolicyFilesSection({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingImage, setDeletingImage] = useState<MediaFile | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Mirrors the uploadProgress shape so the delete banner uses the same
+  // visual treatment as the upload banner at the top of the page.
+  const [deleteProgress, setDeleteProgress] = useState<{ name: string; pct: number } | null>(null);
   const [activeTab, setActiveTab] = useState("insurance");
   
   // Policy number state
   const [policyNumber, setPolicyNumber] = useState(initialPolicyNumber || "");
   const [savingPolicyNumber, setSavingPolicyNumber] = useState(false);
   const [policyNumberSaved, setPolicyNumberSaved] = useState(!!initialPolicyNumber);
-
-  // Auto-send popup state
-  const [showSendPopup, setShowSendPopup] = useState(false);
-  const [sendingToClient, setSendingToClient] = useState(false);
-  const [countdown, setCountdown] = useState(5);
-  const countdownRef = useRef<NodeJS.Timeout | null>(null);
-  const autoSendRef = useRef<NodeJS.Timeout | null>(null);
 
   // Scanner state
   const [scanning, setScanning] = useState<'insurance' | 'crm' | null>(null);
@@ -174,23 +167,81 @@ export function PolicyFilesSection({
     });
   };
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>, fileType: 'insurance' | 'crm') => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
+  /** Filter to the file types we actually support: images, PDFs,
+   *  videos. Falls back to filename extension when MIME is empty —
+   *  some browsers omit the MIME type when files come from a
+   *  folder drop. */
+  const isAcceptedFile = (file: File): boolean => {
+    if (file.type.startsWith('image/')) return true;
+    if (file.type === 'application/pdf') return true;
+    if (file.type.startsWith('video/')) return true;
+    return /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif|pdf|mp4|mov|avi|webm|mkv|m4v|3gp)$/i.test(file.name);
+  };
+
+  /** Walk a DataTransfer that may contain folders. Uses
+   *  webkitGetAsEntry / FileSystemDirectoryReader, which is widely
+   *  supported across modern browsers despite the "webkit" prefix.
+   *  Falls back to dt.files when items aren't available. */
+  const gatherFilesFromDataTransfer = async (dt: DataTransfer): Promise<File[]> => {
+    const out: File[] = [];
+    const items = dt.items ? Array.from(dt.items) : [];
+    if (items.length === 0) return Array.from(dt.files ?? []);
+
+    const traverse = async (entry: any): Promise<void> => {
+      if (entry.isFile) {
+        const file: File = await new Promise((resolve, reject) =>
+          entry.file(resolve, reject)
+        );
+        out.push(file);
+        return;
+      }
+      if (entry.isDirectory) {
+        const reader = entry.createReader();
+        const readBatch = (): Promise<any[]> =>
+          new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+        let batch = await readBatch();
+        while (batch.length > 0) {
+          for (const child of batch) await traverse(child);
+          batch = await readBatch();
+        }
+      }
+    };
+
+    for (const item of items) {
+      if (item.kind !== 'file') continue;
+      // @ts-ignore — webkitGetAsEntry is widely supported
+      const entry = item.webkitGetAsEntry?.();
+      if (entry) {
+        await traverse(entry);
+      } else {
+        const file = item.getAsFile();
+        if (file) out.push(file);
+      }
+    }
+    return out;
+  };
+
+  /** Shared upload pipeline used by both the file-input button and
+   *  the drag-drop drop zone. Videos route through Bunny Stream
+   *  (resumable tus upload), everything else hits upload-media. */
+  const uploadFiles = async (files: File[], fileType: 'insurance' | 'crm') => {
+    if (files.length === 0) return;
 
     setUploading(fileType);
     try {
-      const fileArray = Array.from(files);
       const { data: { session } } = await supabase.auth.getSession();
 
-      for (let i = 0; i < fileArray.length; i++) {
-        const file = fileArray[i];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         const entityType = fileType === 'insurance' ? 'policy_insurance' : 'policy_crm';
-        setUploadProgress({ name: file.name, pct: 0, current: i + 1, total: fileArray.length });
+        setUploadProgress({ name: file.name, pct: 0, current: i + 1, total: files.length });
 
-        if (file.type.startsWith('video/')) {
-          // Bunny Stream resumable upload (up to 1GB)
-          await uploadVideoToStream(file, entityType, i + 1, fileArray.length);
+        const looksLikeVideo =
+          file.type.startsWith('video/') ||
+          /\.(mp4|mov|avi|webm|mkv|m4v|3gp)$/i.test(file.name);
+
+        if (looksLikeVideo) {
+          await uploadVideoToStream(file, entityType, i + 1, files.length);
         } else {
           await uploadFileWithXhr(file, entityType, session?.access_token, (pct) => {
             setUploadProgress((prev) => (prev ? { ...prev, pct } : prev));
@@ -200,38 +251,50 @@ export function PolicyFilesSection({
 
       toast({ title: "تم الرفع", description: "تم رفع الملفات بنجاح" });
       fetchFiles();
-
-      // Show auto-send popup only for insurance files and if client has phone
-      if (fileType === 'insurance' && clientPhoneNumber) {
-        setCountdown(5);
-        setShowSendPopup(true);
-        // Start countdown
-        countdownRef.current = setInterval(() => {
-          setCountdown(prev => {
-            if (prev <= 1) {
-              clearInterval(countdownRef.current!);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-        // Auto-send after 5 seconds
-        autoSendRef.current = setTimeout(() => {
-          handleSendToClient();
-        }, 5000);
-      }
     } catch (error: any) {
       console.error('Error uploading:', error);
-      toast({ 
-        title: "خطأ", 
-        description: error.message || "فشل في رفع الملفات", 
-        variant: "destructive" 
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل في رفع الملفات",
+        variant: "destructive"
       });
     } finally {
       setUploading(null);
       setUploadProgress(null);
-      event.target.value = '';
     }
+  };
+
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>, fileType: 'insurance' | 'crm') => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    await uploadFiles(Array.from(files), fileType);
+    event.target.value = '';
+  };
+
+  const handleDrop = async (event: React.DragEvent<HTMLDivElement>, fileType: 'insurance' | 'crm') => {
+    event.preventDefault();
+    setIsDragging(null);
+    if (uploading || scanning) return;
+
+    const collected = await gatherFilesFromDataTransfer(event.dataTransfer);
+    const accepted = collected.filter(isAcceptedFile);
+    const rejectedCount = collected.length - accepted.length;
+
+    if (accepted.length === 0) {
+      toast({
+        title: "لا توجد ملفات مدعومة",
+        description: "ادعم الصور و PDF والفيديو فقط.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (rejectedCount > 0) {
+      toast({
+        title: `تم تجاهل ${rejectedCount} ملف غير مدعوم`,
+        description: "تم قبول الصور و PDF والفيديو فقط.",
+      });
+    }
+    await uploadFiles(accepted, fileType);
   };
 
   const uploadVideoToStream = async (file: File, entityType: string, current: number, total: number) => {
@@ -276,88 +339,6 @@ export function PolicyFilesSection({
       });
       upload.start();
     });
-  };
-
-  const handleSendToClient = async () => {
-    // Cancel auto-send timer
-    if (autoSendRef.current) clearTimeout(autoSendRef.current);
-    if (countdownRef.current) clearInterval(countdownRef.current);
-
-    if (!guardSmsSend('click')) return;
-
-    setSendingToClient(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('send-package-invoice-sms', {
-        body: { policy_ids: [policyId] }
-      });
-      
-      // Parse edge function error response
-      if (error) {
-        // Try to get detailed error from response
-        let errorMessage = "فشل في الإرسال";
-        try {
-          const errorBody = typeof error.message === 'string' && error.message.includes('{') 
-            ? JSON.parse(error.message) 
-            : null;
-          if (errorBody?.error) {
-            errorMessage = getArabicErrorMessage(errorBody.error);
-          }
-        } catch {
-          // Check if error.context has the response
-          if (error.context?.body) {
-            try {
-              const body = typeof error.context.body === 'string' 
-                ? JSON.parse(error.context.body) 
-                : error.context.body;
-              if (body?.error) {
-                errorMessage = getArabicErrorMessage(body.error);
-              }
-            } catch {}
-          }
-        }
-        throw new Error(errorMessage);
-      }
-      
-      // Check if response indicates failure
-      if (data && data.success === false) {
-        toast({ 
-          title: "تنبيه", 
-          description: data.message || "تم إرسال الفواتير مسبقاً",
-        });
-      } else {
-        toast({ title: "تم الإرسال", description: "تم إرسال الملفات للعميل بنجاح" });
-      }
-    } catch (err: any) {
-      console.error('Error sending to client:', err);
-      toast({ title: "خطأ", description: err.message || "فشل في الإرسال", variant: "destructive" });
-    } finally {
-      setSendingToClient(false);
-      setShowSendPopup(false);
-    }
-  };
-
-  // Helper to translate common edge function errors to Arabic
-  const getArabicErrorMessage = (englishError: string): string => {
-    const errorMap: Record<string, string> = {
-      "Policy number is required before sending invoices": "يجب إدخال رقم البوليصة قبل الإرسال",
-      "At least one policy file must be uploaded before sending invoices": "يجب رفع ملف بوليصة واحد على الأقل قبل الإرسال",
-      "Client phone number is required": "رقم هاتف العميل مطلوب",
-      "SMS service is not enabled": "خدمة الرسائل غير مفعلة",
-      "Policy not found": "المعاملة غير موجودة",
-      "Client not found": "العميل غير موجود",
-      "Client already has a signature": "العميل لديه توقيع مسبق",
-      "Failed to fetch SMS settings": "فشل في جلب إعدادات الرسائل",
-      "Failed to create signature request": "فشل في إنشاء طلب التوقيع",
-      "Missing authorization header": "خطأ في المصادقة",
-      "Invalid authentication": "جلسة غير صالحة",
-    };
-    return errorMap[englishError] || englishError;
-  };
-
-  const handleCancelSend = () => {
-    if (autoSendRef.current) clearTimeout(autoSendRef.current);
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    setShowSendPopup(false);
   };
 
   // Convert base64 to Blob
@@ -478,24 +459,6 @@ export function PolicyFilesSection({
 
           toast({ title: "تم", description: `تم مسح ورفع ${scannedImages.length} صورة بنجاح` });
           fetchFiles();
-
-          // Show auto-send popup only for insurance files and if client has phone
-          if (fileType === 'insurance' && clientPhoneNumber) {
-            setCountdown(5);
-            setShowSendPopup(true);
-            countdownRef.current = setInterval(() => {
-              setCountdown(prev => {
-                if (prev <= 1) {
-                  clearInterval(countdownRef.current!);
-                  return 0;
-                }
-                return prev - 1;
-              });
-            }, 1000);
-            autoSendRef.current = setTimeout(() => {
-              handleSendToClient();
-            }, 5000);
-          }
         } catch (error: any) {
           console.error('Error uploading scanned images:', error);
           toast({ 
@@ -546,29 +509,52 @@ export function PolicyFilesSection({
   const handleDelete = async () => {
     if (!deletingImage) return;
 
+    // Close the confirm dialog right away and switch to the top
+    // progress banner — mirrors the upload UX so the user sees a
+    // consistent "operation in progress" indicator rather than a
+    // spinner stuck inside the AlertDialog.
+    const fileToDelete = deletingImage;
+    setDeleteDialogOpen(false);
+    setDeletingImage(null);
     setDeleting(true);
+    setDeleteProgress({ name: fileToDelete.original_name, pct: 0 });
+
+    // Simulate smooth progress while delete-media is in flight. The
+    // server call is a single round-trip, but Bunny Stream cleanup +
+    // DB row delete can take a couple of seconds for videos. Climbs
+    // to 90% during the request, then snaps to 100% on success.
+    const interval = setInterval(() => {
+      setDeleteProgress((prev) => prev ? { ...prev, pct: Math.min(prev.pct + 5, 90) } : prev);
+    }, 100);
+
     try {
       const { error } = await supabase.functions.invoke('delete-media', {
-        body: { fileIds: [deletingImage.id] },
+        body: { fileIds: [fileToDelete.id] },
       });
 
       if (error) {
         throw new Error(error.message || 'Delete failed');
       }
 
+      clearInterval(interval);
+      setDeleteProgress((prev) => prev ? { ...prev, pct: 100 } : prev);
+      // Brief pause so the 100% state is actually visible.
+      await new Promise((r) => setTimeout(r, 300));
+
       toast({ title: "تم الحذف", description: "تم حذف الملف بنجاح" });
       fetchFiles();
     } catch (error: any) {
+      clearInterval(interval);
       console.error('Error deleting:', error);
-      toast({ 
-        title: "خطأ", 
-        description: error.message || "فشل في حذف الملف", 
-        variant: "destructive" 
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل في حذف الملف",
+        variant: "destructive"
       });
     } finally {
+      clearInterval(interval);
       setDeleting(false);
-      setDeleteDialogOpen(false);
-      setDeletingImage(null);
+      setDeleteProgress(null);
     }
   };
 
@@ -750,6 +736,17 @@ export function PolicyFilesSection({
           <Progress value={uploadProgress.pct} className="h-2" />
         </Card>
       )}
+      {deleteProgress && (
+        <Card className="p-3 mb-3 space-y-2 border-destructive/40 bg-destructive/5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="truncate max-w-[70%] text-destructive">
+              جاري الحذف: {deleteProgress.name}
+            </span>
+            <span className="font-mono text-destructive">{deleteProgress.pct}%</span>
+          </div>
+          <Progress value={deleteProgress.pct} className="h-2" />
+        </Card>
+      )}
       {/* Policy Number Section - Always visible at top */}
       <Card className="p-4 mb-4 border-2 border-primary/20">
         <div className="flex items-center gap-2 mb-3">
@@ -807,7 +804,21 @@ export function PolicyFilesSection({
 
         {/* Insurance Files Tab */}
         <TabsContent value="insurance" className="m-0">
-          <Card className="p-4 space-y-4">
+          <Card
+            className={`relative p-4 space-y-4 transition-colors ${
+              isDragging === 'insurance' ? 'ring-2 ring-primary ring-offset-2 bg-primary/5' : ''
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!uploading && !scanning) setIsDragging('insurance');
+            }}
+            onDragLeave={(e) => {
+              // Only clear when actually leaving the card, not when crossing children
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+              setIsDragging(null);
+            }}
+            onDrop={(e) => handleDrop(e, 'insurance')}
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-primary font-semibold">
                 <ImageIcon className="h-4 w-4" />
@@ -816,19 +827,40 @@ export function PolicyFilesSection({
               {renderUploadButton('insurance')}
             </div>
             <p className="text-xs text-muted-foreground">
-              البوليصة من شركة التأمين - يمكنك رفع صور متعددة أو PDF
+              البوليصة من شركة التأمين - يمكنك رفع صور متعددة، PDF أو فيديو. اسحب وأفلت ملفات أو مجلد كامل هنا.
             </p>
             {loading ? (
               <div className="text-center py-4 text-muted-foreground">جاري التحميل...</div>
             ) : (
               renderFileGrid(insuranceFiles)
             )}
+            {isDragging === 'insurance' && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-lg">
+                <div className="bg-background/95 px-4 py-2 rounded-md shadow-md text-sm font-semibold text-primary flex items-center gap-2">
+                  <Upload className="h-4 w-4" />
+                  أفلت الملفات أو المجلد للرفع
+                </div>
+              </div>
+            )}
           </Card>
         </TabsContent>
 
         {/* CRM Files Tab */}
         <TabsContent value="crm" className="m-0">
-          <Card className="p-4 space-y-4">
+          <Card
+            className={`relative p-4 space-y-4 transition-colors ${
+              isDragging === 'crm' ? 'ring-2 ring-primary ring-offset-2 bg-primary/5' : ''
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!uploading && !scanning) setIsDragging('crm');
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+              setIsDragging(null);
+            }}
+            onDrop={(e) => handleDrop(e, 'crm')}
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-secondary-foreground font-semibold">
                 <FolderOpen className="h-4 w-4" />
@@ -836,11 +868,21 @@ export function PolicyFilesSection({
               </div>
               {renderUploadButton('crm')}
             </div>
-            <p className="text-xs text-muted-foreground">هوية، رخصة، صور سيارة - ملفات للاستخدام الداخلي فقط</p>
+            <p className="text-xs text-muted-foreground">
+              هوية، رخصة، صور سيارة، فيديو - ملفات للاستخدام الداخلي فقط. اسحب وأفلت ملفات أو مجلد كامل هنا.
+            </p>
             {loading ? (
               <div className="text-center py-4 text-muted-foreground">جاري التحميل...</div>
             ) : (
               renderFileGrid(crmFiles)
+            )}
+            {isDragging === 'crm' && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-lg">
+                <div className="bg-background/95 px-4 py-2 rounded-md shadow-md text-sm font-semibold text-primary flex items-center gap-2">
+                  <Upload className="h-4 w-4" />
+                  أفلت الملفات أو المجلد للرفع
+                </div>
+              </div>
             )}
           </Card>
         </TabsContent>
@@ -854,48 +896,16 @@ export function PolicyFilesSection({
         onNavigate={(file) => setSelectedFile(file)}
       />
 
-      {/* Delete Confirm Dialog */}
+      {/* Delete Confirm Dialog. Closes immediately on confirm — the
+          progress is shown in the top banner like the upload flow. */}
       <DeleteConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleDelete}
         title="حذف الملف"
         description={`هل أنت متأكد من حذف "${deletingImage?.original_name}"؟`}
-        loading={deleting}
+        loading={false}
       />
-
-      {/* Auto-Send Popup */}
-      <Dialog open={showSendPopup} onOpenChange={(open) => !open && handleCancelSend()}>
-        <DialogContent dir="rtl" className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Send className="h-5 w-5 text-primary" />
-              إرسال للعميل
-            </DialogTitle>
-            <DialogDescription>
-              هل تريد إرسال ملفات البوليصة والفواتير للعميل {clientName}؟
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="py-4">
-            <div className="flex items-center justify-center gap-2 text-muted-foreground mb-2">
-              <AlertTriangle className="h-4 w-4" />
-              <span>سيتم الإرسال تلقائياً خلال {countdown} ثوانٍ</span>
-            </div>
-            <Progress value={(5 - countdown) * 20} className="h-2" />
-          </div>
-
-          <DialogFooter className="flex-row-reverse gap-2 sm:gap-2">
-            <Button onClick={handleSendToClient} disabled={sendingToClient}>
-              {sendingToClient ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Send className="h-4 w-4 ml-2" />}
-              إرسال الآن
-            </Button>
-            <Button variant="outline" onClick={handleCancelSend} disabled={sendingToClient}>
-              إلغاء
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Upload progress toast — fixed bottom-right while uploading */}
       {uploadProgress && (
