@@ -2,19 +2,11 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
-import { Loader2, RefreshCw, CheckCircle2, Phone, Inbox, Clock, FileText, HelpCircle, Sparkles, MessageCircle, UserCog } from "lucide-react";
+import { Loader2, RefreshCw, CheckCircle2, Phone, Inbox, Clock, FileText, HelpCircle, Sparkles, MessageCircle, UserCog, Trash2, Calendar } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -22,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -74,6 +67,7 @@ function toWhatsAppDigits(phone: string): string {
 export default function CustomerRequests() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [deleteTarget, setDeleteTarget] = useState<CustomerRequest | null>(null);
 
   const { data: requests, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["customer_requests"],
@@ -116,6 +110,20 @@ export default function CustomerRequests() {
     },
     onError: (e: any) =>
       toast({ title: "خطأ", description: e?.message ?? "فشل التحديث", variant: "destructive" }),
+  });
+
+  const deleteRequest = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("customer_requests").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "تم حذف الطلب" });
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["customer_requests"] });
+    },
+    onError: (e: any) =>
+      toast({ title: "خطأ", description: e?.message ?? "فشل الحذف", variant: "destructive" }),
   });
 
   return (
@@ -182,115 +190,143 @@ export default function CustomerRequests() {
           </Button>
         </div>
 
-        {/* Table */}
-        <Card>
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-16">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <Inbox className="h-10 w-10 text-muted-foreground/40 mb-3" />
-                <p className="text-sm text-muted-foreground">لا توجد طلبات لعرضها</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-right">النوع</TableHead>
-                      <TableHead className="text-right">الطلب</TableHead>
-                      <TableHead className="text-right">رقم العميل</TableHead>
-                      <TableHead className="text-right">التفاصيل</TableHead>
-                      <TableHead className="text-right">الحالة</TableHead>
-                      <TableHead className="text-right">التاريخ</TableHead>
-                      <TableHead className="text-right">إجراء</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map((r) => {
-                      const meta = REQUEST_TYPE_META[r.request_type] ?? {
-                        label: r.request_type,
-                        icon: FileText,
-                      };
-                      const Icon = meta.icon;
-                      const localPhone = formatLocalPhone(r.phone_number);
-                      return (
-                        <TableRow key={r.id}>
-                          <TableCell>
-                            <Badge variant="outline" className="gap-1 font-normal">
-                              <Icon className="h-3 w-3" />
-                              {meta.label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-medium max-w-xs">{r.title}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2 whitespace-nowrap">
-                              <a
-                                href={`tel:${localPhone}`}
-                                className="inline-flex items-center gap-1.5 text-primary hover:underline font-mono text-sm"
-                              >
-                                <Phone className="h-3.5 w-3.5" />
-                                {localPhone}
-                              </a>
-                              <a
-                                href={`https://wa.me/${toWhatsAppDigits(r.phone_number)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center rounded-md bg-emerald-500 hover:bg-emerald-600 text-white h-7 w-7 transition-colors"
-                                title="فتح محادثة واتساب"
-                              >
-                                <MessageCircle className="h-3.5 w-3.5" />
-                              </a>
-                            </div>
-                          </TableCell>
-                          <TableCell className="max-w-md whitespace-pre-line text-sm text-muted-foreground">
-                            {r.content}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={r.status === "open" ? "default" : "secondary"}
-                              className="gap-1"
-                            >
-                              {r.status === "open" ? (
-                                <Clock className="h-3 w-3" />
-                              ) : (
-                                <CheckCircle2 className="h-3 w-3" />
-                              )}
-                              {STATUS_LABELS[r.status] ?? r.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                            <div>{format(new Date(r.created_at), "d MMM yyyy", { locale: ar })}</div>
-                            <div className="text-xs">
-                              {formatDistanceToNow(new Date(r.created_at), { locale: ar, addSuffix: true })}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {r.status === "open" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => markHandled.mutate(r.id)}
-                                disabled={markHandled.isPending}
-                              >
-                                <CheckCircle2 className="h-4 w-4 ml-1" />
-                                تم التواصل
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* Cards */}
+        {isLoading ? (
+          <Card>
+            <CardContent className="flex items-center justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </CardContent>
+          </Card>
+        ) : filtered.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <Inbox className="h-10 w-10 text-muted-foreground/40 mb-3" />
+              <p className="text-sm text-muted-foreground">لا توجد طلبات لعرضها</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {filtered.map((r) => (
+              <RequestCard
+                key={r.id}
+                request={r}
+                onMarkHandled={() => markHandled.mutate(r.id)}
+                onDelete={() => setDeleteTarget(r)}
+                markHandledPending={markHandled.isPending}
+              />
+            ))}
+          </div>
+        )}
       </div>
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteRequest.mutate(deleteTarget.id)}
+        title="حذف الطلب"
+        description={
+          deleteTarget
+            ? `هل أنت متأكد من حذف طلب "${deleteTarget.title}"؟ لا يمكن التراجع عن هذا الإجراء.`
+            : undefined
+        }
+        loading={deleteRequest.isPending}
+      />
     </MainLayout>
+  );
+}
+
+interface RequestCardProps {
+  request: CustomerRequest;
+  onMarkHandled: () => void;
+  onDelete: () => void;
+  markHandledPending: boolean;
+}
+
+function RequestCard({ request: r, onMarkHandled, onDelete, markHandledPending }: RequestCardProps) {
+  const meta = REQUEST_TYPE_META[r.request_type] ?? {
+    label: r.request_type,
+    icon: FileText,
+  };
+  const Icon = meta.icon;
+  const localPhone = formatLocalPhone(r.phone_number);
+  const isOpen = r.status === "open";
+
+  return (
+    <Card className="overflow-hidden transition-shadow hover:shadow-md">
+      <div className={`h-1 w-full ${isOpen ? "bg-primary" : "bg-emerald-500"}`} />
+      <CardContent className="p-4 space-y-4">
+        {/* Header: type + status */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="gap-1 font-normal">
+              <Icon className="h-3 w-3" />
+              {meta.label}
+            </Badge>
+            <Badge
+              variant={isOpen ? "default" : "secondary"}
+              className={`gap-1 ${!isOpen ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15" : ""}`}
+            >
+              {isOpen ? <Clock className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+              {STATUS_LABELS[r.status] ?? r.status}
+            </Badge>
+          </div>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 -mt-1 -ml-1"
+            onClick={onDelete}
+            title="حذف الطلب"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Title */}
+        <h3 className="font-semibold text-base leading-snug">{r.title}</h3>
+
+        {/* Phone row */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <a
+            href={`tel:${localPhone}`}
+            className="inline-flex items-center gap-1.5 text-primary hover:underline font-mono text-sm"
+          >
+            <Phone className="h-3.5 w-3.5" />
+            {localPhone}
+          </a>
+          <a
+            href={`https://wa.me/${toWhatsAppDigits(r.phone_number)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium px-2.5 py-1 transition-colors"
+            title="فتح محادثة واتساب"
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+            واتساب
+          </a>
+        </div>
+
+        {/* Details */}
+        <div className="rounded-md bg-muted/40 border border-border/50 p-3 text-sm whitespace-pre-line text-foreground/80">
+          {r.content}
+        </div>
+
+        {/* Footer: date + actions */}
+        <div className="flex items-center justify-between gap-2 pt-1 border-t">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Calendar className="h-3.5 w-3.5" />
+            <span>{format(new Date(r.created_at), "d MMM yyyy", { locale: ar })}</span>
+            <span className="text-muted-foreground/60">·</span>
+            <span>{formatDistanceToNow(new Date(r.created_at), { locale: ar, addSuffix: true })}</span>
+          </div>
+          {isOpen && (
+            <Button size="sm" onClick={onMarkHandled} disabled={markHandledPending}>
+              <CheckCircle2 className="h-4 w-4 ml-1" />
+              تم التواصل
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
