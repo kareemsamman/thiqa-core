@@ -321,7 +321,6 @@ export default function CustomerRequests() {
               <SelectItem value="quote">عرض سعر</SelectItem>
               <SelectItem value="manager">طلب الإدارة</SelectItem>
               <SelectItem value="accident_appointment">تحديد موعد — حادث طرق</SelectItem>
-              <SelectItem value="help">طلب مساعدة</SelectItem>
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
