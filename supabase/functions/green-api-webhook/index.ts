@@ -62,24 +62,26 @@ const CUSTOMER_SYSTEM_PROMPT = `أنت "ثاقب" — المساعد الآلي 
 لو العميل طلب سعر تأمين جديد أو سأل "بكم؟" أو "كم سعر التأمين":
 - **ممنوع** تعطي أسعار من رأسك.
 - **ممنوع** تنادي create_customer_request قبل ما تجمع كل المعلومات اللازمة.
-- اتبع الخطوات بالترتيب التالي. كل خطوة برسالة قصيرة، وانتظر رد العميل قبل الانتقال للتالية:
+- اتبع الخطوات بالترتيب التالي **حرفياً** (لا تغيّر الترتيب). كل خطوة برسالة قصيرة، وانتظر رد العميل قبل الانتقال للتالية:
 
-**الخطوة 1 — نوع التأمين**:
+**الخطوة 1 — رقم السيارة**:
 اسأل بهالنص بالضبط (نسخ ولصق، لا تغيّر صياغته):
-"إلزامي، طرف ثالث، ولا شامل وخدمات طريق؟"
+"تمام. شو رقم سيارتك؟"
+- العميل ممكن يبعت الرقم مكتوب أو يبعت **صورة** (للسيارة، أو للوحة، أو لرخصة السيارة / רישיון רכב). الصورة بتنقرأ تلقائياً وبيوصلك الرقم كنص — اعتمد عليه.
 
-**الخطوة 2 — رقم السيارة**:
-لما يجاوب على نوع التأمين، اسأل: "تمام. شو رقم سيارتك؟"
-
-**الخطوة 3 — تأكيد بيانات السيارة**:
+**الخطوة 2 — تأكيد بيانات السيارة**:
 لما يبعت رقم السيارة، نادي **lookup_vehicle** بهالرقم.
 - إذا found=true: ابعت تأكيد بصيغة:
   "سيارتك [manufacturer] [model] موديل [year]، مظبوط؟"
 - إذا found=false: قول للعميل "ما لقيت بيانات للرقم. متأكد منه؟ ابعتلي إياه مرة ثانية لو سمحت" — وحاول مرة وحدة كمان.
 - إذا فضل ما لقي بعد محاولتين، أكمل بدون بيانات السيارة (لا تضيع وقت العميل).
 
+**الخطوة 3 — نوع التأمين**:
+لما يأكد السيارة (نعم/أيوه/تمام/مظبوط) أو لما تعدّيت خطوة 2، اسأل بهالنص بالضبط:
+"إلزامي، طرف ثالث، ولا شامل وخدمات طريق؟"
+
 **الخطوة 4 — عمر السائق**:
-لما يأكد السيارة (نعم/أيوه/تمام/مظبوط) أو لما تعدّيت خطوة 3، اسأل:
+لما يجاوب على نوع التأمين، اسأل:
 "كم عمر السائق؟ أكثر من 24 ولا أقل؟"
 
 **الخطوة 5 — تسجيل الطلب**:
@@ -1656,9 +1658,13 @@ serve(async (req) => {
     // Look up the latest bot message ONCE — used both to detect an
     // in-progress deterministic flow (quote state machine) and to know
     // whether we're at the start of a conversation (greeting handler).
+    // We also select `content` so the image-OCR path can detect when
+    // the LLM (not just the state machine) just asked for the car
+    // number — the LLM doesn't set `flow_step`, so a content-based
+    // phrase check is the only signal we have.
     const { data: lastBotMsg } = await supabase
       .from("customer_chat_messages")
-      .select("metadata")
+      .select("metadata, content")
       .eq("session_id", session.id)
       .eq("role", "bot")
       .order("created_at", { ascending: false })
@@ -1667,6 +1673,12 @@ serve(async (req) => {
     const inProgressFlow = lastBotMsg?.metadata?.flow ?? null;
     const inProgressStep = lastBotMsg?.metadata?.flow_step ?? null;
     const inProgressData: QuoteFlowData = lastBotMsg?.metadata?.flow_data ?? {};
+    // Phrases the bot uses (deterministic OR LLM) to ask the customer
+    // for their plate number. If we see one of these in the latest bot
+    // turn, an incoming image is almost certainly a license/registration
+    // photo and worth OCR'ing.
+    const lastBotContent: string = lastBotMsg?.content ?? "";
+    const lastBotAskedForPlate = /شو رقم سيارت|رقم سيارتك|ابعتلي رقم سيارت|رقم السيارة/.test(lastBotContent);
 
     const quoteCtx: QuoteFlowCtx = {
       supabase,
@@ -1682,22 +1694,25 @@ serve(async (req) => {
       serviceKey,
     };
 
-    // Image-only message (no text) — only the awaiting_car_number step
-    // knows what to do with a picture today: try to OCR the plate from
-    // it and feed the digits into the existing flow. Anywhere else, ask
-    // the customer to write their request as text.
+    // Image-only message (no text). Try OCR if either:
+    //   • the deterministic quote flow is in awaiting_car_number*, OR
+    //   • the LLM just asked the customer for their plate (text-based
+    //     check of the previous bot turn).
+    // Anywhere else, ask the customer to write their request as text.
     if (pendingImage && !text) {
-      const inCarStep =
+      const inDeterministicCarStep =
         inProgressFlow === "quote" &&
         (inProgressStep === "awaiting_car_number" || inProgressStep === "awaiting_car_number_retry");
-      if (inCarStep) {
+      const shouldOcr = inDeterministicCarStep || lastBotAskedForPlate;
+      if (shouldOcr) {
         const plate = await extractPlateFromImage(pendingImage.downloadUrl, pendingImage.mimeType);
         if (plate) {
-          // Treat the OCR result as if the customer had typed it. The
-          // existing (1a) dispatch below will run processCarNumber on
-          // this text and continue the flow naturally.
+          // Treat the OCR result as if the customer had typed it. If a
+          // deterministic flow is active, (1a) below will pick it up;
+          // otherwise it falls through to the LLM path with the digits
+          // as the new turn.
           text = plate;
-        } else {
+        } else if (inDeterministicCarStep) {
           await sendQuoteStep(
             quoteCtx,
             "ما قدرت أقرأ رقم السيارة من الصورة. ابعتلي رقم سيارتك مكتوب لو سمحت.",
@@ -1705,6 +1720,31 @@ serve(async (req) => {
             inProgressData,
           );
           return new Response(JSON.stringify({ ok: true, image_plate_ocr: "failed" }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        } else {
+          // LLM-driven flow: don't lock state to a deterministic step;
+          // just hint at retry and let the LLM continue.
+          const reply = "ما قدرت أقرأ رقم السيارة من الصورة. ابعتلي رقم سيارتك مكتوب لو سمحت.";
+          const sendResult = await sendWhatsAppText(
+            instanceId,
+            gaSettings.api_token_instance,
+            senderId,
+            reply,
+          );
+          await supabase.from("customer_chat_messages").insert({
+            session_id: session.id,
+            role: "bot",
+            content: reply,
+            whatsapp_message_id: sendResult.idMessage,
+            metadata: { image_plate_ocr_failed: true, send_ok: sendResult.ok },
+          });
+          await supabase
+            .from("customer_chat_sessions")
+            .update({ last_message_at: new Date().toISOString() })
+            .eq("id", session.id);
+          return new Response(JSON.stringify({ ok: true, image_plate_ocr: "failed_llm" }), {
             status: 200,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
