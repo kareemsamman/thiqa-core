@@ -7,6 +7,13 @@ import {
   handleDeleteConfirm,
   type DeleteFlowMetadata,
 } from "./delete-flow.ts";
+import {
+  isAradiRulesIntent,
+  handleAradiRulesIntent,
+  handleAradiRulesPick,
+  handleAradiRulesConfirm,
+  type AradiRulesFlowMetadata,
+} from "./aradi-rules-flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1057,7 +1064,10 @@ Deno.serve(async (req) => {
       return null;
     })();
 
-    const handleDeterministic = async (reply: string, metadata: DeleteFlowMetadata | null) => {
+    const handleDeterministic = async (
+      reply: string,
+      metadata: DeleteFlowMetadata | AradiRulesFlowMetadata | null,
+    ) => {
       await adminClient.from("ai_chat_messages").insert([
         { session_id: sessionId, role: "user", content: message },
         { session_id: sessionId, role: "assistant", content: reply, metadata: metadata ?? {} },
@@ -1090,6 +1100,24 @@ Deno.serve(async (req) => {
         return await handleDeterministic(reply, null);
       }
       const r = await handleDeleteIntent(adminClient, agentId, branchId, message);
+      return await handleDeterministic(r.reply, r.metadata);
+    }
+
+    // ─── Stateful Aradi Muqadasa rules-seeding flow (admin only) ───
+    if (lastAssistantMeta?.pending_action === "aradi_rules_pick") {
+      const r = await handleAradiRulesPick(lastAssistantMeta, message);
+      return await handleDeterministic(r.reply, r.metadata);
+    }
+    if (lastAssistantMeta?.pending_action === "aradi_rules_confirm") {
+      const r = await handleAradiRulesConfirm(adminClient, lastAssistantMeta, message);
+      return await handleDeterministic(r.reply, r.metadata);
+    }
+    if (isAradiRulesIntent(message)) {
+      if (!isAdmin) {
+        const reply = "تنزيل قواعد التسعير صلاحية للمدير فقط. تواصل مع مديرك.";
+        return await handleDeterministic(reply, null);
+      }
+      const r = await handleAradiRulesIntent(adminClient, agentId, message);
       return await handleDeterministic(r.reply, r.metadata);
     }
 
