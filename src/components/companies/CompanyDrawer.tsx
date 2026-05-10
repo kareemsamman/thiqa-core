@@ -295,24 +295,24 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
                       aria-checked={selected}
                       onClick={() => handleTypeToggle(type.value, !selected)}
                       className={cn(
-                        "group flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all",
+                        "group flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all text-right",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                         selected
                           ? "border-primary bg-primary/5 text-foreground shadow-sm"
                           : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground",
                       )}
                     >
-                      <span>{type.label}</span>
                       <span
                         className={cn(
-                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all",
+                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-all",
                           selected
                             ? "border-primary bg-primary text-primary-foreground"
                             : "border-input bg-background group-hover:border-primary/50",
                         )}
                       >
-                        {selected && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                        {selected && <Check className="h-3 w-3" strokeWidth={3} />}
                       </span>
+                      <span className="flex-1 text-right">{type.label}</span>
                     </button>
                   );
                 })}
