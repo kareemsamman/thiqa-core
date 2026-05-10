@@ -41,6 +41,8 @@ interface PricingRule {
   value: number;
   age_band: Enums<'age_band'> | null;
   car_type: Enums<'car_type'> | null;
+  min_car_value: number | null;
+  max_car_value: number | null;
 }
 
 interface CalculationExplanationModalProps {
@@ -103,7 +105,7 @@ export function CalculationExplanationModal({
     try {
       const { data, error } = await supabase
         .from('pricing_rules')
-        .select('id, rule_type, value, age_band, car_type')
+        .select('id, rule_type, value, age_band, car_type, min_car_value, max_car_value')
         .eq('company_id', company.id)
         .eq('policy_type_parent', policy.policy_type_parent);
 
@@ -126,21 +128,40 @@ export function CalculationExplanationModal({
   const companyPayment = Number(policy.payed_for_company || 0);
   const profit = Number(policy.profit || 0);
 
-  // Find matching rules
-  const findRule = (ruleType: string) => {
-    // First try exact match
-    let rule = pricingRules.find(
-      r => r.rule_type === ruleType && 
-           (r.car_type === carType || r.car_type === null) &&
-           (r.age_band === ageBand || r.age_band === 'ANY')
+  // Mirrors `getRuleValue` in src/lib/pricingCalculator.ts so the modal
+  // shows the SAME rule the actual calculation picked. Filters by
+  // car_type + age_band + car_value range, then prefers ranged rules
+  // over open-ended ones (matches `rangedSpecificity` in the calculator).
+  const inCarValueRange = (r: PricingRule): boolean => {
+    if (r.min_car_value === null && r.max_car_value === null) return true;
+    if (r.min_car_value !== null && carValue < Number(r.min_car_value)) return false;
+    if (r.max_car_value !== null && carValue > Number(r.max_car_value)) return false;
+    return true;
+  };
+
+  const hasRange = (r: PricingRule): boolean =>
+    r.min_car_value !== null || r.max_car_value !== null;
+
+  const findRule = (ruleType: string): PricingRule | undefined => {
+    const candidates = pricingRules.filter(
+      (r) =>
+        r.rule_type === ruleType &&
+        (r.car_type === carType || r.car_type === null) &&
+        (r.age_band === ageBand || r.age_band === 'ANY' || r.age_band === null) &&
+        inCarValueRange(r),
     );
-    
-    // Fallback to any matching rule type
-    if (!rule) {
-      rule = pricingRules.find(r => r.rule_type === ruleType);
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => Number(hasRange(b)) - Number(hasRange(a)));
+      return candidates[0];
     }
-    
-    return rule;
+    // Fallback: relax car_type to find any same-rule_type rule that
+    // still matches the car value range. Mirrors the calculator's
+    // step-2 fallback ("ignore car_type filter").
+    const relaxed = pricingRules.filter(
+      (r) => r.rule_type === ruleType && inCarValueRange(r),
+    );
+    relaxed.sort((a, b) => Number(hasRange(b)) - Number(hasRange(a)));
+    return relaxed[0];
   };
 
   const thirdPriceRule = findRule('THIRD_PRICE');
