@@ -155,7 +155,7 @@ export function EditSettlementDialog({ open, onOpenChange, table, row, onSaved }
           toast.error('فشل تحميل السند');
           onOpenChange(false);
         } else {
-          const d = data as Record<string, unknown>;
+          const d = data as unknown as Record<string, unknown>;
           // Treat the legacy single column as the first element when
           // the new array column is empty — this keeps old rows visible
           // until they're edited and migrated to the array.
