@@ -10,9 +10,11 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const token = req.headers.get("x-import-token");
-    const expected = Deno.env.get("ONE_OFF_IMPORT_TOKEN");
-    if (!expected || token !== expected) {
+    // Caller must present the service-role key in Authorization to invoke
+    // this one-off importer.
+    const auth = req.headers.get("Authorization") || "";
+    const expected = `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`;
+    if (auth !== expected) {
       return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: corsHeaders });
     }
     const sql = await req.text();
