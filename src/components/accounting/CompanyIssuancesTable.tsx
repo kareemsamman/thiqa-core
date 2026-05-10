@@ -275,14 +275,13 @@ export function CompanyIssuancesTable({
     const isFromBroker = row.main.broker_direction === 'from_broker';
     const viewed = view(row);
 
+    const mainPrice = Number(viewed.main.insurance_price ?? 0);
     const overlayPatch: IssuanceEditPatch = { payed_for_company: num, manual_override: true };
-    if (!isFromBroker) overlayPatch.profit = viewed.insurance_price - num;
+    if (!isFromBroker) overlayPatch.profit = mainPrice - num;
     onPatch(row.id, overlayPatch);
 
     const dbPatch: PolicyPatch = { payed_for_company: num, manual_override: true };
-    if (!isFromBroker) {
-      dbPatch.profit = Number(viewed.main.insurance_price ?? 0) - num;
-    }
+    if (!isFromBroker) dbPatch.profit = mainPrice - num;
     policyDebounced.schedule(row.main.id, dbPatch);
   };
 
@@ -638,7 +637,7 @@ export function CompanyIssuancesTable({
                               <span className="text-xs text-muted-foreground">—</span>
                             ) : (
                               <NumberCell
-                                value={row.payed_for_company ?? 0}
+                                value={row.main.payed_for_company ?? 0}
                                 onChange={(v) => updateNumericField(rawRow, 'payed_for_company', v)}
                                 tone="destructive"
                               />
@@ -649,7 +648,7 @@ export function CompanyIssuancesTable({
                         {mode === 'broker' && showCol('broker_buy_price') && (
                           <TableCell>
                             <NumberCell
-                              value={row.broker_buy_price ?? 0}
+                              value={row.main.broker_buy_price ?? 0}
                               disabled={!mainEditable || isToBroker}
                               onChange={(v) => updateNumericField(rawRow, 'broker_buy_price', v)}
                               tone="amber"
@@ -665,7 +664,7 @@ export function CompanyIssuancesTable({
                         {mode === 'broker' && showCol('insurance_price') && (
                           <TableCell>
                             <NumberCell
-                              value={row.insurance_price ?? 0}
+                              value={row.main.insurance_price ?? 0}
                               disabled={!mainEditable}
                               onChange={(v) => updateNumericField(rawRow, 'insurance_price', v)}
                               tone="strong"
@@ -678,13 +677,13 @@ export function CompanyIssuancesTable({
                             {mode === 'broker' ? (
                               <span className="font-semibold tabular-nums text-emerald-700">
                                 ₪{(isToBroker
-                                  ? Number(row.profit ?? 0)
-                                  : Math.max(0, row.insurance_price - row.broker_buy_price)
+                                  ? Number(row.main.profit ?? 0)
+                                  : Math.max(0, Number(row.main.insurance_price ?? 0) - Number(row.main.broker_buy_price ?? 0))
                                 ).toLocaleString('en-US')}
                               </span>
                             ) : (
                               <NumberCell
-                                value={isElzami ? row.office_commission ?? 0 : row.profit ?? 0}
+                                value={isElzami ? row.main.office_commission ?? 0 : row.main.profit ?? 0}
                                 disabled={!mainEditable}
                                 onChange={(v) =>
                                   updateNumericField(
@@ -702,7 +701,7 @@ export function CompanyIssuancesTable({
                         {mode === 'company' && showCol('insurance_price') && (
                           <TableCell>
                             <NumberCell
-                              value={row.insurance_price ?? 0}
+                              value={row.main.insurance_price ?? 0}
                               disabled={!mainEditable}
                               onChange={(v) => updateNumericField(rawRow, 'insurance_price', v)}
                               tone="strong"

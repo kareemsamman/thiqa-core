@@ -294,12 +294,16 @@ export function useAccountingData(
       const issuances: IssuanceRow[] = Array.from(groupBuckets.values()).map(
         (group) => {
           const main = pickMainSubPolicy(group);
-          // The table's money columns — insurance_price, payed_for_company,
-          // profit, office_commission, broker_buy_price — reflect ONLY the
-          // main sub-policy (THIRD/FULL when present, ELZAMI otherwise).
-          // The other subs' numbers are visible by drilling into the
-          // package details drawer; the row-level cells are not summed.
-          const moneySubs = [main];
+          // Row-level money aggregates SUM across sub-policies (excluding
+          // ELZAMI when bundled with non-ELZAMI subs). These totals power
+          // the summary pills at the top of the table — "إجمالي سعر
+          // التأمين", "المستحق للشركات", "الأرباح + العمولات", etc.
+          // Per-cell display in the table uses `row.main.*` instead so
+          // the visible row reflects only the main sub (THIRD/FULL).
+          const hasNonElzami = group.some((s) => s.policy_type_parent !== 'ELZAMI');
+          const moneySubs = hasNonElzami
+            ? group.filter((s) => s.policy_type_parent !== 'ELZAMI')
+            : group;
           const aggregate = group.reduce(
             (acc, s) => {
               const recs = receiptsByPolicy.get(s.id);
@@ -466,17 +470,31 @@ export function useAccountingData(
         if (idx === -1) return row;
         const nextSubs = row.sub_policies.slice();
         nextSubs[idx] = { ...nextSubs[idx], ...patch };
-        // Money columns mirror the main sub only — matches the initial
-        // aggregation in fetchAll. Other subs' values are reachable
-        // through the package details drawer.
+        // Row-level aggregates sum across non-ELZAMI subs (or all subs
+        // for an ELZAMI-only group). Mirrors the initial aggregation in
+        // fetchAll so the summary pills stay correct after edits.
+        const hasNonElzami = nextSubs.some((s) => s.policy_type_parent !== 'ELZAMI');
+        const moneySubs = hasNonElzami
+          ? nextSubs.filter((s) => s.policy_type_parent !== 'ELZAMI')
+          : nextSubs;
+        const aggregate = moneySubs.reduce(
+          (acc, s) => {
+            acc.insurance_price += Number(s.insurance_price ?? 0);
+            acc.payed_for_company += Number(s.payed_for_company ?? 0);
+            acc.profit += Number(s.profit ?? 0);
+            acc.office_commission += Number(s.office_commission ?? 0);
+            acc.broker_buy_price += Number(s.broker_buy_price ?? 0);
+            return acc;
+          },
+          {
+            insurance_price: 0,
+            payed_for_company: 0,
+            profit: 0,
+            office_commission: 0,
+            broker_buy_price: 0,
+          },
+        );
         const main = pickMainSubPolicy(nextSubs);
-        const aggregate = {
-          insurance_price: Number(main.insurance_price ?? 0),
-          payed_for_company: Number(main.payed_for_company ?? 0),
-          profit: Number(main.profit ?? 0),
-          office_commission: Number(main.office_commission ?? 0),
-          broker_buy_price: Number(main.broker_buy_price ?? 0),
-        };
         return {
           ...row,
           sub_policies: nextSubs,
@@ -608,13 +626,14 @@ function narrowByType(row: IssuanceRow, allowed: Set<string>): IssuanceRow | nul
   if (matched.length === row.sub_policies.length) return row; // no narrowing needed
 
   const main = pickMainSubPolicy(matched);
-  // Money columns reflect the main of the narrowed set only — matches
-  // the row's default rendering rule (no cross-sub summing).
-  const insurance_price = Number(main.insurance_price ?? 0);
-  const payed_for_company = Number(main.payed_for_company ?? 0);
-  const profit = Number(main.profit ?? 0);
-  const office_commission = Number(main.office_commission ?? 0);
-  const broker_buy_price = Number(main.broker_buy_price ?? 0);
+  // Row-level aggregates sum the matched subs (after filter narrowing).
+  // Per-cell rendering uses row.main.* in the table, but the totals at
+  // the top still need a SUM — same convention as the default rows.
+  const insurance_price = matched.reduce((s, p) => s + Number(p.insurance_price ?? 0), 0);
+  const payed_for_company = matched.reduce((s, p) => s + Number(p.payed_for_company ?? 0), 0);
+  const profit = matched.reduce((s, p) => s + Number(p.profit ?? 0), 0);
+  const office_commission = matched.reduce((s, p) => s + Number(p.office_commission ?? 0), 0);
+  const broker_buy_price = matched.reduce((s, p) => s + Number(p.broker_buy_price ?? 0), 0);
 
   return {
     ...row,
