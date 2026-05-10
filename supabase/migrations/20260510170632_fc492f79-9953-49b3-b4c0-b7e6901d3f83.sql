@@ -1,0 +1,4 @@
+UPDATE clients SET branch_id='ebb6725f-0a32-498b-ac86-57fd68e36d71' WHERE agent_id='f37f11e5-6b05-4948-bd1a-c9a490eeb20e' AND branch_id IS NULL;
+UPDATE cars SET branch_id='ebb6725f-0a32-498b-ac86-57fd68e36d71' WHERE agent_id='f37f11e5-6b05-4948-bd1a-c9a490eeb20e' AND branch_id IS NULL;
+UPDATE policies SET branch_id='ebb6725f-0a32-498b-ac86-57fd68e36d71', skip_recalc=true, manual_override=true WHERE agent_id='f37f11e5-6b05-4948-bd1a-c9a490eeb20e' AND branch_id IS NULL;
+UPDATE policy_payments SET branch_id='ebb6725f-0a32-498b-ac86-57fd68e36d71' WHERE agent_id='f37f11e5-6b05-4948-bd1a-c9a490eeb20e' AND branch_id IS NULL;

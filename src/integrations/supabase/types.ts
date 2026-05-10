@@ -7137,6 +7137,7 @@ export type Database = {
         Args: { _agent_id: string }
         Returns: boolean
       }
+      exec_one_off_sql: { Args: { _sql: string }; Returns: undefined }
       find_missing_packages: {
         Args: never
         Returns: {
