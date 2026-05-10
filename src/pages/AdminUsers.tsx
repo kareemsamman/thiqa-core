@@ -66,7 +66,7 @@ import { arDZ as ar } from "date-fns/locale";
 import { UserSessionsTab } from "@/components/admin/UserSessionsTab";
 import { UserPermissionsDialog } from "@/components/admin/UserPermissionsDialog";
 import { DefaultEmployeePermissionsCard } from "@/components/admin/DefaultEmployeePermissionsCard";
-import { isPasswordValid } from "@/lib/authValidation";
+import { isPasswordValid, checkPasswordStrength } from "@/lib/authValidation";
 import { digitsOnly } from "@/lib/validation";
 import {
   DateRangeFilter,
@@ -1538,9 +1538,28 @@ export default function AdminUsers() {
                 type="password"
                 autoComplete="new-password"
               />
-              <p className="text-xs text-muted-foreground">
-                يجب أن تحتوي على 8 أحرف على الأقل، حرف كبير، رقم، ورمز
-              </p>
+              {newUserPassword ? (
+                (() => {
+                  const { checks } = checkPasswordStrength(newUserPassword);
+                  const Item = ({ ok, label }: { ok: boolean; label: string }) => (
+                    <span className={ok ? "text-green-600" : "text-destructive"}>
+                      {ok ? "✓" : "✗"} {label}
+                    </span>
+                  );
+                  return (
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                      <Item ok={checks.minLength} label="8 أحرف" />
+                      <Item ok={checks.hasUpper} label="حرف كبير" />
+                      <Item ok={checks.hasNumber} label="رقم" />
+                      <Item ok={checks.hasSymbol} label="رمز" />
+                    </div>
+                  );
+                })()
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  يجب أن تحتوي على 8 أحرف على الأقل، حرف كبير، رقم، ورمز
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>الهاتف</Label>
@@ -1579,24 +1598,37 @@ export default function AdminUsers() {
                 </p>
               </div>
             )}
-            <div className="flex gap-2 pt-4">
-              <Button
-                onClick={handleCreateUser}
-                disabled={
-                  creatingUser ||
-                  !newUserEmail.trim() ||
-                  !isPasswordValid(newUserPassword) ||
-                  (branches.length > 0 && (!newUserBranch || newUserBranch === "none"))
-                }
-                className="flex-1"
-              >
-                {creatingUser ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Plus className="h-4 w-4 ml-2" />}
-                إنشاء المستخدم
-              </Button>
-              <Button variant="outline" onClick={() => setCreateSheetOpen(false)} disabled={creatingUser}>
-                إلغاء
-              </Button>
-            </div>
+            {(() => {
+              const missing: string[] = [];
+              if (!newUserEmail.trim()) missing.push("البريد الإلكتروني");
+              if (!isPasswordValid(newUserPassword)) missing.push("كلمة مرور صالحة");
+              if (branches.length > 0 && (!newUserBranch || newUserBranch === "none")) {
+                missing.push("الفرع");
+              }
+              const isDisabled = creatingUser || missing.length > 0;
+              return (
+                <div className="space-y-2 pt-4">
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleCreateUser}
+                      disabled={isDisabled}
+                      className="flex-1"
+                    >
+                      {creatingUser ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Plus className="h-4 w-4 ml-2" />}
+                      إنشاء المستخدم
+                    </Button>
+                    <Button variant="outline" onClick={() => setCreateSheetOpen(false)} disabled={creatingUser}>
+                      إلغاء
+                    </Button>
+                  </div>
+                  {!creatingUser && missing.length > 0 && (
+                    <p className="text-xs text-destructive">
+                      لإكمال الإنشاء: {missing.join(" · ")}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </SheetContent>
       </Sheet>
