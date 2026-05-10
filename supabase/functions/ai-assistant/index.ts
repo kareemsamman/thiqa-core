@@ -1109,7 +1109,7 @@ Deno.serve(async (req) => {
       return await handleDeterministic(r.reply, r.metadata);
     }
     if (lastAssistantMeta?.pending_action === "aradi_rules_confirm") {
-      const r = await handleAradiRulesConfirm(adminClient, lastAssistantMeta, message);
+      const r = await handleAradiRulesConfirm(adminClient, agentId, lastAssistantMeta, message);
       return await handleDeterministic(r.reply, r.metadata);
     }
     if (isAradiRulesIntent(message)) {

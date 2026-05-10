@@ -97,11 +97,12 @@ serve(async (req) => {
 
     const { data: company, error: companyErr } = await supabase
       .from("insurance_companies")
-      .select("id, name, name_ar, category_parent")
+      .select("id, name, name_ar, category_parent, agent_id")
       .eq("id", company_id)
       .maybeSingle();
     if (companyErr) return jsonError(500, companyErr.message);
     if (!company) return jsonError(404, "Company not found");
+    if (!company.agent_id) return jsonError(400, "Company has no agent_id; cannot satisfy pricing_rules RLS");
 
     const { data: existing, error: existingErr } = await supabase
       .from("pricing_rules")
@@ -129,8 +130,12 @@ serve(async (req) => {
 
     let insertError: string | null = null;
     if (inserted.length > 0) {
+      // agent_id is required by RLS — pricing_rules without it are
+      // invisible to the agency's users. Pulled from the parent
+      // insurance_companies row above.
       const rows = inserted.map((t) => ({
         company_id,
+        agent_id: company.agent_id,
         policy_type_parent: "THIRD_FULL" as const,
         rule_type: t.rule_type,
         car_type: t.car_type,

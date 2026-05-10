@@ -101,6 +101,7 @@ function describeCompany(c: CompanyCandidate): string {
 async function seedAradiRules(
   supabase: any,
   companyId: string,
+  agentId: string,
 ): Promise<{ inserted: TargetRow[]; skipped: TargetRow[]; error?: string }> {
   const { data: existing, error: existingErr } = await supabase
     .from("pricing_rules")
@@ -122,8 +123,12 @@ async function seedAradiRules(
   }
 
   if (inserted.length > 0) {
+    // agent_id is required by RLS — pricing_rules without it are
+    // invisible to the agency's users. Pulled from the parent
+    // insurance_companies row before calling here.
     const rows = inserted.map((t) => ({
       company_id: companyId,
+      agent_id: agentId,
       policy_type_parent: "THIRD_FULL" as const,
       rule_type: t.rule_type,
       car_type: t.car_type,
@@ -242,6 +247,7 @@ export async function handleAradiRulesPick(
 
 export async function handleAradiRulesConfirm(
   supabase: any,
+  agentId: string,
   meta: Extract<AradiRulesFlowMetadata, { pending_action: "aradi_rules_confirm" }>,
   message: string,
 ): Promise<AradiRulesFlowResult> {
@@ -253,7 +259,7 @@ export async function handleAradiRulesConfirm(
     return { reply: "نعم أو لا؟", metadata: meta };
   }
 
-  const result = await seedAradiRules(supabase, meta.company.id);
+  const result = await seedAradiRules(supabase, meta.company.id, agentId);
   if (result.error) {
     return { reply: `تعذّر إضافة القواعد: ${result.error}`, metadata: null };
   }
