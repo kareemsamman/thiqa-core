@@ -241,22 +241,6 @@ export function CompanyIssuancesTable({
   const showCol = (key: string) => visible.includes(key);
   const visibleCount = visible.length;
 
-  // Helper for package edits: when the displayed value is the sum of
-  // visible (non-ELZAMI when applicable) subs, derive what to write to
-  // the main sub by subtracting OTHER non-ELZAMI subs' values for the
-  // same field.
-  const visibleNonMainSum = (
-    row: IssuanceRow,
-    field: keyof IssuanceRow,
-  ): number => {
-    if (!row.is_grouped) return 0;
-    const hasNonElzami = row.sub_policies.some((s) => s.policy_type_parent !== 'ELZAMI');
-    return row.sub_policies
-      .filter((s) => s.id !== row.main.id)
-      .filter((s) => !(hasNonElzami && s.policy_type_parent === 'ELZAMI'))
-      .reduce((sum, s) => sum + Number((s as any)[field] ?? 0), 0);
-  };
-
   const updateNumericField = (
     row: IssuanceRow,
     field: keyof PolicyPatch,
@@ -265,9 +249,9 @@ export function CompanyIssuancesTable({
     const num = raw === '' ? 0 : Number(raw);
     if (Number.isNaN(num)) return;
 
-    // Fields the user can edit even when the row is a package. The edit
-    // targets row.main with the OTHER-subs' value subtracted out so the
-    // displayed sum matches what was typed once aggregates rebuild.
+    // Fields the user can edit even when the row is a package. The
+    // displayed cell value reflects only the main sub, so the typed
+    // value writes through to main directly with no subtraction.
     const PACKAGE_EDITABLE_FIELDS: Array<keyof PolicyPatch> = [
       'payed_for_company',
       'insurance_price',
@@ -278,12 +262,8 @@ export function CompanyIssuancesTable({
     if (row.is_grouped && !PACKAGE_EDITABLE_FIELDS.includes(field)) return;
 
     if (field !== 'payed_for_company') {
-      // Single-sub field: just write through.
-      // Package field: subtract other visible subs' contribution.
-      const otherSum = visibleNonMainSum(row, field as keyof IssuanceRow);
-      const mainNew = num - otherSum;
       onPatch(row.id, { [field]: num, manual_override: true });
-      policyDebounced.schedule(row.main.id, { [field]: mainNew, manual_override: true });
+      policyDebounced.schedule(row.main.id, { [field]: num, manual_override: true });
       return;
     }
 
@@ -291,26 +271,17 @@ export function CompanyIssuancesTable({
     // insurance_price = profit + payed_for_company. We mirror that
     // invariant locally + on save so the user sees الربح update live.
     // from_broker rows compute profit from broker_buy_price instead —
-    // skip the auto-mirror there. ELZAMI is already excluded at the cell.
+    // skip the auto-mirror there.
     const isFromBroker = row.main.broker_direction === 'from_broker';
     const viewed = view(row);
 
-    // Overlay reflects displayed totals so the profit cell on this row
-    // updates in real time as the user types.
     const overlayPatch: IssuanceEditPatch = { payed_for_company: num, manual_override: true };
     if (!isFromBroker) overlayPatch.profit = viewed.insurance_price - num;
     onPatch(row.id, overlayPatch);
 
-    // The DB save targets row.main.id. For packages the displayed
-    // payed_for_company is the SUM across visible subs (ELZAMI excluded
-    // when the group has any non-ELZAMI member), so we subtract other
-    // visible subs' contribution before writing — that way the on-disk
-    // sum matches what the user typed once aggregates rebuild.
-    const nonMainPayed = visibleNonMainSum(row, 'payed_for_company');
-    const mainPayedNew = num - nonMainPayed;
-    const dbPatch: PolicyPatch = { payed_for_company: mainPayedNew, manual_override: true };
+    const dbPatch: PolicyPatch = { payed_for_company: num, manual_override: true };
     if (!isFromBroker) {
-      dbPatch.profit = Number(viewed.main.insurance_price ?? 0) - mainPayedNew;
+      dbPatch.profit = Number(viewed.main.insurance_price ?? 0) - num;
     }
     policyDebounced.schedule(row.main.id, dbPatch);
   };

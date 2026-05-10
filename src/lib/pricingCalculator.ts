@@ -311,6 +311,17 @@ export async function recalculatePolicyProfit(policyId: string): Promise<ProfitR
 
     if (error || !policy) throw error;
 
+    // Defense-in-depth: rows flagged manual_override carry user-edited
+    // money values that bulk recalc must not overwrite. Callers
+    // already filter on manual_override=false, but a stray direct call
+    // would otherwise silently clobber the user's edits.
+    if ((policy as { manual_override?: boolean }).manual_override) {
+      return {
+        companyPayment: Number(policy.payed_for_company ?? 0),
+        profit: Number(policy.profit ?? 0),
+      };
+    }
+
     const ageBand: Enums<'age_band'> = policy.clients.less_than_24 ? 'UNDER_24' : 'UP_24';
 
     const result = await calculatePolicyProfit({
