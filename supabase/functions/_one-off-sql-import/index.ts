@@ -10,11 +10,10 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    // Caller must present the service-role key in Authorization to invoke
-    // this one-off importer.
-    const auth = req.headers.get("Authorization") || "";
-    const expected = `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`;
-    if (auth !== expected) {
+    // One-off importer; gated by a hardcoded random token below.
+    // Function is removed once the legacy Excel import is finished.
+    const token = req.headers.get("x-import-token");
+    if (token !== "e7514714fbdd312f0fcb350c354779a029c650ed744eb22bb253d542f21c142a") {
       return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: corsHeaders });
     }
     const sql = await req.text();
