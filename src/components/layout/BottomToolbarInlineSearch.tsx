@@ -8,7 +8,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { normalizeArabic } from "@/lib/arabicNormalize";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { useShortcutAction } from "@/hooks/useShortcutAction";
 
@@ -125,153 +124,83 @@ export function BottomToolbarInlineSearch({
 
     setLoading(true);
     try {
-      const searchTerm = term.trim();
-
-      const [clientsRes, carsRes, policiesRes, receiptsRes] = await Promise.all([
-        supabase
-          .from("clients")
-          .select("id, full_name, id_number, phone_number")
-          .is("deleted_at", null)
-          .or(
-            `full_name_normalized.ilike.%${normalizeArabic(searchTerm)}%,phone_number.ilike.%${searchTerm}%,phone_number_2.ilike.%${searchTerm}%,id_number.ilike.%${searchTerm}%,file_number.ilike.%${searchTerm}%`,
-          )
-          .limit(10),
-        supabase
-          .from("cars")
-          .select("id, client_id, car_number, clients(id, full_name, id_number, phone_number)")
-          .is("deleted_at", null)
-          .ilike("car_number", `%${searchTerm}%`)
-          .limit(10),
-        // Policies matched by document_number or policy_number. The
-        // document_number is the human-readable "35/2026" form shown
-        // on invoices; policy_number is the external insurer ref.
-        supabase
-          .from("policies")
-          .select(
-            "id, document_number, policy_number, client_id, clients(full_name), car:cars(car_number)",
-          )
-          .is("deleted_at", null)
-          .or(`document_number.ilike.%${searchTerm}%,policy_number.ilike.%${searchTerm}%`)
-          .limit(8),
-        // Payment receipts matched by receipt_number — typing a
-        // receipt number takes the user straight to that policy's
-        // drawer.
-        supabase
-          .from("policy_payments")
-          .select(
-            "id, receipt_number, policy_id, policy:policies(id, document_number, client_id, clients(full_name), car:cars(car_number))",
-          )
-          .not("receipt_number", "is", null)
-          .ilike("receipt_number", `%${searchTerm}%`)
-          .limit(8),
-      ]);
+      // Single round-trip — see search_global() in the migration.
+      const { data, error } = await supabase.rpc("search_global", {
+        p_term: term.trim(),
+      });
 
       if (latestRequestRef.current !== requestId) return;
+      if (error) throw error;
 
-      if (clientsRes.error) throw clientsRes.error;
-      if (carsRes.error) throw carsRes.error;
-      if (policiesRes.error) throw policiesRes.error;
-      if (receiptsRes.error) throw receiptsRes.error;
-
-      const map = new Map<string, ClientResult>();
-
-      for (const c of clientsRes.data || []) {
-        map.set(c.id, {
-          id: c.id,
-          full_name: c.full_name,
-          id_number: c.id_number,
-          phone_number: c.phone_number,
-          cars: [],
-        });
-      }
-
-      for (const row of carsRes.data || []) {
-        const client = (row as any).clients as {
+      const payload = (data ?? {
+        clients: [],
+        policies: [],
+        receipts: [],
+      }) as {
+        clients: Array<{
           id: string;
           full_name: string;
           id_number: string;
           phone_number: string | null;
-        } | null;
-        if (!client) continue;
+          cars: string[];
+          matched_car_id: string | null;
+        }>;
+        policies: Array<{
+          id: string;
+          document_number: string | null;
+          policy_number: string | null;
+          client_name: string | null;
+          car_number: string | null;
+        }>;
+        receipts: Array<{
+          receipt_number: string;
+          policy_id: string;
+          document_number: string | null;
+          client_name: string | null;
+          car_number: string | null;
+        }>;
+      };
 
-        const carNumber = (row as any).car_number as string;
-        const carId = (row as any).id as string;
-        const isCarMatch = carNumber.toLowerCase().includes(searchTerm.toLowerCase());
-
-        if (!map.has(client.id)) {
-          map.set(client.id, {
-            id: client.id,
-            full_name: client.full_name,
-            id_number: client.id_number,
-            phone_number: client.phone_number,
-            cars: [],
-            matchedCarId: isCarMatch ? carId : undefined,
-          });
-        } else if (isCarMatch && !map.get(client.id)?.matchedCarId) {
-          // If this car matches the search and we don't have a matched car yet
-          map.get(client.id)!.matchedCarId = carId;
-        }
-      }
-
-      const clientIds = Array.from(map.keys());
-
-      if (clientIds.length) {
-        const { data: allCars, error: allCarsError } = await supabase
-          .from("cars")
-          .select("client_id, car_number")
-          .is("deleted_at", null)
-          .in("client_id", clientIds)
-          .order("created_at", { ascending: false })
-          .limit(60);
-
-        if (allCarsError) throw allCarsError;
-
-        for (const car of allCars || []) {
-          const entry = map.get(car.client_id);
-          if (!entry) continue;
-          if (entry.cars.length >= 3) continue;
-          if (!entry.cars.includes(car.car_number)) entry.cars.push(car.car_number);
-        }
-      }
-
-      setResults(Array.from(map.values()).slice(0, 10));
+      setResults(
+        payload.clients.map((c) => ({
+          id: c.id,
+          full_name: c.full_name,
+          id_number: c.id_number,
+          phone_number: c.phone_number,
+          cars: c.cars ?? [],
+          matchedCarId: c.matched_car_id ?? undefined,
+        })),
+      );
 
       // Policy + receipt results — deduped by policy id, with the
       // document-number matches listed first and receipt-number
       // matches appended.
       const policyMap = new Map<string, PolicyResult>();
-      for (const p of policiesRes.data || []) {
-        const id = (p as any).id as string;
-        if (!id || policyMap.has(id)) continue;
-        const clientName = ((p as any).clients?.full_name as string) || null;
-        const carNumber = ((p as any).car?.car_number as string) || null;
-        const docNum = ((p as any).document_number as string) || null;
-        const polNum = ((p as any).policy_number as string) || null;
-        policyMap.set(id, {
+      for (const p of payload.policies) {
+        if (policyMap.has(p.id)) continue;
+        policyMap.set(p.id, {
           kind: "policy",
-          policyId: id,
-          label: docNum || polNum || "معاملة",
-          subLabel: [clientName, carNumber].filter(Boolean).join(" · ") || null,
-          clientName,
-          carNumber,
+          policyId: p.id,
+          label: p.document_number || p.policy_number || "معاملة",
+          subLabel:
+            [p.client_name, p.car_number].filter(Boolean).join(" · ") || null,
+          clientName: p.client_name,
+          carNumber: p.car_number,
         });
       }
-      for (const r of receiptsRes.data || []) {
-        const policyRef = (r as any).policy;
-        const policyId = (policyRef?.id as string) || ((r as any).policy_id as string) || null;
-        const receiptNumber = (r as any).receipt_number as string | null;
-        if (!policyId || !receiptNumber) continue;
-        if (policyMap.has(`receipt:${receiptNumber}`)) continue;
-        const clientName = (policyRef?.clients?.full_name as string) || null;
-        const carNumber = (policyRef?.car?.car_number as string) || null;
-        const docNum = (policyRef?.document_number as string) || null;
-        policyMap.set(`receipt:${receiptNumber}`, {
+      for (const r of payload.receipts) {
+        const key = `receipt:${r.receipt_number}`;
+        if (policyMap.has(key)) continue;
+        policyMap.set(key, {
           kind: "receipt",
-          policyId,
-          label: receiptNumber,
-          subLabel: [docNum, clientName, carNumber].filter(Boolean).join(" · ") || null,
-          clientName,
-          carNumber,
+          policyId: r.policy_id,
+          label: r.receipt_number,
+          subLabel:
+            [r.document_number, r.client_name, r.car_number]
+              .filter(Boolean)
+              .join(" · ") || null,
+          clientName: r.client_name,
+          carNumber: r.car_number,
         });
       }
       setPolicyResults(Array.from(policyMap.values()).slice(0, 8));
