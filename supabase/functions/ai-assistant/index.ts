@@ -14,6 +14,13 @@ import {
   handleAradiRulesConfirm,
   type AradiRulesFlowMetadata,
 } from "./aradi-rules-flow.ts";
+import {
+  isPalestineRulesIntent,
+  handlePalestineRulesIntent,
+  handlePalestineRulesPick,
+  handlePalestineRulesConfirm,
+  type PalestineRulesFlowMetadata,
+} from "./palestine-rules-flow.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1066,7 +1073,7 @@ Deno.serve(async (req) => {
 
     const handleDeterministic = async (
       reply: string,
-      metadata: DeleteFlowMetadata | AradiRulesFlowMetadata | null,
+      metadata: DeleteFlowMetadata | AradiRulesFlowMetadata | PalestineRulesFlowMetadata | null,
     ) => {
       await adminClient.from("ai_chat_messages").insert([
         { session_id: sessionId, role: "user", content: message },
@@ -1118,6 +1125,24 @@ Deno.serve(async (req) => {
         return await handleDeterministic(reply, null);
       }
       const r = await handleAradiRulesIntent(adminClient, agentId, message);
+      return await handleDeterministic(r.reply, r.metadata);
+    }
+
+    // ─── Stateful Palestine Insurance rules-seeding flow (admin only) ───
+    if (lastAssistantMeta?.pending_action === "palestine_rules_pick") {
+      const r = await handlePalestineRulesPick(lastAssistantMeta, message);
+      return await handleDeterministic(r.reply, r.metadata);
+    }
+    if (lastAssistantMeta?.pending_action === "palestine_rules_confirm") {
+      const r = await handlePalestineRulesConfirm(adminClient, agentId, lastAssistantMeta, message);
+      return await handleDeterministic(r.reply, r.metadata);
+    }
+    if (isPalestineRulesIntent(message)) {
+      if (!isAdmin) {
+        const reply = "تنزيل قواعد التسعير صلاحية للمدير فقط. تواصل مع مديرك.";
+        return await handleDeterministic(reply, null);
+      }
+      const r = await handlePalestineRulesIntent(adminClient, agentId, message);
       return await handleDeterministic(r.reply, r.metadata);
     }
 
