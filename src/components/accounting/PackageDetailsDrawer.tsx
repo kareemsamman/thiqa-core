@@ -70,9 +70,9 @@ export function PackageDetailsDrawer({ open, onOpenChange, row, mode, onSubPolic
     debounced.schedule(sub.id, { [field]: num, manual_override: true });
   };
 
-  const valueOf = (sub: SubPolicy, field: keyof SubPatch, fallback: number) => {
+  const valueOf = (sub: SubPolicy, field: keyof SubPatch, fallback: number): number => {
     const local = edits[sub.id]?.[field];
-    if (local !== undefined) return local;
+    if (local !== undefined && typeof local !== 'boolean') return local as number;
     return fallback;
   };
 
