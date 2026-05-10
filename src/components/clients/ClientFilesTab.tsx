@@ -98,27 +98,27 @@ export function ClientFilesTab({ policies, kind, clientId, onCountChange }: Clie
 
     if (policyIds.length > 0) {
       queries.push(
-        supabase
+        Promise.resolve(supabase
           .from('media_files')
           .select('id, original_name, cdn_url, mime_type, size, created_at, entity_type, entity_id, storage_path, stream_video_guid, stream_library_id')
           .in('entity_id', policyIds)
           .in('entity_type', ENTITY_TYPES[kind])
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
-          .then((r) => ({ data: r.data as MediaFile[] | null, error: r.error })),
+          .then((r: any) => ({ data: r.data as MediaFile[] | null, error: r.error }))),
       );
     }
 
     if (showManualUpload && clientId) {
       queries.push(
-        supabase
+        Promise.resolve(supabase
           .from('media_files')
           .select('id, original_name, cdn_url, mime_type, size, created_at, entity_type, entity_id, storage_path, stream_video_guid, stream_library_id')
           .eq('entity_id', clientId)
           .eq('entity_type', CLIENT_SYSTEM_ENTITY_TYPE)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
-          .then((r) => ({ data: r.data as MediaFile[] | null, error: r.error })),
+          .then((r: any) => ({ data: r.data as MediaFile[] | null, error: r.error }))),
       );
     }
 
