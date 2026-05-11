@@ -35,6 +35,14 @@ export interface ReceiptRow {
   // trigger, 'manual' when the agent typed it directly on /receipts.
   source?: string | null;
   payment_id?: string | null;
+  // Cancellation tracking — added by 20260511160000_receipt_cancellation_voucher.
+  // On the original payment receipt: cancelled_at + cancellation_reason
+  // are populated when the underlying policy_payment is voided.
+  // On the cancellation voucher (receipt_type='cancellation'):
+  // cancels_receipt_id points back to the original receipt it cancels.
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+  cancels_receipt_id?: string | null;
   policy?: {
     id: string;
     document_number: string | null;

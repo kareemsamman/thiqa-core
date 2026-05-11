@@ -36,6 +36,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Search,
   Plus,
@@ -53,6 +55,8 @@ import {
   Pencil,
   Trash2,
   Eye,
+  XCircle,
+  Ban,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -479,10 +483,17 @@ export default function Receipts() {
   // Data
   const [receipts, setReceipts] = useState<ReceiptRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  // Receipt tab is locked to "payment" now — the accident_fee tab
-  // was removed from the UI but the `receipt_type` filter on the
-  // query stays so legacy accident_fee rows don't mix in.
-  const activeTab = "payment";
+  // Tabs:
+  //  - payment:      سندات قبض  → receipt_type='payment'  (cancelled
+  //                  originals stay here with a "ملغي" badge so the
+  //                  audit trail surfaces in the same place the cashier
+  //                  always looked)
+  //  - cancellation: سندات إلغاء → receipt_type='cancellation' (vouchers
+  //                  inserted by sync_receipt_from_policy_payment when
+  //                  a payment is voided)
+  // Legacy accident_fee rows are filtered out by the .eq() in
+  // fetchReceipts and don't have their own tab.
+  const [activeTab, setActiveTab] = useState<'payment' | 'cancellation'>('payment');
 
   // Filters — search stays inline in the toolbar; everything else lives
   // in the AccountingFilters popover so we get one canonical filter UI
@@ -564,6 +575,27 @@ export default function Receipts() {
   // tile and the printed report header so they reflect the whole set,
   // not just the current page (which is capped at PAGE_SIZE).
   const [totalCount, setTotalCount] = useState(0);
+
+  // Switching tabs resets the cursor — otherwise the user lands on
+  // a page that may not exist in the new tab's smaller result set.
+  useEffect(() => {
+    setPage(0);
+  }, [activeTab]);
+
+  // Cross-reference between an original payment receipt and its
+  // cancellation voucher (and vice versa). Populated by fetchReceipts
+  // after the main query — drives the "ملغي بسند #X" line on cancelled
+  // payments and the "إلغاء سند #Y" line on cancellation vouchers.
+  // Map keys: receipt.id (UUID) → the OTHER side's receipt_number.
+  const [cancelXref, setCancelXref] = useState<Record<string, number | string>>({});
+
+  // Reason prompt for إلغاء السند on the receipts page. Same pattern
+  // as the cheques page — required field, dialog blocks until typed.
+  const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
+  const [reasonGroup, setReasonGroup] = useState<ReceiptGroupView | null>(null);
+  const [reasonText, setReasonText] = useState("");
+  const [reasonError, setReasonError] = useState<string | null>(null);
+  const [reasonSubmitting, setReasonSubmitting] = useState(false);
 
   // Add / edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -671,9 +703,55 @@ export default function Receipts() {
 
       const rows = (data || []) as ReceiptRecord[];
       const filtered = hideElzamiPayments ? rows.filter((r) => !isElzamiPassthrough(r)) : rows;
+      const trimmed = filtered.length > PAGE_SIZE ? filtered.slice(0, PAGE_SIZE) : filtered;
       setHasMore(filtered.length > PAGE_SIZE);
-      setReceipts(filtered.length > PAGE_SIZE ? filtered.slice(0, PAGE_SIZE) : filtered);
+      setReceipts(trimmed);
       setTotalCount(total ?? 0);
+
+      // Build the cancellation cross-reference: each cancelled
+      // payment receipt links to a voucher (cancels_receipt_id =
+      // original.id) and we want the voucher's receipt_number for
+      // display, not its UUID. Same the other way around for the
+      // cancellation tab. One extra round-trip; would only get
+      // expensive if the page had hundreds of cancelled rows.
+      const xref: Record<string, number | string> = {};
+      if (activeTab === 'payment') {
+        const cancelledIds = trimmed
+          .filter((r) => r.cancelled_at)
+          .map((r) => r.id);
+        if (cancelledIds.length > 0) {
+          const { data: vouchers } = await supabase
+            .from('receipts')
+            .select('receipt_number, cancels_receipt_id')
+            .eq('receipt_type', 'cancellation')
+            .in('cancels_receipt_id', cancelledIds);
+          for (const v of (vouchers ?? []) as Array<{ receipt_number: number | string | null; cancels_receipt_id: string | null }>) {
+            if (v.cancels_receipt_id && v.receipt_number != null) {
+              xref[v.cancels_receipt_id] = v.receipt_number;
+            }
+          }
+        }
+      } else {
+        const originalIds = trimmed
+          .map((r) => r.cancels_receipt_id)
+          .filter((id): id is string => !!id);
+        if (originalIds.length > 0) {
+          const { data: originals } = await supabase
+            .from('receipts')
+            .select('id, receipt_number')
+            .in('id', originalIds);
+          const byId = new Map<string, number | string>();
+          for (const o of (originals ?? []) as Array<{ id: string; receipt_number: number | string | null }>) {
+            if (o.receipt_number != null) byId.set(o.id, o.receipt_number);
+          }
+          for (const r of trimmed) {
+            if (r.cancels_receipt_id && byId.has(r.cancels_receipt_id)) {
+              xref[r.id] = byId.get(r.cancels_receipt_id)!;
+            }
+          }
+        }
+      }
+      setCancelXref(xref);
     } catch (err: any) {
       console.error("Error fetching receipts:", err);
       toast.error("خطأ في تحميل الإيصالات");
@@ -887,6 +965,62 @@ export default function Receipts() {
       notes: r.notes || "",
     });
     setDialogOpen(true);
+  };
+
+  const openCancelDialog = (group: ReceiptGroupView) => {
+    setReasonGroup(group);
+    setReasonText("");
+    setReasonError(null);
+    setReasonDialogOpen(true);
+  };
+
+  const confirmCancelReceipt = async () => {
+    if (!reasonGroup) return;
+    if (!reasonText.trim()) {
+      setReasonError('السبب مطلوب');
+      return;
+    }
+    // Only auto-source receipts (mirrored from policy_payments) can
+    // be voided this way — manual receipts have no underlying
+    // payment row to flip refused on. Manual cancellation isn't
+    // wired yet; surface a clear error instead of silently no-op'ing.
+    const paymentIds = reasonGroup.receipts
+      .filter((r) => r.source === 'auto' && r.payment_id)
+      .map((r) => r.payment_id as string);
+    if (paymentIds.length === 0) {
+      toast.error('السندات اليدوية لا تدعم الإلغاء بعد — الميزة للسندات الآلية فقط');
+      return;
+    }
+    setReasonSubmitting(true);
+    try {
+      // Update every underlying policy_payment to refused=true with
+      // the same reason. The sync_receipt_from_policy_payment trigger
+      // then runs once per row, marks the matching original receipt
+      // cancelled, and inserts a paired cancellation voucher.
+      // cheque_status flip to 'cancelled' is only meaningful for
+      // payment_type='cheque' rows but storing it on cash/visa rows
+      // is harmless (the cheques page filters by payment_type).
+      const { error } = await supabase
+        .from('policy_payments')
+        .update({
+          refused: true,
+          cheque_status: 'cancelled',
+          cancellation_reason: reasonText.trim(),
+        })
+        .in('id', paymentIds);
+      if (error) throw error;
+      toast.success(`تم إلغاء ${paymentIds.length} سند${paymentIds.length > 1 ? 'اً' : ''} وإصدار سند إلغاء`);
+      setReasonDialogOpen(false);
+      setReasonGroup(null);
+      setReasonText("");
+      setReasonError(null);
+      fetchReceipts();
+    } catch (err: any) {
+      console.error('[Receipts] cancel error:', err);
+      toast.error(err?.message || 'فشل في إلغاء السند');
+    } finally {
+      setReasonSubmitting(false);
+    }
   };
 
   const handleSaveReceipt = async () => {
@@ -1212,18 +1346,43 @@ export default function Receipts() {
       <div dir="rtl" className="min-h-screen">
         <Header
           title="إدارة الإيصالات"
-          subtitle="عرض وإدارة إيصالات الدفع ورسوم الحوادث"
+          subtitle={activeTab === 'cancellation'
+            ? 'سندات الإلغاء — كل عملية إلغاء تُنشئ سنداً مستقلاً يضمن التوثيق المحاسبي'
+            : 'سندات القبض — إيصالات الدفع الصادرة للعملاء'}
         />
 
         <div className="p-3 md:p-6 space-y-4">
+          {/* Tab switcher — receipt_type='payment' vs 'cancellation'.
+              Each tab applies the same filters/search but against its
+              own slice of the receipts table. Switching resets the
+              page cursor (useEffect on activeTab). */}
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'payment' | 'cancellation')}>
+            <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger value="payment" className="gap-2">
+                <Receipt className="h-3.5 w-3.5" />
+                سندات القبض
+              </TabsTrigger>
+              <TabsTrigger value="cancellation" className="gap-2">
+                <Ban className="h-3.5 w-3.5" />
+                سندات الإلغاء
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
           {/* Toolbar — single row: primary actions on the right (RTL),
               search + count + manage columns + filter on the left, same
               pattern as /accounting. */}
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={handleOpenDialog} className="h-8 gap-1.5">
-              <Plus className="h-3.5 w-3.5" />
-              إضافة إيصال
-            </Button>
+            {/* "إضافة إيصال" is for manual payment receipts only —
+                cancellation vouchers are always auto-generated by the
+                sync trigger, never typed by hand, so hide the button
+                when the cancellation tab is active. */}
+            {activeTab === 'payment' && (
+              <Button size="sm" onClick={handleOpenDialog} className="h-8 gap-1.5">
+                <Plus className="h-3.5 w-3.5" />
+                إضافة إيصال
+              </Button>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -1487,6 +1646,67 @@ export default function Receipts() {
           await fetchReceipts();
         }}
       />
+
+      {/* Reason prompt for إلغاء السند. Reason is required by the
+          immutable-accounting flow — the bookkeeper needs a written
+          explanation that gets copied onto the cancellation voucher
+          and the cancelled original. */}
+      <Dialog open={reasonDialogOpen} onOpenChange={(o) => {
+        if (!o) {
+          setReasonDialogOpen(false);
+          setReasonGroup(null);
+          setReasonText("");
+          setReasonError(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>إلغاء السند</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            {reasonGroup && (
+              <p className="text-xs text-muted-foreground">
+                سيُنشأ سند إلغاء برقم جديد لكل واحد من{' '}
+                <span className="font-bold ltr-nums">{reasonGroup.receipts.length}</span>{' '}
+                {reasonGroup.receipts.length === 1 ? 'سند' : 'سندات'} بقيمة{' '}
+                <span className="font-bold ltr-nums">
+                  ₪{Math.round(reasonGroup.total).toLocaleString('en-US')}
+                </span>
+                ، ورصيد العميل سيتم تعديله تلقائياً.
+              </p>
+            )}
+            <Label htmlFor="cancel-reason">
+              سبب الإلغاء<span className="text-destructive mr-1">*</span>
+            </Label>
+            <Textarea
+              id="cancel-reason"
+              value={reasonText}
+              onChange={(e) => {
+                setReasonText(e.target.value);
+                if (e.target.value.trim()) setReasonError(null);
+              }}
+              placeholder="مثال: العميل طلب الإلغاء، خطأ في الإصدار، شيك مكرر..."
+              rows={3}
+              autoFocus
+              disabled={reasonSubmitting}
+            />
+            {reasonError && <p className="text-sm text-destructive">{reasonError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReasonDialogOpen(false)} disabled={reasonSubmitting}>
+              تراجع
+            </Button>
+            <Button
+              variant="default"
+              onClick={confirmCancelReceipt}
+              disabled={reasonSubmitting || !reasonText.trim()}
+            >
+              {reasonSubmitting ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+              تأكيد الإلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 
@@ -1573,6 +1793,30 @@ export default function Receipts() {
                   const combinedMethodLabel = Array.from(
                     new Set(group.receipts.map((r) => paymentLabelShort(r.payment_method))),
                   ).join(" + ");
+                  // Cancellation state for this row.
+                  //  - allCancelled: every payment receipt in the group
+                  //    has been voided. Drives the big "ملغي" badge and
+                  //    hides the cancel action from the dropdown.
+                  //  - voucherRef: receipt_number of the cancellation
+                  //    voucher (for payment tab) or the original receipt
+                  //    (for cancellation tab) — sourced from cancelXref.
+                  //  - canCancel: only auto-source rows in the payment
+                  //    tab that aren't already cancelled.
+                  const allCancelled =
+                    activeTab === 'payment' &&
+                    group.receipts.length > 0 &&
+                    group.receipts.every((r) => !!r.cancelled_at);
+                  const partiallyCancelled =
+                    activeTab === 'payment' &&
+                    !allCancelled &&
+                    group.receipts.some((r) => !!r.cancelled_at);
+                  const voucherRef = activeTab === 'payment'
+                    ? cancelXref[group.receipts.find((r) => r.cancelled_at)?.id ?? '']
+                    : cancelXref[firstReceipt?.id ?? ''];
+                  const canCancel =
+                    activeTab === 'payment' &&
+                    !allCancelled &&
+                    group.receipts.some((r) => r.source === 'auto' && r.payment_id);
                   // Cheque number for the row — only meaningful when the
                   // group is a single cheque receipt.
                   const chequeNumber =
@@ -1614,6 +1858,7 @@ export default function Receipts() {
                       )}
                       {isCol("receipt_number") && (
                         <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                          <div className="flex flex-col gap-0.5">
                           {group.receipts.length <= 1 ? (
                             <span>{firstReceipt?.receipt_number ?? "-"}</span>
                           ) : (
@@ -1652,6 +1897,31 @@ export default function Receipts() {
                               </TooltipContent>
                             </Tooltip>
                           )}
+                          {/* Cancellation indicators. Payment tab: red
+                              "ملغي" badge + the voucher number that
+                              cancelled it. Cancellation tab: amber badge
+                              + the original receipt number this voucher
+                              cancels. */}
+                          {allCancelled && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-destructive/10 text-destructive text-[10px] font-sans w-fit">
+                              <XCircle className="h-2.5 w-2.5" />
+                              ملغي
+                              {voucherRef != null && <span className="font-mono ltr-nums">→ #{voucherRef}</span>}
+                            </span>
+                          )}
+                          {partiallyCancelled && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 text-[10px] font-sans w-fit">
+                              <AlertCircle className="h-2.5 w-2.5" />
+                              ملغي جزئياً
+                            </span>
+                          )}
+                          {activeTab === 'cancellation' && voucherRef != null && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 text-[10px] font-sans w-fit">
+                              <Ban className="h-2.5 w-2.5" />
+                              <span className="font-mono ltr-nums">إلغاء سند #{voucherRef}</span>
+                            </span>
+                          )}
+                          </div>
                         </TableCell>
                       )}
                       {isCol("amount") && (
@@ -1742,12 +2012,29 @@ export default function Receipts() {
                                   ? "طباعة السندات"
                                   : "طباعة السند"}
                               </DropdownMenuItem>
-                              {/* For single-receipt rows expose edit/delete
-                                  inline; for multi-receipt groups the user
-                                  clicks the row itself, opens the details
-                                  popup, and edits any individual card from
-                                  there — no more per-receipt dropdown spam. */}
-                              {group.receipts.length === 1 && (
+                              {/* إلغاء السند — voids every underlying
+                                  policy_payment in the group, which fires
+                                  the sync trigger to create cancellation
+                                  vouchers and mark these receipts cancelled.
+                                  Hidden once the row is fully cancelled
+                                  (no point re-cancelling) and on the
+                                  cancellation tab (vouchers are already
+                                  the cancellation record). */}
+                              {canCancel && (
+                                <DropdownMenuItem
+                                  className="text-amber-700 focus:text-amber-800"
+                                  onClick={() => openCancelDialog(group)}
+                                >
+                                  <Ban className="h-4 w-4 ml-2" />
+                                  إلغاء السند
+                                </DropdownMenuItem>
+                              )}
+                              {/* Edit/Delete only for single-receipt manual
+                                  rows AND only when not cancelled — auto
+                                  rows go through PaymentEditDialog via the
+                                  group details, and cancelled receipts are
+                                  immutable historical records. */}
+                              {group.receipts.length === 1 && !allCancelled && (
                                 <>
                                   <DropdownMenuItem
                                     onClick={() => handleEditReceipt(group.receipts[0])}
