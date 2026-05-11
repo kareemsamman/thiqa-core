@@ -10,6 +10,14 @@ const corsHeaders = {
 interface BulkReceiptRequest {
   payment_ids: string[];
   total_amount?: number; // optional verification
+  // When true (used by the receipts page print button), expand the
+  // scope from "just these payments" to "every non-إلزامي payment
+  // this customer has ever made". The customer-level receipt is the
+  // canonical "كشف قبض" the user wants — money the office actually
+  // collected, not scoped to any one transaction. Defaults to false
+  // so the SMS auto-receipt sent right after تسديد المبلغ keeps
+  // showing only the just-collected session.
+  customer_scope?: boolean;
 }
 
 const PAYMENT_TYPE_LABELS: Record<string, string> = {
@@ -157,6 +165,12 @@ function buildBulkReceiptHtml(
   // "ملغية → سند الإلغاء #19" so the printed copy carries the same
   // audit-trail reference the receipts page shows on screen.
   cancellationVoucherMap: Record<string, number | string> = {},
+  // When true the receipt is a customer-level كشف قبض (every non-إلزامي
+  // payment the customer ever made) and the "هذه السندات تخص المعاملة"
+  // note is hidden — the receipt isn't scoped to a single transaction
+  // anymore. Defaults to false for the SMS auto-receipt that still
+  // wants the per-session framing.
+  isCustomerLevel: boolean = false,
 ): string {
   const today = new Date();
   // Pick the package's representative document_number the same way the
@@ -639,10 +653,13 @@ function buildBulkReceiptHtml(
       </div>
     </div>
 
-    <!-- Policy-link note -->
+    ${isCustomerLevel ? '' : `
+    <!-- Policy-link note — hidden on customer-level receipts since
+         those are deliberately not scoped to a single transaction. -->
     <div class="policy-note">
       هذه السندات تخص المعاملة رقم <strong>${escapeHtml(primaryDocumentNumber)}</strong>.
     </div>
+    `}
 
     <!-- Footer -->
     <div class="footer">
@@ -709,7 +726,7 @@ serve(async (req) => {
     const agentId = await resolveAgentId(supabase, user.id);
     const branding = await getAgentBranding(supabase, agentId);
 
-    const { payment_ids, total_amount }: BulkReceiptRequest = await req.json();
+    const { payment_ids, total_amount, customer_scope }: BulkReceiptRequest = await req.json();
 
     if (!payment_ids || payment_ids.length === 0) {
       return new Response(
@@ -718,7 +735,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[generate-bulk-payment-receipt] Processing ${payment_ids.length} payments`);
+    console.log(`[generate-bulk-payment-receipt] Processing ${payment_ids.length} payments (customer_scope=${!!customer_scope})`);
 
     // Fetch company settings for contact info
     const { data: smsSettings } = await supabase
@@ -733,10 +750,11 @@ serve(async (req) => {
       company_location: smsSettings?.company_location || '',
     };
 
-    // Fetch all payments with policy info
-    const { data: payments, error: paymentsError } = await supabase
-      .from("policy_payments")
-      .select(`
+    // Build the SELECT once — both the seed query (just the input
+    // payment_ids) and the customer-scope expansion below need the
+    // same shape including the new batch_id + insurance_price fields
+    // we use for collapse and ELZAMI filtering.
+    const selectClause = `
         id,
         amount,
         payment_type,
@@ -752,35 +770,136 @@ serve(async (req) => {
         refused,
         notes,
         receipt_number,
+        batch_id,
         policy:policies(
           id,
           policy_type_parent,
           policy_type_child,
           document_number,
+          insurance_price,
           office_commission,
+          client_id,
           client:clients(id, full_name, id_number, phone_number, phone_number_2),
           car:cars(car_number, manufacturer_name, model, year)
         )
-      `)
+      `;
+
+    // Fetch the seed set so we can derive the customer (and skip the
+    // customer-scope expansion when the caller didn't ask for it).
+    const { data: seedPayments, error: seedError } = await supabase
+      .from("policy_payments")
+      .select(selectClause)
       .in("id", payment_ids)
       .order('payment_date', { ascending: true });
 
-    if (paymentsError || !payments || payments.length === 0) {
-      console.error("[generate-bulk-payment-receipt] Payments not found:", paymentsError);
+    if (seedError || !seedPayments || seedPayments.length === 0) {
+      console.error("[generate-bulk-payment-receipt] Payments not found:", seedError);
       return new Response(
         JSON.stringify({ error: "Payments not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // When customer_scope=true the receipts page wants every non-إلزامي
+    // payment this customer ever made — not just the rows of whatever
+    // transaction the user clicked print on. Walk policy → client_id,
+    // refetch every policy_payment under that client_id.
+    let payments = seedPayments;
+    if (customer_scope) {
+      const seedPolicy = (seedPayments[0] as any).policy;
+      const seedPolicyResolved = Array.isArray(seedPolicy) ? seedPolicy[0] : seedPolicy;
+      const clientId = seedPolicyResolved?.client_id;
+      if (clientId) {
+        const { data: clientPolicies } = await supabase
+          .from('policies')
+          .select('id')
+          .eq('client_id', clientId)
+          .is('deleted_at', null);
+        const clientPolicyIds = (clientPolicies ?? []).map((p: any) => p.id);
+        if (clientPolicyIds.length > 0) {
+          const { data: allCustomerPayments, error: expandErr } = await supabase
+            .from("policy_payments")
+            .select(selectClause)
+            .in("policy_id", clientPolicyIds)
+            .order('payment_date', { ascending: true });
+          if (!expandErr && allCustomerPayments && allCustomerPayments.length > 0) {
+            payments = allCustomerPayments;
+          }
+        }
+      }
+    }
+
+    // Drop ELZAMI passthroughs — payments where the policy is ELZAMI
+    // and the amount equals its insurance_price. Per the user's rule:
+    // إلزامي money goes straight to the insurer, the office doesn't
+    // actually collect it, so it shouldn't show up on a سند قبض. A
+    // partial-amount payment on an ELZAMI policy is kept (might be
+    // the office collecting a slice on behalf of the customer).
+    payments = payments.filter((p: any) => {
+      const pol = Array.isArray(p.policy) ? p.policy[0] : p.policy;
+      if (!pol || pol.policy_type_parent !== 'ELZAMI') return true;
+      const price = Number(pol.insurance_price ?? 0);
+      if (price <= 0) return true;
+      return Math.abs(Number(p.amount ?? 0) - price) >= 0.005;
+    });
+
+    // Collapse multi-split rows: when a single physical cheque was
+    // split across N policies (handleSubmit assigns the same batch_id
+    // to all rows), we want ONE row on the printed receipt at the
+    // cheque's true face value (= sum of every sibling's amount), not
+    // N rows showing the per-policy slices. Single-row payments
+    // (batch_id null) and outgoing-style rows pass through unchanged.
+    const collapseByBatchId = (rows: any[]): any[] => {
+      const out: any[] = [];
+      const idxByBatch = new Map<string, number>();
+      for (const p of rows) {
+        const amt = Number(p.amount ?? 0);
+        if (!p.batch_id) {
+          out.push({ ...p, amount: amt });
+          continue;
+        }
+        const i = idxByBatch.get(p.batch_id);
+        if (i === undefined) {
+          idxByBatch.set(p.batch_id, out.length);
+          out.push({ ...p, amount: amt });
+        } else {
+          out[i].amount += amt;
+        }
+      }
+      return out;
+    };
+    payments = collapseByBatchId(payments);
+
+    if (payments.length === 0) {
+      // The seed survived the SELECT but everything got filtered as
+      // إلزامي passthrough. Return a friendly error so the caller can
+      // surface it to the user instead of silently producing an empty
+      // receipt.
+      return new Response(
+        JSON.stringify({ error: "لا توجد دفعات قابلة للطباعة (كل الدفعات إلزامي مرور للشركة)" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Calculate total from payments — refused payments are excluded
     // entirely (neither added nor subtracted), since they represent
-    // money the client never actually paid.
+    // money the client never actually paid. The collapse already
+    // turned each batch into one row at face value, so this sums
+    // physical cheque face values (post-ELZAMI-filter).
     const calculatedTotal = payments.reduce((sum, p: any) => {
       if (p.refused) return sum;
       return sum + Number(p.amount || 0);
     }, 0);
-    const finalTotal = total_amount || calculatedTotal;
+    // Ignore the caller's total_amount hint — after collapse + ELZAMI
+    // filter the displayed rows can sum to a different number than
+    // what the caller saw at submit time, and showing a footer total
+    // that disagrees with the row sum would confuse the bookkeeper.
+    // The hint is left in the request shape for backwards compat but
+    // no longer used.
+    const finalTotal = calculatedTotal;
+    if (total_amount && Math.abs(total_amount - calculatedTotal) > 0.01) {
+      console.log(`[generate-bulk-payment-receipt] total_amount hint (${total_amount}) differs from row sum (${calculatedTotal}); using row sum`);
+    }
 
     // Get client and car info from first payment
     const firstPolicy = (payments[0] as any).policy;
@@ -839,6 +958,7 @@ serve(async (req) => {
       companySettings,
       branding,
       cancellationVoucherMap,
+      !!customer_scope,
     );
 
     if (!bunnyApiKey || !bunnyStorageZone) {

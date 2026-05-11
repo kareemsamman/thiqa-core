@@ -856,12 +856,14 @@ export default function Receipts() {
 
     if (allAuto && paymentIds.length > 0) {
       try {
-        const fn = paymentIds.length > 1
-          ? "generate-bulk-payment-receipt"
-          : "generate-payment-receipt";
-        const body = paymentIds.length > 1
-          ? { payment_ids: paymentIds }
-          : { payment_id: paymentIds[0] };
+        // Always go through the bulk endpoint here. customer_scope=true
+        // tells the function to expand from "the receipts of whatever
+        // row was clicked" to "every non-إلزامي payment this customer
+        // ever made" — the canonical كشف قبض the user wants. The
+        // single-receipt endpoint stays the per-payment view used
+        // elsewhere.
+        const fn = "generate-bulk-payment-receipt";
+        const body = { payment_ids: paymentIds, customer_scope: true };
         const { data, error } = await supabase.functions.invoke(fn, { body });
         if (error) throw error;
         const url = (data as any)?.receipt_url;
