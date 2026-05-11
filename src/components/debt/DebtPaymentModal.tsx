@@ -680,17 +680,30 @@ export function DebtPaymentModal({
    * and the insert fails. Splitting across policies keeps every row
    * under its cap while still representing one physical cheque.
    */
-  const calculateSplitPayments = (amount: number, _paymentType: string = 'cash') => {
+  const calculateSplitPayments = (
+    amount: number,
+    _paymentType: string = 'cash',
+    remainingByPolicy?: Map<string, number>,
+  ) => {
     const splits: { policyId: string; amount: number; branchId: string | null }[] = [];
 
     if (amount <= 0) return splits;
+
+    // When a remaining map is passed in (from handleSubmit's per-batch
+    // tracker) read from it instead of the policy's original remaining.
+    // Without this, a multi-cheque submit re-targets the same policies
+    // for every cheque, and the second cheque trips the per-group cap
+    // in validate_policy_payment_total — leaving the user with one
+    // saved cheque and the rest silently dropped.
+    const getRemaining = (p: { policyId: string; remaining: number }) =>
+      remainingByPolicy ? (remainingByPolicy.get(p.policyId) ?? 0) : p.remaining;
 
     // Smallest-remaining first: fill the tightest policies before
     // spilling over into ones with more room. That way a 1550 cheque
     // with (1300, 250) slots becomes [1300, 250] instead of [250, 1300].
     const policiesWithBalance = [...allPayablePolicies]
-      .filter(p => p.remaining > 0)
-      .sort((a, b) => a.remaining - b.remaining);
+      .filter(p => getRemaining(p) > 0)
+      .sort((a, b) => getRemaining(a) - getRemaining(b));
 
     if (policiesWithBalance.length === 0) return splits;
 
@@ -699,7 +712,7 @@ export function DebtPaymentModal({
     for (const policy of policiesWithBalance) {
       if (remainingAmount <= 0) break;
 
-      const paymentForPolicy = Math.min(remainingAmount, policy.remaining);
+      const paymentForPolicy = Math.min(remainingAmount, getRemaining(policy));
       if (paymentForPolicy > 0.001) {
         const roundedAmount = Math.round(paymentForPolicy * 100) / 100;
         if (roundedAmount > 0) {
@@ -802,19 +815,40 @@ export function DebtPaymentModal({
     }
 
     setSaving(true);
-    
+
     // Collect all created payment IDs for bulk receipt
     const allCreatedPaymentIds: string[] = [];
-    
+
+    // Per-batch remaining tracker. Each cheque in this submit must
+    // see the room left AFTER earlier cheques in the same submit took
+    // their slice — otherwise calculateSplitPayments re-targets the
+    // same smallest-remaining policies for every cheque and the
+    // per-group validate_policy_payment_total trigger rejects the
+    // duplicates (only the first cheque saves; the rest disappear).
+    const remainingByPolicy = new Map<string, number>(
+      allPayablePolicies.map(p => [p.policyId, p.remaining]),
+    );
+
     try {
       for (const paymentLine of paymentLines) {
         // Skip visa payments that are already paid via Tranzila
         if (paymentLine.paymentType === 'visa' && paymentLine.tranzilaPaid) {
           continue;
         }
-        
+
         if (paymentLine.paymentType !== 'visa') {
-          const splits = calculateSplitPayments(paymentLine.amount, paymentLine.paymentType);
+          const splits = calculateSplitPayments(
+            paymentLine.amount,
+            paymentLine.paymentType,
+            remainingByPolicy,
+          );
+
+          // Reserve this cheque's slice so the next cheque's split sees
+          // the smaller remaining figure.
+          for (const split of splits) {
+            const prev = remainingByPolicy.get(split.policyId) ?? 0;
+            remainingByPolicy.set(split.policyId, Math.max(0, prev - split.amount));
+          }
           
           if (splits.length > 0) {
             // Generate batch_id for grouping split payments in the UI
