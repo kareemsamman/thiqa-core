@@ -124,6 +124,16 @@ interface ChequeRecord {
    *  the client gave us (policy_payments). The other values come from
    *  outgoing settlement vouchers — same cheque book, opposite flow. */
   source?: 'customer' | 'company' | 'broker' | 'expense';
+  /** Multi-split grouping. When a single physical cheque pays several
+   *  policies (debt-settlement modal splits it across the smallest-
+   *  remaining first), all the rows share the same batch_id. The
+   *  cheques page collapses them into one logical row whose `amount`
+   *  is the SUM and whose `member_ids` / `member_policy_ids` carry the
+   *  underlying policy_payments rows so mutations (status change, edit
+   *  cheque number, etc.) propagate to all of them. */
+  batch_id?: string | null;
+  member_ids?: string[];
+  member_policy_ids?: string[];
 }
 
 interface CustomerGroup {
@@ -526,7 +536,7 @@ export default function Cheques() {
         .from('policy_payments')
         .select(`
           id, policy_id, amount, payment_date, cheque_due_date, cheque_issue_date,
-          cheque_number, cheque_date,
+          cheque_number, cheque_date, batch_id,
           bank_code, branch_code, cheque_image_url,
           cheque_status, refused, notes, transferred_to_type, transferred_to_id, transferred_payment_id,
           policies!policy_payments_policy_id_fkey(
@@ -633,6 +643,7 @@ export default function Cheques() {
           cheque_status: c.cheque_status || 'pending',
           refused: c.refused,
           notes: c.notes,
+          batch_id: c.batch_id || null,
           policy: c.policies ? {
             id: c.policies.id,
             policy_type_parent: c.policies.policy_type_parent,
@@ -664,14 +675,23 @@ export default function Cheques() {
         return bd - ad;
       });
 
+      // Collapse multi-split customer cheques into one logical row per
+      // physical cheque. The debt-settlement modal splits a single
+      // cheque across N policies (smallest-remaining first) so all
+      // splits share batch_id; the user thinks of and signs ONE cheque,
+      // so the page should show one row at the cheque's face value.
+      // Outgoing cheques and single-policy payments (no batch_id) are
+      // passed through unchanged.
+      const collapsed = collapseCustomerChequesByBatch(formattedCheques);
+
       // Search filter (includes customer name search)
-      const filtered = searchQuery 
-        ? formattedCheques.filter(c => 
+      const filtered = searchQuery
+        ? collapsed.filter(c =>
             c.policy?.client?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             c.cheque_number?.includes(searchQuery) ||
             c.policy?.client?.phone_number?.includes(searchQuery)
           )
-        : formattedCheques;
+        : collapsed;
 
       // Auto-expand all groups when there's a small number of them so
       // the user lands in a useful state without having to click around.
@@ -698,10 +718,15 @@ export default function Cheques() {
 
   const handleStatusChange = async (chequeId: string, newStatus: string) => {
     try {
+      // chequeId is the displayed (logical) row id. For multi-split
+      // cheques every underlying policy_payments row must flip together
+      // — a physical cheque can't be half-cashed.
+      const target = cheques.find(c => c.id === chequeId);
+      const idsToUpdate = target?.member_ids?.length ? target.member_ids : [chequeId];
       const { error } = await supabase
         .from('policy_payments')
         .update({ cheque_status: newStatus, refused: newStatus === 'returned' })
-        .eq('id', chequeId);
+        .in('id', idsToUpdate);
 
       if (error) throw error;
       toast({ title: "تم التحديث", description: "تم تحديث حالة الشيك" });
@@ -745,13 +770,25 @@ export default function Cheques() {
 
   const handleBulkStatusChange = async (newStatus: string) => {
     if (selectedCheques.size === 0) return;
-    
+
     setBulkActionLoading(true);
     try {
+      // Expand each selected logical row to its underlying members so
+      // multi-split cheques flip in full.
+      const idsToUpdate = new Set<string>();
+      for (const id of selectedCheques) {
+        const target = cheques.find(c => c.id === id);
+        if (target?.member_ids?.length) {
+          target.member_ids.forEach(mid => idsToUpdate.add(mid));
+        } else {
+          idsToUpdate.add(id);
+        }
+      }
+
       const { error } = await supabase
         .from('policy_payments')
         .update({ cheque_status: newStatus, refused: newStatus === 'returned' })
-        .in('id', Array.from(selectedCheques));
+        .in('id', Array.from(idsToUpdate));
 
       if (error) throw error;
       toast({ title: "تم التحديث", description: `تم تحديث ${selectedCheques.size} شيك` });
@@ -792,14 +829,19 @@ export default function Cheques() {
     }
     
     try {
+      // Cheque number / status reset must apply to every split of the
+      // physical cheque — not just one row of the batch.
+      const idsToUpdate = editingCheque.member_ids?.length
+        ? editingCheque.member_ids
+        : [editingCheque.id];
       const { error } = await supabase
         .from('policy_payments')
-        .update({ 
+        .update({
           cheque_number: sanitized,
           cheque_status: 'pending',
           refused: false,
         })
-        .eq('id', editingCheque.id);
+        .in('id', idsToUpdate);
 
       if (error) throw error;
       toast({ title: "تم التحديث", description: "تم تحديث رقم الشيك وإعادة الحالة إلى قيد الانتظار" });
@@ -1067,6 +1109,15 @@ export default function Cheques() {
               <Badge variant="outline" className="text-[9px] px-1 py-0 gap-1 border-amber-300 text-amber-700 bg-amber-50">
                 <Building2 className="h-2.5 w-2.5" />
                 خارجي
+              </Badge>
+            )}
+            {/* "موزّع على N معاملات" — surfaces the fact that this
+                row is the aggregate of a batch_id collapse so staff
+                aren't confused why one physical cheque appears once
+                instead of once-per-policy like before. */}
+            {cheque.member_ids && cheque.member_ids.length > 1 && (
+              <Badge variant="outline" className="text-[9px] px-1 py-0 border-blue-300 text-blue-700 bg-blue-50">
+                موزّع على {cheque.member_ids.length} معاملات
               </Badge>
             )}
           </div>
@@ -1889,6 +1940,67 @@ export default function Cheques() {
       />
     </MainLayout>
   );
+}
+
+/**
+ * Collapses customer cheque rows that share a batch_id into a single
+ * logical cheque. The debt-settlement modal splits one physical
+ * cheque across N policies (smallest-remaining first) and writes N
+ * `policy_payments` rows with the same `batch_id` so the trigger
+ * cap is respected per policy. From the user's standpoint the
+ * customer signed ONE cheque, so the cheques page should render one
+ * row at the cheque's face value (= SUM of splits) and let mutations
+ * (status change, edit) propagate to all underlying rows via
+ * `member_ids`.
+ *
+ * Rows pass through unchanged when:
+ *  - source !== 'customer' (outgoing settlements/expenses don't have batch_id)
+ *  - batch_id is null (the cheque wasn't split)
+ *
+ * Metadata (cheque_number, bank_code, branch_code, dates, status) is
+ * identical across batch members because handleSubmit copies them
+ * onto every split, so taking the first one is correct.
+ */
+function collapseCustomerChequesByBatch(rows: ChequeRecord[]): ChequeRecord[] {
+  const result: ChequeRecord[] = [];
+  const indexByBatch = new Map<string, number>();
+
+  for (const row of rows) {
+    const isOutgoing = row.source && row.source !== 'customer';
+
+    if (isOutgoing || !row.batch_id) {
+      result.push({
+        ...row,
+        member_ids: [row.id],
+        member_policy_ids: row.policy_id ? [row.policy_id] : [],
+      });
+      continue;
+    }
+
+    const existingIdx = indexByBatch.get(row.batch_id);
+    if (existingIdx === undefined) {
+      indexByBatch.set(row.batch_id, result.length);
+      result.push({
+        ...row,
+        member_ids: [row.id],
+        member_policy_ids: row.policy_id ? [row.policy_id] : [],
+      });
+      continue;
+    }
+
+    const existing = result[existingIdx];
+    existing.amount += row.amount;
+    existing.member_ids!.push(row.id);
+    if (row.policy_id) existing.member_policy_ids!.push(row.policy_id);
+    if (!existing.cheque_image_url && row.cheque_image_url) {
+      existing.cheque_image_url = row.cheque_image_url;
+    }
+    if (row.images && row.images.length > 0) {
+      existing.images = [...(existing.images || []), ...row.images];
+    }
+  }
+
+  return result;
 }
 
 /**
