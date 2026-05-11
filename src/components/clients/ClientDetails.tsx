@@ -272,6 +272,14 @@ interface GroupedPayment {
   // Locks the "تعديل" entry on the dropdown — printed receipts are
   // immutable per the accountant's rule; only إلغاء stays available.
   printed: boolean;
+  // True when the row represents money the office didn't actually
+  // collect (payment_type='visa_external' or ELZAMI passthrough).
+  // Renders as a read-only informational row — no سند number, no
+  // edit / cancel actions, just shows the amount so the bookkeeper
+  // sees the customer's total payment picture. The print/cancel
+  // scope resolvers still exclude these rows from the office's
+  // كشف قبض.
+  isPassthrough: boolean;
   payments: PaymentRecord[]; // Individual splits in this batch (or one row when not batched)
 }
 
@@ -1587,10 +1595,21 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     const groups = new Map<string, GroupedPayment>();
     const policyById = new Map(policies.map((p) => [p.id, p]));
 
-    // Search + payment-type filter (toolbar above the table) plus the
-    // always-on hide of رسائل الإلزامي / فيزا خارجي. Done before the
-    // grouping loop so a multi-split row whose only surviving slice
-    // is إلزامي never produces a stub group.
+    // Search + payment-type filter (toolbar above the table). The
+    // إلزامي/visa_external rows are NOT filtered here — they stay
+    // visible as read-only informational rows so the bookkeeper sees
+    // the customer's full payment picture. Their isPassthrough flag
+    // is computed below and drives the row's rendering (no سند
+    // number, no edit / cancel actions).
+    const isPassthroughPayment = (payment: PaymentRecord): boolean => {
+      if (payment.payment_type === 'visa_external') return true;
+      const pol = policyById.get(payment.policy_id);
+      if (!pol || pol.policy_type_parent !== 'ELZAMI') return false;
+      const price = Number((pol as any).insurance_price ?? 0);
+      if (price <= 0) return false;
+      return Math.abs(Number(payment.amount ?? 0) - price) < 0.005;
+    };
+
     const filteredPayments = payments.filter((payment) => {
       if (paymentSearch) {
         const search = paymentSearch.toLowerCase();
@@ -1601,15 +1620,6 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       }
       if (paymentTypeFilter !== 'all' && payment.payment_type !== paymentTypeFilter) {
         return false;
-      }
-      // Always-on filter — see comment above the memo for why.
-      if (payment.payment_type === 'visa_external') return false;
-      const pol = policyById.get(payment.policy_id);
-      if (pol && pol.policy_type_parent === 'ELZAMI') {
-        const price = Number((pol as any).insurance_price ?? 0);
-        if (price > 0 && Math.abs(Number(payment.amount ?? 0) - price) < 0.005) {
-          return false;
-        }
       }
       return true;
     });
@@ -1639,6 +1649,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           notes: payment.notes,
           locked: payment.locked,
           printed: false,
+          isPassthrough: false,
           payments: [],
         });
       }
@@ -1671,6 +1682,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       if (payment.printed_at) {
         group.printed = true;
       }
+    }
+
+    // Pass 2: tag groups whose ENTIRE membership is passthrough money
+    // (إلزامي / visa_external). Mixed sessions stay editable; the
+    // print/cancel scope resolvers still skip the passthrough slices
+    // via their own filters, so the office's كشف قبض numbers don't
+    // change either way.
+    for (const group of groups.values()) {
+      group.isPassthrough = group.payments.every(isPassthroughPayment);
     }
 
     // Sort by date descending
@@ -2095,7 +2115,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             </TabsTrigger>
             <TabsTrigger value="payments" className="gap-1.5 shrink-0 whitespace-nowrap">
               <CreditCard className="h-4 w-4" />
-              سجل الدفعات ({payments.length})
+              سجل الدفعات ({groupedPayments.length})
             </TabsTrigger>
             <TabsTrigger value="cars" className="gap-1.5 shrink-0 whitespace-nowrap">
               <Car className="h-4 w-4" />
@@ -2491,14 +2511,26 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                       return (
                       <TableRow
                         key={group.id}
-                        className="cursor-pointer hover:bg-muted/40"
-                        onClick={() => {
+                        className={cn(
+                          'hover:bg-muted/40',
+                          !group.isPassthrough && 'cursor-pointer',
+                          // Passthrough rows render in a muted strip so
+                          // the bookkeeper can tell at a glance they're
+                          // informational (money the office never
+                          // actually collected — إلزامي / visa_external).
+                          group.isPassthrough && 'bg-muted/30 text-muted-foreground',
+                        )}
+                        onClick={group.isPassthrough ? undefined : () => {
                           setGroupDetailsGroup(group);
                           setGroupDetailsOpen(true);
                         }}
                       >
                         <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
-                          {group.receipt_number || '—'}
+                          {group.isPassthrough ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            group.receipt_number || '—'
+                          )}
                         </TableCell>
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-1">
@@ -2528,21 +2560,37 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                           )}
                         </TableCell>
                         <TableCell>
-                          {group.refused ? (
+                          {group.isPassthrough ? (
+                            <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground text-[10px]">
+                              إلزامي / فيزا خارجي
+                            </Badge>
+                          ) : group.refused ? (
                             <Badge variant="destructive">ملغي</Badge>
                           ) : (
                             <Badge variant="success">مقبول</Badge>
                           )}
                         </TableCell>
                         <TableCell>
-                          <ChequeImageGallery
-                            primaryImageUrl={group.cheque_image_url}
-                            paymentId={group.payments[0]?.id || group.id}
-                            batchPaymentIds={group.payments.map(p => p.id)}
-                            hasBatchImages={group.payments.some(p => p.has_images)}
-                          />
+                          {group.isPassthrough ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <ChequeImageGallery
+                              primaryImageUrl={group.cheque_image_url}
+                              paymentId={group.payments[0]?.id || group.id}
+                              batchPaymentIds={group.payments.map(p => p.id)}
+                              hasBatchImages={group.payments.some(p => p.has_images)}
+                            />
+                          )}
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
+                          {group.isPassthrough ? (
+                            // Passthrough rows are read-only — the
+                            // office didn't actually collect this
+                            // money, so it can't be edited or
+                            // cancelled here. The customer paid the
+                            // insurer directly.
+                            <span className="text-muted-foreground text-xs">—</span>
+                          ) : (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -2650,6 +2698,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>
+                          )}
                         </TableCell>
                       </TableRow>
                       );
