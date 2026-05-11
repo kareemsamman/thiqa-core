@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -855,6 +856,29 @@ export default function Receipts() {
     const allAuto = paymentIds.length === group.receipts.length;
 
     if (allAuto && paymentIds.length > 0) {
+      // Open the progress overlay and start a fake-progress ticker.
+      // The edge function call doesn't expose real progress so we just
+      // creep toward 90% to give visible motion; the final jump to 100
+      // happens once the promise resolves. The ticker self-caps so a
+      // slow function never overruns the bar.
+      setPrintProgress({ open: true, value: 8 });
+      const ticker = setInterval(() => {
+        setPrintProgress((s) => {
+          if (!s.open) return s;
+          if (s.value >= 90) return s;
+          return { ...s, value: Math.min(90, s.value + 6) };
+        });
+      }, 220);
+      const closeOverlay = (success: boolean) => {
+        clearInterval(ticker);
+        if (success) {
+          setPrintProgress({ open: true, value: 100 });
+          setTimeout(() => setPrintProgress({ open: false, value: 0 }), 350);
+        } else {
+          setPrintProgress({ open: false, value: 0 });
+        }
+      };
+
       try {
         // Always go through the bulk endpoint here. customer_scope=true
         // tells the function to expand from "the receipts of whatever
@@ -868,12 +892,15 @@ export default function Receipts() {
         if (error) throw error;
         const url = (data as any)?.receipt_url;
         if (url) {
+          closeOverlay(true);
           window.open(url, "_blank");
           return;
         }
+        closeOverlay(false);
         toast.error("لم يتم العثور على رابط السند");
         return;
       } catch (err: any) {
+        closeOverlay(false);
         console.error("[Receipts] edge function print failed:", err);
         // Pull the actual error body out of the FunctionsHttpError so
         // the toast shows the function's message.
@@ -1165,6 +1192,16 @@ export default function Receipts() {
   // match exactly.
 
   const [printingAll, setPrintingAll] = useState(false);
+
+  // Progress overlay shown while a single-row print is being prepared.
+  // The edge function call typically takes 1-4 seconds (fetch payments,
+  // render HTML, upload to Bunny CDN) and the user wants visible
+  // feedback in that window instead of a frozen-feeling click.
+  const [printProgress, setPrintProgress] = useState<{ open: boolean; value: number }>({
+    open: false,
+    value: 0,
+  });
+
   const handlePrintAll = async () => {
     if (!agentId) return;
     setPrintingAll(true);
@@ -1648,6 +1685,35 @@ export default function Receipts() {
           await fetchReceipts();
         }}
       />
+
+      {/* Print progress overlay — visible while the bulk-receipt edge
+          function is preparing the PDF. The bar advances on a fake
+          ticker (real progress isn't exposed by the function) and
+          locks to 100% just before window.open fires, then dismisses.
+          Non-closable: ignore outside clicks / Esc so the user can't
+          accidentally lose the spinner before the new tab opens. */}
+      <Dialog open={printProgress.open}>
+        <DialogContent
+          className="sm:max-w-sm [&>button]:hidden"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              جاري إعداد السند
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <Progress value={printProgress.value} className="h-2" />
+            <p className="text-xs text-muted-foreground text-center ltr-nums">
+              {printProgress.value < 100
+                ? 'قد تستغرق العملية بضع ثوانٍ، يرجى الانتظار...'
+                : 'تم — جاري فتح السند'}
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Reason prompt for إلغاء السند. Reason is required by the
           immutable-accounting flow — the bookkeeper needs a written
