@@ -101,7 +101,7 @@ import { DebtPaymentModal } from '@/components/debt/DebtPaymentModal';
 import { ClientNotesSection } from '@/components/clients/ClientNotesSection';
 import { PaymentEditDialog } from '@/components/clients/PaymentEditDialog';
 import { PaymentGroupDetailsDialog } from '@/components/clients/PaymentGroupDetailsDialog';
-import { getCombinedPaymentTypeLabel, getPaymentTypeLabel } from '@/lib/paymentLabels';
+import { getPaymentTypeLabel } from '@/lib/paymentLabels';
 import { RefundsTab } from '@/components/clients/RefundsTab';
 import { ClientFilesTab, type ClientFilesPolicyRef } from '@/components/clients/ClientFilesTab';
 import { AccidentReportWizard } from '@/components/accident-reports/AccidentReportWizard';
@@ -228,6 +228,7 @@ interface PaymentRecord {
   locked: boolean | null;
   policy_id: string;
   batch_id: string | null;
+  receipt_number: string | null;
   policy: {
     id: string;
     policy_type_parent: string;
@@ -238,28 +239,28 @@ interface PaymentRecord {
   } | null;
 }
 
-// Grouped payment for display (combines payments with same batch_id)
+// Grouped payment for display — one row per physical receipt.
+// Multi-split cheques (تسديد المبلغ allocator splits one cheque
+// across N policies, all sharing the same batch_id) collapse into
+// one row at the cheque's face value. Single-policy payments stay
+// as their own row keyed by payment.id. The transaction grouping
+// the page used to do (by policy.group_id) is gone — the customer
+// payment-history view now matches the cheques-page and receipts-
+// page "physical payment = one row" rule.
 interface GroupedPayment {
   id: string; // batch_id or individual payment id
-  groupId: string | null; // policies.group_id when the row collapses a package
+  receipt_number: string | null; // first split's receipt_number (R85/2026 etc.)
   totalAmount: number;
   payment_date: string;
-  payment_type: string; // first type, kept for filter compat
-  paymentTypes: string[]; // unique payment types across the batch
+  payment_type: string; // same across all splits in a batch
+  paymentTypes: string[]; // historical; for a batch it's just [payment_type]
   cheque_number: string | null;
   cheque_image_url: string | null;
   card_last_four: string | null;
   refused: boolean | null;
   notes: string | null;
   locked: boolean | null;
-  payments: PaymentRecord[]; // Individual payments in this group
-  policyTypes: string[]; // Unique policy types in this group
-  // Every policy that belongs to this package (resolved via group_id on
-  // policies). Auto-generated ELZAMI and user-entered payments are always
-  // attached to the main policy_id on the DB side, so without this we'd
-  // only ever see one policy type per row. When the row is a standalone
-  // payment (no group_id) this falls back to just the attached policy.
-  packagePolicies: { id: string; policy_type_parent: string; policy_type_child: string | null; document_number: string | null }[];
+  payments: PaymentRecord[]; // Individual splits in this batch (or one row when not batched)
 }
 
 interface ClientDetailsProps {
@@ -807,7 +808,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // Get all payments for these policies (include batch_id for grouping)
       const { data: paymentsData, error } = await supabase
         .from('policy_payments')
-        .select('id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id')
+        .select('id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id, receipt_number')
         .in('policy_id', policyIds)
         .order('payment_date', { ascending: false });
 
@@ -1088,27 +1089,31 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   };
 
   // Open payment edit dialog directly
-  const handleEditPayment = (payment: PaymentRecord, group?: GroupedPayment) => {
+  const handleEditPayment = (payment: PaymentRecord, _group?: GroupedPayment) => {
     setEditingPayment(payment);
-    // If the payment belongs to a package (has group_id + >1 policy),
-    // expand the package policies so the dialog can render every row
-    // of the package at the top instead of just the attached policy.
-    if (group && group.packagePolicies.length > 1) {
-      const enriched = group.packagePolicies
-        .map((pp) => {
-          const full = policies.find((pol) => pol.id === pp.id);
-          return {
-            id: pp.id,
-            policy_type_parent: pp.policy_type_parent,
-            policy_type_child: pp.policy_type_child,
-            insurance_price: Number(full?.insurance_price || 0),
-            company_name: full?.company?.name_ar || full?.company?.name || null,
-          };
-        });
-      setEditingGroupPolicies(enriched);
-    } else {
-      setEditingGroupPolicies(undefined);
+    // If the payment belongs to a package, expand to every policy in
+    // the package so the dialog can render the whole package context.
+    // We derive this from the underlying policy's group_id at click
+    // time — the row data no longer carries packagePolicies because
+    // the grouping is now per physical receipt, not per package.
+    const policyOfPayment = policies.find((p) => p.id === payment.policy_id);
+    const groupId = policyOfPayment?.group_id;
+    if (groupId) {
+      const inSamePackage = policies.filter((p) => p.group_id === groupId);
+      if (inSamePackage.length > 1) {
+        const enriched = inSamePackage.map((p) => ({
+          id: p.id,
+          policy_type_parent: p.policy_type_parent,
+          policy_type_child: (p as any).policy_type_child ?? null,
+          insurance_price: Number(p.insurance_price || 0),
+          company_name: p.company?.name_ar || p.company?.name || null,
+        }));
+        setEditingGroupPolicies(enriched);
+        setEditPaymentDialogOpen(true);
+        return;
+      }
     }
+    setEditingGroupPolicies(undefined);
     setEditPaymentDialogOpen(true);
   };
 
@@ -1531,34 +1536,31 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     };
   }, [policyIdsKey, client?.id]);
 
-  // Group payments by batch_id for unified display
+  // Group payments into one row per physical receipt. The grouping
+  // collapses multi-split cheques (same batch_id, allocated across
+  // N policies by the debt-payment modal) into a single row at the
+  // cheque's face value. The transaction-package grouping the page
+  // used to do (by policies.group_id) is gone — the receipt-centric
+  // view matches the cheques page and the print, so the bookkeeper
+  // sees the same numbers everywhere.
+  //
+  // إلزامي passthrough + visa_external are also dropped here, same
+  // filter as the receipts page and the bulk-receipt edge function.
+  // These are payments the office never actually collected, so they
+  // don't belong on a كشف قبض. (Future: surface as a per-agent
+  // toggle so offices that DO collect إلزامي can flip them back in.)
   const groupedPayments = useMemo((): GroupedPayment[] => {
     const groups = new Map<string, GroupedPayment>();
+    const policyById = new Map(policies.map((p) => [p.id, p]));
 
-    // Build a group_id → package policies lookup. Every policy with a
-    // group_id gets bucketed so we can answer "which policy types are in
-    // this package?" without re-joining on the payments side.
-    const packagePoliciesByGroup = new Map<
-      string,
-      { id: string; policy_type_parent: string; policy_type_child: string | null; document_number: string | null }[]
-    >();
-    for (const p of policies) {
-      if (!p.group_id) continue;
-      const arr = packagePoliciesByGroup.get(p.group_id) || [];
-      arr.push({
-        id: p.id,
-        policy_type_parent: p.policy_type_parent,
-        policy_type_child: (p as any).policy_type_child ?? null,
-        document_number: (p as any).document_number ?? null,
-      });
-      packagePoliciesByGroup.set(p.group_id, arr);
-    }
-
-    // Filter payments first based on search and type filter
-    const filteredPayments = payments.filter(payment => {
+    // Search + payment-type filter (toolbar above the table) plus the
+    // always-on hide of رسائل الإلزامي / فيزا خارجي. Done before the
+    // grouping loop so a multi-split row whose only surviving slice
+    // is إلزامي never produces a stub group.
+    const filteredPayments = payments.filter((payment) => {
       if (paymentSearch) {
         const search = paymentSearch.toLowerCase();
-        if (!payment.cheque_number?.toLowerCase().includes(search) && 
+        if (!payment.cheque_number?.toLowerCase().includes(search) &&
             !payment.notes?.toLowerCase().includes(search)) {
           return false;
         }
@@ -1566,27 +1568,27 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       if (paymentTypeFilter !== 'all' && payment.payment_type !== paymentTypeFilter) {
         return false;
       }
+      // Always-on filter — see comment above the memo for why.
+      if (payment.payment_type === 'visa_external') return false;
+      const pol = policyById.get(payment.policy_id);
+      if (pol && pol.policy_type_parent === 'ELZAMI') {
+        const price = Number((pol as any).insurance_price ?? 0);
+        if (price > 0 && Math.abs(Number(payment.amount ?? 0) - price) < 0.005) {
+          return false;
+        }
+      }
       return true;
     });
 
     for (const payment of filteredPayments) {
-      // Collapse every payment made against the same package (shared
-      // group_id on the underlying policy) into one row, regardless of
-      // when or how it was paid. Auto-generated ELZAMI payments and
-      // user-entered package payments don't share a batch_id but they
-      // do share a policy.group_id. Fall back to batch_id for historical
-      // non-package batches and finally to the payment id for standalone
-      // rows.
-      const groupKey = payment.policy?.group_id
-        ? `group:${payment.policy.group_id}`
-        : payment.batch_id || payment.id;
-      
+      // Group by batch_id (one batch == one physical cheque) or by
+      // payment.id when it's a standalone single-policy payment.
+      const groupKey = payment.batch_id || payment.id;
+
       if (!groups.has(groupKey)) {
-        const thisGroupId = payment.policy?.group_id || null;
-        const fromPackage = thisGroupId ? packagePoliciesByGroup.get(thisGroupId) : null;
         groups.set(groupKey, {
           id: groupKey,
-          groupId: thisGroupId,
+          receipt_number: payment.receipt_number,
           totalAmount: 0,
           payment_date: payment.payment_date,
           payment_type: payment.payment_type,
@@ -1598,17 +1600,6 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           notes: payment.notes,
           locked: payment.locked,
           payments: [],
-          policyTypes: [],
-          packagePolicies: fromPackage && fromPackage.length > 0
-            ? fromPackage
-            : (payment.policy
-              ? [{
-                  id: payment.policy.id,
-                  policy_type_parent: payment.policy.policy_type_parent,
-                  policy_type_child: payment.policy.policy_type_child ?? null,
-                  document_number: payment.policy.document_number ?? null,
-                }]
-              : []),
         });
       }
 
@@ -1616,33 +1607,26 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       group.payments.push(payment);
       group.totalAmount += payment.amount;
 
-      // Collect unique payment types across the batch so the row can show
-      // combined labels like "نقدي + فيزا" or "نقدي + فيزا + شيكات".
       if (payment.payment_type && !group.paymentTypes.includes(payment.payment_type)) {
         group.paymentTypes.push(payment.payment_type);
       }
 
-      // Collect unique policy types
-      if (payment.policy?.policy_type_parent && !group.policyTypes.includes(payment.policy.policy_type_parent)) {
-        group.policyTypes.push(payment.policy.policy_type_parent);
-      }
-      
-      // Use earliest date if batched
+      // Use earliest date if batched (typically all splits share a date).
       if (payment.payment_date < group.payment_date) {
         group.payment_date = payment.payment_date;
       }
-      
-      // If any payment in batch is refused, mark whole batch
+
+      // If any split is refused, mark whole batch — the cancel flow
+      // propagates so this should be all-or-nothing in practice.
       if (payment.refused) {
         group.refused = true;
       }
-      
-      // If any payment is locked, mark whole batch
+
       if (payment.locked) {
         group.locked = true;
       }
     }
-    
+
     // Sort by date descending
     return Array.from(groups.values()).sort((a, b) =>
       new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()
@@ -2430,11 +2414,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
+                      <TableHead className="text-right">رقم السند</TableHead>
                       <TableHead className="text-right">المبلغ</TableHead>
                       <TableHead className="text-right">التاريخ</TableHead>
                       <TableHead className="text-right">طريقة الدفع</TableHead>
-                      <TableHead className="text-right">نوع التأمين</TableHead>
-                      <TableHead className="text-right">رقم المعاملة</TableHead>
+                      <TableHead className="text-right">رقم الشيك</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
                       <TableHead className="text-right">ملفات</TableHead>
                       <TableHead className="text-right w-[60px]">إجراءات</TableHead>
@@ -2442,7 +2426,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   </TableHeader>
                   <TableBody>
                     {groupedPayments.map((group) => {
-                      const combinedLabel = getCombinedPaymentTypeLabel(group.payments);
+                      const paymentLabel = getPaymentTypeLabel(group.payment_type);
                       return (
                       <TableRow
                         key={group.id}
@@ -2452,80 +2436,31 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                           setGroupDetailsOpen(true);
                         }}
                       >
+                        <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                          {group.receipt_number || '—'}
+                        </TableCell>
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-1">
                             ₪{group.totalAmount.toLocaleString()}
-                            {group.payments.length > 1 && (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                {group.payments.length} دفعات
-                              </Badge>
-                            )}
                           </div>
                         </TableCell>
                         <TableCell>{formatDate(group.payment_date)}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <Badge variant="outline">{combinedLabel}</Badge>
-                            {group.paymentTypes.includes('visa') && group.card_last_four && (
+                            <Badge variant="outline">{paymentLabel}</Badge>
+                            {group.payment_type === 'visa' && group.card_last_four && (
                               <span className="text-xs text-muted-foreground font-mono">
                                 *{group.card_last_four}
                               </span>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {(() => {
-                              // Show every policy type in the package (via
-                              // group_id → packagePolicies). Payments are
-                              // attached to a single policy on the DB but a
-                              // package pay really covers the whole group.
-                              const seen = new Set<string>();
-                              const tags: { label: string; parent: string }[] = [];
-                              for (const p of group.packagePolicies) {
-                                const label = getInsuranceTypeLabel(p.policy_type_parent as any, p.policy_type_child as any);
-                                if (seen.has(label)) continue;
-                                seen.add(label);
-                                tags.push({ label, parent: p.policy_type_parent });
-                              }
-                              return tags.map((t) => (
-                                <Badge key={t.label} className={cn("border", policyTypeColors[t.parent])}>
-                                  {t.label}
-                                </Badge>
-                              ));
-                            })()}
-                          </div>
-                        </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          {(() => {
-                            // A package is one معاملة — show the same
-                            // doc number the card picks (THIRD_FULL >
-                            // ELZAMI > addons, smallest tiebreak) so
-                            // card / log / invoice all agree. Click
-                            // jumps to the owning policy card; we
-                            // resolve the id back by matching the
-                            // chosen doc against group.packagePolicies.
-                            const docNumber = pickPackageDocumentNumber(group.packagePolicies);
-                            if (!docNumber) {
-                              return <span className="text-muted-foreground text-xs">—</span>;
-                            }
-                            const owner = group.packagePolicies.find(p => p.document_number === docNumber)
-                              || group.packagePolicies[0];
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => scrollToPolicyCard(owner.id)}
-                                className="inline-flex items-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-medium px-2 py-0.5 ltr-nums transition-colors"
-                                title="عرض في المعاملات"
-                              >
-                                #{docNumber}
-                              </button>
-                            );
-                          })()}
+                        <TableCell className="font-mono text-xs ltr-nums">
+                          {group.cheque_number || <span className="text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell>
                           {group.refused ? (
-                            <Badge variant="destructive">راجع</Badge>
+                            <Badge variant="destructive">ملغي</Badge>
                           ) : (
                             <Badge variant="success">مقبول</Badge>
                           )}
