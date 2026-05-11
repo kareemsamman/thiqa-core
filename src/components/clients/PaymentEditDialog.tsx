@@ -73,6 +73,18 @@ interface PaymentEditDialogProps {
   // the package so the dialog can show the full context instead of just
   // the single policy the payment row is attached to.
   packagePolicies?: PackagePolicyInfo[];
+  /**
+   * When the displayed payment is the aggregate of a multi-split
+   * cheque (debt-settlement modal split one physical cheque across N
+   * policies, all sharing batch_id), pass every underlying
+   * policy_payments id here. The dialog then propagates metadata edits
+   * (cheque_number, bank, branch, dates, status, refused, notes) and
+   * the delete action to ALL members so a physical cheque stays
+   * coherent. The amount field is locked in this mode — changing the
+   * face value would require re-splitting across policies, which the
+   * user should do via delete + re-enter from the debt page.
+   */
+  memberIds?: string[];
 }
 
 const policyTypeLabels: Record<string, string> = {
@@ -101,7 +113,9 @@ export function PaymentEditDialog({
   payment,
   onSuccess,
   packagePolicies,
+  memberIds,
 }: PaymentEditDialogProps) {
+  const isSplitCheque = !!(memberIds && memberIds.length > 1);
   const { hasFeature } = useAgentContext();
   const visaEnabled = hasFeature('visa_payment');
   const [saving, setSaving] = useState(false);
@@ -291,12 +305,21 @@ export function PaymentEditDialog({
     setSaving(true);
     try {
       const updateData: any = {
-        amount: formData.amount,
         payment_type: formData.payment_type,
         payment_date: formData.payment_date,
         refused: formData.refused,
         notes: formData.notes?.trim() ? formData.notes.trim() : null,
       };
+
+      // For split cheques the face value is the SUM of every member's
+      // amount and the per-row amounts encode the per-policy allocation
+      // — overwriting them all with the aggregate would double-count
+      // the cheque and trip validate_policy_payment_total. Lock the
+      // amount field upstream and just skip it here. Single-row
+      // payments still get their amount updated like before.
+      if (!isSplitCheque) {
+        updateData.amount = formData.amount;
+      }
 
       // Only include cheque_number / bank / branch if payment type is
       // cheque — otherwise clear them so the columns don't carry stale
@@ -325,10 +348,15 @@ export function PaymentEditDialog({
         updateData.cheque_issue_date = null;
       }
 
+      // Multi-split cheque: propagate metadata to every member so the
+      // physical cheque stays consistent across all of its allocation
+      // rows. Single-row payments keep using .eq('id') for the same
+      // result with one less call to .in().
+      const idsToUpdate = isSplitCheque ? memberIds! : [payment.id];
       const { error } = await supabase
         .from('policy_payments')
         .update(updateData)
-        .eq('id', payment.id);
+        .in('id', idsToUpdate);
 
       if (error) throw error;
 
@@ -348,10 +376,15 @@ export function PaymentEditDialog({
     if (!payment) return;
     setDeleting(true);
     try {
+      // Multi-split cheque: a physical cheque can't be half-deleted —
+      // wipe every allocation row in the batch so the customer's
+      // running totals stay coherent. payment_images and the auto
+      // receipts row cascade off the FK to policy_payments.id.
+      const idsToDelete = isSplitCheque ? memberIds! : [payment.id];
       const { error } = await supabase
         .from('policy_payments')
         .delete()
-        .eq('id', payment.id);
+        .in('id', idsToDelete);
       if (error) throw error;
       toast.success('تم حذف الدفعة');
       setDeleteConfirmOpen(false);
@@ -450,9 +483,15 @@ export function PaymentEditDialog({
               step={0.01}
               value={formData.amount}
               onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
-              disabled={isLocked}
+              disabled={isLocked || isSplitCheque}
               className="text-xl font-bold h-12 ltr-input text-left"
             />
+            {isSplitCheque && (
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                هذه القيمة هي مجموع الشيك الفعلي الموزّع على {memberIds!.length} معاملات.
+                لتغيير المبلغ احذف الشيك من هنا وأعد إدخاله من تسديد الديون.
+              </p>
+            )}
           </div>
 
           {/* Method + Date side-by-side */}

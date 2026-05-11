@@ -240,6 +240,10 @@ export default function Cheques() {
   const [paymentEditRecord, setPaymentEditRecord] = useState<any>(null);
   const [paymentEditOpen, setPaymentEditOpen] = useState(false);
   const [loadingPaymentEdit, setLoadingPaymentEdit] = useState(false);
+  // For multi-split cheques, every underlying policy_payments id so
+  // the dialog can propagate edits/deletes to the whole batch instead
+  // of just one allocation row.
+  const [paymentEditMemberIds, setPaymentEditMemberIds] = useState<string[] | undefined>(undefined);
 
   // Outgoing-cheque edit dialog — companies / brokers / expenses.
   // Reuses EditSettlementDialog so the same fields the accounting
@@ -320,9 +324,13 @@ export default function Cheques() {
       const policy = Array.isArray((data as any).policies)
         ? (data as any).policies[0]
         : (data as any).policies;
+      // For a multi-split cheque the per-row .amount is just one slice
+      // (e.g. 250 of a 1000₪ cheque). Use the collapsed row's aggregate
+      // so the dialog shows the actual face value the customer signed.
+      const isSplit = !!(cheque.member_ids && cheque.member_ids.length > 1);
       setPaymentEditRecord({
         id: (data as any).id,
-        amount: (data as any).amount,
+        amount: isSplit ? cheque.amount : (data as any).amount,
         payment_date: (data as any).payment_date,
         payment_type: (data as any).payment_type,
         cheque_number: (data as any).cheque_number,
@@ -346,6 +354,7 @@ export default function Cheques() {
             }
           : null,
       });
+      setPaymentEditMemberIds(isSplit ? cheque.member_ids : undefined);
       setPaymentEditOpen(true);
     } catch (err) {
       console.error('Error loading payment for edit:', err);
@@ -409,7 +418,7 @@ export default function Cheques() {
       const [ppRes, csRes, bsRes, exRes] = await Promise.all([
         supabase
           .from('policy_payments')
-          .select('amount, cheque_status, payment_date')
+          .select('amount, cheque_status, payment_date, batch_id')
           .eq('payment_type', 'cheque'),
         supabase
           .from('company_settlements')
@@ -428,13 +437,36 @@ export default function Cheques() {
       type Norm = { amount: number; cheque_status: string | null; payment_date: string };
       const normalized: Norm[] = [];
 
-      ((ppRes.data ?? []) as Array<{ amount: number | null; cheque_status: string | null; payment_date: string }>).forEach((c) => {
-        normalized.push({
-          amount: Number(c.amount ?? 0),
-          cheque_status: c.cheque_status,
-          payment_date: c.payment_date,
-        });
-      });
+      // Multi-split cheques (batch_id != null) collapse into one logical
+      // cheque so the summary counts at the top of the page match what
+      // the user sees in the list. Amounts get summed across siblings;
+      // status/date are identical within a batch so any member is fine.
+      type PpRow = { amount: number | null; cheque_status: string | null; payment_date: string; batch_id: string | null };
+      const ppRows = (ppRes.data ?? []) as PpRow[];
+      const batchSums = new Map<string, number>();
+      const seenBatches = new Set<string>();
+      for (const c of ppRows) {
+        if (c.batch_id) {
+          batchSums.set(c.batch_id, (batchSums.get(c.batch_id) ?? 0) + Number(c.amount ?? 0));
+        }
+      }
+      for (const c of ppRows) {
+        if (c.batch_id) {
+          if (seenBatches.has(c.batch_id)) continue;
+          seenBatches.add(c.batch_id);
+          normalized.push({
+            amount: batchSums.get(c.batch_id) ?? 0,
+            cheque_status: c.cheque_status,
+            payment_date: c.payment_date,
+          });
+        } else {
+          normalized.push({
+            amount: Number(c.amount ?? 0),
+            cheque_status: c.cheque_status,
+            payment_date: c.payment_date,
+          });
+        }
+      }
 
       const settlementToStatus = (status: string | null, refused: boolean | null): string => {
         if (refused) return 'returned';
@@ -1735,7 +1767,7 @@ export default function Cheques() {
               {/* Pagination */}
               <div className="flex items-center justify-between border-t border-border/30 px-4 py-3">
                 <p className="text-sm text-muted-foreground">
-                  {customerGroups.length} عميل، {cheques.length} شيك من {totalCount}
+                  {customerGroups.length} عميل، {cheques.length} شيك
                 </p>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>
@@ -1899,12 +1931,17 @@ export default function Cheques() {
         open={paymentEditOpen}
         onOpenChange={(o) => {
           setPaymentEditOpen(o);
-          if (!o) setPaymentEditRecord(null);
+          if (!o) {
+            setPaymentEditRecord(null);
+            setPaymentEditMemberIds(undefined);
+          }
         }}
         payment={paymentEditRecord}
+        memberIds={paymentEditMemberIds}
         onSuccess={() => {
           setPaymentEditOpen(false);
           setPaymentEditRecord(null);
+          setPaymentEditMemberIds(undefined);
           fetchCheques();
           fetchSummaryStats();
         }}
