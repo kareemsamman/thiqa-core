@@ -1271,7 +1271,7 @@ export default function Receipts() {
                   <div>
                     <p className="text-sm text-muted-foreground">المجموع</p>
                     <p className="text-xl font-bold">
-                      ₪{totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      ₪{Math.round(totalAmount).toLocaleString("en-US")}
                     </p>
                   </div>
                 </CardContent>
@@ -1626,9 +1626,7 @@ export default function Receipts() {
                         <TableCell className="font-semibold whitespace-nowrap">
                           <div className="flex items-center gap-1">
                             ₪
-                            {group.total.toLocaleString("en-US", {
-                              minimumFractionDigits: 2,
-                            })}
+                            {Math.round(group.total).toLocaleString("en-US")}
                             {group.receipts.length > 1 && (
                               <Badge
                                 variant="secondary"
