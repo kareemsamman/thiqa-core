@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -56,6 +57,7 @@ import {
   MoreVertical,
   Building2,
   FileText,
+  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PdfJsViewer } from "@/components/policies/PdfJsViewer";
@@ -222,6 +224,17 @@ export default function Cheques() {
   const [smsCheque, setSmsCheque] = useState<ChequeRecord | null>(null);
   const [smsMessage, setSmsMessage] = useState("");
   const [sendingSms, setSendingSms] = useState(false);
+
+  // Reason prompt for إلغاء / رجع — both actions are "voiding" the
+  // cheque (refused=true, removed from the customer's paid total) so
+  // accounting wants a written explanation. Single shared dialog
+  // keeps the surface area small; `reasonAction` swaps the wording.
+  const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
+  const [reasonAction, setReasonAction] = useState<'cancelled' | 'returned' | null>(null);
+  const [reasonChequeId, setReasonChequeId] = useState<string | null>(null);
+  const [reasonText, setReasonText] = useState("");
+  const [reasonError, setReasonError] = useState<string | null>(null);
+  const [reasonSubmitting, setReasonSubmitting] = useState(false);
 
   // Active tab
   const [activeTab, setActiveTab] = useState("list");
@@ -748,55 +761,76 @@ export default function Cheques() {
   useEffect(() => { fetchSummaryStats(); }, [fetchSummaryStats]);
   useEffect(() => { fetchCheques(); }, [fetchCheques]);
 
-  const handleStatusChange = async (chequeId: string, newStatus: string) => {
+  const handleStatusChange = async (chequeId: string, newStatus: string, reason?: string) => {
     try {
       // chequeId is the displayed (logical) row id. For multi-split
       // cheques every underlying policy_payments row must flip together
       // — a physical cheque can't be half-cashed.
       const target = cheques.find(c => c.id === chequeId);
       const idsToUpdate = target?.member_ids?.length ? target.member_ids : [chequeId];
+
+      // refused=true is what excludes the row from
+      // validate_policy_payment_total's sum, which is how إلغاء/رجع
+      // subtract the cheque from the customer's "paid" total. صرف
+      // keeps refused=false because a cashed cheque counts as paid.
+      const isVoided = newStatus === 'returned' || newStatus === 'cancelled';
+      const updateData: { cheque_status: string; refused: boolean; notes?: string } = {
+        cheque_status: newStatus,
+        refused: isVoided,
+      };
+
+      // Append the reason on top of the existing notes. This is a
+      // stop-gap until step 5 introduces a proper cancellation_reason
+      // column + cancellation voucher record. The split's notes are
+      // identical across batch members (handleSubmit copies them) so
+      // reading from `target.notes` is the same as reading from any
+      // member.
+      if (reason && reason.trim()) {
+        const prefix = newStatus === 'cancelled' ? 'إلغاء' : 'رجع';
+        const reasonLine = `${prefix}: ${reason.trim()}`;
+        const existingNotes = target?.notes?.trim() || '';
+        updateData.notes = existingNotes ? `${existingNotes}\n${reasonLine}` : reasonLine;
+      }
+
       const { error } = await supabase
         .from('policy_payments')
-        .update({ cheque_status: newStatus, refused: newStatus === 'returned' })
+        .update(updateData)
         .in('id', idsToUpdate);
 
       if (error) throw error;
       toast({ title: "تم التحديث", description: "تم تحديث حالة الشيك" });
-      
-      // Auto SMS on returned cheque
-      if (newStatus === 'returned' && guardSmsSend('auto')) {
-        const cheque = cheques.find(c => c.id === chequeId);
-        if (cheque?.policy?.client?.phone_number) {
-          const clientName = cheque.policy.client.full_name || "العميل";
-          const chequeNum = cheque.cheque_number || "";
-          const autoMessage = `مرحباً ${clientName}، نود إعلامك بأن الشيك رقم ${chequeNum} بمبلغ ${formatCurrency(cheque.amount)} قد تم إرجاعه. يرجى التواصل معنا لتسوية الأمر.`;
-          
-          try {
-            const { error: autoSmsError } = await supabase.functions.invoke('send-sms', {
-              body: {
-                phone: cheque.policy.client.phone_number,
-                message: autoMessage,
-                clientId: cheque.policy.client.id,
-                policyId: cheque.policy_id,
-                smsType: 'manual',
-              }
-            });
-            if (autoSmsError) throw autoSmsError;
-            toast({ title: "تم إرسال SMS", description: "تم إرسال إشعار للعميل بالشيك المرتجع" });
-          } catch (smsError) {
-            console.error('Failed to send auto SMS:', smsError);
-            const msg = await extractFunctionErrorMessage(smsError);
-            if (msg) {
-              toast({ title: "تنبيه", description: msg });
-            }
-          }
-        }
-      }
-      
+
       fetchCheques();
       fetchSummaryStats();
     } catch (error) {
       toast({ title: "خطأ", description: "فشل في تحديث الحالة", variant: "destructive" });
+    }
+  };
+
+  const openReasonDialog = (chequeId: string, action: 'cancelled' | 'returned') => {
+    setReasonChequeId(chequeId);
+    setReasonAction(action);
+    setReasonText("");
+    setReasonError(null);
+    setReasonDialogOpen(true);
+  };
+
+  const confirmReasonAction = async () => {
+    if (!reasonAction || !reasonChequeId) return;
+    if (!reasonText.trim()) {
+      setReasonError('السبب مطلوب');
+      return;
+    }
+    setReasonSubmitting(true);
+    try {
+      await handleStatusChange(reasonChequeId, reasonAction, reasonText.trim());
+      setReasonDialogOpen(false);
+      setReasonAction(null);
+      setReasonChequeId(null);
+      setReasonText("");
+      setReasonError(null);
+    } finally {
+      setReasonSubmitting(false);
     }
   };
 
@@ -817,9 +851,10 @@ export default function Cheques() {
         }
       }
 
+      const isVoided = newStatus === 'returned' || newStatus === 'cancelled';
       const { error } = await supabase
         .from('policy_payments')
-        .update({ cheque_status: newStatus, refused: newStatus === 'returned' })
+        .update({ cheque_status: newStatus, refused: isVoided })
         .in('id', Array.from(idsToUpdate));
 
       if (error) throw error;
@@ -1233,36 +1268,13 @@ export default function Cheques() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              {/* "تعديل الدفعة" + "عرض المعاملة" only make sense for
-                  customer cheques — they query policy_payments by id
-                  and read policy_id, neither of which exist on the
-                  synthetic outgoing rows pulled from *_settlements /
-                  expenses. Hiding them avoids the "فشل في تحميل" toast
-                  staff hit when trying to edit an outgoing cheque. */}
-              {(cheque.source === 'customer' || !cheque.source) && (
-                <>
-                  <DropdownMenuItem
-                    disabled={loadingPaymentEdit}
-                    onClick={() => openPaymentEditFor(cheque)}
-                  >
-                    <Pencil className="h-4 w-4 ml-2" />
-                    تعديل الدفعة
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setSelectedPolicyId(cheque.policy_id);
-                      setPolicyDrawerOpen(true);
-                    }}
-                  >
-                    <ExternalLink className="h-4 w-4 ml-2" />
-                    عرض المعاملة
-                  </DropdownMenuItem>
-                </>
-              )}
               {/* Outgoing cheques (شيكات صادرة) — same edit surface as
                   the accounting page, opens against the underlying
                   settlement / expense row so changes stay in sync
-                  across both pages. */}
+                  across both pages. The customer-cheque immutability
+                  rules (no edit, only صرف/إلغاء/رجع) don't apply here
+                  because outgoing rows live in *_settlements / expenses,
+                  not policy_payments. */}
               {(cheque.source === 'company' ||
                 cheque.source === 'broker' ||
                 cheque.source === 'expense') && (
@@ -1271,53 +1283,45 @@ export default function Cheques() {
                   تعديل الشيك
                 </DropdownMenuItem>
               )}
-              {cheque.cheque_status !== 'cashed' &&
-                cheque.cheque_status !== 'returned' &&
+              {/* Customer cheques: only the three voiding actions are
+                  exposed — صرف, إلغاء, رجع. Per the immutable-accounting
+                  rule the user wants going forward, we don't surface
+                  inline edits anymore; correction goes through the
+                  delete + re-enter flow once the voucher system lands.
+                  transferred_out is a terminal state (the cheque is
+                  already used as outgoing) so no actions show. */}
+              {(cheque.source === 'customer' || !cheque.source) &&
                 cheque.cheque_status !== 'transferred_out' && (
-                  <DropdownMenuItem
-                    onClick={() => handleStatusChange(cheque.id, 'cashed')}
-                    className="text-green-600 focus:text-green-700"
-                  >
-                    <CheckCircle2 className="h-4 w-4 ml-2" />
-                    صرف الشيك
-                  </DropdownMenuItem>
-                )}
-              {cheque.cheque_status !== 'returned' &&
-                cheque.cheque_status !== 'transferred_out' && (
-                  <DropdownMenuItem
-                    onClick={() => handleStatusChange(cheque.id, 'returned')}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <RotateCcw className="h-4 w-4 ml-2" />
-                    رجع الشيك
-                  </DropdownMenuItem>
-                )}
-              {cheque.cheque_status === 'returned' && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleEditCheque(cheque)}>
-                    <Edit className="h-4 w-4 ml-2" />
-                    تغيير رقم الشيك
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={smsLoading}
-                    onClick={() => {
-                      if (smsLoading) return;
-                      if (smsLocked) { openSmsUpgrade(); return; }
-                      openSmsDialog(cheque);
-                    }}
-                  >
-                    {smsLocked ? (
-                      <span className="h-4 w-4 ml-2 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
-                        <Lock className="h-2.5 w-2.5" weight="fill" />
-                      </span>
-                    ) : (
-                      <MessageSquare className="h-4 w-4 ml-2" />
+                  <>
+                    {cheque.cheque_status !== 'cashed' && (
+                      <DropdownMenuItem
+                        onClick={() => handleStatusChange(cheque.id, 'cashed')}
+                        className="text-green-600 focus:text-green-700"
+                      >
+                        <CheckCircle2 className="h-4 w-4 ml-2" />
+                        صرف الشيك
+                      </DropdownMenuItem>
                     )}
-                    إرسال SMS للعميل
-                  </DropdownMenuItem>
-                </>
-              )}
+                    {cheque.cheque_status !== 'cancelled' && (
+                      <DropdownMenuItem
+                        onClick={() => openReasonDialog(cheque.id, 'cancelled')}
+                        className="text-amber-600 focus:text-amber-700"
+                      >
+                        <XCircle className="h-4 w-4 ml-2" />
+                        إلغاء الشيك
+                      </DropdownMenuItem>
+                    )}
+                    {cheque.cheque_status !== 'returned' && (
+                      <DropdownMenuItem
+                        onClick={() => openReasonDialog(cheque.id, 'returned')}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <RotateCcw className="h-4 w-4 ml-2" />
+                        رجع الشيك
+                      </DropdownMenuItem>
+                    )}
+                  </>
+                )}
             </DropdownMenuContent>
           </DropdownMenu>
         </TableCell>
@@ -1900,6 +1904,68 @@ export default function Cheques() {
             <Button onClick={sendReturnedChequeSms} disabled={sendingSms || !smsCheque?.policy?.client?.phone_number}>
               {sendingSms ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
               إرسال
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reason prompt for إلغاء / رجع. Reason is required because
+          accounting treats both as voiding the cheque (refused=true →
+          dropped from the customer's paid total) and the bookkeeper
+          needs a written explanation for the audit trail. Stored as
+          a notes line for now; will move to a dedicated column with
+          the cancellation-voucher work in step 5. */}
+      <Dialog open={reasonDialogOpen} onOpenChange={(o) => {
+        if (!o) {
+          setReasonDialogOpen(false);
+          setReasonAction(null);
+          setReasonChequeId(null);
+          setReasonText("");
+          setReasonError(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {reasonAction === 'cancelled' ? 'إلغاء الشيك' : 'رجع الشيك'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <Label htmlFor="reason-text">
+              سبب {reasonAction === 'cancelled' ? 'الإلغاء' : 'الرجع'}
+              <span className="text-destructive mr-1">*</span>
+            </Label>
+            <Textarea
+              id="reason-text"
+              value={reasonText}
+              onChange={(e) => {
+                setReasonText(e.target.value);
+                if (e.target.value.trim()) setReasonError(null);
+              }}
+              placeholder={reasonAction === 'cancelled'
+                ? 'مثال: العميل طلب الإلغاء، شيك مكرر، خطأ في الإصدار...'
+                : 'مثال: لا يوجد رصيد، شيك مرتجع من البنك، تم إيقاف الصرف...'}
+              rows={3}
+              autoFocus
+              disabled={reasonSubmitting}
+            />
+            {reasonError && <p className="text-sm text-destructive">{reasonError}</p>}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReasonDialogOpen(false)}
+              disabled={reasonSubmitting}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant={reasonAction === 'cancelled' ? 'default' : 'destructive'}
+              onClick={confirmReasonAction}
+              disabled={reasonSubmitting || !reasonText.trim()}
+            >
+              {reasonSubmitting ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+              تأكيد
             </Button>
           </DialogFooter>
         </DialogContent>
