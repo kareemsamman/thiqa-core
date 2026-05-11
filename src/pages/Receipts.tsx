@@ -712,7 +712,26 @@ export default function Receipts() {
       if (countErr) throw countErr;
 
       const rows = (data || []) as ReceiptRecord[];
-      const filtered = hideElzamiPayments ? rows.filter((r) => !isElzamiPassthrough(r)) : rows;
+      // Always drop the payments the office never actually collected:
+      //   - payment_method='visa_external' (customer paid the insurer
+      //     directly via card; the row exists for accounting context
+      //     but the money never passed through the office)
+      //   - ELZAMI passthrough (policy is ELZAMI + amount equals the
+      //     insurance_price — same idea but logged under any payment
+      //     method)
+      // This mirrors the filter the bulk-receipt edge function applies
+      // before rendering the printed copy, so the list and the print
+      // can never disagree on what counts as "money the office
+      // collected". hideElzamiPayments stays available as an opt-in
+      // for users who want to also hide partial ELZAMI payments, but
+      // visa_external + the strict passthrough match are no longer
+      // gated behind it.
+      const officeCollected = rows.filter(
+        (r) => r.payment_method !== 'visa_external' && !isElzamiPassthrough(r),
+      );
+      const filtered = hideElzamiPayments
+        ? officeCollected.filter((r) => !isElzamiPassthrough(r))
+        : officeCollected;
       const trimmed = filtered.length > PAGE_SIZE ? filtered.slice(0, PAGE_SIZE) : filtered;
       setHasMore(filtered.length > PAGE_SIZE);
       setReceipts(trimmed);
@@ -1335,9 +1354,16 @@ export default function Receipts() {
       const { data, error } = await q;
       if (error) throw error;
       const fetched = (data || []) as ReceiptRecord[];
+      // Same office-collected filter the table view applies (see
+      // fetchReceipts) so a "طباعة الكل" report can't smuggle in
+      // visa_external / ELZAMI passthrough rows the table itself
+      // hides.
+      const officeCollected = fetched.filter(
+        (r) => r.payment_method !== 'visa_external' && !isElzamiPassthrough(r),
+      );
       const allReceipts = hideElzamiPayments
-        ? fetched.filter((r) => !isElzamiPassthrough(r))
-        : fetched;
+        ? officeCollected.filter((r) => !isElzamiPassthrough(r))
+        : officeCollected;
 
       if (allReceipts.length === 0) {
         toast.error("لا توجد إيصالات للطباعة");
