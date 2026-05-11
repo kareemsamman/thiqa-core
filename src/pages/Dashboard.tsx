@@ -63,7 +63,13 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-          <PoliciesDonut range={range} branchId={branchId} />
+          // Without the financial chart next to it, the donut card was
+          // free to stretch to full width and the chart area collapsed
+          // to a strip with the legend below. Keep the column width it
+          // was designed for.
+          <div className="max-w-md">
+            <PoliciesDonut range={range} branchId={branchId} />
+          </div>
         )}
 
         {/* Client debt buckets — full width */}
