@@ -774,22 +774,20 @@ export default function Cheques() {
       // subtract the cheque from the customer's "paid" total. صرف
       // keeps refused=false because a cashed cheque counts as paid.
       const isVoided = newStatus === 'returned' || newStatus === 'cancelled';
-      const updateData: { cheque_status: string; refused: boolean; notes?: string } = {
+      const updateData: { cheque_status: string; refused: boolean; cancellation_reason?: string | null } = {
         cheque_status: newStatus,
         refused: isVoided,
       };
 
-      // Append the reason on top of the existing notes. This is a
-      // stop-gap until step 5 introduces a proper cancellation_reason
-      // column + cancellation voucher record. The split's notes are
-      // identical across batch members (handleSubmit copies them) so
-      // reading from `target.notes` is the same as reading from any
-      // member.
-      if (reason && reason.trim()) {
-        const prefix = newStatus === 'cancelled' ? 'إلغاء' : 'رجع';
-        const reasonLine = `${prefix}: ${reason.trim()}`;
-        const existingNotes = target?.notes?.trim() || '';
-        updateData.notes = existingNotes ? `${existingNotes}\n${reasonLine}` : reasonLine;
+      // Reason goes onto the dedicated column added by
+      // 20260511160000_receipt_cancellation_voucher. The
+      // sync_receipt_from_policy_payment trigger reads it to populate
+      // both the cancellation voucher's notes line and the cancelled
+      // original's cancellation_reason field — so the bookkeeper sees
+      // the exact same text on the receipts page and on the printed
+      // voucher.
+      if (isVoided && reason && reason.trim()) {
+        updateData.cancellation_reason = reason.trim();
       }
 
       const { error } = await supabase
