@@ -37,6 +37,12 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   Table,
   TableBody,
   TableCell,
@@ -230,6 +236,7 @@ interface PaymentRecord {
   batch_id: string | null;
   payment_session_id: string | null;
   receipt_number: string | null;
+  printed_at: string | null;
   policy: {
     id: string;
     policy_type_parent: string;
@@ -261,6 +268,10 @@ interface GroupedPayment {
   refused: boolean | null;
   notes: string | null;
   locked: boolean | null;
+  // True when ANY payment in the row has been printed (printed_at set).
+  // Locks the "تعديل" entry on the dropdown — printed receipts are
+  // immutable per the accountant's rule; only إلغاء stays available.
+  printed: boolean;
   payments: PaymentRecord[]; // Individual splits in this batch (or one row when not batched)
 }
 
@@ -809,7 +820,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // Get all payments for these policies (include batch_id for grouping)
       const { data: paymentsData, error } = await supabase
         .from('policy_payments')
-        .select('id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id, payment_session_id, receipt_number')
+        .select('id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id, payment_session_id, receipt_number, printed_at')
         .in('policy_id', policyIds)
         .order('payment_date', { ascending: false });
 
@@ -1365,28 +1376,50 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
   // Print every سند قبض in a grouped row as a single combined page. Uses
   // the bulk endpoint when there's more than one payment; for a single
-  // payment it falls back to the per-payment endpoint.
+  // payment it falls back to the per-payment endpoint. Once the PDF
+  // is generated successfully, every policy_payment in the row gets
+  // printed_at stamped — that's the trigger that locks the "تعديل"
+  // entry on the dropdown (printed receipts become immutable per the
+  // accountant's rule the user agreed on; only إلغاء stays available).
   const handlePrintGroupReceipts = async (groupKey: string, paymentIds: string[]) => {
     if (paymentIds.length === 0) return;
     setGeneratingReceipt(groupKey);
     try {
+      let url: string | undefined;
       if (paymentIds.length === 1) {
         const { data, error } = await supabase.functions.invoke('generate-payment-receipt', {
           body: { payment_id: paymentIds[0] },
         });
         if (error) throw error;
-        const url = data?.receipt_url;
-        if (url) window.open(url, '_blank');
-        else toast.error('لم يتم العثور على رابط السند');
+        url = data?.receipt_url;
       } else {
         const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
           body: { payment_ids: paymentIds },
         });
         if (error) throw error;
-        const url = data?.receipt_url;
-        if (url) window.open(url, '_blank');
-        else toast.error('لم يتم العثور على رابط السندات');
+        url = data?.receipt_url;
       }
+      if (!url) {
+        toast.error(paymentIds.length === 1 ? 'لم يتم العثور على رابط السند' : 'لم يتم العثور على رابط السندات');
+        return;
+      }
+      // Stamp printed_at on every row in this group so subsequent
+      // renders disable the edit action. We deliberately don't fail
+      // the print if this UPDATE errors — the PDF is already in hand,
+      // and the user can re-click to retry the stamp.
+      const { error: stampErr } = await supabase
+        .from('policy_payments')
+        .update({ printed_at: new Date().toISOString() })
+        .in('id', paymentIds)
+        .is('printed_at', null);
+      if (stampErr) {
+        console.warn('[ClientDetails] failed to stamp printed_at after print:', stampErr);
+      } else {
+        // Refresh so the dropdown picks up the new state right away
+        // without a manual reload.
+        fetchPayments();
+      }
+      window.open(url, '_blank');
     } catch (e) {
       console.error('Print group receipts error:', e);
       toast.error('فشل في توليد سندات القبض');
@@ -1605,6 +1638,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           refused: payment.refused,
           notes: payment.notes,
           locked: payment.locked,
+          printed: false,
           payments: [],
         });
       }
@@ -1630,6 +1664,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
       if (payment.locked) {
         group.locked = true;
+      }
+
+      // Any printed row in the session locks the whole session's edit
+      // action — there's no concept of a partially-printed receipt.
+      if (payment.printed_at) {
+        group.printed = true;
       }
     }
 
@@ -2544,50 +2584,69 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                 </DropdownMenuItem>
                               )}
 
-                              {group.payments.length === 1 ? (
-                                <>
-                                  {!group.payments[0].refused && (
-                                    <DropdownMenuItem onClick={() => handleEditPayment(group.payments[0], group)}>
-                                      <Edit className="h-4 w-4 ml-2" />
-                                      تعديل
-                                    </DropdownMenuItem>
-                                  )}
-                                  {!group.locked && !group.payments[0].refused && (
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={() => {
-                                        setDeletePaymentId(group.payments[0].id);
-                                        setDeletePaymentDialogOpen(true);
-                                      }}
-                                    >
-                                      <Trash2 className="h-4 w-4 ml-2" />
-                                      حذف
-                                    </DropdownMenuItem>
-                                  )}
-                                </>
-                              ) : (
-                                <>
-                                  <DropdownMenuItem disabled className="text-muted-foreground text-xs">
-                                    دفعة مجمعة ({group.payments.length} سجلات)
+                              {/* "تعديل" — opens the existing
+                                  PaymentGroupDetailsDialog (same dialog
+                                  the row-click already opens) where the
+                                  user can edit each line of the session
+                                  via its own pencil button. Disabled
+                                  once any row in the session is printed
+                                  (printed_at set) — printed receipts
+                                  are immutable, only إلغاء stays open.
+                                  Cancelled rows hide the option entirely
+                                  since edit-on-cancelled doesn't apply. */}
+                              {!group.refused && (
+                                group.printed ? (
+                                  <TooltipProvider delayDuration={200}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        {/* span wrapper so Tooltip can hook
+                                            into the disabled item */}
+                                        <span>
+                                          <DropdownMenuItem
+                                            disabled
+                                            onSelect={(e) => e.preventDefault()}
+                                            className="opacity-50 cursor-not-allowed"
+                                          >
+                                            <Edit className="h-4 w-4 ml-2" />
+                                            تعديل
+                                          </DropdownMenuItem>
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="left" className="text-xs max-w-[220px]">
+                                        تمت طباعة السند — التعديل غير متاح. الإلغاء فقط.
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                ) : (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setGroupDetailsGroup(group);
+                                      setGroupDetailsOpen(true);
+                                    }}
+                                  >
+                                    <Edit className="h-4 w-4 ml-2" />
+                                    تعديل
                                   </DropdownMenuItem>
-                                  {group.payments.map((payment) => (
-                                    <DropdownMenuItem
-                                      key={payment.id}
-                                      onClick={() => handleEditPayment(payment, group)}
-                                      className="text-sm"
-                                    >
-                                      <Edit className="h-3 w-3 ml-2" />
-                                      <span className="flex items-center gap-1.5">
-                                        تعديل: ₪{Number(payment.amount || 0).toLocaleString('en-US')}
-                                        {payment.refused && (
-                                          <span className="text-[10px] font-bold text-destructive border border-destructive/40 bg-destructive/10 rounded px-1 py-0">
-                                            مرفوضة
-                                          </span>
-                                        )}
-                                      </span>
-                                    </DropdownMenuItem>
-                                  ))}
-                                </>
+                                )
+                              )}
+                              {/* Delete stays available for single-row
+                                  manual receipts only — never for auto
+                                  rows (they go through إلغاء) and never
+                                  for already-refused/locked rows. */}
+                              {group.payments.length === 1 &&
+                                !group.locked &&
+                                !group.payments[0].refused &&
+                                !group.printed && (
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => {
+                                      setDeletePaymentId(group.payments[0].id);
+                                      setDeletePaymentDialogOpen(true);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4 ml-2" />
+                                    حذف
+                                  </DropdownMenuItem>
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>

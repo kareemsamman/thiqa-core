@@ -954,6 +954,16 @@ export default function Receipts() {
         if (error) throw error;
         const url = (data as any)?.receipt_url;
         if (url) {
+          // Stamp printed_at on the underlying policy_payments so the
+          // client profile's سجل الدفعات locks the "تعديل" entry on
+          // these rows — printed receipts are immutable from now on,
+          // only إلغاء stays open. We don't fail the print if the
+          // UPDATE errors (the PDF is already in hand).
+          await supabase
+            .from('policy_payments')
+            .update({ printed_at: new Date().toISOString() })
+            .in('id', paymentIds)
+            .is('printed_at', null);
           closeOverlay(true);
           window.open(url, "_blank");
           return;
