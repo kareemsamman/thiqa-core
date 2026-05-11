@@ -72,47 +72,56 @@ export function PoliciesDonut({
         <CardTitle className="text-base font-semibold">نظرة عامة على المعاملات</CardTitle>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col">
-        <div className="flex-1 min-h-[180px] relative">
+        <div className="flex-1 min-h-[200px] relative">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <Skeleton className="h-32 w-32 rounded-full" />
-            </div>
-          ) : total === 0 ? (
-            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-              لا توجد بيانات
             </div>
           ) : (
             <>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={chartData}
+                    // When everything is zero we still render a single
+                    // "ghost" segment so the card visually reads as a
+                    // chart and not a blank slate. The center overlay
+                    // takes over and shows the "لا توجد بيانات" copy.
+                    data={total === 0 ? [{ name: "", value: 1, color: "hsl(var(--muted))" }] : chartData}
                     cx="50%"
                     cy="50%"
                     innerRadius={55}
                     outerRadius={80}
-                    paddingAngle={2}
+                    paddingAngle={total === 0 ? 0 : 2}
                     dataKey="value"
+                    isAnimationActive={total !== 0}
                   >
-                    {chartData.map((d, i) => (
+                    {(total === 0 ? [{ name: "", value: 1, color: "hsl(var(--muted))" }] : chartData).map((d, i) => (
                       <Cell key={i} fill={d.color} />
                     ))}
                   </Pie>
-                  <Tooltip
-                    formatter={(v: number, n: string) => [v.toLocaleString("en-US"), n]}
-                    contentStyle={{
-                      direction: "rtl",
-                      textAlign: "right",
-                      backgroundColor: "hsl(var(--background))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                  />
+                  {total > 0 && (
+                    <Tooltip
+                      formatter={(v: number, n: string) => [v.toLocaleString("en-US"), n]}
+                      contentStyle={{
+                        direction: "rtl",
+                        textAlign: "right",
+                        backgroundColor: "hsl(var(--background))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                      }}
+                    />
+                  )}
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <p className="text-2xl font-bold ltr-nums">{total.toLocaleString("en-US")}</p>
-                <p className="text-xs text-muted-foreground">إجمالي</p>
+                {total === 0 ? (
+                  <p className="text-xs text-muted-foreground">لا توجد بيانات</p>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold ltr-nums">{total.toLocaleString("en-US")}</p>
+                    <p className="text-xs text-muted-foreground">إجمالي</p>
+                  </>
+                )}
               </div>
             </>
           )}

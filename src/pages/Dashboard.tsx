@@ -52,34 +52,35 @@ export default function Dashboard() {
         {/* KPI row */}
         <KpiRow range={range} branchId={branchId} canViewFinancial={canViewFinancial} />
 
-        {/* Income vs Expense + Policies donut */}
+        {/* Charts + follow-ups. Admin gets the full layout (income vs
+            expense, donut, debt buckets, top companies + follow-ups).
+            Workers without view_financial only get the donut +
+            follow-ups paired on a single row — keeps the layout
+            balanced and avoids the wide-empty-row look. */}
         {canViewFinancial ? (
-          <div className="grid gap-4 grid-cols-1 xl:grid-cols-3">
-            <div className="xl:col-span-2">
-              <IncomeExpenseChart range={range} period={period} branchId={branchId} />
+          <>
+            <div className="grid gap-4 grid-cols-1 xl:grid-cols-3">
+              <div className="xl:col-span-2">
+                <IncomeExpenseChart range={range} period={period} branchId={branchId} />
+              </div>
+              <div>
+                <PoliciesDonut range={range} branchId={branchId} />
+              </div>
             </div>
-            <div>
-              <PoliciesDonut range={range} branchId={branchId} />
+
+            <DebtBuckets range={range} branchId={branchId} />
+
+            <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+              <TopCompanies range={range} branchId={branchId} />
+              <FollowUpsCard />
             </div>
-          </div>
+          </>
         ) : (
-          // Without the financial chart next to it, the donut card was
-          // free to stretch to full width and the chart area collapsed
-          // to a strip with the legend below. Keep the column width it
-          // was designed for.
-          <div className="max-w-md">
+          <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
             <PoliciesDonut range={range} branchId={branchId} />
+            <FollowUpsCard />
           </div>
         )}
-
-        {/* Client debt buckets — full width */}
-        {canViewFinancial && <DebtBuckets range={range} branchId={branchId} />}
-
-        {/* Top companies + Follow-ups */}
-        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-          {canViewFinancial && <TopCompanies range={range} branchId={branchId} />}
-          <FollowUpsCard />
-        </div>
 
         {/* Mini cards — tasks, notifications, activity */}
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
