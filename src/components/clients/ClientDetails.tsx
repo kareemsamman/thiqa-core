@@ -29,6 +29,14 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
   Table,
   TableBody,
   TableCell,
@@ -70,6 +78,7 @@ import {
   Handshake,
   Lock,
   Sparkles,
+  Ban,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -445,6 +454,19 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [groupDetailsOpen, setGroupDetailsOpen] = useState(false);
   const [groupDetailsGroup, setGroupDetailsGroup] = useState<GroupedPayment | null>(null);
   const [deletingPayment, setDeletingPayment] = useState(false);
+
+  // Cancel-payment-receipt state — mirrors the receipts page flow.
+  // Cancellation is always customer-scope: voids every non-إلزامي /
+  // non-visa_external payment of this customer + every batch sibling
+  // so a physical cheque can't end up half-cancelled. The dialog
+  // shows the resolved count + total before the user confirms.
+  const [cancelReasonOpen, setCancelReasonOpen] = useState(false);
+  const [cancelReasonText, setCancelReasonText] = useState('');
+  const [cancelReasonError, setCancelReasonError] = useState<string | null>(null);
+  const [cancelTargetIds, setCancelTargetIds] = useState<string[]>([]);
+  const [cancelTargetSum, setCancelTargetSum] = useState<number>(0);
+  const [cancelResolving, setCancelResolving] = useState(false);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
   // Group key to re-open the PaymentGroupDetailsDialog with after an
   // edit/delete round-trip. Set to the current group's id when the user
   // clicks pencil/trash inside the popup, then consumed by the effect
@@ -941,6 +963,101 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   };
 
   // Delete payment handler
+  const openCancelPaymentDialog = () => {
+    // Customer-scope resolver — mirrors the receipts page so the
+    // bookkeeper sees the SAME set of receipts in the cancel dialog
+    // that they'd see on a printed كشف القبض for this customer. We
+    // already have the customer's payments + policies in memory from
+    // fetchPayments / fetchPolicies, so no extra round-trip is needed.
+    setCancelResolving(true);
+    try {
+      const policyById = new Map(policies.map((p) => [p.id, p]));
+
+      // Stage 1 — same filter as the print:
+      //   - skip already-refused rows (nothing to cancel)
+      //   - skip payment_type='visa_external' (customer paid the
+      //     insurer directly, never came through the office)
+      //   - skip ELZAMI passthrough (policy ELZAMI + amount == price)
+      const survivors = payments.filter((p) => {
+        if (p.refused) return false;
+        if (p.payment_type === 'visa_external') return false;
+        const pol = policyById.get(p.policy_id);
+        if (!pol) return true;
+        if (pol.policy_type_parent !== 'ELZAMI') return true;
+        const price = Number(pol.insurance_price ?? 0);
+        if (price <= 0) return true;
+        return Math.abs(Number(p.amount ?? 0) - price) >= 0.005;
+      });
+
+      // Stage 2 — keep multi-split cheques whole: if any live slice
+      // of a batch survives Stage 1, every still-live slice in that
+      // batch joins the target. Already-refused siblings stay alone.
+      const batchIds = new Set(
+        survivors.filter((p) => !!p.batch_id).map((p) => p.batch_id as string),
+      );
+      const survivorIds = new Set(survivors.map((p) => p.id));
+      const finalRows = payments.filter((p) => {
+        if (p.refused) return false;
+        if (survivorIds.has(p.id)) return true;
+        return !!p.batch_id && batchIds.has(p.batch_id);
+      });
+
+      if (finalRows.length === 0) {
+        toast.error('لا توجد سندات قابلة للإلغاء (كل دفعات العميل ملغاة أو إلزامي/فيزا خارجي)');
+        return;
+      }
+
+      setCancelTargetIds(finalRows.map((p) => p.id));
+      setCancelTargetSum(finalRows.reduce((s, p) => s + Number(p.amount || 0), 0));
+      setCancelReasonText('');
+      setCancelReasonError(null);
+      setCancelReasonOpen(true);
+    } finally {
+      setCancelResolving(false);
+    }
+  };
+
+  const confirmCancelPayment = async () => {
+    if (!cancelReasonText.trim()) {
+      setCancelReasonError('السبب مطلوب');
+      return;
+    }
+    if (cancelTargetIds.length === 0) {
+      toast.error('لا توجد سندات قابلة للإلغاء');
+      return;
+    }
+    setCancelSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('policy_payments')
+        .update({
+          refused: true,
+          cheque_status: 'cancelled',
+          cancellation_reason: cancelReasonText.trim(),
+        })
+        .in('id', cancelTargetIds);
+      if (error) throw error;
+      toast.success(`تم إلغاء ${cancelTargetIds.length} سند${cancelTargetIds.length > 1 ? 'اً' : ''} وإصدار سند إلغاء`);
+      setCancelReasonOpen(false);
+      setCancelTargetIds([]);
+      setCancelTargetSum(0);
+      setCancelReasonText('');
+      setCancelReasonError(null);
+      // Same refresh fan-out as handleDeletePayment so the policy
+      // cards' paid/remaining recompute without a reload.
+      await Promise.all([
+        fetchPayments(),
+        fetchPaymentSummary(),
+        fetchPolicies(),
+      ]);
+    } catch (err: any) {
+      console.error('[ClientDetails] cancel payment:', err);
+      toast.error(err?.message || 'فشل في إلغاء السند');
+    } finally {
+      setCancelSubmitting(false);
+    }
+  };
+
   const handleDeletePayment = async () => {
     if (!deletePaymentId) return;
 
@@ -2444,13 +2561,34 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                 {group.payments.length > 1 ? 'طباعة سندات القبض' : 'طباعة سند القبض'}
                               </DropdownMenuItem>
 
+                              {/* إلغاء السند — customer-scope void. Scope
+                                  matches the printed كشف القبض so a
+                                  click here reverses every non-إلزامي
+                                  payment of this customer (incl. batch
+                                  siblings) and lets the trigger emit
+                                  paired cancellation vouchers. Hidden
+                                  on cancelled rows — re-cancelling has
+                                  no effect. */}
+                              {group.payments.some((p) => !p.refused) && (
+                                <DropdownMenuItem
+                                  className="text-amber-700 focus:text-amber-800"
+                                  disabled={cancelResolving}
+                                  onClick={openCancelPaymentDialog}
+                                >
+                                  <Ban className="h-4 w-4 ml-2" />
+                                  إلغاء السند
+                                </DropdownMenuItem>
+                              )}
+
                               {group.payments.length === 1 ? (
                                 <>
-                                  <DropdownMenuItem onClick={() => handleEditPayment(group.payments[0], group)}>
-                                    <Edit className="h-4 w-4 ml-2" />
-                                    تعديل
-                                  </DropdownMenuItem>
-                                  {!group.locked && (
+                                  {!group.payments[0].refused && (
+                                    <DropdownMenuItem onClick={() => handleEditPayment(group.payments[0], group)}>
+                                      <Edit className="h-4 w-4 ml-2" />
+                                      تعديل
+                                    </DropdownMenuItem>
+                                  )}
+                                  {!group.locked && !group.payments[0].refused && (
                                     <DropdownMenuItem
                                       className="text-destructive focus:text-destructive"
                                       onClick={() => {
@@ -2987,6 +3125,76 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           setDeletePaymentDialogOpen(true);
         }}
       />
+
+      {/* Cancel-payment reason prompt. Scope was pre-resolved in
+          openCancelPaymentDialog so the count + total reflect every
+          customer payment that will be voided (incl. batch siblings),
+          not just the row the user clicked. The bookkeeper sees what
+          they're about to do before confirming. */}
+      <Dialog
+        open={cancelReasonOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setCancelReasonOpen(false);
+            setCancelTargetIds([]);
+            setCancelTargetSum(0);
+            setCancelReasonText('');
+            setCancelReasonError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>إلغاء سندات القبض</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <p className="text-xs text-muted-foreground">
+              سيُنشأ سند إلغاء لكل واحد من{' '}
+              <span className="font-bold ltr-nums">{cancelTargetIds.length}</span>{' '}
+              {cancelTargetIds.length === 1 ? 'سند' : 'سندات'} لهذا العميل بقيمة إجمالية{' '}
+              <span className="font-bold ltr-nums">
+                ₪{Math.round(cancelTargetSum).toLocaleString('en-US')}
+              </span>
+              . رصيد العميل سيرتد بالكامل كما لو لم يدفع.
+            </p>
+            <Label htmlFor="cancel-payment-reason">
+              سبب الإلغاء<span className="text-destructive mr-1">*</span>
+            </Label>
+            <Textarea
+              id="cancel-payment-reason"
+              value={cancelReasonText}
+              onChange={(e) => {
+                setCancelReasonText(e.target.value);
+                if (e.target.value.trim()) setCancelReasonError(null);
+              }}
+              placeholder="مثال: العميل طلب الإلغاء، خطأ في الإصدار، شيك مكرر..."
+              rows={3}
+              autoFocus
+              disabled={cancelSubmitting}
+            />
+            {cancelReasonError && (
+              <p className="text-sm text-destructive">{cancelReasonError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCancelReasonOpen(false)}
+              disabled={cancelSubmitting}
+            >
+              تراجع
+            </Button>
+            <Button
+              variant="default"
+              onClick={confirmCancelPayment}
+              disabled={cancelSubmitting || !cancelReasonText.trim()}
+            >
+              {cancelSubmitting ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+              تأكيد الإلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Super Admin: Delete Policy Confirmation Dialog */}
       <DeleteConfirmDialog
