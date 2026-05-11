@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
 import { Filter, X } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { MultiSelectFilter } from '@/components/shared/MultiSelectFilter';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 import { ArabicMonthPicker } from './ArabicMonthPicker';
@@ -35,7 +36,14 @@ interface Props {
     companies?: boolean;
     types?: boolean;
     paymentMethods?: boolean;
+    hideElzami?: boolean;
   };
+  // Optional standalone toggle wired only on /receipts. Lives outside
+  // AccountingFiltersValue because other pages (e.g. /accounting) don't
+  // have the same passthrough-payment concern and shouldn't carry the
+  // flag in their filter state.
+  hideElzami?: boolean;
+  onHideElzamiChange?: (next: boolean) => void;
 }
 
 const ALL_SHOWN: Required<NonNullable<Props['show']>> = {
@@ -43,6 +51,7 @@ const ALL_SHOWN: Required<NonNullable<Props['show']>> = {
   companies: true,
   types: true,
   paymentMethods: true,
+  hideElzami: false,
 };
 
 type DateMode = 'month' | 'range';
@@ -83,6 +92,8 @@ export function AccountingFilters({
   typeOptions,
   paymentMethodOptions,
   show,
+  hideElzami,
+  onHideElzamiChange,
 }: Props) {
   const visible = { ...ALL_SHOWN, ...(show ?? {}) };
   const [dateMode, setDateMode] = useState<DateMode>(() =>
@@ -97,7 +108,8 @@ export function AccountingFilters({
     (value.dateFrom ? 1 : 0) +
     value.companies.length +
     value.types.length +
-    value.paymentMethods.length;
+    value.paymentMethods.length +
+    (visible.hideElzami && hideElzami ? 1 : 0);
 
   const reset = () => {
     onChange({
@@ -107,6 +119,7 @@ export function AccountingFilters({
       types: [],
       paymentMethods: [],
     });
+    if (visible.hideElzami) onHideElzamiChange?.(false);
   };
 
   const setMonth = (m: string) => {
@@ -244,6 +257,24 @@ export function AccountingFilters({
                 placeholder="كل الطرق"
               />
             </div>
+          )}
+
+          {visible.hideElzami && (
+            <label className="flex items-start gap-2 cursor-pointer select-none pt-1">
+              <Checkbox
+                checked={!!hideElzami}
+                onCheckedChange={(v) => onHideElzamiChange?.(v === true)}
+                className="mt-0.5"
+              />
+              <div className="space-y-0.5">
+                <span className="text-xs font-medium leading-none">
+                  إخفاء دفعات الإلزامي
+                </span>
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  يخفي الدفعات التي يساوي مبلغها سعر الإلزامي (لا يتم تحصيلها من قبل الوكالة)
+                </p>
+              </div>
+            </label>
           )}
         </div>
       </PopoverContent>

@@ -184,6 +184,22 @@ function formatDate(dateStr: string): string {
   }
 }
 
+// A receipt is an "إلزامي passthrough" when its joined policy is
+// ELZAMI and the amount equals that policy's insurance_price.
+// Those rows are money the customer paid directly to the insurance
+// company (typically by visa) — not collected by the agency — so
+// the user wants the option to hide them from the receipts list.
+// Manual receipts (no joined policy) are never passthroughs.
+function isElzamiPassthrough(r: { amount: number; policy?: any }): boolean {
+  const rawPolicy = r.policy;
+  const policy = Array.isArray(rawPolicy) ? rawPolicy[0] ?? null : rawPolicy ?? null;
+  if (!policy) return false;
+  if (policy.policy_type_parent !== "ELZAMI") return false;
+  const price = Number(policy.insurance_price ?? 0);
+  if (price <= 0) return false;
+  return Math.abs(Number(r.amount) - price) < 0.005;
+}
+
 function paymentLabelShort(method: string): string {
   return {
     cash: "نقدي",
@@ -482,6 +498,14 @@ export default function Receipts() {
   });
   // Page-level branch filter — global admins only.
   const [branchFilter, setBranchFilter] = useState<string | null>(null);
+  // Hide "passthrough" ELZAMI receipts — the visa/cash payment whose
+  // amount equals the joined policy's insurance_price for an ELZAMI
+  // policy. That money goes straight to the insurer, not the agency,
+  // so it pollutes the agency's receipts list. Detection is amount-
+  // based because a customer might split a package payment across the
+  // ELZAMI policy_id even though only one of those slices is the
+  // actual إلزامي premium.
+  const [hideElzamiPayments, setHideElzamiPayments] = useState(false);
 
   // Insurance companies — loaded once for the filter dropdown options.
   const [companyOptions, setCompanyOptions] = useState<
@@ -585,8 +609,8 @@ export default function Receipts() {
       // foreignTable:"policy") resolve identically against either.
       // Inner-join only when company/type filters are active.
       const policyJoinFull = needsPolicyInnerJoin
-        ? "policy:policies!inner(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_companies(id, name, name_ar), clients(id_number))"
-        : "policy:policies(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_companies(id, name, name_ar), clients(id_number))";
+        ? "policy:policies!inner(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id_number))"
+        : "policy:policies(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id_number))";
       const policyJoinCount = needsPolicyInnerJoin
         ? "policy:policies!inner(id)"
         : "policy:policies(id)";
@@ -646,8 +670,9 @@ export default function Receipts() {
       if (countErr) throw countErr;
 
       const rows = (data || []) as ReceiptRecord[];
-      setHasMore(rows.length > PAGE_SIZE);
-      setReceipts(rows.length > PAGE_SIZE ? rows.slice(0, PAGE_SIZE) : rows);
+      const filtered = hideElzamiPayments ? rows.filter((r) => !isElzamiPassthrough(r)) : rows;
+      setHasMore(filtered.length > PAGE_SIZE);
+      setReceipts(filtered.length > PAGE_SIZE ? filtered.slice(0, PAGE_SIZE) : filtered);
       setTotalCount(total ?? 0);
     } catch (err: any) {
       console.error("Error fetching receipts:", err);
@@ -655,7 +680,7 @@ export default function Receipts() {
     } finally {
       setLoading(false);
     }
-  }, [agentId, activeTab, page, filters, branchFilter, searchQuery]);
+  }, [agentId, activeTab, page, filters, branchFilter, searchQuery, hideElzamiPayments]);
 
   useEffect(() => {
     if (!agentLoading && agentId) {
@@ -666,7 +691,7 @@ export default function Receipts() {
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
-  }, [activeTab, filters, branchFilter, searchQuery]);
+  }, [activeTab, filters, branchFilter, searchQuery, hideElzamiPayments]);
 
   // ─── Grouping ──────────────────────────────────────────────────
   //
@@ -1013,8 +1038,8 @@ export default function Receipts() {
       const { dateFrom, dateTo, companies, types, paymentMethods } = filters;
       const needsPolicyInnerJoin = companies.length > 0 || types.length > 0;
       const policyJoin = needsPolicyInnerJoin
-        ? "policy:policies!inner(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_companies(id, name, name_ar), clients(id_number))"
-        : "policy:policies(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_companies(id, name, name_ar), clients(id_number))";
+        ? "policy:policies!inner(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id_number))"
+        : "policy:policies(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id_number))";
 
       // Pull every matching row (not just the current page) so طباعة الكل
       // actually reflects "all" — pagination is a screen affordance, not
@@ -1045,7 +1070,10 @@ export default function Receipts() {
 
       const { data, error } = await q;
       if (error) throw error;
-      const allReceipts = (data || []) as ReceiptRecord[];
+      const fetched = (data || []) as ReceiptRecord[];
+      const allReceipts = hideElzamiPayments
+        ? fetched.filter((r) => !isElzamiPassthrough(r))
+        : fetched;
 
       if (allReceipts.length === 0) {
         toast.error("لا توجد إيصالات للطباعة");
@@ -1087,6 +1115,7 @@ export default function Receipts() {
         filterBits.push(`نوع التأمين: ${labels}`);
       }
       if (searchQuery) filterBits.push(`بحث: "${searchQuery}"`);
+      if (hideElzamiPayments) filterBits.push("إخفاء دفعات الإلزامي");
 
       // Build print columns from the on-screen Manage-Columns toggle
       // (minus the actions cell, which has no print equivalent), with
@@ -1242,7 +1271,10 @@ export default function Receipts() {
                   companies: true,
                   types: true,
                   paymentMethods: true,
+                  hideElzami: true,
                 }}
+                hideElzami={hideElzamiPayments}
+                onHideElzamiChange={setHideElzamiPayments}
               />
               <AgentBranchFilter value={branchFilter} onChange={setBranchFilter} />
             </div>
