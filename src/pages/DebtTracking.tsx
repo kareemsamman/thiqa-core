@@ -14,13 +14,13 @@ import { extractFunctionErrorMessage, toastFunctionError } from "@/lib/functionE
 import { useToast } from "@/hooks/use-toast";
 import { format, differenceInDays } from "date-fns";
 
-import { 
-  DollarSign, Search, AlertTriangle, Clock, Send, 
+import {
+  DollarSign, Search, AlertTriangle, Clock, Send,
   Phone, Eye, Filter, Users, TrendingDown, Calendar,
-  MessageSquare, RefreshCw, ChevronDown, ChevronUp, Wallet, MessageCircle,
+  MessageSquare, RefreshCw, ChevronDown, ChevronUp, Wallet,
   SendHorizonal
 } from "lucide-react";
-import { Lock } from "@phosphor-icons/react";
+import { Lock, WhatsappLogo } from "@phosphor-icons/react";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { DebtPaymentModal } from "@/components/debt/DebtPaymentModal";
 import { ClientNotesPopover } from "@/components/clients/ClientNotesPopover";
@@ -836,7 +836,7 @@ export default function DebtTracking() {
                               rel="noopener noreferrer"
                               className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium border bg-transparent h-9 rounded-md px-3 text-green-600 border-green-600 hover:bg-green-50 transition-all flex-1 sm:flex-none"
                             >
-                              <MessageCircle className="h-4 w-4" />
+                              <WhatsappLogo className="h-4 w-4" weight="fill" />
                             </a>
                           ) : (
                             <Button
@@ -845,17 +845,27 @@ export default function DebtTracking() {
                               disabled
                               className="text-green-600 border-green-600 flex-1 sm:flex-none"
                             >
-                              <MessageCircle className="h-4 w-4" />
+                              <WhatsappLogo className="h-4 w-4" weight="fill" />
                             </Button>
                           )}
                           <Button
                             variant="outline"
                             size="sm"
                             className="flex-1 sm:flex-none"
-                            onClick={() => openSmsDialog(client)}
-                            disabled={!client.phone_number}
+                            onClick={() => {
+                              if (smsLoading) return;
+                              if (smsLocked) { openSmsUpgrade(); return; }
+                              openSmsDialog(client);
+                            }}
+                            disabled={!client.phone_number || smsLoading}
                           >
-                            <Send className="h-4 w-4 ml-2" />
+                            {smsLocked ? (
+                              <span className="h-4 w-4 ml-2 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
+                                <Lock className="h-2.5 w-2.5" weight="fill" />
+                              </span>
+                            ) : (
+                              <Send className="h-4 w-4 ml-2" />
+                            )}
                             تذكير
                           </Button>
                         </div>
