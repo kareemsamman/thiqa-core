@@ -1152,7 +1152,14 @@ export default function PolicyReports() {
                                 />
                               )}
                             </TableCell>
-                            <TableCell className="font-mono text-xs">{formatDateTime(policy.created_at)}</TableCell>
+                            <TableCell className="font-mono text-xs whitespace-nowrap">
+                              <div className="leading-tight">
+                                <div>{formatDate(policy.created_at)}</div>
+                                <div className="text-[10px] text-muted-foreground">
+                                  {new Date(policy.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                              </div>
+                            </TableCell>
                             <TableCell>
                               <div>
                                 <p className="font-medium text-sm">{policy.created_by_name || '-'}</p>
@@ -1221,8 +1228,11 @@ export default function PolicyReports() {
                                 policy.company_name_ar || policy.company_name || '-'
                               )}
                             </TableCell>
-                            <TableCell className="text-xs">
-                              {formatDate(policy.start_date)} - {formatDate(policy.end_date)}
+                            <TableCell className="font-mono text-xs whitespace-nowrap">
+                              <div className="leading-tight">
+                                <div>{formatDate(policy.start_date)}</div>
+                                <div className="text-muted-foreground">{formatDate(policy.end_date)}</div>
+                              </div>
                             </TableCell>
                             <TableCell className="font-bold">₪{policy.insurance_price.toLocaleString()}</TableCell>
                             <TableCell>
