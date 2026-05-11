@@ -829,13 +829,19 @@ serve(async (req) => {
       }
     }
 
-    // Drop ELZAMI passthroughs — payments where the policy is ELZAMI
-    // and the amount equals its insurance_price. Per the user's rule:
-    // إلزامي money goes straight to the insurer, the office doesn't
-    // actually collect it, so it shouldn't show up on a سند قبض. A
-    // partial-amount payment on an ELZAMI policy is kept (might be
-    // the office collecting a slice on behalf of the customer).
+    // Drop payments the office never actually collected:
+    //  1. payment_type='visa_external' — the customer paid the
+    //     insurer directly via their own card. The row exists for
+    //     accounting context but the money never passed through the
+    //     office, so it has no business on a سند قبض.
+    //  2. ELZAMI policy + amount equals insurance_price — same idea
+    //     but covers the legacy/manual case of an إلزامي premium
+    //     recorded under any payment method (cash/cheque/transfer).
+    //     A partial-amount ELZAMI payment is kept since that could
+    //     mean the office is collecting a slice on the customer's
+    //     behalf to forward later.
     payments = payments.filter((p: any) => {
+      if (p.payment_type === 'visa_external') return false;
       const pol = Array.isArray(p.policy) ? p.policy[0] : p.policy;
       if (!pol || pol.policy_type_parent !== 'ELZAMI') return true;
       const price = Number(pol.insurance_price ?? 0);
