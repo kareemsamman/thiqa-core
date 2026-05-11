@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useBranches } from "@/hooks/useBranches";
+import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { digitsOnly, isValidIsraeliId, isValidPhoneNumber10 } from "@/lib/validation";
 import type {
@@ -50,6 +51,12 @@ interface UsePolicyWizardStateProps {
 
 export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaultBrokerDirection, preselectedClientId, renewalData }: UsePolicyWizardStateProps) {
   const { user, isAdmin, branchId: userBranchId } = useAuth();
+  const { can } = usePermissions();
+  // Cross-branch worker grant — a non-admin with this permission still
+  // needs to pick a branch for each new transaction (the row is stamped
+  // with one branch_id), but the picker is hidden by default for
+  // non-admins. Treat them like admins for branch-selection purposes.
+  const canSeeAllBranches = can('access.all_branches');
   const { branches, loading: loadingBranches, refetch: refetchBranches } = useBranches();
   const initialBrokerDirection = defaultBrokerDirection || "";
 
@@ -59,14 +66,15 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
   const [saving, setSaving] = useState(false);
 
   // Branch — admin default comes from the DB `is_default` flag.
-  // Non-admins are always locked to their own branch.
+  // Workers without access.all_branches are locked to their own branch.
+  const canPickBranch = isAdmin || canSeeAllBranches;
   const [selectedBranchId, setSelectedBranchId] = useState<string>("");
   useEffect(() => {
-    if (!isAdmin || selectedBranchId || branches.length === 0) return;
+    if (!canPickBranch || selectedBranchId || branches.length === 0) return;
     const defaultBranch = branches.find((b) => b.is_default) ?? branches[0];
     if (defaultBranch) setSelectedBranchId(defaultBranch.id);
-  }, [isAdmin, branches, selectedBranchId]);
-  const effectiveBranchId = isAdmin ? selectedBranchId : userBranchId;
+  }, [canPickBranch, branches, selectedBranchId]);
+  const effectiveBranchId = canPickBranch ? selectedBranchId : userBranchId;
 
   // Insurance Category
   const [categories, setCategories] = useState<InsuranceCategory[]>([]);
@@ -432,7 +440,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
 
   // Steps configuration with validation
   const steps: WizardStep[] = useMemo(() => {
-    const branchValid = isAdmin
+    const branchValid = canPickBranch
       ? !!selectedBranchId && branches.length > 0
       : !!userBranchId;
     const newClientValid =
@@ -489,7 +497,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
       { id: 4, key: "payments", title: "الدفعات", icon: CreditCard, isUnlocked: step1Valid && step2Valid && step3Valid, isValid: step4Valid },
     ];
   }, [
-    isAdmin, selectedBranchId, branches, userBranchId,
+    canPickBranch, selectedBranchId, branches, userBranchId,
     selectedClient, createNewClient, newClient, selectedCategory, isLightMode,
     selectedCar, existingCar, createNewCar, newCar, carConflict,
     policy, paymentsExceedPrice, hasZeroPayment, hasIncompleteCheque,
@@ -510,7 +518,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     const isPaymentStep = currentStep === (isLightMode ? 3 : 4);
 
     if (currentStep === 1) {
-      if (isAdmin) {
+      if (canPickBranch) {
         if (branches.length === 0) missing.push("الفرع (لا توجد فروع)");
         else if (!selectedBranchId) missing.push("الفرع");
       } else if (!userBranchId) {
@@ -591,7 +599,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     return missing;
   }, [
     currentStep,
-    isAdmin,
+    canPickBranch,
     selectedBranchId,
     branches,
     userBranchId,
@@ -704,7 +712,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
 
     switch (step.key) {
       case "branch_type_client":
-        if (isAdmin) {
+        if (canPickBranch) {
           if (branches.length === 0) {
             newErrors.branch = "يجب إضافة فرع قبل إنشاء معاملة";
           } else if (!selectedBranchId) {
