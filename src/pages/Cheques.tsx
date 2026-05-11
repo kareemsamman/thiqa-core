@@ -1111,15 +1111,6 @@ export default function Cheques() {
                 خارجي
               </Badge>
             )}
-            {/* "موزّع على N معاملات" — surfaces the fact that this
-                row is the aggregate of a batch_id collapse so staff
-                aren't confused why one physical cheque appears once
-                instead of once-per-policy like before. */}
-            {cheque.member_ids && cheque.member_ids.length > 1 && (
-              <Badge variant="outline" className="text-[9px] px-1 py-0 border-blue-300 text-blue-700 bg-blue-50">
-                موزّع على {cheque.member_ids.length} معاملات
-              </Badge>
-            )}
           </div>
         </TableCell>
         <TableCell className="text-sm">
