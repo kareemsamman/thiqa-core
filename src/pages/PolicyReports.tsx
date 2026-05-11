@@ -73,6 +73,7 @@ import { useSmsLock } from '@/hooks/useSmsLock';
 import { Lock } from '@phosphor-icons/react';
 import { ClickablePhone } from '@/components/shared/ClickablePhone';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
+import { getPaymentTypeLabel } from '@/lib/paymentLabels';
 import { RenewalAssistant } from '@/components/reports/RenewalAssistant';
 
 const policyTypeLabels: Record<string, string> = {
@@ -661,15 +662,6 @@ export default function PolicyReports() {
     } finally {
       setLoadingPayments(null);
     }
-  };
-
-  const paymentTypeLabels: Record<string, string> = {
-    cash: 'نقداً',
-    cheque: 'شيك',
-    credit: 'بطاقة',
-    bank_transfer: 'تحويل بنكي',
-    tranzila: 'ترانزيلا',
-    customer_cheque: 'شيك عميل',
   };
 
   // Refresh data based on active tab
@@ -1285,10 +1277,10 @@ export default function PolicyReports() {
                                               ₪{payment.amount.toLocaleString()}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
-                                              {paymentTypeLabels[payment.payment_type] || payment.payment_type}
+                                              {getPaymentTypeLabel(payment)}
                                             </p>
                                           </div>
-                                          <div className="text-left">
+                                          <div className="text-left whitespace-nowrap">
                                             <p className="font-mono text-xs">{formatDate(payment.payment_date)}</p>
                                             <p className="text-xs text-muted-foreground">
                                               أنشئت: {formatDateTime(payment.created_at)}
