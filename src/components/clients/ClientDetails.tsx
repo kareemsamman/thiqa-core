@@ -393,6 +393,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     }, 350);
   };
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  // payment_id → { voucher_number, reason } for refused payments. Read from
+  // the receipts table (receipt_type='cancellation') so a cancelled row in
+  // the payment log can render the linked سند الإلغاء number + the
+  // bookkeeper's stated reason. Empty for non-refused payments.
+  const [cancellationInfo, setCancellationInfo] = useState<
+    Map<string, { voucherNumber: number | string; reason: string | null }>
+  >(new Map());
   const [broker, setBroker] = useState<Broker | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary>({ total_paid: 0, total_remaining: 0, total_profit: 0 });
   const [brokerDebts, setBrokerDebts] = useState<BrokerDebtInfo[]>([]);
@@ -858,6 +865,67 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       }));
 
       setPayments(paymentsWithPolicy);
+
+      // Cancellation voucher lookup for refused rows. The trigger inserts
+      // one cancellation receipt per refused payment; on the UI we
+      // collapse to one voucher per session (smallest receipt_number)
+      // and assign that to every payment in the session, matching the
+      // bulk-receipt print rule. Legacy payments without a session_id
+      // keep their own voucher number.
+      const refused = paymentsWithPolicy.filter((p) => p.refused);
+      const refusedIds = refused.map((p) => p.id);
+      const nextInfo = new Map<string, { voucherNumber: number | string; reason: string | null }>();
+      if (refusedIds.length > 0) {
+        const { data: voucherRows } = await supabase
+          .from('receipts')
+          .select('payment_id, receipt_number, cancellation_reason')
+          .eq('receipt_type', 'cancellation')
+          .in('payment_id', refusedIds);
+
+        const perPayment = new Map<string, { voucherNumber: number | string; reason: string | null }>();
+        for (const row of (voucherRows ?? []) as Array<{
+          payment_id: string | null;
+          receipt_number: number | string | null;
+          cancellation_reason: string | null;
+        }>) {
+          if (row.payment_id && row.receipt_number != null) {
+            perPayment.set(row.payment_id, {
+              voucherNumber: row.receipt_number,
+              reason: row.cancellation_reason,
+            });
+          }
+        }
+
+        // Pick the canonical voucher per session: smallest numeric
+        // receipt_number among the session's refused payments.
+        const sortKey = (v: number | string): string => {
+          const n = typeof v === 'number' ? v : Number(v);
+          return Number.isFinite(n) ? String(n).padStart(20, '0') : String(v);
+        };
+        const sessionVoucher = new Map<string, { voucherNumber: number | string; reason: string | null }>();
+        for (const p of refused) {
+          const sid = p.payment_session_id;
+          if (!sid) continue;
+          const own = perPayment.get(p.id);
+          if (!own) continue;
+          const existing = sessionVoucher.get(sid);
+          if (!existing || sortKey(own.voucherNumber) < sortKey(existing.voucherNumber)) {
+            sessionVoucher.set(sid, own);
+          }
+        }
+
+        for (const p of refused) {
+          const sid = p.payment_session_id;
+          const v = sid ? sessionVoucher.get(sid) : undefined;
+          if (v) {
+            nextInfo.set(p.id, v);
+          } else {
+            const own = perPayment.get(p.id);
+            if (own) nextInfo.set(p.id, own);
+          }
+        }
+      }
+      setCancellationInfo(nextInfo);
     } catch (error) {
       console.error('Error fetching payments:', error);
     } finally {
@@ -1693,10 +1761,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       group.isPassthrough = group.payments.every(isPassthroughPayment);
     }
 
-    // Sort by date descending
-    return Array.from(groups.values()).sort((a, b) =>
-      new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()
-    );
+    // Sort: passthrough rows (إلزامي / فيزا خارجي) always render last
+    // regardless of date — they're informational money the office didn't
+    // collect, and the bookkeeper wants the real receipts on top.
+    // Within each bucket sort by date descending (newest first).
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.isPassthrough !== b.isPassthrough) {
+        return a.isPassthrough ? 1 : -1;
+      }
+      return new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime();
+    });
   }, [payments, paymentSearch, paymentTypeFilter, policies]);
 
   // Re-open the PaymentGroupDetailsDialog with the freshest version of
@@ -2565,7 +2639,36 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                               إلزامي / فيزا خارجي
                             </Badge>
                           ) : group.refused ? (
-                            <Badge variant="destructive">ملغي</Badge>
+                            (() => {
+                              // For a cancelled row we surface the linked
+                              // سند الإلغاء number and the bookkeeper's
+                              // stated reason. We dedupe per session in
+                              // the fetch step, so every payment of the
+                              // same session lands on the same voucher
+                              // number — one receipt cancelled = one
+                              // voucher, not N.
+                              const info = group.payments
+                                .map((p) => cancellationInfo.get(p.id))
+                                .find((x) => x != null);
+                              return (
+                                <div className="flex flex-col items-start gap-0.5">
+                                  <Badge variant="destructive">ملغي</Badge>
+                                  {info?.voucherNumber != null && (
+                                    <span className="text-[10px] font-mono ltr-nums text-muted-foreground">
+                                      سند الإلغاء #{String(info.voucherNumber)}
+                                    </span>
+                                  )}
+                                  {info?.reason && (
+                                    <span
+                                      className="text-[10px] text-muted-foreground max-w-[180px] truncate"
+                                      title={info.reason}
+                                    >
+                                      السبب: {info.reason}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()
                           ) : (
                             <Badge variant="success">مقبول</Badge>
                           )}
@@ -2584,12 +2687,35 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           {group.isPassthrough ? (
-                            // Passthrough rows are read-only — the
-                            // office didn't actually collect this
-                            // money, so it can't be edited or
-                            // cancelled here. The customer paid the
-                            // insurer directly.
-                            <span className="text-muted-foreground text-xs">—</span>
+                            // Passthrough rows (إلزامي / فيزا خارجي) skip
+                            // the receipt-cancellation flow — there's no
+                            // money in the office to refund, so a plain
+                            // delete is the right action. Gated on a
+                            // single row + not yet printed; multi-row
+                            // and printed passthroughs stay read-only.
+                            group.payments.length === 1 && !group.printed ? (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => {
+                                      setDeletePaymentId(group.payments[0].id);
+                                      setDeletePaymentDialogOpen(true);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4 ml-2" />
+                                    حذف
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )
                           ) : (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

@@ -262,6 +262,21 @@ function buildBulkReceiptHtml(
     const amountCell = refused
       ? `<span class="struck">₪${amount}</span>`
       : `₪${amount}`;
+
+    // Per-row date label: a cheque carries a maturity date (when the
+    // bank will honour it) so "تاريخ الاستحقاق" is the accurate term;
+    // cash / transfer / card are collected on the spot, so the date
+    // IS the receipt date — labelled "تاريخ القبض". The column header
+    // stays generic ("التاريخ") so the table reads consistently while
+    // each cell carries its own precise sub-label.
+    const dateValue = p.payment_type === 'cheque'
+      ? (p.cheque_date || p.payment_date)
+      : p.payment_date;
+    const dateLabelText = p.payment_type === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ القبض';
+    const dateCell = `
+      <div class="date-label">${dateLabelText}</div>
+      <div class="date-value">${formatDate(dateValue)}</div>
+    `;
     const notesCell = anyNotes
       ? `<td class="notes">${escapeHtml(p.notes || '').replace(/\n/g, '<br>') || '—'}</td>`
       : '';
@@ -284,7 +299,7 @@ function buildBulkReceiptHtml(
           <div>${escapeHtml(typeLbl)}${extra}${refusedBadge}</div>
           ${bankLine}
         </td>
-        <td class="date">${formatDate(p.payment_date)}</td>
+        <td class="date">${dateCell}</td>
         <td class="amount">${amountCell}</td>
         ${notesCell}
       </tr>
@@ -424,11 +439,32 @@ function buildBulkReceiptHtml(
     .receipts tbody td:last-child { border-left: none; }
     .receipts tbody tr:first-child td { border-top: none; }
     .receipts tbody td.num,
-    .receipts tbody td.date,
     .receipts tbody td.amount {
       direction: ltr; text-align: left;
       font-variant-numeric: tabular-nums; font-weight: 700;
     }
+    /* Date cell carries a small caption ("تاريخ الاستحقاق" for cheques,
+       "تاريخ القبض" otherwise) above the actual date so each row
+       self-labels even though the column header is generic. */
+    .receipts tbody td.date {
+      text-align: right;
+      font-weight: 500;
+    }
+    .receipts tbody td.date .date-label {
+      font-size: 10px;
+      color: #6b7280;
+      font-weight: 600;
+      margin-bottom: 2px;
+      letter-spacing: 0.2px;
+    }
+    .receipts tbody td.date .date-value {
+      direction: ltr;
+      text-align: left;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+    .receipts tbody tr.refused td.date .date-value { color: #7f1d1d; }
     .receipts tbody td.notes {
       text-align: right; font-weight: 500; color: #1a1a1a;
       max-width: 200px; white-space: normal; word-break: break-word;
@@ -628,7 +664,7 @@ function buildBulkReceiptHtml(
           <tr>
             <th style="width: 110px;">رقم سند القبض</th>
             <th style="width: 150px;">طريقة الدفع</th>
-            <th style="width: 120px;">تاريخ الدفع</th>
+            <th style="width: 130px;">التاريخ</th>
             <th style="width: 110px;">المبلغ</th>
             ${anyNotes ? '<th>ملاحظات</th>' : ''}
           </tr>
@@ -771,6 +807,7 @@ serve(async (req) => {
         notes,
         receipt_number,
         batch_id,
+        payment_session_id,
         policy:policies(
           id,
           policy_type_parent,
@@ -937,17 +974,61 @@ serve(async (req) => {
     // trigger inserts one cancellation row per refused policy_payment
     // with receipt_type='cancellation'; we surface the voucher number
     // on the printed copy so the bookkeeper can cross-reference.
+    //
+    // Display rule: one collection event (payment_session_id) = one
+    // cancellation voucher number. Trigger still creates a row per
+    // payment under the hood (immutable audit trail), but on the
+    // printed receipt every payment in the same session shows the
+    // SAME voucher number — the smallest receipt_number among the
+    // session's cancellation rows. Legacy payments without a
+    // session_id fall back to per-payment lookup.
     const cancellationVoucherMap: Record<string, number | string> = {};
-    const refusedIds = payments.filter((p: any) => p.refused).map((p: any) => p.id);
+    const refusedPayments = payments.filter((p: any) => p.refused);
+    const refusedIds = refusedPayments.map((p: any) => p.id);
     if (refusedIds.length > 0) {
       const { data: vouchers } = await supabase
         .from('receipts')
         .select('payment_id, receipt_number')
         .eq('receipt_type', 'cancellation')
         .in('payment_id', refusedIds);
+
+      // Per-payment voucher: refused_payment.id → its own cancellation receipt_number
+      const perPaymentVoucher = new Map<string, number | string>();
       for (const v of (vouchers ?? []) as Array<{ payment_id: string | null; receipt_number: number | string | null }>) {
         if (v.payment_id && v.receipt_number != null) {
-          cancellationVoucherMap[v.payment_id] = v.receipt_number;
+          perPaymentVoucher.set(v.payment_id, v.receipt_number);
+        }
+      }
+
+      // Pick the canonical voucher per session: smallest numeric
+      // receipt_number among the session's refused payments. Strings
+      // are compared numerically when parseable, else lexicographically.
+      const sessionVoucher = new Map<string, number | string>();
+      const sortKey = (v: number | string): string => {
+        const n = typeof v === 'number' ? v : Number(v);
+        return Number.isFinite(n) ? String(n).padStart(20, '0') : String(v);
+      };
+      for (const p of refusedPayments as Array<{ id: string; payment_session_id: string | null }>) {
+        const sid = p.payment_session_id;
+        if (!sid) continue;
+        const v = perPaymentVoucher.get(p.id);
+        if (v == null) continue;
+        const existing = sessionVoucher.get(sid);
+        if (existing == null || sortKey(v) < sortKey(existing)) {
+          sessionVoucher.set(sid, v);
+        }
+      }
+
+      // Assign: session payments get the session's canonical voucher;
+      // legacy (no session_id) payments keep their own voucher.
+      for (const p of refusedPayments as Array<{ id: string; payment_session_id: string | null }>) {
+        const sid = p.payment_session_id;
+        const v = sid ? sessionVoucher.get(sid) : undefined;
+        if (v != null) {
+          cancellationVoucherMap[p.id] = v;
+        } else {
+          const own = perPaymentVoucher.get(p.id);
+          if (own != null) cancellationVoucherMap[p.id] = own;
         }
       }
     }

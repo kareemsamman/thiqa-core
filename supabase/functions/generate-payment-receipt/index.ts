@@ -223,14 +223,12 @@ function buildPaymentReceiptHtml(
         </div>
       `);
     }
-    if (payment.cheque_date) {
-      extraDetailRows.push(`
-        <div class="row">
-          <div class="label">تاريخ الشيك</div>
-          <div class="val">${formatDate(payment.cheque_date)}</div>
-        </div>
-      `);
-    }
+    // For cheques the "main" payment date is the maturity date (تاريخ
+    // الاستحقاق) which we now render in the primary date row below;
+    // duplicating it as a "تاريخ الشيك" extra row would just be noise.
+    // For non-cheque payments cheque_date is meaningless, so this row
+    // is silently dropped — kept here as an explicit no-op so the
+    // intent (not lost) is clear.
   }
   const extraDetailsHtml = extraDetailRows.join('');
 
@@ -698,8 +696,8 @@ function buildPaymentReceiptHtml(
           <div class="val">${escapeHtml(paymentMethodLabel)}</div>
         </div>
         <div class="row">
-          <div class="label">تاريخ الدفع</div>
-          <div class="val">${formatDate(payment.payment_date)}</div>
+          <div class="label">${payment.payment_type === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ القبض'}</div>
+          <div class="val">${formatDate(payment.payment_type === 'cheque' ? (payment.cheque_date || payment.payment_date) : payment.payment_date)}</div>
         </div>
         ${extraDetailsHtml}
       </div>
