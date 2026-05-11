@@ -597,6 +597,15 @@ export default function Receipts() {
   const [reasonText, setReasonText] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [reasonSubmitting, setReasonSubmitting] = useState(false);
+  // The pre-computed customer-level cancel target — every non-إلزامي,
+  // non-visa_external policy_payment for this customer (live + batch
+  // siblings of any live row). Populated by openCancelDialog before
+  // the dialog opens so we can show the exact count + amount on the
+  // confirm screen, and reused in confirmCancelReceipt so the cancel
+  // matches the printed كشف القبض scope 1:1.
+  const [reasonTargetIds, setReasonTargetIds] = useState<string[]>([]);
+  const [reasonTargetSum, setReasonTargetSum] = useState<number>(0);
+  const [reasonResolving, setReasonResolving] = useState(false);
 
   // Add / edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -996,11 +1005,99 @@ export default function Receipts() {
     setDialogOpen(true);
   };
 
-  const openCancelDialog = (group: ReceiptGroupView) => {
-    setReasonGroup(group);
-    setReasonText("");
-    setReasonError(null);
-    setReasonDialogOpen(true);
+  const openCancelDialog = async (group: ReceiptGroupView) => {
+    // Resolve the customer from the clicked row so we can expand the
+    // cancel scope to every non-إلزامي / non-visa_external payment
+    // this customer ever made — same scope the printed receipt shows.
+    // Anything less and the row-clicked-cancel ends up half-voiding a
+    // multi-split cheque (e.g. كریم تست 7 ended with cheque 901 slice
+    // 834 cancelled while slice 332 stayed live — the bookkeeper's
+    // worst nightmare).
+    const firstReceipt = group.receipts.find((r) => r.policy);
+    const policyResolved = Array.isArray((firstReceipt as any)?.policy)
+      ? (firstReceipt as any).policy[0]
+      : (firstReceipt as any)?.policy;
+    const clientId =
+      policyResolved?.clients?.id ||
+      policyResolved?.client_id ||
+      (Array.isArray(policyResolved?.clients) ? policyResolved.clients[0]?.id : null);
+    if (!clientId) {
+      toast.error('لم يمكن تحديد العميل من هذا الصف');
+      return;
+    }
+
+    setReasonResolving(true);
+    try {
+      const { data: policies } = await supabase
+        .from('policies')
+        .select('id, policy_type_parent, insurance_price')
+        .eq('client_id', clientId)
+        .is('deleted_at', null);
+      const policyIds = (policies ?? []).map((p: any) => p.id);
+      if (policyIds.length === 0) {
+        toast.error('لا توجد بوالص لهذا العميل');
+        return;
+      }
+
+      const { data: payments } = await supabase
+        .from('policy_payments')
+        .select('id, amount, payment_type, batch_id, policy_id, refused')
+        .in('policy_id', policyIds);
+
+      const policyById = new Map<string, any>(
+        (policies ?? []).map((p: any) => [p.id, p]),
+      );
+
+      // Stage 1: pick the live rows that survive the same filter the
+      // print uses (skip already-refused, skip visa_external, skip
+      // إلزامي passthrough — same rule from the edge function).
+      const survivors = (payments ?? []).filter((p: any) => {
+        if (p.refused) return false;
+        if (p.payment_type === 'visa_external') return false;
+        const pol = policyById.get(p.policy_id);
+        if (!pol) return true;
+        if (pol.policy_type_parent !== 'ELZAMI') return true;
+        const price = Number(pol.insurance_price ?? 0);
+        if (price <= 0) return true;
+        return Math.abs(Number(p.amount ?? 0) - price) >= 0.005;
+      });
+
+      // Stage 2: keep multi-split cheques whole. If any slice of a
+      // batch survives the filter, every still-live slice of that
+      // batch joins the target — a physical cheque can't be half-
+      // cancelled. Already-refused siblings are left alone (no point
+      // re-flipping refused=true on rows that already are).
+      const batchIds = new Set(
+        survivors
+          .filter((p: any) => !!p.batch_id)
+          .map((p: any) => p.batch_id as string),
+      );
+      const survivorIds = new Set(survivors.map((p: any) => p.id));
+      const finalRows = (payments ?? []).filter((p: any) => {
+        if (p.refused) return false;
+        if (survivorIds.has(p.id)) return true;
+        return !!p.batch_id && batchIds.has(p.batch_id);
+      });
+
+      if (finalRows.length === 0) {
+        toast.error('لا توجد سندات قابلة للإلغاء (كل دفعات العميل ملغاة أو إلزامي/فيزا خارجي)');
+        return;
+      }
+
+      setReasonGroup(group);
+      setReasonTargetIds(finalRows.map((p: any) => p.id));
+      setReasonTargetSum(
+        finalRows.reduce((s: number, p: any) => s + Number(p.amount || 0), 0),
+      );
+      setReasonText('');
+      setReasonError(null);
+      setReasonDialogOpen(true);
+    } catch (err: any) {
+      console.error('[Receipts] resolve cancel scope:', err);
+      toast.error(err?.message || 'فشل في تحضير الإلغاء');
+    } finally {
+      setReasonResolving(false);
+    }
   };
 
   const confirmCancelReceipt = async () => {
@@ -1009,26 +1106,18 @@ export default function Receipts() {
       setReasonError('السبب مطلوب');
       return;
     }
-    // Only auto-source receipts (mirrored from policy_payments) can
-    // be voided this way — manual receipts have no underlying
-    // payment row to flip refused on. Manual cancellation isn't
-    // wired yet; surface a clear error instead of silently no-op'ing.
-    const paymentIds = reasonGroup.receipts
-      .filter((r) => r.source === 'auto' && r.payment_id)
-      .map((r) => r.payment_id as string);
-    if (paymentIds.length === 0) {
-      toast.error('السندات اليدوية لا تدعم الإلغاء بعد — الميزة للسندات الآلية فقط');
+    if (reasonTargetIds.length === 0) {
+      toast.error('لا توجد سندات قابلة للإلغاء');
       return;
     }
     setReasonSubmitting(true);
     try {
-      // Update every underlying policy_payment to refused=true with
-      // the same reason. The sync_receipt_from_policy_payment trigger
-      // then runs once per row, marks the matching original receipt
-      // cancelled, and inserts a paired cancellation voucher.
-      // cheque_status flip to 'cancelled' is only meaningful for
-      // payment_type='cheque' rows but storing it on cash/visa rows
-      // is harmless (the cheques page filters by payment_type).
+      // Update every targeted policy_payment in one statement. The
+      // sync_receipt_from_policy_payment trigger then fires per row:
+      // marks each original receipt cancelled and inserts a paired
+      // cancellation voucher. The cheque_status flip is only
+      // meaningful for cheques but storing it on cash/transfer rows
+      // is harmless (cheques page filters by payment_type).
       const { error } = await supabase
         .from('policy_payments')
         .update({
@@ -1036,11 +1125,13 @@ export default function Receipts() {
           cheque_status: 'cancelled',
           cancellation_reason: reasonText.trim(),
         })
-        .in('id', paymentIds);
+        .in('id', reasonTargetIds);
       if (error) throw error;
-      toast.success(`تم إلغاء ${paymentIds.length} سند${paymentIds.length > 1 ? 'اً' : ''} وإصدار سند إلغاء`);
+      toast.success(`تم إلغاء ${reasonTargetIds.length} سند${reasonTargetIds.length > 1 ? 'اً' : ''} وإصدار سند إلغاء`);
       setReasonDialogOpen(false);
       setReasonGroup(null);
+      setReasonTargetIds([]);
+      setReasonTargetSum(0);
       setReasonText("");
       setReasonError(null);
       fetchReceipts();
@@ -1718,11 +1809,17 @@ export default function Receipts() {
       {/* Reason prompt for إلغاء السند. Reason is required by the
           immutable-accounting flow — the bookkeeper needs a written
           explanation that gets copied onto the cancellation voucher
-          and the cancelled original. */}
+          and the cancelled original. The count + total shown here
+          come from the customer-scope resolver in openCancelDialog,
+          NOT from the clicked row, because cancellation matches the
+          printed كشف القبض (every non-إلزامي / non-visa_external
+          payment of this customer + every batch sibling). */}
       <Dialog open={reasonDialogOpen} onOpenChange={(o) => {
         if (!o) {
           setReasonDialogOpen(false);
           setReasonGroup(null);
+          setReasonTargetIds([]);
+          setReasonTargetSum(0);
           setReasonText("");
           setReasonError(null);
         }
@@ -1734,13 +1831,13 @@ export default function Receipts() {
           <div className="space-y-3 pt-2">
             {reasonGroup && (
               <p className="text-xs text-muted-foreground">
-                سيُنشأ سند إلغاء برقم جديد لكل واحد من{' '}
-                <span className="font-bold ltr-nums">{reasonGroup.receipts.length}</span>{' '}
-                {reasonGroup.receipts.length === 1 ? 'سند' : 'سندات'} بقيمة{' '}
+                سيُنشأ سند إلغاء لكل واحد من{' '}
+                <span className="font-bold ltr-nums">{reasonTargetIds.length}</span>{' '}
+                {reasonTargetIds.length === 1 ? 'سند' : 'سندات'} لهذا العميل بقيمة إجمالية{' '}
                 <span className="font-bold ltr-nums">
-                  ₪{Math.round(reasonGroup.total).toLocaleString('en-US')}
+                  ₪{Math.round(reasonTargetSum).toLocaleString('en-US')}
                 </span>
-                ، ورصيد العميل سيتم تعديله تلقائياً.
+                . رصيد العميل سيرتد بالكامل كما لو لم يدفع.
               </p>
             )}
             <Label htmlFor="cancel-reason">
@@ -2090,6 +2187,7 @@ export default function Receipts() {
                               {canCancel && (
                                 <DropdownMenuItem
                                   className="text-amber-700 focus:text-amber-800"
+                                  disabled={reasonResolving}
                                   onClick={() => openCancelDialog(group)}
                                 >
                                   <Ban className="h-4 w-4 ml-2" />
