@@ -590,6 +590,14 @@ export default function Receipts() {
   // Map keys: receipt.id (UUID) → the OTHER side's receipt_number.
   const [cancelXref, setCancelXref] = useState<Record<string, number | string>>({});
 
+  // payment_id → payment_session_id. Receipts share a session when the
+  // user collected several payment lines together via تسديد المبلغ;
+  // the grouping memo collapses those into ONE row (one سند قبض)
+  // instead of the legacy per-package grouping. Receipts without a
+  // session_id (legacy data, or manual rows) fall back to the old
+  // policy.group_id key.
+  const [sessionByPaymentId, setSessionByPaymentId] = useState<Record<string, string>>({});
+
   // Reason prompt for إلغاء السند on the receipts page. Same pattern
   // as the cheques page — required field, dialog blocks until typed.
   const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
@@ -781,6 +789,29 @@ export default function Receipts() {
         }
       }
       setCancelXref(xref);
+
+      // Resolve payment_session_id for every auto receipt on this
+      // page so the grouping memo can collapse a multi-line
+      // collection event (cash + cheque entered together via تسديد
+      // المبلغ) into one سند قبض row. Legacy rows without a
+      // session_id (predate the 20260511180000 migration) fall back
+      // to the old policy.group_id key.
+      const autoPaymentIds = trimmed
+        .map((r) => r.payment_id)
+        .filter((id): id is string => !!id);
+      const sessionMap: Record<string, string> = {};
+      if (autoPaymentIds.length > 0) {
+        const { data: sessionRows } = await supabase
+          .from('policy_payments')
+          .select('id, payment_session_id')
+          .in('id', autoPaymentIds);
+        for (const row of (sessionRows ?? []) as Array<{ id: string; payment_session_id: string | null }>) {
+          if (row.payment_session_id) {
+            sessionMap[row.id] = row.payment_session_id;
+          }
+        }
+      }
+      setSessionByPaymentId(sessionMap);
     } catch (err: any) {
       console.error("Error fetching receipts:", err);
       toast.error("خطأ في تحميل الإيصالات");
@@ -802,15 +833,15 @@ export default function Receipts() {
 
   // ─── Grouping ──────────────────────────────────────────────────
   //
-  // Preferred grouping for auto-synced receipts (those with a policy
-  // link): collapse every receipt whose policy shares the same package
-  // (policies.group_id) into one row — matches how ClientDetails groups
-  // the payments table. Standalone policies (no group_id) still collapse
-  // all their payments into one row via policy_id. Manual receipts with
-  // no policy link fall back to the old (client_name, car_number,
-  // minute) key so same-batch manual entries still show together.
-  // Receipts are already fetched newest-first, so Map insertion order
-  // preserves that ordering in the output.
+  // Preferred grouping for auto-synced receipts: by payment_session_id
+  // (one collection event = one سند قبض row). When a session_id isn't
+  // present — legacy rows that predate the 20260511180000 migration —
+  // we fall back to the old policies.group_id grouping so historical
+  // data keeps rendering as it always did. Standalone policies (no
+  // group_id) collapse to one row via policy_id. Manual receipts with
+  // no policy link still group by (client_name, car_number, minute)
+  // so same-batch manual entries show together. Receipts are fetched
+  // newest-first, so Map insertion order preserves that in the output.
   const groups: ReceiptGroup[] = useMemo(() => {
     const map = new Map<string, ReceiptGroup>();
     for (const r of receipts) {
@@ -826,8 +857,11 @@ export default function Receipts() {
       const client = Array.isArray(rawClient)
         ? rawClient[0] ?? null
         : rawClient ?? null;
+      const sessionId = r.payment_id ? sessionByPaymentId[r.payment_id] : null;
       let key: string;
-      if (policy?.group_id) {
+      if (sessionId) {
+        key = `sess:${sessionId}`;
+      } else if (policy?.group_id) {
         key = `grp:${policy.group_id}`;
       } else if (policy?.id) {
         key = `pol:${policy.id}`;
@@ -866,7 +900,7 @@ export default function Receipts() {
       }
     }
     return Array.from(map.values());
-  }, [receipts]);
+  }, [receipts, sessionByPaymentId]);
 
   // ─── Print ─────────────────────────────────────────────────────
   //

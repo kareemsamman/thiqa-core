@@ -829,6 +829,15 @@ export function DebtPaymentModal({
       allPayablePolicies.map(p => [p.policyId, p.remaining]),
     );
 
+    // One session id for the entire submit. Every policy_payment row
+    // we insert below (cheques + cash + visa, split or not) gets the
+    // same payment_session_id, so the receipts page and the client
+    // profile's سجل الدفعات tab can collapse them into ONE سند قبض
+    // row matching the paper voucher the cashier would hand the
+    // customer for this collection event. Distinct from batch_id —
+    // that's per-physical-cheque; this is per-visit/per-submit.
+    const sessionId = crypto.randomUUID();
+
     try {
       for (const paymentLine of paymentLines) {
         // Skip visa payments that are already paid via Tranzila
@@ -874,6 +883,7 @@ export function DebtPaymentModal({
               notes: paymentLine.notes || `تسديد دين`,
               branch_id: split.branchId,
               batch_id: batchId,
+              payment_session_id: sessionId,
             }));
 
             const { data: insertedPayments, error } = await supabase

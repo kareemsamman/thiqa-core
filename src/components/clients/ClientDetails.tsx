@@ -101,7 +101,7 @@ import { DebtPaymentModal } from '@/components/debt/DebtPaymentModal';
 import { ClientNotesSection } from '@/components/clients/ClientNotesSection';
 import { PaymentEditDialog } from '@/components/clients/PaymentEditDialog';
 import { PaymentGroupDetailsDialog } from '@/components/clients/PaymentGroupDetailsDialog';
-import { getPaymentTypeLabel } from '@/lib/paymentLabels';
+import { getCombinedPaymentTypeLabel, getPaymentTypeLabel } from '@/lib/paymentLabels';
 import { RefundsTab } from '@/components/clients/RefundsTab';
 import { ClientFilesTab, type ClientFilesPolicyRef } from '@/components/clients/ClientFilesTab';
 import { AccidentReportWizard } from '@/components/accident-reports/AccidentReportWizard';
@@ -228,6 +228,7 @@ interface PaymentRecord {
   locked: boolean | null;
   policy_id: string;
   batch_id: string | null;
+  payment_session_id: string | null;
   receipt_number: string | null;
   policy: {
     id: string;
@@ -808,7 +809,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // Get all payments for these policies (include batch_id for grouping)
       const { data: paymentsData, error } = await supabase
         .from('policy_payments')
-        .select('id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id, receipt_number')
+        .select('id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id, payment_session_id, receipt_number')
         .in('policy_id', policyIds)
         .order('payment_date', { ascending: false });
 
@@ -1581,9 +1582,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     });
 
     for (const payment of filteredPayments) {
-      // Group by batch_id (one batch == one physical cheque) or by
-      // payment.id when it's a standalone single-policy payment.
-      const groupKey = payment.batch_id || payment.id;
+      // Group by collection event (payment_session_id) when present —
+      // that's the cashier's "one visit, one voucher" concept. New
+      // submits from DebtPaymentModal stamp a session_id on every row.
+      // Legacy rows (no session_id) fall back to batch_id (one
+      // physical cheque) or the payment id (standalone single payment).
+      const groupKey = payment.payment_session_id
+        || payment.batch_id
+        || payment.id;
 
       if (!groups.has(groupKey)) {
         groups.set(groupKey, {
@@ -2426,7 +2432,22 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   </TableHeader>
                   <TableBody>
                     {groupedPayments.map((group) => {
-                      const paymentLabel = getPaymentTypeLabel(group.payment_type);
+                      // A session row can mix payment methods (cash +
+                      // cheque + visa all handed over in one visit), so
+                      // use the combined label which dedupes types. A
+                      // single-method row falls back to "نقدي" / "شيك"
+                      // exactly as before.
+                      const paymentLabel = group.paymentTypes.length > 1
+                        ? getCombinedPaymentTypeLabel(group.payments)
+                        : getPaymentTypeLabel({
+                            payment_type: group.payment_type,
+                            locked: group.locked,
+                          });
+                      // Cheque-number cell: when a session bundles
+                      // multiple cheques we'd be lying to print one of
+                      // them, so show a "N شيكات" pill. Click the row
+                      // to drill into the details dialog for specifics.
+                      const chequeCount = group.payments.filter((p) => p.payment_type === 'cheque' && p.cheque_number).length;
                       return (
                       <TableRow
                         key={group.id}
@@ -2456,7 +2477,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                           </div>
                         </TableCell>
                         <TableCell className="font-mono text-xs ltr-nums">
-                          {group.cheque_number || <span className="text-muted-foreground">—</span>}
+                          {chequeCount === 0 ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : chequeCount === 1 ? (
+                            group.payments.find((p) => p.payment_type === 'cheque')?.cheque_number || '—'
+                          ) : (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              {chequeCount} شيكات
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell>
                           {group.refused ? (
