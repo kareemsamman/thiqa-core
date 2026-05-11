@@ -1833,8 +1833,7 @@ export default function Receipts() {
                   return (
                     <TableRow
                       key={group.key}
-                      className="cursor-pointer hover:bg-muted/40"
-                      onClick={() => handleOpenGroupDetails(group)}
+                      className="hover:bg-muted/40"
                     >
                       {isCol("document_number") && (
                         <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">

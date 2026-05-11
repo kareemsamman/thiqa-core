@@ -152,6 +152,11 @@ function buildBulkReceiptHtml(
   _paymentType: string,
   companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string },
   branding: AgentBranding = DEFAULT_BRANDING,
+  // payment_id → cancellation voucher receipt_number, populated by the
+  // caller after the payments fetch. Lets a voided row print
+  // "ملغية → سند الإلغاء #19" so the printed copy carries the same
+  // audit-trail reference the receipts page shows on screen.
+  cancellationVoucherMap: Record<string, number | string> = {},
 ): string {
   const today = new Date();
   // Pick the package's representative document_number the same way the
@@ -221,9 +226,23 @@ function buildBulkReceiptHtml(
     const typeLbl = paymentTypeLabel(p);
     const extra = p.cheque_number ? ` · ${escapeHtml(String(p.cheque_number))}` : '';
     const refused = !!p.refused;
+    // Distinguish ملغي (customer-initiated, cheque_status='cancelled')
+    // from مرتجع (bank-bounced, cheque_status='returned'). Both flip
+    // refused=true and both spawn a cancellation voucher via the
+    // sync_receipt_from_policy_payment trigger, but the bookkeeper
+    // wants the printed copy to say which one happened. Anything
+    // refused without a recognised status falls back to "مرفوضة"
+    // so legacy data (pre-cancellation-voucher migration) still
+    // renders cleanly.
+    const isCancelled = refused && p.cheque_status === 'cancelled';
+    const isReturned = refused && p.cheque_status === 'returned';
     const rowClass = refused ? ' class="refused"' : '';
+    const voucherNo = cancellationVoucherMap[p.id];
+    const voucherRef = voucherNo != null
+      ? ` <span class="voucher-ref">سند الإلغاء #${escapeHtml(String(voucherNo))}</span>`
+      : '';
     const refusedBadge = refused
-      ? ' <span class="refused-tag">مرفوضة</span>'
+      ? ` <span class="refused-tag">${isCancelled ? 'ملغية' : isReturned ? 'مرتجع' : 'مرفوضة'}</span>${voucherRef}`
       : '';
     const amount = Number(p.amount || 0).toLocaleString('en-US');
     const amountCell = refused
@@ -401,6 +420,18 @@ function buildBulkReceiptHtml(
       max-width: 200px; white-space: normal; word-break: break-word;
     }
     .receipts tbody tr.refused td { background: #fef2f2; color: #7f1d1d; }
+    .voucher-ref {
+      display: inline-block;
+      margin-right: 6px;
+      padding: 1px 6px;
+      background: #fef3c7;
+      color: #78350f;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 3px;
+      direction: ltr;
+      unicode-bidi: embed;
+    }
     .receipts tbody tr.refused .struck {
       text-decoration: line-through;
       text-decoration-thickness: 1.5px;
@@ -715,6 +746,8 @@ serve(async (req) => {
         bank_code,
         branch_code,
         card_last_four,
+        cheque_status,
+        cancellation_reason,
         locked,
         refused,
         notes,
@@ -774,6 +807,26 @@ serve(async (req) => {
 
     console.log(`[generate-bulk-payment-receipt] Total: ${finalTotal}, Policy types: ${policyTypes.join(', ')}`);
 
+    // Look up cancellation voucher receipt_numbers for any voided
+    // payment in this batch. The sync_receipt_from_policy_payment
+    // trigger inserts one cancellation row per refused policy_payment
+    // with receipt_type='cancellation'; we surface the voucher number
+    // on the printed copy so the bookkeeper can cross-reference.
+    const cancellationVoucherMap: Record<string, number | string> = {};
+    const refusedIds = payments.filter((p: any) => p.refused).map((p: any) => p.id);
+    if (refusedIds.length > 0) {
+      const { data: vouchers } = await supabase
+        .from('receipts')
+        .select('payment_id, receipt_number')
+        .eq('receipt_type', 'cancellation')
+        .in('payment_id', refusedIds);
+      for (const v of (vouchers ?? []) as Array<{ payment_id: string | null; receipt_number: number | string | null }>) {
+        if (v.payment_id && v.receipt_number != null) {
+          cancellationVoucherMap[v.payment_id] = v.receipt_number;
+        }
+      }
+    }
+
     // Generate receipt HTML
     const receiptHtml = buildBulkReceiptHtml(
       payments,
@@ -785,6 +838,7 @@ serve(async (req) => {
       paymentType,
       companySettings,
       branding,
+      cancellationVoucherMap,
     );
 
     if (!bunnyApiKey || !bunnyStorageZone) {

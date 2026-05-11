@@ -145,12 +145,26 @@ function buildPaymentReceiptHtml(
   client: any,
   car: any,
   companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string },
-  branding: AgentBranding = DEFAULT_BRANDING
+  branding: AgentBranding = DEFAULT_BRANDING,
+  // receipt_number of the cancellation voucher that voided this
+  // payment, when applicable. Drives the "ملغي" stamp and the
+  // "أُلغي بسند رقم #X" line on the printed copy so the historical
+  // record clearly shows that the receipt is no longer in force.
+  cancellationVoucherNumber: number | string | null = null,
 ): string {
   const paymentMethodLabel = paymentTypeLabel(payment);
   const policyDocumentNumber = policy?.document_number || policy?.policy_number || '—';
   const receiptNumber = payment.receipt_number || '—';
   const today = new Date();
+  // Voiding state — same logic as the bulk template. cheque_status
+  // tells us whether this was a customer-initiated إلغاء or a
+  // bank-bounced مرتجع; refused alone means legacy data without
+  // the new status field.
+  const refused = !!payment.refused;
+  const isCancelled = refused && payment.cheque_status === 'cancelled';
+  const isReturned = refused && payment.cheque_status === 'returned';
+  const voidLabel = isCancelled ? 'ملغية' : isReturned ? 'مرتجع' : refused ? 'مرفوضة' : '';
+  const voidReason = (payment.cancellation_reason || '').toString().trim();
 
   // Build extra payment-method details rows (cheque number, visa last four,
   // tranzila approval code, etc). Each one is a key/value row inside the
@@ -473,6 +487,35 @@ function buildPaymentReceiptHtml(
       direction: ltr;
     }
 
+    /* Voided-receipt banner — only rendered when the underlying
+       payment row has refused=true. The big red strip + struck-out
+       hero amount make sure no bookkeeper mistakes a ملغي/مرتجع
+       receipt for an active one. */
+    .void-banner {
+      border: 2px solid #b91c1c;
+      background: #fef2f2;
+      color: #7f1d1d;
+      padding: 14px 18px;
+      margin-bottom: 22px;
+      border-radius: 4px;
+    }
+    .void-banner .void-title {
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      letter-spacing: 1px;
+    }
+    .void-banner .void-meta {
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    .void-banner .void-meta strong {
+      direction: ltr;
+      display: inline-block;
+      font-variant-numeric: tabular-nums;
+    }
+    .hero.struck .val { text-decoration: line-through; opacity: 0.55; }
+
     /* Note linking to the policy */
     .policy-note {
       border: 1px solid #1a1a1a;
@@ -615,8 +658,23 @@ function buildPaymentReceiptHtml(
       </div>
     </div>
 
+    ${refused ? `
+    <!-- Voided banner — surfaces the cancellation/return state and
+         the linked voucher number so a printed copy of a voided
+         receipt can never be confused with a live one. -->
+    <div class="void-banner">
+      <div class="void-title">⊘ ${escapeHtml(voidLabel)}</div>
+      <div class="void-meta">
+        ${cancellationVoucherNumber != null
+          ? `أُلغي بسند الإلغاء رقم <strong>#${escapeHtml(String(cancellationVoucherNumber))}</strong>.`
+          : ''}
+        ${voidReason ? `<br>السبب: ${escapeHtml(voidReason)}` : ''}
+      </div>
+    </div>
+    ` : ''}
+
     <!-- Amount hero -->
-    <div class="hero">
+    <div class="hero${refused ? ' struck' : ''}">
       <div class="label">المبلغ المدفوع</div>
       <div class="val">₪${(payment.amount || 0).toLocaleString('en-US')}</div>
     </div>
@@ -758,6 +816,9 @@ serve(async (req) => {
         card_expiry,
         installments_count,
         tranzila_approval_code,
+        cheque_status,
+        cancellation_reason,
+        refused,
         notes,
         receipt_number,
         policy:policies(
@@ -789,9 +850,25 @@ serve(async (req) => {
     const client = policy?.client?.[0] || policy?.client || {};
     const car = policy?.car?.[0] || policy?.car || {};
 
+    // Look up the cancellation voucher's receipt_number when this
+    // payment has been voided, so the printed copy shows the same
+    // cross-reference the receipts page surfaces on screen.
+    let cancellationVoucherNumber: number | string | null = null;
+    if ((payment as any).refused) {
+      const { data: voucher } = await supabase
+        .from('receipts')
+        .select('receipt_number')
+        .eq('receipt_type', 'cancellation')
+        .eq('payment_id', (payment as any).id)
+        .maybeSingle();
+      if (voucher && voucher.receipt_number != null) {
+        cancellationVoucherNumber = voucher.receipt_number;
+      }
+    }
+
     if (!bunnyApiKey || !bunnyStorageZone) {
       // Return HTML directly without storing
-      const receiptHtml = buildPaymentReceiptHtml(payment, policy, client, car, companySettings, branding);
+      const receiptHtml = buildPaymentReceiptHtml(payment, policy, client, car, companySettings, branding, cancellationVoucherNumber);
       return new Response(receiptHtml, {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "text/html; charset=utf-8" }
@@ -799,7 +876,7 @@ serve(async (req) => {
     }
 
     // Generate receipt HTML
-    const receiptHtml = buildPaymentReceiptHtml(payment, policy, client, car, companySettings, branding);
+    const receiptHtml = buildPaymentReceiptHtml(payment, policy, client, car, companySettings, branding, cancellationVoucherNumber);
     
     // Upload to Bunny CDN
     const now = new Date();
