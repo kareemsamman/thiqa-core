@@ -4,6 +4,7 @@ import { Plus, Lock, Search, Calculator } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { useAgentLimits } from "@/hooks/useAgentLimits";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { usePolicyWizardController } from "@/hooks/usePolicyWizardController";
 
@@ -12,10 +13,14 @@ export function QuickActions() {
   const { openWizard } = usePolicyWizardController();
   const { hasFeature } = useAgentContext();
   const { policies: policiesLimit, loading: limitsLoading } = useAgentLimits();
+  const { can, loading: permLoading } = usePermissions();
   const { showUpgradePrompt } = useUpgradePrompt();
 
   const policiesLocked = !limitsLoading && policiesLimit.exceeded;
-  const canAccounting = hasFeature("accounting");
+  const accountingFeature = hasFeature("accounting");
+  // Hide the chip entirely when the worker lacks page.accounting —
+  // matches sidebar behavior. Plan-level lock still applies on top.
+  const showAccounting = !permLoading && can("page.accounting");
 
   const onNewPolicy = () => {
     if (limitsLoading) return;
@@ -31,7 +36,7 @@ export function QuickActions() {
   };
 
   const onAccounting = () => {
-    if (canAccounting) {
+    if (accountingFeature) {
       navigate("/accounting");
     } else {
       showUpgradePrompt({ featureKey: "accounting", featureLabel: "المحاسبة" });
@@ -50,9 +55,11 @@ export function QuickActions() {
         بحث عن عميل
       </Chip>
 
-      <Chip onClick={onAccounting} locked={!canAccounting} tone="amber" Icon={canAccounting ? Calculator : Lock}>
-        المحاسبة
-      </Chip>
+      {showAccounting && (
+        <Chip onClick={onAccounting} locked={!accountingFeature} tone="amber" Icon={accountingFeature ? Calculator : Lock}>
+          المحاسبة
+        </Chip>
+      )}
     </div>
   );
 }
