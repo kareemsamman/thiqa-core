@@ -1036,6 +1036,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     loadingBranches,
     refetchBranches,
     isAdmin,
+    canPickBranch,
 
     // Category
     categories,

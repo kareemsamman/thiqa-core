@@ -205,6 +205,7 @@ export function PolicyWizard({
     clearDraft,
     user,
     isAdmin,
+    canPickBranch,
     userBranchId,
     branches,
     loadingBranches,
@@ -1945,6 +1946,7 @@ export function PolicyWizard({
             {currentStep === 1 && (
               <Step1BranchTypeClient
                 isAdmin={isAdmin}
+                canPickBranch={canPickBranch}
                 branches={branches}
                 loadingBranches={loadingBranches}
                 selectedBranchId={selectedBranchId}

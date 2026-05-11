@@ -23,6 +23,10 @@ import { digitsOnly } from "@/lib/validation";
 interface Step1Props {
   // Branch
   isAdmin: boolean;
+  // True for admins AND for non-admins with the access.all_branches
+  // grant. Controls whether the branch selector is shown at all;
+  // manage/create controls inside still gate on `isAdmin`.
+  canPickBranch: boolean;
   branches: Array<{ id: string; name: string; name_ar: string | null; status?: 'active' | 'plan_locked' }>;
   loadingBranches?: boolean;
   selectedBranchId: string;
@@ -65,6 +69,7 @@ interface Step1Props {
 
 export function Step1BranchTypeClient({
   isAdmin,
+  canPickBranch,
   branches,
   loadingBranches,
   selectedBranchId,
@@ -264,12 +269,14 @@ export function Step1BranchTypeClient({
 
   return (
     <div className="space-y-6">
-      {/* Branch Selection - Admin Only (always visible for admin) */}
-      {isAdmin && (
+      {/* Branch Selection — admins always, plus non-admins with the
+          access.all_branches grant. Workers granted cross-branch access
+          still need to choose which branch a new transaction belongs to. */}
+      {canPickBranch && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <Label className="text-base font-semibold block">الفرع *</Label>
-            {branches.length > 0 && (
+            {isAdmin && branches.length > 0 && (
               <div className="flex items-center gap-1">
                 <Button
                   type="button"
@@ -310,13 +317,17 @@ export function Step1BranchTypeClient({
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm">لا توجد فروع بعد</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    أضف فرعك الأول لتتمكن من إنشاء المعاملات
+                    {isAdmin
+                      ? "أضف فرعك الأول لتتمكن من إنشاء المعاملات"
+                      : "تواصل مع المدير لإضافة فرع"}
                   </p>
                 </div>
-                <Button type="button" size="sm" className="gap-2 shrink-0" onClick={openBranchCreate}>
-                  <Plus className="h-4 w-4" />
-                  اضغط للإضافة
-                </Button>
+                {isAdmin && (
+                  <Button type="button" size="sm" className="gap-2 shrink-0" onClick={openBranchCreate}>
+                    <Plus className="h-4 w-4" />
+                    اضغط للإضافة
+                  </Button>
+                )}
               </div>
             </Card>
           ) : (
