@@ -47,6 +47,7 @@ function buildPermissionGroups(): PermissionGroup[] {
     label: 'خاص',
     keys: [
       ['view_financial', 'عرض الأرقام المالية (أرباح / عمولات / ديون)'] as const,
+      ['access.all_branches', 'الوصول لكل الفروع'] as const,
     ],
   });
   return groups;
