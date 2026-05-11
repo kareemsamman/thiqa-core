@@ -1842,21 +1842,37 @@ function PolicyPackageCard({
             </div>
           </div>
 
-          {/* Amount */}
-          <div className="flex items-start gap-2 justify-end">
-            <div className="flex flex-col items-start leading-tight">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المبلغ</span>
-              <span className={cn(
-                "text-lg font-bold ltr-nums",
-                isActive ? "text-primary" : "text-muted-foreground"
-              )}>
-                ₪{pkg.totalPrice.toLocaleString('en-US')}
-              </span>
-              {(() => {
-                const rowPolicies = (isPkg
-                  ? [pkg.mainPolicy, ...pkg.addons].filter(Boolean) as PolicyRecord[]
-                  : [policy]
-                );
+          {/* Amount. Split out إلزامي onto its own line so the
+              bookkeeper sees "package price (without إلزامي)" + a
+              separate "إلزامي: X" — the إلزامي portion goes straight
+              to the insurer and is tracked apart from what the
+              office actually collects. */}
+          {(() => {
+            const rowPoliciesForAmount = (isPkg
+              ? [pkg.mainPolicy, ...pkg.addons].filter(Boolean) as PolicyRecord[]
+              : [policy]
+            );
+            const elzamiTotal = rowPoliciesForAmount
+              .filter((p) => p.policy_type_parent === 'ELZAMI')
+              .reduce((s, p) => s + p.insurance_price + (p.office_commission || 0), 0);
+            const packageTotal = pkg.totalPrice - elzamiTotal;
+            return (
+              <div className="flex items-start gap-2 justify-end">
+                <div className="flex flex-col items-start leading-tight">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المبلغ</span>
+                  <span className={cn(
+                    "text-lg font-bold ltr-nums",
+                    isActive ? "text-primary" : "text-muted-foreground"
+                  )}>
+                    ₪{packageTotal.toLocaleString('en-US')}
+                  </span>
+                  {elzamiTotal > 0 && (
+                    <span className="text-[10px] text-muted-foreground ltr-nums mt-0.5">
+                      إلزامي: <span className="font-semibold">₪{elzamiTotal.toLocaleString('en-US')}</span>
+                    </span>
+                  )}
+                  {(() => {
+                    const rowPolicies = rowPoliciesForAmount;
                 const totalCommission = rowPolicies.reduce(
                   (sum, p) => sum + (p.office_commission || 0),
                   0,
@@ -1926,8 +1942,10 @@ function PolicyPackageCard({
                   </>
                 );
               })()}
-            </div>
-          </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Package Components Section - Shows details for each policy in the package */}
