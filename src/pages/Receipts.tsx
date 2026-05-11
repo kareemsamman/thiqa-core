@@ -533,39 +533,6 @@ export default function Receipts() {
   );
   const isCol = (key: string) => colsState.visible.includes(key);
 
-  // Imported-from-exe policies are flagged with `skip_recalc=true`.
-  // Receipts attached to them shouldn't appear on this page (the user
-  // doesn't want imported transactions polluting the live receipt view).
-  // We pre-fetch the IDs once per agent and exclude them via .or() so
-  // pagination + count both stay accurate. Manual receipts (policy_id
-  // IS NULL) are kept regardless.
-  const [skipPolicyIds, setSkipPolicyIds] = useState<string[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!agentId) {
-      setSkipPolicyIds(null);
-      return;
-    }
-    (async () => {
-      const { data, error } = await (supabase as any)
-        .from("policies")
-        .select("id")
-        .eq("agent_id", agentId)
-        .eq("skip_recalc", true);
-      if (cancelled) return;
-      if (error) {
-        console.error("[Receipts] failed to load skip policy ids:", error);
-        setSkipPolicyIds([]);
-        return;
-      }
-      setSkipPolicyIds((data ?? []).map((p: { id: string }) => p.id));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [agentId]);
-
   // Pagination
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -631,6 +598,7 @@ export default function Receipts() {
         .select(`*, ${policyJoinFull}`)
         .eq("agent_id", agentId)
         .eq("receipt_type", activeTab)
+        .eq("is_imported", false)
         .order("created_at", { ascending: false })
         .order("receipt_date", { ascending: false })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -639,7 +607,8 @@ export default function Receipts() {
         .from("receipts")
         .select(`id, ${policyJoinCount}`, { count: "exact", head: true })
         .eq("agent_id", agentId)
-        .eq("receipt_type", activeTab);
+        .eq("receipt_type", activeTab)
+        .eq("is_imported", false);
 
       const applyShared = (q: any) => {
         // Hide ₪0 receipts — they have no print value and only confuse
@@ -662,14 +631,6 @@ export default function Receipts() {
           // Applied on the joined policies table via the `policy` alias.
           const clause = types.map(typeKeyToFilterClause).join(",");
           q = q.or(clause, { foreignTable: "policy" });
-        }
-        // Hide imported-from-exe rows: drop receipts whose policy is
-        // flagged skip_recalc=true. Manual receipts (policy_id IS NULL)
-        // are kept because they aren't in the skip list.
-        if (skipPolicyIds && skipPolicyIds.length > 0) {
-          q = q.or(
-            `policy_id.is.null,policy_id.not.in.(${skipPolicyIds.join(",")})`,
-          );
         }
         return q;
       };
@@ -694,15 +655,13 @@ export default function Receipts() {
     } finally {
       setLoading(false);
     }
-  }, [agentId, activeTab, page, filters, branchFilter, searchQuery, skipPolicyIds]);
+  }, [agentId, activeTab, page, filters, branchFilter, searchQuery]);
 
   useEffect(() => {
-    // Wait until skipPolicyIds has resolved (null = still loading) so the
-    // first paint already excludes imported rows instead of flashing them.
-    if (!agentLoading && agentId && skipPolicyIds !== null) {
+    if (!agentLoading && agentId) {
       fetchReceipts();
     }
-  }, [fetchReceipts, agentLoading, agentId, skipPolicyIds]);
+  }, [fetchReceipts, agentLoading, agentId]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -1066,6 +1025,7 @@ export default function Receipts() {
         .select(`*, ${policyJoin}`)
         .eq("agent_id", agentId)
         .eq("receipt_type", activeTab)
+        .eq("is_imported", false)
         .gt("amount", 0)
         .order("created_at", { ascending: false })
         .order("receipt_date", { ascending: false });
@@ -1081,11 +1041,6 @@ export default function Receipts() {
       if (types.length > 0) {
         const clause = types.map(typeKeyToFilterClause).join(",");
         q = q.or(clause, { foreignTable: "policy" });
-      }
-      if (skipPolicyIds && skipPolicyIds.length > 0) {
-        q = q.or(
-          `policy_id.is.null,policy_id.not.in.(${skipPolicyIds.join(",")})`,
-        );
       }
 
       const { data, error } = await q;
