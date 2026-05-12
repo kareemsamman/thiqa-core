@@ -407,6 +407,23 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [cancellationInfo, setCancellationInfo] = useState<
     Map<string, { voucherNumber: number | string; reason: string | null }>
   >(new Map());
+  // First-class سند إلغاء entries — one per cancelled session, NOT
+  // per refused row. Rendered as their own rows in سجل الدفعات so the
+  // bookkeeper can see them next to the original سند قبض and trigger
+  // a separate print for just the cancellation voucher (per the user's
+  // rule: "one cancelled سند = the original visible AND the إلغاء
+  // visible AND a print button on the إلغاء").
+  const [cancellationVouchers, setCancellationVouchers] = useState<Array<{
+    id: string;                 // canonical cancellation receipt's row id
+    voucherNumber: string;      // canonical (smallest) R-number for the voucher
+    sourceReceiptNumber: string | null;  // original سند قبض's R-number
+    sourceGroupId: string;      // payment_session_id || batch_id || payment.id
+    cancelledPaymentIds: string[];
+    amount: number;             // total cancelled
+    reason: string | null;
+    date: string;               // cancellation receipt's date
+    sortDate: string;           // for chronological merge with payment groups
+  }>>([]);
   const [broker, setBroker] = useState<Broker | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary>({ total_paid: 0, total_remaining: 0, total_profit: 0 });
   const [brokerDebts, setBrokerDebts] = useState<BrokerDebtInfo[]>([]);
@@ -894,23 +911,42 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       const refused = paymentsWithPolicy.filter((p) => p.refused);
       const refusedIds = refused.map((p) => p.id);
       const nextInfo = new Map<string, { voucherNumber: number | string; reason: string | null }>();
+      const nextVouchers: typeof cancellationVouchers = [];
       if (refusedIds.length > 0) {
         const { data: voucherRows } = await supabase
           .from('receipts')
-          .select('payment_id, receipt_number, cancellation_reason')
+          .select('id, payment_id, receipt_number, cancellation_reason, receipt_date, created_at')
           .eq('receipt_type', 'cancellation')
           .in('payment_id', refusedIds);
 
-        const perPayment = new Map<string, { voucherNumber: number | string; reason: string | null }>();
+        // Per-payment row data: keep ALL fields we'll need for both the
+        // inline badge (voucherNumber + reason) and the standalone
+        // cancellation voucher row (id + date for the print URL).
+        type VoucherRow = {
+          id: string;
+          payment_id: string;
+          voucherNumber: number | string;
+          reason: string | null;
+          date: string;
+          sortDate: string;
+        };
+        const perPayment = new Map<string, VoucherRow>();
         for (const row of (voucherRows ?? []) as Array<{
+          id: string | null;
           payment_id: string | null;
           receipt_number: number | string | null;
           cancellation_reason: string | null;
+          receipt_date: string | null;
+          created_at: string | null;
         }>) {
-          if (row.payment_id && row.receipt_number != null) {
+          if (row.payment_id && row.id && row.receipt_number != null) {
             perPayment.set(row.payment_id, {
+              id: row.id,
+              payment_id: row.payment_id,
               voucherNumber: row.receipt_number,
               reason: row.cancellation_reason,
+              date: row.receipt_date || row.created_at || new Date().toISOString(),
+              sortDate: row.created_at || row.receipt_date || new Date().toISOString(),
             });
           }
         }
@@ -923,11 +959,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         };
         const receiptGroupKey = (p: PaymentRecord): string =>
           p.payment_session_id || p.batch_id || p.id;
-        const groupVoucher = new Map<string, { voucherNumber: number | string; reason: string | null }>();
+        const groupVoucher = new Map<string, VoucherRow>();
+        const groupRefusedPayments = new Map<string, PaymentRecord[]>();
         for (const p of refused) {
+          const key = receiptGroupKey(p);
+          if (!groupRefusedPayments.has(key)) groupRefusedPayments.set(key, []);
+          groupRefusedPayments.get(key)!.push(p);
           const own = perPayment.get(p.id);
           if (!own) continue;
-          const key = receiptGroupKey(p);
           const existing = groupVoucher.get(key);
           if (!existing || sortKey(own.voucherNumber) < sortKey(existing.voucherNumber)) {
             groupVoucher.set(key, own);
@@ -936,10 +975,37 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
         for (const p of refused) {
           const v = groupVoucher.get(receiptGroupKey(p));
-          if (v) nextInfo.set(p.id, v);
+          if (v) nextInfo.set(p.id, { voucherNumber: v.voucherNumber, reason: v.reason });
+        }
+
+        // Build one cancellation voucher entry per cancelled session.
+        // Source receipt_number = smallest R-number among the session's
+        // refused payments (same canonical we use for grouped display).
+        for (const [key, voucher] of groupVoucher.entries()) {
+          const sessionPayments = groupRefusedPayments.get(key) ?? [];
+          const amount = sessionPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
+          let sourceReceiptNumber: string | null = null;
+          for (const p of sessionPayments) {
+            if (!p.receipt_number) continue;
+            if (!sourceReceiptNumber || p.receipt_number < sourceReceiptNumber) {
+              sourceReceiptNumber = p.receipt_number;
+            }
+          }
+          nextVouchers.push({
+            id: voucher.id,
+            voucherNumber: String(voucher.voucherNumber),
+            sourceReceiptNumber,
+            sourceGroupId: key,
+            cancelledPaymentIds: sessionPayments.map((p) => p.id),
+            amount,
+            reason: voucher.reason,
+            date: voucher.date,
+            sortDate: voucher.sortDate,
+          });
         }
       }
       setCancellationInfo(nextInfo);
+      setCancellationVouchers(nextVouchers);
     } catch (error) {
       console.error('Error fetching payments:', error);
     } finally {
@@ -1559,6 +1625,36 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     }
   };
 
+  // Print a سند إلغاء as its own document — different from a سند قبض.
+  // Calls a dedicated edge function so the rendered HTML has the right
+  // title ("سند إلغاء") and layout, and lives at a separate URL from
+  // the original سند قبض it cancels (per the user's rule: each is its
+  // own paper). The voucher row in سجل الدفعات has the print action
+  // bound to this handler; voucherId is the receipts.id of the
+  // canonical cancellation row resolved in fetchPayments.
+  const handlePrintCancellationVoucher = async (voucherId: string, voucherNumber: string) => {
+    const key = `voucher-${voucherId}`;
+    setGeneratingReceipt(key);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        'generate-cancellation-voucher',
+        { body: { voucher_receipt_id: voucherId } },
+      );
+      if (error) throw error;
+      const url = (data as { receipt_url?: string } | null)?.receipt_url;
+      if (!url) {
+        toast.error('لم يتم العثور على رابط سند الإلغاء');
+        return;
+      }
+      window.open(url, '_blank');
+    } catch (e) {
+      console.error('Print cancellation voucher error:', e);
+      toast.error(`فشل في طباعة سند الإلغاء ${voucherNumber}`);
+    } finally {
+      setGeneratingReceipt(null);
+    }
+  };
+
   const getPolicyStatus = (policy: PolicyRecord) => {
     if (policy.cancelled) return { label: 'ملغاة', variant: 'destructive' as const, color: 'text-destructive' };
     if (policy.transferred) return { label: 'محولة', variant: 'warning' as const, color: 'text-amber-600' };
@@ -1863,6 +1959,26 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime()
     );
   }, [payments, paymentSearch, paymentTypeFilter, policies]);
+
+  // Merged display list: payment groups AND cancellation voucher rows
+  // (one per cancelled session). The voucher is its own row, sorted by
+  // its own date so it can sit above the cancelled source سند when the
+  // cancellation happened later (the usual case in newest-first order).
+  type DisplayRow =
+    | { kind: 'payment'; group: GroupedPayment; sortDate: string }
+    | { kind: 'voucher'; voucher: (typeof cancellationVouchers)[number]; sortDate: string };
+  const displayRows = useMemo((): DisplayRow[] => {
+    const rows: DisplayRow[] = [];
+    for (const group of groupedPayments) {
+      rows.push({ kind: 'payment', group, sortDate: group.latestCreatedAt });
+    }
+    for (const voucher of cancellationVouchers) {
+      rows.push({ kind: 'voucher', voucher, sortDate: voucher.sortDate });
+    }
+    return rows.sort((a, b) =>
+      new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime(),
+    );
+  }, [groupedPayments, cancellationVouchers]);
 
   // Re-open the PaymentGroupDetailsDialog with the freshest version of
   // the group the user was drilled into. Runs whenever groupedPayments
@@ -2666,7 +2782,80 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {groupedPayments.map((group) => {
+                    {displayRows.map((row) => {
+                      if (row.kind === 'voucher') {
+                        const v = row.voucher;
+                        return (
+                          <TableRow
+                            key={`voucher-${v.id}`}
+                            className="hover:bg-muted/40 bg-amber-50/40 dark:bg-amber-950/10"
+                          >
+                            <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                              <span className="font-bold text-amber-700 dark:text-amber-300">{v.voucherNumber}</span>
+                            </TableCell>
+                            <TableCell className="font-semibold">
+                              <span className="text-amber-700 dark:text-amber-300">
+                                ₪{Math.round(v.amount).toLocaleString()}
+                              </span>
+                            </TableCell>
+                            <TableCell>{formatDate(v.date)}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className="border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30"
+                              >
+                                سند إلغاء
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-muted-foreground">—</span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col items-start gap-0.5">
+                                {v.sourceReceiptNumber && (
+                                  <span className="text-[10px] font-mono ltr-nums text-muted-foreground">
+                                    ألغى {v.sourceReceiptNumber}
+                                  </span>
+                                )}
+                                {v.reason && (
+                                  <span
+                                    className="text-[10px] text-muted-foreground max-w-[180px] truncate"
+                                    title={v.reason}
+                                  >
+                                    السبب: {v.reason}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-muted-foreground">—</span>
+                            </TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    disabled={generatingReceipt === `voucher-${v.id}`}
+                                    onClick={() => handlePrintCancellationVoucher(v.id, v.voucherNumber)}
+                                  >
+                                    {generatingReceipt === `voucher-${v.id}` ? (
+                                      <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                                    ) : (
+                                      <Receipt className="h-4 w-4 ml-2" />
+                                    )}
+                                    طباعة سند الإلغاء
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+                      const group = row.group;
                       // A session row can mix payment methods (cash +
                       // cheque + visa all handed over in one visit), so
                       // use the combined label which dedupes types. A
