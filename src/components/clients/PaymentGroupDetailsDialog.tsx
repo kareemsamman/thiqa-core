@@ -187,10 +187,14 @@ export function PaymentGroupDetailsDialog({
     if (group.payments.length === 0) return;
     setPrinting(true);
     try {
+      // Always use the bulk endpoint — its template handles single
+      // and multi cases identically (the user's rule: one template
+      // for both paths so future edits stay in one place).
       const ids = group.payments.map((p) => p.id);
-      const fn = ids.length > 1 ? 'generate-bulk-payment-receipt' : 'generate-payment-receipt';
-      const body = ids.length > 1 ? { payment_ids: ids } : { payment_id: ids[0] };
-      const { data, error } = await supabase.functions.invoke(fn, { body });
+      const { data, error } = await supabase.functions.invoke(
+        'generate-bulk-payment-receipt',
+        { body: { payment_ids: ids } },
+      );
       if (error) throw error;
       const url = data?.receipt_url;
       if (url) {

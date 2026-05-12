@@ -822,8 +822,9 @@ export function PolicyPaymentsSection({
   const handleGenerateReceipt = async (paymentId: string) => {
     setGeneratingReceipt(paymentId);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-payment-receipt', {
-        body: { payment_id: paymentId }
+      // Unified template — bulk endpoint handles single payments too.
+      const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
+        body: { payment_ids: [paymentId] }
       });
 
       if (error) throw error;

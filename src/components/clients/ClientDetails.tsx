@@ -1569,8 +1569,10 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const handleGeneratePaymentReceipt = async (paymentId: string) => {
     setGeneratingReceipt(paymentId);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-payment-receipt', {
-        body: { payment_id: paymentId }
+      // Unified template: always call the bulk endpoint (it renders
+      // the singular layout when a single id is passed).
+      const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
+        body: { payment_ids: [paymentId] }
       });
 
       if (error) throw error;
@@ -1620,13 +1622,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     };
     try {
       let url: string | undefined;
-      if (paymentIds.length === 1) {
-        const { data, error } = await supabase.functions.invoke('generate-payment-receipt', {
-          body: { payment_id: paymentIds[0] },
-        });
-        if (error) throw error;
-        url = data?.receipt_url;
-      } else {
+      // Always go through the bulk endpoint — it already collapses to
+      // a single-سند layout when paymentIds.length === 1 (doc-title
+      // becomes singular, the رقم سند القبض column disappears, etc.).
+      // The user wants one template for both paths so future edits
+      // only touch one place; the legacy single-payment endpoint
+      // stays in the codebase for any external callers but no UI
+      // surface routes to it anymore.
+      {
         const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
           body: { payment_ids: paymentIds },
         });
