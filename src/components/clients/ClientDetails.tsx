@@ -439,6 +439,20 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     sortDate: string;      // created_at, drives newest-first merge
     description: string | null;  // notes column (e.g. "مرتجع إلغاء معاملة 12/2026")
   }>>([]);
+  // سند صرف rows — same shape as credit notes but for actual cash
+  // disbursed (refund-on-cancel/transfer or manual). The amount
+  // here doesn't carry into wallet balance (the agency literally
+  // paid the customer); سجل الدفعات shows it so the bookkeeper
+  // can prove the money left.
+  const [disbursements, setDisbursements] = useState<Array<{
+    id: string;
+    voucherNumber: string; // D{nn}/YYYY
+    amount: number;
+    date: string;
+    sortDate: string;
+    description: string | null;
+    paymentMethod: string | null;  // 'cash' / 'cheque' / 'transfer' / 'visa'
+  }>>([]);
   const [broker, setBroker] = useState<Broker | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary>({ total_paid: 0, total_remaining: 0, total_profit: 0 });
   const [brokerDebts, setBrokerDebts] = useState<BrokerDebtInfo[]>([]);
@@ -1074,10 +1088,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       setCancellationInfo(nextInfo);
       setCancellationVouchers(nextVouchers);
 
-      // اشعار دائن rows for this client — independent fetch since
-      // they live in receipts (not policy_payments). Failure here
-      // just leaves the section without credit notes; we don't fail
-      // the whole payment-log load over it.
+      // اشعار دائن + سند صرف rows for this client — independent
+      // fetch since they live in receipts (not policy_payments).
+      // Failure either way just leaves the section without that
+      // family of rows; we don't fail the whole payment-log load
+      // over a single read.
       try {
         const { data: creditRows } = await supabase
           .from('receipts')
@@ -1101,6 +1116,32 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       } catch (creditErr) {
         console.warn('[ClientDetails] credit_note fetch failed:', creditErr);
         setCreditNotes([]);
+      }
+
+      try {
+        const { data: disbRows } = await supabase
+          .from('receipts')
+          .select('id, voucher_number, amount, receipt_date, created_at, notes, payment_method')
+          .eq('receipt_type', 'disbursement')
+          .eq('client_id', client.id)
+          .is('cancelled_at', null)
+          .order('created_at', { ascending: false });
+
+        const nextDisbursements = (disbRows ?? [])
+          .filter((r: any) => r.voucher_number)
+          .map((r: any) => ({
+            id: r.id as string,
+            voucherNumber: r.voucher_number as string,
+            amount: Number(r.amount || 0),
+            date: (r.receipt_date as string) || (r.created_at as string),
+            sortDate: (r.created_at as string) || (r.receipt_date as string),
+            description: (r.notes as string | null) ?? null,
+            paymentMethod: (r.payment_method as string | null) ?? null,
+          }));
+        setDisbursements(nextDisbursements);
+      } catch (disbErr) {
+        console.warn('[ClientDetails] disbursement fetch failed:', disbErr);
+        setDisbursements([]);
       }
     } catch (error) {
       console.error('Error fetching payments:', error);
@@ -1754,6 +1795,52 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   // own paper). The voucher row in سجل الدفعات has the print action
   // bound to this handler; voucherId is the receipts.id of the
   // canonical cancellation row resolved in fetchPayments.
+  // سند صرف print — mirror of handlePrintCreditNote against the
+  // disbursement edge function. Same visual family (navy accent),
+  // shows the payment-line breakdown since disbursement actually
+  // moved money.
+  const handlePrintDisbursement = async (voucherId: string, voucherNumber: string) => {
+    const key = `disbursement-${voucherId}`;
+    setGeneratingReceipt(key);
+    setPrintProgress({ open: true, value: 8, title: 'جاري إعداد سند الصرف' });
+    const ticker = setInterval(() => {
+      setPrintProgress((s) => {
+        if (!s.open || s.value >= 90) return s;
+        return { ...s, value: Math.min(90, s.value + 6) };
+      });
+    }, 220);
+    const closeOverlay = (success: boolean) => {
+      clearInterval(ticker);
+      if (success) {
+        setPrintProgress((s) => ({ ...s, value: 100 }));
+        setTimeout(() => setPrintProgress({ open: false, value: 0 }), 350);
+      } else {
+        setPrintProgress({ open: false, value: 0 });
+      }
+    };
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        'generate-disbursement-voucher',
+        { body: { voucher_receipt_id: voucherId } },
+      );
+      if (error) throw error;
+      const url = (data as { receipt_url?: string } | null)?.receipt_url;
+      if (!url) {
+        closeOverlay(false);
+        toast.error('لم يتم العثور على رابط سند الصرف');
+        return;
+      }
+      closeOverlay(true);
+      window.open(url, '_blank');
+    } catch (e) {
+      closeOverlay(false);
+      console.error('Print disbursement error:', e);
+      toast.error(`فشل في طباعة سند الصرف ${voucherNumber}`);
+    } finally {
+      setGeneratingReceipt(null);
+    }
+  };
+
   // اشعار دائن print — calls the dedicated edge function so the
   // output matches the visual family of سند قبض / سند إلغاء (same
   // A4 layout, branded header, customer block, amount panel). The
@@ -2148,13 +2235,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   }, [payments, paymentSearch, policies]);
 
   // Merged display list: payment groups + cancellation vouchers +
-  // اشعار دائن (credit_note) rows. Each carries its own sortDate so
-  // newest-first merge naturally lets a cancellation or credit note
-  // sit above the source سند when those documents were issued later.
+  // اشعار دائن (credit_note) + سند صرف (disbursement) rows. Each
+  // carries its own sortDate so newest-first merge naturally lets a
+  // cancellation / credit note / disbursement sit above the source
+  // سند when those documents were issued later.
   type DisplayRow =
     | { kind: 'payment'; group: GroupedPayment; sortDate: string }
     | { kind: 'voucher'; voucher: (typeof cancellationVouchers)[number]; sortDate: string }
-    | { kind: 'credit_note'; note: (typeof creditNotes)[number]; sortDate: string };
+    | { kind: 'credit_note'; note: (typeof creditNotes)[number]; sortDate: string }
+    | { kind: 'disbursement'; disb: (typeof disbursements)[number]; sortDate: string };
   const displayRows = useMemo((): DisplayRow[] => {
     const rows: DisplayRow[] = [];
     for (const group of groupedPayments) {
@@ -2166,10 +2255,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     for (const note of creditNotes) {
       rows.push({ kind: 'credit_note', note, sortDate: note.sortDate });
     }
+    for (const disb of disbursements) {
+      rows.push({ kind: 'disbursement', disb, sortDate: disb.sortDate });
+    }
     return rows.sort((a, b) =>
       new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime(),
     );
-  }, [groupedPayments, cancellationVouchers, creditNotes]);
+  }, [groupedPayments, cancellationVouchers, creditNotes, disbursements]);
 
   // Filter options surfaced in the popover are derived from the rows
   // actually present for this client — typing a filter that has no
@@ -2187,6 +2279,9 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     }
     if (displayRows.some((r) => r.kind === 'credit_note')) {
       opts.push({ value: 'credit_note', label: 'اشعار دائن' });
+    }
+    if (displayRows.some((r) => r.kind === 'disbursement')) {
+      opts.push({ value: 'disbursement', label: 'سند صرف' });
     }
     return opts;
   }, [displayRows]);
@@ -2213,7 +2308,9 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           ? row.voucher.date
           : row.kind === 'credit_note'
             ? row.note.date
-            : row.group.payment_date;
+            : row.kind === 'disbursement'
+              ? row.disb.date
+              : row.group.payment_date;
       const dateOnly = (date || '').slice(0, 10);
       if (dateFrom && dateOnly && dateOnly < dateFrom) return false;
       if (dateTo && dateOnly && dateOnly > dateTo) return false;
@@ -2224,14 +2321,21 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             ? 'cancellation'
             : row.kind === 'credit_note'
               ? 'credit_note'
-              : 'payment';
+              : row.kind === 'disbursement'
+                ? 'disbursement'
+                : 'payment';
         if (!types.includes(kind)) return false;
       }
 
       if (paymentMethods.length > 0) {
-        // Voucher / credit_note rows carry no payment method — they're
-        // filtered out whenever a method is selected.
+        // Voucher / credit_note rows carry no payment method.
+        // Disbursement rows DO (cash / cheque / transfer / visa)
+        // since the agency picked one when it paid the customer.
         if (row.kind === 'voucher' || row.kind === 'credit_note') return false;
+        if (row.kind === 'disbursement') {
+          const m = row.disb.paymentMethod;
+          return m ? paymentMethods.includes(m) : false;
+        }
         const methods = row.group.paymentTypes;
         if (!methods.some((m) => paymentMethods.includes(m))) return false;
       }
@@ -3051,6 +3155,83 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   </TableHeader>
                   <TableBody>
                     {filteredDisplayRows.map((row) => {
+                      if (row.kind === 'disbursement') {
+                        const d = row.disb;
+                        const methodLabel = d.paymentMethod
+                          ? PAYMENT_TYPE_LABELS[d.paymentMethod] || d.paymentMethod
+                          : null;
+                        return (
+                          <TableRow
+                            key={`disbursement-${d.id}`}
+                            className="hover:bg-muted/40 bg-sky-50/40 dark:bg-sky-950/10"
+                          >
+                            <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                              <span className="font-bold text-sky-700 dark:text-sky-300">
+                                {d.voucherNumber}
+                              </span>
+                            </TableCell>
+                            <TableCell className="font-semibold">
+                              <span className="text-sky-700 dark:text-sky-300">
+                                ₪{Math.round(d.amount).toLocaleString()}
+                              </span>
+                            </TableCell>
+                            <TableCell>{formatDate(d.date)}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className="border-sky-500/40 text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/30"
+                              >
+                                سند صرف
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col items-start gap-0.5">
+                                {methodLabel && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    طريقة الصرف: {methodLabel}
+                                  </span>
+                                )}
+                                {d.description && (
+                                  <span
+                                    className="text-[10px] text-muted-foreground max-w-[220px] truncate"
+                                    title={d.description}
+                                  >
+                                    {d.description}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-muted-foreground">
+                                  المبلغ خرج من صندوق الشركة — لا يضيف للعميل رصيداً
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-muted-foreground">—</span>
+                            </TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    disabled={generatingReceipt === `disbursement-${d.id}`}
+                                    onClick={() => handlePrintDisbursement(d.id, d.voucherNumber)}
+                                  >
+                                    {generatingReceipt === `disbursement-${d.id}` ? (
+                                      <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                                    ) : (
+                                      <Receipt className="h-4 w-4 ml-2" />
+                                    )}
+                                    طباعة سند الصرف
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
                       if (row.kind === 'credit_note') {
                         const n = row.note;
                         return (
