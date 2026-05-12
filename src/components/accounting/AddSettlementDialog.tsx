@@ -716,7 +716,24 @@ function PaymentLineCard({
             <Label className="text-[11px]">طريقة الدفع</Label>
             <Select
               value={line.payment_type}
-              onValueChange={(v) => onChange({ payment_type: v as PaymentLineType })}
+              onValueChange={(v) => {
+                // Switching INTO cheque from a non-cheque type leaves
+                // cheque_due_date / cheque_issue_date undefined (the
+                // current line was seeded as cash). Default both to
+                // today so the agent doesn't open empty pickers and
+                // has to remember to fill them just to save. Mirror
+                // for customer_cheque so the selector card opens
+                // ready to pick.
+                const newType = v as PaymentLineType;
+                const patch: Partial<PaymentLine> = { payment_type: newType };
+                if (newType === 'cheque') {
+                  if (!line.cheque_due_date) patch.cheque_due_date = today();
+                  if (!line.cheque_issue_date) patch.cheque_issue_date = today();
+                  if (line.bank_code === undefined) patch.bank_code = null;
+                  if (line.branch_code === undefined) patch.branch_code = null;
+                }
+                onChange(patch);
+              }}
             >
               <SelectTrigger className="h-10">
                 <SelectValue />
@@ -793,6 +810,19 @@ function ChequeLineEditor({
   line: PaymentLine;
   onChange: (patch: Partial<PaymentLine>) => void;
 }) {
+  // Defensive default: any cheque line reaching this editor without
+  // dates gets backfilled to today on mount. Covers initialLines from
+  // legacy staged data and any other path that bypassed makeLine.
+  // Empty-deps so this only runs once per line mount — onChange is
+  // intentionally not tracked.
+  useEffect(() => {
+    const patch: Partial<PaymentLine> = {};
+    if (!line.cheque_due_date) patch.cheque_due_date = today();
+    if (!line.cheque_issue_date) patch.cheque_issue_date = today();
+    if (Object.keys(patch).length > 0) onChange(patch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Cross-surface duplicate detection — same query the expense form runs.
   const [duplicate, setDuplicate] = useState<DuplicateMatch | null>(null);
   // Once the user dismisses the auto-switch prompt for a given cheque
