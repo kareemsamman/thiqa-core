@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -144,9 +144,12 @@ export function TransferPolicyModal({
   // open AddSettlementDialog before committing the transfer when the
   // agent picks سند صرف, then re-run handleTransfer once the dialog
   // saves so the transfer commits with the disbursement already on
-  // the books.
+  // the books. The ref carries the saved flag through the same-tick
+  // re-run; the state mirrors it for rendering the confirmation pill.
   const [disbursementDialogOpen, setDisbursementDialogOpen] = useState(false);
   const [disbursementSaved, setDisbursementSaved] = useState(false);
+  const disbursementSavedRef = useRef(false);
+  const [disbursementVoucher, setDisbursementVoucher] = useState<string | null>(null);
   
   // SMS
   const [sendSms, setSendSms] = useState(true);
@@ -389,13 +392,16 @@ export function TransferPolicyModal({
     // Disbursement detour — same shape as CancelPolicyModal. When the
     // agent picks سند صرف on the refund branch, divert through
     // AddSettlementDialog before the transfer commits. The dialog's
-    // onSaved re-runs handleTransfer with disbursementSaved=true so
-    // we fall through this gate the second time around. Closing the
-    // dialog without saving leaves the transfer un-committed.
+    // onSaved flips disbursementSavedRef and re-runs handleTransfer
+    // so we fall through this gate the second time around. Closing
+    // the dialog without saving leaves the transfer un-committed.
+    // We read the ref (not the state) here because handleTransfer is
+    // re-invoked from inside onSaved in the same tick — useState
+    // updates aren't visible yet.
     if (
       adjustmentType === "refund" &&
       refundKind === "disbursement" &&
-      !disbursementSaved
+      !disbursementSavedRef.current
     ) {
       setDisbursementDialogOpen(true);
       return;
@@ -722,6 +728,8 @@ export function TransferPolicyModal({
     setAdjustmentNote("");
     setRefundKind("credit_note");
     setDisbursementSaved(false);
+    disbursementSavedRef.current = false;
+    setDisbursementVoucher(null);
     setSendSms(true);
     setSmsMessage("");
     setShowNewCarForm(false);
@@ -1089,10 +1097,37 @@ export function TransferPolicyModal({
                           <div className="flex items-center gap-1.5 font-medium text-sm">
                             <Banknote className="h-3.5 w-3.5" />
                             سند صرف
+                            {disbursementSaved && (
+                              <span className="ms-auto inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 bg-emerald-500/15 text-emerald-700 border border-emerald-500/30">
+                                ✓ تم الصرف
+                                {disbursementVoucher && (
+                                  <span className="font-mono ltr-nums">{disbursementVoucher}</span>
+                                )}
+                              </span>
+                            )}
                           </div>
                           <p className="text-[11px] text-muted-foreground mt-0.5">
                             المبلغ يخرج فعلياً من صندوق الشركة الآن (نقدي / شيك / تحويل / فيزا). لا يضيف للعميل أي رصيد.
                           </p>
+                          {disbursementSaved && (
+                            <div className="mt-2 flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[11px] gap-1"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  disbursementSavedRef.current = false;
+                                  setDisbursementSaved(false);
+                                  setDisbursementVoucher(null);
+                                  setDisbursementDialogOpen(true);
+                                }}
+                              >
+                                تعديل / إعادة فتح
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </label>
                     </RadioGroup>
@@ -1186,9 +1221,30 @@ export function TransferPolicyModal({
         policyId={policyId}
         branchId={branchId}
         targetAmount={adjustmentAmount ? parseFloat(adjustmentAmount) : undefined}
-        onSaved={() => {
+        onSaved={async () => {
+          disbursementSavedRef.current = true;
           setDisbursementSaved(true);
           setDisbursementDialogOpen(false);
+
+          // Best-effort voucher lookup so the confirmation pill on
+          // the transfer modal carries the actual D{nn}/YYYY rather
+          // than a generic "saved" hint.
+          try {
+            const { data: latestVoucher } = await supabase
+              .from("receipts")
+              .select("voucher_number")
+              .eq("receipt_type", "disbursement")
+              .eq("client_id", clientId)
+              .eq("policy_id", policyId)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            const voucher = (latestVoucher as { voucher_number?: string } | null)?.voucher_number;
+            if (voucher) setDisbursementVoucher(voucher);
+          } catch (lookupErr) {
+            console.warn("[TransferPolicyModal] disbursement voucher lookup failed:", lookupErr);
+          }
+
           void handleTransfer();
         }}
       />

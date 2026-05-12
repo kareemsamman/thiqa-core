@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -103,8 +103,21 @@ export function CancelPolicyModal({
   // before committing the cancel so the agent picks the actual payment
   // method(s). The dialog's onSaved callback re-runs handleCancel to
   // commit the policy update after the disbursement landed cleanly.
+  //
+  // disbursementSavedRef carries the "already disbursed" flag through
+  // the same-tick handleCancel re-run; a useState here would still
+  // read the old value via stale closure and re-open the dialog. The
+  // mirrored useState exists only to drive the on-screen status pill
+  // (refs don't trigger re-renders).
   const [disbursementDialogOpen, setDisbursementDialogOpen] = useState(false);
   const [disbursementSaved, setDisbursementSaved] = useState(false);
+  const disbursementSavedRef = useRef(false);
+  // After the AddSettlementDialog saves, look up the just-created
+  // voucher_number and store it so we can render a "تم الصرف —
+  // D{nn}/YYYY" confirmation pill next to the refund block, instead
+  // of leaving the agent guessing whether the payment actually went
+  // through.
+  const [disbursementVoucher, setDisbursementVoucher] = useState<string | null>(null);
   const [sendSms, setSendSms] = useState(false);
 
   // Pre-flight validation for the confirm button. Mirrors what
@@ -197,13 +210,17 @@ export function CancelPolicyModal({
     // Disbursement gate: when the agent picks سند صرف, divert through
     // AddSettlementDialog first so they can pick the actual payment
     // method(s). The cancellation only commits once the dialog
-    // resolves successfully (disbursementSaved becomes true).
-    // Closing the dialog without saving leaves disbursementSaved=false
-    // so the policy stays in its pre-cancel state — safe abort.
+    // resolves successfully (disbursementSavedRef flips true).
+    // Closing the dialog without saving leaves the ref at false so
+    // the policy stays in its pre-cancel state — safe abort.
+    //
+    // We read the ref (not the state) here because handleCancel is
+    // re-invoked from inside the dialog's onSaved callback in the
+    // same tick — useState updates aren't visible yet.
     if (
       hasRefund &&
       refundKind === "disbursement" &&
-      !disbursementSaved &&
+      !disbursementSavedRef.current &&
       primaryPolicyId
     ) {
       setDisbursementDialogOpen(true);
@@ -354,6 +371,8 @@ export function CancelPolicyModal({
       setRefundAmount("");
       setRefundKind("credit_note");
       setDisbursementSaved(false);
+      disbursementSavedRef.current = false;
+      setDisbursementVoucher(null);
       setSendSms(false);
       setSmsMessage("");
     } catch (error: any) {
@@ -385,7 +404,7 @@ export function CancelPolicyModal({
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span>
               {isPackage
-                ? `سيتم تسجيل ${effectivePolicyIds.length} معاملات الباقة كملغاة دفعة واحدة`
+                ? "سيتم تسجيل كل وثائق الباقة كملغاة معاً"
                 : "سيتم تسجيل المعاملة كملغاة ولن تظهر في التقارير النشطة"}
             </span>
           </div>
@@ -484,10 +503,42 @@ export function CancelPolicyModal({
                         <div className="flex items-center gap-1.5 font-medium text-sm">
                           <Banknote className="h-3.5 w-3.5" />
                           سند صرف
+                          {disbursementSaved && (
+                            <span className="ms-auto inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 bg-emerald-500/15 text-emerald-700 border border-emerald-500/30">
+                              ✓ تم الصرف
+                              {disbursementVoucher && (
+                                <span className="font-mono ltr-nums">{disbursementVoucher}</span>
+                              )}
+                            </span>
+                          )}
                         </div>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
                           المبلغ يخرج فعلياً من صندوق الشركة الآن (نقدي / شيك / تحويل / فيزا). لا يضيف للعميل أي رصيد.
                         </p>
+                        {disbursementSaved && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-[11px] gap-1"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                // Reopen the dialog so the agent can review or
+                                // re-pick payment lines. The previous saved
+                                // rows stay in client_settlements; saving
+                                // again creates additional rows (rare path —
+                                // the agent should usually just print).
+                                disbursementSavedRef.current = false;
+                                setDisbursementSaved(false);
+                                setDisbursementVoucher(null);
+                                setDisbursementDialogOpen(true);
+                              }}
+                            >
+                              تعديل / إعادة فتح
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </label>
                   </RadioGroup>
@@ -585,14 +636,7 @@ export function CancelPolicyModal({
           dialog without saving leaves the policy intact — safe abort. */}
       <AddSettlementDialog
         open={disbursementDialogOpen}
-        onOpenChange={(v) => {
-          setDisbursementDialogOpen(v);
-          // Closing without save clears the saved flag so the next
-          // confirm click reopens the dialog rather than skipping it.
-          if (!v && !disbursementSaved) {
-            // intentional no-op — disbursementSaved already false
-          }
-        }}
+        onOpenChange={setDisbursementDialogOpen}
         mode="client"
         kind="disbursement"
         defaultEntityId={clientId}
@@ -600,11 +644,40 @@ export function CancelPolicyModal({
         policyId={primaryPolicyId}
         branchId={branchId}
         targetAmount={refundAmount ? parseFloat(refundAmount) : undefined}
-        onSaved={() => {
+        onSaved={async () => {
+          // 1. Flip BOTH the ref (read inside the same-tick
+          //    handleCancel re-run, no closure staleness) AND the
+          //    mirrored state (drives the on-screen confirmation
+          //    pill rendered below).
+          disbursementSavedRef.current = true;
           setDisbursementSaved(true);
           setDisbursementDialogOpen(false);
-          // Re-enter handleCancel — the gate at the top now passes
-          // because disbursementSaved is true, so cancel commits.
+
+          // 2. Look up the just-created voucher_number so we can
+          //    show it on the cancel modal. The trigger stamps the
+          //    voucher on the receipts row mirrored from the
+          //    client_settlement we just inserted — newest matching
+          //    row for this client+policy. Best-effort; failing to
+          //    find it just leaves the pill on the generic "تم
+          //    الصرف بنجاح" text.
+          try {
+            const { data: latestVoucher } = await supabase
+              .from("receipts")
+              .select("voucher_number")
+              .eq("receipt_type", "disbursement")
+              .eq("client_id", clientId)
+              .eq("policy_id", primaryPolicyId)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            const voucher = (latestVoucher as { voucher_number?: string } | null)?.voucher_number;
+            if (voucher) setDisbursementVoucher(voucher);
+          } catch (lookupErr) {
+            console.warn("[CancelPolicyModal] disbursement voucher lookup failed:", lookupErr);
+          }
+
+          // 3. Re-enter handleCancel — the gate now reads the ref as
+          //    true and falls through to commit the cancellation.
           void handleCancel();
         }}
       />
