@@ -375,6 +375,39 @@ serve(async (req) => {
     const totalPaid = (allPayments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
     const totalRemaining = Math.max(0, totalPrice - totalPaid);
 
+    // Customer-wide balance — the printed invoice now shows a friendly
+    // single-line statement instead of a per-row payment log, and that
+    // line says "remaining on your overall account" (not just this
+    // معاملة). Fetch every non-cancelled, non-transferred policy for
+    // the same client and sum their prices + non-refused payments.
+    // We deliberately fail soft — a 0 balance still renders cleanly.
+    let customerTotalPrice = 0;
+    let customerTotalPaid = 0;
+    if (client?.id) {
+      const { data: clientPolicies } = await supabase
+        .from('policies')
+        .select('id, insurance_price, office_commission')
+        .eq('client_id', client.id)
+        .eq('cancelled', false)
+        .eq('transferred', false)
+        .is('deleted_at', null);
+      const clientPolicyIds = (clientPolicies || []).map((p: any) => p.id);
+      customerTotalPrice = (clientPolicies || []).reduce(
+        (s: number, p: any) => s + (Number(p.insurance_price) || 0) + (Number(p.office_commission) || 0),
+        0,
+      );
+      if (clientPolicyIds.length > 0) {
+        const { data: clientPayments } = await supabase
+          .from('policy_payments')
+          .select('amount, refused')
+          .in('policy_id', clientPolicyIds);
+        customerTotalPaid = (clientPayments || [])
+          .filter((p: any) => !p.refused)
+          .reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
+      }
+    }
+    const customerTotalRemaining = Math.max(0, customerTotalPrice - customerTotalPaid);
+
     // Cancellation snapshot — if any sibling in this package is cancelled,
     // the invoice gets a big red footer banner with the refund owed. The
     // refund lives on customer_wallet_transactions so we pull every "refund"
@@ -446,7 +479,7 @@ serve(async (req) => {
     });
 
     // Generate Package Invoice HTML with files and policy children
-    const packageInvoiceHtml = buildPackageInvoiceHtml(policies, paymentsByPolicy, totalPrice, totalPaid, totalRemaining, insuranceFiles || [], policyChildren || [], companySettings, branding, cancellationInfo, transferNoteByNewPolicyId, transferAdjustmentByNewPolicyId, bunnyCdnUrl);
+    const packageInvoiceHtml = buildPackageInvoiceHtml(policies, paymentsByPolicy, totalPrice, totalPaid, totalRemaining, insuranceFiles || [], policyChildren || [], companySettings, branding, cancellationInfo, transferNoteByNewPolicyId, transferAdjustmentByNewPolicyId, bunnyCdnUrl, customerTotalRemaining);
     
     const now = new Date();
     const year = now.getFullYear();
@@ -670,7 +703,12 @@ function buildPackageInvoiceHtml(
   cancellationInfo: { isCancelled: boolean; date: string; note: string; refundAmount: number } = { isCancelled: false, date: '', note: '', refundAmount: 0 },
   transferNoteByNewPolicyId: Record<string, string> = {},
   transferAdjustmentByNewPolicyId: Record<string, { amount: number; adjustmentNote: string | null }> = {},
-  bunnyCdnUrl: string = ''
+  bunnyCdnUrl: string = '',
+  // Customer-wide remaining across every non-cancelled, non-transferred
+  // policy for this client. The printed invoice surfaces it on the
+  // friendly bottom line ("لا يزال على حسابك ₪X...") so the customer
+  // sees their full picture, not just this معاملة.
+  customerTotalRemaining: number = 0,
 ): string {
   const client = policies[0]?.client || {};
   const today = new Date();
@@ -1485,6 +1523,49 @@ function buildPackageInvoiceHtml(
       letter-spacing: 0.5px;
     }
     .totals tr.total td.val { color: #ffffff; }
+    /* Payment-status rows replace the old totals' bottom row. Green
+       background for paid, amber for unpaid — same visual language
+       as the customer card's status badge so the printed copy reads
+       at a glance. */
+    .totals tr.paid td {
+      font-weight: 800;
+      background: #15803d;
+      color: #ffffff;
+      font-size: 15px;
+      padding: 12px 14px;
+    }
+    .totals tr.paid td.label,
+    .totals tr.paid td.val { color: #ffffff; }
+    .totals tr.unpaid td {
+      font-weight: 800;
+      background: #b45309;
+      color: #ffffff;
+      font-size: 15px;
+      padding: 12px 14px;
+    }
+    .totals tr.unpaid td.label,
+    .totals tr.unpaid td.val { color: #ffffff; }
+
+    /* Friendly customer-facing single-line note about the overall
+       account balance. Lives just below the status block instead of
+       the per-row payments log. Plain box with a soft border so it
+       reads as supporting copy, not a hard data table. */
+    .account-note {
+      margin: 0 0 20px 0;
+      padding: 14px 16px;
+      border: 1px solid #1a1a1a;
+      background: #f9fafb;
+      font-size: 13px;
+      color: #1a1a1a;
+      line-height: 1.7;
+      text-align: right;
+    }
+    .account-note strong {
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      direction: ltr;
+      display: inline-block;
+    }
 
     /* ── Broker banner ── shown when any policy in the package is
        tied to a broker. Muted amber so it reads as informational,
@@ -1881,28 +1962,33 @@ function buildPackageInvoiceHtml(
       </tbody>
     </table>
 
-    <!-- Payments log (سجل الدفعات) as a proper table of receipts -->
-    <div class="payments-section">
-      <div class="section-title">سجل الدفعات</div>
-      ${paymentsTableHtml}
-    </div>
-
-    <!-- Totals -->
+    <!-- Payment status block — replaces the previous per-row سجل
+         الدفعات table and the 3-row totals. The customer doesn't need
+         to see which cheque / cash / transfer was used (that's
+         internal accounting); they need a clear "did I pay this
+         معاملة yet" answer plus a friendly read on their overall
+         account balance. -->
     <div class="bottom">
       <table class="totals">
         <tr>
           <td class="label">الإجمالي</td>
           <td class="val">₪${totalPrice.toLocaleString('en-US')}</td>
         </tr>
-        <tr>
-          <td class="label">المدفوع</td>
-          <td class="val">₪${totalPaid.toLocaleString('en-US')}</td>
-        </tr>
-        <tr class="total">
-          <td class="label">المتبقي</td>
-          <td class="val">₪${remaining.toLocaleString('en-US')}</td>
+        <tr class="${remaining <= 0 ? 'paid' : 'unpaid'}">
+          <td class="label">حالة الدفع</td>
+          <td class="val">${remaining <= 0 ? '✓ دفعت' : '✗ لم يتم الدفع'}</td>
         </tr>
       </table>
+    </div>
+
+    <div class="account-note">
+      ${remaining <= 0
+        ? (customerTotalRemaining > 0
+          ? `تم دفع كامل قيمة هذه المعاملة. لا يزال على حسابك الكلي مبلغ <strong>₪${customerTotalRemaining.toLocaleString('en-US')}</strong> من معاملات أخرى.`
+          : `تم دفع كامل قيمة هذه المعاملة. حسابك مدفوع بالكامل — شكراً لك.`)
+        : (totalPaid > 0
+          ? `تم دفع <strong>₪${totalPaid.toLocaleString('en-US')}</strong> من حسابك، والمبلغ المتبقي عليك على حسابك الكلي هو <strong>₪${customerTotalRemaining.toLocaleString('en-US')}</strong>.`
+          : `لم يتم استلام أي مبلغ بعد. المبلغ المستحق عليك على حسابك الكلي هو <strong>₪${customerTotalRemaining.toLocaleString('en-US')}</strong>.`)}
     </div>
 
     ${branding.invoicePrivacyText ? `
