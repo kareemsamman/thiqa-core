@@ -55,6 +55,7 @@ import {
   Lock,
   Sparkles,
   Pencil,
+  Phone,
 } from "lucide-react";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { useAgentLimits } from "@/hooks/useAgentLimits";
@@ -65,6 +66,7 @@ import { format } from "date-fns";
 import { arDZ as ar } from "date-fns/locale";
 import { UserSessionsTab } from "@/components/admin/UserSessionsTab";
 import { UserPermissionsDialog } from "@/components/admin/UserPermissionsDialog";
+import { Click2CallUserDialog } from "@/components/admin/Click2CallUserDialog";
 import { DefaultEmployeePermissionsCard } from "@/components/admin/DefaultEmployeePermissionsCard";
 import { isPasswordValid, checkPasswordStrength } from "@/lib/authValidation";
 import { digitsOnly } from "@/lib/validation";
@@ -145,6 +147,10 @@ export default function AdminUsers() {
   // Per-user permissions dialog state. Opens from the "صلاحيات" button
   // on each active-user row.
   const [permissionsUser, setPermissionsUser] = useState<UserWithRole | null>(null);
+
+  // Per-user Click2Call config dialog. Opens from the "اتصال" button —
+  // admin sets the provider + api_key + extensions for this worker.
+  const [c2cUser, setC2cUser] = useState<UserWithRole | null>(null);
 
   // Edit user form state — opens from the "تعديل" button on each
   // active-user row. Lets an admin update the worker's name, phone,
@@ -1081,7 +1087,7 @@ export default function AdminUsers() {
                               </Button>
                             </div>
                           ) : !isProtectedSuperAdmin(user) ? (
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="grid grid-cols-2 gap-2">
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -1100,6 +1106,15 @@ export default function AdminUsers() {
                               >
                                 <ShieldCheck className="h-4 w-4" />
                                 صلاحيات
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setC2cUser(user)}
+                                className="gap-1"
+                              >
+                                <Phone className="h-4 w-4" />
+                                اتصال
                               </Button>
                               <Button
                                 size="sm"
@@ -1240,7 +1255,7 @@ export default function AdminUsers() {
                               </Button>
                             </div>
                           ) : !isProtectedSuperAdmin(user) ? (
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap">
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -1261,6 +1276,16 @@ export default function AdminUsers() {
                               >
                                 <ShieldCheck className="h-4 w-4" />
                                 صلاحيات
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setC2cUser(user)}
+                                className="gap-1"
+                                title="إعدادات الاتصال السريع"
+                              >
+                                <Phone className="h-4 w-4" />
+                                اتصال
                               </Button>
                               <Button
                                 size="sm"
@@ -1443,6 +1468,13 @@ export default function AdminUsers() {
         open={!!permissionsUser}
         onOpenChange={(open) => !open && setPermissionsUser(null)}
         onSaved={fetchUsers}
+      />
+
+      {/* Per-user Click2Call config */}
+      <Click2CallUserDialog
+        user={c2cUser}
+        open={!!c2cUser}
+        onOpenChange={(open) => !open && setC2cUser(null)}
       />
 
       {/* Edit User Sheet */}
