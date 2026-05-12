@@ -967,6 +967,65 @@ export default function Receipts() {
       .filter((id): id is string => typeof id === "string" && id.length > 0);
     const allAuto = paymentIds.length === group.receipts.length;
 
+    // اشعار دائن — its own edge function. credit_note rows have no
+    // payment_id so they'd otherwise miss the auto-route below and
+    // fall to the bare-bones local HTML builder. Handle them first
+    // so we always invoke the dedicated renderer regardless of the
+    // group shape.
+    if (activeTab === 'credit_note') {
+      const firstReceipt = group.receipts[0];
+      if (!firstReceipt?.id) {
+        toast.error('لا يوجد إشعار للطباعة');
+        return;
+      }
+      setPrintProgress({ open: true, value: 8 });
+      const ticker = setInterval(() => {
+        setPrintProgress((s) => {
+          if (!s.open) return s;
+          if (s.value >= 90) return s;
+          return { ...s, value: Math.min(90, s.value + 6) };
+        });
+      }, 220);
+      const closeOverlay = (success: boolean) => {
+        clearInterval(ticker);
+        if (success) {
+          setPrintProgress({ open: true, value: 100 });
+          setTimeout(() => setPrintProgress({ open: false, value: 0 }), 350);
+        } else {
+          setPrintProgress({ open: false, value: 0 });
+        }
+      };
+      try {
+        const { data, error } = await supabase.functions.invoke(
+          'generate-credit-note-voucher',
+          { body: { voucher_receipt_id: firstReceipt.id } },
+        );
+        if (error) throw error;
+        const url = (data as any)?.receipt_url;
+        if (url) {
+          closeOverlay(true);
+          window.open(url, '_blank');
+          return;
+        }
+        closeOverlay(false);
+        toast.error('لم يتم العثور على رابط الإشعار');
+        return;
+      } catch (err: any) {
+        closeOverlay(false);
+        console.error('[Receipts] credit-note print failed:', err);
+        let detail = '';
+        try {
+          if (err?.context && typeof err.context.clone === 'function') {
+            const body = await err.context.clone().json();
+            detail = body?.error || body?.message || '';
+          }
+        } catch {}
+        if (!detail) detail = err?.message || '';
+        toast.error(detail ? `فشل في توليد الإشعار: ${detail}` : 'فشل في توليد الإشعار');
+        return;
+      }
+    }
+
     if (allAuto && paymentIds.length > 0) {
       // Open the progress overlay and start a fake-progress ticker.
       // The edge function call doesn't expose real progress so we just
