@@ -225,14 +225,6 @@ const isCurrentYear = (startDate: string): boolean => {
   return policyYear === currentYear || policyYear === currentYear - 1;
 };
 
-// Check if policy was created within the last 24 hours
-const isNewPolicy = (createdAt: string): boolean => {
-  const created = new Date(createdAt);
-  const now = new Date();
-  const hoursDiff = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
-  return hoursDiff < 24;
-};
-
 interface PaymentInfo {
   [policyId: string]: { paid: number; remaining: number };
 }
@@ -244,6 +236,11 @@ interface PolicyPackage {
   status: PolicyStatus;
   totalPrice: number;
   debtPrice: number; // Excludes ELZAMI for debt calculations
+  // True when this is the most recently-added non-transfer package in its
+  // year — drives the "جديدة" badge and the top-of-year sort position.
+  // Stays put when a sibling is cancelled or transferred (those don't
+  // create a fresh package); only shifts when a brand-new معاملة is added.
+  isNewest: boolean;
 }
 
 interface YearGroup {
@@ -573,7 +570,8 @@ export function PolicyYearTimeline({
           allPolicyIds: allIds,
           status,
           totalPrice,
-          debtPrice
+          debtPrice,
+          isNewest: false,
         });
       });
 
@@ -586,30 +584,54 @@ export function PolicyYearTimeline({
           allPolicyIds: [policy.id],
           status: getPolicyStatus(policy),
           totalPrice: policy.insurance_price + (policy.office_commission || 0),
-          debtPrice: policy.insurance_price + (policy.office_commission || 0)
+          debtPrice: policy.insurance_price + (policy.office_commission || 0),
+          isNewest: false,
         });
       });
 
-      // Sort packages within year: 
-      // 1. Newly created (last 24h) first
+      // Mark the newest non-transfer-created package in this year. The
+      // candidate is the package whose latest policy.created_at is the
+      // greatest, ignoring any package where at least one policy was
+      // created by a transfer (transferred_from_policy_id IS NOT NULL).
+      // Excluding transfer-created packages is what keeps the "جديدة"
+      // badge anchored when a policy is transferred — the transfer
+      // makes a new row, but the user has been clear it shouldn't
+      // claim the badge.
+      let newestPkgIndex = -1;
+      let newestCreatedAt = '';
+      packages.forEach((p, idx) => {
+        const polys = [p.mainPolicy, ...p.addons].filter((x): x is PolicyRecord => !!x);
+        if (polys.length === 0) return;
+        if (polys.some(x => x.transferred_from_policy_id)) return;
+        const maxCreated = polys.reduce((acc, x) => {
+          const c = x.created_at || '';
+          return c > acc ? c : acc;
+        }, '');
+        if (maxCreated && maxCreated > newestCreatedAt) {
+          newestCreatedAt = maxCreated;
+          newestPkgIndex = idx;
+        }
+      });
+      if (newestPkgIndex >= 0) {
+        packages[newestPkgIndex].isNewest = true;
+      }
+
+      // Sort packages within year:
+      // 1. Newest non-transfer package first (the one carrying "جديدة")
       // 2. Then by status: active → ended → transferred → cancelled
       // 3. Then by newest start date
       packages.sort((a, b) => {
-        const policyA = a.mainPolicy || a.addons[0];
-        const policyB = b.mainPolicy || b.addons[0];
-        
-        // New policies first (created within last 24 hours)
-        const aIsNew = policyA?.created_at && isNewPolicy(policyA.created_at);
-        const bIsNew = policyB?.created_at && isNewPolicy(policyB.created_at);
-        if (aIsNew && !bIsNew) return -1;
-        if (!aIsNew && bIsNew) return 1;
-        
+        if (a.isNewest && !b.isNewest) return -1;
+        if (!a.isNewest && b.isNewest) return 1;
+
         // Then by status priority
         const priorityA = getStatusPriority(a.status);
         const priorityB = getStatusPriority(b.status);
         if (priorityA !== priorityB) return priorityA - priorityB;
-        
+
         // Then by newest start date
+        const policyA = a.mainPolicy || a.addons[0];
+        const policyB = b.mainPolicy || b.addons[0];
         const dateA = policyA?.start_date || '';
         const dateB = policyB?.start_date || '';
         return new Date(dateB).getTime() - new Date(dateA).getTime();
@@ -1420,8 +1442,11 @@ function PolicyPackageCard({
             </Badge>
           )}
 
-          {/* New Policy Badge - shows for policies created within last 24 hours */}
-          {policy.created_at && isNewPolicy(policy.created_at) && (
+          {/* "جديدة" badge — marks the most recently-added non-transfer
+              package in this year. Stays anchored across status changes
+              (cancel/transfer), and only moves when a brand-new معاملة is
+              added. Computed once in the parent useMemo. */}
+          {pkg.isNewest && (
             <Badge variant="outline" className="gap-1 text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-600">
               <Zap className="h-3 w-3" />
               جديدة
