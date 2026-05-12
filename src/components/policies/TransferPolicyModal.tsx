@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -34,12 +34,17 @@ import {
   CheckCircle2,
   Wallet,
   Banknote,
+  FolderOpen,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { AddSettlementDialog } from "@/components/accounting/AddSettlementDialog";
+import {
+  AddSettlementDialog,
+  type StagedSettlement,
+} from "@/components/accounting/AddSettlementDialog";
+import { persistSettlementLines } from "@/components/accounting/persistSettlementLines";
 import { Card } from "@/components/ui/card";
 import { CAR_TYPES } from "@/components/policies/wizard/types";
 import { cn } from "@/lib/utils";
@@ -95,6 +100,18 @@ const POLICY_TYPE_LABELS: Record<string, string> = {
 };
 
 type AdjustmentType = "none" | "customer_pays" | "refund";
+
+// Arabic plural rendering for the "تم إدخال X دفعة" status line under
+// the فتح button — mirrors CancelPolicyModal so both modals read the
+// same to staff.
+function formatStagedCount(n: number): string {
+  if (n <= 0) return "لا توجد دفعات";
+  if (n === 1) return "تم إدخال دفعة واحدة";
+  if (n === 2) return "تم إدخال دفعتين";
+  if (n >= 3 && n <= 10) return `تم إدخال ${n} دفعات`;
+  return `تم إدخال ${n} دفعة`;
+}
+
 // When adjustmentType === 'refund' the user picks how the agency
 // settles up with the client. credit_note keeps the legacy behavior
 // (wallet credit, no cash out); disbursement (cash actually leaving
@@ -145,16 +162,15 @@ export function TransferPolicyModal({
   const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [adjustmentNote, setAdjustmentNote] = useState("");
   const [refundKind, setRefundKind] = useState<RefundKind>("credit_note");
-  // Disbursement detour state — same pattern as CancelPolicyModal:
-  // open AddSettlementDialog before committing the transfer when the
-  // agent picks سند صرف, then re-run handleTransfer once the dialog
-  // saves so the transfer commits with the disbursement already on
-  // the books. The ref carries the saved flag through the same-tick
-  // re-run; the state mirrors it for rendering the confirmation pill.
+  // Disbursement detour — staged pattern. AddSettlementDialog opens in
+  // stageOnly mode so its Save returns the validated payload rather
+  // than writing rows. We hold it in stagedDisbursement until the
+  // transfer commits, then persist atomically alongside the policy
+  // moves. Reopening the dialog rehydrates from this state so editing
+  // doesn't lose prior entries; closing the cancel modal without
+  // confirming leaves zero orphans in the DB.
   const [disbursementDialogOpen, setDisbursementDialogOpen] = useState(false);
-  const [disbursementSaved, setDisbursementSaved] = useState(false);
-  const disbursementSavedRef = useRef(false);
-  const [disbursementVoucher, setDisbursementVoucher] = useState<string | null>(null);
+  const [stagedDisbursement, setStagedDisbursement] = useState<StagedSettlement | null>(null);
   
   // SMS
   const [sendSms, setSendSms] = useState(true);
@@ -244,6 +260,27 @@ export function TransferPolicyModal({
     transferableTotal > 0 &&
     !isNaN(adjustmentNum) &&
     adjustmentNum > transferableTotal;
+
+  // Staged-disbursement guards. سند صرف needs the portal opened and
+  // the totals to match before تأكيد التحويل will commit — same
+  // safety net as CancelPolicyModal.
+  const stagedTotal = stagedDisbursement
+    ? stagedDisbursement.lines.reduce((s, l) => {
+        if (l.payment_type === "customer_cheque" && l.selected_cheques) {
+          return s + l.selected_cheques.reduce((a, c) => a + Number(c.amount || 0), 0);
+        }
+        return s + Number(l.amount || 0);
+      }, 0)
+    : 0;
+  const needsDisbursement =
+    adjustmentType === "refund" && refundKind === "disbursement";
+  const disbursementStagedMissing =
+    needsDisbursement && stagedDisbursement === null;
+  const disbursementTotalMismatch =
+    needsDisbursement &&
+    stagedDisbursement !== null &&
+    !isNaN(adjustmentNum) &&
+    Math.round(stagedTotal * 100) !== Math.round(adjustmentNum * 100);
 
   const fetchCars = async () => {
     setLoadingCars(true);
@@ -436,22 +473,24 @@ export function TransferPolicyModal({
       return;
     }
 
-
-    // Disbursement detour — same shape as CancelPolicyModal. When the
-    // agent picks سند صرف on the refund branch, divert through
-    // AddSettlementDialog before the transfer commits. The dialog's
-    // onSaved flips disbursementSavedRef and re-runs handleTransfer
-    // so we fall through this gate the second time around. Closing
-    // the dialog without saving leaves the transfer un-committed.
-    // We read the ref (not the state) here because handleTransfer is
-    // re-invoked from inside onSaved in the same tick — useState
-    // updates aren't visible yet.
-    if (
-      adjustmentType === "refund" &&
-      refundKind === "disbursement" &&
-      !disbursementSavedRef.current
-    ) {
-      setDisbursementDialogOpen(true);
+    // Disbursement guards — the radio is set to سند صرف but the agent
+    // never staged a payment, OR the staged total drifted from the
+    // adjustment amount after edits. Confirm is already disabled in
+    // these states; this is the safety net.
+    if (needsDisbursement && !stagedDisbursement) {
+      toast({
+        title: "خطأ",
+        description: "اضغط 'فتح' وأدخل دفعات سند الصرف قبل التأكيد",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (needsDisbursement && disbursementTotalMismatch) {
+      toast({
+        title: "خطأ",
+        description: "مجموع الدفعات لا يساوي مبلغ المرتجع — افتح البوابة وعدّل",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -651,10 +690,13 @@ export function TransferPolicyModal({
       //   credit_note  → wallet credit (existing transfer behavior)
       //                  PLUS a numbered voucher in receipts so the
       //                  agency has a printable record.
-      //   disbursement → already committed via AddSettlementDialog
-      //                  before we reached this block (the trigger on
-      //                  client_settlements mirrored the receipts row
-      //                  with type='disbursement'). Nothing to do here.
+      //   disbursement → persist the staged client_settlements rows
+      //                  now (the BEFORE/AFTER INSERT triggers stamp
+      //                  voucher_number + mirror to receipts). Lines
+      //                  were collected via AddSettlementDialog in
+      //                  stageOnly mode so nothing hit the DB until
+      //                  this point — closing without confirming
+      //                  leaves no orphan rows.
       // customer_pays doesn't apply — it just bumps insurance_price
       // and is already handled above.
       if (adjustmentType === "refund" && adjustmentAmount && newPolicyIds.length > 0 && refundKind === "credit_note") {
@@ -710,6 +752,29 @@ export function TransferPolicyModal({
             }
           }
         }
+      }
+
+      // Disbursement persist — staged lines hit the DB only after
+      // the policy transfer succeeded. The new policy's id is the
+      // primary anchor so the disbursement receipt links to the new
+      // (active) policy rather than the original (transferred) one.
+      if (
+        adjustmentType === "refund" &&
+        refundKind === "disbursement" &&
+        stagedDisbursement &&
+        newPolicyIds.length > 0
+      ) {
+        await persistSettlementLines({
+          mode: "client",
+          kind: "disbursement",
+          entityId: clientId,
+          policyId: newPolicyIds[0],
+          branchId,
+          effective: stagedDisbursement.lines,
+          notes: stagedDisbursement.notes,
+          userId: user?.id ?? null,
+          agentId: agentId ?? null,
+        });
       }
 
       // 6. Send SMS if enabled
@@ -778,9 +843,7 @@ export function TransferPolicyModal({
     setAdjustmentAmount("");
     setAdjustmentNote("");
     setRefundKind("credit_note");
-    setDisbursementSaved(false);
-    disbursementSavedRef.current = false;
-    setDisbursementVoucher(null);
+    setStagedDisbursement(null);
     setSendSms(true);
     setSmsMessage("");
     setShowNewCarForm(false);
@@ -1233,35 +1296,50 @@ export function TransferPolicyModal({
                           <div className="flex items-center gap-1.5 font-medium text-sm">
                             <Banknote className="h-3.5 w-3.5" />
                             سند صرف
-                            {disbursementSaved && (
-                              <span className="ms-auto inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 bg-emerald-500/15 text-emerald-700 border border-emerald-500/30">
-                                ✓ تم الصرف
-                                {disbursementVoucher && (
-                                  <span className="font-mono ltr-nums">{disbursementVoucher}</span>
-                                )}
-                              </span>
-                            )}
                           </div>
                           <p className="text-[11px] text-muted-foreground mt-0.5">
                             المبلغ يخرج فعلياً من صندوق الشركة الآن (نقدي / شيك / تحويل / فيزا). لا يضيف للعميل أي رصيد.
                           </p>
-                          {disbursementSaved && (
-                            <div className="mt-2 flex items-center gap-2">
+                          {refundKind === "disbursement" && (
+                            <div className="mt-2 flex flex-col gap-1.5">
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="h-7 text-[11px] gap-1"
+                                className="h-8 gap-1.5 self-start"
                                 onClick={(e) => {
                                   e.preventDefault();
-                                  disbursementSavedRef.current = false;
-                                  setDisbursementSaved(false);
-                                  setDisbursementVoucher(null);
                                   setDisbursementDialogOpen(true);
                                 }}
                               >
-                                تعديل / إعادة فتح
+                                <FolderOpen className="h-3.5 w-3.5" />
+                                فتح
                               </Button>
+                              {stagedDisbursement ? (
+                                <p
+                                  className={cn(
+                                    "text-[11px]",
+                                    disbursementTotalMismatch
+                                      ? "text-destructive"
+                                      : "text-emerald-700",
+                                  )}
+                                >
+                                  {disbursementTotalMismatch ? (
+                                    <>
+                                      ⚠ المجموع ₪{stagedTotal.toLocaleString("en-US")} لا يساوي المرتجع — اضغط فتح وعدّل
+                                    </>
+                                  ) : (
+                                    <>
+                                      ✓ {formatStagedCount(stagedDisbursement.lines.length)} (₪
+                                      {stagedTotal.toLocaleString("en-US")})
+                                    </>
+                                  )}
+                                </p>
+                              ) : (
+                                <p className="text-[11px] text-muted-foreground">
+                                  اضغط فتح لإدخال الدفعات
+                                </p>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1324,11 +1402,21 @@ export function TransferPolicyModal({
           </Button>
           <Button
             onClick={handleTransfer}
-            disabled={saving || !selectedCarId || refundExceedsMax}
+            disabled={
+              saving ||
+              !selectedCarId ||
+              refundExceedsMax ||
+              disbursementStagedMissing ||
+              disbursementTotalMismatch
+            }
             title={
               refundExceedsMax
                 ? `المبلغ يتجاوز الحد الأقصى ₪${transferableTotal.toLocaleString("en-US")}`
-                : undefined
+                : disbursementStagedMissing
+                  ? "اضغط فتح وأدخل دفعات سند الصرف"
+                  : disbursementTotalMismatch
+                    ? "مجموع الدفعات لا يساوي مبلغ المرتجع"
+                    : undefined
             }
           >
             {saving ? (
@@ -1347,11 +1435,14 @@ export function TransferPolicyModal({
       </DialogContent>
     </Dialog>
 
-      {/* Disbursement detour — opens when the agent picks سند صرف
-          and clicks confirm. Mirrors CancelPolicyModal: handleTransfer
-          bails early, the dialog collects payment lines, and onSaved
-          re-runs handleTransfer with disbursementSaved=true so the
-          transfer commits with the disbursement already on the books. */}
+      {/* Disbursement detour, stageOnly mode. Same flow as
+          CancelPolicyModal: the agent opens the portal via the "فتح"
+          button on the radio card, fills lines, and saves — no DB
+          write happens here. The validated payload flows back into
+          stagedDisbursement; the actual insert runs from
+          handleTransfer once the transfer commits. Closing without
+          saving preserves any prior staged data so the agent can
+          reopen and edit instead of starting over. */}
       <AddSettlementDialog
         open={disbursementDialogOpen}
         onOpenChange={setDisbursementDialogOpen}
@@ -1362,31 +1453,11 @@ export function TransferPolicyModal({
         policyId={policyId}
         branchId={branchId}
         targetAmount={adjustmentAmount ? parseFloat(adjustmentAmount) : undefined}
-        onSaved={async () => {
-          disbursementSavedRef.current = true;
-          setDisbursementSaved(true);
-          setDisbursementDialogOpen(false);
-
-          // Best-effort voucher lookup so the confirmation pill on
-          // the transfer modal carries the actual D{nn}/YYYY rather
-          // than a generic "saved" hint.
-          try {
-            const { data: latestVoucher } = await supabase
-              .from("receipts")
-              .select("voucher_number")
-              .eq("receipt_type", "disbursement")
-              .eq("client_id", clientId)
-              .eq("policy_id", policyId)
-              .order("created_at", { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            const voucher = (latestVoucher as { voucher_number?: string } | null)?.voucher_number;
-            if (voucher) setDisbursementVoucher(voucher);
-          } catch (lookupErr) {
-            console.warn("[TransferPolicyModal] disbursement voucher lookup failed:", lookupErr);
-          }
-
-          void handleTransfer();
+        stageOnly
+        initialLines={stagedDisbursement?.lines}
+        initialNotes={stagedDisbursement?.notes}
+        onSaved={(staged) => {
+          if (staged) setStagedDisbursement(staged);
         }}
       />
     </>
