@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAgentContext } from '@/hooks/useAgentContext';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -690,7 +690,7 @@ export function PackagePaymentModal({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto" dir="rtl">
+      <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6" dir="rtl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Package className="h-5 w-5 text-primary" />
@@ -709,26 +709,30 @@ export function PackagePaymentModal({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Summary Cards */}
-            <div className="grid grid-cols-3 gap-2">
-              <Card className="p-3 text-center bg-muted/50">
-                <p className="text-xs text-muted-foreground mb-1">إجمالي السعر</p>
-                <p className="text-lg font-bold">₪{totalPrice.toLocaleString()}</p>
-              </Card>
-              <Card className="p-3 text-center bg-green-50 dark:bg-green-950/20">
-                <p className="text-xs text-muted-foreground mb-1">المدفوع</p>
-                <p className="text-lg font-bold text-success">₪{(totalPaid + paidVisaTotal).toLocaleString()}</p>
-              </Card>
-              <Card className="p-3 text-center bg-red-50 dark:bg-red-950/20">
-                <p className="text-xs text-muted-foreground mb-1">المتبقي</p>
-                <p className="text-lg font-bold text-destructive">₪{effectiveRemaining.toLocaleString()}</p>
-                {appliedCredit > 0 && (
-                  <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
-                    <p>المطلوب: ₪{(totalRemaining - paidVisaTotal).toLocaleString()}</p>
-                    <p className="text-amber-600">المرتجع: -₪{appliedCredit.toLocaleString()}</p>
-                  </div>
-                )}
-              </Card>
+            {/* Sticky-top summary so إجمالي / مدفوع / متبقي stay visible
+                while the user scrolls through multiple payment lines —
+                same pattern as DebtPaymentModal. */}
+            <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-1 pb-2 bg-background border-b">
+              <div className="grid grid-cols-3 gap-2">
+                <Card className="p-3 text-center bg-muted/50">
+                  <p className="text-xs text-muted-foreground mb-1">إجمالي السعر</p>
+                  <p className="text-lg font-bold">₪{totalPrice.toLocaleString()}</p>
+                </Card>
+                <Card className="p-3 text-center bg-green-50 dark:bg-green-950/20">
+                  <p className="text-xs text-muted-foreground mb-1">المدفوع</p>
+                  <p className="text-lg font-bold text-success">₪{(totalPaid + paidVisaTotal).toLocaleString()}</p>
+                </Card>
+                <Card className="p-3 text-center bg-red-50 dark:bg-red-950/20">
+                  <p className="text-xs text-muted-foreground mb-1">المتبقي</p>
+                  <p className="text-lg font-bold text-destructive">₪{effectiveRemaining.toLocaleString()}</p>
+                  {appliedCredit > 0 && (
+                    <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+                      <p>المطلوب: ₪{(totalRemaining - paidVisaTotal).toLocaleString()}</p>
+                      <p className="text-amber-600">المرتجع: -₪{appliedCredit.toLocaleString()}</p>
+                    </div>
+                  )}
+                </Card>
+              </div>
             </div>
 
             {appliedCredit > 0 && (
@@ -860,24 +864,25 @@ export function PackagePaymentModal({
                           value={payment.paymentDate}
                           onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
                           disabled={payment.tranzilaPaid}
-                          compact
                         />
                       </div>
                     </div>
 
-                    {/* Cheque-only row: bank → branch → رقم الشيك */}
+                    {/* Cheque sub-row: 4 equal columns (Bank | Branch |
+                        Cheque# | Issue date) — same layout as
+                        DebtPaymentModal so both pay flows read alike. */}
                     {payment.paymentType === 'cheque' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <div>
-                          <Label className="text-xs">البنك</Label>
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div className="space-y-1.5 min-w-0">
+                          <Label className="text-xs font-semibold">البنك</Label>
                           <BankPicker
                             value={payment.bankCode}
                             onChange={(code) => updatePaymentLine(payment.id, 'bankCode', code)}
                             disabled={payment.tranzilaPaid}
                           />
                         </div>
-                        <div>
-                          <Label className="text-xs">الفرع</Label>
+                        <div className="space-y-1.5 min-w-0">
+                          <Label className="text-xs font-semibold">الفرع</Label>
                           <Input
                             type="text"
                             inputMode="numeric"
@@ -893,8 +898,8 @@ export function PackagePaymentModal({
                             disabled={payment.tranzilaPaid}
                           />
                         </div>
-                        <div>
-                          <Label className="text-xs">رقم الشيك</Label>
+                        <div className="space-y-1.5 min-w-0">
+                          <Label className="text-xs font-semibold">رقم الشيك</Label>
                           <Input
                             value={payment.chequeNumber || ''}
                             onChange={e => updatePaymentLine(payment.id, 'chequeNumber', sanitizeChequeNumber(e.target.value))}
@@ -904,20 +909,14 @@ export function PackagePaymentModal({
                             disabled={payment.tranzilaPaid}
                           />
                         </div>
-                      </div>
-                    )}
-
-                    {/* Cheque issue date — separate from due date so the
-                        Cheques page can show the right "تاريخ الاستحقاق". */}
-                    {payment.paymentType === 'cheque' && (
-                      <div>
-                        <Label className="text-xs">تاريخ الإصدار</Label>
-                        <ArabicDatePicker
-                          value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
-                          onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
-                          disabled={payment.tranzilaPaid}
-                          compact
-                        />
+                        <div className="space-y-1.5 min-w-0">
+                          <Label className="text-xs">تاريخ الإصدار</Label>
+                          <ArabicDatePicker
+                            value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
+                            onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
+                            disabled={payment.tranzilaPaid}
+                          />
+                        </div>
                       </div>
                     )}
 
@@ -934,54 +933,6 @@ export function PackagePaymentModal({
                       </Button>
                     )}
 
-                    {/* Image Upload for cash/cheque/transfer */}
-                    {(payment.paymentType === 'cash' || payment.paymentType === 'cheque' || payment.paymentType === 'transfer') && !payment.tranzilaPaid && (
-                      <div className="space-y-2">
-                        <Label className="text-xs flex items-center gap-1">
-                          <ImageIcon className="h-3 w-3" />
-                          {payment.paymentType === 'cheque' ? 'صورة الشيك' : payment.paymentType === 'transfer' ? 'صورة الحوالة' : 'صورة الإيصال'}
-                        </Label>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {getPreviewUrls(payment.id).map((item, imgIndex) => (
-                            <div key={imgIndex} className="relative">
-                              {item.kind === 'pdf' ? (
-                                <div
-                                  className="h-16 w-16 rounded border bg-red-50 border-red-200 flex flex-col items-center justify-center gap-0.5"
-                                  title={item.name || 'PDF'}
-                                >
-                                  <FileText className="h-5 w-5 text-red-500" />
-                                  <span className="text-[9px] font-bold text-red-500">PDF</span>
-                                </div>
-                              ) : (
-                                <img
-                                  src={item.url}
-                                  alt={item.name || 'Preview'}
-                                  className="h-16 w-16 object-cover rounded border"
-                                />
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => removeImage(payment.id, imgIndex)}
-                                className="absolute -top-1 -right-1 bg-destructive text-white rounded-full p-0.5"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          ))}
-                          <label className="h-16 w-16 border-2 border-dashed rounded flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors">
-                            <Upload className="h-5 w-5 text-muted-foreground" />
-                            <input
-                              type="file"
-                              accept="image/*,application/pdf"
-                              multiple
-                              className="hidden"
-                              onChange={(e) => handleImageSelect(payment.id, e)}
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    )}
-
                     <div>
                       <Label className="text-xs">ملاحظات (اختياري)</Label>
                       <Input
@@ -991,37 +942,99 @@ export function PackagePaymentModal({
                         disabled={payment.tranzilaPaid}
                       />
                     </div>
+
+                    {/* Inline image upload — same compact strip used in
+                        DebtPaymentModal. Label + thumbs + إضافة button
+                        all on one row instead of a dashed drop block. */}
+                    {(payment.paymentType === 'cash' || payment.paymentType === 'cheque' || payment.paymentType === 'transfer') && !payment.tranzilaPaid && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">
+                          {payment.paymentType === 'cheque' ? 'صورة الشيك:' : payment.paymentType === 'transfer' ? 'صورة الحوالة:' : 'صورة الإيصال:'}
+                        </Label>
+                        {getPreviewUrls(payment.id).map((item, imgIndex) => (
+                          <div key={imgIndex} className="relative">
+                            {item.kind === 'pdf' ? (
+                              <div
+                                className="h-9 w-12 rounded border bg-red-50 border-red-200 flex flex-col items-center justify-center gap-0.5"
+                                title={item.name || 'PDF'}
+                              >
+                                <FileText className="h-3.5 w-3.5 text-red-500" />
+                                <span className="text-[8px] font-bold text-red-500">PDF</span>
+                              </div>
+                            ) : (
+                              <img
+                                src={item.url}
+                                alt={item.name || 'Preview'}
+                                className="h-9 w-12 object-cover rounded border"
+                              />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeImage(payment.id, imgIndex)}
+                              className="absolute -top-1 -right-1 bg-destructive text-white rounded-full p-0.5"
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
+                          </div>
+                        ))}
+                        <label className="h-9 px-2.5 inline-flex items-center gap-1.5 border border-dashed rounded cursor-pointer hover:bg-muted/50 transition-colors text-xs text-muted-foreground">
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => handleImageSelect(payment.id, e)}
+                          />
+                          <Upload className="h-3.5 w-3.5" />
+                          إضافة
+                        </label>
+                      </div>
+                    )}
                   </div>
                 </Card>
               ))}
 
-              {/* Overpaying Warning */}
-              {isOverpaying && (
-                <div className="flex items-center gap-2 text-destructive text-sm p-2 bg-destructive/10 rounded-lg">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>مجموع الدفعات أكبر من المبلغ المتبقي</span>
-                </div>
-              )}
+            </div>
+          </div>
+        )}
 
+        {/* Combined sticky-bottom bar — same as DebtPaymentModal: مجموع
+            الدفعات + validation banners + action buttons all pinned
+            together so the cashier sees totals AND the save button at
+            once no matter how far down they scrolled. */}
+        <div className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-3 pb-2 bg-background border-t space-y-2">
+          {!loading && totalRemaining > 0 && (
+            <>
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <span className="font-medium">مجموع الدفعات:</span>
+                <span className={cn("text-lg font-bold", isOverpaying && "text-destructive")}>
+                  ₪{totalPaymentAmount.toLocaleString()}
+                </span>
+              </div>
+              {isOverpaying && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  مجموع الدفعات أكبر من المبلغ المتبقي (₪{effectiveRemaining.toLocaleString()})
+                </p>
+              )}
               {hasUnpaidVisa && (
                 <div className="flex items-center gap-2 text-amber-600 text-sm p-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>يرجى إتمام الدفع بالبطاقة أولاً قبل الحفظ</span>
                 </div>
               )}
-            </div>
+            </>
+          )}
+          <div className="flex justify-end gap-3 pt-1">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleSubmit} disabled={!isValid || saving || totalRemaining <= 0}>
+              {saving && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
+              إضافة الدفعات
+            </Button>
           </div>
-        )}
-
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            إلغاء
-          </Button>
-          <Button onClick={handleSubmit} disabled={!isValid || saving || totalRemaining <= 0}>
-            {saving && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
-            إضافة الدفعات
-          </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
 
       {/* Tranzila Payment Modal */}

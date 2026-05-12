@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAgentContext } from '@/hooks/useAgentContext';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 import { TranzilaPaymentModal } from '@/components/payments/TranzilaPaymentModal';
 import { ChequeScannerDialog } from '@/components/payments/ChequeScannerDialog';
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from '@/lib/chequeUtils';
-import { BankBranchPicker } from '@/components/shared/BankBranchPicker';
+import { BankPicker } from '@/components/shared/BankPicker';
 import { useToast } from '@/hooks/use-toast';
 import { useSmsLock } from '@/hooks/useSmsLock';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
@@ -1402,28 +1402,51 @@ export function DebtPaymentModal({
                     </div>
 
                     {payment.paymentType === 'cheque' && (
-                      <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)] gap-3">
-                        <BankBranchPicker
-                          bankCode={payment.bankCode}
-                          branchCode={payment.branchCode}
-                          onBankChange={(code) => updatePaymentLine(payment.id, 'bankCode', code)}
-                          onBranchChange={(code) => updatePaymentLine(payment.id, 'branchCode', code)}
-                          disabled={payment.tranzilaPaid}
-                          chequeNumberSlot={
-                            <>
-                              <Label className="text-xs font-semibold">رقم الشيك</Label>
-                              <Input
-                                value={payment.chequeNumber || ''}
-                                onChange={e => updatePaymentLine(payment.id, 'chequeNumber', sanitizeChequeNumber(e.target.value))}
-                                placeholder="رقم الشيك"
-                                maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                                className="h-10 font-mono"
-                                disabled={payment.tranzilaPaid}
-                              />
-                            </>
-                          }
-                        />
-                        <div>
+                      // Cheque sub-row: 4 equal-width columns (Bank,
+                      // Branch, Cheque#, Issue date) so the inputs read
+                      // as a clean Material-style row instead of the
+                      // uneven 1.6fr/0.7fr/1fr split BankBranchPicker
+                      // defaults to. We bypass the picker wrapper and
+                      // place its inner pieces (BankPicker + branch
+                      // Input) as siblings in this grid.
+                      <div className="grid grid-cols-4 gap-3">
+                        <div className="space-y-1.5 min-w-0">
+                          <Label className="text-xs font-semibold">البنك</Label>
+                          <BankPicker
+                            value={payment.bankCode}
+                            onChange={(code) => updatePaymentLine(payment.id, 'bankCode', code)}
+                            disabled={payment.tranzilaPaid}
+                          />
+                        </div>
+                        <div className="space-y-1.5 min-w-0">
+                          <Label className="text-xs font-semibold">الفرع</Label>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            maxLength={4}
+                            className="h-10 text-sm ltr-nums font-mono"
+                            placeholder="مثال: 305"
+                            value={payment.branchCode || ''}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/\D/g, '');
+                              updatePaymentLine(payment.id, 'branchCode', v || null);
+                            }}
+                            disabled={payment.tranzilaPaid}
+                          />
+                        </div>
+                        <div className="space-y-1.5 min-w-0">
+                          <Label className="text-xs font-semibold">رقم الشيك</Label>
+                          <Input
+                            value={payment.chequeNumber || ''}
+                            onChange={e => updatePaymentLine(payment.id, 'chequeNumber', sanitizeChequeNumber(e.target.value))}
+                            placeholder="رقم الشيك"
+                            maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                            className="h-10 font-mono"
+                            disabled={payment.tranzilaPaid}
+                          />
+                        </div>
+                        <div className="space-y-1.5 min-w-0">
                           <Label className="text-xs">تاريخ الإصدار</Label>
                           <ArabicDatePicker
                             value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
@@ -1521,46 +1544,50 @@ export function DebtPaymentModal({
               ))}
             </div>
 
-            {/* Sticky-bottom totals + validation messages — same idea
-                as the sticky-top summary: the cashier needs to see
-                مجموع الدفعات vs the wallet ceiling at all times while
-                they add / edit lines. Pinned just above the dialog
-                footer with a background + top border so it doesn't
-                bleed into the scrolling rows above. */}
-            <div className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-2 pb-1 bg-background border-t space-y-2">
+          </div>
+        )}
+
+        {/* Combined sticky-bottom bar: totals (when applicable) +
+            validation banners + action buttons (إلغاء / تسديد المبلغ).
+            Was previously two pieces — a sticky totals block inside
+            the conditional and a separate DialogFooter outside it —
+            which meant the totals could scroll out of view while the
+            footer stayed put. Merging them keeps everything the
+            cashier needs to act on the form pinned to the bottom of
+            the modal at once. */}
+        <div className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-3 pb-2 bg-background border-t space-y-2">
+          {!loading && debtItems.length > 0 && (
+            <>
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <span className="font-medium">مجموع الدفعات:</span>
                 <span className={cn("text-lg font-bold", isOverpaying && "text-destructive")}>
                   ₪{totalPaymentAmount.toLocaleString()}
                 </span>
               </div>
-
               {isOverpaying && (
                 <p className="text-sm text-destructive flex items-center gap-1">
                   <AlertCircle className="h-4 w-4" />
                   مجموع الدفعات أكبر من المبلغ المتبقي (₪{effectiveRemaining.toLocaleString()})
                 </p>
               )}
-
               {hasUnpaidVisa && (
                 <div className="flex items-center gap-2 text-amber-600 text-sm p-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>يرجى إتمام الدفع بالبطاقة أولاً قبل الحفظ</span>
                 </div>
               )}
-            </div>
+            </>
+          )}
+          <div className="flex justify-end gap-3 pt-1">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleSubmit} disabled={!isValid || saving || debtItems.length === 0}>
+              {saving && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
+              تسديد المبلغ
+            </Button>
           </div>
-        )}
-
-        <DialogFooter className="gap-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            إلغاء
-          </Button>
-          <Button onClick={handleSubmit} disabled={!isValid || saving || debtItems.length === 0}>
-            {saving && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
-            تسديد المبلغ
-          </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
 
       {/* Tranzila Payment Modal */}
