@@ -329,6 +329,10 @@ export function PolicyWizard({
     clientId: string;
     clientPhone: string | null;
     isPackage: boolean;
+    // Non-mandatory payment ids the user added in step 4 (the ELZAMI
+    // auto-row is excluded — see source='user' filter at save time).
+    // Drives whether the "سند القبض" action shows in the success dialog.
+    receiptPaymentIds: string[];
   } | null>(null);
 
   // Track category fetch so Step 1 can render a skeleton instead of
@@ -1708,12 +1712,28 @@ export function PolicyWizard({
       }
 
 
+      // Resolve which payment rows the user added beyond the ELZAMI
+      // auto-row — anything that isn't the locked system row counts as
+      // a real receipt-able payment (cash, cheque, transfer, internal
+      // visa, Tranzila visa…). Query the table directly so the
+      // Tranzila-pre-insert branch (skipPaymentInsert) is also covered:
+      // those rows are already in policy_payments by this point but
+      // aren't in the local `insertedPayments` array.
+      const { data: allPaymentsForPolicy } = await supabase
+        .from('policy_payments')
+        .select('id, source, locked, refused')
+        .eq('policy_id', policyIdToUse);
+      const receiptPaymentIds = (allPaymentsForPolicy ?? [])
+        .filter((p: any) => !p.refused && !(p.source === 'system' && p.locked))
+        .map((p: any) => p.id);
+
       // Show success dialog instead of closing immediately
       setSuccessPolicyData({
         policyId: policyIdToUse,
         clientId: dialogClientId || '',
         clientPhone: clientPhone || null,
         isPackage: packageMode && packageAddons.some(addon => addon.enabled),
+        receiptPaymentIds,
       });
       setShowSuccessDialog(true);
       
@@ -2288,6 +2308,7 @@ export function PolicyWizard({
           clientId={successPolicyData.clientId}
           clientPhone={successPolicyData.clientPhone}
           isPackage={successPolicyData.isPackage}
+          receiptPaymentIds={successPolicyData.receiptPaymentIds}
           onClose={() => {
             const clientIdToNavigate = successPolicyData.clientId;
             setShowSuccessDialog(false);

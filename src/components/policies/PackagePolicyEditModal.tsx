@@ -1723,6 +1723,10 @@ export function PackagePolicyEditModal({
           clientId={clientId}
           clientPhone={clientPhone}
           isPackage={successIsPackage}
+          // Edit flow doesn't add new payments — the receipt action
+          // already lives in the package / payments screen for any
+          // existing rows, so we hide it here.
+          receiptPaymentIds={[]}
           onClose={() => {
             setShowSuccessDialog(false);
             setSuccessPolicyId(null);

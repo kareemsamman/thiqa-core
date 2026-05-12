@@ -6,9 +6,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
-import { extractFunctionErrorMessage } from "@/lib/functionError";
+import { toastFunctionError } from "@/lib/functionError";
 import { toast } from "sonner";
 import {
   Printer,
@@ -18,8 +24,15 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
+  Receipt,
+  Info,
 } from "lucide-react";
+import { WhatsappLogo } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+
+type RowKey = "transaction" | "receipt";
+type ChannelKey = "print" | "sms" | "whatsapp";
+type ChannelState = "idle" | "loading" | "sent";
 
 interface PolicySuccessDialogProps {
   open: boolean;
@@ -28,8 +41,27 @@ interface PolicySuccessDialogProps {
   clientId: string;
   clientPhone: string | null;
   isPackage: boolean;
+  /** payment_ids the user added beyond the auto-mandatory row. When the
+   *  array is empty the سند القبض button is hidden — there's nothing
+   *  receiptable to print/send. */
+  receiptPaymentIds: string[];
   onClose: () => void;
 }
+
+const ROW_LABELS: Record<RowKey, { title: string; desc: string; tooltip: string }> = {
+  transaction: {
+    title: "طباعة أو إرسال المعاملة",
+    desc: "تفاصيل البوليصة الكاملة",
+    tooltip:
+      "المعاملة تحتوي تفاصيل البوليصة كاملة — السيارة، نوع التأمين، السعر، والدفعات المتفق عليها.",
+  },
+  receipt: {
+    title: "طباعة أو إرسال سند القبض",
+    desc: "إثبات استلام المبلغ من العميل",
+    tooltip:
+      "سند القبض إثبات استلام المبلغ من العميل بنفس شكل السندات في صفحة الإيصالات.",
+  },
+};
 
 export function PolicySuccessDialog({
   open,
@@ -37,25 +69,35 @@ export function PolicySuccessDialog({
   policyId,
   clientPhone,
   isPackage,
+  receiptPaymentIds,
   onClose,
 }: PolicySuccessDialogProps) {
-  const [printingInvoice, setPrintingInvoice] = useState(false);
-  const [sendingSms, setSendingSms] = useState(false);
-  const [smsSent, setSmsSent] = useState(false);
+  // Only one action panel is ever open at a time — clicking the other
+  // row collapses this one and opens that one with the same animation.
+  const [activeRow, setActiveRow] = useState<RowKey | null>(null);
+
+  // Per-cell state, keyed `${row}:${channel}`. Cells run independently
+  // so the user can fire one icon, watch it spin, and still hit another
+  // icon in the same panel without losing context.
+  const [cellState, setCellState] = useState<Record<string, ChannelState>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const { guardSend: guardSmsSend } = useSmsLock();
 
-  const extractErrorMessage = async (result: { data: any; error: any }): Promise<string> => {
-    if (result.error) {
-      const parsed = await extractFunctionErrorMessage(result.error);
-      return parsed || "حدث خطأ غير متوقع";
-    }
-    if (result.data?.error) return result.data.error;
-    return "حدث خطأ غير متوقع";
-  };
+  const {
+    locked: smsLocked,
+    loading: smsLoading,
+    openUpgradeDialog: openSmsUpgrade,
+  } = useSmsLock();
 
-  // Resolve every policy id in the package (falls back to just [policyId]
-  // for standalone policies). Used for both print and SMS.
+  const cellKey = (row: RowKey, channel: ChannelKey) => `${row}:${channel}`;
+  const setCell = (row: RowKey, channel: ChannelKey, state: ChannelState) =>
+    setCellState((prev) => ({ ...prev, [cellKey(row, channel)]: state }));
+  const getCell = (row: RowKey, channel: ChannelKey): ChannelState =>
+    cellState[cellKey(row, channel)] || "idle";
+
+  const hasReceipt = receiptPaymentIds.length > 0;
+
+  // Resolve every policy id in the package — single policies get a
+  // 1-item array. Used for transaction print/SMS/WhatsApp.
   const resolvePolicyIds = async (): Promise<string[]> => {
     if (!isPackage) return [policyId];
     const { data: mainPolicy } = await supabase
@@ -72,94 +114,259 @@ export function PolicySuccessDialog({
     return groupPolicies?.map((p) => p.id) || [policyId];
   };
 
-  const invokeInvoiceFunction = async (skipSms: boolean) => {
-    const ids = await resolvePolicyIds();
-    // Always route through send-package-invoice-sms so single and
-    // package invoices share one printed template.
-    return supabase.functions.invoke("send-package-invoice-sms", {
-      body: skipSms ? { policy_ids: ids, skip_sms: true } : { policy_ids: ids },
-    });
-  };
-
-  const handlePrintInvoice = async () => {
-    setPrintingInvoice(true);
+  // ─── Transaction actions ───────────────────────────────────────
+  const handleTransactionPrint = async () => {
+    setCell("transaction", "print", "loading");
     setErrorMessage(null);
-
     try {
-      const result = await invokeInvoiceFunction(true);
-      if (result.error || result.data?.error) {
-        const errorMsg = await extractErrorMessage(result);
-        setErrorMessage(errorMsg);
-        toast.error(errorMsg);
+      const ids = await resolvePolicyIds();
+      const { data, error } = await supabase.functions.invoke(
+        "send-package-invoice-sms",
+        { body: { policy_ids: ids, skip_sms: true } },
+      );
+      if (error) {
+        await toastFunctionError(error, "فشل في تحميل المعاملة");
         return;
       }
-      const invoiceUrl =
-        result.data?.package_invoice_url ||
-        result.data?.ab_invoice_url ||
-        result.data?.invoice_url;
-      if (invoiceUrl) {
-        window.open(invoiceUrl, "_blank");
-        toast.success("تم فتح المعاملة");
-      } else {
-        setErrorMessage("لم يتم العثور على رابط المعاملة");
-        toast.error("لم يتم العثور على رابط المعاملة");
+      if (data?.error) {
+        toast.error(data.error);
+        return;
       }
-    } catch (error) {
-      console.error("Print invoice error:", error);
-      const errorMsg = error instanceof Error ? error.message : "فشل في تحميل المعاملة";
-      setErrorMessage(errorMsg);
-      toast.error(errorMsg);
+      const url =
+        data?.package_invoice_url || data?.ab_invoice_url || data?.invoice_url;
+      if (!url) {
+        toast.error("لم يتم العثور على رابط المعاملة");
+        return;
+      }
+      window.open(url, "_blank");
+      toast.success("تم فتح المعاملة");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "فشل في تحميل المعاملة";
+      setErrorMessage(msg);
+      toast.error(msg);
     } finally {
-      setPrintingInvoice(false);
+      setCell("transaction", "print", "idle");
     }
   };
 
-  const handleSendSms = async () => {
+  const handleTransactionSms = async () => {
     if (!clientPhone) {
       toast.error("لا يوجد رقم هاتف للعميل");
       return;
     }
-    if (!guardSmsSend('click')) return;
+    if (smsLoading) return;
+    if (smsLocked) {
+      openSmsUpgrade();
+      return;
+    }
 
-    setSendingSms(true);
+    setCell("transaction", "sms", "loading");
     setErrorMessage(null);
-
     try {
-      const result = await invokeInvoiceFunction(false);
-      if (result.error || result.data?.error) {
-        const errorMsg = await extractErrorMessage(result);
-        setErrorMessage(errorMsg);
-        toast.error(errorMsg);
+      const ids = await resolvePolicyIds();
+      const { data, error } = await supabase.functions.invoke(
+        "send-package-invoice-sms",
+        { body: { policy_ids: ids } },
+      );
+      if (error) {
+        await toastFunctionError(error, "فشل في إرسال SMS");
+        setCell("transaction", "sms", "idle");
         return;
       }
-      setSmsSent(true);
+      if (data?.error) {
+        toast.error(data.error);
+        setCell("transaction", "sms", "idle");
+        return;
+      }
+      setCell("transaction", "sms", "sent");
       toast.success("تم إرسال المعاملة عبر SMS");
-    } catch (error) {
-      console.error("Send SMS error:", error);
-      const errorMsg = error instanceof Error ? error.message : "فشل في إرسال SMS";
-      setErrorMessage(errorMsg);
-      toast.error(errorMsg);
-    } finally {
-      setSendingSms(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "فشل في إرسال SMS";
+      setErrorMessage(msg);
+      toast.error(msg);
+      setCell("transaction", "sms", "idle");
     }
   };
 
+  const handleTransactionWhatsapp = async () => {
+    if (!clientPhone) {
+      toast.error("لا يوجد رقم هاتف للعميل");
+      return;
+    }
+    setCell("transaction", "whatsapp", "loading");
+    setErrorMessage(null);
+    try {
+      const ids = await resolvePolicyIds();
+      const { data, error } = await supabase.functions.invoke(
+        "send-package-invoice-sms",
+        { body: { policy_ids: ids, whatsapp_mode: true } },
+      );
+      if (error) {
+        await toastFunctionError(error, "فشل في تجهيز رسالة واتساب");
+        return;
+      }
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+      const phone = data?.whatsapp_phone;
+      const text = data?.message_text;
+      if (!phone || !text) {
+        toast.error("لم يتم تجهيز رسالة واتساب");
+        return;
+      }
+      window.open(
+        `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
+        "_blank",
+      );
+      toast.success("تم فتح واتساب");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "فشل في تجهيز رسالة واتساب";
+      setErrorMessage(msg);
+      toast.error(msg);
+    } finally {
+      setCell("transaction", "whatsapp", "idle");
+    }
+  };
+
+  // ─── Receipt actions ───────────────────────────────────────────
+  const handleReceiptPrint = async () => {
+    setCell("receipt", "print", "loading");
+    setErrorMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "send-payment-receipt-sms",
+        { body: { payment_ids: receiptPaymentIds, skip_sms: true } },
+      );
+      if (error) {
+        await toastFunctionError(error, "فشل في تحميل سند القبض");
+        return;
+      }
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+      const url = data?.receipt_url;
+      if (!url) {
+        toast.error("لم يتم العثور على رابط السند");
+        return;
+      }
+      // Stamp printed_at so سجل الدفعات locks "تعديل" on these rows —
+      // mirrors the Receipts page print path. Best-effort, don't block
+      // the open() on this update.
+      await supabase
+        .from("policy_payments")
+        .update({ printed_at: new Date().toISOString() })
+        .in("id", receiptPaymentIds)
+        .is("printed_at", null);
+      window.open(url, "_blank");
+      toast.success("تم فتح سند القبض");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "فشل في تحميل سند القبض";
+      setErrorMessage(msg);
+      toast.error(msg);
+    } finally {
+      setCell("receipt", "print", "idle");
+    }
+  };
+
+  const handleReceiptSms = async () => {
+    if (!clientPhone) {
+      toast.error("لا يوجد رقم هاتف للعميل");
+      return;
+    }
+    if (smsLoading) return;
+    if (smsLocked) {
+      openSmsUpgrade();
+      return;
+    }
+
+    setCell("receipt", "sms", "loading");
+    setErrorMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "send-payment-receipt-sms",
+        { body: { payment_ids: receiptPaymentIds } },
+      );
+      if (error) {
+        await toastFunctionError(error, "فشل في إرسال SMS");
+        setCell("receipt", "sms", "idle");
+        return;
+      }
+      if (data?.error) {
+        toast.error(data.error);
+        setCell("receipt", "sms", "idle");
+        return;
+      }
+      setCell("receipt", "sms", "sent");
+      toast.success("تم إرسال سند القبض عبر SMS");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "فشل في إرسال SMS";
+      setErrorMessage(msg);
+      toast.error(msg);
+      setCell("receipt", "sms", "idle");
+    }
+  };
+
+  const handleReceiptWhatsapp = async () => {
+    if (!clientPhone) {
+      toast.error("لا يوجد رقم هاتف للعميل");
+      return;
+    }
+    setCell("receipt", "whatsapp", "loading");
+    setErrorMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "send-payment-receipt-sms",
+        { body: { payment_ids: receiptPaymentIds, whatsapp_mode: true } },
+      );
+      if (error) {
+        await toastFunctionError(error, "فشل في تجهيز رسالة واتساب");
+        return;
+      }
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+      const phone = data?.whatsapp_phone;
+      const text = data?.message_text;
+      if (!phone || !text) {
+        toast.error("لم يتم تجهيز رسالة واتساب");
+        return;
+      }
+      window.open(
+        `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
+        "_blank",
+      );
+      toast.success("تم فتح واتساب");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "فشل في تجهيز رسالة واتساب";
+      setErrorMessage(msg);
+      toast.error(msg);
+    } finally {
+      setCell("receipt", "whatsapp", "idle");
+    }
+  };
+
+  // ─── Close ─────────────────────────────────────────────────────
   const handleClose = () => {
     setErrorMessage(null);
-    setSmsSent(false);
+    setCellState({});
+    setActiveRow(null);
     onOpenChange(false);
     onClose();
   };
 
-  const isBusy = printingInvoice || sendingSms;
+  const anyLoading = Object.values(cellState).some((s) => s === "loading");
+
+  const toggleRow = (row: RowKey) =>
+    setActiveRow((prev) => (prev === row ? null : row));
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogContent className="max-w-md w-[95vw] p-0 overflow-hidden" dir="rtl">
-        {/* Dark navy header — matches the package drawer / client report shell */}
-        <div
-          className="text-white p-5 hero-gradient"
-        >
+        {/* Hero header */}
+        <div className="text-white p-5 hero-gradient">
           <DialogHeader>
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center shrink-0">
@@ -170,7 +377,9 @@ export function PolicySuccessDialog({
                   تم إنشاء المعاملة بنجاح
                 </DialogTitle>
                 <p className="text-xs text-white/70 mt-0.5">
-                  يمكنك طباعتها أو إرسالها للعميل عبر SMS
+                  {hasReceipt
+                    ? "يمكنك طباعة أو إرسال المعاملة وسند القبض للعميل"
+                    : "يمكنك طباعة أو إرسال المعاملة للعميل"}
                 </p>
               </div>
             </div>
@@ -186,76 +395,55 @@ export function PolicySuccessDialog({
             </div>
           )}
 
-          {/* Print */}
-          <button
-            type="button"
-            onClick={handlePrintInvoice}
-            disabled={isBusy}
-            className={cn(
-              "w-full p-4 rounded-xl border-2 border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 text-right flex items-center gap-4",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-            )}
-          >
-            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
-              {printingInvoice ? (
-                <Loader2 className="h-6 w-6 text-emerald-600 animate-spin" />
-              ) : (
-                <Printer className="h-6 w-6 text-emerald-600" />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold text-base">طباعة المعاملة</div>
-              <div className="text-sm text-muted-foreground">
-                فتح المعاملة في نافذة جديدة للطباعة
-              </div>
-            </div>
-          </button>
+          <TooltipProvider delayDuration={200}>
+            {/* Transaction row */}
+            <RowBlock
+              row="transaction"
+              icon={<FileText className="h-6 w-6 text-emerald-600" />}
+              iconBg="bg-emerald-500/10"
+              active={activeRow === "transaction"}
+              onToggle={() => toggleRow("transaction")}
+              channelStates={{
+                print: getCell("transaction", "print"),
+                sms: getCell("transaction", "sms"),
+                whatsapp: getCell("transaction", "whatsapp"),
+              }}
+              onPrint={handleTransactionPrint}
+              onSms={handleTransactionSms}
+              onWhatsapp={handleTransactionWhatsapp}
+              hasPhone={!!clientPhone}
+              smsLocked={smsLocked}
+            />
 
-          {/* Send SMS */}
-          <button
-            type="button"
-            onClick={handleSendSms}
-            disabled={isBusy || smsSent || !clientPhone}
-            className={cn(
-              "w-full p-4 rounded-xl border-2 transition-all duration-200 text-right flex items-center gap-4",
-              smsSent
-                ? "border-success/40 bg-success/5"
-                : "border-border hover:border-primary/50 hover:bg-primary/5",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
+            {/* Receipt row — only shown when the user added a payment
+                beyond the auto-mandatory ELZAMI row. */}
+            {hasReceipt && (
+              <RowBlock
+                row="receipt"
+                icon={<Receipt className="h-6 w-6 text-blue-600" />}
+                iconBg="bg-blue-500/10"
+                active={activeRow === "receipt"}
+                onToggle={() => toggleRow("receipt")}
+                channelStates={{
+                  print: getCell("receipt", "print"),
+                  sms: getCell("receipt", "sms"),
+                  whatsapp: getCell("receipt", "whatsapp"),
+                }}
+                onPrint={handleReceiptPrint}
+                onSms={handleReceiptSms}
+                onWhatsapp={handleReceiptWhatsapp}
+                hasPhone={!!clientPhone}
+                smsLocked={smsLocked}
+              />
             )}
-          >
-            <div
-              className={cn(
-                "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
-                smsSent ? "bg-success/15" : "bg-blue-500/10",
-              )}
-            >
-              {sendingSms ? (
-                <Loader2 className="h-6 w-6 text-blue-600 animate-spin" />
-              ) : smsSent ? (
-                <CheckCircle2 className="h-6 w-6 text-success" />
-              ) : (
-                <MessageSquare className="h-6 w-6 text-blue-600" />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold text-base">
-                {smsSent ? "تم إرسال المعاملة" : "إرسال المعاملة عبر SMS"}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {clientPhone
-                  ? `سيتم إرسال رابط المعاملة للرقم ${clientPhone}`
-                  : "لا يوجد رقم هاتف للعميل"}
-              </div>
-            </div>
-          </button>
+          </TooltipProvider>
 
           {/* Close */}
           <Button
             variant="outline"
             className="w-full gap-2 mt-1"
             onClick={handleClose}
-            disabled={isBusy}
+            disabled={anyLoading}
           >
             <X className="h-4 w-4" />
             إغلاق
@@ -263,5 +451,176 @@ export function PolicySuccessDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
+
+interface RowBlockProps {
+  row: RowKey;
+  icon: React.ReactNode;
+  iconBg: string;
+  active: boolean;
+  onToggle: () => void;
+  channelStates: Record<ChannelKey, ChannelState>;
+  onPrint: () => void;
+  onSms: () => void;
+  onWhatsapp: () => void;
+  hasPhone: boolean;
+  smsLocked: boolean;
+}
+
+function RowBlock({
+  row,
+  icon,
+  iconBg,
+  active,
+  onToggle,
+  channelStates,
+  onPrint,
+  onSms,
+  onWhatsapp,
+  hasPhone,
+  smsLocked,
+}: RowBlockProps) {
+  const labels = ROW_LABELS[row];
+
+  return (
+    <div className="space-y-2">
+      {/* Action panel — collapses both height and opacity so the
+          row above slides up cleanly when the panel closes. */}
+      <div
+        className={cn(
+          "overflow-hidden transition-all duration-200 ease-out",
+          active ? "max-h-24 opacity-100" : "max-h-0 opacity-0",
+        )}
+      >
+        <div className="flex items-center justify-center gap-2 p-2 bg-muted/40 border border-border/60 rounded-xl">
+          <ChannelButton
+            label="طباعة"
+            state={channelStates.print}
+            onClick={onPrint}
+            icon={<Printer className="h-5 w-5" />}
+            colorIdle="text-emerald-600"
+          />
+          <ChannelButton
+            label={hasPhone ? "إرسال SMS" : "لا يوجد رقم هاتف"}
+            state={channelStates.sms}
+            disabled={!hasPhone}
+            locked={smsLocked}
+            onClick={onSms}
+            icon={<MessageSquare className="h-5 w-5" />}
+            colorIdle="text-blue-600"
+          />
+          <ChannelButton
+            label={hasPhone ? "إرسال واتساب" : "لا يوجد رقم هاتف"}
+            state={channelStates.whatsapp}
+            disabled={!hasPhone}
+            onClick={onWhatsapp}
+            icon={<WhatsappLogo className="h-5 w-5" weight="fill" />}
+            colorIdle="text-green-600"
+          />
+        </div>
+      </div>
+
+      {/* Main row button */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className={cn(
+          "w-full p-4 rounded-xl border-2 transition-all duration-200 text-right flex items-center gap-4",
+          active
+            ? "border-primary/60 bg-primary/5"
+            : "border-border hover:border-primary/50 hover:bg-primary/5",
+        )}
+      >
+        <div
+          className={cn(
+            "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
+            iconBg,
+          )}
+        >
+          {icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-base">{labels.title}</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="inline-flex items-center justify-center w-4 h-4 text-muted-foreground/70 hover:text-foreground cursor-help"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[260px] text-right">
+                {labels.tooltip}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          <div className="text-sm text-muted-foreground">{labels.desc}</div>
+        </div>
+      </button>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
+
+interface ChannelButtonProps {
+  label: string;
+  state: ChannelState;
+  onClick: () => void;
+  icon: React.ReactNode;
+  colorIdle: string;
+  disabled?: boolean;
+  locked?: boolean;
+}
+
+function ChannelButton({
+  label,
+  state,
+  onClick,
+  icon,
+  colorIdle,
+  disabled,
+  locked,
+}: ChannelButtonProps) {
+  const isLoading = state === "loading";
+  const isSent = state === "sent";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={disabled || isLoading || isSent}
+          className={cn(
+            "relative flex-1 h-12 rounded-lg border border-border/60 bg-background",
+            "transition-all duration-150 hover:scale-105 hover:shadow-sm",
+            "flex items-center justify-center",
+            "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none",
+            !disabled && !isLoading && !isSent && colorIdle,
+            isSent && "text-emerald-600 bg-emerald-50 border-emerald-200",
+          )}
+        >
+          {isLoading ? (
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          ) : isSent ? (
+            <CheckCircle2 className="h-5 w-5" />
+          ) : (
+            icon
+          )}
+          {locked && !isLoading && !isSent && (
+            <span className="absolute top-0.5 left-0.5 h-1.5 w-1.5 rounded-full bg-amber-500" />
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
