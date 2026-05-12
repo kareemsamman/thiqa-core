@@ -812,6 +812,36 @@ export default function ActivityLog() {
                     </span>
                   </div>
 
+                  {/* Card-level paid/remaining totals — replaces the
+                      per-row badges. Sums across every policy event in
+                      the group so staff see the customer's overall
+                      balance in one place. Only shown when the group
+                      has at least one policy event with a price. */}
+                  {(() => {
+                    let invoiced = 0;
+                    let paid = 0;
+                    let remaining = 0;
+                    for (const s of steps) {
+                      if (s.type !== "policy") continue;
+                      invoiced += s.details.insurance_price || 0;
+                      paid += s.details.paid_amount || 0;
+                      remaining += s.details.remaining_amount || 0;
+                    }
+                    if (invoiced === 0) return null;
+                    return (
+                      <div className="flex items-center gap-2 flex-wrap mb-4 -mt-2">
+                        <Badge variant="outline" className="text-xs border-success/40 text-success bg-success/5">
+                          مدفوع: ₪{paid.toLocaleString()}
+                        </Badge>
+                        {remaining > 0 && (
+                          <Badge variant="outline" className="text-xs border-destructive/40 text-destructive bg-destructive/5">
+                            متبقي: ₪{remaining.toLocaleString()}
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* Inner numbered timeline. Each step:
                       [step #] · [icon] · [action + details + timestamp]
                       A vertical line connects the icons through their
