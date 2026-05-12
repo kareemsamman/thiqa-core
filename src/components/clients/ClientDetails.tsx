@@ -436,6 +436,10 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [carDrawerOpen, setCarDrawerOpen] = useState(false);
   const [policyDetailsOpen, setPolicyDetailsOpen] = useState(false);
   const [selectedPolicyId, setSelectedPolicyId] = useState<string | null>(null);
+  // Drawer can open on either the main tab or jump straight to files —
+  // the "ملفات (N)" button on the card uses the latter.
+  const [policyDetailsInitialSection, setPolicyDetailsInitialSection] =
+    useState<'main' | 'files'>('main');
   const [policyWizardOpen, setPolicyWizardOpen] = useState(false);
   const { policies: policiesLimit, loading: limitsLoading } = useAgentLimits();
   const { showUpgradePrompt } = useUpgradePrompt();
@@ -509,6 +513,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [policyPaymentInfo, setPolicyPaymentInfo] = useState<Record<string, { paid: number; remaining: number }>>({});
   const [policyAccidentCounts, setPolicyAccidentCounts] = useState<Record<string, number>>({});
   const [policyChildrenCounts, setPolicyChildrenCounts] = useState<Record<string, number>>({});
+  // Per-policy file counts (media_files where entity_id = policy.id +
+  // entity_type ∈ {policy, policy_insurance, policy_file}). Drives the
+  // "ملفات (N)" button on each policy card, which opens the details
+  // drawer pre-positioned to the files tab. Bulk-fetched alongside
+  // payment / accident / children metadata.
+  const [policyFileCounts, setPolicyFileCounts] = useState<Record<string, number>>({});
   
   // Payment delete state
   const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null);
@@ -630,12 +640,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       setPolicyPaymentInfo({});
       setPolicyAccidentCounts({});
       setPolicyChildrenCounts({});
+      setPolicyFileCounts({});
       return;
     }
 
     try {
-      // Fetch all three in parallel
-      const [paymentsRes, accidentsRes, childrenRes] = await Promise.all([
+      // Fetch all four in parallel (added: per-policy file counts so
+      // the new "ملفات (N)" button on the card has a number to show
+      // without forcing the drawer open).
+      const [paymentsRes, accidentsRes, childrenRes, filesRes] = await Promise.all([
         supabase
           .from('policy_payments')
           .select('policy_id, amount, refused')
@@ -648,6 +661,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           .from('policy_children')
           .select('policy_id')
           .in('policy_id', policyIds),
+        supabase
+          .from('media_files')
+          .select('entity_id')
+          .in('entity_id', policyIds)
+          .in('entity_type', ['policy', 'policy_insurance', 'policy_file'])
+          .is('deleted_at', null),
       ]);
 
       // Process payment info
@@ -676,6 +695,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         childCounts[row.policy_id] = (childCounts[row.policy_id] || 0) + 1;
       });
       setPolicyChildrenCounts(childCounts);
+
+      // Process per-policy file counts (one entry in media_files per
+      // attachment; entity_id is the policy id).
+      const fileCounts: Record<string, number> = {};
+      (filesRes.data || []).forEach((row: { entity_id: string }) => {
+        fileCounts[row.entity_id] = (fileCounts[row.entity_id] || 0) + 1;
+      });
+      setPolicyFileCounts(fileCounts);
     } catch (error) {
       console.error('Error fetching policy metadata:', error);
     }
@@ -2691,6 +2718,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 accidentInfo={policyAccidentCounts}
                 childrenInfo={policyChildrenCounts}
                 onPolicyClick={handlePolicyClick}
+                fileCounts={policyFileCounts}
+                onOpenPolicyFiles={(policyId) => {
+                  // Files shortcut on the policy card → drawer opens
+                  // pre-positioned to the ملفات tab.
+                  setSelectedPolicyId(policyId);
+                  setPolicyDetailsInitialSection('files');
+                  setPolicyDetailsOpen(true);
+                }}
                 onPaymentAdded={async () => {
                   await Promise.all([
                     fetchPaymentSummary(),
@@ -3444,8 +3479,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       {/* Policy Details Drawer */}
       <PolicyDetailsDrawer
         open={policyDetailsOpen}
-        onOpenChange={setPolicyDetailsOpen}
+        onOpenChange={(open) => {
+          setPolicyDetailsOpen(open);
+          // Reset to main when the drawer closes so the next opener
+          // gets the default landing tab (the ملفات button explicitly
+          // sets 'files' just before opening).
+          if (!open) setPolicyDetailsInitialSection('main');
+        }}
         policyId={selectedPolicyId}
+        initialSection={policyDetailsInitialSection}
         onUpdated={() => {
           fetchPolicies();
           fetchPaymentSummary();

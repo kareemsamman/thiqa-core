@@ -69,6 +69,13 @@ interface PolicyTreeViewProps {
   onCancelPolicy?: (policyId: string) => void;
   onTransferPackage?: (policyIds: string[]) => void;
   onCancelPackage?: (policyIds: string[]) => void;
+  /** Per-policy file count (entity_id → count) shown on the
+   *  "ملفات (N)" button on each card. */
+  fileCounts?: Record<string, number>;
+  /** Click handler for the "ملفات (N)" button — distinct from
+   *  onPolicyClick because it opens the details drawer pre-set to
+   *  the files tab. */
+  onOpenPolicyFiles?: (policyId: string) => void;
 }
 
 const policyTypeLabels: Record<string, string> = {

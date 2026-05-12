@@ -115,6 +115,12 @@ interface PolicyYearTimelineProps {
   paymentInfo?: Record<string, { paid: number; remaining: number }>;
   accidentInfo?: Record<string, number>;
   childrenInfo?: Record<string, number>;
+  /** Per-policy file count keyed by policy.id (entity_id in media_files).
+   *  Drives the "ملفات (N)" button on each card. */
+  fileCounts?: Record<string, number>;
+  /** Click handler for the ملفات button — opens the details drawer
+   *  pre-positioned to the files tab. Distinct from onPolicyClick. */
+  onOpenPolicyFiles?: (policyId: string) => void;
   onPolicyClick: (policyId: string) => void;
   onPaymentAdded?: () => void | Promise<void>;
   onTransferPolicy?: (policyId: string) => void;
@@ -254,6 +260,8 @@ export function PolicyYearTimeline({
   paymentInfo: externalPaymentInfo,
   accidentInfo: externalAccidentInfo,
   childrenInfo: externalChildrenInfo,
+  fileCounts,
+  onOpenPolicyFiles,
   onPolicyClick,
   onPaymentAdded,
   onTransferPolicy,
@@ -1033,6 +1041,13 @@ export function PolicyYearTimeline({
                         clientPhone={clientPhone}
                         getDocNumber={(id) => policyDocNumbers.get(id)}
                         onOpenPaymentDetails={handleOpenPaymentDetails}
+                        fileCount={pkg.allPolicyIds.reduce(
+                          (s, id) => s + (fileCounts?.[id] || 0),
+                          0,
+                        )}
+                        onOpenFiles={onOpenPolicyFiles
+                          ? () => onOpenPolicyFiles(mainPolicy?.id || pkg.allPolicyIds[0])
+                          : undefined}
                         onPolicyClick={onPolicyClick}
                         onPaymentClick={(e) => handlePackagePayment(e, pkg.allPolicyIds, pkg.mainPolicy?.branch_id || pkg.addons[0]?.branch_id || null)}
                         onPrintInvoice={() => handleCardPrintInvoice(pkg.allPolicyIds, pkg.allPolicyIds.length > 1)}
@@ -1151,6 +1166,8 @@ function PolicyPackageCard({
   clientPhone,
   getDocNumber,
   onOpenPaymentDetails,
+  fileCount = 0,
+  onOpenFiles,
   onPolicyClick,
   onPaymentClick,
   onPrintInvoice,
@@ -1195,6 +1212,12 @@ function PolicyPackageCard({
   clientPhone?: string | null;
   getDocNumber?: (policyId: string) => number | undefined;
   onOpenPaymentDetails?: (policyIds: string[]) => void;
+  /** Total media_files attached to any policy in the package — drives
+   *  the "ملفات (N)" button. */
+  fileCount?: number;
+  /** Click handler for the ملفات button — opens the details drawer
+   *  pre-positioned to the files tab. */
+  onOpenFiles?: () => void;
   onPolicyClick: (id: string) => void;
   onPaymentClick: (e: React.MouseEvent) => void;
   onPrintInvoice: () => Promise<boolean>;
@@ -1296,19 +1319,14 @@ function PolicyPackageCard({
     return getDisplayLabel(policy);
   };
 
-  // Whole-card click → open policy details. We let the click bubble up
-  // from any non-interactive surface inside the card, but bail when the
-  // click originated on a button/link/input/menu trigger so the existing
-  // inline actions (kebab menu, pay, send, edit notes, copy chip…) keep
-  // working without a pile of stopPropagation calls. data-no-card-click
-  // is an opt-out hatch for future widgets that need it.
-  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const target = e.target as HTMLElement | null;
-    if (!target) return;
-    if (target.closest('button, a, input, textarea, select, label, [role="button"], [role="menuitem"], [data-no-card-click]')) {
-      return;
-    }
-    onPolicyClick(policy.id);
+  // Whole-card click → was wired to open the policy-details drawer
+  // (PolicyDetailsDrawer). Disabled at the user's request — the drawer
+  // still mounts when triggered explicitly (e.g. the dedicated Files
+  // button below, or kebab-menu "تفاصيل المعاملة"), but a stray click
+  // anywhere on the card no longer pops it. Keeping the function
+  // around as a no-op so re-enabling later is just deleting one line.
+  const handleCardClick = (_e: React.MouseEvent<HTMLDivElement>) => {
+    // intentionally empty — drawer entry was hidden
   };
 
   return (
@@ -1317,7 +1335,7 @@ function PolicyPackageCard({
       data-policy-ids={pkg.allPolicyIds.join(' ')}
       onClick={handleCardClick}
       className={cn(
-        "overflow-hidden transition-all duration-200 cursor-pointer",
+        "overflow-hidden transition-all duration-200",
         // Active: Highlight and strong border
         isActive && "bg-card border-2 border-primary/40 shadow-md shadow-primary/5",
         // Ended: Neutral
@@ -1521,6 +1539,31 @@ function PolicyPackageCard({
               >
                 <Banknote className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">دفع</span>
+              </Button>
+            )}
+
+            {/* Files shortcut — replaces the previous whole-card click
+                to open the details drawer. Compact button with the
+                file count badge; click opens the drawer pre-positioned
+                to the ملفات tab. Always rendered (even when count=0)
+                so the user has a visible entry point to upload the
+                first file. */}
+            {onOpenFiles && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1 h-8 px-2.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenFiles();
+                }}
+                title="عرض / إضافة ملفات هذه المعاملة"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">ملفات</span>
+                <span className="font-mono ltr-nums text-[10px] bg-muted text-muted-foreground rounded px-1.5 py-px">
+                  {fileCount}
+                </span>
               </Button>
             )}
 
@@ -1826,11 +1869,10 @@ function PolicyPackageCard({
 
         {/* Main Content: Key Info Grid — company column removed since the
             insurer name is already visible inside the مكونات rows below;
-            period column likewise lives in those rows. */}
-        <div
-          className="grid grid-cols-2 gap-3 text-sm cursor-pointer"
-          onClick={() => onPolicyClick(policy.id)}
-        >
+            period column likewise lives in those rows.
+            Click handler was wired to open the policy-details drawer;
+            removed alongside the whole-card handler above. */}
+        <div className="grid grid-cols-2 gap-3 text-sm">
           {/* Car */}
           <div ref={periodRef} className="flex items-start gap-2">
             <Car className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
@@ -2102,6 +2144,15 @@ function PolicyPackageCard({
                 )}
               </div>
             </div>
+            {/* Creator caption — small line at the bottom showing who
+                added the معاملة. Pulled off the policy.creator join
+                that ClientDetails populates. Kept subtle so the
+                totals stay the visual focal point. */}
+            {pkg.mainPolicy?.creator?.full_name && (
+              <div className="text-[10px] text-muted-foreground mt-1.5 px-1">
+                أنشأها: <span className="font-medium">{pkg.mainPolicy.creator.full_name}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -2178,6 +2229,12 @@ function PolicyPackageCard({
                 )}
               </div>
             </div>
+            {/* Same creator caption as the package version. */}
+            {policy.creator?.full_name && (
+              <div className="text-[10px] text-muted-foreground mt-1.5 px-1">
+                أنشأها: <span className="font-medium">{policy.creator.full_name}</span>
+              </div>
+            )}
           </div>
         )}
 

@@ -63,6 +63,10 @@ interface PolicyDetailsDrawerProps {
   policyId: string | null;
   onUpdated?: () => void;
   onViewRelatedPolicy?: (policyId: string) => void;
+  /** Which tab the drawer should open on. Defaults to 'main'.
+   *  The "ملفات (N)" button on the policy card passes 'files'
+   *  so the user lands directly on the files surface. */
+  initialSection?: 'main' | 'files';
 }
 
 interface PolicyDetails {
@@ -255,7 +259,7 @@ const Section = ({ title, icon: Icon, children, className }: {
   </div>
 );
 
-export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, onViewRelatedPolicy }: PolicyDetailsDrawerProps) {
+export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, onViewRelatedPolicy, initialSection = 'main' }: PolicyDetailsDrawerProps) {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const { can } = usePermissions();
@@ -270,7 +274,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<'main' | 'payments' | 'files'>('main');
+  const [activeSection, setActiveSection] = useState<'main' | 'payments' | 'files'>(initialSection);
   const [showQuickPayment, setShowQuickPayment] = useState(false);
   const [creatorName, setCreatorName] = useState<string | null>(null);
   const [sendingSignatureSms, setSendingSignatureSms] = useState(false);
@@ -573,10 +577,13 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
   useEffect(() => {
     if (open && policyId) {
       fetchPolicyDetails();
-      setActiveSection('main');
+      // Open on whatever section the caller asked for ('files' for the
+      // ملفات shortcut button on the card, 'main' for the default kebab
+      // entry point).
+      setActiveSection(initialSection);
       setShowQuickPayment(false);
     }
-  }, [open, policyId]);
+  }, [open, policyId, initialSection]);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-GB");
