@@ -5,9 +5,8 @@ import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
-  ChevronDown, 
-  ChevronLeft, 
-  Eye, 
+  ChevronDown,
+  ChevronLeft,
   Calendar,
   Car,
   Banknote,
@@ -1752,11 +1751,6 @@ function PolicyPackageCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => onPolicyClick(policy.id)}>
-                  <Eye className="h-4 w-4 ml-2" />
-                  عرض التفاصيل
-                </DropdownMenuItem>
-
                 {/* Edit — open the package/policy edit modal directly from
                     the dropdown so the user doesn't have to walk through
                     the details drawer first. Hidden for cancelled and
