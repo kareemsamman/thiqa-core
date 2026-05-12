@@ -1962,33 +1962,25 @@ function buildPackageInvoiceHtml(
       </tbody>
     </table>
 
-    <!-- Payment status block — replaces the previous per-row سجل
-         الدفعات table and the 3-row totals. The customer doesn't need
-         to see which cheque / cash / transfer was used (that's
-         internal accounting); they need a clear "did I pay this
-         معاملة yet" answer plus a friendly read on their overall
-         account balance. -->
+    <!-- Bottom block: just the إجمالي for this معاملة plus a single
+         customer-facing line about the overall account balance. The
+         "حالة الدفع" badge was dropped at the user's request — the
+         only number the customer cares about is what they still owe
+         on their whole account, not whether this particular معاملة
+         is internally marked paid. -->
     <div class="bottom">
       <table class="totals">
         <tr>
           <td class="label">الإجمالي</td>
           <td class="val">₪${totalPrice.toLocaleString('en-US')}</td>
         </tr>
-        <tr class="${remaining <= 0 ? 'paid' : 'unpaid'}">
-          <td class="label">حالة الدفع</td>
-          <td class="val">${remaining <= 0 ? '✓ دفعت' : '✗ لم يتم الدفع'}</td>
-        </tr>
       </table>
     </div>
 
     <div class="account-note">
-      ${remaining <= 0
-        ? (customerTotalRemaining > 0
-          ? `تم دفع كامل قيمة هذه المعاملة. لا يزال على حسابك الكلي مبلغ <strong>₪${customerTotalRemaining.toLocaleString('en-US')}</strong> من معاملات أخرى.`
-          : `تم دفع كامل قيمة هذه المعاملة. حسابك مدفوع بالكامل — شكراً لك.`)
-        : (totalPaid > 0
-          ? `تم دفع <strong>₪${totalPaid.toLocaleString('en-US')}</strong> من حسابك، والمبلغ المتبقي عليك على حسابك الكلي هو <strong>₪${customerTotalRemaining.toLocaleString('en-US')}</strong>.`
-          : `لم يتم استلام أي مبلغ بعد. المبلغ المستحق عليك على حسابك الكلي هو <strong>₪${customerTotalRemaining.toLocaleString('en-US')}</strong>.`)}
+      ${customerTotalRemaining > 0
+        ? `المبلغ المتبقي على حسابك الكلي هو <strong>₪${customerTotalRemaining.toLocaleString('en-US')}</strong>.`
+        : `حسابك مدفوع بالكامل — شكراً لك.`}
     </div>
 
     ${branding.invoicePrivacyText ? `
