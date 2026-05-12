@@ -42,7 +42,7 @@ import { MultiImagePicker } from '@/components/shared/MultiImagePicker';
 import { sanitizeChequeNumber, validateChequeNumber } from '@/lib/chequeUtils';
 import { cn } from '@/lib/utils';
 
-export type SettlementMode = 'company' | 'broker';
+export type SettlementMode = 'company' | 'broker' | 'client';
 export type SettlementKind = 'disbursement' | 'receipt';
 export type PaymentLineType = 'cash' | 'cheque' | 'customer_cheque' | 'bank_transfer' | 'visa';
 
@@ -57,8 +57,23 @@ interface Props {
   mode: SettlementMode;
   kind: SettlementKind;
   defaultEntityId?: string | null;
-  entities: SettlementEntity[];
+  /** Required for company / broker modes; ignored on client mode (the
+   *  client is identified by defaultEntityId, no picker shown). */
+  entities?: SettlementEntity[];
   onSaved: () => void;
+  // ── client-mode extras ─────────────────────────────────────────────
+  /** Title-bar display name when mode === 'client'. */
+  clientName?: string;
+  /** Optional link to the policy this disbursement is settling (cancel
+   *  or transfer flow). Stored on client_settlements.policy_id and
+   *  mirrored through to the receipts row by the AFTER INSERT trigger. */
+  policyId?: string | null;
+  /** Optional branch override; defaults to inherit-from-agent. */
+  branchId?: string | null;
+  /** When set, the dialog refuses to save unless the line total equals
+   *  this amount. Used by Cancel/Transfer modals to pin the
+   *  disbursement to the refund value the user already typed. */
+  targetAmount?: number;
 }
 
 interface PaymentLine {
@@ -122,11 +137,17 @@ function makeLine(type: PaymentLineType): PaymentLine {
   return base;
 }
 
-const titleFor = (mode: SettlementMode, kind: SettlementKind): string => {
+const titleFor = (mode: SettlementMode, kind: SettlementKind, clientName?: string): string => {
   if (mode === 'company') {
     return kind === 'disbursement' ? 'إضافة سند صرف لشركة' : 'إضافة سند قبض من شركة';
   }
-  return kind === 'disbursement' ? 'إضافة سند صرف لوسيط' : 'إضافة سند قبض من وسيط';
+  if (mode === 'broker') {
+    return kind === 'disbursement' ? 'إضافة سند صرف لوسيط' : 'إضافة سند قبض من وسيط';
+  }
+  // Client mode is always disbursement (incoming client money goes
+  // through policy_payments, never this dialog). Show the customer
+  // name in the title so the agent confirms the right person.
+  return clientName ? `إضافة سند صرف للعميل — ${clientName}` : 'إضافة سند صرف للعميل';
 };
 
 export function AddSettlementDialog({
@@ -137,6 +158,10 @@ export function AddSettlementDialog({
   defaultEntityId,
   entities,
   onSaved,
+  clientName,
+  policyId,
+  branchId,
+  targetAmount,
 }: Props) {
   const { user } = useAuth();
   const { agentId } = useAgentContext();
@@ -266,8 +291,27 @@ export function AddSettlementDialog({
 
   const handleSave = async () => {
     if (!entityId) {
-      toast.error(mode === 'company' ? 'الرجاء اختيار شركة' : 'الرجاء اختيار وسيط');
+      toast.error(
+        mode === 'company'
+          ? 'الرجاء اختيار شركة'
+          : mode === 'broker'
+            ? 'الرجاء اختيار وسيط'
+            : 'العميل غير محدد',
+      );
       return;
+    }
+    // When the caller pinned a target amount (cancel/transfer refund
+    // scenarios), the line total must match it before save. Rounding
+    // to 2 decimals so the comparison ignores floating-point dust.
+    if (mode === 'client' && typeof targetAmount === 'number' && targetAmount > 0) {
+      const totalRounded = Math.round(total * 100) / 100;
+      const targetRounded = Math.round(targetAmount * 100) / 100;
+      if (totalRounded !== targetRounded) {
+        toast.error(
+          `المجموع ₪${totalRounded.toLocaleString('en-US')} لا يساوي المبلغ المطلوب ₪${targetRounded.toLocaleString('en-US')}`,
+        );
+        return;
+      }
     }
     // Silently drop empty placeholder lines — the dialog seeds with an
     // empty cash row, and quick-add buttons stack more empty rows when
@@ -324,6 +368,11 @@ export function AddSettlementDialog({
     }
 
     setSaving(true);
+    // Multi-line client disbursements share one settlement_session_id
+    // so the BEFORE INSERT trigger reuses a single D{nn}/YYYY voucher
+    // across all lines instead of allocating a new number per row.
+    const clientSettlementSessionId =
+      mode === 'client' && effective.length > 0 ? crypto.randomUUID() : null;
     try {
       for (const line of effective) {
         const isCustomerCheque = line.payment_type === 'customer_cheque';
@@ -384,13 +433,34 @@ export function AddSettlementDialog({
             .single();
           if (error) throw error;
           settlementId = (data as { id: string }).id;
-        } else {
+        } else if (mode === 'broker') {
           const { data, error } = await supabase
             .from('broker_settlements')
             .insert({
               ...shared,
               broker_id: entityId,
               direction: kind === 'disbursement' ? 'we_owe' : 'broker_owes',
+            } as never)
+            .select('id')
+            .single();
+          if (error) throw error;
+          settlementId = (data as { id: string }).id;
+        } else {
+          // mode === 'client'
+          //
+          // Disbursement only (the dialog short-circuits 'receipt' at
+          // the open path — client payments go through policy_payments).
+          // The DB triggers handle voucher_number + receipts mirror
+          // automatically; we just send the raw line and let the
+          // BEFORE/AFTER triggers do their thing.
+          const { data, error } = await supabase
+            .from('client_settlements')
+            .insert({
+              ...shared,
+              client_id: entityId,
+              policy_id: policyId ?? null,
+              branch_id: branchId ?? null,
+              settlement_session_id: clientSettlementSessionId,
             } as never)
             .select('id')
             .single();
@@ -429,26 +499,43 @@ export function AddSettlementDialog({
       <Dialog open={open} onOpenChange={(v) => !saving && onOpenChange(v)}>
         <DialogContent dir="rtl" className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{titleFor(mode, kind)}</DialogTitle>
+            <DialogTitle>{titleFor(mode, kind, clientName)}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Entity picker */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">{mode === 'company' ? 'الشركة' : 'الوسيط'}</Label>
-              <Select value={entityId} onValueChange={setEntityId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={mode === 'company' ? 'اختر شركة' : 'اختر وسيط'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {entities.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Entity picker — hidden in client mode since the customer
+                is already pinned via defaultEntityId from the cancel /
+                transfer flow that opened the dialog. Showing a fake
+                disabled picker would just add visual noise. */}
+            {mode !== 'client' && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">{mode === 'company' ? 'الشركة' : 'الوسيط'}</Label>
+                <Select value={entityId} onValueChange={setEntityId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={mode === 'company' ? 'اختر شركة' : 'اختر وسيط'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(entities ?? []).map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* In client mode, surface the target amount the cancel /
+                transfer modal handed us so the agent has a constant
+                reminder of what the sum must equal. */}
+            {mode === 'client' && typeof targetAmount === 'number' && targetAmount > 0 && (
+              <div className="flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">المطلوب صرفه</span>
+                <span className="font-semibold ltr-nums">
+                  ₪{targetAmount.toLocaleString('en-US')}
+                </span>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label className="text-xs">الوصف / ملاحظات</Label>
