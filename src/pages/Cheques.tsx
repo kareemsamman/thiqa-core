@@ -58,6 +58,7 @@ import {
   Building2,
   FileText,
   XCircle,
+  Printer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PdfJsViewer } from "@/components/policies/PdfJsViewer";
@@ -235,6 +236,11 @@ export default function Cheques() {
   const [reasonText, setReasonText] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [reasonSubmitting, setReasonSubmitting] = useState(false);
+
+  // Tracks which cancelled cheque is currently printing its سند إلغاء,
+  // so the dropdown item can show a spinner and block double-clicks
+  // while the edge function spins up the PDF.
+  const [printingVoucherChequeId, setPrintingVoucherChequeId] = useState<string | null>(null);
 
   // Active tab
   const [activeTab, setActiveTab] = useState("list");
@@ -832,6 +838,62 @@ export default function Cheques() {
     }
   };
 
+  // Looks up the cancellation voucher receipt for a cancelled customer
+  // cheque and opens the printable سند إلغاء. The voucher row is
+  // created by sync_receipt_from_policy_payment when refused flips
+  // false→true (migration 20260511160000); we find it by
+  // receipt_type='cancellation' + payment_id IN (member ids). For
+  // multi-split cheques every member row gets its own voucher receipt,
+  // all sharing the same session — we pick the smallest receipt_number
+  // as the canonical row, matching the dedupe Receipts.tsx uses.
+  const handlePrintCancellationVoucher = async (cheque: ChequeRecord) => {
+    setPrintingVoucherChequeId(cheque.id);
+    try {
+      const paymentIds = cheque.member_ids?.length ? cheque.member_ids : [cheque.id];
+      const { data: vouchers, error: vErr } = await supabase
+        .from('receipts')
+        .select('id, receipt_number')
+        .eq('receipt_type', 'cancellation')
+        .in('payment_id', paymentIds)
+        .order('receipt_number', { ascending: true })
+        .limit(1);
+      if (vErr) throw vErr;
+      const voucherId = vouchers?.[0]?.id;
+      if (!voucherId) {
+        toast({
+          title: "غير موجود",
+          description: "لم يتم العثور على سند الإلغاء",
+          variant: "destructive",
+        });
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke(
+        'generate-cancellation-voucher',
+        { body: { voucher_receipt_id: voucherId } },
+      );
+      if (error) throw error;
+      const url = (data as { receipt_url?: string } | null)?.receipt_url;
+      if (!url) {
+        toast({
+          title: "خطأ",
+          description: "لم يتم العثور على رابط السند",
+          variant: "destructive",
+        });
+        return;
+      }
+      window.open(url, '_blank');
+    } catch (err) {
+      const detail = await extractFunctionErrorMessage(err);
+      toast({
+        title: "خطأ",
+        description: detail || "فشل في توليد سند الإلغاء",
+        variant: "destructive",
+      });
+    } finally {
+      setPrintingVoucherChequeId(null);
+    }
+  };
+
   const handleBulkStatusChange = async (newStatus: string) => {
     if (selectedCheques.size === 0) return;
 
@@ -1281,26 +1343,39 @@ export default function Cheques() {
                   تعديل الشيك
                 </DropdownMenuItem>
               )}
-              {/* Customer cheques: only the three voiding actions are
-                  exposed — صرف, إلغاء, رجع. Per the immutable-accounting
-                  rule the user wants going forward, we don't surface
-                  inline edits anymore; correction goes through the
-                  delete + re-enter flow once the voucher system lands.
-                  transferred_out is a terminal state (the cheque is
-                  already used as outgoing) so no actions show. */}
+              {/* Customer cheques: the three voiding actions are exposed —
+                  صرف, إلغاء, رجع — until the cheque is cancelled. Once
+                  cancelled the row is frozen (no صرف / no رجع back into
+                  active state) per the immutable-accounting rule, and
+                  the only remaining action is reprinting the سند إلغاء
+                  the cancellation generated. transferred_out is a
+                  terminal state (the cheque is already used as outgoing)
+                  so no actions show. */}
               {(cheque.source === 'customer' || !cheque.source) &&
                 cheque.cheque_status !== 'transferred_out' && (
-                  <>
-                    {cheque.cheque_status !== 'cashed' && (
-                      <DropdownMenuItem
-                        onClick={() => handleStatusChange(cheque.id, 'cashed')}
-                        className="text-green-600 focus:text-green-700"
-                      >
-                        <CheckCircle2 className="h-4 w-4 ml-2" />
-                        صرف الشيك
-                      </DropdownMenuItem>
-                    )}
-                    {cheque.cheque_status !== 'cancelled' && (
+                  cheque.cheque_status === 'cancelled' ? (
+                    <DropdownMenuItem
+                      onClick={() => handlePrintCancellationVoucher(cheque)}
+                      disabled={printingVoucherChequeId === cheque.id}
+                    >
+                      {printingVoucherChequeId === cheque.id ? (
+                        <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                      ) : (
+                        <Printer className="h-4 w-4 ml-2" />
+                      )}
+                      طباعة سند الإلغاء
+                    </DropdownMenuItem>
+                  ) : (
+                    <>
+                      {cheque.cheque_status !== 'cashed' && (
+                        <DropdownMenuItem
+                          onClick={() => handleStatusChange(cheque.id, 'cashed')}
+                          className="text-green-600 focus:text-green-700"
+                        >
+                          <CheckCircle2 className="h-4 w-4 ml-2" />
+                          صرف الشيك
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
                         onClick={() => openReasonDialog(cheque.id, 'cancelled')}
                         className="text-amber-600 focus:text-amber-700"
@@ -1308,17 +1383,17 @@ export default function Cheques() {
                         <XCircle className="h-4 w-4 ml-2" />
                         إلغاء الشيك
                       </DropdownMenuItem>
-                    )}
-                    {cheque.cheque_status !== 'returned' && (
-                      <DropdownMenuItem
-                        onClick={() => openReasonDialog(cheque.id, 'returned')}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <RotateCcw className="h-4 w-4 ml-2" />
-                        رجع الشيك
-                      </DropdownMenuItem>
-                    )}
-                  </>
+                      {cheque.cheque_status !== 'returned' && (
+                        <DropdownMenuItem
+                          onClick={() => openReasonDialog(cheque.id, 'returned')}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <RotateCcw className="h-4 w-4 ml-2" />
+                          رجع الشيك
+                        </DropdownMenuItem>
+                      )}
+                    </>
+                  )
                 )}
             </DropdownMenuContent>
           </DropdownMenu>
