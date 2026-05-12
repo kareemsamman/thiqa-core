@@ -32,11 +32,6 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -55,7 +50,6 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
-  Eye,
   XCircle,
   Ban,
 } from "lucide-react";
@@ -133,12 +127,11 @@ const PAGE_SIZE = 50;
 
 // ─── Columns ─────────────────────────────────────────────────────────
 //
-// Schema for the manage-columns dropdown. document_number and actions
-// are required (the row would lose its identity / interactivity without
-// them). Default visibility excludes ملاحظات / رقم الشيك since those
-// only matter to a subset of users — they can opt in via the dropdown.
+// Schema for the manage-columns dropdown. actions is required (the row
+// would lose its interactivity without it). Default visibility excludes
+// ملاحظات / رقم الشيك since those only matter to a subset of users —
+// they can opt in via the dropdown.
 const RECEIPTS_COLUMNS: ColumnOption[] = [
-  { key: "document_number", label: "رقم المعاملة", required: true },
   { key: "receipt_number", label: "رقم سند القبض" },
   { key: "amount", label: "المبلغ" },
   { key: "receipt_date", label: "التاريخ" },
@@ -154,7 +147,6 @@ const RECEIPTS_COLUMNS: ColumnOption[] = [
 ];
 
 const RECEIPTS_DEFAULT_VISIBLE = [
-  "document_number",
   "receipt_number",
   "amount",
   "receipt_date",
@@ -908,7 +900,6 @@ export default function Receipts() {
           created_minute: roundToMinute(r.created_at),
           receipts: [],
           total: 0,
-          document_numbers: [],
           company_name: company?.name_ar || company?.name || null,
           policy_type_label: typeKey
             ? POLICY_TYPE_DISPLAY[typeKey] || typeKey
@@ -919,10 +910,6 @@ export default function Receipts() {
       const g = map.get(key)!;
       g.receipts.push(r);
       g.total += r.amount;
-      const doc = policy?.document_number;
-      if (doc && !g.document_numbers.includes(doc)) {
-        g.document_numbers.push(doc);
-      }
     }
     return Array.from(map.values());
   }, [receipts, sessionByPaymentId]);
@@ -1678,7 +1665,6 @@ export default function Receipts() {
       // the row index pinned in front. Toggling شركة التأمين on screen
       // toggles it in print too — one knob, both surfaces.
       const PRINT_LABELS: Record<string, string> = {
-        document_number: "رقم المعاملة",
         receipt_number: "رقم السند",
         amount: "المبلغ",
         receipt_date: "التاريخ",
@@ -1722,7 +1708,6 @@ export default function Receipts() {
           : null;
         return {
           idx: i + 1,
-          document_number: policy?.document_number ?? "",
           receipt_number: r.receipt_number ?? "",
           receipt_date: formatDate(r.receipt_date),
           client_name: r.client_name,
@@ -2237,7 +2222,6 @@ export default function Receipts() {
     // Per-column widths so table-fixed has something stable to size to.
     // Anything not listed gets `auto` (the client_name column flexes).
     const colWidths: Record<string, string | undefined> = {
-      document_number: "110px",
       receipt_number: "160px",
       amount: "180px",
       receipt_date: "110px",
@@ -2330,91 +2314,37 @@ export default function Receipts() {
                       key={group.key}
                       className="hover:bg-muted/40"
                     >
-                      {isCol("document_number") && (
-                        <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
-                          {group.document_numbers.length > 0 ? (
-                            <div className="flex items-center gap-1.5">
-                              <span>{group.document_numbers.join(" · ")}</span>
-                              {group.document_numbers.length > 1 && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[9px] px-1.5 py-0 h-4 font-sans bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-300"
-                                  title="هذه المعاملات ضمن باقة واحدة"
-                                >
-                                  📦 باقة
-                                </Badge>
-                              )}
-                            </div>
-                          ) : (
-                            "-"
-                          )}
-                        </TableCell>
-                      )}
                       {isCol("receipt_number") && (
                         <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
-                          <div className="flex flex-col gap-0.5">
-                          {group.receipts.length <= 1 ? (
-                            <span>{firstReceipt?.receipt_number ?? "-"}</span>
-                          ) : (
-                            <Tooltip delayDuration={100}>
-                              <TooltipTrigger asChild>
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-semibold cursor-help hover:bg-primary/15 transition-colors">
-                                  <Eye className="h-3 w-3" />
-                                  عرض الكل
-                                  <span className="bg-primary/20 rounded-full px-1.5 py-0 text-[9px]">
-                                    {group.receipts.length}
-                                  </span>
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent
-                                side="bottom"
-                                align="end"
-                                className="p-2"
-                                dir="rtl"
-                              >
-                                <p className="text-[10px] text-muted-foreground mb-1.5 px-1">
-                                  أرقام السندات ({group.receipts.length})
-                                </p>
-                                <ul className="flex flex-col gap-0.5">
-                                  {group.receipts.map((r) => (
-                                    <li
-                                      key={r.id}
-                                      className="px-2 py-1 rounded font-mono text-xs ltr-nums flex items-center gap-3 justify-between min-w-[140px]"
-                                    >
-                                      <span>{r.receipt_number ?? "-"}</span>
-                                      <span className="text-muted-foreground">
-                                        {paymentLabelShort(r.payment_method)}
-                                      </span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                          {/* Cancellation indicators. Payment tab: red
-                              "ملغي" badge + the voucher number that
-                              cancelled it. Cancellation tab: amber badge
-                              + the original receipt number this voucher
-                              cancels. */}
-                          {allCancelled && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-destructive/10 text-destructive text-[10px] font-sans w-fit">
-                              <XCircle className="h-2.5 w-2.5" />
-                              ملغي
-                              {voucherRef != null && <span className="font-mono ltr-nums">→ #{voucherRef}</span>}
-                            </span>
-                          )}
-                          {partiallyCancelled && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 text-[10px] font-sans w-fit">
-                              <AlertCircle className="h-2.5 w-2.5" />
-                              ملغي جزئياً
-                            </span>
-                          )}
-                          {activeTab === 'cancellation' && voucherRef != null && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 text-[10px] font-sans w-fit">
-                              <Ban className="h-2.5 w-2.5" />
-                              <span className="font-mono ltr-nums">إلغاء سند #{voucherRef}</span>
-                            </span>
-                          )}
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="font-semibold">{firstReceipt?.receipt_number ?? "-"}</span>
+                            {/* Cancellation indicators. Payment tab: red
+                                pill + the voucher number that cancelled
+                                it. Cancellation tab: amber pill + the
+                                original receipt number this voucher
+                                cancels. */}
+                            {allCancelled && (
+                              <Badge variant="destructive" className="gap-1 px-2 py-0 h-5 text-[10px] font-medium">
+                                <XCircle className="h-3 w-3" />
+                                <span>ملغي</span>
+                                {voucherRef != null && (
+                                  <span className="font-mono ltr-nums opacity-80">#{voucherRef}</span>
+                                )}
+                              </Badge>
+                            )}
+                            {partiallyCancelled && (
+                              <Badge variant="warning" className="gap-1 px-2 py-0 h-5 text-[10px] font-medium">
+                                <AlertCircle className="h-3 w-3" />
+                                <span>ملغي جزئياً</span>
+                              </Badge>
+                            )}
+                            {activeTab === 'cancellation' && voucherRef != null && (
+                              <Badge variant="warning" className="gap-1 px-2 py-0 h-5 text-[10px] font-medium">
+                                <Ban className="h-3 w-3" />
+                                <span>إلغاء سند</span>
+                                <span className="font-mono ltr-nums opacity-80">#{voucherRef}</span>
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
                       )}
