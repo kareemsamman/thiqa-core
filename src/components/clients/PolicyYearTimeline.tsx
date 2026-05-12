@@ -2245,10 +2245,16 @@ function PolicyPackageCard({
           </div>
         )}
 
-        {/* Standalone policy — single-row "المعاملة" section so staff can
-            still edit the policy number inline and the paid/remaining
-            totals live in the same framed footer the package cards use. */}
-        {!isPkg && isActive && (
+        {/* Standalone policy — single-row "المعاملة" section. Used to
+            be gated on isActive, which made cancelled / transferred
+            single-policy cards collapse to the price line with no
+            policy-number row or duration. Staff couldn't see what
+            had actually been cancelled. The breakdown table now
+            renders for every status; the paid/remaining/profit
+            totals footer is the only piece that stays active-only
+            (those numbers no longer mean anything once the policy is
+            cancelled or transferred). */}
+        {!isPkg && (
           <div className="mt-3 pt-3 border-t border-border/50">
             <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
               <FileText className="h-3.5 w-3.5" />
@@ -2267,57 +2273,59 @@ function PolicyPackageCard({
                 onPoliciesUpdate={onPoliciesUpdate}
               />
             </div>
-            <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
-              {/* Standalone-policy totals footer — non-interactive,
-                  same change as the package version. */}
-              <div
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2",
-                  hasBroker
-                    ? "justify-start bg-amber-50/60 dark:bg-amber-500/5 text-right"
-                    : "justify-end text-right",
-                )}
-                title={hasBroker ? brokerNoteText : undefined}
-              >
-                {hasBroker ? (
-                  <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
-                    <Handshake className="h-3.5 w-3.5 shrink-0" />
-                    <span>{brokerNoteText}</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex flex-col text-xs items-end text-left">
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
-                      <span className="font-bold text-success ltr-nums">
-                        ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
-                      </span>
+            {isActive && (
+              <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
+                {/* Standalone-policy totals footer — non-interactive,
+                    same change as the package version. */}
+                <div
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2",
+                    hasBroker
+                      ? "justify-start bg-amber-50/60 dark:bg-amber-500/5 text-right"
+                      : "justify-end text-right",
+                  )}
+                  title={hasBroker ? brokerNoteText : undefined}
+                >
+                  {hasBroker ? (
+                    <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
+                      <Handshake className="h-3.5 w-3.5 shrink-0" />
+                      <span>{brokerNoteText}</span>
                     </div>
-                    <div className="flex flex-col text-xs items-end text-left">
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
-                      <span className={cn(
-                        "font-bold ltr-nums",
-                        paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
-                      )}>
-                        ₪{paymentStatus.remaining.toLocaleString('en-US')}
-                      </span>
-                    </div>
-                    {canSeeFinancials && (
+                  ) : (
+                    <>
                       <div className="flex flex-col text-xs items-end text-left">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">الربح</span>
-                        <span className={cn(
-                          "font-bold ltr-nums",
-                          paymentStatus.profit > 0 ? "text-emerald-700 dark:text-emerald-400"
-                          : paymentStatus.profit < 0 ? "text-red-700 dark:text-red-400"
-                          : "text-muted-foreground",
-                        )}>
-                          ₪{paymentStatus.profit.toLocaleString('en-US')}
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
+                        <span className="font-bold text-success ltr-nums">
+                          ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
                         </span>
                       </div>
-                    )}
-                  </>
-                )}
+                      <div className="flex flex-col text-xs items-end text-left">
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
+                        <span className={cn(
+                          "font-bold ltr-nums",
+                          paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
+                        )}>
+                          ₪{paymentStatus.remaining.toLocaleString('en-US')}
+                        </span>
+                      </div>
+                      {canSeeFinancials && (
+                        <div className="flex flex-col text-xs items-end text-left">
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wide">الربح</span>
+                          <span className={cn(
+                            "font-bold ltr-nums",
+                            paymentStatus.profit > 0 ? "text-emerald-700 dark:text-emerald-400"
+                            : paymentStatus.profit < 0 ? "text-red-700 dark:text-red-400"
+                            : "text-muted-foreground",
+                          )}>
+                            ₪{paymentStatus.profit.toLocaleString('en-US')}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
             {/* Same caption as the package version — creator name with
                 email fallback plus the creation date+time. */}
             {(() => {
