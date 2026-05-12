@@ -1136,7 +1136,7 @@ export function DebtPaymentModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-[95vw] max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+      <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
             <DollarSign className="h-5 w-5 text-primary shrink-0" />
@@ -1275,82 +1275,13 @@ export function DebtPaymentModal({
               </Card>
             )}
 
-            {/* Debt Items List */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">المعاملات</Label>
-                <Badge variant="secondary" className="text-xs">
-                  {filteredItems.length} عناصر
-                </Badge>
-              </div>
-              <div className="border rounded-lg divide-y max-h-72 overflow-auto scrollbar-thin">
-                {filteredItems.map(item => (
-                  <div key={item.itemKey} className="p-2.5 sm:p-3 hover:bg-muted/30">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
-                      <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
-                        {item.isPackage ? (
-                          <Package className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 shrink-0" />
-                        ) : (
-                          <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground mt-0.5 shrink-0" />
-                        )}
-                        <div className="flex flex-col gap-1 min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <Badge variant={item.isPackage ? "default" : "outline"} className="text-[11px] sm:text-xs">
-                              {item.isPackage ? `📦 باقة تأمين` : getPolicyTypeLabel(item.policies[0]?.policyType, item.policies[0]?.policyTypeChild)}
-                            </Badge>
-                            {item.includesElzami && (
-                              <Badge variant="secondary" className="text-[11px] sm:text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
-                                يشمل الإلزامي
-                              </Badge>
-                            )}
-                          </div>
-                          {item.carNumber && (
-                            <span className="text-[11px] sm:text-xs text-muted-foreground font-mono">🚗 {item.carNumber}</span>
-                          )}
-                          {/* Show package components */}
-                          {item.isPackage && (
-                            <div className="flex flex-wrap gap-1 mt-0.5 items-center">
-                              {item.policies.map((comp, idx) => (
-                                <span key={idx} className="text-[11px] sm:text-xs text-muted-foreground">
-                                  {getPolicyTypeLabel(comp.policyType, comp.policyTypeChild)}
-                                  {idx < item.policies.length - 1 ? ' + ' : ''}
-                                </span>
-                              ))}
-                              {item.transferFee > 0 && (
-                                <Badge className="text-[10px] px-1.5 py-0 h-4 bg-sky-100 text-sky-800 hover:bg-sky-100 border-sky-200">
-                                  + عمولة تحويل ₪{item.transferFee.toLocaleString('en-US')}
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-                          {!item.isPackage && item.transferFee > 0 && (
-                            <div className="mt-0.5">
-                              <Badge className="text-[10px] px-1.5 py-0 h-4 bg-sky-100 text-sky-800 hover:bg-sky-100 border-sky-200">
-                                + عمولة تحويل ₪{item.transferFee.toLocaleString('en-US')}
-                              </Badge>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 sm:gap-1 text-[11px] sm:text-sm shrink-0 pl-6 sm:pl-0 border-t sm:border-t-0 pt-2 sm:pt-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-muted-foreground">السعر</span>
-                          <span className="font-medium tabular-nums whitespace-nowrap">₪{item.fullPrice.toLocaleString('en-US')}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-muted-foreground">المدفوع</span>
-                          <span className="font-medium text-green-600 tabular-nums whitespace-nowrap">₪{item.paidTotal.toLocaleString('en-US')}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-muted-foreground">المتبقي</span>
-                          <span className="font-bold text-destructive tabular-nums whitespace-nowrap">₪{item.remainingTotal.toLocaleString('en-US')}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* "المعاملات" section was removed per the user — the
+                summary cards at the top already convey إجمالي / مدفوع /
+                متبقي for the whole customer; the per-policy breakdown
+                was duplicated information and crowded the modal. The
+                payment distribution logic (calculateSplitPayments) still
+                uses debtItems / allPayablePolicies under the hood, just
+                not surfaced as a list. */}
 
             {/* Payment Lines */}
             <div className="space-y-3">
@@ -1411,7 +1342,15 @@ export function DebtPaymentModal({
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Reorder rationale (Google/Material common pattern
+                        for payment forms): primary inputs the cashier
+                        types FIRST line up on one row — المبلغ +
+                        طريقة الدفع + التاريخ. Cheques add a single
+                        secondary row for bank + branch + رقم الشيك +
+                        تاريخ الإصدار. Notes are tertiary and compact.
+                        Removes the empty whitespace the user pointed
+                        at without sacrificing field visibility. */}
+                    <div className="grid grid-cols-3 gap-3">
                       <div>
                         <Label className="text-xs">المبلغ</Label>
                         <Input
@@ -1424,8 +1363,8 @@ export function DebtPaymentModal({
                       </div>
                       <div>
                         <Label className="text-xs">طريقة الدفع</Label>
-                        <Select 
-                          value={payment.paymentType} 
+                        <Select
+                          value={payment.paymentType}
                           onValueChange={v => updatePaymentLine(payment.id, 'paymentType', v)}
                           disabled={payment.tranzilaPaid}
                         >
@@ -1434,26 +1373,20 @@ export function DebtPaymentModal({
                           </SelectTrigger>
                           <SelectContent>
                             {paymentTypes.map(pt => (
-                                <SelectItem key={pt.value} value={pt.value}>
-                                  <span className="flex items-center gap-2">
-                                    <pt.icon className="h-4 w-4" />
-                                    {pt.label}
-                                  </span>
-                                </SelectItem>
-                              ))}
+                              <SelectItem key={pt.value} value={pt.value}>
+                                <span className="flex items-center gap-2">
+                                  <pt.icon className="h-4 w-4" />
+                                  {pt.label}
+                                </span>
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
-                    </div>
-
-                    {/* For non-cheque types the date sits on its own row.
-                        For cheque rows the BankBranchPicker absorbs the
-                        cheque number into its third slot so bank → branch →
-                        رقم الشيك all line up on one row, with the due date
-                        on the next row. */}
-                    {payment.paymentType !== 'cheque' && (
                       <div>
-                        <Label className="text-xs">تاريخ الدفع</Label>
+                        <Label className="text-xs">
+                          {payment.paymentType === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
+                        </Label>
                         <ArabicDatePicker
                           value={payment.paymentDate}
                           onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
@@ -1461,10 +1394,10 @@ export function DebtPaymentModal({
                           compact
                         />
                       </div>
-                    )}
+                    </div>
 
                     {payment.paymentType === 'cheque' && (
-                      <>
+                      <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)] gap-3">
                         <BankBranchPicker
                           bankCode={payment.bankCode}
                           branchCode={payment.branchCode}
@@ -1485,16 +1418,6 @@ export function DebtPaymentModal({
                             </>
                           }
                         />
-                        {/* Convention: تاريخ الاستحقاق فوق، تاريخ الإصدار تحت. */}
-                        <div>
-                          <Label className="text-xs">تاريخ الاستحقاق</Label>
-                          <ArabicDatePicker
-                            value={payment.paymentDate}
-                            onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
-                            disabled={payment.tranzilaPaid}
-                            compact
-                          />
-                        </div>
                         <div>
                           <Label className="text-xs">تاريخ الإصدار</Label>
                           <ArabicDatePicker
@@ -1504,7 +1427,7 @@ export function DebtPaymentModal({
                             compact
                           />
                         </div>
-                      </>
+                      </div>
                     )}
 
                     <div>
@@ -1513,9 +1436,9 @@ export function DebtPaymentModal({
                         value={payment.notes || ''}
                         onChange={e => updatePaymentLine(payment.id, 'notes', e.target.value)}
                         placeholder="أضف ملاحظة لهذه الدفعة..."
-                        rows={2}
+                        rows={1}
                         disabled={payment.tranzilaPaid}
-                        className="resize-none text-sm"
+                        className="resize-none text-sm min-h-9"
                       />
                     </div>
 
