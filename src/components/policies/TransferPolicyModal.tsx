@@ -810,12 +810,14 @@ export function TransferPolicyModal({
         }
       }
 
-      const transferCount = policiesToTransfer.length;
-      toast({ 
-        title: "تم التحويل بنجاح", 
-        description: transferCount > 1 
-          ? `تم تحويل ${transferCount} معاملات - المعاملات القديمة انتهت بتاريخ التحويل ومعاملات جديدة تم إنشاؤها للسيارة الجديدة`
-          : "تم تحويل المعاملة - المعاملة القديمة انتهت بتاريخ التحويل ومعاملة جديدة تم إنشاؤها للسيارة الجديدة"
+      // A package of N add-ons under one تحويل is still ONE معاملة
+      // to the agent — singular phrasing keeps the success message
+      // honest. The DB row count differs from the user-visible
+      // transaction count when add-ons travel along, so we don't
+      // surface it.
+      toast({
+        title: "تم التحويل بنجاح",
+        description: "تم تحويل المعاملة — المعاملة القديمة انتهت بتاريخ التحويل ومعاملة جديدة تم إنشاؤها للسيارة الجديدة",
       });
       onTransferred();
       onOpenChange(false);

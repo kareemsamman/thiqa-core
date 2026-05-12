@@ -617,19 +617,24 @@ export function PolicyYearTimeline({
       }
 
       // Sort packages within year:
-      // 1. Newest non-transfer package first (the one carrying "جديدة")
-      // 2. Then by status: active → ended → transferred → cancelled
+      // 1. Status first: active → ended → transferred → cancelled.
+      //    After a تحويل the freshly-created target package is active
+      //    while the source flips to transferred — surfacing the
+      //    active one at the top so the agent sees the current state
+      //    without scrolling. "isNewest" used to come first here,
+      //    which let the transferred-out source keep the top slot
+      //    just because it had the older created_at among
+      //    non-transfer-target packages.
+      // 2. Then by "isNewest" (the جديدة flag, fresh-creation hint)
       // 3. Then by newest start date
       packages.sort((a, b) => {
-        if (a.isNewest && !b.isNewest) return -1;
-        if (!a.isNewest && b.isNewest) return 1;
-
-        // Then by status priority
         const priorityA = getStatusPriority(a.status);
         const priorityB = getStatusPriority(b.status);
         if (priorityA !== priorityB) return priorityA - priorityB;
 
-        // Then by newest start date
+        if (a.isNewest && !b.isNewest) return -1;
+        if (!a.isNewest && b.isNewest) return 1;
+
         const policyA = a.mainPolicy || a.addons[0];
         const policyB = b.mainPolicy || b.addons[0];
         const dateA = policyA?.start_date || '';

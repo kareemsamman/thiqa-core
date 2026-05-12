@@ -4007,6 +4007,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 fetchPolicies(),
                 fetchPaymentSummary(),
                 fetchPayments(),
+                // Transfer can mint a brand-new car (the "+ إضافة
+                // سيارة جديدة" path); without refetching, the cars
+                // filter and the new transaction's car badge stay
+                // stuck on the prior list until the page is reloaded.
+                fetchCars(),
               ]);
               onRefresh();
             }}
