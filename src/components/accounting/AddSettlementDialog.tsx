@@ -206,6 +206,18 @@ export function AddSettlementDialog({
     [lines],
   );
 
+  // Pre-flight target-amount check. Mirrors the rule handleSave
+  // enforces, but exposes it to the UI up-front so the save button
+  // and the total bar can reflect the state without waiting for a
+  // click. Only meaningful in client mode with a non-zero target.
+  const targetCap = typeof targetAmount === 'number' && targetAmount > 0 ? targetAmount : null;
+  const targetMismatch =
+    mode === 'client' &&
+    targetCap !== null &&
+    Math.round(total * 100) !== Math.round(targetCap * 100);
+  const targetExceeded =
+    mode === 'client' && targetCap !== null && total > targetCap + 0.005;
+
   const updateLine = (id: string, patch: Partial<PaymentLine>) =>
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
 
@@ -640,11 +652,32 @@ export function AddSettlementDialog({
                 ))}
             </div>
 
-            <div className="flex items-center justify-between rounded-lg bg-muted px-4 py-2.5">
+            <div
+              className={cn(
+                'flex items-center justify-between rounded-lg px-4 py-2.5',
+                targetMismatch
+                  ? 'bg-destructive/10 border border-destructive/30'
+                  : 'bg-muted',
+              )}
+            >
               <span className="text-sm font-semibold">إجمالي السند:</span>
-              <span className="text-lg font-bold tabular-nums">
-                ₪{total.toLocaleString('en-US')}
-              </span>
+              <div className="flex flex-col items-end gap-0.5">
+                <span
+                  className={cn(
+                    'text-lg font-bold tabular-nums',
+                    targetMismatch && 'text-destructive',
+                  )}
+                >
+                  ₪{total.toLocaleString('en-US')}
+                </span>
+                {targetMismatch && (
+                  <span className="text-[11px] text-destructive font-medium">
+                    {targetExceeded
+                      ? `يتجاوز المطلوب ₪${targetCap!.toLocaleString('en-US')}`
+                      : `أقل من المطلوب ₪${targetCap!.toLocaleString('en-US')}`}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -652,7 +685,18 @@ export function AddSettlementDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
               إلغاء
             </Button>
-            <Button onClick={handleSave} disabled={saving} className="gap-2">
+            <Button
+              onClick={handleSave}
+              disabled={saving || targetMismatch}
+              className="gap-2"
+              title={
+                targetMismatch
+                  ? targetExceeded
+                    ? `المجموع يتجاوز المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
+                    : `المجموع أقل من المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
+                  : undefined
+              }
+            >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {`حفظ (${lines.length})`}
             </Button>
