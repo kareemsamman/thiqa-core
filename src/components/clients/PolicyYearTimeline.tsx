@@ -2146,13 +2146,19 @@ function PolicyPackageCard({
             </div>
             {/* Creator caption — small line at the bottom showing who
                 added the معاملة. Pulled off the policy.creator join
-                that ClientDetails populates. Kept subtle so the
-                totals stay the visual focal point. */}
-            {pkg.mainPolicy?.creator?.full_name && (
-              <div className="text-[10px] text-muted-foreground mt-1.5 px-1">
-                أنشأها: <span className="font-medium">{pkg.mainPolicy.creator.full_name}</span>
-              </div>
-            )}
+                that ClientDetails populates. Falls back to the part
+                before "@" in the email when full_name is null (the
+                profiles row sometimes carries email only). */}
+            {(() => {
+              const c = pkg.mainPolicy?.creator;
+              const label = c?.full_name?.trim() || c?.email?.split('@')[0] || null;
+              if (!label) return null;
+              return (
+                <div className="text-[10px] text-muted-foreground mt-1.5 px-1">
+                  أنشأها: <span className="font-medium">{label}</span>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -2229,12 +2235,18 @@ function PolicyPackageCard({
                 )}
               </div>
             </div>
-            {/* Same creator caption as the package version. */}
-            {policy.creator?.full_name && (
-              <div className="text-[10px] text-muted-foreground mt-1.5 px-1">
-                أنشأها: <span className="font-medium">{policy.creator.full_name}</span>
-              </div>
-            )}
+            {/* Same creator caption as the package version — full_name
+                with email-username fallback. */}
+            {(() => {
+              const c = policy.creator;
+              const label = c?.full_name?.trim() || c?.email?.split('@')[0] || null;
+              if (!label) return null;
+              return (
+                <div className="text-[10px] text-muted-foreground mt-1.5 px-1">
+                  أنشأها: <span className="font-medium">{label}</span>
+                </div>
+              );
+            })()}
           </div>
         )}
 

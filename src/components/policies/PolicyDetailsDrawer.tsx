@@ -721,12 +721,28 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
     return null;
   };
 
+  // Files-only / compact mode: when the drawer is opened via the
+  // "ملفات (N)" shortcut on the policy card, the user wants a slim
+  // popup focused on the files surface — no hero header with all the
+  // policy meta, no tabs, no action buttons, no policy-number row.
+  // Just an X, a simple title, and the files list. We keep the full
+  // PolicyFilesSection underneath so upload / preview / delete all
+  // behave identically — only the chrome around it changes.
+  const isFilesOnlyMode = initialSection === 'files';
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           hideCloseButton
-          className="!left-2 !right-2 !top-2 !bottom-2 !translate-x-0 !translate-y-0 !w-auto !max-w-none !max-h-none sm:!left-[50%] sm:!right-auto sm:!top-[50%] sm:!bottom-auto sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:!w-full sm:!max-w-6xl sm:!h-[95vh] sm:!max-h-[95vh] p-0 overflow-hidden gap-0"
+          className={cn(
+            "p-0 overflow-hidden gap-0",
+            isFilesOnlyMode
+              // Compact: smaller width + auto height + center alignment
+              ? "!left-2 !right-2 !top-[50%] !bottom-auto !translate-x-0 !translate-y-[-50%] !w-auto !max-w-none !max-h-[90vh] sm:!left-[50%] sm:!right-auto sm:!top-[50%] sm:!bottom-auto sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:!w-full sm:!max-w-2xl sm:!h-auto sm:!max-h-[85vh]"
+              // Default: full-size for the معلومات المعاملة surface.
+              : "!left-2 !right-2 !top-2 !bottom-2 !translate-x-0 !translate-y-0 !w-auto !max-w-none !max-h-none sm:!left-[50%] sm:!right-auto sm:!top-[50%] sm:!bottom-auto sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:!w-full sm:!max-w-6xl sm:!h-[95vh] sm:!max-h-[95vh]"
+          )}
           dir="rtl"
         >
           {loading ? (
@@ -739,6 +755,47 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                 <Skeleton className="h-20" />
               </div>
               <Skeleton className="h-40 w-full" />
+            </div>
+          ) : policy && isFilesOnlyMode ? (
+            // Compact files-only popup: minimal X + title bar, then
+            // the same PolicyFilesSection the full drawer uses. The
+            // upload / preview / delete experience underneath is the
+            // shared component, so any change to the file flow
+            // automatically reflects in both modes.
+            <div className="flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b">
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  aria-label="إغلاق"
+                  title="إغلاق"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <ImageIcon className="h-4 w-4 text-primary" />
+                  <span>ملفات المعاملة</span>
+                  {policyFilesCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-xs bg-muted-foreground/20">
+                      {policyFilesCount}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <ScrollArea className="flex-1 max-h-[75vh]">
+                <div className="p-4 sm:p-5">
+                  <PolicyFilesSection
+                    policyId={policy.id}
+                    policyNumber={policy.policy_number}
+                    clientId={policy.clients.id}
+                    clientPhoneNumber={policy.clients.phone_number}
+                    clientName={policy.clients.full_name}
+                    onPolicyNumberSaved={() => fetchPolicyDetails()}
+                    packagePolicyIds={hasPackage ? [policy.id, ...relatedPolicies.map(rp => rp.id)] : undefined}
+                  />
+                </div>
+              </ScrollArea>
             </div>
           ) : policy ? (
             <div className="flex flex-col h-full overflow-hidden">
