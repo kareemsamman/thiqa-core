@@ -86,6 +86,39 @@ interface BrokerDebtInfo {
   amount: number;
 }
 
+// When the modal is opened in "edit" mode this carries everything the
+// modal needs to act as a session-level editor: which payment rows
+// belong to the session being edited, plus the existing line data so
+// the form can pre-populate them. The accounting rule (set by the user)
+// is "delete the old سند قبض and write a new one" — there is no
+// per-row UPDATE path; submit DELETEs every row in `paymentIds` and
+// recreates them from the form. The session id is reused so the new
+// rows keep the same grouping key.
+export interface DebtPaymentEditingSession {
+  id: string;
+  paymentIds: string[];
+  // The original payment rows, used only for pre-loading the form. We
+  // collapse multi-policy splits (same batch_id) into a single line at
+  // the face value the user originally entered.
+  payments: Array<{
+    id: string;
+    amount: number;
+    payment_type: string;
+    payment_date: string;
+    cheque_number?: string | null;
+    cheque_date?: string | null;
+    cheque_issue_date?: string | null;
+    bank_code?: string | null;
+    branch_code?: string | null;
+    cheque_image_url?: string | null;
+    notes?: string | null;
+    batch_id?: string | null;
+    locked?: boolean | null;
+  }>;
+  totalAmount: number;
+  receiptNumber: string | null;
+}
+
 interface DebtPaymentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -94,6 +127,11 @@ interface DebtPaymentModalProps {
   clientPhone: string | null;
   totalOwed: number;
   onSuccess: () => void;
+  // Optional: when set, the modal switches into "edit a single سند قبض"
+  // mode — title changes, the wallet ceiling treats the session's
+  // existing total as available room, and submit replaces the session's
+  // rows instead of adding new ones.
+  editingSession?: DebtPaymentEditingSession | null;
 }
 
 const policyTypeLabels: Record<string, string> = {
@@ -129,7 +167,9 @@ export function DebtPaymentModal({
   clientPhone,
   totalOwed,
   onSuccess,
+  editingSession,
 }: DebtPaymentModalProps) {
+  const isEditMode = !!editingSession;
   const { toast: uiToast } = useToast();
   const { hasFeature } = useAgentContext();
   const { guardSend: guardSmsSend } = useSmsLock();
@@ -221,17 +261,75 @@ export function DebtPaymentModal({
     if (open && clientId) {
       fetchDebtItems();
       fetchCreditBalance();
-      // Reset form with one empty payment line
-      setPaymentLines([{
-        id: crypto.randomUUID(),
-        amount: 0,
-        paymentType: 'cash',
-        paymentDate: new Date().toISOString().split('T')[0],
-      }]);
+      if (isEditMode && editingSession) {
+        // Edit mode: pre-load the session's existing payments as form
+        // lines. Multi-policy splits (same batch_id, one physical
+        // cheque allocated across N policies) collapse into ONE line
+        // at the cheque's face value — re-submitting will re-split
+        // via calculateSplitPayments just like the original entry did.
+        // Passthrough / locked rows are excluded; the session can only
+        // contain user-collected rows (the auto إلزامي passthrough has
+        // its own non-shared session_id from PolicyWizard).
+        const eligible = editingSession.payments.filter((p) => p.locked !== true);
+        const byBatch = new Map<string, typeof eligible>();
+        const standalone: typeof eligible = [];
+        for (const p of eligible) {
+          if (p.batch_id) {
+            const arr = byBatch.get(p.batch_id) ?? [];
+            arr.push(p);
+            byBatch.set(p.batch_id, arr);
+          } else {
+            standalone.push(p);
+          }
+        }
+        const lines: PaymentLine[] = [];
+        const toLine = (rep: (typeof eligible)[number], amount: number): PaymentLine => ({
+          id: crypto.randomUUID(),
+          amount,
+          paymentType: (['cash', 'cheque', 'transfer', 'visa'].includes(rep.payment_type)
+            ? rep.payment_type
+            : 'cash') as PaymentLine['paymentType'],
+          paymentDate: rep.payment_type === 'cheque'
+            ? (rep.cheque_date || rep.payment_date)
+            : rep.payment_date,
+          chequeIssueDate: rep.payment_type === 'cheque'
+            ? (rep.cheque_issue_date || undefined)
+            : undefined,
+          chequeNumber: rep.cheque_number || undefined,
+          bankCode: rep.bank_code ?? null,
+          branchCode: rep.branch_code ?? null,
+          notes: rep.notes || undefined,
+          cheque_image_url: rep.cheque_image_url || undefined,
+        });
+        for (const [, batch] of byBatch) {
+          const sum = batch.reduce((s, p) => s + Number(p.amount || 0), 0);
+          lines.push(toLine(batch[0], sum));
+        }
+        for (const p of standalone) {
+          lines.push(toLine(p, Number(p.amount || 0)));
+        }
+        setPaymentLines(lines.length > 0
+          ? lines
+          : [{
+              id: crypto.randomUUID(),
+              amount: 0,
+              paymentType: 'cash',
+              paymentDate: new Date().toISOString().split('T')[0],
+            }],
+        );
+      } else {
+        // Reset form with one empty payment line
+        setPaymentLines([{
+          id: crypto.randomUUID(),
+          amount: 0,
+          paymentType: 'cash',
+          paymentDate: new Date().toISOString().split('T')[0],
+        }]);
+      }
       setPreviewUrls({});
       setSelectedCars([]);
     }
-  }, [open, clientId]);
+  }, [open, clientId, isEditMode, editingSession]);
 
   // Net amount we currently owe the client (refunds minus adjustments due).
   // This offsets the debt shown in the modal so "المتبقي للدفع" reflects
@@ -357,15 +455,24 @@ export function DebtPaymentModal({
       if (allPolicyIds.length > 0) {
         const { data: paymentsData, error: paymentsError } = await supabase
           .from('policy_payments')
-          .select('policy_id, amount, refused')
+          .select('id, policy_id, amount, refused')
           .in('policy_id', allPolicyIds);
 
         if (paymentsError) throw paymentsError;
 
+        // In edit mode the session being edited is about to be DELETEd
+        // and recreated on submit, so its rows should not count toward
+        // المدفوع / المتبقي here — otherwise the wallet ceiling would
+        // be off by the session's existing total and the user couldn't
+        // re-allocate the same money they already paid.
+        const excluded = new Set<string>(
+          isEditMode && editingSession ? editingSession.paymentIds : [],
+        );
+
         (paymentsData || []).forEach(p => {
-          if (!p.refused) {
-            paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + p.amount;
-          }
+          if (p.refused) return;
+          if (excluded.has((p as any).id)) return;
+          paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + p.amount;
         });
       }
 
@@ -836,9 +943,36 @@ export function DebtPaymentModal({
     // row matching the paper voucher the cashier would hand the
     // customer for this collection event. Distinct from batch_id —
     // that's per-physical-cheque; this is per-visit/per-submit.
-    const sessionId = crypto.randomUUID();
+    //
+    // In edit mode we keep the SAME session id so audit history /
+    // back-references that pointed at the old session keep resolving
+    // to the new rows (e.g. activity log entries linking to the
+    // session). The old rows themselves are about to be DELETEd just
+    // below, before the new INSERTs run.
+    const sessionId = isEditMode && editingSession ? editingSession.id : crypto.randomUUID();
 
     try {
+      // Edit-mode prelude: replace, don't update. The user's accounting
+      // rule is that an unprinted سند قبض is a draft — editing it is
+      // not "modify in place" but "tear up the draft and write a new
+      // one". So we DELETE the existing session rows first (cascading
+      // delete cleans up payment_images via FK; receipts.payment_id is
+      // ON DELETE SET NULL so we explicitly remove the receipts rows
+      // too, otherwise the old سند قبض number would hang around in
+      // the receipts page with a null payment link).
+      if (isEditMode && editingSession && editingSession.paymentIds.length > 0) {
+        const { error: receiptsErr } = await supabase
+          .from('receipts')
+          .delete()
+          .in('payment_id', editingSession.paymentIds);
+        if (receiptsErr) throw receiptsErr;
+
+        const { error: paymentsErr } = await supabase
+          .from('policy_payments')
+          .delete()
+          .in('id', editingSession.paymentIds);
+        if (paymentsErr) throw paymentsErr;
+      }
       for (const paymentLine of paymentLines) {
         // Skip visa payments that are already paid via Tranzila
         if (paymentLine.paymentType === 'visa' && paymentLine.tranzilaPaid) {
@@ -941,7 +1075,7 @@ export function DebtPaymentModal({
         }
       }
 
-      toast.success('تم تسديد الدفعات بنجاح');
+      toast.success(isEditMode ? 'تم تحديث سند القبض' : 'تم تسديد الدفعات بنجاح');
       
       // Send bulk receipt SMS with all payment IDs
       if (allCreatedPaymentIds.length > 0) {
@@ -974,7 +1108,11 @@ export function DebtPaymentModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
             <DollarSign className="h-5 w-5 text-primary shrink-0" />
-            <span className="truncate">تسديد ديون {clientName}</span>
+            <span className="truncate">
+              {isEditMode
+                ? `تعديل سند قبض ${editingSession?.receiptNumber ? `#${editingSession.receiptNumber}` : ''}`
+                : `تسديد ديون ${clientName}`}
+            </span>
           </DialogTitle>
         </DialogHeader>
 

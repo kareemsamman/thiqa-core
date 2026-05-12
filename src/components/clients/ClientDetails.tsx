@@ -443,6 +443,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   );
   const [transferOpen, setTransferOpen] = useState(false);
   const [debtPaymentModalOpen, setDebtPaymentModalOpen] = useState(false);
+  // When set, the DebtPaymentModal opens in "edit a سند قبض" mode:
+  // it pre-loads the session's existing rows, treats the session's
+  // existing total as available wallet room, and on submit DELETEs
+  // the session's old rows before re-inserting. The accounting rule
+  // (set by the user) is "tear up the unprinted draft and rewrite"
+  // — there is no per-row UPDATE path. Cleared every time the modal
+  // closes so the next plain "دفع" click goes back to add mode.
+  const [debtModalEditingSession, setDebtModalEditingSession] =
+    useState<import('@/components/debt/DebtPaymentModal').DebtPaymentEditingSession | null>(null);
   // Cancel policy/package modal — opened directly from the dropdown on
   // PolicyYearTimeline instead of going through the details drawer.
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -2807,8 +2816,36 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                 ) : (
                                   <DropdownMenuItem
                                     onClick={() => {
-                                      setGroupDetailsGroup(group);
-                                      setGroupDetailsOpen(true);
+                                      // Unified edit flow: open the same
+                                      // DebtPaymentModal used for "دفع",
+                                      // but seeded with this session's
+                                      // existing rows so the user can
+                                      // re-allocate the same wallet room
+                                      // (or add/remove lines). On submit
+                                      // the old session is DELETEd and
+                                      // recreated — no per-row UPDATE.
+                                      setDebtModalEditingSession({
+                                        id: group.id,
+                                        paymentIds: group.payments.map((p) => p.id),
+                                        payments: group.payments.map((p) => ({
+                                          id: p.id,
+                                          amount: Number(p.amount || 0),
+                                          payment_type: p.payment_type,
+                                          payment_date: p.payment_date,
+                                          cheque_number: p.cheque_number,
+                                          cheque_date: (p as any).cheque_date ?? null,
+                                          cheque_issue_date: (p as any).cheque_issue_date ?? null,
+                                          bank_code: p.bank_code ?? null,
+                                          branch_code: p.branch_code ?? null,
+                                          cheque_image_url: p.cheque_image_url,
+                                          notes: p.notes,
+                                          batch_id: p.batch_id,
+                                          locked: p.locked,
+                                        })),
+                                        totalAmount: group.totalAmount,
+                                        receiptNumber: group.receipt_number,
+                                      });
+                                      setDebtPaymentModalOpen(true);
                                     }}
                                   >
                                     <Edit className="h-4 w-4 ml-2" />
@@ -3272,13 +3309,18 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       {/* Debt Payment Modal */}
       <DebtPaymentModal
         open={debtPaymentModalOpen}
-        onOpenChange={setDebtPaymentModalOpen}
+        onOpenChange={(open) => {
+          setDebtPaymentModalOpen(open);
+          if (!open) setDebtModalEditingSession(null);
+        }}
         clientId={client.id}
         clientName={client.full_name}
         clientPhone={client.phone_number}
         totalOwed={paymentSummary.total_remaining}
+        editingSession={debtModalEditingSession}
         onSuccess={async () => {
           setDebtPaymentModalOpen(false);
+          setDebtModalEditingSession(null);
           // Refresh all payment-related data
           await Promise.all([
             fetchPaymentSummary(),
@@ -3326,9 +3368,37 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           }
         }}
         group={groupDetailsGroup}
-        onEdit={(payment) => {
-          setPendingReopenGroupKey(groupDetailsGroup?.id ?? null);
-          handleEditPayment(payment as any, groupDetailsGroup ?? undefined);
+        onEdit={() => {
+          // Pencil inside the details popup now routes to the same
+          // session-level edit flow as the "تعديل" dropdown — the
+          // accounting rule is "delete the whole unprinted draft and
+          // rewrite", so per-row UPDATE doesn't apply anymore. We
+          // ignore the clicked row and edit the entire session.
+          const g = groupDetailsGroup;
+          if (!g || g.printed || g.refused) return;
+          setDebtModalEditingSession({
+            id: g.id,
+            paymentIds: g.payments.map((p) => p.id),
+            payments: g.payments.map((p) => ({
+              id: p.id,
+              amount: Number(p.amount || 0),
+              payment_type: p.payment_type,
+              payment_date: p.payment_date,
+              cheque_number: p.cheque_number,
+              cheque_date: (p as any).cheque_date ?? null,
+              cheque_issue_date: (p as any).cheque_issue_date ?? null,
+              bank_code: p.bank_code ?? null,
+              branch_code: p.branch_code ?? null,
+              cheque_image_url: p.cheque_image_url,
+              notes: p.notes,
+              batch_id: p.batch_id,
+              locked: p.locked,
+            })),
+            totalAmount: g.totalAmount,
+            receiptNumber: g.receipt_number,
+          });
+          setGroupDetailsOpen(false);
+          setDebtPaymentModalOpen(true);
         }}
         onDelete={(payment) => {
           setPendingReopenGroupKey(groupDetailsGroup?.id ?? null);
