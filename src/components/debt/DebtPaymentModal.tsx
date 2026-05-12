@@ -1159,29 +1159,35 @@ export function DebtPaymentModal({
           </div>
         ) : (
           <div className="space-y-3 sm:space-y-4">
-            {/* Summary Cards */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              <div className="bg-muted/50 rounded-lg p-2 sm:p-3 text-center">
-                <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">إجمالي السعر</p>
-                <p className="text-sm sm:text-lg font-bold tabular-nums leading-tight mt-0.5">₪{totalFullPrice.toLocaleString('en-US')}</p>
-              </div>
-              <div className="bg-green-500/10 rounded-lg p-2 sm:p-3 text-center">
-                <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">المدفوع</p>
-                <p className="text-sm sm:text-lg font-bold text-green-600 tabular-nums leading-tight mt-0.5">
-                  ₪{(totalPaidAmount + paidVisaTotal).toLocaleString('en-US')}
-                </p>
-              </div>
-              <div className="bg-destructive/10 rounded-lg p-2 sm:p-3 text-center">
-                <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">المتبقي للدفع</p>
-                <p className="text-sm sm:text-lg font-bold text-destructive tabular-nums leading-tight mt-0.5">
-                  ₪{effectiveRemaining.toLocaleString('en-US')}
-                </p>
-                {appliedCredit > 0 && (
-                  <div className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 space-y-0.5 leading-tight">
-                    <p>المطلوب: ₪{(totalRemaining - paidVisaTotal).toLocaleString('en-US')}</p>
-                    <p className="text-amber-600">المرتجع: -₪{appliedCredit.toLocaleString('en-US')}</p>
-                  </div>
-                )}
+            {/* Summary Cards — sticky at the top of the scrolling
+                content so the cashier sees إجمالي / مدفوع / متبقي no
+                matter how far down they scroll the payment lines.
+                Background + slight padding + shadow give a clean
+                separation from the scrolling rows underneath. */}
+            <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-1 pb-2 bg-background border-b">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <div className="bg-muted/50 rounded-lg p-2 sm:p-3 text-center">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">إجمالي السعر</p>
+                  <p className="text-sm sm:text-lg font-bold tabular-nums leading-tight mt-0.5">₪{totalFullPrice.toLocaleString('en-US')}</p>
+                </div>
+                <div className="bg-green-500/10 rounded-lg p-2 sm:p-3 text-center">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">المدفوع</p>
+                  <p className="text-sm sm:text-lg font-bold text-green-600 tabular-nums leading-tight mt-0.5">
+                    ₪{(totalPaidAmount + paidVisaTotal).toLocaleString('en-US')}
+                  </p>
+                </div>
+                <div className="bg-destructive/10 rounded-lg p-2 sm:p-3 text-center">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">المتبقي للدفع</p>
+                  <p className="text-sm sm:text-lg font-bold text-destructive tabular-nums leading-tight mt-0.5">
+                    ₪{effectiveRemaining.toLocaleString('en-US')}
+                  </p>
+                  {appliedCredit > 0 && (
+                    <div className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 space-y-0.5 leading-tight">
+                      <p>المطلوب: ₪{(totalRemaining - paidVisaTotal).toLocaleString('en-US')}</p>
+                      <p className="text-amber-600">المرتجع: -₪{appliedCredit.toLocaleString('en-US')}</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1391,7 +1397,6 @@ export function DebtPaymentModal({
                           value={payment.paymentDate}
                           onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
                           disabled={payment.tranzilaPaid}
-                          compact
                         />
                       </div>
                     </div>
@@ -1424,7 +1429,6 @@ export function DebtPaymentModal({
                             value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
                             onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
                             disabled={payment.tranzilaPaid}
-                            compact
                           />
                         </div>
                       </div>
@@ -1464,49 +1468,52 @@ export function DebtPaymentModal({
                       </div>
                     )}
 
-                    {/* Image Upload Section */}
+                    {/* Compact image-upload strip — sits inline next to
+                        the notes cell instead of taking its own full-
+                        width block + dashed drop zone. Existing previews
+                        render as 9×9 thumbnails with a hover-revealed X;
+                        a plus-tile triggers the file input. Status of
+                        pending uploads collapses into a single short
+                        line under the tiles so it doesn't double the
+                        modal height. */}
                     {(payment.paymentType === 'cash' || payment.paymentType === 'cheque' || payment.paymentType === 'transfer') && (
-                      <div className="pt-3 border-t border-border/50">
-                        <div className="flex-1">
-                          <Label className="text-xs text-muted-foreground mb-2 block">
-                            {payment.paymentType === 'cheque' ? 'صور الشيك (أمامي/خلفي)' : payment.paymentType === 'transfer' ? 'صور إيصال التحويل' : 'صور إيصال الدفع'}
-                          </Label>
-                          <div className="flex flex-wrap gap-2">
-                            {getPreviewUrls(payment.id).map((url, imgIndex) => (
-                              <div key={imgIndex} className="relative group">
-                                <img 
-                                  src={url} 
-                                  alt="" 
-                                  className="h-14 w-18 object-cover rounded border"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => removeImage(payment.id, imgIndex)}
-                                  className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                            ))}
-                            <label className="h-14 w-18 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors">
-                              <input 
-                                type="file" 
-                                accept="image/*,application/pdf" 
-                                multiple 
-                                onChange={(e) => handleImageSelect(payment.id, e)} 
-                                className="hidden" 
-                              />
-                              <Upload className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-[10px] text-muted-foreground mt-0.5">إضافة</span>
-                            </label>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">
+                          {payment.paymentType === 'cheque' ? 'صور الشيك:' : payment.paymentType === 'transfer' ? 'صور التحويل:' : 'صور الإيصال:'}
+                        </Label>
+                        {getPreviewUrls(payment.id).map((url, imgIndex) => (
+                          <div key={imgIndex} className="relative group">
+                            <img
+                              src={url}
+                              alt=""
+                              className="h-9 w-12 object-cover rounded border"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeImage(payment.id, imgIndex)}
+                              className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
                           </div>
-                          {payment.pendingImages && payment.pendingImages.length > 0 && (
-                            <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-                              <ImageIcon className="h-3 w-3" />
-                              {payment.pendingImages.length} ملفات سيتم رفعها عند الحفظ
-                            </p>
-                          )}
-                        </div>
+                        ))}
+                        <label className="h-9 px-2.5 inline-flex items-center gap-1.5 border border-dashed rounded cursor-pointer hover:bg-muted/50 transition-colors text-xs text-muted-foreground">
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            multiple
+                            onChange={(e) => handleImageSelect(payment.id, e)}
+                            className="hidden"
+                          />
+                          <Upload className="h-3.5 w-3.5" />
+                          إضافة
+                        </label>
+                        {payment.pendingImages && payment.pendingImages.length > 0 && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <ImageIcon className="h-3 w-3" />
+                            {payment.pendingImages.length} ملف سيُرفع
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1514,27 +1521,34 @@ export function DebtPaymentModal({
               ))}
             </div>
 
-            {/* Total and Validation */}
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-              <span className="font-medium">مجموع الدفعات:</span>
-              <span className={cn("text-lg font-bold", isOverpaying && "text-destructive")}>
-                ₪{totalPaymentAmount.toLocaleString()}
-              </span>
-            </div>
-
-            {isOverpaying && (
-              <p className="text-sm text-destructive flex items-center gap-1">
-                <AlertCircle className="h-4 w-4" />
-                مجموع الدفعات أكبر من المبلغ المتبقي (₪{effectiveRemaining.toLocaleString()})
-              </p>
-            )}
-
-            {hasUnpaidVisa && (
-              <div className="flex items-center gap-2 text-amber-600 text-sm p-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>يرجى إتمام الدفع بالبطاقة أولاً قبل الحفظ</span>
+            {/* Sticky-bottom totals + validation messages — same idea
+                as the sticky-top summary: the cashier needs to see
+                مجموع الدفعات vs the wallet ceiling at all times while
+                they add / edit lines. Pinned just above the dialog
+                footer with a background + top border so it doesn't
+                bleed into the scrolling rows above. */}
+            <div className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-2 pb-1 bg-background border-t space-y-2">
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <span className="font-medium">مجموع الدفعات:</span>
+                <span className={cn("text-lg font-bold", isOverpaying && "text-destructive")}>
+                  ₪{totalPaymentAmount.toLocaleString()}
+                </span>
               </div>
-            )}
+
+              {isOverpaying && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  مجموع الدفعات أكبر من المبلغ المتبقي (₪{effectiveRemaining.toLocaleString()})
+                </p>
+              )}
+
+              {hasUnpaidVisa && (
+                <div className="flex items-center gap-2 text-amber-600 text-sm p-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>يرجى إتمام الدفع بالبطاقة أولاً قبل الحفظ</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
