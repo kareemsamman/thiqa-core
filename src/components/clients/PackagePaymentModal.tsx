@@ -605,6 +605,23 @@ export function PackagePaymentModal({
       // Generate a batch_id to group all payments in this batch
       const batchId = crypto.randomUUID();
 
+      // Pre-allocate ONE receipt_number for the whole submit — same
+      // rule as DebtPaymentModal: a single collection event = a single
+      // سند قبض number, regardless of how many payment methods. The
+      // BEFORE-INSERT trigger would otherwise allocate per-row and
+      // every paymentLine would get its own R-number.
+      let sessionReceiptNumber: string | null = null;
+      const { data: rNum, error: rNumErr } = await supabase.rpc(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'allocate_receipt_number_for_policy' as any,
+        { p_policy_id: primaryPolicyId },
+      );
+      if (rNumErr) {
+        console.warn('[PackagePaymentModal] receipt_number pre-allocate failed; trigger will fall back', rNumErr);
+      } else if (typeof rNum === 'string') {
+        sessionReceiptNumber = rNum;
+      }
+
       for (const paymentLine of paymentLines) {
         // Skip already paid visa payments (already recorded via Tranzila)
         if (paymentLine.paymentType === 'visa' && paymentLine.tranzilaPaid) {
@@ -634,6 +651,10 @@ export function PackagePaymentModal({
             notes: paymentLine.notes || `دفعة من باقة (${policies.filter(p => !p.isTransferFee).length} معاملات)`,
             branch_id: branchId,
             batch_id: batchId,
+            // Same R-number across every row of this submit (see
+            // pre-allocate comment above). Null → trigger falls back
+            // to per-row allocation; used only on RPC error.
+            ...(sessionReceiptNumber ? { receipt_number: sessionReceiptNumber } : {}),
           })
           .select('id')
           .single();

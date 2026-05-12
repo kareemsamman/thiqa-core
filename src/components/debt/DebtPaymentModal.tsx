@@ -973,6 +973,33 @@ export function DebtPaymentModal({
           .in('id', editingSession.paymentIds);
         if (paymentsErr) throw paymentsErr;
       }
+
+      // Pre-allocate ONE receipt_number for this entire submit. Every
+      // row we insert below — across all paymentLines, all cheque
+      // splits, all batches — gets stamped with the same R-number so
+      // the user-stated rule "one collection event = one سند قبض =
+      // one number" holds. Without this, the BEFORE-INSERT trigger
+      // would fire per row and allocate sequential-but-different
+      // numbers (R10, R11, R12...) for cash + cheque + transfer of
+      // one submit.
+      let sessionReceiptNumber: string | null = null;
+      const firstPayablePolicyId = allPayablePolicies[0]?.policyId;
+      if (firstPayablePolicyId) {
+        const { data: rNum, error: rNumErr } = await supabase.rpc(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          'allocate_receipt_number_for_policy' as any,
+          { p_policy_id: firstPayablePolicyId },
+        );
+        if (rNumErr) {
+          // Fall through: trigger will still allocate per-row. Worse
+          // numbering than the unified path, but the submit succeeds
+          // instead of erroring out for the cashier.
+          console.warn('[DebtPaymentModal] receipt_number pre-allocate failed; trigger will fall back', rNumErr);
+        } else if (typeof rNum === 'string') {
+          sessionReceiptNumber = rNum;
+        }
+      }
+
       for (const paymentLine of paymentLines) {
         // Skip visa payments that are already paid via Tranzila
         if (paymentLine.paymentType === 'visa' && paymentLine.tranzilaPaid) {
@@ -1018,6 +1045,11 @@ export function DebtPaymentModal({
               branch_id: split.branchId,
               batch_id: batchId,
               payment_session_id: sessionId,
+              // Stamp the pre-allocated session receipt_number so every
+              // row in this submit shares one سند قبض. Null lets the
+              // trigger fall back to per-row allocation (used only when
+              // the pre-allocate RPC errored).
+              ...(sessionReceiptNumber ? { receipt_number: sessionReceiptNumber } : {}),
             }));
 
             const { data: insertedPayments, error } = await supabase

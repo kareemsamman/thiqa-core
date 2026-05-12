@@ -235,8 +235,29 @@ function buildBulkReceiptHtml(
   const anyNotes = payments.some(
     (p: any) => typeof p.notes === 'string' && p.notes.trim().length > 0,
   );
+  // Display dedupe: legacy data has one collection event spread
+  // across N rows with N different R-numbers (the BEFORE-INSERT
+  // trigger allocated per row). Per the user's rule "one سند قبض =
+  // one number, no matter how many rows", every row of the same
+  // session/batch should show the SAME R-number on the printed
+  // copy. We pick the smallest one as the canonical — same fallback
+  // chain as groupedPayments (`payment_session_id` → `batch_id` →
+  // `payment.id`).  New data from the app-side pre-allocate path
+  // already shares one R-number across the submit, so this map is a
+  // no-op there.
+  const receiptGroupKey = (p: any): string =>
+    p.payment_session_id || p.batch_id || p.id;
+  const canonicalReceiptByGroup = new Map<string, string>();
+  for (const p of payments as any[]) {
+    if (!p.receipt_number) continue;
+    const key = receiptGroupKey(p);
+    const existing = canonicalReceiptByGroup.get(key);
+    if (!existing || String(p.receipt_number) < existing) {
+      canonicalReceiptByGroup.set(key, String(p.receipt_number));
+    }
+  }
   const receiptRows = payments.map((p: any) => {
-    const num = p.receipt_number || '—';
+    const num = canonicalReceiptByGroup.get(receiptGroupKey(p)) || p.receipt_number || '—';
     const typeLbl = paymentTypeLabel(p);
     const extra = p.cheque_number ? ` · ${escapeHtml(String(p.cheque_number))}` : '';
     const refused = !!p.refused;

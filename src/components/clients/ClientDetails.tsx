@@ -1791,6 +1791,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       group.payments.push(payment);
       group.totalAmount += payment.amount;
 
+      // Display dedupe: legacy data has rows in the same session/batch
+      // with different receipt_numbers (R10/R11/R12 for one collection
+      // event). Show the smallest as the canonical سند number per the
+      // user's rule "one سند قبض = one number, regardless of how many
+      // rows". New data from the pre-allocate path already has the
+      // same R-number across all rows, so this is a no-op for it.
+      if (payment.receipt_number && (!group.receipt_number || payment.receipt_number < group.receipt_number)) {
+        group.receipt_number = payment.receipt_number;
+      }
+
       if (payment.payment_type && !group.paymentTypes.includes(payment.payment_type)) {
         group.paymentTypes.push(payment.payment_type);
       }
