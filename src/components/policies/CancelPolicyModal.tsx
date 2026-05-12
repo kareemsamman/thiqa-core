@@ -22,6 +22,7 @@ import { Lock as LockIcon } from "@phosphor-icons/react";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
+import { AddSettlementDialog } from "@/components/accounting/AddSettlementDialog";
 
 // Two ways to record a refund when cancelling a policy:
 //   credit_note  — the agency owes the client. Adds to the wallet
@@ -98,6 +99,12 @@ export function CancelPolicyModal({
   // unchanged. Disbursement is wired into the UI but disabled until
   // phase 2b ships its full payment-line picker.
   const [refundKind, setRefundKind] = useState<RefundKind>("credit_note");
+  // When refundKind === 'disbursement', we open AddSettlementDialog
+  // before committing the cancel so the agent picks the actual payment
+  // method(s). The dialog's onSaved callback re-runs handleCancel to
+  // commit the policy update after the disbursement landed cleanly.
+  const [disbursementDialogOpen, setDisbursementDialogOpen] = useState(false);
+  const [disbursementSaved, setDisbursementSaved] = useState(false);
   const [sendSms, setSendSms] = useState(false);
 
   // Pre-flight validation for the confirm button. Mirrors what
@@ -187,6 +194,22 @@ export function CancelPolicyModal({
       return;
     }
 
+    // Disbursement gate: when the agent picks سند صرف, divert through
+    // AddSettlementDialog first so they can pick the actual payment
+    // method(s). The cancellation only commits once the dialog
+    // resolves successfully (disbursementSaved becomes true).
+    // Closing the dialog without saving leaves disbursementSaved=false
+    // so the policy stays in its pre-cancel state — safe abort.
+    if (
+      hasRefund &&
+      refundKind === "disbursement" &&
+      !disbursementSaved &&
+      primaryPolicyId
+    ) {
+      setDisbursementDialogOpen(true);
+      return;
+    }
+
     setSaving(true);
     try {
       // 1. Update every affected policy with cancellation info. Using
@@ -210,81 +233,80 @@ export function CancelPolicyModal({
       //                  formal voucher row in receipts so it shows
       //                  up in /receipts under "اشعار دائن" with a
       //                  printable C{nn}/YYYY number.
-      //   disbursement → cash actually leaves the agency. Skipped
-      //                  here; goes through the AddSettlementDialog
-      //                  flow that lands in phase 2b.
+      //   disbursement → already committed via AddSettlementDialog +
+      //                  the client_settlements → receipts trigger
+      //                  by the time we get here. Nothing more to do.
       //
       // Both branches always operate on the primary policy id — for
       // a package cancel the client sees one cancellation, not many.
-      if (hasRefund && refundAmount && primaryPolicyId) {
+      if (hasRefund && refundAmount && primaryPolicyId && refundKind === "credit_note") {
         const refundDescription = isPackage
           ? `مرتجع إلغاء باقة ${policyNumber || ""}`
           : `مرتجع إلغاء معاملة ${policyNumber || ""}`;
 
-        if (refundKind === "credit_note") {
-          // 2a. Wallet transaction — the source of truth for the
-          // client's available balance.
-          const { data: walletRow, error: walletError } = await supabase
-            .from("customer_wallet_transactions")
-            .insert({
+        // 2a. Wallet transaction — the source of truth for the
+        // client's available balance.
+        const { data: walletRow, error: walletError } = await supabase
+          .from("customer_wallet_transactions")
+          .insert({
+            client_id: clientId,
+            policy_id: primaryPolicyId,
+            transaction_type: "refund",
+            amount: parseFloat(refundAmount),
+            description: refundDescription,
+            notes: cancellationNote || null,
+            created_by_admin_id: user?.id || null,
+            branch_id: branchId,
+            agent_id: agentId,
+          })
+          .select("id")
+          .single();
+
+        if (walletError) throw walletError;
+
+        // 2b. Formal numbered voucher. Skip silently if we can't
+        // resolve an agent — the wallet entry is already on the
+        // record and the cancellation succeeded; refusing to ship
+        // the cancel because of a missing voucher would be worse
+        // than missing the voucher. The bookkeeper can re-issue
+        // from /receipts later.
+        if (agentId) {
+          const year = new Date(cancellationDate).getFullYear();
+          const { data: voucherNumber, error: voucherError } = await supabase.rpc(
+            "allocate_credit_note_number",
+            { p_agent_id: agentId, p_year: year },
+          );
+          if (voucherError) {
+            console.warn("[CancelPolicyModal] allocate_credit_note_number failed:", voucherError);
+          } else if (voucherNumber) {
+            const { error: receiptError } = await supabase.from("receipts").insert({
+              receipt_type: "credit_note",
+              source: "auto",
+              voucher_number: voucherNumber as unknown as string,
               client_id: clientId,
+              client_name: clientName,
               policy_id: primaryPolicyId,
-              transaction_type: "refund",
+              wallet_transaction_id: walletRow?.id ?? null,
               amount: parseFloat(refundAmount),
-              description: refundDescription,
-              notes: cancellationNote || null,
-              created_by_admin_id: user?.id || null,
-              branch_id: branchId,
+              receipt_date: cancellationDate,
+              // payment_method stays at the table default ('cash').
+              // No real method applies here — the /receipts tab for
+              // credit notes filters by receipt_type and never
+              // surfaces this column.
+              notes: refundDescription,
               agent_id: agentId,
-            })
-            .select("id")
-            .single();
-
-          if (walletError) throw walletError;
-
-          // 2b. Formal numbered voucher. Skip silently if we can't
-          // resolve an agent — the wallet entry is already on the
-          // record and the cancellation succeeded; refusing to ship
-          // the cancel because of a missing voucher would be worse
-          // than missing the voucher. The bookkeeper can re-issue
-          // from /receipts later.
-          if (agentId) {
-            const year = new Date(cancellationDate).getFullYear();
-            const { data: voucherNumber, error: voucherError } = await supabase.rpc(
-              "allocate_credit_note_number",
-              { p_agent_id: agentId, p_year: year },
-            );
-            if (voucherError) {
-              console.warn("[CancelPolicyModal] allocate_credit_note_number failed:", voucherError);
-            } else if (voucherNumber) {
-              const { error: receiptError } = await supabase.from("receipts").insert({
-                receipt_type: "credit_note",
-                source: "auto",
-                voucher_number: voucherNumber as unknown as string,
-                client_id: clientId,
-                client_name: clientName,
-                policy_id: primaryPolicyId,
-                wallet_transaction_id: walletRow?.id ?? null,
-                amount: parseFloat(refundAmount),
-                receipt_date: cancellationDate,
-                // payment_method stays at the table default ('cash').
-                // No real method applies here — the /receipts tab for
-                // credit notes filters by receipt_type and never
-                // surfaces this column.
-                notes: refundDescription,
-                agent_id: agentId,
-                branch_id: branchId,
-                created_by: user?.id || null,
-              });
-              if (receiptError) {
-                console.warn("[CancelPolicyModal] credit_note receipt insert failed:", receiptError);
-              }
+              branch_id: branchId,
+              created_by: user?.id || null,
+            });
+            if (receiptError) {
+              console.warn("[CancelPolicyModal] credit_note receipt insert failed:", receiptError);
             }
           }
         }
-        // refundKind === "disbursement" intentionally falls through
-        // until phase 2b lands the cash-out picker.
       }
+      // refundKind === "disbursement" was already committed via the
+      // AddSettlementDialog detour before we reached this block, so
+      // there's nothing to do here on that branch.
 
       // 3. Send SMS if enabled (and plan allows it — skip quietly
       // otherwise so the policy-cancel flow still completes).
@@ -330,6 +352,8 @@ export function CancelPolicyModal({
       setCancellationDate(new Date().toISOString().split("T")[0]);
       setHasRefund(false);
       setRefundAmount("");
+      setRefundKind("credit_note");
+      setDisbursementSaved(false);
       setSendSms(false);
       setSmsMessage("");
     } catch (error: any) {
@@ -345,6 +369,7 @@ export function CancelPolicyModal({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md" dir="rtl">
         <DialogHeader>
@@ -452,15 +477,13 @@ export function CancelPolicyModal({
 
                     <label
                       htmlFor="refund-kind-disb"
-                      aria-disabled
-                      className="flex items-start gap-2 p-2.5 border rounded-md cursor-not-allowed opacity-60"
+                      className="flex items-start gap-2 p-2.5 border rounded-md cursor-pointer hover:bg-muted/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
                     >
-                      <RadioGroupItem value="disbursement" id="refund-kind-disb" disabled className="mt-0.5" />
+                      <RadioGroupItem value="disbursement" id="refund-kind-disb" className="mt-0.5" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 font-medium text-sm">
                           <Banknote className="h-3.5 w-3.5" />
                           سند صرف
-                          <span className="text-[9px] px-1.5 py-0 rounded-full bg-muted text-muted-foreground">قريباً</span>
                         </div>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
                           المبلغ يخرج فعلياً من صندوق الشركة الآن (نقدي / شيك / تحويل / فيزا). لا يضيف للعميل أي رصيد.
@@ -554,5 +577,37 @@ export function CancelPolicyModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+      {/* Disbursement detour. Opens when the agent picks سند صرف and
+          hits تأكيد الإلغاء; the cancellation only commits after the
+          dialog saves successfully (handleCancel re-runs with
+          disbursementSaved=true and skips the gate). Closing the
+          dialog without saving leaves the policy intact — safe abort. */}
+      <AddSettlementDialog
+        open={disbursementDialogOpen}
+        onOpenChange={(v) => {
+          setDisbursementDialogOpen(v);
+          // Closing without save clears the saved flag so the next
+          // confirm click reopens the dialog rather than skipping it.
+          if (!v && !disbursementSaved) {
+            // intentional no-op — disbursementSaved already false
+          }
+        }}
+        mode="client"
+        kind="disbursement"
+        defaultEntityId={clientId}
+        clientName={clientName}
+        policyId={primaryPolicyId}
+        branchId={branchId}
+        targetAmount={refundAmount ? parseFloat(refundAmount) : undefined}
+        onSaved={() => {
+          setDisbursementSaved(true);
+          setDisbursementDialogOpen(false);
+          // Re-enter handleCancel — the gate at the top now passes
+          // because disbursementSaved is true, so cancel commits.
+          void handleCancel();
+        }}
+      />
+    </>
   );
 }

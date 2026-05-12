@@ -38,6 +38,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
+import { AddSettlementDialog } from "@/components/accounting/AddSettlementDialog";
 import { Card } from "@/components/ui/card";
 import { CAR_TYPES } from "@/components/policies/wizard/types";
 import { cn } from "@/lib/utils";
@@ -139,6 +140,13 @@ export function TransferPolicyModal({
   const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [adjustmentNote, setAdjustmentNote] = useState("");
   const [refundKind, setRefundKind] = useState<RefundKind>("credit_note");
+  // Disbursement detour state — same pattern as CancelPolicyModal:
+  // open AddSettlementDialog before committing the transfer when the
+  // agent picks سند صرف, then re-run handleTransfer once the dialog
+  // saves so the transfer commits with the disbursement already on
+  // the books.
+  const [disbursementDialogOpen, setDisbursementDialogOpen] = useState(false);
+  const [disbursementSaved, setDisbursementSaved] = useState(false);
   
   // SMS
   const [sendSms, setSendSms] = useState(true);
@@ -378,6 +386,21 @@ export function TransferPolicyModal({
       return;
     }
 
+    // Disbursement detour — same shape as CancelPolicyModal. When the
+    // agent picks سند صرف on the refund branch, divert through
+    // AddSettlementDialog before the transfer commits. The dialog's
+    // onSaved re-runs handleTransfer with disbursementSaved=true so
+    // we fall through this gate the second time around. Closing the
+    // dialog without saving leaves the transfer un-committed.
+    if (
+      adjustmentType === "refund" &&
+      refundKind === "disbursement" &&
+      !disbursementSaved
+    ) {
+      setDisbursementDialogOpen(true);
+      return;
+    }
+
     setSaving(true);
     try {
       const selectedCar = cars.find(c => c.id === selectedCarId);
@@ -571,66 +594,65 @@ export function TransferPolicyModal({
       //   credit_note  → wallet credit (existing transfer behavior)
       //                  PLUS a numbered voucher in receipts so the
       //                  agency has a printable record.
-      //   disbursement → cash out via AddSettlementDialog. Wired in
-      //                  phase 2b; falls through here.
+      //   disbursement → already committed via AddSettlementDialog
+      //                  before we reached this block (the trigger on
+      //                  client_settlements mirrored the receipts row
+      //                  with type='disbursement'). Nothing to do here.
       // customer_pays doesn't apply — it just bumps insurance_price
       // and is already handled above.
-      if (adjustmentType === "refund" && adjustmentAmount && newPolicyIds.length > 0) {
+      if (adjustmentType === "refund" && adjustmentAmount && newPolicyIds.length > 0 && refundKind === "credit_note") {
         const refundDescription = `مرتجع تحويل معاملة ${policyNumber || ""} - مستحق للعميل`;
-        if (refundKind === "credit_note") {
-          const { data: walletRow, error: walletError } = await supabase
-            .from("customer_wallet_transactions")
-            .insert({
+        const { data: walletRow, error: walletError } = await supabase
+          .from("customer_wallet_transactions")
+          .insert({
+            client_id: clientId,
+            policy_id: newPolicyIds[0],
+            transaction_type: "transfer_refund_owed",
+            amount: parseFloat(adjustmentAmount),
+            description: refundDescription,
+            notes: adjustmentNote || null,
+            created_by_admin_id: user?.id,
+            branch_id: branchId,
+            agent_id: agentId,
+          })
+          .select("id")
+          .single();
+
+        if (walletError) throw walletError;
+
+        // Same fail-soft strategy as CancelPolicyModal: the transfer
+        // already committed by this point, so a missing agent_id or
+        // a voucher-allocation hiccup logs and moves on rather than
+        // rolling back a successful transfer.
+        if (agentId) {
+          const year = new Date().getFullYear();
+          const { data: voucherNumber, error: voucherError } = await supabase.rpc(
+            "allocate_credit_note_number",
+            { p_agent_id: agentId, p_year: year },
+          );
+          if (voucherError) {
+            console.warn("[TransferPolicyModal] allocate_credit_note_number failed:", voucherError);
+          } else if (voucherNumber) {
+            const { error: receiptError } = await supabase.from("receipts").insert({
+              receipt_type: "credit_note",
+              source: "auto",
+              voucher_number: voucherNumber as unknown as string,
               client_id: clientId,
+              client_name: clientName,
               policy_id: newPolicyIds[0],
-              transaction_type: "transfer_refund_owed",
+              wallet_transaction_id: walletRow?.id ?? null,
               amount: parseFloat(adjustmentAmount),
-              description: refundDescription,
-              notes: adjustmentNote || null,
-              created_by_admin_id: user?.id,
-              branch_id: branchId,
+              receipt_date: new Date().toISOString().split("T")[0],
+              notes: refundDescription,
               agent_id: agentId,
-            })
-            .select("id")
-            .single();
-
-          if (walletError) throw walletError;
-
-          // Same fail-soft strategy as CancelPolicyModal: the
-          // transfer already committed by this point, so a missing
-          // agent_id or a voucher-allocation hiccup logs and moves
-          // on rather than rolling back a successful transfer.
-          if (agentId) {
-            const year = new Date().getFullYear();
-            const { data: voucherNumber, error: voucherError } = await supabase.rpc(
-              "allocate_credit_note_number",
-              { p_agent_id: agentId, p_year: year },
-            );
-            if (voucherError) {
-              console.warn("[TransferPolicyModal] allocate_credit_note_number failed:", voucherError);
-            } else if (voucherNumber) {
-              const { error: receiptError } = await supabase.from("receipts").insert({
-                receipt_type: "credit_note",
-                source: "auto",
-                voucher_number: voucherNumber as unknown as string,
-                client_id: clientId,
-                client_name: clientName,
-                policy_id: newPolicyIds[0],
-                wallet_transaction_id: walletRow?.id ?? null,
-                amount: parseFloat(adjustmentAmount),
-                receipt_date: new Date().toISOString().split("T")[0],
-                notes: refundDescription,
-                agent_id: agentId,
-                branch_id: branchId,
-                created_by: user?.id || null,
-              });
-              if (receiptError) {
-                console.warn("[TransferPolicyModal] credit_note receipt insert failed:", receiptError);
-              }
+              branch_id: branchId,
+              created_by: user?.id || null,
+            });
+            if (receiptError) {
+              console.warn("[TransferPolicyModal] credit_note receipt insert failed:", receiptError);
             }
           }
         }
-        // refundKind === "disbursement" falls through until phase 2b.
       }
 
       // 6. Send SMS if enabled
@@ -699,6 +721,7 @@ export function TransferPolicyModal({
     setAdjustmentAmount("");
     setAdjustmentNote("");
     setRefundKind("credit_note");
+    setDisbursementSaved(false);
     setSendSms(true);
     setSmsMessage("");
     setShowNewCarForm(false);
@@ -715,6 +738,7 @@ export function TransferPolicyModal({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" dir="rtl">
         <DialogHeader>
@@ -1058,15 +1082,13 @@ export function TransferPolicyModal({
 
                       <label
                         htmlFor="transfer-refund-kind-disb"
-                        aria-disabled
-                        className="flex items-start gap-2 p-2.5 border rounded-md cursor-not-allowed opacity-60"
+                        className="flex items-start gap-2 p-2.5 border rounded-md cursor-pointer hover:bg-muted/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
                       >
-                        <RadioGroupItem value="disbursement" id="transfer-refund-kind-disb" disabled className="mt-0.5" />
+                        <RadioGroupItem value="disbursement" id="transfer-refund-kind-disb" className="mt-0.5" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 font-medium text-sm">
                             <Banknote className="h-3.5 w-3.5" />
                             سند صرف
-                            <span className="text-[9px] px-1.5 py-0 rounded-full bg-muted text-muted-foreground">قريباً</span>
                           </div>
                           <p className="text-[11px] text-muted-foreground mt-0.5">
                             المبلغ يخرج فعلياً من صندوق الشركة الآن (نقدي / شيك / تحويل / فيزا). لا يضيف للعميل أي رصيد.
@@ -1148,5 +1170,28 @@ export function TransferPolicyModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+      {/* Disbursement detour — opens when the agent picks سند صرف
+          and clicks confirm. Mirrors CancelPolicyModal: handleTransfer
+          bails early, the dialog collects payment lines, and onSaved
+          re-runs handleTransfer with disbursementSaved=true so the
+          transfer commits with the disbursement already on the books. */}
+      <AddSettlementDialog
+        open={disbursementDialogOpen}
+        onOpenChange={setDisbursementDialogOpen}
+        mode="client"
+        kind="disbursement"
+        defaultEntityId={clientId}
+        clientName={clientName}
+        policyId={policyId}
+        branchId={branchId}
+        targetAmount={adjustmentAmount ? parseFloat(adjustmentAmount) : undefined}
+        onSaved={() => {
+          setDisbursementSaved(true);
+          setDisbursementDialogOpen(false);
+          void handleTransfer();
+        }}
+      />
+    </>
   );
 }
