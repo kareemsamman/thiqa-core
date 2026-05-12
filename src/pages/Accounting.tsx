@@ -3,14 +3,15 @@ import { useSearchParams } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Building2, Users, Receipt } from 'lucide-react';
+import { Building2, Users, Receipt, UserRound } from 'lucide-react';
 import { CompaniesSection } from '@/components/accounting/CompaniesSection';
 import { BrokersSection } from '@/components/accounting/BrokersSection';
 import { ExpensesSection } from '@/components/accounting/ExpensesSection';
+import { ClientsSection } from '@/components/accounting/ClientsSection';
 import { RecalcProfitsButton } from '@/components/dashboard/RecalcProfitsButton';
 import { AgentBranchFilter } from '@/components/shared/AgentBranchFilter';
 
-type MainTab = 'companies' | 'brokers' | 'expenses';
+type MainTab = 'companies' | 'brokers' | 'clients' | 'expenses';
 
 // Access is gated by <PermissionRoute permission="page.accounting"
 // feature="accounting"> at the route level — admins bypass; workers
@@ -21,6 +22,8 @@ export default function Accounting() {
   const initialTab: MainTab =
     searchParams.get('tab') === 'brokers'
       ? 'brokers'
+      : searchParams.get('tab') === 'clients'
+      ? 'clients'
       : searchParams.get('tab') === 'expenses'
       ? 'expenses'
       : 'companies';
@@ -48,7 +51,7 @@ export default function Accounting() {
       <div className="p-3 md:p-4 space-y-3">
         <Tabs value={tab} onValueChange={(v) => setTab(v as MainTab)}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <TabsList className="grid w-full max-w-md grid-cols-3">
+            <TabsList className="grid w-full max-w-2xl grid-cols-4">
               <TabsTrigger value="companies" className="gap-2">
                 <Building2 className="h-4 w-4" />
                 شركات التأمين
@@ -56,6 +59,10 @@ export default function Accounting() {
               <TabsTrigger value="brokers" className="gap-2">
                 <Users className="h-4 w-4" />
                 الوسطاء
+              </TabsTrigger>
+              <TabsTrigger value="clients" className="gap-2">
+                <UserRound className="h-4 w-4" />
+                العملاء
               </TabsTrigger>
               <TabsTrigger value="expenses" className="gap-2">
                 <Receipt className="h-4 w-4" />
@@ -73,6 +80,9 @@ export default function Accounting() {
           </TabsContent>
           <TabsContent value="brokers" className="mt-3">
             <BrokersSection focusSettlementId={settlementParam} branchId={branchId} />
+          </TabsContent>
+          <TabsContent value="clients" className="mt-3">
+            <ClientsSection branchId={branchId} />
           </TabsContent>
           <TabsContent value="expenses" className="mt-3">
             <ExpensesSection focusSettlementId={settlementParam} branchId={branchId} />
