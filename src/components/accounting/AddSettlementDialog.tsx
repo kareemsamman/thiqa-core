@@ -253,6 +253,52 @@ export function AddSettlementDialog({
   const targetExceeded =
     mode === 'client' && targetCap !== null && total > targetCap + 0.005;
 
+  // Per-line validation surfaced up-front so the Save button stays
+  // disabled until every started line is complete. Lines that look
+  // like an untouched placeholder (no amount, no cheque number, no
+  // bank, no customer cheques) are ignored — same filter handleSave
+  // uses to drop empty rows before persisting.
+  const effectiveLinesForValidation = lines.filter((line) => {
+    if (line.payment_type === 'customer_cheque') {
+      return (line.selected_cheques?.length ?? 0) > 0;
+    }
+    if (line.payment_type === 'cheque') {
+      return (
+        (line.amount ?? 0) > 0 ||
+        !!(line.cheque_number && line.cheque_number.length > 0) ||
+        !!line.bank_code
+      );
+    }
+    return Number(line.amount || 0) > 0;
+  });
+  const getLineError = (line: PaymentLine): string | null => {
+    if (line.payment_type === 'customer_cheque') {
+      if ((line.selected_cheques?.length ?? 0) === 0) {
+        return 'اختر شيك عميل واحد على الأقل';
+      }
+      return null;
+    }
+    if (!(Number(line.amount) > 0)) return 'المبلغ مطلوب';
+    if (line.payment_type === 'cheque') {
+      const v = validateChequeNumber(line.cheque_number ?? '');
+      if (!v.isValid) return v.error ?? 'رقم الشيك غير صحيح';
+      if (!line.bank_code) return 'اختر البنك';
+      if (!line.cheque_due_date) return 'تاريخ الاستحقاق مطلوب';
+      if (!line.cheque_issue_date) return 'تاريخ الإصدار مطلوب';
+    }
+    if (line.payment_type === 'bank_transfer') {
+      if (!line.payment_date) return 'تاريخ التحويل مطلوب';
+    }
+    return null;
+  };
+  const firstLineError =
+    effectiveLinesForValidation.length === 0
+      ? 'أضف دفعة واحدة على الأقل'
+      : (effectiveLinesForValidation
+          .map((l) => getLineError(l))
+          .find((e): e is string => e !== null) ?? null);
+  const linesIncomplete = firstLineError !== null;
+
   const updateLine = (id: string, patch: Partial<PaymentLine>) =>
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
 
@@ -619,6 +665,16 @@ export function AddSettlementDialog({
                 )}
               </div>
             </div>
+
+            {/* Inline line-validation hint so the agent sees what's
+                blocking save without having to hover the button. Hidden
+                when the only issue is target mismatch (already shown
+                above) so the warnings don't stack. */}
+            {linesIncomplete && !targetMismatch && (
+              <div className="text-[11px] text-destructive font-medium px-1">
+                ⚠ {firstLineError}
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -627,14 +683,14 @@ export function AddSettlementDialog({
             </Button>
             <Button
               onClick={handleSave}
-              disabled={saving || targetMismatch}
+              disabled={saving || targetMismatch || linesIncomplete}
               className="gap-2"
               title={
                 targetMismatch
                   ? targetExceeded
                     ? `المجموع يتجاوز المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
                     : `المجموع أقل من المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
-                  : undefined
+                  : firstLineError ?? undefined
               }
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}

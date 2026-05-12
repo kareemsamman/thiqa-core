@@ -153,6 +153,8 @@ interface CreatedPolicy {
   total_count: number;
   package_companies: string[] | null;
   package_service_names: string[] | null;
+  is_cancelled: boolean | null;
+  is_deleted: boolean | null;
 }
 
 // Matches new report_renewals return type - grouped by client
@@ -1079,7 +1081,16 @@ export default function PolicyReports() {
                     <TableBody>
                       {createdPolicies.map(policy => (
                         <React.Fragment key={policy.id}>
-                          <TableRow className="hover:bg-muted/30">
+                          <TableRow
+                            className={cn(
+                              "hover:bg-muted/30",
+                              // Soft-deleted or all-cancelled rows fade and
+                              // get a strikethrough so they read as "history"
+                              // at a glance without re-introducing a status
+                              // column.
+                              (policy.is_deleted || policy.is_cancelled) && "opacity-60 line-through decoration-muted-foreground/40"
+                            )}
+                          >
                             <TableCell className="font-mono text-xs whitespace-nowrap">
                               <div className="leading-tight">
                                 <div>{formatDate(policy.created_at)}</div>
@@ -1098,7 +1109,18 @@ export default function PolicyReports() {
                             </TableCell>
                             <TableCell>
                               <div>
-                                <p className="font-medium">{policy.client_name}</p>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="font-medium">{policy.client_name}</p>
+                                  {policy.is_deleted ? (
+                                    <Badge variant="outline" className="text-[10px] gap-1 bg-muted/60 border-muted-foreground/30 text-muted-foreground no-underline">
+                                      محذوفة
+                                    </Badge>
+                                  ) : policy.is_cancelled ? (
+                                    <Badge variant="outline" className="text-[10px] gap-1 bg-red-500/10 border-red-500/30 text-red-600 no-underline">
+                                      ملغاة
+                                    </Badge>
+                                  ) : null}
+                                </div>
                                 {policy.client_file_number && (
                                   <p className="text-xs text-muted-foreground">{policy.client_file_number}</p>
                                 )}
