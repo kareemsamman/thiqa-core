@@ -174,36 +174,39 @@ export function TransferPolicyModal({
   const [carDataFetched, setCarDataFetched] = useState(false);
   const [savingNewCar, setSavingNewCar] = useState(false);
 
-  // Fetch client's cars and related policies
+  // Fetch client's cars and policies in the same group (or just the
+  // primary when this is a standalone transaction). We always pull at
+  // least the primary's insurance_price so the refund cap renders
+  // correctly even on solo transfers.
   useEffect(() => {
     if (open && clientId) {
       fetchCars();
       loadSmsTemplate();
-      if (groupId) {
-        fetchRelatedPolicies();
-      } else {
-        setGroupPolicies([]);
-        setSelectedRelatedIds(new Set());
-      }
+      fetchRelatedPolicies();
     }
-  }, [open, clientId, groupId]);
+  }, [open, clientId, groupId, policyId]);
 
   // Fetch every active policy in the group — primary + add-ons. We
   // intentionally include the primary so its row renders alongside the
   // add-ons (price + type + policy_number), instead of hiding it behind
-  // a "أساسية" label fed from props.
+  // a "أساسية" label fed from props. For a standalone transaction
+  // (no groupId), we fetch just the primary so the refund cap still
+  // has insurance_price to clamp against.
   const fetchRelatedPolicies = async () => {
-    if (!groupId) return;
-
     setLoadingRelated(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("policies")
         .select("id, policy_type_parent, policy_number, insurance_price")
-        .eq("group_id", groupId)
         .is("deleted_at", null)
         .is("cancelled", false)
         .is("transferred", false);
+      if (groupId) {
+        query = query.eq("group_id", groupId);
+      } else {
+        query = query.eq("id", policyId);
+      }
+      const { data, error } = await query;
 
       if (error) throw error;
       const rows = (data || []) as RelatedPolicy[];
@@ -221,6 +224,26 @@ export function TransferPolicyModal({
       setLoadingRelated(false);
     }
   };
+
+  // Sum of insurance_price across every policy that will actually
+  // travel — primary + checked add-ons. Used as the refund cap so
+  // the agent can't ask for more cash back than the client paid for
+  // the policies they're moving.
+  const transferableTotal = groupPolicies.reduce(
+    (sum, p) =>
+      p.id === policyId || selectedRelatedIds.has(p.id)
+        ? sum + Number(p.insurance_price || 0)
+        : sum,
+    0,
+  );
+  // Refund cap. Customer-pays has no symmetric cap (upgrade-amounts
+  // are legitimately open-ended), so we only clamp the refund path.
+  const adjustmentNum = parseFloat(adjustmentAmount);
+  const refundExceedsMax =
+    adjustmentType === "refund" &&
+    transferableTotal > 0 &&
+    !isNaN(adjustmentNum) &&
+    adjustmentNum > transferableTotal;
 
   const fetchCars = async () => {
     setLoadingCars(true);
@@ -403,6 +426,16 @@ export function TransferPolicyModal({
       toast({ title: "خطأ", description: "مبلغ التعديل المالي مطلوب", variant: "destructive" });
       return;
     }
+
+    if (refundExceedsMax) {
+      toast({
+        title: "خطأ",
+        description: `مبلغ المرتجع لا يمكن أن يتجاوز ₪${transferableTotal.toLocaleString("en-US")}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
 
     // Disbursement detour — same shape as CancelPolicyModal. When the
     // agent picks سند صرف on the refund branch, divert through
@@ -962,6 +995,7 @@ export function TransferPolicyModal({
                           maxLength={8}
                           inputMode="numeric"
                           dir="ltr"
+                          className="text-right"
                         />
                         {fetchingCarData && (
                           <div className="absolute left-3 top-1/2 -translate-y-1/2">
@@ -1128,8 +1162,29 @@ export function TransferPolicyModal({
                     onChange={(e) => setAdjustmentAmount(e.target.value)}
                     placeholder="0"
                     min="0"
+                    max={
+                      adjustmentType === "refund" && transferableTotal > 0
+                        ? transferableTotal
+                        : undefined
+                    }
                     dir="ltr"
+                    className={
+                      refundExceedsMax
+                        ? "border-destructive focus-visible:ring-destructive"
+                        : undefined
+                    }
                   />
+                  {adjustmentType === "refund" && transferableTotal > 0 && (
+                    refundExceedsMax ? (
+                      <p className="text-xs text-destructive">
+                        المبلغ يتجاوز الحد الأقصى ₪{transferableTotal.toLocaleString("en-US")}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        الحد الأقصى: ₪{transferableTotal.toLocaleString("en-US")} (مجموع الوثائق المُحوَّلة)
+                      </p>
+                    )
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>ملاحظة للتعديل المالي</Label>
@@ -1267,9 +1322,14 @@ export function TransferPolicyModal({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             إلغاء
           </Button>
-          <Button 
-            onClick={handleTransfer} 
-            disabled={saving || !selectedCarId}
+          <Button
+            onClick={handleTransfer}
+            disabled={saving || !selectedCarId || refundExceedsMax}
+            title={
+              refundExceedsMax
+                ? `المبلغ يتجاوز الحد الأقصى ₪${transferableTotal.toLocaleString("en-US")}`
+                : undefined
+            }
           >
             {saving ? (
               <>
