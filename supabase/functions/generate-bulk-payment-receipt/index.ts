@@ -289,8 +289,13 @@ function buildBulkReceiptHtml(
     const isReturned = refused && p.cheque_status === 'returned';
     const rowClass = refused ? ' class="refused"' : '';
     const voucherNo = cancellationVoucherMap[p.id];
+    // Same R{N}/{YYYY} shape as the سند قبض numbering so the printed
+    // copy reads consistently — "سند الإلغاء R655/2026" not the bare
+    // SERIAL "#655". Year derived from the printed-on date (today)
+    // since the voucher itself was struck against the current period.
+    const voucherYear = new Date().getFullYear();
     const voucherRef = voucherNo != null
-      ? ` <span class="voucher-ref">سند الإلغاء #${escapeHtml(String(voucherNo))}</span>`
+      ? ` <span class="voucher-ref">سند الإلغاء R${escapeHtml(String(voucherNo))}/${voucherYear}</span>`
       : '';
     const refusedBadge = refused
       ? ` <span class="refused-tag">${isCancelled ? 'ملغية' : isReturned ? 'مرتجع' : 'مرفوضة'}</span>${voucherRef}`

@@ -237,7 +237,7 @@ function buildHtml(
         <div class="meta-rows">
           <div class="row">
             <div class="label">رقم سند الإلغاء</div>
-            <div class="val">${escapeHtml(String(voucher.receipt_number))}</div>
+            <div class="val">R${escapeHtml(String(voucher.receipt_number))}/${new Date(voucher.cancelled_at || voucher.receipt_date || today).getFullYear()}</div>
           </div>
           ${source?.receipt_number ? `
           <div class="row">

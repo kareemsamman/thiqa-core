@@ -405,7 +405,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   // the payment log can render the linked سند الإلغاء number + the
   // bookkeeper's stated reason. Empty for non-refused payments.
   const [cancellationInfo, setCancellationInfo] = useState<
-    Map<string, { voucherNumber: number | string; reason: string | null }>
+    Map<string, { voucherNumber: number | string; reason: string | null; year: number }>
   >(new Map());
   // First-class سند إلغاء entries — one per cancelled session, NOT
   // per refused row. Rendered as their own rows in سجل الدفعات so the
@@ -910,7 +910,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // and PackagePaymentModal batches dedupe correctly.
       const refused = paymentsWithPolicy.filter((p) => p.refused);
       const refusedIds = refused.map((p) => p.id);
-      const nextInfo = new Map<string, { voucherNumber: number | string; reason: string | null }>();
+      const nextInfo = new Map<string, { voucherNumber: number | string; reason: string | null; year: number }>();
       const nextVouchers: typeof cancellationVouchers = [];
       if (refusedIds.length > 0) {
         const { data: voucherRows } = await supabase
@@ -975,7 +975,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
         for (const p of refused) {
           const v = groupVoucher.get(receiptGroupKey(p));
-          if (v) nextInfo.set(p.id, { voucherNumber: v.voucherNumber, reason: v.reason });
+          if (v) {
+            nextInfo.set(p.id, {
+              voucherNumber: v.voucherNumber,
+              reason: v.reason,
+              year: new Date(v.date).getFullYear(),
+            });
+          }
         }
 
         // Build one cancellation voucher entry per cancelled session.
@@ -2791,7 +2797,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                             className="hover:bg-muted/40 bg-amber-50/40 dark:bg-amber-950/10"
                           >
                             <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
-                              <span className="font-bold text-amber-700 dark:text-amber-300">{v.voucherNumber}</span>
+                              <span className="font-bold text-amber-700 dark:text-amber-300">
+                                {/* Display as R{N}/{YYYY} — same shape as
+                                    سند قبض numbers so the bookkeeper
+                                    can read both numbering schemes at a
+                                    glance without mental conversion. */}
+                                R{v.voucherNumber}/{new Date(v.date).getFullYear()}
+                              </span>
                             </TableCell>
                             <TableCell className="font-semibold">
                               <span className="text-amber-700 dark:text-amber-300">
@@ -2945,7 +2957,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                   <Badge variant="destructive">ملغي</Badge>
                                   {info?.voucherNumber != null && (
                                     <span className="text-[10px] font-mono ltr-nums text-muted-foreground">
-                                      سند الإلغاء #{String(info.voucherNumber)}
+                                      سند الإلغاء R{String(info.voucherNumber)}/{info.year}
                                     </span>
                                   )}
                                   {info?.reason && (
