@@ -1053,7 +1053,7 @@ function PolicyCardHeader({
                       onTransferPackage(allPolicyIds);
                     }}>
                       <ArrowRightLeft className="h-4 w-4 ml-2" />
-                      تحويل الباقة كاملة
+                      تحويل المعاملة
                     </DropdownMenuItem>
                   )}
                   {!isPackage && onTransfer && (
@@ -1075,7 +1075,7 @@ function PolicyCardHeader({
                       }}
                     >
                       <XCircle className="h-4 w-4 ml-2" />
-                      إلغاء الباقة كاملة
+                      إلغاء المعاملة
                     </DropdownMenuItem>
                   )}
                   {!isPackage && onCancel && (

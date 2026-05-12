@@ -1785,7 +1785,7 @@ function PolicyPackageCard({
                     {isPkg && onEditPackage && policy.group_id && (
                       <DropdownMenuItem onClick={() => onEditPackage(policy.group_id!)}>
                         <Pencil className="h-4 w-4 ml-2" />
-                        تعديل الباقة
+                        تعديل المعاملة
                       </DropdownMenuItem>
                     )}
                     {!isPkg && onEditPolicy && (
@@ -1803,7 +1803,7 @@ function PolicyPackageCard({
                     {isPkg && onTransferPackage && (
                       <DropdownMenuItem onClick={() => onTransferPackage(pkg.allPolicyIds)}>
                         <ArrowRightLeft className="h-4 w-4 ml-2" />
-                        تحويل الباقة
+                        تحويل المعاملة
                       </DropdownMenuItem>
                     )}
                     {!isPkg && onTransfer && (
@@ -1826,7 +1826,7 @@ function PolicyPackageCard({
                     {isPkg && onRenewPackage && (
                       <DropdownMenuItem onClick={() => onRenewPackage(pkg.allPolicyIds)}>
                         <RefreshCw className="h-4 w-4 ml-2" />
-                        تجديد الباقة
+                        تجديد المعاملة
                       </DropdownMenuItem>
                     )}
                     {!isPkg && onRenewPolicy && (
@@ -1847,7 +1847,7 @@ function PolicyPackageCard({
                         onClick={() => onCancelPackage(pkg.allPolicyIds)}
                       >
                         <XCircle className="h-4 w-4 ml-2" />
-                        إلغاء الباقة
+                        إلغاء المعاملة
                       </DropdownMenuItem>
                     )}
                     {!isPkg && onCancel && (
@@ -1877,7 +1877,7 @@ function PolicyPackageCard({
                       }}
                     >
                       <Trash2 className="h-4 w-4 ml-2" />
-                      {isPkg ? 'حذف الباقة نهائياً' : 'حذف المعاملة نهائياً'}
+                      حذف المعاملة نهائياً
                     </DropdownMenuItem>
                   </>
                 )}

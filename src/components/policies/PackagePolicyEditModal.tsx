@@ -1076,7 +1076,7 @@ export function PackagePolicyEditModal({
 
   if (!groupId && !policyId) return null;
 
-  const titleText = isSingleMode ? 'تعديل المعاملة' : 'تعديل الباقة';
+  const titleText = 'تعديل المعاملة';
   const totalLabel = isSingleMode ? 'إجمالي' : 'إجمالي الباقة';
   const saveLabel = isSingleMode ? 'حفظ' : 'حفظ جميع التغييرات';
   const emptyText = isSingleMode ? 'لم يتم العثور على المعاملة' : 'لا توجد معاملات في هذه الباقة';

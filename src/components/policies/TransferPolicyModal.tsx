@@ -26,6 +26,7 @@ import {
   Loader2,
   ArrowLeftRight,
   Plus,
+  X,
   Car,
   Send,
   AlertTriangle,
@@ -125,10 +126,14 @@ export function TransferPolicyModal({
   const [selectedCarId, setSelectedCarId] = useState<string>("");
   const [showNewCarForm, setShowNewCarForm] = useState(false);
   
-  // Package / related policies
-  const [relatedPolicies, setRelatedPolicies] = useState<RelatedPolicy[]>([]);
+  // Package policies. groupPolicies contains every active policy in the
+  // current group — primary + related (add-ons). The primary is always
+  // transferred (this dialog is opened for it); selectedRelatedIds
+  // controls which add-ons travel along. Default selects every related
+  // so the legacy "transfer entire package" behavior is the no-op path.
+  const [groupPolicies, setGroupPolicies] = useState<RelatedPolicy[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
-  const [transferPackage, setTransferPackage] = useState(true);
+  const [selectedRelatedIds, setSelectedRelatedIds] = useState<Set<string>>(new Set());
   
   // Transfer details
   const [transferDate, setTransferDate] = useState(new Date().toISOString().split("T")[0]);
@@ -177,31 +182,41 @@ export function TransferPolicyModal({
       if (groupId) {
         fetchRelatedPolicies();
       } else {
-        setRelatedPolicies([]);
+        setGroupPolicies([]);
+        setSelectedRelatedIds(new Set());
       }
     }
   }, [open, clientId, groupId]);
 
-  // Fetch related policies in the same group (add-ons)
+  // Fetch every active policy in the group — primary + add-ons. We
+  // intentionally include the primary so its row renders alongside the
+  // add-ons (price + type + policy_number), instead of hiding it behind
+  // a "أساسية" label fed from props.
   const fetchRelatedPolicies = async () => {
     if (!groupId) return;
-    
+
     setLoadingRelated(true);
     try {
       const { data, error } = await supabase
         .from("policies")
         .select("id, policy_type_parent, policy_number, insurance_price")
         .eq("group_id", groupId)
-        .neq("id", policyId)
         .is("deleted_at", null)
         .is("cancelled", false)
         .is("transferred", false);
 
       if (error) throw error;
-      setRelatedPolicies(data || []);
+      const rows = (data || []) as RelatedPolicy[];
+      setGroupPolicies(rows);
+      // Default: select every related (non-primary) — keeps the
+      // existing "transfer entire package" default behavior.
+      setSelectedRelatedIds(
+        new Set(rows.filter((p) => p.id !== policyId).map((p) => p.id)),
+      );
     } catch (error) {
       console.error("Error fetching related policies:", error);
-      setRelatedPolicies([]);
+      setGroupPolicies([]);
+      setSelectedRelatedIds(new Set());
     } finally {
       setLoadingRelated(false);
     }
@@ -411,12 +426,12 @@ export function TransferPolicyModal({
     try {
       const selectedCar = cars.find(c => c.id === selectedCarId);
       
-      // Determine which policies to transfer
-      const policiesToTransfer = [policyId];
-      if (transferPackage && relatedPolicies.length > 0) {
-        policiesToTransfer.push(...relatedPolicies.map(p => p.id));
-      }
-      
+      // Determine which policies to transfer — primary is always in,
+      // related (add-ons) only when their checkbox is checked. The agent
+      // can uncheck every add-on to transfer just the primary; that's a
+      // valid scenario (leaves the add-ons on the old car/group).
+      const policiesToTransfer = [policyId, ...Array.from(selectedRelatedIds)];
+
       // Fetch original policy details for all policies being transferred
       const { data: originalPolicies, error: fetchError } = await supabase
         .from("policies")
@@ -428,10 +443,13 @@ export function TransferPolicyModal({
         throw new Error("لم يتم العثور على المعاملات");
       }
 
-      // Generate new group_id if transferring package
+      // Generate new group_id when more than one policy is moving so
+      // the new policies stay linked together on the target car. Single
+      // policy transfers (just the primary, or a non-package) don't
+      // need a group at all.
       let newGroupId: string | null = null;
-      
-      if (transferPackage && policiesToTransfer.length > 1) {
+
+      if (policiesToTransfer.length > 1) {
         newGroupId = crypto.randomUUID();
         
         // Create entry in policy_groups table for the new package
@@ -733,8 +751,8 @@ export function TransferPolicyModal({
     setSendSms(true);
     setSmsMessage("");
     setShowNewCarForm(false);
-    setTransferPackage(true);
-    setRelatedPolicies([]);
+    setGroupPolicies([]);
+    setSelectedRelatedIds(new Set());
   };
 
   const formatCarLabel = (car: CarOption) => {
@@ -766,59 +784,107 @@ export function TransferPolicyModal({
             </p>
           </Card>
 
-          {/* Package Transfer Option - Show if there are related policies */}
-          {relatedPolicies.length > 0 && (
-            <Card className="p-4 border-primary/30 bg-primary/5 space-y-3">
-              <div className="flex items-center gap-2">
-                <Package className="h-5 w-5 text-primary" />
-                <Label className="font-semibold text-primary">
-                  هذه المعاملة جزء من حزمة
-                </Label>
-              </div>
-              
-              <div className="text-sm text-muted-foreground">
-                تم العثور على {relatedPolicies.length} معاملات إضافية مرتبطة:
-              </div>
-              
-              <div className="space-y-2">
-                {relatedPolicies.map((policy) => (
-                  <div 
-                    key={policy.id} 
-                    className="flex items-center justify-between bg-background/50 rounded-md px-3 py-2 text-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      <span className="font-medium">
-                        {POLICY_TYPE_LABELS[policy.policy_type_parent] || policy.policy_type_parent}
-                      </span>
-                      {policy.policy_number && (
-                        <span className="text-muted-foreground">
-                          ({policy.policy_number})
-                        </span>
-                      )}
-                    </div>
-                    <span className="font-bold text-primary">
-                      ₪{policy.insurance_price.toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
+          {/* Group selection — only render when there's at least one
+              other policy in the group (otherwise there's nothing to
+              pick). The primary always transfers (its checkbox is
+              disabled); each add-on has its own toggle so the agent
+              can leave some on the old car. */}
+          {groupPolicies.length > 1 && (() => {
+            const primary = groupPolicies.find((p) => p.id === policyId);
+            const related = groupPolicies.filter((p) => p.id !== policyId);
+            return (
+              <Card className="p-4 border-primary/30 bg-primary/5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Package className="h-5 w-5 text-primary" />
+                  <Label className="font-semibold text-primary">
+                    هذه المعاملة جزء من حزمة
+                  </Label>
+                </div>
 
-              <div className="flex items-center gap-3 pt-2 border-t">
-                <Checkbox
-                  id="transfer-package"
-                  checked={transferPackage}
-                  onCheckedChange={(checked) => setTransferPackage(checked === true)}
-                />
-                <Label 
-                  htmlFor="transfer-package" 
-                  className="cursor-pointer text-sm font-medium"
-                >
-                  تحويل الحزمة كاملة (الخدمات وإعفاء الرسوم)
-                </Label>
-              </div>
-            </Card>
-          )}
+                <div className="text-sm text-muted-foreground">
+                  اختر الوثائق التي تريد تحويلها — المعاملة الأساسية تنتقل تلقائياً.
+                </div>
+
+                <div className="space-y-2">
+                  {/* Primary row — always selected, checkbox locked so
+                      the agent can't accidentally untick it. */}
+                  {primary && (
+                    <label
+                      htmlFor="transfer-primary"
+                      className="flex items-center justify-between bg-background/60 rounded-md px-3 py-2 text-sm border border-primary/20"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Checkbox
+                          id="transfer-primary"
+                          checked
+                          disabled
+                          aria-label="المعاملة الأساسية تنتقل دائماً"
+                        />
+                        <span className="font-medium">
+                          {POLICY_TYPE_LABELS[primary.policy_type_parent] || primary.policy_type_parent}
+                        </span>
+                        {primary.policy_number && (
+                          <span className="text-muted-foreground">
+                            ({primary.policy_number})
+                          </span>
+                        )}
+                        <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-primary/15 text-primary border border-primary/30 shrink-0">
+                          أساسية
+                        </span>
+                      </div>
+                      <span className="font-bold text-primary shrink-0">
+                        ₪{primary.insurance_price.toLocaleString()}
+                      </span>
+                    </label>
+                  )}
+
+                  {/* Related rows — each toggleable. */}
+                  {related.map((policy) => {
+                    const isSelected = selectedRelatedIds.has(policy.id);
+                    return (
+                      <label
+                        key={policy.id}
+                        htmlFor={`transfer-related-${policy.id}`}
+                        className={cn(
+                          "flex items-center justify-between rounded-md px-3 py-2 text-sm cursor-pointer border transition-colors",
+                          isSelected
+                            ? "bg-background/60 border-primary/20"
+                            : "bg-background/30 border-transparent text-muted-foreground",
+                        )}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Checkbox
+                            id={`transfer-related-${policy.id}`}
+                            checked={isSelected}
+                            onCheckedChange={(checked) => {
+                              setSelectedRelatedIds((prev) => {
+                                const next = new Set(prev);
+                                if (checked === true) next.add(policy.id);
+                                else next.delete(policy.id);
+                                return next;
+                              });
+                            }}
+                          />
+                          <span className="font-medium">
+                            {POLICY_TYPE_LABELS[policy.policy_type_parent] || policy.policy_type_parent}
+                          </span>
+                          {policy.policy_number && (
+                            <span>({policy.policy_number})</span>
+                          )}
+                        </div>
+                        <span className={cn(
+                          "font-bold shrink-0",
+                          isSelected ? "text-primary" : "text-muted-foreground",
+                        )}>
+                          ₪{policy.insurance_price.toLocaleString()}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </Card>
+            );
+          })()}
 
           {loadingRelated && (
             <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
@@ -836,27 +902,42 @@ export function TransferPolicyModal({
               </div>
             ) : (
               <>
-                <Select value={selectedCarId} onValueChange={setSelectedCarId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="اختر السيارة" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cars.map((car) => (
-                      <SelectItem key={car.id} value={car.id}>
-                        {formatCarLabel(car)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {/* When the client has no other cars on file, the dropdown
+                    would be empty and confusing — show an inline hint
+                    instead so the agent immediately sees the next step
+                    (add a new car). The picker reappears the moment a
+                    new car exists. */}
+                {cars.length === 0 ? (
+                  <div className="rounded-md border border-dashed bg-muted/30 p-3 text-center text-sm text-muted-foreground">
+                    لا توجد سيارات أخرى لهذا العميل — أضف سيارة جديدة لإكمال التحويل
+                  </div>
+                ) : (
+                  <Select value={selectedCarId} onValueChange={setSelectedCarId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختر السيارة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cars.map((car) => (
+                        <SelectItem key={car.id} value={car.id}>
+                          {formatCarLabel(car)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
 
                 {/* Add New Car Button */}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="w-full mt-2"
                   onClick={() => setShowNewCarForm(!showNewCarForm)}
                 >
-                  <Plus className="h-4 w-4 ml-1" />
+                  {showNewCarForm ? (
+                    <X className="h-4 w-4 ml-1" />
+                  ) : (
+                    <Plus className="h-4 w-4 ml-1" />
+                  )}
                   {showNewCarForm ? "إلغاء الإضافة" : "إضافة سيارة جديدة"}
                 </Button>
 
