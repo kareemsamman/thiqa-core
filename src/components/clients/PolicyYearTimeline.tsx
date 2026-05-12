@@ -5,9 +5,8 @@ import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
-  ChevronDown, 
-  ChevronLeft, 
-  Eye, 
+  ChevronDown,
+  ChevronLeft,
   Calendar,
   Car,
   Banknote,
@@ -115,6 +114,12 @@ interface PolicyYearTimelineProps {
   paymentInfo?: Record<string, { paid: number; remaining: number }>;
   accidentInfo?: Record<string, number>;
   childrenInfo?: Record<string, number>;
+  /** Per-policy file count keyed by policy.id (entity_id in media_files).
+   *  Drives the "ملفات (N)" button on each card. */
+  fileCounts?: Record<string, number>;
+  /** Click handler for the ملفات button — opens the details drawer
+   *  pre-positioned to the files tab. Distinct from onPolicyClick. */
+  onOpenPolicyFiles?: (policyId: string) => void;
   onPolicyClick: (policyId: string) => void;
   onPaymentAdded?: () => void | Promise<void>;
   onTransferPolicy?: (policyId: string) => void;
@@ -220,14 +225,6 @@ const isCurrentYear = (startDate: string): boolean => {
   return policyYear === currentYear || policyYear === currentYear - 1;
 };
 
-// Check if policy was created within the last 24 hours
-const isNewPolicy = (createdAt: string): boolean => {
-  const created = new Date(createdAt);
-  const now = new Date();
-  const hoursDiff = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
-  return hoursDiff < 24;
-};
-
 interface PaymentInfo {
   [policyId: string]: { paid: number; remaining: number };
 }
@@ -239,6 +236,11 @@ interface PolicyPackage {
   status: PolicyStatus;
   totalPrice: number;
   debtPrice: number; // Excludes ELZAMI for debt calculations
+  // True when this is the most recently-added non-transfer package in its
+  // year — drives the "جديدة" badge and the top-of-year sort position.
+  // Stays put when a sibling is cancelled or transferred (those don't
+  // create a fresh package); only shifts when a brand-new معاملة is added.
+  isNewest: boolean;
 }
 
 interface YearGroup {
@@ -254,6 +256,8 @@ export function PolicyYearTimeline({
   paymentInfo: externalPaymentInfo,
   accidentInfo: externalAccidentInfo,
   childrenInfo: externalChildrenInfo,
+  fileCounts,
+  onOpenPolicyFiles,
   onPolicyClick,
   onPaymentAdded,
   onTransferPolicy,
@@ -324,37 +328,76 @@ export function PolicyYearTimeline({
   // policy has transferred_from_policy_id set, so non-transfer clients
   // don't pay a round-trip cost.
   const [transferAdjustments, setTransferAdjustments] = useState<Record<string, TransferAdjustment>>({});
+  // Source-side notes — the same office_note / adjustment_note / note
+  // that already render on the target card need to surface on the
+  // transferred-OUT source card too, so staff reviewing the old
+  // transaction can see the reason without opening the target. Keyed
+  // by the source policy_id.
+  const [sourceTransferNotes, setSourceTransferNotes] = useState<Record<string, TransferAdjustment>>({});
   useEffect(() => {
-    const transferredIds = policies
-      .filter(p => p.transferred_from_policy_id)
-      .map(p => p.id);
-    if (transferredIds.length === 0) {
+    const sourceIds = policies.filter(p => p.transferred).map(p => p.id);
+    const targetIds = policies.filter(p => p.transferred_from_policy_id).map(p => p.id);
+    if (sourceIds.length === 0 && targetIds.length === 0) {
       setTransferAdjustments({});
+      setSourceTransferNotes({});
       return;
     }
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      // Fetch every transfer row where either end matches a policy in
+      // the current view. Most transfers have both ends visible (same
+      // year), but cross-year transfers are also handled — we just ask
+      // for both directions in one round-trip.
+      const orFilters: string[] = [];
+      if (sourceIds.length > 0) {
+        orFilters.push(`policy_id.in.(${sourceIds.join(',')})`);
+      }
+      if (targetIds.length > 0) {
+        orFilters.push(`new_policy_id.in.(${targetIds.join(',')})`);
+      }
+      let query = supabase
         .from('policy_transfers')
-        .select('new_policy_id, adjustment_amount, adjustment_type, note, office_note, adjustment_note')
-        .in('new_policy_id', transferredIds);
+        .select('policy_id, new_policy_id, adjustment_amount, adjustment_type, note, office_note, adjustment_note');
+      if (orFilters.length === 1) {
+        const [col, , raw] = orFilters[0].split('.');
+        query = query.in(col, raw.slice(1, -1).split(','));
+      } else {
+        query = query.or(orFilters.join(','));
+      }
+      const { data } = await query;
       if (cancelled) return;
-      const map: Record<string, TransferAdjustment> = {};
+      const targetMap: Record<string, TransferAdjustment> = {};
+      const sourceMap: Record<string, TransferAdjustment> = {};
       (data || []).forEach((row: any) => {
+        const info: TransferAdjustment = {
+          amount: Number(row.adjustment_amount || 0),
+          customerNote: typeof row.note === 'string' && row.note.trim() ? row.note.trim() : null,
+          officeNote: typeof row.office_note === 'string' && row.office_note.trim() ? row.office_note.trim() : null,
+          adjustmentNote: typeof row.adjustment_note === 'string' && row.adjustment_note.trim() ? row.adjustment_note.trim() : null,
+        };
+        // Target side keeps its existing rule — only "customer_pays"
+        // with a positive amount renders as a "عمولة التحويل" charge
+        // row on the new card.
         if (
           row?.new_policy_id &&
           row?.adjustment_type === 'customer_pays' &&
-          Number(row?.adjustment_amount) > 0
+          info.amount > 0
         ) {
-          map[row.new_policy_id] = {
-            amount: Number(row.adjustment_amount),
-            customerNote: typeof row.note === 'string' && row.note.trim() ? row.note.trim() : null,
-            officeNote: typeof row.office_note === 'string' && row.office_note.trim() ? row.office_note.trim() : null,
-            adjustmentNote: typeof row.adjustment_note === 'string' && row.adjustment_note.trim() ? row.adjustment_note.trim() : null,
-          };
+          targetMap[row.new_policy_id] = info;
+        }
+        // Source side surfaces whenever there is any note — office,
+        // adjustment, or customer-facing reason. Lets the agent see
+        // why the transfer happened by looking at the transferred-out
+        // row alone.
+        if (
+          row?.policy_id &&
+          (info.officeNote || info.adjustmentNote || info.customerNote)
+        ) {
+          sourceMap[row.policy_id] = info;
         }
       });
-      setTransferAdjustments(map);
+      setTransferAdjustments(targetMap);
+      setSourceTransferNotes(sourceMap);
     })();
     return () => {
       cancelled = true;
@@ -566,7 +609,8 @@ export function PolicyYearTimeline({
           allPolicyIds: allIds,
           status,
           totalPrice,
-          debtPrice
+          debtPrice,
+          isNewest: false,
         });
       });
 
@@ -579,30 +623,59 @@ export function PolicyYearTimeline({
           allPolicyIds: [policy.id],
           status: getPolicyStatus(policy),
           totalPrice: policy.insurance_price + (policy.office_commission || 0),
-          debtPrice: policy.insurance_price + (policy.office_commission || 0)
+          debtPrice: policy.insurance_price + (policy.office_commission || 0),
+          isNewest: false,
         });
       });
 
-      // Sort packages within year: 
-      // 1. Newly created (last 24h) first
-      // 2. Then by status: active → ended → transferred → cancelled
+      // Mark the newest non-transfer-created package in this year. The
+      // candidate is the package whose latest policy.created_at is the
+      // greatest, ignoring any package where at least one policy was
+      // created by a transfer (transferred_from_policy_id IS NOT NULL).
+      // Excluding transfer-created packages is what keeps the "جديدة"
+      // badge anchored when a policy is transferred — the transfer
+      // makes a new row, but the user has been clear it shouldn't
+      // claim the badge.
+      let newestPkgIndex = -1;
+      let newestCreatedAt = '';
+      packages.forEach((p, idx) => {
+        const polys = [p.mainPolicy, ...p.addons].filter((x): x is PolicyRecord => !!x);
+        if (polys.length === 0) return;
+        if (polys.some(x => x.transferred_from_policy_id)) return;
+        const maxCreated = polys.reduce((acc, x) => {
+          const c = x.created_at || '';
+          return c > acc ? c : acc;
+        }, '');
+        if (maxCreated && maxCreated > newestCreatedAt) {
+          newestCreatedAt = maxCreated;
+          newestPkgIndex = idx;
+        }
+      });
+      if (newestPkgIndex >= 0) {
+        packages[newestPkgIndex].isNewest = true;
+      }
+
+      // Sort packages within year:
+      // 1. Status first: active → ended → transferred → cancelled.
+      //    After a تحويل the freshly-created target package is active
+      //    while the source flips to transferred — surfacing the
+      //    active one at the top so the agent sees the current state
+      //    without scrolling. "isNewest" used to come first here,
+      //    which let the transferred-out source keep the top slot
+      //    just because it had the older created_at among
+      //    non-transfer-target packages.
+      // 2. Then by "isNewest" (the جديدة flag, fresh-creation hint)
       // 3. Then by newest start date
       packages.sort((a, b) => {
-        const policyA = a.mainPolicy || a.addons[0];
-        const policyB = b.mainPolicy || b.addons[0];
-        
-        // New policies first (created within last 24 hours)
-        const aIsNew = policyA?.created_at && isNewPolicy(policyA.created_at);
-        const bIsNew = policyB?.created_at && isNewPolicy(policyB.created_at);
-        if (aIsNew && !bIsNew) return -1;
-        if (!aIsNew && bIsNew) return 1;
-        
-        // Then by status priority
         const priorityA = getStatusPriority(a.status);
         const priorityB = getStatusPriority(b.status);
         if (priorityA !== priorityB) return priorityA - priorityB;
-        
-        // Then by newest start date
+
+        if (a.isNewest && !b.isNewest) return -1;
+        if (!a.isNewest && b.isNewest) return 1;
+
+        const policyA = a.mainPolicy || a.addons[0];
+        const policyB = b.mainPolicy || b.addons[0];
         const dateA = policyA?.start_date || '';
         const dateB = policyB?.start_date || '';
         return new Date(dateB).getTime() - new Date(dateA).getTime();
@@ -1027,12 +1100,20 @@ export function PolicyYearTimeline({
                         pkg={pkg}
                         sequence={pkgIndex + 1}
                         transferAdjustments={transferAdjustments}
+                        sourceTransferNotes={sourceTransferNotes}
                         paymentStatus={getPackagePaymentStatus(pkg)}
                         accidentCount={accidentCount}
                         childrenCount={childrenCount}
                         clientPhone={clientPhone}
                         getDocNumber={(id) => policyDocNumbers.get(id)}
                         onOpenPaymentDetails={handleOpenPaymentDetails}
+                        fileCount={pkg.allPolicyIds.reduce(
+                          (s, id) => s + (fileCounts?.[id] || 0),
+                          0,
+                        )}
+                        onOpenFiles={onOpenPolicyFiles
+                          ? () => onOpenPolicyFiles(mainPolicy?.id || pkg.allPolicyIds[0])
+                          : undefined}
                         onPolicyClick={onPolicyClick}
                         onPaymentClick={(e) => handlePackagePayment(e, pkg.allPolicyIds, pkg.mainPolicy?.branch_id || pkg.addons[0]?.branch_id || null)}
                         onPrintInvoice={() => handleCardPrintInvoice(pkg.allPolicyIds, pkg.allPolicyIds.length > 1)}
@@ -1145,12 +1226,15 @@ function PolicyPackageCard({
   pkg,
   sequence,
   transferAdjustments,
+  sourceTransferNotes,
   paymentStatus,
   accidentCount = 0,
   childrenCount = 0,
   clientPhone,
   getDocNumber,
   onOpenPaymentDetails,
+  fileCount = 0,
+  onOpenFiles,
   onPolicyClick,
   onPaymentClick,
   onPrintInvoice,
@@ -1189,12 +1273,23 @@ function PolicyPackageCard({
    *  + financial-adjustment note underneath it. Populated by the parent
    *  PolicyYearTimeline from policy_transfers. */
   transferAdjustments: Record<string, TransferAdjustment>;
+  /** source policy_id → the same three transfer notes, rendered as a
+   *  small footer block on the transferred-OUT card so staff reviewing
+   *  the old transaction see the reason without opening the target.
+   *  Amount lives only on the target side. */
+  sourceTransferNotes: Record<string, TransferAdjustment>;
   paymentStatus: { totalPaid: number; remaining: number; isPaid: boolean; profit: number };
   accidentCount?: number;
   childrenCount?: number;
   clientPhone?: string | null;
   getDocNumber?: (policyId: string) => number | undefined;
   onOpenPaymentDetails?: (policyIds: string[]) => void;
+  /** Total media_files attached to any policy in the package — drives
+   *  the "ملفات (N)" button. */
+  fileCount?: number;
+  /** Click handler for the ملفات button — opens the details drawer
+   *  pre-positioned to the files tab. */
+  onOpenFiles?: () => void;
   onPolicyClick: (id: string) => void;
   onPaymentClick: (e: React.MouseEvent) => void;
   onPrintInvoice: () => Promise<boolean>;
@@ -1296,19 +1391,14 @@ function PolicyPackageCard({
     return getDisplayLabel(policy);
   };
 
-  // Whole-card click → open policy details. We let the click bubble up
-  // from any non-interactive surface inside the card, but bail when the
-  // click originated on a button/link/input/menu trigger so the existing
-  // inline actions (kebab menu, pay, send, edit notes, copy chip…) keep
-  // working without a pile of stopPropagation calls. data-no-card-click
-  // is an opt-out hatch for future widgets that need it.
-  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const target = e.target as HTMLElement | null;
-    if (!target) return;
-    if (target.closest('button, a, input, textarea, select, label, [role="button"], [role="menuitem"], [data-no-card-click]')) {
-      return;
-    }
-    onPolicyClick(policy.id);
+  // Whole-card click → was wired to open the policy-details drawer
+  // (PolicyDetailsDrawer). Disabled at the user's request — the drawer
+  // still mounts when triggered explicitly (e.g. the dedicated Files
+  // button below, or kebab-menu "تفاصيل المعاملة"), but a stray click
+  // anywhere on the card no longer pops it. Keeping the function
+  // around as a no-op so re-enabling later is just deleting one line.
+  const handleCardClick = (_e: React.MouseEvent<HTMLDivElement>) => {
+    // intentionally empty — drawer entry was hidden
   };
 
   return (
@@ -1317,7 +1407,7 @@ function PolicyPackageCard({
       data-policy-ids={pkg.allPolicyIds.join(' ')}
       onClick={handleCardClick}
       className={cn(
-        "overflow-hidden transition-all duration-200 cursor-pointer",
+        "overflow-hidden transition-all duration-200",
         // Active: Highlight and strong border
         isActive && "bg-card border-2 border-primary/40 shadow-md shadow-primary/5",
         // Ended: Neutral
@@ -1391,7 +1481,7 @@ function PolicyPackageCard({
           {wasTransferredFrom && !isTransferred && (
             <Badge variant="outline" className="gap-1 text-xs bg-blue-500/10 border-blue-500/30 text-blue-600">
               <ArrowRightLeft className="h-3 w-3" />
-              محول من <span className="font-mono ltr-nums">{wasTransferredFrom}</span>
+              محولة من سيارة <span className="font-mono ltr-nums">{wasTransferredFrom}</span>
             </Badge>
           )}
 
@@ -1403,8 +1493,11 @@ function PolicyPackageCard({
             </Badge>
           )}
 
-          {/* New Policy Badge - shows for policies created within last 24 hours */}
-          {policy.created_at && isNewPolicy(policy.created_at) && (
+          {/* "جديدة" badge — marks the most recently-added non-transfer
+              package in this year. Stays anchored across status changes
+              (cancel/transfer), and only moves when a brand-new معاملة is
+              added. Computed once in the parent useMemo. */}
+          {pkg.isNewest && (
             <Badge variant="outline" className="gap-1 text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-600">
               <Zap className="h-3 w-3" />
               جديدة
@@ -1521,6 +1614,31 @@ function PolicyPackageCard({
               >
                 <Banknote className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">دفع</span>
+              </Button>
+            )}
+
+            {/* Files shortcut — replaces the previous whole-card click
+                to open the details drawer. Compact button with the
+                file count badge; click opens the drawer pre-positioned
+                to the ملفات tab. Always rendered (even when count=0)
+                so the user has a visible entry point to upload the
+                first file. */}
+            {onOpenFiles && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1 h-8 px-2.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenFiles();
+                }}
+                title="عرض / إضافة ملفات هذه المعاملة"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">ملفات</span>
+                <span className="font-mono ltr-nums text-[10px] bg-muted text-muted-foreground rounded px-1.5 py-px">
+                  {fileCount}
+                </span>
               </Button>
             )}
 
@@ -1709,11 +1827,6 @@ function PolicyPackageCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => onPolicyClick(policy.id)}>
-                  <Eye className="h-4 w-4 ml-2" />
-                  عرض التفاصيل
-                </DropdownMenuItem>
-
                 {/* Edit — open the package/policy edit modal directly from
                     the dropdown so the user doesn't have to walk through
                     the details drawer first. Hidden for cancelled and
@@ -1723,7 +1836,7 @@ function PolicyPackageCard({
                     {isPkg && onEditPackage && policy.group_id && (
                       <DropdownMenuItem onClick={() => onEditPackage(policy.group_id!)}>
                         <Pencil className="h-4 w-4 ml-2" />
-                        تعديل الباقة
+                        تعديل المعاملة
                       </DropdownMenuItem>
                     )}
                     {!isPkg && onEditPolicy && (
@@ -1741,7 +1854,7 @@ function PolicyPackageCard({
                     {isPkg && onTransferPackage && (
                       <DropdownMenuItem onClick={() => onTransferPackage(pkg.allPolicyIds)}>
                         <ArrowRightLeft className="h-4 w-4 ml-2" />
-                        تحويل الباقة
+                        تحويل المعاملة
                       </DropdownMenuItem>
                     )}
                     {!isPkg && onTransfer && (
@@ -1764,7 +1877,7 @@ function PolicyPackageCard({
                     {isPkg && onRenewPackage && (
                       <DropdownMenuItem onClick={() => onRenewPackage(pkg.allPolicyIds)}>
                         <RefreshCw className="h-4 w-4 ml-2" />
-                        تجديد الباقة
+                        تجديد المعاملة
                       </DropdownMenuItem>
                     )}
                     {!isPkg && onRenewPolicy && (
@@ -1785,7 +1898,7 @@ function PolicyPackageCard({
                         onClick={() => onCancelPackage(pkg.allPolicyIds)}
                       >
                         <XCircle className="h-4 w-4 ml-2" />
-                        إلغاء الباقة
+                        إلغاء المعاملة
                       </DropdownMenuItem>
                     )}
                     {!isPkg && onCancel && (
@@ -1815,7 +1928,7 @@ function PolicyPackageCard({
                       }}
                     >
                       <Trash2 className="h-4 w-4 ml-2" />
-                      {isPkg ? 'حذف الباقة نهائياً' : 'حذف المعاملة نهائياً'}
+                      حذف المعاملة نهائياً
                     </DropdownMenuItem>
                   </>
                 )}
@@ -1826,11 +1939,10 @@ function PolicyPackageCard({
 
         {/* Main Content: Key Info Grid — company column removed since the
             insurer name is already visible inside the مكونات rows below;
-            period column likewise lives in those rows. */}
-        <div
-          className="grid grid-cols-2 gap-3 text-sm cursor-pointer"
-          onClick={() => onPolicyClick(policy.id)}
-        >
+            period column likewise lives in those rows.
+            Click handler was wired to open the policy-details drawer;
+            removed alongside the whole-card handler above. */}
+        <div className="grid grid-cols-2 gap-3 text-sm">
           {/* Car */}
           <div ref={periodRef} className="flex items-start gap-2">
             <Car className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
@@ -1842,21 +1954,37 @@ function PolicyPackageCard({
             </div>
           </div>
 
-          {/* Amount */}
-          <div className="flex items-start gap-2 justify-end">
-            <div className="flex flex-col items-start leading-tight">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المبلغ</span>
-              <span className={cn(
-                "text-lg font-bold ltr-nums",
-                isActive ? "text-primary" : "text-muted-foreground"
-              )}>
-                ₪{pkg.totalPrice.toLocaleString('en-US')}
-              </span>
-              {(() => {
-                const rowPolicies = (isPkg
-                  ? [pkg.mainPolicy, ...pkg.addons].filter(Boolean) as PolicyRecord[]
-                  : [policy]
-                );
+          {/* Amount. Split out إلزامي onto its own line so the
+              bookkeeper sees "package price (without إلزامي)" + a
+              separate "إلزامي: X" — the إلزامي portion goes straight
+              to the insurer and is tracked apart from what the
+              office actually collects. */}
+          {(() => {
+            const rowPoliciesForAmount = (isPkg
+              ? [pkg.mainPolicy, ...pkg.addons].filter(Boolean) as PolicyRecord[]
+              : [policy]
+            );
+            const elzamiTotal = rowPoliciesForAmount
+              .filter((p) => p.policy_type_parent === 'ELZAMI')
+              .reduce((s, p) => s + p.insurance_price + (p.office_commission || 0), 0);
+            const packageTotal = pkg.totalPrice - elzamiTotal;
+            return (
+              <div className="flex items-start gap-2 justify-end">
+                <div className="flex flex-col items-start leading-tight">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المبلغ</span>
+                  <span className={cn(
+                    "text-lg font-bold ltr-nums",
+                    isActive ? "text-primary" : "text-muted-foreground"
+                  )}>
+                    ₪{packageTotal.toLocaleString('en-US')}
+                  </span>
+                  {elzamiTotal > 0 && (
+                    <span className="text-[10px] text-muted-foreground mt-0.5">
+                      <span className="text-muted-foreground/70">+ </span>إلزامي: <span className="font-semibold ltr-nums">₪{elzamiTotal.toLocaleString('en-US')}</span>
+                    </span>
+                  )}
+                  {(() => {
+                    const rowPolicies = rowPoliciesForAmount;
                 const totalCommission = rowPolicies.reduce(
                   (sum, p) => sum + (p.office_commission || 0),
                   0,
@@ -1926,8 +2054,10 @@ function PolicyPackageCard({
                   </>
                 );
               })()}
-            </div>
-          </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Package Components Section - Shows details for each policy in the package */}
@@ -2029,17 +2159,21 @@ function PolicyPackageCard({
                   </div>
                 );
               })()}
-              {/* Totals footer row */}
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onOpenPaymentDetails?.(pkg.allPolicyIds); }}
+              {/* Totals footer row — non-interactive. The previous
+                  click-to-open-details flow was removed at the user's
+                  request: the totals are read-only summary info and
+                  the dedicated سجل الدفعات tab already provides the
+                  detailed breakdown. The wrapper stays a flex row so
+                  the layout / hover affordance for the broker banner
+                  doesn't change visually. */}
+              <div
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 border-t border-border/60 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  "w-full flex items-center gap-3 px-3 py-2 border-t border-border/60",
                   hasBroker
-                    ? "justify-start bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-500/5 dark:hover:bg-amber-500/10 text-right"
-                    : "justify-end bg-muted/30 hover:bg-muted/50 text-right",
+                    ? "justify-start bg-amber-50/60 dark:bg-amber-500/5 text-right"
+                    : "justify-end bg-muted/30 text-right",
                 )}
-                title={hasBroker ? brokerNoteText : "عرض تفاصيل الدفعات"}
+                title={hasBroker ? brokerNoteText : undefined}
               >
                 {hasBroker ? (
                   <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
@@ -2078,15 +2212,49 @@ function PolicyPackageCard({
                     )}
                   </>
                 )}
-              </button>
+              </div>
             </div>
+            {/* Creator + creation timestamp — "أنشأها: <name> · <date>
+                <time>". Name falls back to email-username when
+                profiles.full_name is null. Date renders in dd/MM/yyyy
+                + HH:mm (en-GB locale) to match the rest of the app.
+                Both halves render only when their source is non-null
+                so old rows without a creator / created_at degrade
+                cleanly. */}
+            {(() => {
+              const c = pkg.mainPolicy?.creator;
+              const who = c?.full_name?.trim() || c?.email?.split('@')[0] || null;
+              const when = pkg.mainPolicy?.created_at;
+              if (!who && !when) return null;
+              const ts = when ? new Date(when) : null;
+              return (
+                <div className="text-[10px] text-muted-foreground mt-1.5 px-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  {who && (
+                    <span>أنشأها: <span className="font-medium">{who}</span></span>
+                  )}
+                  {ts && (
+                    <span className="ltr-nums">
+                      · {ts.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      <span className="mx-1">·</span>
+                      {ts.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
-        {/* Standalone policy — single-row "المعاملة" section so staff can
-            still edit the policy number inline and the paid/remaining
-            totals live in the same framed footer the package cards use. */}
-        {!isPkg && isActive && (
+        {/* Standalone policy — single-row "المعاملة" section. Used to
+            be gated on isActive, which made cancelled / transferred
+            single-policy cards collapse to the price line with no
+            policy-number row or duration. Staff couldn't see what
+            had actually been cancelled. The breakdown table now
+            renders for every status; the paid/remaining/profit
+            totals footer is the only piece that stays active-only
+            (those numbers no longer mean anything once the policy is
+            cancelled or transferred). */}
+        {!isPkg && (
           <div className="mt-3 pt-3 border-t border-border/50">
             <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
               <FileText className="h-3.5 w-3.5" />
@@ -2105,62 +2273,150 @@ function PolicyPackageCard({
                 onPoliciesUpdate={onPoliciesUpdate}
               />
             </div>
-            <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onOpenPaymentDetails?.([policy.id]); }}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
-                  hasBroker
-                    ? "justify-start bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-500/5 dark:hover:bg-amber-500/10 text-right"
-                    : "justify-end hover:bg-muted/50 text-right",
-                )}
-                title={hasBroker ? brokerNoteText : "عرض تفاصيل الدفعات"}
-              >
-                {hasBroker ? (
-                  <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
-                    <Handshake className="h-3.5 w-3.5 shrink-0" />
-                    <span>{brokerNoteText}</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex flex-col text-xs items-end text-left">
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
-                      <span className="font-bold text-success ltr-nums">
-                        ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
-                      </span>
+            {isActive && (
+              <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
+                {/* Standalone-policy totals footer — non-interactive,
+                    same change as the package version. */}
+                <div
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2",
+                    hasBroker
+                      ? "justify-start bg-amber-50/60 dark:bg-amber-500/5 text-right"
+                      : "justify-end text-right",
+                  )}
+                  title={hasBroker ? brokerNoteText : undefined}
+                >
+                  {hasBroker ? (
+                    <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
+                      <Handshake className="h-3.5 w-3.5 shrink-0" />
+                      <span>{brokerNoteText}</span>
                     </div>
-                    <div className="flex flex-col text-xs items-end text-left">
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
-                      <span className={cn(
-                        "font-bold ltr-nums",
-                        paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
-                      )}>
-                        ₪{paymentStatus.remaining.toLocaleString('en-US')}
-                      </span>
-                    </div>
-                    {canSeeFinancials && (
+                  ) : (
+                    <>
                       <div className="flex flex-col text-xs items-end text-left">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">الربح</span>
-                        <span className={cn(
-                          "font-bold ltr-nums",
-                          paymentStatus.profit > 0 ? "text-emerald-700 dark:text-emerald-400"
-                          : paymentStatus.profit < 0 ? "text-red-700 dark:text-red-400"
-                          : "text-muted-foreground",
-                        )}>
-                          ₪{paymentStatus.profit.toLocaleString('en-US')}
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
+                        <span className="font-bold text-success ltr-nums">
+                          ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
                         </span>
                       </div>
-                    )}
-                  </>
-                )}
-              </button>
-            </div>
+                      <div className="flex flex-col text-xs items-end text-left">
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
+                        <span className={cn(
+                          "font-bold ltr-nums",
+                          paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
+                        )}>
+                          ₪{paymentStatus.remaining.toLocaleString('en-US')}
+                        </span>
+                      </div>
+                      {canSeeFinancials && (
+                        <div className="flex flex-col text-xs items-end text-left">
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wide">الربح</span>
+                          <span className={cn(
+                            "font-bold ltr-nums",
+                            paymentStatus.profit > 0 ? "text-emerald-700 dark:text-emerald-400"
+                            : paymentStatus.profit < 0 ? "text-red-700 dark:text-red-400"
+                            : "text-muted-foreground",
+                          )}>
+                            ₪{paymentStatus.profit.toLocaleString('en-US')}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* Same caption as the package version — creator name with
+                email fallback plus the creation date+time. */}
+            {(() => {
+              const c = policy.creator;
+              const who = c?.full_name?.trim() || c?.email?.split('@')[0] || null;
+              const when = policy.created_at;
+              if (!who && !when) return null;
+              const ts = when ? new Date(when) : null;
+              return (
+                <div className="text-[10px] text-muted-foreground mt-1.5 px-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  {who && (
+                    <span>أنشأها: <span className="font-medium">{who}</span></span>
+                  )}
+                  {ts && (
+                    <span className="ltr-nums">
+                      · {ts.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      <span className="mx-1">·</span>
+                      {ts.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
+        {/* Transfer notes recap — only on transferred-out cards.
+            Aggregates the three notes recorded at تحويل time (سبب
+            التحويل / ملاحظات المكتب / سبب الفرق) so the agent can
+            review the old transaction without opening the target.
+            Deduped across siblings so an identical office note set
+            on every add-on in a package only renders once. */}
+        {(() => {
+          const transferredPolicies = isPkg
+            ? [pkg.mainPolicy, ...pkg.addons].filter(
+                (p): p is PolicyRecord => !!p && !!p.transferred,
+              )
+            : policy.transferred
+              ? [policy]
+              : [];
+          if (transferredPolicies.length === 0) return null;
+          const collected = transferredPolicies
+            .map((p) => sourceTransferNotes[p.id])
+            .filter((a): a is TransferAdjustment => !!a);
+          if (collected.length === 0) return null;
+          const dedupe = (vals: (string | null)[]) =>
+            Array.from(new Set(vals.filter((v): v is string => !!v)));
+          const customerNotes = dedupe(collected.map((a) => a.customerNote));
+          const officeNotes = dedupe(collected.map((a) => a.officeNote));
+          const adjustmentNotes = dedupe(collected.map((a) => a.adjustmentNote));
+          if (
+            customerNotes.length + officeNotes.length + adjustmentNotes.length === 0
+          ) {
+            return null;
+          }
+          return (
+            <div className="mt-3 pt-3 border-t border-border/50 space-y-1">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                <ArrowRightLeft className="h-3 w-3" />
+                تفاصيل التحويل
+              </p>
+              {customerNotes.map((n, i) => (
+                <div key={`c-${i}`} className="flex gap-1.5 text-[11px]">
+                  <span className="font-semibold text-foreground/80 shrink-0">
+                    سبب التحويل:
+                  </span>
+                  <span className="break-words">{n}</span>
+                </div>
+              ))}
+              {officeNotes.map((n, i) => (
+                <div key={`o-${i}`} className="flex gap-1.5 text-[11px]">
+                  <span className="font-semibold text-foreground/80 shrink-0">
+                    ملاحظات المكتب:
+                  </span>
+                  <span className="break-words">{n}</span>
+                </div>
+              ))}
+              {adjustmentNotes.map((n, i) => (
+                <div key={`a-${i}`} className="flex gap-1.5 text-[11px]">
+                  <span className="font-semibold text-foreground/80 shrink-0">
+                    سبب الفرق:
+                  </span>
+                  <span className="break-words">{n}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* Notes Section - Inline Edit */}
-        <div 
+        <div
           className="mt-3 pt-3 border-t border-border/50"
           onClick={(e) => e.stopPropagation()}
         >

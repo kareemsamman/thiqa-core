@@ -21,7 +21,6 @@ import {
 import {
   ArrowRight,
   Pencil,
-  Phone,
   FileText,
   Wallet,
   Plus,
@@ -41,6 +40,7 @@ import { ClientDrawer } from "@/components/clients/ClientDrawer";
 import { PolicyWizard } from "@/components/policies/PolicyWizard";
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { RowActionsMenu } from "@/components/shared/RowActionsMenu";
+import { ClickablePhone } from "@/components/shared/ClickablePhone";
 import { getInsuranceTypeLabel } from "@/lib/insuranceTypes";
 
 interface Broker {
@@ -380,9 +380,8 @@ export function BrokerDetails({ broker, onBack, onEdit, onRefresh }: BrokerDetai
               <div>
                 <h1 className="text-2xl font-bold text-foreground">{broker.name}</h1>
                 {broker.phone && (
-                  <div className="flex items-center gap-1 text-muted-foreground">
-                    <Phone className="h-4 w-4" />
-                    <bdi>{broker.phone}</bdi>
+                  <div className="text-muted-foreground">
+                    <ClickablePhone phone={broker.phone} />
                   </div>
                 )}
               </div>

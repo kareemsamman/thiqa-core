@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,19 +22,29 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
-import { 
-  Loader2, 
-  ArrowLeftRight, 
-  Plus, 
-  Car, 
+import {
+  Loader2,
+  ArrowLeftRight,
+  Plus,
+  X,
+  Car,
   Send,
   AlertTriangle,
   Package,
   CheckCircle2,
+  Wallet,
+  Banknote,
+  FolderOpen,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { useAuth } from "@/hooks/useAuth";
+import { useAgentContext } from "@/hooks/useAgentContext";
+import {
+  AddSettlementDialog,
+  type StagedSettlement,
+} from "@/components/accounting/AddSettlementDialog";
+import { persistSettlementLines } from "@/components/accounting/persistSettlementLines";
 import { Card } from "@/components/ui/card";
 import { CAR_TYPES } from "@/components/policies/wizard/types";
 import { cn } from "@/lib/utils";
@@ -91,6 +101,23 @@ const POLICY_TYPE_LABELS: Record<string, string> = {
 
 type AdjustmentType = "none" | "customer_pays" | "refund";
 
+// Arabic plural rendering for the "تم إدخال X دفعة" status line under
+// the فتح button — mirrors CancelPolicyModal so both modals read the
+// same to staff.
+function formatStagedCount(n: number): string {
+  if (n <= 0) return "لا توجد دفعات";
+  if (n === 1) return "تم إدخال دفعة واحدة";
+  if (n === 2) return "تم إدخال دفعتين";
+  if (n >= 3 && n <= 10) return `تم إدخال ${n} دفعات`;
+  return `تم إدخال ${n} دفعة`;
+}
+
+// When adjustmentType === 'refund' the user picks how the agency
+// settles up with the client. credit_note keeps the legacy behavior
+// (wallet credit, no cash out); disbursement (cash actually leaving
+// the agency) lands fully in phase 2b.
+type RefundKind = "credit_note" | "disbursement";
+
 export function TransferPolicyModal({
   open,
   onOpenChange,
@@ -108,6 +135,7 @@ export function TransferPolicyModal({
 }: TransferPolicyModalProps) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { agentId } = useAgentContext();
   
   const [saving, setSaving] = useState(false);
   const [cars, setCars] = useState<CarOption[]>([]);
@@ -115,10 +143,14 @@ export function TransferPolicyModal({
   const [selectedCarId, setSelectedCarId] = useState<string>("");
   const [showNewCarForm, setShowNewCarForm] = useState(false);
   
-  // Package / related policies
-  const [relatedPolicies, setRelatedPolicies] = useState<RelatedPolicy[]>([]);
+  // Package policies. groupPolicies contains every active policy in the
+  // current group — primary + related (add-ons). The primary is always
+  // transferred (this dialog is opened for it); selectedRelatedIds
+  // controls which add-ons travel along. Default selects every related
+  // so the legacy "transfer entire package" behavior is the no-op path.
+  const [groupPolicies, setGroupPolicies] = useState<RelatedPolicy[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
-  const [transferPackage, setTransferPackage] = useState(true);
+  const [selectedRelatedIds, setSelectedRelatedIds] = useState<Set<string>>(new Set());
   
   // Transfer details
   const [transferDate, setTransferDate] = useState(new Date().toISOString().split("T")[0]);
@@ -129,6 +161,16 @@ export function TransferPolicyModal({
   const [adjustmentType, setAdjustmentType] = useState<AdjustmentType>("none");
   const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [adjustmentNote, setAdjustmentNote] = useState("");
+  const [refundKind, setRefundKind] = useState<RefundKind>("credit_note");
+  // Disbursement detour — staged pattern. AddSettlementDialog opens in
+  // stageOnly mode so its Save returns the validated payload rather
+  // than writing rows. We hold it in stagedDisbursement until the
+  // transfer commits, then persist atomically alongside the policy
+  // moves. Reopening the dialog rehydrates from this state so editing
+  // doesn't lose prior entries; closing the cancel modal without
+  // confirming leaves zero orphans in the DB.
+  const [disbursementDialogOpen, setDisbursementDialogOpen] = useState(false);
+  const [stagedDisbursement, setStagedDisbursement] = useState<StagedSettlement | null>(null);
   
   // SMS
   const [sendSms, setSendSms] = useState(true);
@@ -148,43 +190,97 @@ export function TransferPolicyModal({
   const [carDataFetched, setCarDataFetched] = useState(false);
   const [savingNewCar, setSavingNewCar] = useState(false);
 
-  // Fetch client's cars and related policies
+  // Fetch client's cars and policies in the same group (or just the
+  // primary when this is a standalone transaction). We always pull at
+  // least the primary's insurance_price so the refund cap renders
+  // correctly even on solo transfers.
   useEffect(() => {
     if (open && clientId) {
       fetchCars();
       loadSmsTemplate();
-      if (groupId) {
-        fetchRelatedPolicies();
-      } else {
-        setRelatedPolicies([]);
-      }
+      fetchRelatedPolicies();
     }
-  }, [open, clientId, groupId]);
+  }, [open, clientId, groupId, policyId]);
 
-  // Fetch related policies in the same group (add-ons)
+  // Fetch every active policy in the group — primary + add-ons. We
+  // intentionally include the primary so its row renders alongside the
+  // add-ons (price + type + policy_number), instead of hiding it behind
+  // a "أساسية" label fed from props. For a standalone transaction
+  // (no groupId), we fetch just the primary so the refund cap still
+  // has insurance_price to clamp against.
   const fetchRelatedPolicies = async () => {
-    if (!groupId) return;
-    
     setLoadingRelated(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("policies")
         .select("id, policy_type_parent, policy_number, insurance_price")
-        .eq("group_id", groupId)
-        .neq("id", policyId)
         .is("deleted_at", null)
         .is("cancelled", false)
         .is("transferred", false);
+      if (groupId) {
+        query = query.eq("group_id", groupId);
+      } else {
+        query = query.eq("id", policyId);
+      }
+      const { data, error } = await query;
 
       if (error) throw error;
-      setRelatedPolicies(data || []);
+      const rows = (data || []) as RelatedPolicy[];
+      setGroupPolicies(rows);
+      // Default: select every related (non-primary) — keeps the
+      // existing "transfer entire package" default behavior.
+      setSelectedRelatedIds(
+        new Set(rows.filter((p) => p.id !== policyId).map((p) => p.id)),
+      );
     } catch (error) {
       console.error("Error fetching related policies:", error);
-      setRelatedPolicies([]);
+      setGroupPolicies([]);
+      setSelectedRelatedIds(new Set());
     } finally {
       setLoadingRelated(false);
     }
   };
+
+  // Sum of insurance_price across every policy that will actually
+  // travel — primary + checked add-ons. Used as the refund cap so
+  // the agent can't ask for more cash back than the client paid for
+  // the policies they're moving.
+  const transferableTotal = groupPolicies.reduce(
+    (sum, p) =>
+      p.id === policyId || selectedRelatedIds.has(p.id)
+        ? sum + Number(p.insurance_price || 0)
+        : sum,
+    0,
+  );
+  // Refund cap. Customer-pays has no symmetric cap (upgrade-amounts
+  // are legitimately open-ended), so we only clamp the refund path.
+  const adjustmentNum = parseFloat(adjustmentAmount);
+  const refundExceedsMax =
+    adjustmentType === "refund" &&
+    transferableTotal > 0 &&
+    !isNaN(adjustmentNum) &&
+    adjustmentNum > transferableTotal;
+
+  // Staged-disbursement guards. سند صرف needs the portal opened and
+  // the totals to match before تأكيد التحويل will commit — same
+  // safety net as CancelPolicyModal.
+  const stagedTotal = stagedDisbursement
+    ? stagedDisbursement.lines.reduce((s, l) => {
+        if (l.payment_type === "customer_cheque" && l.selected_cheques) {
+          return s + l.selected_cheques.reduce((a, c) => a + Number(c.amount || 0), 0);
+        }
+        return s + Number(l.amount || 0);
+      }, 0)
+    : 0;
+  const needsDisbursement =
+    adjustmentType === "refund" && refundKind === "disbursement";
+  const disbursementStagedMissing =
+    needsDisbursement && stagedDisbursement === null;
+  const disbursementTotalMismatch =
+    needsDisbursement &&
+    stagedDisbursement !== null &&
+    !isNaN(adjustmentNum) &&
+    Math.round(stagedTotal * 100) !== Math.round(adjustmentNum * 100);
 
   const fetchCars = async () => {
     setLoadingCars(true);
@@ -368,16 +464,46 @@ export function TransferPolicyModal({
       return;
     }
 
+    if (refundExceedsMax) {
+      toast({
+        title: "خطأ",
+        description: `مبلغ المرتجع لا يمكن أن يتجاوز ₪${transferableTotal.toLocaleString("en-US")}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Disbursement guards — the radio is set to سند صرف but the agent
+    // never staged a payment, OR the staged total drifted from the
+    // adjustment amount after edits. Confirm is already disabled in
+    // these states; this is the safety net.
+    if (needsDisbursement && !stagedDisbursement) {
+      toast({
+        title: "خطأ",
+        description: "اضغط 'فتح' وأدخل دفعات سند الصرف قبل التأكيد",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (needsDisbursement && disbursementTotalMismatch) {
+      toast({
+        title: "خطأ",
+        description: "مجموع الدفعات لا يساوي مبلغ المرتجع — افتح البوابة وعدّل",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const selectedCar = cars.find(c => c.id === selectedCarId);
       
-      // Determine which policies to transfer
-      const policiesToTransfer = [policyId];
-      if (transferPackage && relatedPolicies.length > 0) {
-        policiesToTransfer.push(...relatedPolicies.map(p => p.id));
-      }
-      
+      // Determine which policies to transfer — primary is always in,
+      // related (add-ons) only when their checkbox is checked. The agent
+      // can uncheck every add-on to transfer just the primary; that's a
+      // valid scenario (leaves the add-ons on the old car/group).
+      const policiesToTransfer = [policyId, ...Array.from(selectedRelatedIds)];
+
       // Fetch original policy details for all policies being transferred
       const { data: originalPolicies, error: fetchError } = await supabase
         .from("policies")
@@ -389,10 +515,13 @@ export function TransferPolicyModal({
         throw new Error("لم يتم العثور على المعاملات");
       }
 
-      // Generate new group_id if transferring package
+      // Generate new group_id when more than one policy is moving so
+      // the new policies stay linked together on the target car. Single
+      // policy transfers (just the primary, or a non-package) don't
+      // need a group at all.
       let newGroupId: string | null = null;
-      
-      if (transferPackage && policiesToTransfer.length > 1) {
+
+      if (policiesToTransfer.length > 1) {
         newGroupId = crypto.randomUUID();
         
         // Create entry in policy_groups table for the new package
@@ -556,22 +685,96 @@ export function TransferPolicyModal({
         if (moveFilesError) throw moveFilesError;
       }
 
-      // 6. Create wallet transaction only for refunds (customer_pays is already added to insurance_price)
-      if (adjustmentType === "refund" && adjustmentAmount && newPolicyIds.length > 0) {
-        const { error: walletError } = await supabase
+      // 6. Refund settlement when transferring at a discount. Two
+      // flavors picked via refundKind:
+      //   credit_note  → wallet credit (existing transfer behavior)
+      //                  PLUS a numbered voucher in receipts so the
+      //                  agency has a printable record.
+      //   disbursement → persist the staged client_settlements rows
+      //                  now (the BEFORE/AFTER INSERT triggers stamp
+      //                  voucher_number + mirror to receipts). Lines
+      //                  were collected via AddSettlementDialog in
+      //                  stageOnly mode so nothing hit the DB until
+      //                  this point — closing without confirming
+      //                  leaves no orphan rows.
+      // customer_pays doesn't apply — it just bumps insurance_price
+      // and is already handled above.
+      if (adjustmentType === "refund" && adjustmentAmount && newPolicyIds.length > 0 && refundKind === "credit_note") {
+        const refundDescription = `مرتجع تحويل معاملة ${policyNumber || ""} - مستحق للعميل`;
+        const { data: walletRow, error: walletError } = await supabase
           .from("customer_wallet_transactions")
           .insert({
             client_id: clientId,
             policy_id: newPolicyIds[0],
             transaction_type: "transfer_refund_owed",
             amount: parseFloat(adjustmentAmount),
-            description: `مرتجع تحويل معاملة ${policyNumber || ""} - مستحق للعميل`,
+            description: refundDescription,
             notes: adjustmentNote || null,
             created_by_admin_id: user?.id,
             branch_id: branchId,
-          });
+            agent_id: agentId,
+          })
+          .select("id")
+          .single();
 
         if (walletError) throw walletError;
+
+        // Same fail-soft strategy as CancelPolicyModal: the transfer
+        // already committed by this point, so a missing agent_id or
+        // a voucher-allocation hiccup logs and moves on rather than
+        // rolling back a successful transfer.
+        if (agentId) {
+          const year = new Date().getFullYear();
+          const { data: voucherNumber, error: voucherError } = await supabase.rpc(
+            "allocate_credit_note_number",
+            { p_agent_id: agentId, p_year: year },
+          );
+          if (voucherError) {
+            console.warn("[TransferPolicyModal] allocate_credit_note_number failed:", voucherError);
+          } else if (voucherNumber) {
+            const { error: receiptError } = await supabase.from("receipts").insert({
+              receipt_type: "credit_note",
+              source: "auto",
+              voucher_number: voucherNumber as unknown as string,
+              client_id: clientId,
+              client_name: clientName,
+              policy_id: newPolicyIds[0],
+              wallet_transaction_id: walletRow?.id ?? null,
+              amount: parseFloat(adjustmentAmount),
+              receipt_date: new Date().toISOString().split("T")[0],
+              notes: refundDescription,
+              agent_id: agentId,
+              branch_id: branchId,
+              created_by: user?.id || null,
+            });
+            if (receiptError) {
+              console.warn("[TransferPolicyModal] credit_note receipt insert failed:", receiptError);
+            }
+          }
+        }
+      }
+
+      // Disbursement persist — staged lines hit the DB only after
+      // the policy transfer succeeded. The new policy's id is the
+      // primary anchor so the disbursement receipt links to the new
+      // (active) policy rather than the original (transferred) one.
+      if (
+        adjustmentType === "refund" &&
+        refundKind === "disbursement" &&
+        stagedDisbursement &&
+        newPolicyIds.length > 0
+      ) {
+        await persistSettlementLines({
+          mode: "client",
+          kind: "disbursement",
+          entityId: clientId,
+          policyId: newPolicyIds[0],
+          branchId,
+          effective: stagedDisbursement.lines,
+          notes: stagedDisbursement.notes,
+          userId: user?.id ?? null,
+          agentId: agentId ?? null,
+        });
       }
 
       // 6. Send SMS if enabled
@@ -607,12 +810,14 @@ export function TransferPolicyModal({
         }
       }
 
-      const transferCount = policiesToTransfer.length;
-      toast({ 
-        title: "تم التحويل بنجاح", 
-        description: transferCount > 1 
-          ? `تم تحويل ${transferCount} معاملات - المعاملات القديمة انتهت بتاريخ التحويل ومعاملات جديدة تم إنشاؤها للسيارة الجديدة`
-          : "تم تحويل المعاملة - المعاملة القديمة انتهت بتاريخ التحويل ومعاملة جديدة تم إنشاؤها للسيارة الجديدة"
+      // A package of N add-ons under one تحويل is still ONE معاملة
+      // to the agent — singular phrasing keeps the success message
+      // honest. The DB row count differs from the user-visible
+      // transaction count when add-ons travel along, so we don't
+      // surface it.
+      toast({
+        title: "تم التحويل بنجاح",
+        description: "تم تحويل المعاملة — المعاملة القديمة انتهت بتاريخ التحويل ومعاملة جديدة تم إنشاؤها للسيارة الجديدة",
       });
       onTransferred();
       onOpenChange(false);
@@ -639,11 +844,13 @@ export function TransferPolicyModal({
     setAdjustmentType("none");
     setAdjustmentAmount("");
     setAdjustmentNote("");
+    setRefundKind("credit_note");
+    setStagedDisbursement(null);
     setSendSms(true);
     setSmsMessage("");
     setShowNewCarForm(false);
-    setTransferPackage(true);
-    setRelatedPolicies([]);
+    setGroupPolicies([]);
+    setSelectedRelatedIds(new Set());
   };
 
   const formatCarLabel = (car: CarOption) => {
@@ -655,6 +862,7 @@ export function TransferPolicyModal({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" dir="rtl">
         <DialogHeader>
@@ -674,59 +882,107 @@ export function TransferPolicyModal({
             </p>
           </Card>
 
-          {/* Package Transfer Option - Show if there are related policies */}
-          {relatedPolicies.length > 0 && (
-            <Card className="p-4 border-primary/30 bg-primary/5 space-y-3">
-              <div className="flex items-center gap-2">
-                <Package className="h-5 w-5 text-primary" />
-                <Label className="font-semibold text-primary">
-                  هذه المعاملة جزء من حزمة
-                </Label>
-              </div>
-              
-              <div className="text-sm text-muted-foreground">
-                تم العثور على {relatedPolicies.length} معاملات إضافية مرتبطة:
-              </div>
-              
-              <div className="space-y-2">
-                {relatedPolicies.map((policy) => (
-                  <div 
-                    key={policy.id} 
-                    className="flex items-center justify-between bg-background/50 rounded-md px-3 py-2 text-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      <span className="font-medium">
-                        {POLICY_TYPE_LABELS[policy.policy_type_parent] || policy.policy_type_parent}
-                      </span>
-                      {policy.policy_number && (
-                        <span className="text-muted-foreground">
-                          ({policy.policy_number})
-                        </span>
-                      )}
-                    </div>
-                    <span className="font-bold text-primary">
-                      ₪{policy.insurance_price.toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
+          {/* Group selection — only render when there's at least one
+              other policy in the group (otherwise there's nothing to
+              pick). The primary always transfers (its checkbox is
+              disabled); each add-on has its own toggle so the agent
+              can leave some on the old car. */}
+          {groupPolicies.length > 1 && (() => {
+            const primary = groupPolicies.find((p) => p.id === policyId);
+            const related = groupPolicies.filter((p) => p.id !== policyId);
+            return (
+              <Card className="p-4 border-primary/30 bg-primary/5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Package className="h-5 w-5 text-primary" />
+                  <Label className="font-semibold text-primary">
+                    هذه المعاملة جزء من حزمة
+                  </Label>
+                </div>
 
-              <div className="flex items-center gap-3 pt-2 border-t">
-                <Checkbox
-                  id="transfer-package"
-                  checked={transferPackage}
-                  onCheckedChange={(checked) => setTransferPackage(checked === true)}
-                />
-                <Label 
-                  htmlFor="transfer-package" 
-                  className="cursor-pointer text-sm font-medium"
-                >
-                  تحويل الحزمة كاملة (الخدمات وإعفاء الرسوم)
-                </Label>
-              </div>
-            </Card>
-          )}
+                <div className="text-sm text-muted-foreground">
+                  اختر الوثائق التي تريد تحويلها — المعاملة الأساسية تنتقل تلقائياً.
+                </div>
+
+                <div className="space-y-2">
+                  {/* Primary row — always selected, checkbox locked so
+                      the agent can't accidentally untick it. */}
+                  {primary && (
+                    <label
+                      htmlFor="transfer-primary"
+                      className="flex items-center justify-between bg-background/60 rounded-md px-3 py-2 text-sm border border-primary/20"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Checkbox
+                          id="transfer-primary"
+                          checked
+                          disabled
+                          aria-label="المعاملة الأساسية تنتقل دائماً"
+                        />
+                        <span className="font-medium">
+                          {POLICY_TYPE_LABELS[primary.policy_type_parent] || primary.policy_type_parent}
+                        </span>
+                        {primary.policy_number && (
+                          <span className="text-muted-foreground">
+                            ({primary.policy_number})
+                          </span>
+                        )}
+                        <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-primary/15 text-primary border border-primary/30 shrink-0">
+                          أساسية
+                        </span>
+                      </div>
+                      <span className="font-bold text-primary shrink-0">
+                        ₪{primary.insurance_price.toLocaleString()}
+                      </span>
+                    </label>
+                  )}
+
+                  {/* Related rows — each toggleable. */}
+                  {related.map((policy) => {
+                    const isSelected = selectedRelatedIds.has(policy.id);
+                    return (
+                      <label
+                        key={policy.id}
+                        htmlFor={`transfer-related-${policy.id}`}
+                        className={cn(
+                          "flex items-center justify-between rounded-md px-3 py-2 text-sm cursor-pointer border transition-colors",
+                          isSelected
+                            ? "bg-background/60 border-primary/20"
+                            : "bg-background/30 border-transparent text-muted-foreground",
+                        )}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Checkbox
+                            id={`transfer-related-${policy.id}`}
+                            checked={isSelected}
+                            onCheckedChange={(checked) => {
+                              setSelectedRelatedIds((prev) => {
+                                const next = new Set(prev);
+                                if (checked === true) next.add(policy.id);
+                                else next.delete(policy.id);
+                                return next;
+                              });
+                            }}
+                          />
+                          <span className="font-medium">
+                            {POLICY_TYPE_LABELS[policy.policy_type_parent] || policy.policy_type_parent}
+                          </span>
+                          {policy.policy_number && (
+                            <span>({policy.policy_number})</span>
+                          )}
+                        </div>
+                        <span className={cn(
+                          "font-bold shrink-0",
+                          isSelected ? "text-primary" : "text-muted-foreground",
+                        )}>
+                          ₪{policy.insurance_price.toLocaleString()}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </Card>
+            );
+          })()}
 
           {loadingRelated && (
             <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
@@ -744,27 +1000,42 @@ export function TransferPolicyModal({
               </div>
             ) : (
               <>
-                <Select value={selectedCarId} onValueChange={setSelectedCarId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="اختر السيارة" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cars.map((car) => (
-                      <SelectItem key={car.id} value={car.id}>
-                        {formatCarLabel(car)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {/* When the client has no other cars on file, the dropdown
+                    would be empty and confusing — show an inline hint
+                    instead so the agent immediately sees the next step
+                    (add a new car). The picker reappears the moment a
+                    new car exists. */}
+                {cars.length === 0 ? (
+                  <div className="rounded-md border border-dashed bg-muted/30 p-3 text-center text-sm text-muted-foreground">
+                    لا توجد سيارات أخرى لهذا العميل — أضف سيارة جديدة لإكمال التحويل
+                  </div>
+                ) : (
+                  <Select value={selectedCarId} onValueChange={setSelectedCarId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختر السيارة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cars.map((car) => (
+                        <SelectItem key={car.id} value={car.id}>
+                          {formatCarLabel(car)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
 
                 {/* Add New Car Button */}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="w-full mt-2"
                   onClick={() => setShowNewCarForm(!showNewCarForm)}
                 >
-                  <Plus className="h-4 w-4 ml-1" />
+                  {showNewCarForm ? (
+                    <X className="h-4 w-4 ml-1" />
+                  ) : (
+                    <Plus className="h-4 w-4 ml-1" />
+                  )}
                   {showNewCarForm ? "إلغاء الإضافة" : "إضافة سيارة جديدة"}
                 </Button>
 
@@ -789,6 +1060,7 @@ export function TransferPolicyModal({
                           maxLength={8}
                           inputMode="numeric"
                           dir="ltr"
+                          className="text-right"
                         />
                         {fetchingCarData && (
                           <div className="absolute left-3 top-1/2 -translate-y-1/2">
@@ -955,8 +1227,29 @@ export function TransferPolicyModal({
                     onChange={(e) => setAdjustmentAmount(e.target.value)}
                     placeholder="0"
                     min="0"
+                    max={
+                      adjustmentType === "refund" && transferableTotal > 0
+                        ? transferableTotal
+                        : undefined
+                    }
                     dir="ltr"
+                    className={
+                      refundExceedsMax
+                        ? "border-destructive focus-visible:ring-destructive"
+                        : undefined
+                    }
                   />
+                  {adjustmentType === "refund" && transferableTotal > 0 && (
+                    refundExceedsMax ? (
+                      <p className="text-xs text-destructive">
+                        المبلغ يتجاوز الحد الأقصى ₪{transferableTotal.toLocaleString("en-US")}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        الحد الأقصى: ₪{transferableTotal.toLocaleString("en-US")} (مجموع الوثائق المُحوَّلة)
+                      </p>
+                    )
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>ملاحظة للتعديل المالي</Label>
@@ -966,6 +1259,96 @@ export function TransferPolicyModal({
                     placeholder="سبب الفرق..."
                   />
                 </div>
+
+                {/* Refund-kind picker only when the agency owes the
+                    client — customer_pays doesn't need it. Same UI
+                    treatment as CancelPolicyModal so the two flows
+                    feel like one feature. Disbursement is shown but
+                    disabled until phase 2b. */}
+                {adjustmentType === "refund" && (
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">طريقة إصدار المرتجع</Label>
+                    <RadioGroup
+                      value={refundKind}
+                      onValueChange={(v) => setRefundKind(v as RefundKind)}
+                      className="gap-2"
+                    >
+                      <label
+                        htmlFor="transfer-refund-kind-credit"
+                        className="flex items-start gap-2 p-2.5 border rounded-md cursor-pointer hover:bg-muted/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                      >
+                        <RadioGroupItem value="credit_note" id="transfer-refund-kind-credit" className="mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 font-medium text-sm">
+                            <Wallet className="h-3.5 w-3.5" />
+                            اشعار دائن
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            يبقى المبلغ رصيداً للعميل عندنا — لا يخرج كاش الآن، ويُحسم تلقائياً من أي دفعة قادمة.
+                          </p>
+                        </div>
+                      </label>
+
+                      <label
+                        htmlFor="transfer-refund-kind-disb"
+                        className="flex items-start gap-2 p-2.5 border rounded-md cursor-pointer hover:bg-muted/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                      >
+                        <RadioGroupItem value="disbursement" id="transfer-refund-kind-disb" className="mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 font-medium text-sm">
+                            <Banknote className="h-3.5 w-3.5" />
+                            سند صرف
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            المبلغ يخرج فعلياً من صندوق الشركة الآن (نقدي / شيك / تحويل / فيزا). لا يضيف للعميل أي رصيد.
+                          </p>
+                          {refundKind === "disbursement" && (
+                            <div className="mt-2 flex flex-col gap-1.5">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 gap-1.5 self-start"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setDisbursementDialogOpen(true);
+                                }}
+                              >
+                                <FolderOpen className="h-3.5 w-3.5" />
+                                فتح
+                              </Button>
+                              {stagedDisbursement ? (
+                                <p
+                                  className={cn(
+                                    "text-[11px]",
+                                    disbursementTotalMismatch
+                                      ? "text-destructive"
+                                      : "text-emerald-700",
+                                  )}
+                                >
+                                  {disbursementTotalMismatch ? (
+                                    <>
+                                      ⚠ المجموع ₪{stagedTotal.toLocaleString("en-US")} لا يساوي المرتجع — اضغط فتح وعدّل
+                                    </>
+                                  ) : (
+                                    <>
+                                      ✓ {formatStagedCount(stagedDisbursement.lines.length)} (₪
+                                      {stagedTotal.toLocaleString("en-US")})
+                                    </>
+                                  )}
+                                </p>
+                              ) : (
+                                <p className="text-[11px] text-muted-foreground">
+                                  اضغط فتح لإدخال الدفعات
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    </RadioGroup>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1019,9 +1402,24 @@ export function TransferPolicyModal({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             إلغاء
           </Button>
-          <Button 
-            onClick={handleTransfer} 
-            disabled={saving || !selectedCarId}
+          <Button
+            onClick={handleTransfer}
+            disabled={
+              saving ||
+              !selectedCarId ||
+              refundExceedsMax ||
+              disbursementStagedMissing ||
+              disbursementTotalMismatch
+            }
+            title={
+              refundExceedsMax
+                ? `المبلغ يتجاوز الحد الأقصى ₪${transferableTotal.toLocaleString("en-US")}`
+                : disbursementStagedMissing
+                  ? "اضغط فتح وأدخل دفعات سند الصرف"
+                  : disbursementTotalMismatch
+                    ? "مجموع الدفعات لا يساوي مبلغ المرتجع"
+                    : undefined
+            }
           >
             {saving ? (
               <>
@@ -1038,5 +1436,32 @@ export function TransferPolicyModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+      {/* Disbursement detour, stageOnly mode. Same flow as
+          CancelPolicyModal: the agent opens the portal via the "فتح"
+          button on the radio card, fills lines, and saves — no DB
+          write happens here. The validated payload flows back into
+          stagedDisbursement; the actual insert runs from
+          handleTransfer once the transfer commits. Closing without
+          saving preserves any prior staged data so the agent can
+          reopen and edit instead of starting over. */}
+      <AddSettlementDialog
+        open={disbursementDialogOpen}
+        onOpenChange={setDisbursementDialogOpen}
+        mode="client"
+        kind="disbursement"
+        defaultEntityId={clientId}
+        clientName={clientName}
+        policyId={policyId}
+        branchId={branchId}
+        targetAmount={adjustmentAmount ? parseFloat(adjustmentAmount) : undefined}
+        stageOnly
+        initialLines={stagedDisbursement?.lines}
+        initialNotes={stagedDisbursement?.notes}
+        onSaved={(staged) => {
+          if (staged) setStagedDisbursement(staged);
+        }}
+      />
+    </>
   );
 }

@@ -69,6 +69,13 @@ interface PolicyTreeViewProps {
   onCancelPolicy?: (policyId: string) => void;
   onTransferPackage?: (policyIds: string[]) => void;
   onCancelPackage?: (policyIds: string[]) => void;
+  /** Per-policy file count (entity_id → count) shown on the
+   *  "ملفات (N)" button on each card. */
+  fileCounts?: Record<string, number>;
+  /** Click handler for the "ملفات (N)" button — distinct from
+   *  onPolicyClick because it opens the details drawer pre-set to
+   *  the files tab. */
+  onOpenPolicyFiles?: (policyId: string) => void;
 }
 
 const policyTypeLabels: Record<string, string> = {
@@ -1046,7 +1053,7 @@ function PolicyCardHeader({
                       onTransferPackage(allPolicyIds);
                     }}>
                       <ArrowRightLeft className="h-4 w-4 ml-2" />
-                      تحويل الباقة كاملة
+                      تحويل المعاملة
                     </DropdownMenuItem>
                   )}
                   {!isPackage && onTransfer && (
@@ -1068,7 +1075,7 @@ function PolicyCardHeader({
                       }}
                     >
                       <XCircle className="h-4 w-4 ml-2" />
-                      إلغاء الباقة كاملة
+                      إلغاء المعاملة
                     </DropdownMenuItem>
                   )}
                   {!isPackage && onCancel && (

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAgentContext } from '@/hooks/useAgentContext';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,15 +13,13 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2, CreditCard, Banknote, Wallet, AlertCircle, CheckCircle, DollarSign, Plus, Trash2, Split, Upload, X, ImageIcon, HelpCircle, Car, Package, FileText, Info, Scan, Handshake } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { TranzilaPaymentModal } from '@/components/payments/TranzilaPaymentModal';
 import { ChequeScannerDialog } from '@/components/payments/ChequeScannerDialog';
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from '@/lib/chequeUtils';
-import { BankBranchPicker } from '@/components/shared/BankBranchPicker';
+import { BankPicker } from '@/components/shared/BankPicker';
 import { useToast } from '@/hooks/use-toast';
-import { useSmsLock } from '@/hooks/useSmsLock';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 
 // Represents each policy inside a debt item
@@ -86,6 +84,39 @@ interface BrokerDebtInfo {
   amount: number;
 }
 
+// When the modal is opened in "edit" mode this carries everything the
+// modal needs to act as a session-level editor: which payment rows
+// belong to the session being edited, plus the existing line data so
+// the form can pre-populate them. The accounting rule (set by the user)
+// is "delete the old سند قبض and write a new one" — there is no
+// per-row UPDATE path; submit DELETEs every row in `paymentIds` and
+// recreates them from the form. The session id is reused so the new
+// rows keep the same grouping key.
+export interface DebtPaymentEditingSession {
+  id: string;
+  paymentIds: string[];
+  // The original payment rows, used only for pre-loading the form. We
+  // collapse multi-policy splits (same batch_id) into a single line at
+  // the face value the user originally entered.
+  payments: Array<{
+    id: string;
+    amount: number;
+    payment_type: string;
+    payment_date: string;
+    cheque_number?: string | null;
+    cheque_date?: string | null;
+    cheque_issue_date?: string | null;
+    bank_code?: string | null;
+    branch_code?: string | null;
+    cheque_image_url?: string | null;
+    notes?: string | null;
+    batch_id?: string | null;
+    locked?: boolean | null;
+  }>;
+  totalAmount: number;
+  receiptNumber: string | null;
+}
+
 interface DebtPaymentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -93,7 +124,17 @@ interface DebtPaymentModalProps {
   clientName: string;
   clientPhone: string | null;
   totalOwed: number;
-  onSuccess: () => void;
+  // Receives the payment_ids created by this submit so the caller can
+  // open a "print / send سند قبض" dialog. The list is empty when the
+  // submit didn't create any rows (e.g. edit mode that only restamped
+  // existing payments) — callers should treat an empty array as "no
+  // receipt to send".
+  onSuccess: (paymentIds: string[]) => void;
+  // Optional: when set, the modal switches into "edit a single سند قبض"
+  // mode — title changes, the wallet ceiling treats the session's
+  // existing total as available room, and submit replaces the session's
+  // rows instead of adding new ones.
+  editingSession?: DebtPaymentEditingSession | null;
 }
 
 const policyTypeLabels: Record<string, string> = {
@@ -129,10 +170,11 @@ export function DebtPaymentModal({
   clientPhone,
   totalOwed,
   onSuccess,
+  editingSession,
 }: DebtPaymentModalProps) {
+  const isEditMode = !!editingSession;
   const { toast: uiToast } = useToast();
   const { hasFeature } = useAgentContext();
-  const { guardSend: guardSmsSend } = useSmsLock();
   const paymentTypes = useMemo(() => hasFeature('visa_payment') ? [...paymentTypesBase, paymentTypeVisa] : paymentTypesBase, [hasFeature]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -221,17 +263,75 @@ export function DebtPaymentModal({
     if (open && clientId) {
       fetchDebtItems();
       fetchCreditBalance();
-      // Reset form with one empty payment line
-      setPaymentLines([{
-        id: crypto.randomUUID(),
-        amount: 0,
-        paymentType: 'cash',
-        paymentDate: new Date().toISOString().split('T')[0],
-      }]);
+      if (isEditMode && editingSession) {
+        // Edit mode: pre-load the session's existing payments as form
+        // lines. Multi-policy splits (same batch_id, one physical
+        // cheque allocated across N policies) collapse into ONE line
+        // at the cheque's face value — re-submitting will re-split
+        // via calculateSplitPayments just like the original entry did.
+        // Passthrough / locked rows are excluded; the session can only
+        // contain user-collected rows (the auto إلزامي passthrough has
+        // its own non-shared session_id from PolicyWizard).
+        const eligible = editingSession.payments.filter((p) => p.locked !== true);
+        const byBatch = new Map<string, typeof eligible>();
+        const standalone: typeof eligible = [];
+        for (const p of eligible) {
+          if (p.batch_id) {
+            const arr = byBatch.get(p.batch_id) ?? [];
+            arr.push(p);
+            byBatch.set(p.batch_id, arr);
+          } else {
+            standalone.push(p);
+          }
+        }
+        const lines: PaymentLine[] = [];
+        const toLine = (rep: (typeof eligible)[number], amount: number): PaymentLine => ({
+          id: crypto.randomUUID(),
+          amount,
+          paymentType: (['cash', 'cheque', 'transfer', 'visa'].includes(rep.payment_type)
+            ? rep.payment_type
+            : 'cash') as PaymentLine['paymentType'],
+          paymentDate: rep.payment_type === 'cheque'
+            ? (rep.cheque_date || rep.payment_date)
+            : rep.payment_date,
+          chequeIssueDate: rep.payment_type === 'cheque'
+            ? (rep.cheque_issue_date || undefined)
+            : undefined,
+          chequeNumber: rep.cheque_number || undefined,
+          bankCode: rep.bank_code ?? null,
+          branchCode: rep.branch_code ?? null,
+          notes: rep.notes || undefined,
+          cheque_image_url: rep.cheque_image_url || undefined,
+        });
+        for (const [, batch] of byBatch) {
+          const sum = batch.reduce((s, p) => s + Number(p.amount || 0), 0);
+          lines.push(toLine(batch[0], sum));
+        }
+        for (const p of standalone) {
+          lines.push(toLine(p, Number(p.amount || 0)));
+        }
+        setPaymentLines(lines.length > 0
+          ? lines
+          : [{
+              id: crypto.randomUUID(),
+              amount: 0,
+              paymentType: 'cash',
+              paymentDate: new Date().toISOString().split('T')[0],
+            }],
+        );
+      } else {
+        // Reset form with one empty payment line
+        setPaymentLines([{
+          id: crypto.randomUUID(),
+          amount: 0,
+          paymentType: 'cash',
+          paymentDate: new Date().toISOString().split('T')[0],
+        }]);
+      }
       setPreviewUrls({});
       setSelectedCars([]);
     }
-  }, [open, clientId]);
+  }, [open, clientId, isEditMode, editingSession]);
 
   // Net amount we currently owe the client (refunds minus adjustments due).
   // This offsets the debt shown in the modal so "المتبقي للدفع" reflects
@@ -357,15 +457,24 @@ export function DebtPaymentModal({
       if (allPolicyIds.length > 0) {
         const { data: paymentsData, error: paymentsError } = await supabase
           .from('policy_payments')
-          .select('policy_id, amount, refused')
+          .select('id, policy_id, amount, refused')
           .in('policy_id', allPolicyIds);
 
         if (paymentsError) throw paymentsError;
 
+        // In edit mode the session being edited is about to be DELETEd
+        // and recreated on submit, so its rows should not count toward
+        // المدفوع / المتبقي here — otherwise the wallet ceiling would
+        // be off by the session's existing total and the user couldn't
+        // re-allocate the same money they already paid.
+        const excluded = new Set<string>(
+          isEditMode && editingSession ? editingSession.paymentIds : [],
+        );
+
         (paymentsData || []).forEach(p => {
-          if (!p.refused) {
-            paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + p.amount;
-          }
+          if (p.refused) return;
+          if (excluded.has((p as any).id)) return;
+          paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + p.amount;
         });
       }
 
@@ -768,43 +877,6 @@ export function DebtPaymentModal({
     setActiveTranzilaPolicyId(null);
   };
 
-  const sendPaymentConfirmationSms = async (paidAmount: number, paymentIds: string[]) => {
-    if (!clientPhone || paymentIds.length === 0) return;
-    if (!guardSmsSend('auto')) return;
-
-    try {
-      // Use bulk receipt function to aggregate all payments into one receipt
-      const { data: receiptData, error: receiptError } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
-        body: { payment_ids: paymentIds, total_amount: paidAmount }
-      });
-      
-      if (receiptError) {
-        console.error('Error generating bulk payment receipt:', receiptError);
-        return;
-      }
-      
-      const receiptUrl = receiptData?.receipt_url;
-      
-      const message = `مرحباً ${clientName}، تم استلام دفعة بمبلغ ₪${paidAmount.toLocaleString()}. شكراً لك!\n\nلعرض وصل الدفع:\n${receiptUrl || 'غير متوفر'}`;
-      
-      const { error: smsError } = await supabase.functions.invoke('send-sms', {
-        body: {
-          phone: clientPhone,
-          message,
-          sms_type: 'payment_confirmation'
-        }
-      });
-
-      if (smsError) throw smsError;
-
-      toast.success('تم إرسال رسالة التأكيد للعميل');
-    } catch (error) {
-      console.error('Error sending payment confirmation SMS:', error);
-      const msg = await extractFunctionErrorMessage(error);
-      if (msg) toast.error(msg);
-    }
-  };
-
   const handleSubmit = async () => {
     if (!isValid) return;
 
@@ -829,7 +901,70 @@ export function DebtPaymentModal({
       allPayablePolicies.map(p => [p.policyId, p.remaining]),
     );
 
+    // One session id for the entire submit. Every policy_payment row
+    // we insert below (cheques + cash + visa, split or not) gets the
+    // same payment_session_id, so the receipts page and the client
+    // profile's سجل الدفعات tab can collapse them into ONE سند قبض
+    // row matching the paper voucher the cashier would hand the
+    // customer for this collection event. Distinct from batch_id —
+    // that's per-physical-cheque; this is per-visit/per-submit.
+    //
+    // In edit mode we keep the SAME session id so audit history /
+    // back-references that pointed at the old session keep resolving
+    // to the new rows (e.g. activity log entries linking to the
+    // session). The old rows themselves are about to be DELETEd just
+    // below, before the new INSERTs run.
+    const sessionId = isEditMode && editingSession ? editingSession.id : crypto.randomUUID();
+
     try {
+      // Edit-mode prelude: replace, don't update. The user's accounting
+      // rule is that an unprinted سند قبض is a draft — editing it is
+      // not "modify in place" but "tear up the draft and write a new
+      // one". So we DELETE the existing session rows first (cascading
+      // delete cleans up payment_images via FK; receipts.payment_id is
+      // ON DELETE SET NULL so we explicitly remove the receipts rows
+      // too, otherwise the old سند قبض number would hang around in
+      // the receipts page with a null payment link).
+      if (isEditMode && editingSession && editingSession.paymentIds.length > 0) {
+        const { error: receiptsErr } = await supabase
+          .from('receipts')
+          .delete()
+          .in('payment_id', editingSession.paymentIds);
+        if (receiptsErr) throw receiptsErr;
+
+        const { error: paymentsErr } = await supabase
+          .from('policy_payments')
+          .delete()
+          .in('id', editingSession.paymentIds);
+        if (paymentsErr) throw paymentsErr;
+      }
+
+      // Pre-allocate ONE receipt_number for this entire submit. Every
+      // row we insert below — across all paymentLines, all cheque
+      // splits, all batches — gets stamped with the same R-number so
+      // the user-stated rule "one collection event = one سند قبض =
+      // one number" holds. Without this, the BEFORE-INSERT trigger
+      // would fire per row and allocate sequential-but-different
+      // numbers (R10, R11, R12...) for cash + cheque + transfer of
+      // one submit.
+      let sessionReceiptNumber: string | null = null;
+      const firstPayablePolicyId = allPayablePolicies[0]?.policyId;
+      if (firstPayablePolicyId) {
+        const { data: rNum, error: rNumErr } = await supabase.rpc(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          'allocate_receipt_number_for_policy' as any,
+          { p_policy_id: firstPayablePolicyId },
+        );
+        if (rNumErr) {
+          // Fall through: trigger will still allocate per-row. Worse
+          // numbering than the unified path, but the submit succeeds
+          // instead of erroring out for the cashier.
+          console.warn('[DebtPaymentModal] receipt_number pre-allocate failed; trigger will fall back', rNumErr);
+        } else if (typeof rNum === 'string') {
+          sessionReceiptNumber = rNum;
+        }
+      }
+
       for (const paymentLine of paymentLines) {
         // Skip visa payments that are already paid via Tranzila
         if (paymentLine.paymentType === 'visa' && paymentLine.tranzilaPaid) {
@@ -874,6 +1009,12 @@ export function DebtPaymentModal({
               notes: paymentLine.notes || `تسديد دين`,
               branch_id: split.branchId,
               batch_id: batchId,
+              payment_session_id: sessionId,
+              // Stamp the pre-allocated session receipt_number so every
+              // row in this submit shares one سند قبض. Null lets the
+              // trigger fall back to per-row allocation (used only when
+              // the pre-allocate RPC errored).
+              ...(sessionReceiptNumber ? { receipt_number: sessionReceiptNumber } : {}),
             }));
 
             const { data: insertedPayments, error } = await supabase
@@ -931,15 +1072,10 @@ export function DebtPaymentModal({
         }
       }
 
-      toast.success('تم تسديد الدفعات بنجاح');
-      
-      // Send bulk receipt SMS with all payment IDs
-      if (allCreatedPaymentIds.length > 0) {
-        await sendPaymentConfirmationSms(totalPaymentAmount, allCreatedPaymentIds);
-      }
-      
+      toast.success(isEditMode ? 'تم تحديث سند القبض' : 'تم تسديد الدفعات بنجاح');
+
       onOpenChange(false);
-      onSuccess();
+      onSuccess(allCreatedPaymentIds);
     } catch (error: any) {
       console.error('Error saving payments:', error);
       toast.error(error.message || 'خطأ في حفظ الدفعات');
@@ -960,11 +1096,15 @@ export function DebtPaymentModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-[95vw] max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+      <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
             <DollarSign className="h-5 w-5 text-primary shrink-0" />
-            <span className="truncate">تسديد ديون {clientName}</span>
+            <span className="truncate">
+              {isEditMode
+                ? `تعديل سند قبض ${editingSession?.receiptNumber ? `#${editingSession.receiptNumber}` : ''}`
+                : `تسديد ديون ${clientName}`}
+            </span>
           </DialogTitle>
         </DialogHeader>
 
@@ -979,29 +1119,35 @@ export function DebtPaymentModal({
           </div>
         ) : (
           <div className="space-y-3 sm:space-y-4">
-            {/* Summary Cards */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              <div className="bg-muted/50 rounded-lg p-2 sm:p-3 text-center">
-                <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">إجمالي السعر</p>
-                <p className="text-sm sm:text-lg font-bold tabular-nums leading-tight mt-0.5">₪{totalFullPrice.toLocaleString('en-US')}</p>
-              </div>
-              <div className="bg-green-500/10 rounded-lg p-2 sm:p-3 text-center">
-                <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">المدفوع</p>
-                <p className="text-sm sm:text-lg font-bold text-green-600 tabular-nums leading-tight mt-0.5">
-                  ₪{(totalPaidAmount + paidVisaTotal).toLocaleString('en-US')}
-                </p>
-              </div>
-              <div className="bg-destructive/10 rounded-lg p-2 sm:p-3 text-center">
-                <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">المتبقي للدفع</p>
-                <p className="text-sm sm:text-lg font-bold text-destructive tabular-nums leading-tight mt-0.5">
-                  ₪{effectiveRemaining.toLocaleString('en-US')}
-                </p>
-                {appliedCredit > 0 && (
-                  <div className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 space-y-0.5 leading-tight">
-                    <p>المطلوب: ₪{(totalRemaining - paidVisaTotal).toLocaleString('en-US')}</p>
-                    <p className="text-amber-600">المرتجع: -₪{appliedCredit.toLocaleString('en-US')}</p>
-                  </div>
-                )}
+            {/* Summary Cards — sticky at the top of the scrolling
+                content so the cashier sees إجمالي / مدفوع / متبقي no
+                matter how far down they scroll the payment lines.
+                Background + slight padding + shadow give a clean
+                separation from the scrolling rows underneath. */}
+            <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-1 pb-2 bg-background border-b">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <div className="bg-muted/50 rounded-lg p-2 sm:p-3 text-center">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">إجمالي السعر</p>
+                  <p className="text-sm sm:text-lg font-bold tabular-nums leading-tight mt-0.5">₪{totalFullPrice.toLocaleString('en-US')}</p>
+                </div>
+                <div className="bg-green-500/10 rounded-lg p-2 sm:p-3 text-center">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">المدفوع</p>
+                  <p className="text-sm sm:text-lg font-bold text-green-600 tabular-nums leading-tight mt-0.5">
+                    ₪{(totalPaidAmount + paidVisaTotal).toLocaleString('en-US')}
+                  </p>
+                </div>
+                <div className="bg-destructive/10 rounded-lg p-2 sm:p-3 text-center">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">المتبقي للدفع</p>
+                  <p className="text-sm sm:text-lg font-bold text-destructive tabular-nums leading-tight mt-0.5">
+                    ₪{effectiveRemaining.toLocaleString('en-US')}
+                  </p>
+                  {appliedCredit > 0 && (
+                    <div className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 space-y-0.5 leading-tight">
+                      <p>المطلوب: ₪{(totalRemaining - paidVisaTotal).toLocaleString('en-US')}</p>
+                      <p className="text-amber-600">المرتجع: -₪{appliedCredit.toLocaleString('en-US')}</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1095,82 +1241,13 @@ export function DebtPaymentModal({
               </Card>
             )}
 
-            {/* Debt Items List */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">المعاملات</Label>
-                <Badge variant="secondary" className="text-xs">
-                  {filteredItems.length} عناصر
-                </Badge>
-              </div>
-              <div className="border rounded-lg divide-y max-h-72 overflow-auto scrollbar-thin">
-                {filteredItems.map(item => (
-                  <div key={item.itemKey} className="p-2.5 sm:p-3 hover:bg-muted/30">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
-                      <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
-                        {item.isPackage ? (
-                          <Package className="h-4 w-4 sm:h-5 sm:w-5 text-primary mt-0.5 shrink-0" />
-                        ) : (
-                          <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground mt-0.5 shrink-0" />
-                        )}
-                        <div className="flex flex-col gap-1 min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <Badge variant={item.isPackage ? "default" : "outline"} className="text-[11px] sm:text-xs">
-                              {item.isPackage ? `📦 باقة تأمين` : getPolicyTypeLabel(item.policies[0]?.policyType, item.policies[0]?.policyTypeChild)}
-                            </Badge>
-                            {item.includesElzami && (
-                              <Badge variant="secondary" className="text-[11px] sm:text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
-                                يشمل الإلزامي
-                              </Badge>
-                            )}
-                          </div>
-                          {item.carNumber && (
-                            <span className="text-[11px] sm:text-xs text-muted-foreground font-mono">🚗 {item.carNumber}</span>
-                          )}
-                          {/* Show package components */}
-                          {item.isPackage && (
-                            <div className="flex flex-wrap gap-1 mt-0.5 items-center">
-                              {item.policies.map((comp, idx) => (
-                                <span key={idx} className="text-[11px] sm:text-xs text-muted-foreground">
-                                  {getPolicyTypeLabel(comp.policyType, comp.policyTypeChild)}
-                                  {idx < item.policies.length - 1 ? ' + ' : ''}
-                                </span>
-                              ))}
-                              {item.transferFee > 0 && (
-                                <Badge className="text-[10px] px-1.5 py-0 h-4 bg-sky-100 text-sky-800 hover:bg-sky-100 border-sky-200">
-                                  + عمولة تحويل ₪{item.transferFee.toLocaleString('en-US')}
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-                          {!item.isPackage && item.transferFee > 0 && (
-                            <div className="mt-0.5">
-                              <Badge className="text-[10px] px-1.5 py-0 h-4 bg-sky-100 text-sky-800 hover:bg-sky-100 border-sky-200">
-                                + عمولة تحويل ₪{item.transferFee.toLocaleString('en-US')}
-                              </Badge>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 sm:gap-1 text-[11px] sm:text-sm shrink-0 pl-6 sm:pl-0 border-t sm:border-t-0 pt-2 sm:pt-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-muted-foreground">السعر</span>
-                          <span className="font-medium tabular-nums whitespace-nowrap">₪{item.fullPrice.toLocaleString('en-US')}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-muted-foreground">المدفوع</span>
-                          <span className="font-medium text-green-600 tabular-nums whitespace-nowrap">₪{item.paidTotal.toLocaleString('en-US')}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-muted-foreground">المتبقي</span>
-                          <span className="font-bold text-destructive tabular-nums whitespace-nowrap">₪{item.remainingTotal.toLocaleString('en-US')}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* "المعاملات" section was removed per the user — the
+                summary cards at the top already convey إجمالي / مدفوع /
+                متبقي for the whole customer; the per-policy breakdown
+                was duplicated information and crowded the modal. The
+                payment distribution logic (calculateSplitPayments) still
+                uses debtItems / allPayablePolicies under the hood, just
+                not surfaced as a list. */}
 
             {/* Payment Lines */}
             <div className="space-y-3">
@@ -1231,7 +1308,15 @@ export function DebtPaymentModal({
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Reorder rationale (Google/Material common pattern
+                        for payment forms): primary inputs the cashier
+                        types FIRST line up on one row — المبلغ +
+                        طريقة الدفع + التاريخ. Cheques add a single
+                        secondary row for bank + branch + رقم الشيك +
+                        تاريخ الإصدار. Notes are tertiary and compact.
+                        Removes the empty whitespace the user pointed
+                        at without sacrificing field visibility. */}
+                    <div className="grid grid-cols-3 gap-3">
                       <div>
                         <Label className="text-xs">المبلغ</Label>
                         <Input
@@ -1244,8 +1329,8 @@ export function DebtPaymentModal({
                       </div>
                       <div>
                         <Label className="text-xs">طريقة الدفع</Label>
-                        <Select 
-                          value={payment.paymentType} 
+                        <Select
+                          value={payment.paymentType}
                           onValueChange={v => updatePaymentLine(payment.id, 'paymentType', v)}
                           disabled={payment.tranzilaPaid}
                         >
@@ -1254,77 +1339,95 @@ export function DebtPaymentModal({
                           </SelectTrigger>
                           <SelectContent>
                             {paymentTypes.map(pt => (
-                                <SelectItem key={pt.value} value={pt.value}>
-                                  <span className="flex items-center gap-2">
-                                    <pt.icon className="h-4 w-4" />
-                                    {pt.label}
-                                  </span>
-                                </SelectItem>
-                              ))}
+                              <SelectItem key={pt.value} value={pt.value}>
+                                <span className="flex items-center gap-2">
+                                  <pt.icon className="h-4 w-4" />
+                                  {pt.label}
+                                </span>
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
-                    </div>
-
-                    {/* For non-cheque types the date sits on its own row.
-                        For cheque rows the BankBranchPicker absorbs the
-                        cheque number into its third slot so bank → branch →
-                        رقم الشيك all line up on one row, with the due date
-                        on the next row. */}
-                    {payment.paymentType !== 'cheque' && (
                       <div>
-                        <Label className="text-xs">تاريخ الدفع</Label>
+                        {/* Date on the primary row: cheque rows put
+                            تاريخ الإصدار here (the act of writing the
+                            cheque is what the cashier types together
+                            with amount+method), and تاريخ الاستحقاق
+                            moves to the cheque sub-row below — same
+                            information density, better field grouping
+                            per the user's revised rule. */}
+                        <Label className="text-xs">
+                          {payment.paymentType === 'cheque' ? 'تاريخ الإصدار' : 'تاريخ الدفع'}
+                        </Label>
                         <ArabicDatePicker
-                          value={payment.paymentDate}
-                          onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
+                          value={payment.paymentType === 'cheque'
+                            ? (payment.chequeIssueDate || new Date().toISOString().split('T')[0])
+                            : payment.paymentDate}
+                          onChange={(date) => updatePaymentLine(
+                            payment.id,
+                            payment.paymentType === 'cheque' ? 'chequeIssueDate' : 'paymentDate',
+                            date,
+                          )}
                           disabled={payment.tranzilaPaid}
-                          compact
                         />
                       </div>
-                    )}
+                    </div>
 
                     {payment.paymentType === 'cheque' && (
-                      <>
-                        <BankBranchPicker
-                          bankCode={payment.bankCode}
-                          branchCode={payment.branchCode}
-                          onBankChange={(code) => updatePaymentLine(payment.id, 'bankCode', code)}
-                          onBranchChange={(code) => updatePaymentLine(payment.id, 'branchCode', code)}
-                          disabled={payment.tranzilaPaid}
-                          chequeNumberSlot={
-                            <>
-                              <Label className="text-xs font-semibold">رقم الشيك</Label>
-                              <Input
-                                value={payment.chequeNumber || ''}
-                                onChange={e => updatePaymentLine(payment.id, 'chequeNumber', sanitizeChequeNumber(e.target.value))}
-                                placeholder="رقم الشيك"
-                                maxLength={CHEQUE_NUMBER_MAX_LENGTH}
-                                className="h-10 font-mono"
-                                disabled={payment.tranzilaPaid}
-                              />
-                            </>
-                          }
-                        />
-                        {/* Convention: تاريخ الاستحقاق فوق، تاريخ الإصدار تحت. */}
-                        <div>
+                      // Cheque sub-row: 4 equal-width columns (Bank,
+                      // Branch, Cheque#, Issue date) so the inputs read
+                      // as a clean Material-style row instead of the
+                      // uneven 1.6fr/0.7fr/1fr split BankBranchPicker
+                      // defaults to. We bypass the picker wrapper and
+                      // place its inner pieces (BankPicker + branch
+                      // Input) as siblings in this grid.
+                      <div className="grid grid-cols-4 gap-3">
+                        <div className="space-y-1.5 min-w-0">
+                          <Label className="text-xs font-semibold">البنك</Label>
+                          <BankPicker
+                            value={payment.bankCode}
+                            onChange={(code) => updatePaymentLine(payment.id, 'bankCode', code)}
+                            disabled={payment.tranzilaPaid}
+                          />
+                        </div>
+                        <div className="space-y-1.5 min-w-0">
+                          <Label className="text-xs font-semibold">الفرع</Label>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            maxLength={4}
+                            className="h-10 text-sm ltr-nums font-mono"
+                            placeholder="مثال: 305"
+                            value={payment.branchCode || ''}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/\D/g, '');
+                              updatePaymentLine(payment.id, 'branchCode', v || null);
+                            }}
+                            disabled={payment.tranzilaPaid}
+                          />
+                        </div>
+                        <div className="space-y-1.5 min-w-0">
+                          <Label className="text-xs font-semibold">رقم الشيك</Label>
+                          <Input
+                            value={payment.chequeNumber || ''}
+                            onChange={e => updatePaymentLine(payment.id, 'chequeNumber', sanitizeChequeNumber(e.target.value))}
+                            placeholder="رقم الشيك"
+                            maxLength={CHEQUE_NUMBER_MAX_LENGTH}
+                            className="h-10 font-mono"
+                            disabled={payment.tranzilaPaid}
+                          />
+                        </div>
+                        <div className="space-y-1.5 min-w-0">
                           <Label className="text-xs">تاريخ الاستحقاق</Label>
                           <ArabicDatePicker
                             value={payment.paymentDate}
                             onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
                             disabled={payment.tranzilaPaid}
-                            compact
                           />
                         </div>
-                        <div>
-                          <Label className="text-xs">تاريخ الإصدار</Label>
-                          <ArabicDatePicker
-                            value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
-                            onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
-                            disabled={payment.tranzilaPaid}
-                            compact
-                          />
-                        </div>
-                      </>
+                      </div>
                     )}
 
                     <div>
@@ -1333,9 +1436,9 @@ export function DebtPaymentModal({
                         value={payment.notes || ''}
                         onChange={e => updatePaymentLine(payment.id, 'notes', e.target.value)}
                         placeholder="أضف ملاحظة لهذه الدفعة..."
-                        rows={2}
+                        rows={1}
                         disabled={payment.tranzilaPaid}
-                        className="resize-none text-sm"
+                        className="resize-none text-sm min-h-9"
                       />
                     </div>
 
@@ -1361,49 +1464,52 @@ export function DebtPaymentModal({
                       </div>
                     )}
 
-                    {/* Image Upload Section */}
+                    {/* Compact image-upload strip — sits inline next to
+                        the notes cell instead of taking its own full-
+                        width block + dashed drop zone. Existing previews
+                        render as 9×9 thumbnails with a hover-revealed X;
+                        a plus-tile triggers the file input. Status of
+                        pending uploads collapses into a single short
+                        line under the tiles so it doesn't double the
+                        modal height. */}
                     {(payment.paymentType === 'cash' || payment.paymentType === 'cheque' || payment.paymentType === 'transfer') && (
-                      <div className="pt-3 border-t border-border/50">
-                        <div className="flex-1">
-                          <Label className="text-xs text-muted-foreground mb-2 block">
-                            {payment.paymentType === 'cheque' ? 'صور الشيك (أمامي/خلفي)' : payment.paymentType === 'transfer' ? 'صور إيصال التحويل' : 'صور إيصال الدفع'}
-                          </Label>
-                          <div className="flex flex-wrap gap-2">
-                            {getPreviewUrls(payment.id).map((url, imgIndex) => (
-                              <div key={imgIndex} className="relative group">
-                                <img 
-                                  src={url} 
-                                  alt="" 
-                                  className="h-14 w-18 object-cover rounded border"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => removeImage(payment.id, imgIndex)}
-                                  className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                            ))}
-                            <label className="h-14 w-18 border-2 border-dashed rounded flex flex-col items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors">
-                              <input 
-                                type="file" 
-                                accept="image/*,application/pdf" 
-                                multiple 
-                                onChange={(e) => handleImageSelect(payment.id, e)} 
-                                className="hidden" 
-                              />
-                              <Upload className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-[10px] text-muted-foreground mt-0.5">إضافة</span>
-                            </label>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">
+                          {payment.paymentType === 'cheque' ? 'صور الشيك:' : payment.paymentType === 'transfer' ? 'صور التحويل:' : 'صور الإيصال:'}
+                        </Label>
+                        {getPreviewUrls(payment.id).map((url, imgIndex) => (
+                          <div key={imgIndex} className="relative group">
+                            <img
+                              src={url}
+                              alt=""
+                              className="h-9 w-12 object-cover rounded border"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeImage(payment.id, imgIndex)}
+                              className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
                           </div>
-                          {payment.pendingImages && payment.pendingImages.length > 0 && (
-                            <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-                              <ImageIcon className="h-3 w-3" />
-                              {payment.pendingImages.length} ملفات سيتم رفعها عند الحفظ
-                            </p>
-                          )}
-                        </div>
+                        ))}
+                        <label className="h-9 px-2.5 inline-flex items-center gap-1.5 border border-dashed rounded cursor-pointer hover:bg-muted/50 transition-colors text-xs text-muted-foreground">
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            multiple
+                            onChange={(e) => handleImageSelect(payment.id, e)}
+                            className="hidden"
+                          />
+                          <Upload className="h-3.5 w-3.5" />
+                          إضافة
+                        </label>
+                        {payment.pendingImages && payment.pendingImages.length > 0 && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <ImageIcon className="h-3 w-3" />
+                            {payment.pendingImages.length} ملف سيُرفع
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1411,39 +1517,50 @@ export function DebtPaymentModal({
               ))}
             </div>
 
-            {/* Total and Validation */}
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-              <span className="font-medium">مجموع الدفعات:</span>
-              <span className={cn("text-lg font-bold", isOverpaying && "text-destructive")}>
-                ₪{totalPaymentAmount.toLocaleString()}
-              </span>
-            </div>
-
-            {isOverpaying && (
-              <p className="text-sm text-destructive flex items-center gap-1">
-                <AlertCircle className="h-4 w-4" />
-                مجموع الدفعات أكبر من المبلغ المتبقي (₪{effectiveRemaining.toLocaleString()})
-              </p>
-            )}
-
-            {hasUnpaidVisa && (
-              <div className="flex items-center gap-2 text-amber-600 text-sm p-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>يرجى إتمام الدفع بالبطاقة أولاً قبل الحفظ</span>
-              </div>
-            )}
           </div>
         )}
 
-        <DialogFooter className="gap-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            إلغاء
-          </Button>
-          <Button onClick={handleSubmit} disabled={!isValid || saving || debtItems.length === 0}>
-            {saving && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
-            تسديد المبلغ
-          </Button>
-        </DialogFooter>
+        {/* Combined sticky-bottom bar: totals (when applicable) +
+            validation banners + action buttons (إلغاء / تسديد المبلغ).
+            Was previously two pieces — a sticky totals block inside
+            the conditional and a separate DialogFooter outside it —
+            which meant the totals could scroll out of view while the
+            footer stayed put. Merging them keeps everything the
+            cashier needs to act on the form pinned to the bottom of
+            the modal at once. */}
+        <div className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-3 pb-2 bg-background border-t space-y-2">
+          {!loading && debtItems.length > 0 && (
+            <>
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <span className="font-medium">مجموع الدفعات:</span>
+                <span className={cn("text-lg font-bold", isOverpaying && "text-destructive")}>
+                  ₪{totalPaymentAmount.toLocaleString()}
+                </span>
+              </div>
+              {isOverpaying && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  مجموع الدفعات أكبر من المبلغ المتبقي (₪{effectiveRemaining.toLocaleString()})
+                </p>
+              )}
+              {hasUnpaidVisa && (
+                <div className="flex items-center gap-2 text-amber-600 text-sm p-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>يرجى إتمام الدفع بالبطاقة أولاً قبل الحفظ</span>
+                </div>
+              )}
+            </>
+          )}
+          <div className="flex justify-end gap-3 pt-1">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleSubmit} disabled={!isValid || saving || debtItems.length === 0}>
+              {saving && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
+              تسديد المبلغ
+            </Button>
+          </div>
+        </div>
       </DialogContent>
 
       {/* Tranzila Payment Modal */}

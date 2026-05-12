@@ -15,9 +15,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ClickablePhone } from "@/components/shared/ClickablePhone";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Save, X, Shield, Car, Truck, FileCheck, Package, Calculator, User, Plus, Check, Phone, Calendar } from "lucide-react";
+import { Loader2, Save, X, Shield, Car, Truck, FileCheck, Package, Calculator, User, Plus, Check, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { calculatePolicyProfit } from "@/lib/pricingCalculator";
 import { formatCurrency } from "@/lib/utils";
@@ -1075,7 +1076,7 @@ export function PackagePolicyEditModal({
 
   if (!groupId && !policyId) return null;
 
-  const titleText = isSingleMode ? 'تعديل المعاملة' : 'تعديل الباقة';
+  const titleText = 'تعديل المعاملة';
   const totalLabel = isSingleMode ? 'إجمالي' : 'إجمالي الباقة';
   const saveLabel = isSingleMode ? 'حفظ' : 'حفظ جميع التغييرات';
   const emptyText = isSingleMode ? 'لم يتم العثور على المعاملة' : 'لا توجد معاملات في هذه الباقة';
@@ -1539,10 +1540,7 @@ export function PackagePolicyEditModal({
                                     </span>
                                   )}
                                   {child.phone && (
-                                    <span className="flex items-center gap-1">
-                                      <Phone className="h-3 w-3" />
-                                      <span className="font-mono ltr-nums">{child.phone}</span>
-                                    </span>
+                                    <ClickablePhone phone={child.phone} />
                                   )}
                                 </div>
                               </div>
@@ -1725,6 +1723,10 @@ export function PackagePolicyEditModal({
           clientId={clientId}
           clientPhone={clientPhone}
           isPackage={successIsPackage}
+          // Edit flow doesn't add new payments — the receipt action
+          // already lives in the package / payments screen for any
+          // existing rows, so we hide it here.
+          receiptPaymentIds={[]}
           onClose={() => {
             setShowSuccessDialog(false);
             setSuccessPolicyId(null);

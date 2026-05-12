@@ -41,8 +41,9 @@ import { BankPicker } from '@/components/shared/BankPicker';
 import { MultiImagePicker } from '@/components/shared/MultiImagePicker';
 import { sanitizeChequeNumber, validateChequeNumber } from '@/lib/chequeUtils';
 import { cn } from '@/lib/utils';
+import { persistSettlementLines } from './persistSettlementLines';
 
-export type SettlementMode = 'company' | 'broker';
+export type SettlementMode = 'company' | 'broker' | 'client';
 export type SettlementKind = 'disbursement' | 'receipt';
 export type PaymentLineType = 'cash' | 'cheque' | 'customer_cheque' | 'bank_transfer' | 'visa';
 
@@ -51,17 +52,54 @@ export interface SettlementEntity {
   name: string;
 }
 
+/** Payload returned to the parent when stageOnly is enabled — the parent
+ *  is responsible for calling persistSettlementLines at confirm time. */
+export interface StagedSettlement {
+  lines: PaymentLine[];
+  notes: string;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: SettlementMode;
   kind: SettlementKind;
   defaultEntityId?: string | null;
-  entities: SettlementEntity[];
-  onSaved: () => void;
+  /** Required for company / broker modes; ignored on client mode (the
+   *  client is identified by defaultEntityId, no picker shown). */
+  entities?: SettlementEntity[];
+  /** Called after the dialog's Save click resolves. When `stageOnly` is
+   *  off, this fires after the DB writes succeed (payload omitted). When
+   *  `stageOnly` is on, no DB write happens — the validated lines + notes
+   *  are handed back so the caller can persist them later. */
+  onSaved: (staged?: StagedSettlement) => void;
+  // ── client-mode extras ─────────────────────────────────────────────
+  /** Title-bar display name when mode === 'client'. */
+  clientName?: string;
+  /** Optional link to the policy this disbursement is settling (cancel
+   *  or transfer flow). Stored on client_settlements.policy_id and
+   *  mirrored through to the receipts row by the AFTER INSERT trigger. */
+  policyId?: string | null;
+  /** Optional branch override; defaults to inherit-from-agent. */
+  branchId?: string | null;
+  /** When set, the dialog refuses to save unless the line total equals
+   *  this amount. Used by Cancel/Transfer modals to pin the
+   *  disbursement to the refund value the user already typed. */
+  targetAmount?: number;
+  // ── staged mode (cancel / transfer detour) ─────────────────────────
+  /** When true, Save validates but does NOT write to the DB. Instead the
+   *  validated lines + notes flow back through onSaved so the caller can
+   *  commit them atomically alongside the policy update. */
+  stageOnly?: boolean;
+  /** Seed the form with these lines when the dialog opens. Used by
+   *  staged-mode callers to restore a prior in-progress entry so the
+   *  agent can edit instead of starting over. */
+  initialLines?: PaymentLine[];
+  /** Seed the notes textarea on open — companion to initialLines. */
+  initialNotes?: string;
 }
 
-interface PaymentLine {
+export interface PaymentLine {
   id: string;
   payment_type: PaymentLineType;
   amount: number;
@@ -122,11 +160,17 @@ function makeLine(type: PaymentLineType): PaymentLine {
   return base;
 }
 
-const titleFor = (mode: SettlementMode, kind: SettlementKind): string => {
+const titleFor = (mode: SettlementMode, kind: SettlementKind, clientName?: string): string => {
   if (mode === 'company') {
     return kind === 'disbursement' ? 'إضافة سند صرف لشركة' : 'إضافة سند قبض من شركة';
   }
-  return kind === 'disbursement' ? 'إضافة سند صرف لوسيط' : 'إضافة سند قبض من وسيط';
+  if (mode === 'broker') {
+    return kind === 'disbursement' ? 'إضافة سند صرف لوسيط' : 'إضافة سند قبض من وسيط';
+  }
+  // Client mode is always disbursement (incoming client money goes
+  // through policy_payments, never this dialog). Show the customer
+  // name in the title so the agent confirms the right person.
+  return clientName ? `إضافة سند صرف للعميل — ${clientName}` : 'إضافة سند صرف للعميل';
 };
 
 export function AddSettlementDialog({
@@ -137,6 +181,13 @@ export function AddSettlementDialog({
   defaultEntityId,
   entities,
   onSaved,
+  clientName,
+  policyId,
+  branchId,
+  targetAmount,
+  stageOnly,
+  initialLines,
+  initialNotes,
 }: Props) {
   const { user } = useAuth();
   const { agentId } = useAgentContext();
@@ -160,14 +211,23 @@ export function AddSettlementDialog({
   }> | null>(null);
 
   // Reset whenever the dialog opens or mode/kind changes underneath.
+  // Staged callers (cancel/transfer) can hand us initialLines+initialNotes
+  // so reopening preserves the prior entry instead of starting fresh.
+  // initialLines/initialNotes deliberately stay out of the deps array —
+  // they're a seed for the open transition, not a live binding.
   useEffect(() => {
     if (!open) return;
     setEntityId(defaultEntityId ?? '');
-    setNotes('');
-    setLines([makeLine('cash')]);
+    setNotes(initialNotes ?? '');
+    setLines(
+      initialLines && initialLines.length > 0
+        ? initialLines.map((l) => ({ ...l }))
+        : [makeLine('cash')],
+    );
     setSplitAmount('');
     setSplitCount(2);
     setSplitType('cheque');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultEntityId, mode, kind]);
 
   const total = useMemo(
@@ -180,6 +240,64 @@ export function AddSettlementDialog({
       }, 0),
     [lines],
   );
+
+  // Pre-flight target-amount check. Mirrors the rule handleSave
+  // enforces, but exposes it to the UI up-front so the save button
+  // and the total bar can reflect the state without waiting for a
+  // click. Only meaningful in client mode with a non-zero target.
+  const targetCap = typeof targetAmount === 'number' && targetAmount > 0 ? targetAmount : null;
+  const targetMismatch =
+    mode === 'client' &&
+    targetCap !== null &&
+    Math.round(total * 100) !== Math.round(targetCap * 100);
+  const targetExceeded =
+    mode === 'client' && targetCap !== null && total > targetCap + 0.005;
+
+  // Per-line validation surfaced up-front so the Save button stays
+  // disabled until every started line is complete. Lines that look
+  // like an untouched placeholder (no amount, no cheque number, no
+  // bank, no customer cheques) are ignored — same filter handleSave
+  // uses to drop empty rows before persisting.
+  const effectiveLinesForValidation = lines.filter((line) => {
+    if (line.payment_type === 'customer_cheque') {
+      return (line.selected_cheques?.length ?? 0) > 0;
+    }
+    if (line.payment_type === 'cheque') {
+      return (
+        (line.amount ?? 0) > 0 ||
+        !!(line.cheque_number && line.cheque_number.length > 0) ||
+        !!line.bank_code
+      );
+    }
+    return Number(line.amount || 0) > 0;
+  });
+  const getLineError = (line: PaymentLine): string | null => {
+    if (line.payment_type === 'customer_cheque') {
+      if ((line.selected_cheques?.length ?? 0) === 0) {
+        return 'اختر شيك عميل واحد على الأقل';
+      }
+      return null;
+    }
+    if (!(Number(line.amount) > 0)) return 'المبلغ مطلوب';
+    if (line.payment_type === 'cheque') {
+      const v = validateChequeNumber(line.cheque_number ?? '');
+      if (!v.isValid) return v.error ?? 'رقم الشيك غير صحيح';
+      if (!line.bank_code) return 'اختر البنك';
+      if (!line.cheque_due_date) return 'تاريخ الاستحقاق مطلوب';
+      if (!line.cheque_issue_date) return 'تاريخ الإصدار مطلوب';
+    }
+    if (line.payment_type === 'bank_transfer') {
+      if (!line.payment_date) return 'تاريخ التحويل مطلوب';
+    }
+    return null;
+  };
+  const firstLineError =
+    effectiveLinesForValidation.length === 0
+      ? 'أضف دفعة واحدة على الأقل'
+      : (effectiveLinesForValidation
+          .map((l) => getLineError(l))
+          .find((e): e is string => e !== null) ?? null);
+  const linesIncomplete = firstLineError !== null;
 
   const updateLine = (id: string, patch: Partial<PaymentLine>) =>
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -266,8 +384,27 @@ export function AddSettlementDialog({
 
   const handleSave = async () => {
     if (!entityId) {
-      toast.error(mode === 'company' ? 'الرجاء اختيار شركة' : 'الرجاء اختيار وسيط');
+      toast.error(
+        mode === 'company'
+          ? 'الرجاء اختيار شركة'
+          : mode === 'broker'
+            ? 'الرجاء اختيار وسيط'
+            : 'العميل غير محدد',
+      );
       return;
+    }
+    // When the caller pinned a target amount (cancel/transfer refund
+    // scenarios), the line total must match it before save. Rounding
+    // to 2 decimals so the comparison ignores floating-point dust.
+    if (mode === 'client' && typeof targetAmount === 'number' && targetAmount > 0) {
+      const totalRounded = Math.round(total * 100) / 100;
+      const targetRounded = Math.round(targetAmount * 100) / 100;
+      if (totalRounded !== targetRounded) {
+        toast.error(
+          `المجموع ₪${totalRounded.toLocaleString('en-US')} لا يساوي المبلغ المطلوب ₪${targetRounded.toLocaleString('en-US')}`,
+        );
+        return;
+      }
     }
     // Silently drop empty placeholder lines — the dialog seeds with an
     // empty cash row, and quick-add buttons stack more empty rows when
@@ -325,97 +462,28 @@ export function AddSettlementDialog({
 
     setSaving(true);
     try {
-      for (const line of effective) {
-        const isCustomerCheque = line.payment_type === 'customer_cheque';
-        const customerChequeIds: string[] = isCustomerCheque
-          ? (line.selected_cheques ?? []).map((c) => c.id)
-          : [];
-        const amount = isCustomerCheque
-          ? (line.selected_cheques ?? []).reduce((s, c) => s + Number(c.amount || 0), 0)
-          : Number(line.amount || 0);
-
-        // Settlement_date: we use the issue date for cheques (when money
-        // logically left), and payment_date for everything else. The
-        // separate due date is persisted alongside in cheque_due_date.
-        const settlementDate =
-          line.payment_type === 'cheque'
-            ? line.cheque_issue_date ?? line.payment_date
-            : line.payment_date;
-
-        const shared = {
-          total_amount: amount,
-          settlement_date: settlementDate,
-          status: 'completed' as const,
-          notes: notes || null,
-          created_by_admin_id: user?.id ?? null,
-          agent_id: agentId ?? null,
-          payment_type: line.payment_type,
-          cheque_number: line.payment_type === 'cheque' ? line.cheque_number ?? null : null,
-          bank_code: line.payment_type === 'cheque' ? line.bank_code ?? null : null,
-          branch_code: line.payment_type === 'cheque' ? line.branch_code ?? null : null,
-          cheque_due_date:
-            line.payment_type === 'cheque'
-              ? line.cheque_due_date ?? line.cheque_issue_date ?? settlementDate
-              : null,
-          cheque_issue_date:
-            line.payment_type === 'cheque'
-              ? line.cheque_issue_date ?? settlementDate
-              : null,
-          cheque_image_url:
-            line.payment_type === 'cheque' ? line.cheque_image_urls?.[0] ?? null : null,
-          cheque_image_urls:
-            line.payment_type === 'cheque' ? line.cheque_image_urls ?? [] : [],
-          bank_reference:
-            line.payment_type === 'bank_transfer' ? line.bank_reference ?? null : null,
-          customer_cheque_ids: customerChequeIds,
-          refused: false,
-        };
-
-        let settlementId: string | null = null;
-        if (mode === 'company') {
-          const { data, error } = await supabase
-            .from('company_settlements')
-            .insert({
-              ...shared,
-              company_id: entityId,
-              direction: kind === 'disbursement' ? 'outgoing' : 'incoming',
-            } as never)
-            .select('id')
-            .single();
-          if (error) throw error;
-          settlementId = (data as { id: string }).id;
-        } else {
-          const { data, error } = await supabase
-            .from('broker_settlements')
-            .insert({
-              ...shared,
-              broker_id: entityId,
-              direction: kind === 'disbursement' ? 'we_owe' : 'broker_owes',
-            } as never)
-            .select('id')
-            .single();
-          if (error) throw error;
-          settlementId = (data as { id: string }).id;
-        }
-
-        if (isCustomerCheque && customerChequeIds.length > 0 && settlementId) {
-          const { error: updateError } = await supabase
-            .from('policy_payments')
-            .update({
-              cheque_status: 'transferred_out',
-              transferred_to_type: mode,
-              transferred_to_id: entityId,
-              transferred_payment_id: settlementId,
-              transferred_at: new Date().toISOString(),
-            })
-            .in('id', customerChequeIds);
-          if (updateError) throw updateError;
-        }
+      if (stageOnly) {
+        // Staged callers (cancel/transfer) need the validated payload
+        // back so they can persist it atomically alongside the policy
+        // update — no DB write happens here.
+        onSaved({ lines: effective, notes });
+        onOpenChange(false);
+      } else {
+        await persistSettlementLines({
+          mode,
+          kind,
+          entityId,
+          policyId,
+          branchId,
+          effective,
+          notes,
+          userId: user?.id ?? null,
+          agentId: agentId ?? null,
+        });
+        toast.success('تم الحفظ');
+        onSaved();
+        onOpenChange(false);
       }
-
-      toast.success('تم الحفظ');
-      onSaved();
-      onOpenChange(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'فشل الحفظ';
       toast.error(message);
@@ -429,26 +497,43 @@ export function AddSettlementDialog({
       <Dialog open={open} onOpenChange={(v) => !saving && onOpenChange(v)}>
         <DialogContent dir="rtl" className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{titleFor(mode, kind)}</DialogTitle>
+            <DialogTitle>{titleFor(mode, kind, clientName)}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Entity picker */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">{mode === 'company' ? 'الشركة' : 'الوسيط'}</Label>
-              <Select value={entityId} onValueChange={setEntityId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={mode === 'company' ? 'اختر شركة' : 'اختر وسيط'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {entities.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Entity picker — hidden in client mode since the customer
+                is already pinned via defaultEntityId from the cancel /
+                transfer flow that opened the dialog. Showing a fake
+                disabled picker would just add visual noise. */}
+            {mode !== 'client' && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">{mode === 'company' ? 'الشركة' : 'الوسيط'}</Label>
+                <Select value={entityId} onValueChange={setEntityId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={mode === 'company' ? 'اختر شركة' : 'اختر وسيط'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(entities ?? []).map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* In client mode, surface the target amount the cancel /
+                transfer modal handed us so the agent has a constant
+                reminder of what the sum must equal. */}
+            {mode === 'client' && typeof targetAmount === 'number' && targetAmount > 0 && (
+              <div className="flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">المطلوب صرفه</span>
+                <span className="font-semibold ltr-nums">
+                  ₪{targetAmount.toLocaleString('en-US')}
+                </span>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label className="text-xs">الوصف / ملاحظات</Label>
@@ -553,19 +638,61 @@ export function AddSettlementDialog({
                 ))}
             </div>
 
-            <div className="flex items-center justify-between rounded-lg bg-muted px-4 py-2.5">
+            <div
+              className={cn(
+                'flex items-center justify-between rounded-lg px-4 py-2.5',
+                targetMismatch
+                  ? 'bg-destructive/10 border border-destructive/30'
+                  : 'bg-muted',
+              )}
+            >
               <span className="text-sm font-semibold">إجمالي السند:</span>
-              <span className="text-lg font-bold tabular-nums">
-                ₪{total.toLocaleString('en-US')}
-              </span>
+              <div className="flex flex-col items-end gap-0.5">
+                <span
+                  className={cn(
+                    'text-lg font-bold tabular-nums',
+                    targetMismatch && 'text-destructive',
+                  )}
+                >
+                  ₪{total.toLocaleString('en-US')}
+                </span>
+                {targetMismatch && (
+                  <span className="text-[11px] text-destructive font-medium">
+                    {targetExceeded
+                      ? `يتجاوز المطلوب ₪${targetCap!.toLocaleString('en-US')}`
+                      : `أقل من المطلوب ₪${targetCap!.toLocaleString('en-US')}`}
+                  </span>
+                )}
+              </div>
             </div>
+
+            {/* Inline line-validation hint so the agent sees what's
+                blocking save without having to hover the button. Hidden
+                when the only issue is target mismatch (already shown
+                above) so the warnings don't stack. */}
+            {linesIncomplete && !targetMismatch && (
+              <div className="text-[11px] text-destructive font-medium px-1">
+                ⚠ {firstLineError}
+              </div>
+            )}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
               إلغاء
             </Button>
-            <Button onClick={handleSave} disabled={saving} className="gap-2">
+            <Button
+              onClick={handleSave}
+              disabled={saving || targetMismatch || linesIncomplete}
+              className="gap-2"
+              title={
+                targetMismatch
+                  ? targetExceeded
+                    ? `المجموع يتجاوز المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
+                    : `المجموع أقل من المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
+                  : firstLineError ?? undefined
+              }
+            >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {`حفظ (${lines.length})`}
             </Button>
@@ -645,7 +772,24 @@ function PaymentLineCard({
             <Label className="text-[11px]">طريقة الدفع</Label>
             <Select
               value={line.payment_type}
-              onValueChange={(v) => onChange({ payment_type: v as PaymentLineType })}
+              onValueChange={(v) => {
+                // Switching INTO cheque from a non-cheque type leaves
+                // cheque_due_date / cheque_issue_date undefined (the
+                // current line was seeded as cash). Default both to
+                // today so the agent doesn't open empty pickers and
+                // has to remember to fill them just to save. Mirror
+                // for customer_cheque so the selector card opens
+                // ready to pick.
+                const newType = v as PaymentLineType;
+                const patch: Partial<PaymentLine> = { payment_type: newType };
+                if (newType === 'cheque') {
+                  if (!line.cheque_due_date) patch.cheque_due_date = today();
+                  if (!line.cheque_issue_date) patch.cheque_issue_date = today();
+                  if (line.bank_code === undefined) patch.bank_code = null;
+                  if (line.branch_code === undefined) patch.branch_code = null;
+                }
+                onChange(patch);
+              }}
             >
               <SelectTrigger className="h-10">
                 <SelectValue />
@@ -722,6 +866,19 @@ function ChequeLineEditor({
   line: PaymentLine;
   onChange: (patch: Partial<PaymentLine>) => void;
 }) {
+  // Defensive default: any cheque line reaching this editor without
+  // dates gets backfilled to today on mount. Covers initialLines from
+  // legacy staged data and any other path that bypassed makeLine.
+  // Empty-deps so this only runs once per line mount — onChange is
+  // intentionally not tracked.
+  useEffect(() => {
+    const patch: Partial<PaymentLine> = {};
+    if (!line.cheque_due_date) patch.cheque_due_date = today();
+    if (!line.cheque_issue_date) patch.cheque_issue_date = today();
+    if (Object.keys(patch).length > 0) onChange(patch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Cross-surface duplicate detection — same query the expense form runs.
   const [duplicate, setDuplicate] = useState<DuplicateMatch | null>(null);
   // Once the user dismisses the auto-switch prompt for a given cheque

@@ -49,6 +49,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { LeadDetailsDrawer } from "@/components/leads/LeadDetailsDrawer";
 import { LeadNotesPopover } from "@/components/leads/LeadNotesPopover";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { ClickablePhone } from "@/components/shared/ClickablePhone";
 import { toast } from "@/hooks/use-toast";
 
 interface Lead {
@@ -369,8 +370,8 @@ export default function Leads() {
                     <TableCell className="font-medium">
                       {lead.customer_name || "-"}
                     </TableCell>
-                    <TableCell dir="ltr" className="text-right">
-                      {lead.phone}
+                    <TableCell dir="ltr" className="text-right" onClick={(e) => e.stopPropagation()}>
+                      {lead.phone ? <ClickablePhone phone={lead.phone} /> : "-"}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">

@@ -17,8 +17,13 @@ import {
   ChevronDown,
   Trash2,
   XCircle,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Banknote,
+  ReceiptText,
+  Printer,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,7 +41,7 @@ import {
 
 interface ActivityItem {
   id: string;
-  type: "policy" | "payment" | "client" | "car" | "delete" | "cancel" | "transfer";
+  type: "policy" | "payment" | "client" | "car" | "delete" | "cancel" | "transfer" | "disbursement" | "credit_note" | "debt_payment";
   action: string;
   created_at: string;
   createdBy?: string;
@@ -62,6 +67,16 @@ interface ActivityItem {
      *  activity loader can resolve the policy id. */
     paid_amount?: number;
     remaining_amount?: number;
+    /** Receipt-backed activities (payment / cancel / disbursement /
+     *  credit_note / debt_payment) carry the receipts row id + type +
+     *  the underlying policy_payment id (for receipt_type='payment' the
+     *  print function needs the payment_id, not the receipt id). The
+     *  voucher_number is shown inline so staff can match the printed
+     *  document at a glance. */
+    receipt_id?: string;
+    receipt_type?: "payment" | "cancellation" | "disbursement" | "credit_note";
+    voucher_number?: string;
+    payment_id?: string;
   };
 }
 
@@ -84,11 +99,14 @@ const PAYMENT_TYPE_COLORS: Record<string, string> = {
 const TYPE_LABELS: Record<string, string> = {
   policy: "معاملة",
   payment: "دفعة",
+  debt_payment: "تسديد دين",
   client: "عميل",
   car: "سيارة",
   delete: "حذف",
   cancel: "إلغاء",
   transfer: "تحويل",
+  disbursement: "سند صرف",
+  credit_note: "إشعار دين",
 };
 
 const POLICY_TYPE_LABELS: Record<string, string> = {
@@ -107,21 +125,27 @@ const POLICY_TYPE_LABELS: Record<string, string> = {
 const typeIcons: Record<string, any> = {
   policy: FileText,
   payment: CreditCard,
+  debt_payment: Banknote,
   client: Users,
   car: Car,
   delete: Trash2,
   cancel: XCircle,
   transfer: ArrowLeftRight,
+  disbursement: Banknote,
+  credit_note: ReceiptText,
 };
 
 const typeColors: Record<string, string> = {
   policy: "text-primary bg-primary/10",
   payment: "text-success bg-success/10",
+  debt_payment: "text-emerald-600 bg-emerald-500/10",
   client: "text-accent bg-accent/10",
   car: "text-warning bg-warning/10",
   delete: "text-destructive bg-destructive/10",
   cancel: "text-destructive bg-destructive/10",
   transfer: "text-warning bg-warning/10",
+  disbursement: "text-orange-600 bg-orange-500/10",
+  credit_note: "text-purple-600 bg-purple-500/10",
 };
 
 export default function ActivityLog() {
@@ -163,26 +187,6 @@ export default function ActivityLog() {
         .match(branchFilter)
         .limit(100);
 
-      // Track policy->refund so we can attach the refund amount to the
-      // cancel event in one pass without an N+1 round-trip per policy.
-      const refundByPolicyId = new Map<string, number>();
-      if (policies && policies.length > 0) {
-        const cancelledIds = policies
-          .filter((p) => p.cancelled)
-          .map((p) => p.id);
-        if (cancelledIds.length > 0) {
-          const { data: refundRows } = await supabase
-            .from("customer_wallet_transactions")
-            .select("policy_id, amount")
-            .in("policy_id", cancelledIds)
-            .eq("transaction_type", "refund");
-          for (const row of refundRows || []) {
-            const prev = refundByPolicyId.get((row as any).policy_id) || 0;
-            refundByPolicyId.set((row as any).policy_id, prev + Number((row as any).amount || 0));
-          }
-        }
-      }
-
       // Total paid per policy — used to show "paid X / remaining Y" on
       // each policy-creation activity. Excludes locked/system rows (the
       // auto ELZAMI anchor isn't a real payment).
@@ -209,7 +213,10 @@ export default function ActivityLog() {
           const companyName = (p.insurance_companies as any)?.name_ar || (p.insurance_companies as any)?.name || "";
           const carNumber = (p.cars as any)?.car_number || "";
 
-          // Original "policy created" event
+          // Original "policy created" event. Cancellation is no longer
+          // emitted from here — receipts.receipt_type='cancellation'
+          // carries the canonical event with its voucher_number so the
+          // print button works.
           const paidAmt = paidByPolicyId.get(p.id) || 0;
           const remainingAmt = Math.max(0, Number(p.insurance_price || 0) - paidAmt);
           results.push({
@@ -231,27 +238,6 @@ export default function ActivityLog() {
               remaining_amount: remainingAmt,
             },
           });
-
-          // Separate "cancelled" event, timestamped at cancellation_date
-          // so it sorts correctly into the feed alongside other events.
-          if (p.cancelled) {
-            results.push({
-              id: `cancel-${p.id}`,
-              type: "cancel",
-              action: "معاملة ملغاة",
-              created_at: (p.cancellation_date as any) || p.created_at,
-              details: {
-                policy_type: policyLabel,
-                company_name: companyName,
-                car_number: carNumber,
-                client_id: (p.clients as any)?.id,
-                client_name: clientName,
-                client_file_number: fileNumber,
-                cancellation_note: p.cancellation_note || undefined,
-                refund_amount: refundByPolicyId.get(p.id) || 0,
-              },
-            });
-          }
         }
       }
 
@@ -302,58 +288,115 @@ export default function ActivityLog() {
         }
       }
 
-      // Fetch payments with full details
-      const { data: payments } = await supabase
-        .from("policy_payments")
+      // Fetch receipts — one unified feed for سند قبض (payment),
+      // سند صرف (disbursement), إشعار دين (credit_note) and
+      // سند إلغاء (cancellation). Each row carries its own
+      // voucher_number so the inline "طباعة" button can call the
+      // matching edge function. Auto-mirrored receipts whose payment
+      // row is system/locked are skipped, same as the old
+      // policy_payments path.
+      const { data: receiptRows } = await supabase
+        .from("receipts")
         .select(`
-          id, created_at, amount, payment_type, cheque_number, locked, source,
+          id, created_at, receipt_type, voucher_number, amount, payment_method,
+          cheque_number, client_id, policy_id, payment_id,
+          direct_client:clients(id, full_name, file_number, deleted_at),
           policies(
-            cancelled,
-            policy_type_parent,
-            policy_type_child,
+            policy_type_parent, policy_type_child,
             insurance_companies(name, name_ar),
             cars(car_number),
-            clients(id, full_name, file_number, deleted_at)
+            policy_client:clients(id, full_name, file_number, deleted_at)
           ),
-          created_by_profile:profiles!policy_payments_created_by_admin_id_fkey(full_name)
+          payment:policy_payments!receipts_payment_id_fkey(locked, source),
+          created_by_profile:profiles!receipts_created_by_fkey(full_name)
         `)
         .order("created_at", { ascending: false })
         .match(branchFilter)
-        .limit(100);
+        .is("cancelled_at", null)
+        .limit(150);
 
-      if (payments) {
-        for (const pay of payments) {
-          if ((pay.policies as any)?.cancelled) continue;
-          if ((pay.policies as any)?.clients?.deleted_at) continue;
-          // Hide system-generated locked rows (the auto ELZAMI
-          // "external visa" anchor) — those aren't real customer
-          // payments. Real customer payments toward an ELZAMI debt
-          // (cash, transfer, etc.) DO surface in the activity feed.
-          if ((pay as any).locked === true || (pay as any).source === 'system') continue;
+      if (receiptRows) {
+        for (const r of receiptRows as any[]) {
+          // Cancellation + payment receipts often arrive with
+          // receipts.client_id = NULL — the row is only linked to the
+          // client via policy.client_id. Fall back to the policy's
+          // client so those events still cluster under the correct
+          // customer card instead of an "عميل" bucket. The two
+          // embeds are aliased (direct_client / policy_client)
+          // because PostgREST can't infer which clients embed is
+          // meant when both sit in the same select.
+          const receiptClient = r.direct_client;
+          const policyClient = r.policies?.policy_client;
+          const client = receiptClient || policyClient;
+          if (client?.deleted_at) continue;
 
-          const clientName = (pay.policies as any)?.clients?.full_name || "عميل";
-          const fileNumber = (pay.policies as any)?.clients?.file_number || "";
-          const policyType = POLICY_TYPE_LABELS[(pay.policies as any)?.policy_type_parent] || "";
-          const companyName = (pay.policies as any)?.insurance_companies?.name_ar || 
-                             (pay.policies as any)?.insurance_companies?.name || "";
-          const carNumber = (pay.policies as any)?.cars?.car_number || "";
+          // Skip the system/locked anchor rows (auto ELZAMI "external
+          // visa") — those carried over via the mirror but aren't
+          // real customer-facing receipts.
+          if (r.payment?.locked === true || r.payment?.source === "system") continue;
+
+          const clientName = client?.full_name || "عميل";
+          const fileNumber = client?.file_number || "";
+          const policyType = POLICY_TYPE_LABELS[r.policies?.policy_type_parent] || "";
+          const companyName = r.policies?.insurance_companies?.name_ar ||
+                              r.policies?.insurance_companies?.name || "";
+          const carNumber = r.policies?.cars?.car_number || "";
+
+          let type: ActivityItem["type"];
+          let action: string;
+          switch (r.receipt_type) {
+            case "payment":
+              // No policy attached → standalone debt settlement (the
+              // customer paid against their open balance without
+              // singling out one معاملة). Different icon, different
+              // label, no policy meta in the row.
+              if (r.policy_id) {
+                type = "payment";
+                action = "دفعة مستلمة";
+              } else {
+                type = "debt_payment";
+                action = "تسديد دين";
+              }
+              break;
+            case "cancellation":
+              type = "cancel";
+              action = "معاملة ملغاة";
+              break;
+            case "disbursement":
+              type = "disbursement";
+              action = "تم عمل سند صرف";
+              break;
+            case "credit_note":
+              type = "credit_note";
+              action = "إشعار دين";
+              break;
+            default:
+              continue;
+          }
 
           results.push({
-            id: `payment-${pay.id}`,
-            type: "payment",
-            action: "دفعة مستلمة",
-            created_at: pay.created_at,
-            createdBy: (pay.created_by_profile as any)?.full_name || undefined,
+            id: `receipt-${r.id}`,
+            type,
+            action,
+            created_at: r.created_at,
+            createdBy: r.created_by_profile?.full_name || undefined,
             details: {
-              amount: pay.amount,
-              payment_type: pay.payment_type || "cash",
-              cheque_number: pay.cheque_number || undefined,
+              // numeric columns come back from PostgREST as strings;
+              // coerce up-front so downstream summations don't degrade
+              // into "0" + "1000" → "01000" string concatenations.
+              amount: Number(r.amount) || 0,
+              payment_type: r.payment_method || undefined,
+              cheque_number: r.cheque_number || undefined,
               policy_type: policyType,
               company_name: companyName,
               car_number: carNumber,
-              client_id: (pay.policies as any)?.clients?.id,
+              client_id: client?.id,
               client_name: clientName,
               client_file_number: fileNumber,
+              receipt_id: r.id,
+              receipt_type: r.receipt_type,
+              voucher_number: r.voucher_number || undefined,
+              payment_id: r.payment_id || undefined,
             },
           });
         }
@@ -496,15 +539,64 @@ export default function ActivityLog() {
     return filtered;
   }, [activities, typeFilter, dateFrom, dateTo, search]);
 
-  // Calculate totals
+  // Calculate totals — both targeted payments and standalone debt
+  // settlements are money in, so they roll up into the same total.
   const paymentTotal = useMemo(() => {
     return filteredActivities
-      .filter((a) => a.type === "payment")
+      .filter((a) => a.type === "payment" || a.type === "debt_payment")
       .reduce((sum, a) => sum + (a.details.amount || 0), 0);
   }, [filteredActivities]);
 
   const displayedActivities = filteredActivities.slice(0, displayLimit);
   const hasMore = filteredActivities.length > displayLimit;
+
+  // Print a receipt-backed activity by calling the matching edge
+  // function. The four receipt types each use their own template (the
+  // /receipts page does the same dispatch) — sand qabd / cancellation
+  // / disbursement / credit-note all live in different CDN folders, so
+  // hitting the wrong function would print the wrong document.
+  const [printingId, setPrintingId] = useState<string | null>(null);
+  const handlePrintReceipt = async (activity: ActivityItem) => {
+    const d = activity.details;
+    if (!d.receipt_id || !d.receipt_type) return;
+    setPrintingId(activity.id);
+    try {
+      let fnName: string;
+      let body: Record<string, unknown>;
+      if (d.receipt_type === "payment") {
+        // payment receipts route through the bulk endpoint keyed by
+        // policy_payments.id (not receipts.id). Single-payment scope.
+        if (!d.payment_id) {
+          toast.error("لا يوجد معرّف دفعة لطباعة السند");
+          return;
+        }
+        fnName = "generate-bulk-payment-receipt";
+        body = { payment_ids: [d.payment_id] };
+      } else if (d.receipt_type === "cancellation") {
+        fnName = "generate-cancellation-voucher";
+        body = { voucher_receipt_id: d.receipt_id };
+      } else if (d.receipt_type === "disbursement") {
+        fnName = "generate-disbursement-voucher";
+        body = { voucher_receipt_id: d.receipt_id };
+      } else {
+        fnName = "generate-credit-note-voucher";
+        body = { voucher_receipt_id: d.receipt_id };
+      }
+      const { data, error } = await supabase.functions.invoke(fnName, { body });
+      if (error) throw error;
+      const url = (data as any)?.receipt_url;
+      if (!url) {
+        toast.error("لم يتم العثور على رابط السند");
+        return;
+      }
+      window.open(url, "_blank");
+    } catch (err: any) {
+      console.error("[ActivityLog] receipt print failed:", err);
+      toast.error(err?.message || "فشل في طباعة السند");
+    } finally {
+      setPrintingId(null);
+    }
+  };
 
   // Group activities by customer so one customer renders as a single
   // card with their own internal numbered timeline. Activities without
@@ -626,6 +718,9 @@ export default function ActivityLog() {
                   <SelectItem value="cancel">الإلغاءات</SelectItem>
                   <SelectItem value="transfer">التحويلات</SelectItem>
                   <SelectItem value="payment">الدفعات</SelectItem>
+                  <SelectItem value="debt_payment">تسديد الدين</SelectItem>
+                  <SelectItem value="disbursement">سندات الصرف</SelectItem>
+                  <SelectItem value="credit_note">إشعارات الدين</SelectItem>
                   <SelectItem value="client">العملاء</SelectItem>
                   <SelectItem value="car">السيارات</SelectItem>
                 </SelectContent>
@@ -733,6 +828,44 @@ export default function ActivityLog() {
                     </span>
                   </div>
 
+                  {/* Card-level paid/remaining totals — computed from
+                      the actual events in this card so it reflects
+                      what the customer DID rather than what's stamped
+                      on individual policy rows (the per-policy
+                      paid_amount only sees payments tied to that one
+                      policy_id and misses standalone debt
+                      settlements). Invoiced = sum of new policy
+                      prices, paid = every payment/debt-settlement
+                      receipt minus any سند صرف refunded back to the
+                      customer. */}
+                  {(() => {
+                    let invoiced = 0;
+                    let paid = 0;
+                    for (const s of steps) {
+                      if (s.type === "policy") {
+                        invoiced += s.details.insurance_price || 0;
+                      } else if (s.type === "payment" || s.type === "debt_payment") {
+                        paid += s.details.amount || 0;
+                      } else if (s.type === "disbursement") {
+                        paid -= s.details.amount || 0;
+                      }
+                    }
+                    if (invoiced === 0 && paid === 0) return null;
+                    const remaining = Math.max(0, invoiced - paid);
+                    return (
+                      <div className="flex items-center gap-2 flex-wrap mb-4 -mt-2">
+                        <Badge variant="outline" className="text-xs border-success/40 text-success bg-success/5">
+                          مدفوع: ₪{paid.toLocaleString()}
+                        </Badge>
+                        {remaining > 0 && (
+                          <Badge variant="outline" className="text-xs border-destructive/40 text-destructive bg-destructive/5">
+                            متبقي: ₪{remaining.toLocaleString()}
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* Inner numbered timeline. Each step:
                       [step #] · [icon] · [action + details + timestamp]
                       A vertical line connects the icons through their
@@ -784,16 +917,56 @@ export default function ActivityLog() {
                                     </span>
                                   )}
                                 </div>
-                                <span className="text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap shrink-0 ltr-nums" dir="ltr">
-                                  {format(new Date(activity.created_at), "dd/MM/yyyy HH:mm")}
-                                </span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {/* Voucher # on receipt-backed rows so
+                                      staff can match what the print
+                                      button is about to render. */}
+                                  {activity.details.voucher_number && (
+                                    <span className="text-[11px] sm:text-xs font-mono text-muted-foreground/80 ltr-nums" dir="ltr">
+                                      {activity.details.voucher_number}
+                                    </span>
+                                  )}
+                                  {/* Inline print — fires the matching
+                                      edge function for the receipt type
+                                      and opens the rendered PDF in a
+                                      new tab. Disabled while in-flight
+                                      to avoid double-clicks. */}
+                                  {activity.details.receipt_id && (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 px-2 text-xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handlePrintReceipt(activity);
+                                      }}
+                                      disabled={printingId === activity.id}
+                                    >
+                                      {printingId === activity.id ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <Printer className="h-3.5 w-3.5" />
+                                      )}
+                                      <span className="mr-1">طباعة</span>
+                                    </Button>
+                                  )}
+                                  <span className="text-[11px] sm:text-xs text-muted-foreground whitespace-nowrap ltr-nums" dir="ltr">
+                                    {format(new Date(activity.created_at), "dd/MM/yyyy HH:mm")}
+                                  </span>
+                                </div>
                               </div>
 
                               {/* Details */}
                               <div className="text-sm space-y-1 mt-1.5 text-muted-foreground">
-                                {activity.type === "payment" && (
+                                {(activity.type === "payment" || activity.type === "debt_payment" || activity.type === "disbursement" || activity.type === "credit_note") && (
                                   <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
-                                    <span className="font-semibold text-success">
+                                    <span className={cn(
+                                      "font-semibold",
+                                      activity.type === "disbursement" ? "text-orange-600" :
+                                      activity.type === "credit_note" ? "text-purple-600" :
+                                      "text-success",
+                                    )}>
                                       ₪{(activity.details.amount || 0).toLocaleString()}
                                     </span>
                                     {activity.details.payment_type && (
@@ -832,27 +1005,10 @@ export default function ActivityLog() {
                                   </div>
                                 )}
 
-                                {/* Payment status — only on policy-creation rows.
-                                    "0 paid" reads as "لم يدفع شيئاً بعد"; otherwise
-                                    show paid + remaining. */}
-                                {activity.type === "policy" && activity.details.insurance_price ? (
-                                  <div className="flex items-center gap-x-2 gap-y-1 flex-wrap pt-0.5">
-                                    {(activity.details.paid_amount || 0) === 0 ? (
-                                      <Badge variant="outline" className="text-[11px] border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/5">
-                                        لم يدفع شيئاً بعد
-                                      </Badge>
-                                    ) : (
-                                      <Badge variant="outline" className="text-[11px] border-success/40 text-success bg-success/5">
-                                        مدفوع: ₪{(activity.details.paid_amount || 0).toLocaleString()}
-                                      </Badge>
-                                    )}
-                                    {(activity.details.remaining_amount || 0) > 0 && (
-                                      <Badge variant="outline" className="text-[11px] border-destructive/40 text-destructive bg-destructive/5">
-                                        متبقي: ₪{(activity.details.remaining_amount || 0).toLocaleString()}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                ) : null}
+                                {/* Per-row paid/remaining badges removed —
+                                    one combined "مدفوع / متبقي" summary
+                                    is rendered once at the foot of the
+                                    card below (see paidTotals). */}
 
                                 {activity.details.car_number && activity.type !== "transfer" && (
                                   <div className="flex items-center gap-2">

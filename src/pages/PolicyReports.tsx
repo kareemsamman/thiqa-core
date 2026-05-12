@@ -54,8 +54,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  CreditCard,
-  Banknote,
   Package,
   Users,
   ArrowLeftRight,
@@ -73,7 +71,6 @@ import { useSmsLock } from '@/hooks/useSmsLock';
 import { Lock } from '@phosphor-icons/react';
 import { ClickablePhone } from '@/components/shared/ClickablePhone';
 import { getInsuranceTypeLabel } from '@/lib/insuranceTypes';
-import { getPaymentTypeLabel } from '@/lib/paymentLabels';
 import { RenewalAssistant } from '@/components/reports/RenewalAssistant';
 
 const policyTypeLabels: Record<string, string> = {
@@ -122,14 +119,6 @@ const renewalStatusColors: Record<string, string> = {
   not_interested: 'bg-red-100 text-red-700 border-red-200',
 };
 
-interface PolicyPaymentActivity {
-  id: string;
-  amount: number;
-  payment_date: string;
-  payment_type: string;
-  created_at: string;
-}
-
 // Matches new report_created_policies return type
 interface CreatedPolicy {
   id: string;
@@ -164,6 +153,8 @@ interface CreatedPolicy {
   total_count: number;
   package_companies: string[] | null;
   package_service_names: string[] | null;
+  is_cancelled: boolean | null;
+  is_deleted: boolean | null;
 }
 
 // Matches new report_renewals return type - grouped by client
@@ -337,9 +328,6 @@ export default function PolicyReports() {
   const [renewingClientId, setRenewingClientId] = useState<string | null>(null);
   
   // Expandable row for payment activity (created policies)
-  const [expandedPolicyId, setExpandedPolicyId] = useState<string | null>(null);
-  const [policyPayments, setPolicyPayments] = useState<Record<string, PolicyPaymentActivity[]>>({});
-  const [loadingPayments, setLoadingPayments] = useState<string | null>(null);
   
   // Expandable row for client policies (renewals)
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
@@ -632,38 +620,6 @@ export default function PolicyReports() {
     }
   };
 
-  // Fetch payment activity for a policy or package
-  const fetchPolicyPayments = async (policyId: string, policyIds?: string[] | null) => {
-    const cacheKey = policyId;
-    if (policyPayments[cacheKey]) {
-      // Already loaded
-      setExpandedPolicyId(expandedPolicyId === cacheKey ? null : cacheKey);
-      return;
-    }
-    
-    setLoadingPayments(policyId);
-    try {
-      // For packages, fetch payments for all policies in the package
-      const idsToQuery = policyIds && policyIds.length > 0 ? policyIds : [policyId];
-      
-      const { data, error } = await supabase
-        .from('policy_payments')
-        .select('id, amount, payment_date, payment_type, created_at')
-        .in('policy_id', idsToQuery)
-        .order('payment_date', { ascending: false });
-      
-      if (error) throw error;
-      
-      setPolicyPayments(prev => ({ ...prev, [cacheKey]: data || [] }));
-      setExpandedPolicyId(cacheKey);
-    } catch (error) {
-      console.error('Error fetching payments:', error);
-      toast.error('فشل في تحميل الدفعات');
-    } finally {
-      setLoadingPayments(null);
-    }
-  };
-
   // Refresh data based on active tab
   useEffect(() => {
     if (activeTab === 'created') {
@@ -939,12 +895,6 @@ export default function PolicyReports() {
     return new Date(dateStr).toLocaleDateString('en-GB');
   };
 
-  const formatDateTime = (dateStr: string | null) => {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    return `${date.toLocaleDateString('en-GB')} ${date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
-  };
-
   const createdTotalPages = Math.ceil(createdTotalRows / PAGE_SIZE);
   const renewalsTotalPages = Math.ceil(renewalsTotalRows / PAGE_SIZE);
   const renewedTotalPages = Math.ceil(renewedTotalRows / PAGE_SIZE);
@@ -1117,7 +1067,6 @@ export default function PolicyReports() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/50">
-                        <TableHead className="w-10"></TableHead>
                         <TableHead className="text-right">تاريخ الإنشاء</TableHead>
                         <TableHead className="text-right">أنشأه</TableHead>
                         <TableHead className="text-right">العميل</TableHead>
@@ -1127,31 +1076,21 @@ export default function PolicyReports() {
                         <TableHead className="text-right">الشركة</TableHead>
                         <TableHead className="text-right">الفترة</TableHead>
                         <TableHead className="text-right">السعر</TableHead>
-                        <TableHead className="text-right">الحالة</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {createdPolicies.map(policy => (
                         <React.Fragment key={policy.id}>
-                          <TableRow 
+                          <TableRow
                             className={cn(
-                              "hover:bg-muted/30 cursor-pointer",
-                              expandedPolicyId === policy.id && "bg-muted/40"
+                              "hover:bg-muted/30",
+                              // Soft-deleted or all-cancelled rows fade and
+                              // get a strikethrough so they read as "history"
+                              // at a glance without re-introducing a status
+                              // column.
+                              (policy.is_deleted || policy.is_cancelled) && "opacity-60 line-through decoration-muted-foreground/40"
                             )}
-                            onClick={() => fetchPolicyPayments(policy.id, policy.package_policy_ids)}
                           >
-                            <TableCell className="w-10">
-                              {loadingPayments === policy.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                              ) : (
-                                <ChevronDown 
-                                  className={cn(
-                                    "h-4 w-4 text-muted-foreground transition-transform",
-                                    expandedPolicyId === policy.id && "rotate-180"
-                                  )} 
-                                />
-                              )}
-                            </TableCell>
                             <TableCell className="font-mono text-xs whitespace-nowrap">
                               <div className="leading-tight">
                                 <div>{formatDate(policy.created_at)}</div>
@@ -1170,7 +1109,18 @@ export default function PolicyReports() {
                             </TableCell>
                             <TableCell>
                               <div>
-                                <p className="font-medium">{policy.client_name}</p>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="font-medium">{policy.client_name}</p>
+                                  {policy.is_deleted ? (
+                                    <Badge variant="outline" className="text-[10px] gap-1 bg-muted/60 border-muted-foreground/30 text-muted-foreground no-underline">
+                                      محذوفة
+                                    </Badge>
+                                  ) : policy.is_cancelled ? (
+                                    <Badge variant="outline" className="text-[10px] gap-1 bg-red-500/10 border-red-500/30 text-red-600 no-underline">
+                                      ملغاة
+                                    </Badge>
+                                  ) : null}
+                                </div>
                                 {policy.client_file_number && (
                                   <p className="text-xs text-muted-foreground">{policy.client_file_number}</p>
                                 )}
@@ -1235,83 +1185,7 @@ export default function PolicyReports() {
                               </div>
                             </TableCell>
                             <TableCell className="font-bold">₪{policy.insurance_price.toLocaleString()}</TableCell>
-                            <TableCell>
-                              <Badge 
-                                variant={policy.payment_status === 'paid' ? 'success' : policy.payment_status === 'partial' ? 'warning' : 'destructive'}
-                                className="gap-1"
-                              >
-                                {policy.payment_status === 'paid' && <CheckCircle className="h-3 w-3" />}
-                                {policy.payment_status === 'partial' && <Clock className="h-3 w-3" />}
-                                {policy.payment_status === 'unpaid' && <AlertCircle className="h-3 w-3" />}
-                                {policy.payment_status === 'paid' ? 'مدفوع' : policy.payment_status === 'partial' ? `باقي ₪${policy.remaining.toLocaleString()}` : 'غير مدفوع'}
-                              </Badge>
-                            </TableCell>
                           </TableRow>
-                          
-                          {/* Expanded Payment Activity Row */}
-                          {expandedPolicyId === policy.id && policyPayments[policy.id] && (
-                            <TableRow key={`${policy.id}-payments`} className="bg-muted/20">
-                              <TableCell colSpan={11} className="p-0">
-                                <div className="px-6 py-4 border-t border-dashed">
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <CreditCard className="h-4 w-4 text-primary" />
-                                    <span className="font-medium text-sm">سجل الدفعات</span>
-                                    <Badge variant="outline" className="text-xs">
-                                      {policyPayments[policy.id].length} دفعة
-                                    </Badge>
-                                  </div>
-                                  
-                                  {policyPayments[policy.id].length === 0 ? (
-                                    <p className="text-sm text-muted-foreground py-2">لا توجد دفعات مسجلة</p>
-                                  ) : (
-                                    <div className="space-y-2">
-                                      {policyPayments[policy.id].map((payment, idx) => (
-                                        <div 
-                                          key={payment.id} 
-                                          className="flex items-center gap-4 p-3 rounded-lg bg-background border text-sm"
-                                        >
-                                          <div className={cn(
-                                            "rounded-full p-2",
-                                            payment.payment_type === 'cash' ? "bg-success/10 text-success" :
-                                            payment.payment_type === 'cheque' || payment.payment_type === 'customer_cheque' ? "bg-warning/10 text-warning" :
-                                            "bg-primary/10 text-primary"
-                                          )}>
-                                            {payment.payment_type === 'cash' ? (
-                                              <Banknote className="h-4 w-4" />
-                                            ) : (
-                                              <CreditCard className="h-4 w-4" />
-                                            )}
-                                          </div>
-                                          <div className="flex-1">
-                                            <p className="font-medium">
-                                              ₪{payment.amount.toLocaleString()}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                              {getPaymentTypeLabel(payment)}
-                                            </p>
-                                          </div>
-                                          <div className="text-left whitespace-nowrap">
-                                            <p className="font-mono text-xs">{formatDate(payment.payment_date)}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                              أنشئت: {formatDateTime(payment.created_at)}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                      
-                                      {/* Summary */}
-                                      <div className="flex items-center justify-between pt-2 border-t mt-2">
-                                        <span className="text-sm font-medium">المجموع المدفوع:</span>
-                                        <span className="font-bold text-success">
-                                          ₪{policyPayments[policy.id].reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          )}
                         </React.Fragment>
                       ))}
                     </TableBody>

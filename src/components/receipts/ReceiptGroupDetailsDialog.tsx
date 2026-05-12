@@ -22,6 +22,10 @@ import {
 export interface ReceiptRow {
   id: string;
   receipt_number: number | string | null;
+  // Pre-formatted voucher string for credit_note / disbursement
+  // rows (C{nn}/YYYY, D{nn}/YYYY). The legacy payment + cancellation
+  // families still use the integer receipt_number column.
+  voucher_number?: string | null;
   client_name: string;
   car_number: string | null;
   amount: number;
@@ -35,6 +39,14 @@ export interface ReceiptRow {
   // trigger, 'manual' when the agent typed it directly on /receipts.
   source?: string | null;
   payment_id?: string | null;
+  // Cancellation tracking — added by 20260511160000_receipt_cancellation_voucher.
+  // On the original payment receipt: cancelled_at + cancellation_reason
+  // are populated when the underlying policy_payment is voided.
+  // On the cancellation voucher (receipt_type='cancellation'):
+  // cancels_receipt_id points back to the original receipt it cancels.
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+  cancels_receipt_id?: string | null;
   policy?: {
     id: string;
     document_number: string | null;
@@ -48,11 +60,6 @@ export interface ReceiptGroupView {
   car_number: string | null;
   receipts: ReceiptRow[];
   total: number;
-  // Document numbers of the policies backing the receipts in this
-  // group. Usually one per group, but packages can carry multiple
-  // (e.g. ELZAMI + ثالث have their own document numbers even though
-  // they share a group_id).
-  document_numbers: string[];
 }
 
 interface Props {
@@ -97,6 +104,22 @@ const formatDate = (value: string | null) => {
   }
 };
 
+// Mirror Receipts.tsx so the dialog shows the same R{seq}/{year} form
+// the table uses; keeps the popup and the row in lockstep.
+const formatReceiptNumber = (
+  num: number | string | null | undefined,
+  dateStr: string | null | undefined,
+): string => {
+  if (num == null || num === "") return "-";
+  const s = String(num);
+  if (s.startsWith("R")) return s;
+  const n = Number(s);
+  if (Number.isNaN(n)) return s;
+  const year = dateStr ? new Date(dateStr).getFullYear() : new Date().getFullYear();
+  const seq = n < 10 ? `0${n}` : `${n}`;
+  return `R${seq}/${year}`;
+};
+
 export function ReceiptGroupDetailsDialog({
   open,
   onOpenChange,
@@ -110,10 +133,6 @@ export function ReceiptGroupDetailsDialog({
   const combinedMethodLabel = Array.from(
     new Set(group.receipts.map((r) => paymentLabel[r.payment_method] || r.payment_method)),
   ).join(" + ");
-
-  const documentNumberLabel = group.document_numbers.length > 0
-    ? group.document_numbers.join(" · ")
-    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -140,7 +159,6 @@ export function ReceiptGroupDetailsDialog({
                     {combinedMethodLabel} · ₪{group.total.toLocaleString("en-US")} ·{" "}
                     {group.receipts.length}{" "}
                     {group.receipts.length === 1 ? "سند" : "سندات"}
-                    {documentNumberLabel && <> · معاملة {documentNumberLabel}</>}
                   </p>
                 </div>
               </div>
@@ -201,7 +219,9 @@ export function ReceiptGroupDetailsDialog({
                         {r.receipt_number && (
                           <Badge variant="secondary" className="text-[10px] gap-1">
                             <span>رقم السند</span>
-                            <span className="font-mono ltr-nums">{r.receipt_number}</span>
+                            <span className="font-mono ltr-nums">
+                              {formatReceiptNumber(r.receipt_number, r.receipt_date)}
+                            </span>
                           </Badge>
                         )}
                       </div>

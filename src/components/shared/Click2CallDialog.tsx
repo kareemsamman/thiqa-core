@@ -19,13 +19,7 @@ import {
 import { Phone, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
-
-interface PbxExtension {
-  id: string;
-  extension_number: string;
-  extension_name: string | null;
-  is_default: boolean;
-}
+import { useClick2Call, type Click2CallExtension } from "@/hooks/useClick2Call";
 
 interface Click2CallDialogProps {
   open: boolean;
@@ -40,47 +34,29 @@ export function Click2CallDialog({
   phoneNumber,
   onSuccess,
 }: Click2CallDialogProps) {
+  const { extensions, ready, loading: stateLoading } = useClick2Call();
   const [isLoading, setIsLoading] = useState(false);
-  const [extensions, setExtensions] = useState<PbxExtension[]>([]);
   const [selectedExtensionId, setSelectedExtensionId] = useState<string>("");
-  const [loadingExtensions, setLoadingExtensions] = useState(false);
 
+  // Re-sync the default extension every time the dialog opens. The
+  // worker may have added/removed lines since the last open, and we
+  // want the dialog to land on the current default — not whatever was
+  // selected last time.
   useEffect(() => {
-    if (open) {
-      fetchExtensions();
+    if (!open) return;
+    const defaultExt = extensions.find((e) => e.is_default) ?? extensions[0];
+    if (defaultExt) {
+      setSelectedExtensionId(defaultExt.id);
+    } else {
+      setSelectedExtensionId("");
     }
-  }, [open]);
-
-  const fetchExtensions = async () => {
-    setLoadingExtensions(true);
-    try {
-      // Use SECURITY DEFINER RPC to fetch only safe (non-sensitive) columns.
-      // The pbx_extensions table itself is admin-only since it stores plaintext passwords.
-      const { data, error } = await (supabase as any).rpc("list_pbx_extensions_safe");
-
-      if (error) throw error;
-
-      setExtensions(data || []);
-      
-      // Set default extension
-      const defaultExt = data?.find((ext) => ext.is_default);
-      if (defaultExt) {
-        setSelectedExtensionId(defaultExt.id);
-      } else if (data && data.length > 0) {
-        setSelectedExtensionId(data[0].id);
-      }
-    } catch (error) {
-      console.error("Error fetching extensions:", error);
-    } finally {
-      setLoadingExtensions(false);
-    }
-  };
+  }, [open, extensions]);
 
   const handleCall = async () => {
     if (!selectedExtensionId) {
       toast({
         title: "خطأ",
-        description: "يرجى اختيار تحويلة",
+        description: "يرجى اختيار خط",
         variant: "destructive",
       });
       return;
@@ -89,14 +65,13 @@ export function Click2CallDialog({
     setIsLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('click2call', {
-        body: { 
+        body: {
           phone_number: phoneNumber,
           extension_id: selectedExtensionId,
         },
       });
 
       if (error) {
-        console.error('Click2Call error:', error);
         toast({
           title: "خطأ",
           description: "تعذر بدء الاتصال",
@@ -119,8 +94,7 @@ export function Click2CallDialog({
           variant: "destructive",
         });
       }
-    } catch (err) {
-      console.error('Click2Call exception:', err);
+    } catch {
       toast({
         title: "خطأ",
         description: "حدث خطأ غير متوقع",
@@ -130,6 +104,15 @@ export function Click2CallDialog({
       setIsLoading(false);
     }
   };
+
+  const renderExtensionLabel = (ext: Click2CallExtension) => (
+    <span className="flex items-center gap-2">
+      <Phone className="h-4 w-4" />
+      <bdi className="font-mono">{ext.number}</bdi>
+      {ext.label && ` - ${ext.label}`}
+      {ext.is_default && " ★"}
+    </span>
+  );
 
   const selectedExtension = extensions.find((ext) => ext.id === selectedExtensionId);
 
@@ -153,45 +136,36 @@ export function Click2CallDialog({
             </div>
           </div>
 
-          {extensions.length > 0 && (
+          {stateLoading ? (
+            <div className="flex justify-center py-2">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : extensions.length > 0 ? (
             <div className="space-y-2">
-              <Label>اختر التحويلة</Label>
+              <Label>اختر الخط</Label>
               <Select
                 value={selectedExtensionId}
                 onValueChange={setSelectedExtensionId}
-                disabled={loadingExtensions}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="اختر التحويلة">
-                    {selectedExtension && (
-                      <span className="flex items-center gap-2">
-                        <Phone className="h-4 w-4" />
-                        {selectedExtension.extension_number}
-                        {selectedExtension.extension_name && ` - ${selectedExtension.extension_name}`}
-                        {selectedExtension.is_default && " ★"}
-                      </span>
-                    )}
+                  <SelectValue placeholder="اختر الخط">
+                    {selectedExtension && renderExtensionLabel(selectedExtension)}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {extensions.map((ext) => (
                     <SelectItem key={ext.id} value={ext.id}>
-                      <span className="flex items-center gap-2">
-                        <Phone className="h-4 w-4" />
-                        {ext.extension_number}
-                        {ext.extension_name && ` - ${ext.extension_name}`}
-                        {ext.is_default && " ★"}
-                      </span>
+                      {renderExtensionLabel(ext)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-          )}
-
-          {extensions.length === 0 && !loadingExtensions && (
-            <div className="text-center text-muted-foreground py-2">
-              لا توجد تحويلات. يرجى إضافة تحويلات من إعدادات المصادقة.
+          ) : (
+            <div className="text-center text-muted-foreground py-2 text-sm">
+              {ready
+                ? "لا توجد خطوط مهيّأة لهذا المستخدم."
+                : "خاصية الاتصال السريع غير مفعلة لحسابك. تواصل مع المدير لتفعيلها."}
             </div>
           )}
         </div>
@@ -206,7 +180,7 @@ export function Click2CallDialog({
           </Button>
           <Button
             onClick={handleCall}
-            disabled={isLoading || extensions.length === 0 || !selectedExtensionId}
+            disabled={isLoading || !ready || !selectedExtensionId}
             variant="default"
           >
             {isLoading ? (

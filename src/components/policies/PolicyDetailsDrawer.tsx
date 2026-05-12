@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { Lock as LockIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { ClickablePhone } from "@/components/shared/ClickablePhone";
 import { PolicyPaymentsSection } from "./PolicyPaymentsSection";
 import { PolicyFilesSection } from "./PolicyFilesSection";
 import { PackageComponentsTable } from "./PackageComponentsTable";
@@ -62,6 +63,10 @@ interface PolicyDetailsDrawerProps {
   policyId: string | null;
   onUpdated?: () => void;
   onViewRelatedPolicy?: (policyId: string) => void;
+  /** Which tab the drawer should open on. Defaults to 'main'.
+   *  The "ملفات (N)" button on the policy card passes 'files'
+   *  so the user lands directly on the files surface. */
+  initialSection?: 'main' | 'files';
 }
 
 interface PolicyDetails {
@@ -254,7 +259,7 @@ const Section = ({ title, icon: Icon, children, className }: {
   </div>
 );
 
-export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, onViewRelatedPolicy }: PolicyDetailsDrawerProps) {
+export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, onViewRelatedPolicy, initialSection = 'main' }: PolicyDetailsDrawerProps) {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
   const { can } = usePermissions();
@@ -269,7 +274,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<'main' | 'payments' | 'files'>('main');
+  const [activeSection, setActiveSection] = useState<'main' | 'payments' | 'files'>(initialSection);
   const [showQuickPayment, setShowQuickPayment] = useState(false);
   const [creatorName, setCreatorName] = useState<string | null>(null);
   const [sendingSignatureSms, setSendingSignatureSms] = useState(false);
@@ -572,10 +577,13 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
   useEffect(() => {
     if (open && policyId) {
       fetchPolicyDetails();
-      setActiveSection('main');
+      // Open on whatever section the caller asked for ('files' for the
+      // ملفات shortcut button on the card, 'main' for the default kebab
+      // entry point).
+      setActiveSection(initialSection);
       setShowQuickPayment(false);
     }
-  }, [open, policyId]);
+  }, [open, policyId, initialSection]);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-GB");
@@ -713,12 +721,28 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
     return null;
   };
 
+  // Files-only / compact mode: when the drawer is opened via the
+  // "ملفات (N)" shortcut on the policy card, the user wants a slim
+  // popup focused on the files surface — no hero header with all the
+  // policy meta, no tabs, no action buttons, no policy-number row.
+  // Just an X, a simple title, and the files list. We keep the full
+  // PolicyFilesSection underneath so upload / preview / delete all
+  // behave identically — only the chrome around it changes.
+  const isFilesOnlyMode = initialSection === 'files';
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           hideCloseButton
-          className="!left-2 !right-2 !top-2 !bottom-2 !translate-x-0 !translate-y-0 !w-auto !max-w-none !max-h-none sm:!left-[50%] sm:!right-auto sm:!top-[50%] sm:!bottom-auto sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:!w-full sm:!max-w-6xl sm:!h-[95vh] sm:!max-h-[95vh] p-0 overflow-hidden gap-0"
+          className={cn(
+            "p-0 overflow-hidden gap-0",
+            isFilesOnlyMode
+              // Compact: smaller width + auto height + center alignment
+              ? "!left-2 !right-2 !top-[50%] !bottom-auto !translate-x-0 !translate-y-[-50%] !w-auto !max-w-none !max-h-[90vh] sm:!left-[50%] sm:!right-auto sm:!top-[50%] sm:!bottom-auto sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:!w-full sm:!max-w-2xl sm:!h-auto sm:!max-h-[85vh]"
+              // Default: full-size for the معلومات المعاملة surface.
+              : "!left-2 !right-2 !top-2 !bottom-2 !translate-x-0 !translate-y-0 !w-auto !max-w-none !max-h-none sm:!left-[50%] sm:!right-auto sm:!top-[50%] sm:!bottom-auto sm:!translate-x-[-50%] sm:!translate-y-[-50%] sm:!w-full sm:!max-w-6xl sm:!h-[95vh] sm:!max-h-[95vh]"
+          )}
           dir="rtl"
         >
           {loading ? (
@@ -731,6 +755,51 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                 <Skeleton className="h-20" />
               </div>
               <Skeleton className="h-40 w-full" />
+            </div>
+          ) : policy && isFilesOnlyMode ? (
+            // Compact files-only popup: minimal X + title bar, then
+            // the same PolicyFilesSection the full drawer uses. The
+            // upload / preview / delete experience underneath is the
+            // shared component, so any change to the file flow
+            // automatically reflects in both modes.
+            <div className="flex flex-col overflow-hidden">
+              {/* Header row — title on the right (start in RTL), X on
+                  the left (end in RTL). Standard RTL dialog layout
+                  the user prefers across the app. */}
+              <div className="flex items-center justify-between px-4 py-3 border-b">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <ImageIcon className="h-4 w-4 text-primary" />
+                  <span>ملفات المعاملة</span>
+                  {policyFilesCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-xs bg-muted-foreground/20">
+                      {policyFilesCount}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  aria-label="إغلاق"
+                  title="إغلاق"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <ScrollArea className="flex-1 max-h-[75vh]">
+                <div className="p-4 sm:p-5">
+                  <PolicyFilesSection
+                    policyId={policy.id}
+                    policyNumber={policy.policy_number}
+                    clientId={policy.clients.id}
+                    clientPhoneNumber={policy.clients.phone_number}
+                    clientName={policy.clients.full_name}
+                    onPolicyNumberSaved={() => fetchPolicyDetails()}
+                    packagePolicyIds={hasPackage ? [policy.id, ...relatedPolicies.map(rp => rp.id)] : undefined}
+                    onFilesCountChanged={setPolicyFilesCount}
+                  />
+                </div>
+              </ScrollArea>
             </div>
           ) : policy ? (
             <div className="flex flex-col h-full overflow-hidden">
@@ -904,24 +973,13 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                   <Shield className="h-4 w-4 inline-block ml-1.5" />
                   معلومات المعاملة
                 </button>
-                <button
-                  onClick={() => setActiveSection('payments')}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 shrink-0",
-                    activeSection === 'payments'
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted"
-                  )}
-                >
-                  <CreditCard className="h-4 w-4" />
-                  الدفعات
-                  <span className={cn(
-                    "px-1.5 py-0.5 rounded-full text-xs",
-                    activeSection === 'payments' ? "bg-white/20" : "bg-muted-foreground/20"
-                  )}>
-                    {hasPackage ? packagePayments.length : payments.length}
-                  </span>
-                </button>
+                {/* الدفعات tab removed from the معاملة details drawer
+                    per the user — the customer-level سجل الدفعات tab
+                    is the canonical place to view + edit payments,
+                    and surfacing them here too just duplicated the
+                    surface area. The activeSection state still
+                    accepts 'payments' for backwards compatibility but
+                    no entry point selects it anymore. */}
                 <button
                   onClick={() => setActiveSection('files')}
                   className={cn(
@@ -1386,7 +1444,11 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                           <Separator />
                           <div className="flex items-center justify-between">
                             <span className="text-sm text-muted-foreground">الهاتف</span>
-                            <span className="font-mono"><bdi>{policy.clients.phone_number || '-'}</bdi></span>
+                            {policy.clients.phone_number ? (
+                              <ClickablePhone phone={policy.clients.phone_number} />
+                            ) : (
+                              <span className="font-mono">-</span>
+                            )}
                           </div>
                           {policy.clients.file_number && (
                             <>
@@ -1461,7 +1523,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                                   </p>
                                 </div>
                                 {pc.child.phone && (
-                                  <span className="text-sm text-muted-foreground font-mono"><bdi>{pc.child.phone}</bdi></span>
+                                  <ClickablePhone phone={pc.child.phone} />
                                 )}
                               </div>
                             )
@@ -1541,32 +1603,21 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                   </div>
                 )}
 
-                {activeSection === 'payments' && (
-                  <div className="p-4 sm:p-6">
-                    <PolicyPaymentsSection
-                      policyId={policy.id}
-                      payments={hasPackage ? packagePayments : payments}
-                      insurancePrice={hasPackage ? packageTotalPrice : (policy.insurance_price + (policy.office_commission || 0))}
-                      branchId={policy.branch_id}
-                      onPaymentsChange={handlePaymentsChange}
-                      autoOpenAdd={showQuickPayment}
-                      onAutoOpenHandled={() => setShowQuickPayment(false)}
-                      packagePolicyIds={hasPackage ? [policy.id, ...relatedPolicies.map(rp => rp.id)] : undefined}
-                      packageTotalPrice={hasPackage ? packageTotalPrice : undefined}
-                    />
-                  </div>
-                )}
+                {/* الدفعات section content removed alongside the tab
+                    button — the surface is fully replaced by the
+                    customer-level سجل الدفعات tab on ClientDetails. */}
 
                 {activeSection === 'files' && (
                   <div className="p-4 sm:p-6">
-                    <PolicyFilesSection 
-                      policyId={policy.id} 
+                    <PolicyFilesSection
+                      policyId={policy.id}
                       policyNumber={policy.policy_number}
                       clientId={policy.clients.id}
                       clientPhoneNumber={policy.clients.phone_number}
                       clientName={policy.clients.full_name}
                       onPolicyNumberSaved={() => fetchPolicyDetails()}
                       packagePolicyIds={hasPackage ? [policy.id, ...relatedPolicies.map(rp => rp.id)] : undefined}
+                      onFilesCountChanged={setPolicyFilesCount}
                     />
                   </div>
                 )}

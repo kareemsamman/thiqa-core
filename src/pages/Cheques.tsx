@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -56,6 +57,8 @@ import {
   MoreVertical,
   Building2,
   FileText,
+  XCircle,
+  Printer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PdfJsViewer } from "@/components/policies/PdfJsViewer";
@@ -124,6 +127,16 @@ interface ChequeRecord {
    *  the client gave us (policy_payments). The other values come from
    *  outgoing settlement vouchers — same cheque book, opposite flow. */
   source?: 'customer' | 'company' | 'broker' | 'expense';
+  /** Multi-split grouping. When a single physical cheque pays several
+   *  policies (debt-settlement modal splits it across the smallest-
+   *  remaining first), all the rows share the same batch_id. The
+   *  cheques page collapses them into one logical row whose `amount`
+   *  is the SUM and whose `member_ids` / `member_policy_ids` carry the
+   *  underlying policy_payments rows so mutations (status change, edit
+   *  cheque number, etc.) propagate to all of them. */
+  batch_id?: string | null;
+  member_ids?: string[];
+  member_policy_ids?: string[];
 }
 
 interface CustomerGroup {
@@ -213,6 +226,22 @@ export default function Cheques() {
   const [smsMessage, setSmsMessage] = useState("");
   const [sendingSms, setSendingSms] = useState(false);
 
+  // Reason prompt for إلغاء / رجع — both actions are "voiding" the
+  // cheque (refused=true, removed from the customer's paid total) so
+  // accounting wants a written explanation. Single shared dialog
+  // keeps the surface area small; `reasonAction` swaps the wording.
+  const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
+  const [reasonAction, setReasonAction] = useState<'cancelled' | 'returned' | null>(null);
+  const [reasonChequeId, setReasonChequeId] = useState<string | null>(null);
+  const [reasonText, setReasonText] = useState("");
+  const [reasonError, setReasonError] = useState<string | null>(null);
+  const [reasonSubmitting, setReasonSubmitting] = useState(false);
+
+  // Tracks which cancelled cheque is currently printing its سند إلغاء,
+  // so the dropdown item can show a spinner and block double-clicks
+  // while the edge function spins up the PDF.
+  const [printingVoucherChequeId, setPrintingVoucherChequeId] = useState<string | null>(null);
+
   // Active tab
   const [activeTab, setActiveTab] = useState("list");
 
@@ -230,6 +259,10 @@ export default function Cheques() {
   const [paymentEditRecord, setPaymentEditRecord] = useState<any>(null);
   const [paymentEditOpen, setPaymentEditOpen] = useState(false);
   const [loadingPaymentEdit, setLoadingPaymentEdit] = useState(false);
+  // For multi-split cheques, every underlying policy_payments id so
+  // the dialog can propagate edits/deletes to the whole batch instead
+  // of just one allocation row.
+  const [paymentEditMemberIds, setPaymentEditMemberIds] = useState<string[] | undefined>(undefined);
 
   // Outgoing-cheque edit dialog — companies / brokers / expenses.
   // Reuses EditSettlementDialog so the same fields the accounting
@@ -310,9 +343,13 @@ export default function Cheques() {
       const policy = Array.isArray((data as any).policies)
         ? (data as any).policies[0]
         : (data as any).policies;
+      // For a multi-split cheque the per-row .amount is just one slice
+      // (e.g. 250 of a 1000₪ cheque). Use the collapsed row's aggregate
+      // so the dialog shows the actual face value the customer signed.
+      const isSplit = !!(cheque.member_ids && cheque.member_ids.length > 1);
       setPaymentEditRecord({
         id: (data as any).id,
-        amount: (data as any).amount,
+        amount: isSplit ? cheque.amount : (data as any).amount,
         payment_date: (data as any).payment_date,
         payment_type: (data as any).payment_type,
         cheque_number: (data as any).cheque_number,
@@ -336,6 +373,7 @@ export default function Cheques() {
             }
           : null,
       });
+      setPaymentEditMemberIds(isSplit ? cheque.member_ids : undefined);
       setPaymentEditOpen(true);
     } catch (err) {
       console.error('Error loading payment for edit:', err);
@@ -399,7 +437,7 @@ export default function Cheques() {
       const [ppRes, csRes, bsRes, exRes] = await Promise.all([
         supabase
           .from('policy_payments')
-          .select('amount, cheque_status, payment_date')
+          .select('amount, cheque_status, payment_date, batch_id')
           .eq('payment_type', 'cheque'),
         supabase
           .from('company_settlements')
@@ -418,13 +456,36 @@ export default function Cheques() {
       type Norm = { amount: number; cheque_status: string | null; payment_date: string };
       const normalized: Norm[] = [];
 
-      ((ppRes.data ?? []) as Array<{ amount: number | null; cheque_status: string | null; payment_date: string }>).forEach((c) => {
-        normalized.push({
-          amount: Number(c.amount ?? 0),
-          cheque_status: c.cheque_status,
-          payment_date: c.payment_date,
-        });
-      });
+      // Multi-split cheques (batch_id != null) collapse into one logical
+      // cheque so the summary counts at the top of the page match what
+      // the user sees in the list. Amounts get summed across siblings;
+      // status/date are identical within a batch so any member is fine.
+      type PpRow = { amount: number | null; cheque_status: string | null; payment_date: string; batch_id: string | null };
+      const ppRows = (ppRes.data ?? []) as PpRow[];
+      const batchSums = new Map<string, number>();
+      const seenBatches = new Set<string>();
+      for (const c of ppRows) {
+        if (c.batch_id) {
+          batchSums.set(c.batch_id, (batchSums.get(c.batch_id) ?? 0) + Number(c.amount ?? 0));
+        }
+      }
+      for (const c of ppRows) {
+        if (c.batch_id) {
+          if (seenBatches.has(c.batch_id)) continue;
+          seenBatches.add(c.batch_id);
+          normalized.push({
+            amount: batchSums.get(c.batch_id) ?? 0,
+            cheque_status: c.cheque_status,
+            payment_date: c.payment_date,
+          });
+        } else {
+          normalized.push({
+            amount: Number(c.amount ?? 0),
+            cheque_status: c.cheque_status,
+            payment_date: c.payment_date,
+          });
+        }
+      }
 
       const settlementToStatus = (status: string | null, refused: boolean | null): string => {
         if (refused) return 'returned';
@@ -526,7 +587,7 @@ export default function Cheques() {
         .from('policy_payments')
         .select(`
           id, policy_id, amount, payment_date, cheque_due_date, cheque_issue_date,
-          cheque_number, cheque_date,
+          cheque_number, cheque_date, batch_id,
           bank_code, branch_code, cheque_image_url,
           cheque_status, refused, notes, transferred_to_type, transferred_to_id, transferred_payment_id,
           policies!policy_payments_policy_id_fkey(
@@ -633,6 +694,7 @@ export default function Cheques() {
           cheque_status: c.cheque_status || 'pending',
           refused: c.refused,
           notes: c.notes,
+          batch_id: c.batch_id || null,
           policy: c.policies ? {
             id: c.policies.id,
             policy_type_parent: c.policies.policy_type_parent,
@@ -664,14 +726,23 @@ export default function Cheques() {
         return bd - ad;
       });
 
+      // Collapse multi-split customer cheques into one logical row per
+      // physical cheque. The debt-settlement modal splits a single
+      // cheque across N policies (smallest-remaining first) so all
+      // splits share batch_id; the user thinks of and signs ONE cheque,
+      // so the page should show one row at the cheque's face value.
+      // Outgoing cheques and single-policy payments (no batch_id) are
+      // passed through unchanged.
+      const collapsed = collapseCustomerChequesByBatch(formattedCheques);
+
       // Search filter (includes customer name search)
-      const filtered = searchQuery 
-        ? formattedCheques.filter(c => 
+      const filtered = searchQuery
+        ? collapsed.filter(c =>
             c.policy?.client?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             c.cheque_number?.includes(searchQuery) ||
             c.policy?.client?.phone_number?.includes(searchQuery)
           )
-        : formattedCheques;
+        : collapsed;
 
       // Auto-expand all groups when there's a small number of them so
       // the user lands in a useful state without having to click around.
@@ -696,46 +767,43 @@ export default function Cheques() {
   useEffect(() => { fetchSummaryStats(); }, [fetchSummaryStats]);
   useEffect(() => { fetchCheques(); }, [fetchCheques]);
 
-  const handleStatusChange = async (chequeId: string, newStatus: string) => {
+  const handleStatusChange = async (chequeId: string, newStatus: string, reason?: string) => {
     try {
+      // chequeId is the displayed (logical) row id. For multi-split
+      // cheques every underlying policy_payments row must flip together
+      // — a physical cheque can't be half-cashed.
+      const target = cheques.find(c => c.id === chequeId);
+      const idsToUpdate = target?.member_ids?.length ? target.member_ids : [chequeId];
+
+      // refused=true is what excludes the row from
+      // validate_policy_payment_total's sum, which is how إلغاء/رجع
+      // subtract the cheque from the customer's "paid" total. صرف
+      // keeps refused=false because a cashed cheque counts as paid.
+      const isVoided = newStatus === 'returned' || newStatus === 'cancelled';
+      const updateData: { cheque_status: string; refused: boolean; cancellation_reason?: string | null } = {
+        cheque_status: newStatus,
+        refused: isVoided,
+      };
+
+      // Reason goes onto the dedicated column added by
+      // 20260511160000_receipt_cancellation_voucher. The
+      // sync_receipt_from_policy_payment trigger reads it to populate
+      // both the cancellation voucher's notes line and the cancelled
+      // original's cancellation_reason field — so the bookkeeper sees
+      // the exact same text on the receipts page and on the printed
+      // voucher.
+      if (isVoided && reason && reason.trim()) {
+        updateData.cancellation_reason = reason.trim();
+      }
+
       const { error } = await supabase
         .from('policy_payments')
-        .update({ cheque_status: newStatus, refused: newStatus === 'returned' })
-        .eq('id', chequeId);
+        .update(updateData)
+        .in('id', idsToUpdate);
 
       if (error) throw error;
       toast({ title: "تم التحديث", description: "تم تحديث حالة الشيك" });
-      
-      // Auto SMS on returned cheque
-      if (newStatus === 'returned' && guardSmsSend('auto')) {
-        const cheque = cheques.find(c => c.id === chequeId);
-        if (cheque?.policy?.client?.phone_number) {
-          const clientName = cheque.policy.client.full_name || "العميل";
-          const chequeNum = cheque.cheque_number || "";
-          const autoMessage = `مرحباً ${clientName}، نود إعلامك بأن الشيك رقم ${chequeNum} بمبلغ ${formatCurrency(cheque.amount)} قد تم إرجاعه. يرجى التواصل معنا لتسوية الأمر.`;
-          
-          try {
-            const { error: autoSmsError } = await supabase.functions.invoke('send-sms', {
-              body: {
-                phone: cheque.policy.client.phone_number,
-                message: autoMessage,
-                clientId: cheque.policy.client.id,
-                policyId: cheque.policy_id,
-                smsType: 'manual',
-              }
-            });
-            if (autoSmsError) throw autoSmsError;
-            toast({ title: "تم إرسال SMS", description: "تم إرسال إشعار للعميل بالشيك المرتجع" });
-          } catch (smsError) {
-            console.error('Failed to send auto SMS:', smsError);
-            const msg = await extractFunctionErrorMessage(smsError);
-            if (msg) {
-              toast({ title: "تنبيه", description: msg });
-            }
-          }
-        }
-      }
-      
+
       fetchCheques();
       fetchSummaryStats();
     } catch (error) {
@@ -743,15 +811,111 @@ export default function Cheques() {
     }
   };
 
+  const openReasonDialog = (chequeId: string, action: 'cancelled' | 'returned') => {
+    setReasonChequeId(chequeId);
+    setReasonAction(action);
+    setReasonText("");
+    setReasonError(null);
+    setReasonDialogOpen(true);
+  };
+
+  const confirmReasonAction = async () => {
+    if (!reasonAction || !reasonChequeId) return;
+    if (!reasonText.trim()) {
+      setReasonError('السبب مطلوب');
+      return;
+    }
+    setReasonSubmitting(true);
+    try {
+      await handleStatusChange(reasonChequeId, reasonAction, reasonText.trim());
+      setReasonDialogOpen(false);
+      setReasonAction(null);
+      setReasonChequeId(null);
+      setReasonText("");
+      setReasonError(null);
+    } finally {
+      setReasonSubmitting(false);
+    }
+  };
+
+  // Looks up the cancellation voucher receipt for a cancelled customer
+  // cheque and opens the printable سند إلغاء. The voucher row is
+  // created by sync_receipt_from_policy_payment when refused flips
+  // false→true (migration 20260511160000); we find it by
+  // receipt_type='cancellation' + payment_id IN (member ids). For
+  // multi-split cheques every member row gets its own voucher receipt,
+  // all sharing the same session — we pick the smallest receipt_number
+  // as the canonical row, matching the dedupe Receipts.tsx uses.
+  const handlePrintCancellationVoucher = async (cheque: ChequeRecord) => {
+    setPrintingVoucherChequeId(cheque.id);
+    try {
+      const paymentIds = cheque.member_ids?.length ? cheque.member_ids : [cheque.id];
+      const { data: vouchers, error: vErr } = await supabase
+        .from('receipts')
+        .select('id, receipt_number')
+        .eq('receipt_type', 'cancellation')
+        .in('payment_id', paymentIds)
+        .order('receipt_number', { ascending: true })
+        .limit(1);
+      if (vErr) throw vErr;
+      const voucherId = vouchers?.[0]?.id;
+      if (!voucherId) {
+        toast({
+          title: "غير موجود",
+          description: "لم يتم العثور على سند الإلغاء",
+          variant: "destructive",
+        });
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke(
+        'generate-cancellation-voucher',
+        { body: { voucher_receipt_id: voucherId } },
+      );
+      if (error) throw error;
+      const url = (data as { receipt_url?: string } | null)?.receipt_url;
+      if (!url) {
+        toast({
+          title: "خطأ",
+          description: "لم يتم العثور على رابط السند",
+          variant: "destructive",
+        });
+        return;
+      }
+      window.open(url, '_blank');
+    } catch (err) {
+      const detail = await extractFunctionErrorMessage(err);
+      toast({
+        title: "خطأ",
+        description: detail || "فشل في توليد سند الإلغاء",
+        variant: "destructive",
+      });
+    } finally {
+      setPrintingVoucherChequeId(null);
+    }
+  };
+
   const handleBulkStatusChange = async (newStatus: string) => {
     if (selectedCheques.size === 0) return;
-    
+
     setBulkActionLoading(true);
     try {
+      // Expand each selected logical row to its underlying members so
+      // multi-split cheques flip in full.
+      const idsToUpdate = new Set<string>();
+      for (const id of selectedCheques) {
+        const target = cheques.find(c => c.id === id);
+        if (target?.member_ids?.length) {
+          target.member_ids.forEach(mid => idsToUpdate.add(mid));
+        } else {
+          idsToUpdate.add(id);
+        }
+      }
+
+      const isVoided = newStatus === 'returned' || newStatus === 'cancelled';
       const { error } = await supabase
         .from('policy_payments')
-        .update({ cheque_status: newStatus, refused: newStatus === 'returned' })
-        .in('id', Array.from(selectedCheques));
+        .update({ cheque_status: newStatus, refused: isVoided })
+        .in('id', Array.from(idsToUpdate));
 
       if (error) throw error;
       toast({ title: "تم التحديث", description: `تم تحديث ${selectedCheques.size} شيك` });
@@ -792,14 +956,19 @@ export default function Cheques() {
     }
     
     try {
+      // Cheque number / status reset must apply to every split of the
+      // physical cheque — not just one row of the batch.
+      const idsToUpdate = editingCheque.member_ids?.length
+        ? editingCheque.member_ids
+        : [editingCheque.id];
       const { error } = await supabase
         .from('policy_payments')
-        .update({ 
+        .update({
           cheque_number: sanitized,
           cheque_status: 'pending',
           refused: false,
         })
-        .eq('id', editingCheque.id);
+        .in('id', idsToUpdate);
 
       if (error) throw error;
       toast({ title: "تم التحديث", description: "تم تحديث رقم الشيك وإعادة الحالة إلى قيد الانتظار" });
@@ -1159,36 +1328,13 @@ export default function Cheques() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              {/* "تعديل الدفعة" + "عرض المعاملة" only make sense for
-                  customer cheques — they query policy_payments by id
-                  and read policy_id, neither of which exist on the
-                  synthetic outgoing rows pulled from *_settlements /
-                  expenses. Hiding them avoids the "فشل في تحميل" toast
-                  staff hit when trying to edit an outgoing cheque. */}
-              {(cheque.source === 'customer' || !cheque.source) && (
-                <>
-                  <DropdownMenuItem
-                    disabled={loadingPaymentEdit}
-                    onClick={() => openPaymentEditFor(cheque)}
-                  >
-                    <Pencil className="h-4 w-4 ml-2" />
-                    تعديل الدفعة
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setSelectedPolicyId(cheque.policy_id);
-                      setPolicyDrawerOpen(true);
-                    }}
-                  >
-                    <ExternalLink className="h-4 w-4 ml-2" />
-                    عرض المعاملة
-                  </DropdownMenuItem>
-                </>
-              )}
               {/* Outgoing cheques (شيكات صادرة) — same edit surface as
                   the accounting page, opens against the underlying
                   settlement / expense row so changes stay in sync
-                  across both pages. */}
+                  across both pages. The customer-cheque immutability
+                  rules (no edit, only صرف/إلغاء/رجع) don't apply here
+                  because outgoing rows live in *_settlements / expenses,
+                  not policy_payments. */}
               {(cheque.source === 'company' ||
                 cheque.source === 'broker' ||
                 cheque.source === 'expense') && (
@@ -1197,53 +1343,58 @@ export default function Cheques() {
                   تعديل الشيك
                 </DropdownMenuItem>
               )}
-              {cheque.cheque_status !== 'cashed' &&
-                cheque.cheque_status !== 'returned' &&
+              {/* Customer cheques: the three voiding actions are exposed —
+                  صرف, إلغاء, رجع — until the cheque is cancelled. Once
+                  cancelled the row is frozen (no صرف / no رجع back into
+                  active state) per the immutable-accounting rule, and
+                  the only remaining action is reprinting the سند إلغاء
+                  the cancellation generated. transferred_out is a
+                  terminal state (the cheque is already used as outgoing)
+                  so no actions show. */}
+              {(cheque.source === 'customer' || !cheque.source) &&
                 cheque.cheque_status !== 'transferred_out' && (
-                  <DropdownMenuItem
-                    onClick={() => handleStatusChange(cheque.id, 'cashed')}
-                    className="text-green-600 focus:text-green-700"
-                  >
-                    <CheckCircle2 className="h-4 w-4 ml-2" />
-                    صرف الشيك
-                  </DropdownMenuItem>
+                  cheque.cheque_status === 'cancelled' ? (
+                    <DropdownMenuItem
+                      onClick={() => handlePrintCancellationVoucher(cheque)}
+                      disabled={printingVoucherChequeId === cheque.id}
+                    >
+                      {printingVoucherChequeId === cheque.id ? (
+                        <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                      ) : (
+                        <Printer className="h-4 w-4 ml-2" />
+                      )}
+                      طباعة سند الإلغاء
+                    </DropdownMenuItem>
+                  ) : (
+                    <>
+                      {cheque.cheque_status !== 'cashed' && (
+                        <DropdownMenuItem
+                          onClick={() => handleStatusChange(cheque.id, 'cashed')}
+                          className="text-green-600 focus:text-green-700"
+                        >
+                          <CheckCircle2 className="h-4 w-4 ml-2" />
+                          صرف الشيك
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem
+                        onClick={() => openReasonDialog(cheque.id, 'cancelled')}
+                        className="text-amber-600 focus:text-amber-700"
+                      >
+                        <XCircle className="h-4 w-4 ml-2" />
+                        إلغاء الشيك
+                      </DropdownMenuItem>
+                      {cheque.cheque_status !== 'returned' && (
+                        <DropdownMenuItem
+                          onClick={() => openReasonDialog(cheque.id, 'returned')}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <RotateCcw className="h-4 w-4 ml-2" />
+                          رجع الشيك
+                        </DropdownMenuItem>
+                      )}
+                    </>
+                  )
                 )}
-              {cheque.cheque_status !== 'returned' &&
-                cheque.cheque_status !== 'transferred_out' && (
-                  <DropdownMenuItem
-                    onClick={() => handleStatusChange(cheque.id, 'returned')}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <RotateCcw className="h-4 w-4 ml-2" />
-                    رجع الشيك
-                  </DropdownMenuItem>
-                )}
-              {cheque.cheque_status === 'returned' && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleEditCheque(cheque)}>
-                    <Edit className="h-4 w-4 ml-2" />
-                    تغيير رقم الشيك
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={smsLoading}
-                    onClick={() => {
-                      if (smsLoading) return;
-                      if (smsLocked) { openSmsUpgrade(); return; }
-                      openSmsDialog(cheque);
-                    }}
-                  >
-                    {smsLocked ? (
-                      <span className="h-4 w-4 ml-2 rounded-full bg-white text-amber-600 flex items-center justify-center ring-2 ring-amber-500">
-                        <Lock className="h-2.5 w-2.5" weight="fill" />
-                      </span>
-                    ) : (
-                      <MessageSquare className="h-4 w-4 ml-2" />
-                    )}
-                    إرسال SMS للعميل
-                  </DropdownMenuItem>
-                </>
-              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </TableCell>
@@ -1693,7 +1844,7 @@ export default function Cheques() {
               {/* Pagination */}
               <div className="flex items-center justify-between border-t border-border/30 px-4 py-3">
                 <p className="text-sm text-muted-foreground">
-                  {customerGroups.length} عميل، {cheques.length} شيك من {totalCount}
+                  {customerGroups.length} عميل، {cheques.length} شيك
                 </p>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>
@@ -1831,6 +1982,68 @@ export default function Cheques() {
         </DialogContent>
       </Dialog>
 
+      {/* Reason prompt for إلغاء / رجع. Reason is required because
+          accounting treats both as voiding the cheque (refused=true →
+          dropped from the customer's paid total) and the bookkeeper
+          needs a written explanation for the audit trail. Stored as
+          a notes line for now; will move to a dedicated column with
+          the cancellation-voucher work in step 5. */}
+      <Dialog open={reasonDialogOpen} onOpenChange={(o) => {
+        if (!o) {
+          setReasonDialogOpen(false);
+          setReasonAction(null);
+          setReasonChequeId(null);
+          setReasonText("");
+          setReasonError(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {reasonAction === 'cancelled' ? 'إلغاء الشيك' : 'رجع الشيك'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <Label htmlFor="reason-text">
+              سبب {reasonAction === 'cancelled' ? 'الإلغاء' : 'الرجع'}
+              <span className="text-destructive mr-1">*</span>
+            </Label>
+            <Textarea
+              id="reason-text"
+              value={reasonText}
+              onChange={(e) => {
+                setReasonText(e.target.value);
+                if (e.target.value.trim()) setReasonError(null);
+              }}
+              placeholder={reasonAction === 'cancelled'
+                ? 'مثال: العميل طلب الإلغاء، شيك مكرر، خطأ في الإصدار...'
+                : 'مثال: لا يوجد رصيد، شيك مرتجع من البنك، تم إيقاف الصرف...'}
+              rows={3}
+              autoFocus
+              disabled={reasonSubmitting}
+            />
+            {reasonError && <p className="text-sm text-destructive">{reasonError}</p>}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReasonDialogOpen(false)}
+              disabled={reasonSubmitting}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant={reasonAction === 'cancelled' ? 'default' : 'destructive'}
+              onClick={confirmReasonAction}
+              disabled={reasonSubmitting || !reasonText.trim()}
+            >
+              {reasonSubmitting ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+              تأكيد
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Policy Details Drawer */}
       <PolicyDetailsDrawer
         open={policyDrawerOpen}
@@ -1857,12 +2070,17 @@ export default function Cheques() {
         open={paymentEditOpen}
         onOpenChange={(o) => {
           setPaymentEditOpen(o);
-          if (!o) setPaymentEditRecord(null);
+          if (!o) {
+            setPaymentEditRecord(null);
+            setPaymentEditMemberIds(undefined);
+          }
         }}
         payment={paymentEditRecord}
+        memberIds={paymentEditMemberIds}
         onSuccess={() => {
           setPaymentEditOpen(false);
           setPaymentEditRecord(null);
+          setPaymentEditMemberIds(undefined);
           fetchCheques();
           fetchSummaryStats();
         }}
@@ -1889,6 +2107,67 @@ export default function Cheques() {
       />
     </MainLayout>
   );
+}
+
+/**
+ * Collapses customer cheque rows that share a batch_id into a single
+ * logical cheque. The debt-settlement modal splits one physical
+ * cheque across N policies (smallest-remaining first) and writes N
+ * `policy_payments` rows with the same `batch_id` so the trigger
+ * cap is respected per policy. From the user's standpoint the
+ * customer signed ONE cheque, so the cheques page should render one
+ * row at the cheque's face value (= SUM of splits) and let mutations
+ * (status change, edit) propagate to all underlying rows via
+ * `member_ids`.
+ *
+ * Rows pass through unchanged when:
+ *  - source !== 'customer' (outgoing settlements/expenses don't have batch_id)
+ *  - batch_id is null (the cheque wasn't split)
+ *
+ * Metadata (cheque_number, bank_code, branch_code, dates, status) is
+ * identical across batch members because handleSubmit copies them
+ * onto every split, so taking the first one is correct.
+ */
+function collapseCustomerChequesByBatch(rows: ChequeRecord[]): ChequeRecord[] {
+  const result: ChequeRecord[] = [];
+  const indexByBatch = new Map<string, number>();
+
+  for (const row of rows) {
+    const isOutgoing = row.source && row.source !== 'customer';
+
+    if (isOutgoing || !row.batch_id) {
+      result.push({
+        ...row,
+        member_ids: [row.id],
+        member_policy_ids: row.policy_id ? [row.policy_id] : [],
+      });
+      continue;
+    }
+
+    const existingIdx = indexByBatch.get(row.batch_id);
+    if (existingIdx === undefined) {
+      indexByBatch.set(row.batch_id, result.length);
+      result.push({
+        ...row,
+        member_ids: [row.id],
+        member_policy_ids: row.policy_id ? [row.policy_id] : [],
+      });
+      continue;
+    }
+
+    const existing = result[existingIdx];
+    existing.amount += row.amount;
+    existing.member_ids!.push(row.id);
+    if (row.policy_id) existing.member_policy_ids!.push(row.policy_id);
+    if (!existing.cheque_image_url && row.cheque_image_url) {
+      existing.cheque_image_url = row.cheque_image_url;
+    }
+    if (row.images && row.images.length > 0) {
+      existing.images = [...(existing.images || []), ...row.images];
+    }
+  }
+
+  return result;
 }
 
 /**

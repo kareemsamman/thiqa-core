@@ -10,6 +10,14 @@ const corsHeaders = {
 interface BulkReceiptRequest {
   payment_ids: string[];
   total_amount?: number; // optional verification
+  // When true (used by the receipts page print button), expand the
+  // scope from "just these payments" to "every non-إلزامي payment
+  // this customer has ever made". The customer-level receipt is the
+  // canonical "كشف قبض" the user wants — money the office actually
+  // collected, not scoped to any one transaction. Defaults to false
+  // so the SMS auto-receipt sent right after تسديد المبلغ keeps
+  // showing only the just-collected session.
+  customer_scope?: boolean;
 }
 
 const PAYMENT_TYPE_LABELS: Record<string, string> = {
@@ -152,6 +160,17 @@ function buildBulkReceiptHtml(
   _paymentType: string,
   companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string },
   branding: AgentBranding = DEFAULT_BRANDING,
+  // payment_id → cancellation voucher receipt_number, populated by the
+  // caller after the payments fetch. Lets a voided row print
+  // "ملغية → سند الإلغاء #19" so the printed copy carries the same
+  // audit-trail reference the receipts page shows on screen.
+  cancellationVoucherMap: Record<string, number | string> = {},
+  // When true the receipt is a customer-level كشف قبض (every non-إلزامي
+  // payment the customer ever made) and the "هذه السندات تخص المعاملة"
+  // note is hidden — the receipt isn't scoped to a single transaction
+  // anymore. Defaults to false for the SMS auto-receipt that still
+  // wants the per-session framing.
+  isCustomerLevel: boolean = false,
 ): string {
   const today = new Date();
   // Pick the package's representative document_number the same way the
@@ -216,19 +235,90 @@ function buildBulkReceiptHtml(
   const anyNotes = payments.some(
     (p: any) => typeof p.notes === 'string' && p.notes.trim().length > 0,
   );
+  // Display dedupe: legacy data has one collection event spread
+  // across N rows with N different R-numbers (the BEFORE-INSERT
+  // trigger allocated per row). Per the user's rule "one سند قبض =
+  // one number, no matter how many rows", every row of the same
+  // session/batch should show the SAME R-number on the printed
+  // copy. We pick the smallest one as the canonical — same fallback
+  // chain as groupedPayments (`payment_session_id` → `batch_id` →
+  // `payment.id`).  New data from the app-side pre-allocate path
+  // already shares one R-number across the submit, so this map is a
+  // no-op there.
+  const receiptGroupKey = (p: any): string =>
+    p.payment_session_id || p.batch_id || p.id;
+  const canonicalReceiptByGroup = new Map<string, string>();
+  for (const p of payments as any[]) {
+    if (!p.receipt_number) continue;
+    const key = receiptGroupKey(p);
+    const existing = canonicalReceiptByGroup.get(key);
+    if (!existing || String(p.receipt_number) < existing) {
+      canonicalReceiptByGroup.set(key, String(p.receipt_number));
+    }
+  }
+  // When the print is scoped to a single سند قبض (the common case
+  // after Receipts.tsx stopped opting into customer_scope), every row
+  // shares one R-number. That number lives prominently in the header
+  // meta block, so repeating it in a "رقم سند القبض" body column on
+  // every line is just noise. We hide the column when there's one
+  // unique canonical R-number across the payments, and show it when
+  // multiple sessions are bundled (the kept-for-now customer-scope
+  // path used by callers that still pass isCustomerLevel=true).
+  const uniqueCanonicals = new Set<string>(canonicalReceiptByGroup.values());
+  const showReceiptNumberColumn = uniqueCanonicals.size > 1;
+  // Session R-number for the header row — only meaningful when the
+  // print is one سند. Falls back to the only entry in the map.
+  const headerReceiptNumber = uniqueCanonicals.size === 1
+    ? Array.from(uniqueCanonicals)[0]
+    : null;
+
   const receiptRows = payments.map((p: any) => {
-    const num = p.receipt_number || '—';
+    const num = canonicalReceiptByGroup.get(receiptGroupKey(p)) || p.receipt_number || '—';
     const typeLbl = paymentTypeLabel(p);
     const extra = p.cheque_number ? ` · ${escapeHtml(String(p.cheque_number))}` : '';
     const refused = !!p.refused;
+    // Distinguish ملغي (customer-initiated, cheque_status='cancelled')
+    // from مرتجع (bank-bounced, cheque_status='returned'). Both flip
+    // refused=true and both spawn a cancellation voucher via the
+    // sync_receipt_from_policy_payment trigger, but the bookkeeper
+    // wants the printed copy to say which one happened. Anything
+    // refused without a recognised status falls back to "مرفوضة"
+    // so legacy data (pre-cancellation-voucher migration) still
+    // renders cleanly.
+    const isCancelled = refused && p.cheque_status === 'cancelled';
+    const isReturned = refused && p.cheque_status === 'returned';
     const rowClass = refused ? ' class="refused"' : '';
+    const voucherNo = cancellationVoucherMap[p.id];
+    // Same R{N}/{YYYY} shape as the سند قبض numbering so the printed
+    // copy reads consistently — "سند الإلغاء R655/2026" not the bare
+    // SERIAL "#655". Year derived from the printed-on date (today)
+    // since the voucher itself was struck against the current period.
+    const voucherYear = new Date().getFullYear();
+    const voucherRef = voucherNo != null
+      ? ` <span class="voucher-ref">سند الإلغاء R${escapeHtml(String(voucherNo))}/${voucherYear}</span>`
+      : '';
     const refusedBadge = refused
-      ? ' <span class="refused-tag">مرفوضة</span>'
+      ? ` <span class="refused-tag">${isCancelled ? 'ملغية' : isReturned ? 'مرتجع' : 'مرفوضة'}</span>${voucherRef}`
       : '';
     const amount = Number(p.amount || 0).toLocaleString('en-US');
     const amountCell = refused
       ? `<span class="struck">₪${amount}</span>`
       : `₪${amount}`;
+
+    // Per-row date label: a cheque carries a maturity date (when the
+    // bank will honour it) so "تاريخ الاستحقاق" is the accurate term;
+    // cash / transfer / card are collected on the spot, so the date
+    // IS the receipt date — labelled "تاريخ القبض". The column header
+    // stays generic ("التاريخ") so the table reads consistently while
+    // each cell carries its own precise sub-label.
+    const dateValue = p.payment_type === 'cheque'
+      ? (p.cheque_date || p.payment_date)
+      : p.payment_date;
+    const dateLabelText = p.payment_type === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ القبض';
+    const dateCell = `
+      <div class="date-label">${dateLabelText}</div>
+      <div class="date-value">${formatDate(dateValue)}</div>
+    `;
     const notesCell = anyNotes
       ? `<td class="notes">${escapeHtml(p.notes || '').replace(/\n/g, '<br>') || '—'}</td>`
       : '';
@@ -246,12 +336,12 @@ function buildBulkReceiptHtml(
 
     return `
       <tr${rowClass}>
-        <td class="num">${escapeHtml(num)}</td>
+        ${showReceiptNumberColumn ? `<td class="num">${escapeHtml(num)}</td>` : ''}
         <td>
           <div>${escapeHtml(typeLbl)}${extra}${refusedBadge}</div>
           ${bankLine}
         </td>
-        <td class="date">${formatDate(p.payment_date)}</td>
+        <td class="date">${dateCell}</td>
         <td class="amount">${amountCell}</td>
         ${notesCell}
       </tr>
@@ -391,16 +481,49 @@ function buildBulkReceiptHtml(
     .receipts tbody td:last-child { border-left: none; }
     .receipts tbody tr:first-child td { border-top: none; }
     .receipts tbody td.num,
-    .receipts tbody td.date,
     .receipts tbody td.amount {
       direction: ltr; text-align: left;
       font-variant-numeric: tabular-nums; font-weight: 700;
     }
+    /* Date cell carries a small caption ("تاريخ الاستحقاق" for cheques,
+       "تاريخ القبض" otherwise) above the actual date so each row
+       self-labels even though the column header is generic. */
+    .receipts tbody td.date {
+      text-align: right;
+      font-weight: 500;
+    }
+    .receipts tbody td.date .date-label {
+      font-size: 10px;
+      color: #6b7280;
+      font-weight: 600;
+      margin-bottom: 2px;
+      letter-spacing: 0.2px;
+    }
+    .receipts tbody td.date .date-value {
+      direction: ltr;
+      text-align: left;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+    .receipts tbody tr.refused td.date .date-value { color: #7f1d1d; }
     .receipts tbody td.notes {
       text-align: right; font-weight: 500; color: #1a1a1a;
       max-width: 200px; white-space: normal; word-break: break-word;
     }
     .receipts tbody tr.refused td { background: #fef2f2; color: #7f1d1d; }
+    .voucher-ref {
+      display: inline-block;
+      margin-right: 6px;
+      padding: 1px 6px;
+      background: #fef3c7;
+      color: #78350f;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 3px;
+      direction: ltr;
+      unicode-bidi: embed;
+    }
     .receipts tbody tr.refused .struck {
       text-decoration: line-through;
       text-decoration-thickness: 1.5px;
@@ -541,13 +664,17 @@ function buildBulkReceiptHtml(
           : (companySettings.company_location ? `<div class="address">${escapeHtml(companySettings.company_location)}</div>` : '')}
       </div>
       <div class="invoice-meta">
-        <div class="doc-title">سندات قبض</div>
-        <div class="subtitle">${payments.length} ${payments.length === 1 ? 'سند قبض' : 'سندات قبض'}</div>
+        <div class="doc-title">${headerReceiptNumber ? 'سند قبض' : 'سندات قبض'}</div>
+        ${headerReceiptNumber
+          ? ''
+          : `<div class="subtitle">${payments.length} ${payments.length === 1 ? 'سند قبض' : 'سندات قبض'}</div>`}
         <div class="meta-rows">
-          <div class="row">
-            <div class="label">رقم المعاملة</div>
-            <div class="val">${escapeHtml(primaryDocumentNumber)}</div>
-          </div>
+          ${headerReceiptNumber
+            ? `<div class="row">
+                 <div class="label">رقم السند</div>
+                 <div class="val">${escapeHtml(headerReceiptNumber)}</div>
+               </div>`
+            : ''}
           <div class="row">
             <div class="label">التاريخ</div>
             <div class="val">${formatDate(today.toISOString())}</div>
@@ -581,9 +708,9 @@ function buildBulkReceiptHtml(
       <table class="receipts">
         <thead>
           <tr>
-            <th style="width: 110px;">رقم سند القبض</th>
+            ${showReceiptNumberColumn ? '<th style="width: 110px;">رقم سند القبض</th>' : ''}
             <th style="width: 150px;">طريقة الدفع</th>
-            <th style="width: 120px;">تاريخ الدفع</th>
+            <th style="width: 130px;">التاريخ</th>
             <th style="width: 110px;">المبلغ</th>
             ${anyNotes ? '<th>ملاحظات</th>' : ''}
           </tr>
@@ -608,10 +735,11 @@ function buildBulkReceiptHtml(
       </div>
     </div>
 
-    <!-- Policy-link note -->
-    <div class="policy-note">
-      هذه السندات تخص المعاملة رقم <strong>${escapeHtml(primaryDocumentNumber)}</strong>.
-    </div>
+    <!-- The legacy "هذه السندات تخص المعاملة رقم N/2026" note was
+         removed per the user's rule: a printed سند قبض carries one
+         R-number at the top and nothing else; there's no separate
+         "transaction number" concept on the printed copy. -->
+
 
     <!-- Footer -->
     <div class="footer">
@@ -678,7 +806,7 @@ serve(async (req) => {
     const agentId = await resolveAgentId(supabase, user.id);
     const branding = await getAgentBranding(supabase, agentId);
 
-    const { payment_ids, total_amount }: BulkReceiptRequest = await req.json();
+    const { payment_ids, total_amount, customer_scope }: BulkReceiptRequest = await req.json();
 
     if (!payment_ids || payment_ids.length === 0) {
       return new Response(
@@ -687,7 +815,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[generate-bulk-payment-receipt] Processing ${payment_ids.length} payments`);
+    console.log(`[generate-bulk-payment-receipt] Processing ${payment_ids.length} payments (customer_scope=${!!customer_scope})`);
 
     // Fetch company settings for contact info
     const { data: smsSettings } = await supabase
@@ -702,10 +830,11 @@ serve(async (req) => {
       company_location: smsSettings?.company_location || '',
     };
 
-    // Fetch all payments with policy info
-    const { data: payments, error: paymentsError } = await supabase
-      .from("policy_payments")
-      .select(`
+    // Build the SELECT once — both the seed query (just the input
+    // payment_ids) and the customer-scope expansion below need the
+    // same shape including the new batch_id + insurance_price fields
+    // we use for collapse and ELZAMI filtering.
+    const selectClause = `
         id,
         amount,
         payment_type,
@@ -715,39 +844,160 @@ serve(async (req) => {
         bank_code,
         branch_code,
         card_last_four,
+        cheque_status,
+        cancellation_reason,
         locked,
         refused,
+        printed_at,
         notes,
         receipt_number,
+        batch_id,
+        payment_session_id,
         policy:policies(
           id,
           policy_type_parent,
           policy_type_child,
           document_number,
+          insurance_price,
           office_commission,
+          client_id,
           client:clients(id, full_name, id_number, phone_number, phone_number_2),
           car:cars(car_number, manufacturer_name, model, year)
         )
-      `)
+      `;
+
+    // Fetch the seed set so we can derive the customer (and skip the
+    // customer-scope expansion when the caller didn't ask for it).
+    const { data: seedPayments, error: seedError } = await supabase
+      .from("policy_payments")
+      .select(selectClause)
       .in("id", payment_ids)
       .order('payment_date', { ascending: true });
 
-    if (paymentsError || !payments || payments.length === 0) {
-      console.error("[generate-bulk-payment-receipt] Payments not found:", paymentsError);
+    if (seedError || !seedPayments || seedPayments.length === 0) {
+      console.error("[generate-bulk-payment-receipt] Payments not found:", seedError);
       return new Response(
         JSON.stringify({ error: "Payments not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // When customer_scope=true the receipts page wants every non-إلزامي
+    // payment this customer ever made — not just the rows of whatever
+    // transaction the user clicked print on. Walk policy → client_id,
+    // refetch every policy_payment under that client_id.
+    let payments = seedPayments;
+    if (customer_scope) {
+      const seedPolicy = (seedPayments[0] as any).policy;
+      const seedPolicyResolved = Array.isArray(seedPolicy) ? seedPolicy[0] : seedPolicy;
+      const clientId = seedPolicyResolved?.client_id;
+      if (clientId) {
+        const { data: clientPolicies } = await supabase
+          .from('policies')
+          .select('id')
+          .eq('client_id', clientId)
+          .is('deleted_at', null);
+        const clientPolicyIds = (clientPolicies ?? []).map((p: any) => p.id);
+        if (clientPolicyIds.length > 0) {
+          const { data: allCustomerPayments, error: expandErr } = await supabase
+            .from("policy_payments")
+            .select(selectClause)
+            .in("policy_id", clientPolicyIds)
+            .order('payment_date', { ascending: true });
+          if (!expandErr && allCustomerPayments && allCustomerPayments.length > 0) {
+            payments = allCustomerPayments;
+          }
+        }
+      }
+    }
+
+    // Drop payments the office never actually collected:
+    //  1. payment_type='visa_external' — the customer paid the
+    //     insurer directly via their own card. The row exists for
+    //     accounting context but the money never passed through the
+    //     office, so it has no business on a سند قبض.
+    //  2. ELZAMI premium recorded as cash/cheque/transfer with the
+    //     system-generated `locked=true` flag (legacy WP imports +
+    //     pre-visa_external auto rows). The `locked` gate is what
+    //     keeps a real cash إلزامي payment — collected by the office
+    //     via the "دفع" button — visible on the printed receipt; only
+    //     the system-stamped passthrough records are filtered out.
+    //  3. Ghost rows: refused=true AND printed_at=null. Per the
+    //     user's accounting rule a سند قبض that was never printed
+    //     was never handed to the customer, so "cancelling" it is
+    //     just throwing away a draft — no سند إلغاء should exist.
+    //     New cancellations on unprinted drafts now DELETE cleanly,
+    //     but pre-fix data left these orphans behind; filtering them
+    //     here keeps them out of any reprint without rewriting the
+    //     historical rows.
+    payments = payments.filter((p: any) => {
+      if (p.payment_type === 'visa_external') return false;
+      if (p.refused && !p.printed_at) return false;
+      if (p.locked !== true) return true;
+      const pol = Array.isArray(p.policy) ? p.policy[0] : p.policy;
+      if (!pol || pol.policy_type_parent !== 'ELZAMI') return true;
+      const price = Number(pol.insurance_price ?? 0);
+      if (price <= 0) return true;
+      return Math.abs(Number(p.amount ?? 0) - price) >= 0.005;
+    });
+
+    // Collapse multi-split rows: when a single physical cheque was
+    // split across N policies (handleSubmit assigns the same batch_id
+    // to all rows), we want ONE row on the printed receipt at the
+    // cheque's true face value (= sum of every sibling's amount), not
+    // N rows showing the per-policy slices. Single-row payments
+    // (batch_id null) and outgoing-style rows pass through unchanged.
+    const collapseByBatchId = (rows: any[]): any[] => {
+      const out: any[] = [];
+      const idxByBatch = new Map<string, number>();
+      for (const p of rows) {
+        const amt = Number(p.amount ?? 0);
+        if (!p.batch_id) {
+          out.push({ ...p, amount: amt });
+          continue;
+        }
+        const i = idxByBatch.get(p.batch_id);
+        if (i === undefined) {
+          idxByBatch.set(p.batch_id, out.length);
+          out.push({ ...p, amount: amt });
+        } else {
+          out[i].amount += amt;
+        }
+      }
+      return out;
+    };
+    payments = collapseByBatchId(payments);
+
+    if (payments.length === 0) {
+      // The seed survived the SELECT but everything got filtered as
+      // إلزامي passthrough. Return a friendly error so the caller can
+      // surface it to the user instead of silently producing an empty
+      // receipt.
+      return new Response(
+        JSON.stringify({ error: "لا توجد دفعات قابلة للطباعة (كل الدفعات إلزامي مرور للشركة)" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Calculate total from payments — refused payments are excluded
     // entirely (neither added nor subtracted), since they represent
-    // money the client never actually paid.
+    // money the client never actually paid. The collapse already
+    // turned each batch into one row at face value, so this sums
+    // physical cheque face values (post-ELZAMI-filter).
     const calculatedTotal = payments.reduce((sum, p: any) => {
       if (p.refused) return sum;
       return sum + Number(p.amount || 0);
     }, 0);
-    const finalTotal = total_amount || calculatedTotal;
+    // Ignore the caller's total_amount hint — after collapse + ELZAMI
+    // filter the displayed rows can sum to a different number than
+    // what the caller saw at submit time, and showing a footer total
+    // that disagrees with the row sum would confuse the bookkeeper.
+    // The hint is left in the request shape for backwards compat but
+    // no longer used.
+    const finalTotal = calculatedTotal;
+    if (total_amount && Math.abs(total_amount - calculatedTotal) > 0.01) {
+      console.log(`[generate-bulk-payment-receipt] total_amount hint (${total_amount}) differs from row sum (${calculatedTotal}); using row sum`);
+    }
 
     // Get client and car info from first payment
     const firstPolicy = (payments[0] as any).policy;
@@ -774,6 +1024,66 @@ serve(async (req) => {
 
     console.log(`[generate-bulk-payment-receipt] Total: ${finalTotal}, Policy types: ${policyTypes.join(', ')}`);
 
+    // Look up cancellation voucher receipt_numbers for any voided
+    // payment in this batch. The sync_receipt_from_policy_payment
+    // trigger inserts one cancellation row per refused policy_payment
+    // with receipt_type='cancellation'; we surface the voucher number
+    // on the printed copy so the bookkeeper can cross-reference.
+    //
+    // Display rule (absolute): one سند قبض = one سند إلغاء, no matter
+    // how many payment rows the سند groups. Trigger still creates a
+    // row per payment under the hood (immutable audit trail), but the
+    // printed receipt shows the SAME voucher number — the smallest
+    // receipt_number among the سند's cancellation rows — across
+    // every payment of the same سند. We use the same fallback chain
+    // as the client UI groupedPayments memo: `payment_session_id`
+    // → `batch_id` → `payment.id`. That keeps DebtPaymentModal
+    // sessions AND PackagePaymentModal batches (which set batch_id
+    // but no session_id) under the one-voucher rule.
+    const cancellationVoucherMap: Record<string, number | string> = {};
+    const refusedPayments = payments.filter((p: any) => p.refused);
+    const refusedIds = refusedPayments.map((p: any) => p.id);
+    if (refusedIds.length > 0) {
+      const { data: vouchers } = await supabase
+        .from('receipts')
+        .select('payment_id, receipt_number')
+        .eq('receipt_type', 'cancellation')
+        .in('payment_id', refusedIds);
+
+      // Per-payment voucher: refused_payment.id → its own cancellation receipt_number
+      const perPaymentVoucher = new Map<string, number | string>();
+      for (const v of (vouchers ?? []) as Array<{ payment_id: string | null; receipt_number: number | string | null }>) {
+        if (v.payment_id && v.receipt_number != null) {
+          perPaymentVoucher.set(v.payment_id, v.receipt_number);
+        }
+      }
+
+      // Pick the canonical voucher per سند: smallest numeric
+      // receipt_number among the سند's refused payments. Strings are
+      // compared numerically when parseable, else lexicographically.
+      const sortKey = (v: number | string): string => {
+        const n = typeof v === 'number' ? v : Number(v);
+        return Number.isFinite(n) ? String(n).padStart(20, '0') : String(v);
+      };
+      const receiptGroupKey = (p: any): string =>
+        p.payment_session_id || p.batch_id || p.id;
+      const groupVoucher = new Map<string, number | string>();
+      for (const p of refusedPayments as any[]) {
+        const v = perPaymentVoucher.get(p.id);
+        if (v == null) continue;
+        const key = receiptGroupKey(p);
+        const existing = groupVoucher.get(key);
+        if (existing == null || sortKey(v) < sortKey(existing)) {
+          groupVoucher.set(key, v);
+        }
+      }
+
+      for (const p of refusedPayments as any[]) {
+        const v = groupVoucher.get(receiptGroupKey(p));
+        if (v != null) cancellationVoucherMap[p.id] = v;
+      }
+    }
+
     // Generate receipt HTML
     const receiptHtml = buildBulkReceiptHtml(
       payments,
@@ -785,6 +1095,8 @@ serve(async (req) => {
       paymentType,
       companySettings,
       branding,
+      cancellationVoucherMap,
+      !!customer_scope,
     );
 
     if (!bunnyApiKey || !bunnyStorageZone) {

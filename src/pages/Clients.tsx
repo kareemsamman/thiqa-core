@@ -19,7 +19,6 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  Phone,
   Users,
   Building2,
   Plus,
@@ -32,6 +31,7 @@ import { ClientDrawer } from "@/components/clients/ClientDrawer";
 import { ClientDetails } from "@/components/clients/ClientDetails";
 import { ClientFilters, ClientFilterValues } from "@/components/clients/ClientFilters";
 import { RowActionsMenu } from "@/components/shared/RowActionsMenu";
+import { ClickablePhone } from "@/components/shared/ClickablePhone";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { useShortcutAction } from "@/hooks/useShortcutAction";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -442,21 +442,16 @@ export default function Clients() {
                           "-"
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         {client.phone_number ? (
-                          <div className="flex items-center gap-1 text-sm text-muted-foreground ltr-nums">
-                            <Phone className="h-3 w-3" />
-                            {client.phone_number}
-                          </div>
+                          <ClickablePhone phone={client.phone_number} />
                         ) : (
                           "-"
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         {client.phone_number_2 ? (
-                          <span className="text-sm text-muted-foreground ltr-nums">
-                            {client.phone_number_2}
-                          </span>
+                          <ClickablePhone phone={client.phone_number_2} />
                         ) : (
                           "-"
                         )}

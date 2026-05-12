@@ -29,6 +29,20 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   Table,
   TableBody,
   TableCell,
@@ -70,6 +84,7 @@ import {
   Handshake,
   Lock,
   Sparkles,
+  Ban,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -88,11 +103,13 @@ import { ExpiryBadge } from '@/components/shared/ExpiryBadge';
 import { ClickablePhone } from '@/components/shared/ClickablePhone';
 import { DebtIndicator } from '@/components/shared/DebtIndicator';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
+import { PrintProgressDialog } from '@/components/shared/PrintProgressDialog';
 import { DebtPaymentModal } from '@/components/debt/DebtPaymentModal';
 import { ClientNotesSection } from '@/components/clients/ClientNotesSection';
 import { PaymentEditDialog } from '@/components/clients/PaymentEditDialog';
 import { PaymentGroupDetailsDialog } from '@/components/clients/PaymentGroupDetailsDialog';
-import { getCombinedPaymentTypeLabel, getPaymentTypeLabel } from '@/lib/paymentLabels';
+import { getCombinedPaymentTypeLabel, getPaymentTypeLabel, PAYMENT_TYPE_LABELS } from '@/lib/paymentLabels';
+import { AccountingFilters, type AccountingFiltersValue } from '@/components/accounting/AccountingFilters';
 import { RefundsTab } from '@/components/clients/RefundsTab';
 import { ClientFilesTab, type ClientFilesPolicyRef } from '@/components/clients/ClientFilesTab';
 import { AccidentReportWizard } from '@/components/accident-reports/AccidentReportWizard';
@@ -219,6 +236,10 @@ interface PaymentRecord {
   locked: boolean | null;
   policy_id: string;
   batch_id: string | null;
+  payment_session_id: string | null;
+  receipt_number: string | null;
+  printed_at: string | null;
+  created_at: string | null;
   policy: {
     id: string;
     policy_type_parent: string;
@@ -229,28 +250,46 @@ interface PaymentRecord {
   } | null;
 }
 
-// Grouped payment for display (combines payments with same batch_id)
+// Grouped payment for display — one row per physical receipt.
+// Multi-split cheques (تسديد المبلغ allocator splits one cheque
+// across N policies, all sharing the same batch_id) collapse into
+// one row at the cheque's face value. Single-policy payments stay
+// as their own row keyed by payment.id. The transaction grouping
+// the page used to do (by policy.group_id) is gone — the customer
+// payment-history view now matches the cheques-page and receipts-
+// page "physical payment = one row" rule.
 interface GroupedPayment {
   id: string; // batch_id or individual payment id
-  groupId: string | null; // policies.group_id when the row collapses a package
+  receipt_number: string | null; // first split's receipt_number (R85/2026 etc.)
   totalAmount: number;
   payment_date: string;
-  payment_type: string; // first type, kept for filter compat
-  paymentTypes: string[]; // unique payment types across the batch
+  payment_type: string; // same across all splits in a batch
+  paymentTypes: string[]; // historical; for a batch it's just [payment_type]
   cheque_number: string | null;
   cheque_image_url: string | null;
   card_last_four: string | null;
   refused: boolean | null;
   notes: string | null;
   locked: boolean | null;
-  payments: PaymentRecord[]; // Individual payments in this group
-  policyTypes: string[]; // Unique policy types in this group
-  // Every policy that belongs to this package (resolved via group_id on
-  // policies). Auto-generated ELZAMI and user-entered payments are always
-  // attached to the main policy_id on the DB side, so without this we'd
-  // only ever see one policy type per row. When the row is a standalone
-  // payment (no group_id) this falls back to just the attached policy.
-  packagePolicies: { id: string; policy_type_parent: string; policy_type_child: string | null; document_number: string | null }[];
+  // True when ANY payment in the row has been printed (printed_at set).
+  // Locks the "تعديل" entry on the dropdown — printed receipts are
+  // immutable per the accountant's rule; only إلغاء stays available.
+  printed: boolean;
+  // True when the row represents money the office didn't actually
+  // collect (payment_type='visa_external' or ELZAMI passthrough).
+  // Renders as a read-only informational row — no سند number, no
+  // edit / cancel actions, just shows the amount so the bookkeeper
+  // sees the customer's total payment picture. The print/cancel
+  // scope resolvers still exclude these rows from the office's
+  // كشف قبض.
+  isPassthrough: boolean;
+  // Latest created_at across the group's rows — used to sort the
+  // payment log strictly by "when the bookkeeper added the entry".
+  // The user explicitly wants newest-on-top regardless of passthrough
+  // vs. real-collection status; payment_date alone is the user-entered
+  // value (which can be back-dated) and would not match that intent.
+  latestCreatedAt: string;
+  payments: PaymentRecord[]; // Individual splits in this batch (or one row when not batched)
 }
 
 interface ClientDetailsProps {
@@ -363,6 +402,57 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     }, 350);
   };
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  // payment_id → { voucher_number, reason } for refused payments. Read from
+  // the receipts table (receipt_type='cancellation') so a cancelled row in
+  // the payment log can render the linked سند الإلغاء number + the
+  // bookkeeper's stated reason. Empty for non-refused payments.
+  const [cancellationInfo, setCancellationInfo] = useState<
+    Map<string, { voucherNumber: number | string; reason: string | null; year: number }>
+  >(new Map());
+  // First-class سند إلغاء entries — one per cancelled session, NOT
+  // per refused row. Rendered as their own rows in سجل الدفعات so the
+  // bookkeeper can see them next to the original سند قبض and trigger
+  // a separate print for just the cancellation voucher (per the user's
+  // rule: "one cancelled سند = the original visible AND the إلغاء
+  // visible AND a print button on the إلغاء").
+  const [cancellationVouchers, setCancellationVouchers] = useState<Array<{
+    id: string;                 // canonical cancellation receipt's row id
+    voucherNumber: string;      // canonical (smallest) R-number for the voucher
+    sourceReceiptNumber: string | null;  // original سند قبض's R-number
+    sourceGroupId: string;      // payment_session_id || batch_id || payment.id
+    cancelledPaymentIds: string[];
+    amount: number;             // total cancelled
+    reason: string | null;
+    date: string;               // cancellation receipt's date
+    sortDate: string;           // for chronological merge with payment groups
+  }>>([]);
+  // اشعار دائن (credit notes): formal voucher rows created by
+  // CancelPolicyModal / TransferPolicyModal when the agency owes the
+  // client money. Shown inline in سجل الدفعات alongside payments and
+  // cancellation vouchers so the bookkeeper sees the full picture of
+  // the customer's account in one place.
+  const [creditNotes, setCreditNotes] = useState<Array<{
+    id: string;            // receipts.id of the credit_note row
+    voucherNumber: string; // C{nn}/YYYY pre-formatted
+    amount: number;
+    date: string;          // receipt_date
+    sortDate: string;      // created_at, drives newest-first merge
+    description: string | null;  // notes column (e.g. "مرتجع إلغاء معاملة 12/2026")
+  }>>([]);
+  // سند صرف rows — same shape as credit notes but for actual cash
+  // disbursed (refund-on-cancel/transfer or manual). The amount
+  // here doesn't carry into wallet balance (the agency literally
+  // paid the customer); سجل الدفعات shows it so the bookkeeper
+  // can prove the money left.
+  const [disbursements, setDisbursements] = useState<Array<{
+    id: string;
+    voucherNumber: string; // D{nn}/YYYY
+    amount: number;
+    date: string;
+    sortDate: string;
+    description: string | null;
+    paymentMethod: string | null;  // 'cash' / 'cheque' / 'transfer' / 'visa'
+  }>>([]);
   const [broker, setBroker] = useState<Broker | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary>({ total_paid: 0, total_remaining: 0, total_profit: 0 });
   const [brokerDebts, setBrokerDebts] = useState<BrokerDebtInfo[]>([]);
@@ -374,6 +464,10 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [carDrawerOpen, setCarDrawerOpen] = useState(false);
   const [policyDetailsOpen, setPolicyDetailsOpen] = useState(false);
   const [selectedPolicyId, setSelectedPolicyId] = useState<string | null>(null);
+  // Drawer can open on either the main tab or jump straight to files —
+  // the "ملفات (N)" button on the card uses the latter.
+  const [policyDetailsInitialSection, setPolicyDetailsInitialSection] =
+    useState<'main' | 'files'>('main');
   const [policyWizardOpen, setPolicyWizardOpen] = useState(false);
   const { policies: policiesLimit, loading: limitsLoading } = useAgentLimits();
   const { showUpgradePrompt } = useUpgradePrompt();
@@ -406,6 +500,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   );
   const [transferOpen, setTransferOpen] = useState(false);
   const [debtPaymentModalOpen, setDebtPaymentModalOpen] = useState(false);
+  // When set, the DebtPaymentModal opens in "edit a سند قبض" mode:
+  // it pre-loads the session's existing rows, treats the session's
+  // existing total as available wallet room, and on submit DELETEs
+  // the session's old rows before re-inserting. The accounting rule
+  // (set by the user) is "tear up the unprinted draft and rewrite"
+  // — there is no per-row UPDATE path. Cleared every time the modal
+  // closes so the next plain "دفع" click goes back to add mode.
+  const [debtModalEditingSession, setDebtModalEditingSession] =
+    useState<import('@/components/debt/DebtPaymentModal').DebtPaymentEditingSession | null>(null);
   // Cancel policy/package modal — opened directly from the dropdown on
   // PolicyYearTimeline instead of going through the details drawer.
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -438,6 +541,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [policyPaymentInfo, setPolicyPaymentInfo] = useState<Record<string, { paid: number; remaining: number }>>({});
   const [policyAccidentCounts, setPolicyAccidentCounts] = useState<Record<string, number>>({});
   const [policyChildrenCounts, setPolicyChildrenCounts] = useState<Record<string, number>>({});
+  // Per-policy file counts (media_files where entity_id = policy.id +
+  // entity_type ∈ {policy, policy_insurance, policy_file}). Drives the
+  // "ملفات (N)" button on each policy card, which opens the details
+  // drawer pre-positioned to the files tab. Bulk-fetched alongside
+  // payment / accident / children metadata.
+  const [policyFileCounts, setPolicyFileCounts] = useState<Record<string, number>>({});
   
   // Payment delete state
   const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null);
@@ -445,6 +554,19 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [groupDetailsOpen, setGroupDetailsOpen] = useState(false);
   const [groupDetailsGroup, setGroupDetailsGroup] = useState<GroupedPayment | null>(null);
   const [deletingPayment, setDeletingPayment] = useState(false);
+
+  // Cancel-payment-receipt state — mirrors the receipts page flow.
+  // Cancellation is always customer-scope: voids every non-إلزامي /
+  // non-visa_external payment of this customer + every batch sibling
+  // so a physical cheque can't end up half-cancelled. The dialog
+  // shows the resolved count + total before the user confirms.
+  const [cancelReasonOpen, setCancelReasonOpen] = useState(false);
+  const [cancelReasonText, setCancelReasonText] = useState('');
+  const [cancelReasonError, setCancelReasonError] = useState<string | null>(null);
+  const [cancelTargetIds, setCancelTargetIds] = useState<string[]>([]);
+  const [cancelTargetSum, setCancelTargetSum] = useState<number>(0);
+  const [cancelResolving, setCancelResolving] = useState(false);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
   // Group key to re-open the PaymentGroupDetailsDialog with after an
   // edit/delete round-trip. Set to the current group's id when the user
   // clicks pencil/trash inside the popup, then consumed by the effect
@@ -479,12 +601,31 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
   // Payment filters
   const [paymentSearch, setPaymentSearch] = useState('');
-  const [paymentTypeFilter, setPaymentTypeFilter] = useState<string>('all');
+  // Date range + voucher kind + payment method filters live in the
+  // AccountingFilters popover (same UX as /receipts). companies stays
+  // unused here — the dynamic options below leave it hidden.
+  const [paymentFilters, setPaymentFilters] = useState<AccountingFiltersValue>({
+    dateFrom: '',
+    dateTo: '',
+    companies: [],
+    types: [],
+    paymentMethods: [],
+  });
   
   // Comprehensive invoice state
   
   // Individual payment receipt state
   const [generatingReceipt, setGeneratingReceipt] = useState<string | null>(null);
+  // Shared print-progress overlay state — same UX as the Receipts page.
+  // Ticker creeps the bar toward 90% while the edge function runs, then
+  // snaps to 100 just before window.open. Title swaps between the two
+  // print paths (سند قبض vs سند إلغاء) so the bookkeeper sees what's
+  // actually being prepared.
+  const [printProgress, setPrintProgress] = useState<{
+    open: boolean;
+    value: number;
+    title?: string;
+  }>({ open: false, value: 0 });
   
   // Accident report wizard state
   const [accidentWizardOpen, setAccidentWizardOpen] = useState(false);
@@ -536,12 +677,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       setPolicyPaymentInfo({});
       setPolicyAccidentCounts({});
       setPolicyChildrenCounts({});
+      setPolicyFileCounts({});
       return;
     }
 
     try {
-      // Fetch all three in parallel
-      const [paymentsRes, accidentsRes, childrenRes] = await Promise.all([
+      // Fetch all four in parallel (added: per-policy file counts so
+      // the new "ملفات (N)" button on the card has a number to show
+      // without forcing the drawer open).
+      const [paymentsRes, accidentsRes, childrenRes, filesRes] = await Promise.all([
         supabase
           .from('policy_payments')
           .select('policy_id, amount, refused')
@@ -554,6 +698,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           .from('policy_children')
           .select('policy_id')
           .in('policy_id', policyIds),
+        supabase
+          .from('media_files')
+          .select('entity_id')
+          .in('entity_id', policyIds)
+          .in('entity_type', ['policy', 'policy_insurance', 'policy_file'])
+          .is('deleted_at', null),
       ]);
 
       // Process payment info
@@ -582,6 +732,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         childCounts[row.policy_id] = (childCounts[row.policy_id] || 0) + 1;
       });
       setPolicyChildrenCounts(childCounts);
+
+      // Process per-policy file counts (one entry in media_files per
+      // attachment; entity_id is the policy id).
+      const fileCounts: Record<string, number> = {};
+      (filesRes.data || []).forEach((row: { entity_id: string }) => {
+        fileCounts[row.entity_id] = (fileCounts[row.entity_id] || 0) + 1;
+      });
+      setPolicyFileCounts(fileCounts);
     } catch (error) {
       console.error('Error fetching policy metadata:', error);
     }
@@ -785,7 +943,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // Get all payments for these policies (include batch_id for grouping)
       const { data: paymentsData, error } = await supabase
         .from('policy_payments')
-        .select('id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id')
+        .select('id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id, payment_session_id, receipt_number, printed_at, created_at')
         .in('policy_id', policyIds)
         .order('payment_date', { ascending: false });
 
@@ -815,6 +973,176 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       }));
 
       setPayments(paymentsWithPolicy);
+
+      // Cancellation voucher lookup for refused rows. The trigger inserts
+      // one cancellation receipt per refused payment; on the UI we
+      // collapse to one voucher per سند قبض (smallest receipt_number)
+      // and assign that to every payment in the same سند. The
+      // accounting rule is absolute: one سند قبض = one سند إلغاء, no
+      // matter how many payment rows the سند groups. We use the same
+      // fallback chain as groupedPayments (`payment_session_id`
+      // → `batch_id` → `payment.id`) so both DebtPaymentModal sessions
+      // and PackagePaymentModal batches dedupe correctly.
+      const refused = paymentsWithPolicy.filter((p) => p.refused);
+      const refusedIds = refused.map((p) => p.id);
+      const nextInfo = new Map<string, { voucherNumber: number | string; reason: string | null; year: number }>();
+      const nextVouchers: typeof cancellationVouchers = [];
+      if (refusedIds.length > 0) {
+        const { data: voucherRows } = await supabase
+          .from('receipts')
+          .select('id, payment_id, receipt_number, cancellation_reason, receipt_date, created_at')
+          .eq('receipt_type', 'cancellation')
+          .in('payment_id', refusedIds);
+
+        // Per-payment row data: keep ALL fields we'll need for both the
+        // inline badge (voucherNumber + reason) and the standalone
+        // cancellation voucher row (id + date for the print URL).
+        type VoucherRow = {
+          id: string;
+          payment_id: string;
+          voucherNumber: number | string;
+          reason: string | null;
+          date: string;
+          sortDate: string;
+        };
+        const perPayment = new Map<string, VoucherRow>();
+        for (const row of (voucherRows ?? []) as Array<{
+          id: string | null;
+          payment_id: string | null;
+          receipt_number: number | string | null;
+          cancellation_reason: string | null;
+          receipt_date: string | null;
+          created_at: string | null;
+        }>) {
+          if (row.payment_id && row.id && row.receipt_number != null) {
+            perPayment.set(row.payment_id, {
+              id: row.id,
+              payment_id: row.payment_id,
+              voucherNumber: row.receipt_number,
+              reason: row.cancellation_reason,
+              date: row.receipt_date || row.created_at || new Date().toISOString(),
+              sortDate: row.created_at || row.receipt_date || new Date().toISOString(),
+            });
+          }
+        }
+
+        // Pick the canonical voucher per سند قبض: smallest numeric
+        // receipt_number among the سند's refused payments.
+        const sortKey = (v: number | string): string => {
+          const n = typeof v === 'number' ? v : Number(v);
+          return Number.isFinite(n) ? String(n).padStart(20, '0') : String(v);
+        };
+        const receiptGroupKey = (p: PaymentRecord): string =>
+          p.payment_session_id || p.batch_id || p.id;
+        const groupVoucher = new Map<string, VoucherRow>();
+        const groupRefusedPayments = new Map<string, PaymentRecord[]>();
+        for (const p of refused) {
+          const key = receiptGroupKey(p);
+          if (!groupRefusedPayments.has(key)) groupRefusedPayments.set(key, []);
+          groupRefusedPayments.get(key)!.push(p);
+          const own = perPayment.get(p.id);
+          if (!own) continue;
+          const existing = groupVoucher.get(key);
+          if (!existing || sortKey(own.voucherNumber) < sortKey(existing.voucherNumber)) {
+            groupVoucher.set(key, own);
+          }
+        }
+
+        for (const p of refused) {
+          const v = groupVoucher.get(receiptGroupKey(p));
+          if (v) {
+            nextInfo.set(p.id, {
+              voucherNumber: v.voucherNumber,
+              reason: v.reason,
+              year: new Date(v.date).getFullYear(),
+            });
+          }
+        }
+
+        // Build one cancellation voucher entry per cancelled session.
+        // Source receipt_number = smallest R-number among the session's
+        // refused payments (same canonical we use for grouped display).
+        for (const [key, voucher] of groupVoucher.entries()) {
+          const sessionPayments = groupRefusedPayments.get(key) ?? [];
+          const amount = sessionPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
+          let sourceReceiptNumber: string | null = null;
+          for (const p of sessionPayments) {
+            if (!p.receipt_number) continue;
+            if (!sourceReceiptNumber || p.receipt_number < sourceReceiptNumber) {
+              sourceReceiptNumber = p.receipt_number;
+            }
+          }
+          nextVouchers.push({
+            id: voucher.id,
+            voucherNumber: String(voucher.voucherNumber),
+            sourceReceiptNumber,
+            sourceGroupId: key,
+            cancelledPaymentIds: sessionPayments.map((p) => p.id),
+            amount,
+            reason: voucher.reason,
+            date: voucher.date,
+            sortDate: voucher.sortDate,
+          });
+        }
+      }
+      setCancellationInfo(nextInfo);
+      setCancellationVouchers(nextVouchers);
+
+      // اشعار دائن + سند صرف rows for this client — independent
+      // fetch since they live in receipts (not policy_payments).
+      // Failure either way just leaves the section without that
+      // family of rows; we don't fail the whole payment-log load
+      // over a single read.
+      try {
+        const { data: creditRows } = await supabase
+          .from('receipts')
+          .select('id, voucher_number, amount, receipt_date, created_at, notes')
+          .eq('receipt_type', 'credit_note')
+          .eq('client_id', client.id)
+          .is('cancelled_at', null)
+          .order('created_at', { ascending: false });
+
+        const nextCreditNotes = (creditRows ?? [])
+          .filter((r: any) => r.voucher_number)
+          .map((r: any) => ({
+            id: r.id as string,
+            voucherNumber: r.voucher_number as string,
+            amount: Number(r.amount || 0),
+            date: (r.receipt_date as string) || (r.created_at as string),
+            sortDate: (r.created_at as string) || (r.receipt_date as string),
+            description: (r.notes as string | null) ?? null,
+          }));
+        setCreditNotes(nextCreditNotes);
+      } catch (creditErr) {
+        console.warn('[ClientDetails] credit_note fetch failed:', creditErr);
+        setCreditNotes([]);
+      }
+
+      try {
+        const { data: disbRows } = await supabase
+          .from('receipts')
+          .select('id, voucher_number, amount, receipt_date, created_at, notes, payment_method')
+          .eq('receipt_type', 'disbursement')
+          .eq('client_id', client.id)
+          .is('cancelled_at', null)
+          .order('created_at', { ascending: false });
+
+        const nextDisbursements = (disbRows ?? [])
+          .filter((r: any) => r.voucher_number)
+          .map((r: any) => ({
+            id: r.id as string,
+            voucherNumber: r.voucher_number as string,
+            amount: Number(r.amount || 0),
+            date: (r.receipt_date as string) || (r.created_at as string),
+            sortDate: (r.created_at as string) || (r.receipt_date as string),
+            description: (r.notes as string | null) ?? null,
+            paymentMethod: (r.payment_method as string | null) ?? null,
+          }));
+        setDisbursements(nextDisbursements);
+      } catch (disbErr) {
+        console.warn('[ClientDetails] disbursement fetch failed:', disbErr);
+        setDisbursements([]);
+      }
     } catch (error) {
       console.error('Error fetching payments:', error);
     } finally {
@@ -941,6 +1269,142 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   };
 
   // Delete payment handler
+  const openCancelPaymentDialog = () => {
+    // Customer-scope resolver — mirrors the receipts page so the
+    // bookkeeper sees the SAME set of receipts in the cancel dialog
+    // that they'd see on a printed كشف القبض for this customer. We
+    // already have the customer's payments + policies in memory from
+    // fetchPayments / fetchPolicies, so no extra round-trip is needed.
+    setCancelResolving(true);
+    try {
+      const policyById = new Map(policies.map((p) => [p.id, p]));
+
+      // Stage 1 — same filter as the print:
+      //   - skip already-refused rows (nothing to cancel)
+      //   - skip payment_type='visa_external' (customer paid the
+      //     insurer directly, never came through the office)
+      //   - skip ELZAMI passthrough = locked system row + amount==price.
+      //     The `locked` gate is what makes this safe: a manual cash
+      //     payment the user collected via the "دفع" button is
+      //     unlocked, so it survives the filter and gets a real سند
+      //     قبض / إلغاء flow.
+      const survivors = payments.filter((p) => {
+        if (p.refused) return false;
+        if (p.payment_type === 'visa_external') return false;
+        if (p.locked !== true) return true;
+        const pol = policyById.get(p.policy_id);
+        if (!pol) return true;
+        if (pol.policy_type_parent !== 'ELZAMI') return true;
+        const price = Number(pol.insurance_price ?? 0);
+        if (price <= 0) return true;
+        return Math.abs(Number(p.amount ?? 0) - price) >= 0.005;
+      });
+
+      // Stage 2 — keep multi-split cheques whole: if any live slice
+      // of a batch survives Stage 1, every still-live slice in that
+      // batch joins the target. Already-refused siblings stay alone.
+      const batchIds = new Set(
+        survivors.filter((p) => !!p.batch_id).map((p) => p.batch_id as string),
+      );
+      const survivorIds = new Set(survivors.map((p) => p.id));
+      const finalRows = payments.filter((p) => {
+        if (p.refused) return false;
+        if (survivorIds.has(p.id)) return true;
+        return !!p.batch_id && batchIds.has(p.batch_id);
+      });
+
+      if (finalRows.length === 0) {
+        toast.error('لا توجد سندات قابلة للإلغاء (كل دفعات العميل ملغاة أو إلزامي/فيزا خارجي)');
+        return;
+      }
+
+      setCancelTargetIds(finalRows.map((p) => p.id));
+      setCancelTargetSum(finalRows.reduce((s, p) => s + Number(p.amount || 0), 0));
+      setCancelReasonText('');
+      setCancelReasonError(null);
+      setCancelReasonOpen(true);
+    } finally {
+      setCancelResolving(false);
+    }
+  };
+
+  const confirmCancelPayment = async () => {
+    if (cancelTargetIds.length === 0) {
+      toast.error('لا توجد سندات قابلة للإلغاء');
+      return;
+    }
+    // Determine whether the targeted سند قبض has ever been printed.
+    // The user's accounting rule splits cancellation into two regimes:
+    //   * Printed → the customer holds a physical copy. We can't
+    //     pretend it never happened, so refused=true + سند إلغاء +
+    //     reason gives the bookkeeper the audit trail. The reason
+    //     text is required here.
+    //   * Unprinted → the سند قبض is still a draft, never handed to
+    //     the customer. "Cancel" really means "throw the draft away":
+    //     DELETE the rows so nothing remains — no سند إلغاء, no
+    //     ghost rows in receipts. No reason is required since there
+    //     is no audit copy that would need explaining.
+    const targetSet = new Set(cancelTargetIds);
+    const anyPrinted = payments.some(
+      (p) => targetSet.has(p.id) && p.printed_at != null,
+    );
+
+    if (anyPrinted && !cancelReasonText.trim()) {
+      setCancelReasonError('السبب مطلوب');
+      return;
+    }
+
+    setCancelSubmitting(true);
+    try {
+      if (anyPrinted) {
+        const { error } = await supabase
+          .from('policy_payments')
+          .update({
+            refused: true,
+            cheque_status: 'cancelled',
+            cancellation_reason: cancelReasonText.trim(),
+          })
+          .in('id', cancelTargetIds);
+        if (error) throw error;
+        toast.success(`تم إلغاء ${cancelTargetIds.length} سند${cancelTargetIds.length > 1 ? 'اً' : ''} وإصدار سند إلغاء`);
+      } else {
+        // Unprinted draft → clean delete. Clear receipts first
+        // (receipts.payment_id FK is ON DELETE SET NULL so the row
+        // would otherwise linger as an orphan with null payment_id),
+        // then DELETE policy_payments (cascades to payment_images).
+        const { error: receiptsErr } = await supabase
+          .from('receipts')
+          .delete()
+          .in('payment_id', cancelTargetIds);
+        if (receiptsErr) throw receiptsErr;
+
+        const { error: payErr } = await supabase
+          .from('policy_payments')
+          .delete()
+          .in('id', cancelTargetIds);
+        if (payErr) throw payErr;
+        toast.success(`تم حذف ${cancelTargetIds.length} سند${cancelTargetIds.length > 1 ? 'اً' : ''}`);
+      }
+      setCancelReasonOpen(false);
+      setCancelTargetIds([]);
+      setCancelTargetSum(0);
+      setCancelReasonText('');
+      setCancelReasonError(null);
+      // Same refresh fan-out as handleDeletePayment so the policy
+      // cards' paid/remaining recompute without a reload.
+      await Promise.all([
+        fetchPayments(),
+        fetchPaymentSummary(),
+        fetchPolicies(),
+      ]);
+    } catch (err: any) {
+      console.error('[ClientDetails] cancel payment:', err);
+      toast.error(err?.message || 'فشل في إلغاء السند');
+    } finally {
+      setCancelSubmitting(false);
+    }
+  };
+
   const handleDeletePayment = async () => {
     if (!deletePaymentId) return;
 
@@ -971,27 +1435,31 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   };
 
   // Open payment edit dialog directly
-  const handleEditPayment = (payment: PaymentRecord, group?: GroupedPayment) => {
+  const handleEditPayment = (payment: PaymentRecord, _group?: GroupedPayment) => {
     setEditingPayment(payment);
-    // If the payment belongs to a package (has group_id + >1 policy),
-    // expand the package policies so the dialog can render every row
-    // of the package at the top instead of just the attached policy.
-    if (group && group.packagePolicies.length > 1) {
-      const enriched = group.packagePolicies
-        .map((pp) => {
-          const full = policies.find((pol) => pol.id === pp.id);
-          return {
-            id: pp.id,
-            policy_type_parent: pp.policy_type_parent,
-            policy_type_child: pp.policy_type_child,
-            insurance_price: Number(full?.insurance_price || 0),
-            company_name: full?.company?.name_ar || full?.company?.name || null,
-          };
-        });
-      setEditingGroupPolicies(enriched);
-    } else {
-      setEditingGroupPolicies(undefined);
+    // If the payment belongs to a package, expand to every policy in
+    // the package so the dialog can render the whole package context.
+    // We derive this from the underlying policy's group_id at click
+    // time — the row data no longer carries packagePolicies because
+    // the grouping is now per physical receipt, not per package.
+    const policyOfPayment = policies.find((p) => p.id === payment.policy_id);
+    const groupId = policyOfPayment?.group_id;
+    if (groupId) {
+      const inSamePackage = policies.filter((p) => p.group_id === groupId);
+      if (inSamePackage.length > 1) {
+        const enriched = inSamePackage.map((p) => ({
+          id: p.id,
+          policy_type_parent: p.policy_type_parent,
+          policy_type_child: (p as any).policy_type_child ?? null,
+          insurance_price: Number(p.insurance_price || 0),
+          company_name: p.company?.name_ar || p.company?.name || null,
+        }));
+        setEditingGroupPolicies(enriched);
+        setEditPaymentDialogOpen(true);
+        return;
+      }
     }
+    setEditingGroupPolicies(undefined);
     setEditPaymentDialogOpen(true);
   };
 
@@ -1221,8 +1689,10 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const handleGeneratePaymentReceipt = async (paymentId: string) => {
     setGeneratingReceipt(paymentId);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-payment-receipt', {
-        body: { payment_id: paymentId }
+      // Unified template: always call the bulk endpoint (it renders
+      // the singular layout when a single id is passed).
+      const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
+        body: { payment_ids: [paymentId] }
       });
 
       if (error) throw error;
@@ -1242,31 +1712,219 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
   // Print every سند قبض in a grouped row as a single combined page. Uses
   // the bulk endpoint when there's more than one payment; for a single
-  // payment it falls back to the per-payment endpoint.
+  // payment it falls back to the per-payment endpoint. Once the PDF
+  // is generated successfully, every policy_payment in the row gets
+  // printed_at stamped — that's the trigger that locks the "تعديل"
+  // entry on the dropdown (printed receipts become immutable per the
+  // accountant's rule the user agreed on; only إلغاء stays available).
   const handlePrintGroupReceipts = async (groupKey: string, paymentIds: string[]) => {
     if (paymentIds.length === 0) return;
     setGeneratingReceipt(groupKey);
-    try {
-      if (paymentIds.length === 1) {
-        const { data, error } = await supabase.functions.invoke('generate-payment-receipt', {
-          body: { payment_id: paymentIds[0] },
-        });
-        if (error) throw error;
-        const url = data?.receipt_url;
-        if (url) window.open(url, '_blank');
-        else toast.error('لم يتم العثور على رابط السند');
+    setPrintProgress({ open: true, value: 8, title: 'جاري إعداد سند القبض' });
+    // Fake-progress ticker (real progress isn't exposed by the edge
+    // function); creeps toward 90 so the bar has visible motion, then
+    // snaps to 100 once we have the URL. Identical UX to the receipts
+    // page so the bookkeeper sees the same spinner everywhere.
+    const ticker = setInterval(() => {
+      setPrintProgress((s) => {
+        if (!s.open || s.value >= 90) return s;
+        return { ...s, value: Math.min(90, s.value + 6) };
+      });
+    }, 220);
+    const closeOverlay = (success: boolean) => {
+      clearInterval(ticker);
+      if (success) {
+        setPrintProgress((s) => ({ ...s, value: 100 }));
+        setTimeout(() => setPrintProgress({ open: false, value: 0 }), 350);
       } else {
+        setPrintProgress({ open: false, value: 0 });
+      }
+    };
+    try {
+      let url: string | undefined;
+      // Always go through the bulk endpoint — it already collapses to
+      // a single-سند layout when paymentIds.length === 1 (doc-title
+      // becomes singular, the رقم سند القبض column disappears, etc.).
+      // The user wants one template for both paths so future edits
+      // only touch one place; the legacy single-payment endpoint
+      // stays in the codebase for any external callers but no UI
+      // surface routes to it anymore.
+      {
         const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
           body: { payment_ids: paymentIds },
         });
         if (error) throw error;
-        const url = data?.receipt_url;
-        if (url) window.open(url, '_blank');
-        else toast.error('لم يتم العثور على رابط السندات');
+        url = data?.receipt_url;
       }
+      if (!url) {
+        closeOverlay(false);
+        toast.error(paymentIds.length === 1 ? 'لم يتم العثور على رابط السند' : 'لم يتم العثور على رابط السندات');
+        return;
+      }
+      // Stamp printed_at on every row in this group so subsequent
+      // renders disable the edit action. We deliberately don't fail
+      // the print if this UPDATE errors — the PDF is already in hand,
+      // and the user can re-click to retry the stamp.
+      const { error: stampErr } = await supabase
+        .from('policy_payments')
+        .update({ printed_at: new Date().toISOString() })
+        .in('id', paymentIds)
+        .is('printed_at', null);
+      if (stampErr) {
+        console.warn('[ClientDetails] failed to stamp printed_at after print:', stampErr);
+      } else {
+        // Refresh so the dropdown picks up the new state right away
+        // without a manual reload.
+        fetchPayments();
+      }
+      closeOverlay(true);
+      window.open(url, '_blank');
     } catch (e) {
+      closeOverlay(false);
       console.error('Print group receipts error:', e);
-      toast.error('فشل في توليد سندات القبض');
+      toast.error('فشل في توليد سند القبض');
+    } finally {
+      setGeneratingReceipt(null);
+    }
+  };
+
+  // Print a سند إلغاء as its own document — different from a سند قبض.
+  // Calls a dedicated edge function so the rendered HTML has the right
+  // title ("سند إلغاء") and layout, and lives at a separate URL from
+  // the original سند قبض it cancels (per the user's rule: each is its
+  // own paper). The voucher row in سجل الدفعات has the print action
+  // bound to this handler; voucherId is the receipts.id of the
+  // canonical cancellation row resolved in fetchPayments.
+  // سند صرف print — mirror of handlePrintCreditNote against the
+  // disbursement edge function. Same visual family (navy accent),
+  // shows the payment-line breakdown since disbursement actually
+  // moved money.
+  const handlePrintDisbursement = async (voucherId: string, voucherNumber: string) => {
+    const key = `disbursement-${voucherId}`;
+    setGeneratingReceipt(key);
+    setPrintProgress({ open: true, value: 8, title: 'جاري إعداد سند الصرف' });
+    const ticker = setInterval(() => {
+      setPrintProgress((s) => {
+        if (!s.open || s.value >= 90) return s;
+        return { ...s, value: Math.min(90, s.value + 6) };
+      });
+    }, 220);
+    const closeOverlay = (success: boolean) => {
+      clearInterval(ticker);
+      if (success) {
+        setPrintProgress((s) => ({ ...s, value: 100 }));
+        setTimeout(() => setPrintProgress({ open: false, value: 0 }), 350);
+      } else {
+        setPrintProgress({ open: false, value: 0 });
+      }
+    };
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        'generate-disbursement-voucher',
+        { body: { voucher_receipt_id: voucherId } },
+      );
+      if (error) throw error;
+      const url = (data as { receipt_url?: string } | null)?.receipt_url;
+      if (!url) {
+        closeOverlay(false);
+        toast.error('لم يتم العثور على رابط سند الصرف');
+        return;
+      }
+      closeOverlay(true);
+      window.open(url, '_blank');
+    } catch (e) {
+      closeOverlay(false);
+      console.error('Print disbursement error:', e);
+      toast.error(`فشل في طباعة سند الصرف ${voucherNumber}`);
+    } finally {
+      setGeneratingReceipt(null);
+    }
+  };
+
+  // اشعار دائن print — calls the dedicated edge function so the
+  // output matches the visual family of سند قبض / سند إلغاء (same
+  // A4 layout, branded header, customer block, amount panel). The
+  // emerald accent on the document distinguishes it from the red
+  // سند إلغاء and the navy-blue سند قبض at a glance.
+  const handlePrintCreditNote = async (voucherId: string, voucherNumber: string) => {
+    const key = `credit-${voucherId}`;
+    setGeneratingReceipt(key);
+    setPrintProgress({ open: true, value: 8, title: 'جاري إعداد الإشعار' });
+    const ticker = setInterval(() => {
+      setPrintProgress((s) => {
+        if (!s.open || s.value >= 90) return s;
+        return { ...s, value: Math.min(90, s.value + 6) };
+      });
+    }, 220);
+    const closeOverlay = (success: boolean) => {
+      clearInterval(ticker);
+      if (success) {
+        setPrintProgress((s) => ({ ...s, value: 100 }));
+        setTimeout(() => setPrintProgress({ open: false, value: 0 }), 350);
+      } else {
+        setPrintProgress({ open: false, value: 0 });
+      }
+    };
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        'generate-credit-note-voucher',
+        { body: { voucher_receipt_id: voucherId } },
+      );
+      if (error) throw error;
+      const url = (data as { receipt_url?: string } | null)?.receipt_url;
+      if (!url) {
+        closeOverlay(false);
+        toast.error('لم يتم العثور على رابط الإشعار');
+        return;
+      }
+      closeOverlay(true);
+      window.open(url, '_blank');
+    } catch (e) {
+      closeOverlay(false);
+      console.error('Print credit note error:', e);
+      toast.error(`فشل في طباعة الإشعار ${voucherNumber}`);
+    } finally {
+      setGeneratingReceipt(null);
+    }
+  };
+
+  const handlePrintCancellationVoucher = async (voucherId: string, voucherNumber: string) => {
+    const key = `voucher-${voucherId}`;
+    setGeneratingReceipt(key);
+    setPrintProgress({ open: true, value: 8, title: 'جاري إعداد سند الإلغاء' });
+    const ticker = setInterval(() => {
+      setPrintProgress((s) => {
+        if (!s.open || s.value >= 90) return s;
+        return { ...s, value: Math.min(90, s.value + 6) };
+      });
+    }, 220);
+    const closeOverlay = (success: boolean) => {
+      clearInterval(ticker);
+      if (success) {
+        setPrintProgress((s) => ({ ...s, value: 100 }));
+        setTimeout(() => setPrintProgress({ open: false, value: 0 }), 350);
+      } else {
+        setPrintProgress({ open: false, value: 0 });
+      }
+    };
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        'generate-cancellation-voucher',
+        { body: { voucher_receipt_id: voucherId } },
+      );
+      if (error) throw error;
+      const url = (data as { receipt_url?: string } | null)?.receipt_url;
+      if (!url) {
+        closeOverlay(false);
+        toast.error('لم يتم العثور على رابط سند الإلغاء');
+        return;
+      }
+      closeOverlay(true);
+      window.open(url, '_blank');
+    } catch (e) {
+      closeOverlay(false);
+      console.error('Print cancellation voucher error:', e);
+      toast.error(`فشل في طباعة سند الإلغاء ${voucherNumber}`);
     } finally {
       setGeneratingReceipt(null);
     }
@@ -1414,62 +2072,82 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     };
   }, [policyIdsKey, client?.id]);
 
-  // Group payments by batch_id for unified display
+  // Group payments into one row per physical receipt. The grouping
+  // collapses multi-split cheques (same batch_id, allocated across
+  // N policies by the debt-payment modal) into a single row at the
+  // cheque's face value. The transaction-package grouping the page
+  // used to do (by policies.group_id) is gone — the receipt-centric
+  // view matches the cheques page and the print, so the bookkeeper
+  // sees the same numbers everywhere.
+  //
+  // إلزامي passthrough + visa_external are also dropped here, same
+  // filter as the receipts page and the bulk-receipt edge function.
+  // These are payments the office never actually collected, so they
+  // don't belong on a كشف قبض. (Future: surface as a per-agent
+  // toggle so offices that DO collect إلزامي can flip them back in.)
   const groupedPayments = useMemo((): GroupedPayment[] => {
     const groups = new Map<string, GroupedPayment>();
+    const policyById = new Map(policies.map((p) => [p.id, p]));
 
-    // Build a group_id → package policies lookup. Every policy with a
-    // group_id gets bucketed so we can answer "which policy types are in
-    // this package?" without re-joining on the payments side.
-    const packagePoliciesByGroup = new Map<
-      string,
-      { id: string; policy_type_parent: string; policy_type_child: string | null; document_number: string | null }[]
-    >();
-    for (const p of policies) {
-      if (!p.group_id) continue;
-      const arr = packagePoliciesByGroup.get(p.group_id) || [];
-      arr.push({
-        id: p.id,
-        policy_type_parent: p.policy_type_parent,
-        policy_type_child: (p as any).policy_type_child ?? null,
-        document_number: (p as any).document_number ?? null,
-      });
-      packagePoliciesByGroup.set(p.group_id, arr);
-    }
+    // Search + payment-type filter (toolbar above the table). The
+    // إلزامي/visa_external rows are NOT filtered here — they stay
+    // visible as read-only informational rows so the bookkeeper sees
+    // the customer's full payment picture. Their isPassthrough flag
+    // is computed below and drives the row's rendering (no سند
+    // number, no edit / cancel actions).
+    const isPassthroughPayment = (payment: PaymentRecord): boolean => {
+      if (payment.payment_type === 'visa_external') return true;
+      // Legacy/import case: an إلزامي premium recorded as cash/cheque
+      // /transfer with the system-generated `locked` flag — money the
+      // office didn't actually collect, just a passthrough record. The
+      // `locked === true` check is what makes this safe; without it,
+      // a user-collected cash payment that happens to match the إلزامي
+      // price (e.g. customer pays the exact premium in cash via the
+      // "دفع" button) would incorrectly hide as passthrough.
+      if (payment.locked !== true) return false;
+      const pol = policyById.get(payment.policy_id);
+      if (!pol || pol.policy_type_parent !== 'ELZAMI') return false;
+      const price = Number((pol as any).insurance_price ?? 0);
+      if (price <= 0) return false;
+      return Math.abs(Number(payment.amount ?? 0) - price) < 0.005;
+    };
 
-    // Filter payments first based on search and type filter
-    const filteredPayments = payments.filter(payment => {
+    const filteredPayments = payments.filter((payment) => {
+      // Note: ghost rows (refused=true + printed_at=null from legacy
+      // cancel-while-unprinted) USED to be filtered out here, but the
+      // user revised the rule for سجل الدفعات: when a cancellation
+      // voucher row is shown above, the cancelled سند قبض below has
+      // to be visible too so the bookkeeper sees both sides of the
+      // event. Ghosts still get filtered out of the printed receipt
+      // in generate-bulk-payment-receipt (separate concern — printed
+      // copy must stay clean of orphan history).
       if (paymentSearch) {
         const search = paymentSearch.toLowerCase();
-        if (!payment.cheque_number?.toLowerCase().includes(search) && 
+        if (!payment.cheque_number?.toLowerCase().includes(search) &&
             !payment.notes?.toLowerCase().includes(search)) {
           return false;
         }
       }
-      if (paymentTypeFilter !== 'all' && payment.payment_type !== paymentTypeFilter) {
-        return false;
-      }
+      // Voucher-kind / date / payment-method filters apply at the
+      // session level (filteredDisplayRows) so a session with mixed
+      // methods doesn't get its splits dropped here.
       return true;
     });
 
     for (const payment of filteredPayments) {
-      // Collapse every payment made against the same package (shared
-      // group_id on the underlying policy) into one row, regardless of
-      // when or how it was paid. Auto-generated ELZAMI payments and
-      // user-entered package payments don't share a batch_id but they
-      // do share a policy.group_id. Fall back to batch_id for historical
-      // non-package batches and finally to the payment id for standalone
-      // rows.
-      const groupKey = payment.policy?.group_id
-        ? `group:${payment.policy.group_id}`
-        : payment.batch_id || payment.id;
-      
+      // Group by collection event (payment_session_id) when present —
+      // that's the cashier's "one visit, one voucher" concept. New
+      // submits from DebtPaymentModal stamp a session_id on every row.
+      // Legacy rows (no session_id) fall back to batch_id (one
+      // physical cheque) or the payment id (standalone single payment).
+      const groupKey = payment.payment_session_id
+        || payment.batch_id
+        || payment.id;
+
       if (!groups.has(groupKey)) {
-        const thisGroupId = payment.policy?.group_id || null;
-        const fromPackage = thisGroupId ? packagePoliciesByGroup.get(thisGroupId) : null;
         groups.set(groupKey, {
           id: groupKey,
-          groupId: thisGroupId,
+          receipt_number: payment.receipt_number,
           totalAmount: 0,
           payment_date: payment.payment_date,
           payment_type: payment.payment_type,
@@ -1480,18 +2158,10 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           refused: payment.refused,
           notes: payment.notes,
           locked: payment.locked,
+          printed: false,
+          isPassthrough: false,
+          latestCreatedAt: payment.created_at || payment.payment_date,
           payments: [],
-          policyTypes: [],
-          packagePolicies: fromPackage && fromPackage.length > 0
-            ? fromPackage
-            : (payment.policy
-              ? [{
-                  id: payment.policy.id,
-                  policy_type_parent: payment.policy.policy_type_parent,
-                  policy_type_child: payment.policy.policy_type_child ?? null,
-                  document_number: payment.policy.document_number ?? null,
-                }]
-              : []),
         });
       }
 
@@ -1499,38 +2169,180 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       group.payments.push(payment);
       group.totalAmount += payment.amount;
 
-      // Collect unique payment types across the batch so the row can show
-      // combined labels like "نقدي + فيزا" or "نقدي + فيزا + شيكات".
+      // Display dedupe: legacy data has rows in the same session/batch
+      // with different receipt_numbers (R10/R11/R12 for one collection
+      // event). Show the smallest as the canonical سند number per the
+      // user's rule "one سند قبض = one number, regardless of how many
+      // rows". New data from the pre-allocate path already has the
+      // same R-number across all rows, so this is a no-op for it.
+      if (payment.receipt_number && (!group.receipt_number || payment.receipt_number < group.receipt_number)) {
+        group.receipt_number = payment.receipt_number;
+      }
+
       if (payment.payment_type && !group.paymentTypes.includes(payment.payment_type)) {
         group.paymentTypes.push(payment.payment_type);
       }
 
-      // Collect unique policy types
-      if (payment.policy?.policy_type_parent && !group.policyTypes.includes(payment.policy.policy_type_parent)) {
-        group.policyTypes.push(payment.policy.policy_type_parent);
-      }
-      
-      // Use earliest date if batched
+      // Use earliest date if batched (typically all splits share a date).
       if (payment.payment_date < group.payment_date) {
         group.payment_date = payment.payment_date;
       }
-      
-      // If any payment in batch is refused, mark whole batch
+
+      // Track the LATEST created_at across the group's rows. Sort uses
+      // this so newer additions (or recent edits via the unified flow,
+      // which re-INSERTs with a new created_at) bubble to the top.
+      const candidateCa = payment.created_at || payment.payment_date;
+      if (candidateCa > group.latestCreatedAt) {
+        group.latestCreatedAt = candidateCa;
+      }
+
+      // If any split is refused, mark whole batch — the cancel flow
+      // propagates so this should be all-or-nothing in practice.
       if (payment.refused) {
         group.refused = true;
       }
-      
-      // If any payment is locked, mark whole batch
+
       if (payment.locked) {
         group.locked = true;
       }
+
+      // Any printed row in the session locks the whole session's edit
+      // action — there's no concept of a partially-printed receipt.
+      if (payment.printed_at) {
+        group.printed = true;
+      }
     }
-    
-    // Sort by date descending
+
+    // Pass 2: tag groups whose ENTIRE membership is passthrough money
+    // (إلزامي / visa_external). Mixed sessions stay editable; the
+    // print/cancel scope resolvers still skip the passthrough slices
+    // via their own filters, so the office's كشف قبض numbers don't
+    // change either way.
+    for (const group of groups.values()) {
+      group.isPassthrough = group.payments.every(isPassthroughPayment);
+    }
+
+    // Sort by latest created_at descending — newest entry always on
+    // top, regardless of whether it's a real collection or an إلزامي
+    // / فيزا خارجي passthrough row. The user's rule (revised): order
+    // is purely by when the bookkeeper added the entry. The earlier
+    // "passthrough always last" behaviour was removed at the user's
+    // request — they want consistency with the chronological order of
+    // work, not a type-based segregation.
     return Array.from(groups.values()).sort((a, b) =>
-      new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()
+      new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime()
     );
-  }, [payments, paymentSearch, paymentTypeFilter, policies]);
+  }, [payments, paymentSearch, policies]);
+
+  // Merged display list: payment groups + cancellation vouchers +
+  // اشعار دائن (credit_note) + سند صرف (disbursement) rows. Each
+  // carries its own sortDate so newest-first merge naturally lets a
+  // cancellation / credit note / disbursement sit above the source
+  // سند when those documents were issued later.
+  type DisplayRow =
+    | { kind: 'payment'; group: GroupedPayment; sortDate: string }
+    | { kind: 'voucher'; voucher: (typeof cancellationVouchers)[number]; sortDate: string }
+    | { kind: 'credit_note'; note: (typeof creditNotes)[number]; sortDate: string }
+    | { kind: 'disbursement'; disb: (typeof disbursements)[number]; sortDate: string };
+  const displayRows = useMemo((): DisplayRow[] => {
+    const rows: DisplayRow[] = [];
+    for (const group of groupedPayments) {
+      rows.push({ kind: 'payment', group, sortDate: group.latestCreatedAt });
+    }
+    for (const voucher of cancellationVouchers) {
+      rows.push({ kind: 'voucher', voucher, sortDate: voucher.sortDate });
+    }
+    for (const note of creditNotes) {
+      rows.push({ kind: 'credit_note', note, sortDate: note.sortDate });
+    }
+    for (const disb of disbursements) {
+      rows.push({ kind: 'disbursement', disb, sortDate: disb.sortDate });
+    }
+    return rows.sort((a, b) =>
+      new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime(),
+    );
+  }, [groupedPayments, cancellationVouchers, creditNotes, disbursements]);
+
+  // Filter options surfaced in the popover are derived from the rows
+  // actually present for this client — typing a filter that has no
+  // matching data is just noise. Only the 4 voucher families the user
+  // requested (سند قبض / سند صرف / سند الإلغاء / اشعار دائن) are
+  // candidates; the last two aren't fetched into سجل الدفعات yet, so
+  // they appear only once the rendering side adds them.
+  const paymentTypeOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [];
+    if (displayRows.some((r) => r.kind === 'payment')) {
+      opts.push({ value: 'payment', label: 'سند قبض' });
+    }
+    if (displayRows.some((r) => r.kind === 'voucher')) {
+      opts.push({ value: 'cancellation', label: 'سند الإلغاء' });
+    }
+    if (displayRows.some((r) => r.kind === 'credit_note')) {
+      opts.push({ value: 'credit_note', label: 'اشعار دائن' });
+    }
+    if (displayRows.some((r) => r.kind === 'disbursement')) {
+      opts.push({ value: 'disbursement', label: 'سند صرف' });
+    }
+    return opts;
+  }, [displayRows]);
+
+  const paymentMethodOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of displayRows) {
+      if (row.kind !== 'payment') continue;
+      for (const t of row.group.paymentTypes) {
+        if (t) set.add(t);
+      }
+    }
+    return Array.from(set).map((value) => ({
+      value,
+      label: PAYMENT_TYPE_LABELS[value] || value,
+    }));
+  }, [displayRows]);
+
+  const filteredDisplayRows = useMemo((): DisplayRow[] => {
+    const { dateFrom, dateTo, types, paymentMethods } = paymentFilters;
+    return displayRows.filter((row) => {
+      const date =
+        row.kind === 'voucher'
+          ? row.voucher.date
+          : row.kind === 'credit_note'
+            ? row.note.date
+            : row.kind === 'disbursement'
+              ? row.disb.date
+              : row.group.payment_date;
+      const dateOnly = (date || '').slice(0, 10);
+      if (dateFrom && dateOnly && dateOnly < dateFrom) return false;
+      if (dateTo && dateOnly && dateOnly > dateTo) return false;
+
+      if (types.length > 0) {
+        const kind =
+          row.kind === 'voucher'
+            ? 'cancellation'
+            : row.kind === 'credit_note'
+              ? 'credit_note'
+              : row.kind === 'disbursement'
+                ? 'disbursement'
+                : 'payment';
+        if (!types.includes(kind)) return false;
+      }
+
+      if (paymentMethods.length > 0) {
+        // Voucher / credit_note rows carry no payment method.
+        // Disbursement rows DO (cash / cheque / transfer / visa)
+        // since the agency picked one when it paid the customer.
+        if (row.kind === 'voucher' || row.kind === 'credit_note') return false;
+        if (row.kind === 'disbursement') {
+          const m = row.disb.paymentMethod;
+          return m ? paymentMethods.includes(m) : false;
+        }
+        const methods = row.group.paymentTypes;
+        if (!methods.some((m) => paymentMethods.includes(m))) return false;
+      }
+
+      return true;
+    });
+  }, [displayRows, paymentFilters]);
 
   // Re-open the PaymentGroupDetailsDialog with the freshest version of
   // the group the user was drilled into. Runs whenever groupedPayments
@@ -1746,7 +2558,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                       <Badge variant="outline" className="gap-1.5 bg-background text-[10px] sm:text-xs">
                         <Users className="h-3 w-3" />
                         الوسيط: {broker.name}
-                        {broker.phone && <span className="text-muted-foreground mr-1"><bdi>({broker.phone})</bdi></span>}
+                        {broker.phone && (
+                          <span className="mr-1">
+                            <ClickablePhone phone={broker.phone} showIcon={false} />
+                          </span>
+                        )}
                       </Badge>
                     )}
                   </div>
@@ -1872,6 +2688,29 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
               )}>
                 ₪{Math.max(0, paymentSummary.total_remaining - walletBalance.total_refunds).toLocaleString()}
               </p>
+              {/* Always say who owes whom on this card so staff don't have
+                  to do the subtraction in their head. Three states:
+                    • net > 0 → customer owes us this much
+                    • net == 0 with prior payments → fully settled
+                    • net == 0 with no movement → no debt yet */}
+              {(() => {
+                const net = paymentSummary.total_remaining - walletBalance.total_refunds;
+                if (net > 0) {
+                  return (
+                    <p className="text-[10px] sm:text-[11px] text-destructive/80 font-medium leading-tight mt-0.5">
+                      على العميل أن يدفع
+                    </p>
+                  );
+                }
+                if (paymentSummary.total_paid > 0 || paymentSummary.total_remaining > 0) {
+                  return (
+                    <p className="text-[10px] sm:text-[11px] text-success/80 font-medium leading-tight mt-0.5">
+                      مسدد ✓
+                    </p>
+                  );
+                }
+                return null;
+              })()}
               {walletBalance.total_refunds > 0 && paymentSummary.total_remaining > 0 && (
                 <div className="text-[9px] sm:text-[10px] text-muted-foreground space-y-0.5 mt-1">
                   <p className="truncate">المطلوب: ₪{paymentSummary.total_remaining.toLocaleString()}</p>
@@ -1948,7 +2787,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             </TabsTrigger>
             <TabsTrigger value="payments" className="gap-1.5 shrink-0 whitespace-nowrap">
               <CreditCard className="h-4 w-4" />
-              سجل الدفعات ({payments.length})
+              سجل الدفعات ({groupedPayments.length})
             </TabsTrigger>
             <TabsTrigger value="cars" className="gap-1.5 shrink-0 whitespace-nowrap">
               <Car className="h-4 w-4" />
@@ -1998,7 +2837,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
                     <dt className="text-muted-foreground">رقم الهاتف</dt>
-                    <dd className="font-mono ltr-nums">{client.phone_number || '-'}</dd>
+                    <dd>
+                      {client.phone_number ? (
+                        <ClickablePhone phone={client.phone_number} />
+                      ) : (
+                        <span className="font-mono ltr-nums">-</span>
+                      )}
+                    </dd>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
                     <dt className="text-muted-foreground">رقم الملف</dt>
@@ -2172,6 +3017,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 accidentInfo={policyAccidentCounts}
                 childrenInfo={policyChildrenCounts}
                 onPolicyClick={handlePolicyClick}
+                fileCounts={policyFileCounts}
+                onOpenPolicyFiles={(policyId) => {
+                  // Files shortcut on the policy card → drawer opens
+                  // pre-positioned to the ملفات tab.
+                  setSelectedPolicyId(policyId);
+                  setPolicyDetailsInitialSection('files');
+                  setPolicyDetailsOpen(true);
+                }}
                 onPaymentAdded={async () => {
                   await Promise.all([
                     fetchPaymentSummary(),
@@ -2266,36 +3119,37 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
           {/* Payments Tab */}
           <TabsContent value="payments" className="mt-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-lg">سجل الدفعات</h3>
-            </div>
-            
-            {/* Payment Filters */}
-            <Card className="p-4">
-              <div className="flex flex-wrap gap-3">
-                <div className="relative flex-1 min-w-[200px]">
-                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold text-lg ml-2">سجل الدفعات</h3>
+              <div className="flex items-center gap-2 flex-wrap mr-auto">
+                <div className="relative w-full sm:w-72 md:w-96">
+                  <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                   <Input
-                    placeholder="بحث في الدفعات..."
+                    type="search"
                     value={paymentSearch}
                     onChange={(e) => setPaymentSearch(e.target.value)}
-                    className="pr-10"
+                    placeholder="بحث في الدفعات..."
+                    className="h-8 w-full pr-8 text-sm"
                   />
                 </div>
-                <Select value={paymentTypeFilter} onValueChange={setPaymentTypeFilter}>
-                  <SelectTrigger className="w-[160px]">
-                    <SelectValue placeholder="طريقة الدفع" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">كل الطرق</SelectItem>
-                    <SelectItem value="cash">نقدي</SelectItem>
-                    <SelectItem value="cheque">شيك</SelectItem>
-                    <SelectItem value="visa">بطاقة</SelectItem>
-                    <SelectItem value="transfer">تحويل</SelectItem>
-                  </SelectContent>
-                </Select>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {filteredDisplayRows.length} سند
+                </span>
+                <AccountingFilters
+                  value={paymentFilters}
+                  onChange={setPaymentFilters}
+                  companyOptions={[]}
+                  typeOptions={paymentTypeOptions}
+                  paymentMethodOptions={paymentMethodOptions}
+                  show={{
+                    dateRange: true,
+                    types: paymentTypeOptions.length > 0,
+                    paymentMethods: paymentMethodOptions.length > 0,
+                    companies: false,
+                  }}
+                />
               </div>
-            </Card>
+            </div>
 
             {loadingPayments ? (
               <div className="space-y-2">
@@ -2313,43 +3167,287 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
+                      <TableHead className="text-right">رقم السند</TableHead>
                       <TableHead className="text-right">المبلغ</TableHead>
                       <TableHead className="text-right">التاريخ</TableHead>
                       <TableHead className="text-right">طريقة الدفع</TableHead>
-                      <TableHead className="text-right">نوع التأمين</TableHead>
-                      <TableHead className="text-right">رقم المعاملة</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
                       <TableHead className="text-right">ملفات</TableHead>
                       <TableHead className="text-right w-[60px]">إجراءات</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {groupedPayments.map((group) => {
-                      const combinedLabel = getCombinedPaymentTypeLabel(group.payments);
+                    {filteredDisplayRows.map((row) => {
+                      if (row.kind === 'disbursement') {
+                        const d = row.disb;
+                        const methodLabel = d.paymentMethod
+                          ? PAYMENT_TYPE_LABELS[d.paymentMethod] || d.paymentMethod
+                          : null;
+                        return (
+                          <TableRow
+                            key={`disbursement-${d.id}`}
+                            className="hover:bg-muted/40 bg-sky-50/40 dark:bg-sky-950/10"
+                          >
+                            <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                              <span className="font-bold text-sky-700 dark:text-sky-300">
+                                {d.voucherNumber}
+                              </span>
+                            </TableCell>
+                            <TableCell className="font-semibold">
+                              <span className="text-sky-700 dark:text-sky-300">
+                                ₪{Math.round(d.amount).toLocaleString()}
+                              </span>
+                            </TableCell>
+                            <TableCell>{formatDate(d.date)}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className="border-sky-500/40 text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/30"
+                              >
+                                سند صرف
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col items-start gap-0.5">
+                                {methodLabel && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    طريقة الصرف: {methodLabel}
+                                  </span>
+                                )}
+                                {d.description && (
+                                  <span
+                                    className="text-[10px] text-muted-foreground max-w-[220px] truncate"
+                                    title={d.description}
+                                  >
+                                    {d.description}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-muted-foreground">
+                                  المبلغ خرج من صندوق الشركة — لا يضيف للعميل رصيداً
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-muted-foreground">—</span>
+                            </TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    disabled={generatingReceipt === `disbursement-${d.id}`}
+                                    onClick={() => handlePrintDisbursement(d.id, d.voucherNumber)}
+                                  >
+                                    {generatingReceipt === `disbursement-${d.id}` ? (
+                                      <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                                    ) : (
+                                      <Receipt className="h-4 w-4 ml-2" />
+                                    )}
+                                    طباعة سند الصرف
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+                      if (row.kind === 'credit_note') {
+                        const n = row.note;
+                        return (
+                          <TableRow
+                            key={`credit-${n.id}`}
+                            className="hover:bg-muted/40 bg-emerald-50/40 dark:bg-emerald-950/10"
+                          >
+                            <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                              <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                                {n.voucherNumber}
+                              </span>
+                            </TableCell>
+                            <TableCell className="font-semibold">
+                              <span className="text-emerald-700 dark:text-emerald-300">
+                                ₪{Math.round(n.amount).toLocaleString()}
+                              </span>
+                            </TableCell>
+                            <TableCell>{formatDate(n.date)}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30"
+                              >
+                                اشعار دائن
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col items-start gap-0.5">
+                                {n.description && (
+                                  <span
+                                    className="text-[10px] text-muted-foreground max-w-[220px] truncate"
+                                    title={n.description}
+                                  >
+                                    {n.description}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-muted-foreground">
+                                  رصيد للعميل — يُحسم تلقائياً من أي دفعة قادمة
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-muted-foreground">—</span>
+                            </TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    disabled={generatingReceipt === `credit-${n.id}`}
+                                    onClick={() => handlePrintCreditNote(n.id, n.voucherNumber)}
+                                  >
+                                    {generatingReceipt === `credit-${n.id}` ? (
+                                      <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                                    ) : (
+                                      <Receipt className="h-4 w-4 ml-2" />
+                                    )}
+                                    طباعة الإشعار
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+                      if (row.kind === 'voucher') {
+                        const v = row.voucher;
+                        return (
+                          <TableRow
+                            key={`voucher-${v.id}`}
+                            className="hover:bg-muted/40 bg-amber-50/40 dark:bg-amber-950/10"
+                          >
+                            <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                              <span className="font-bold text-amber-700 dark:text-amber-300">
+                                {/* Display as R{N}/{YYYY} — same shape as
+                                    سند قبض numbers so the bookkeeper
+                                    can read both numbering schemes at a
+                                    glance without mental conversion. */}
+                                R{v.voucherNumber}/{new Date(v.date).getFullYear()}
+                              </span>
+                            </TableCell>
+                            <TableCell className="font-semibold">
+                              <span className="text-amber-700 dark:text-amber-300">
+                                ₪{Math.round(v.amount).toLocaleString()}
+                              </span>
+                            </TableCell>
+                            <TableCell>{formatDate(v.date)}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className="border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30"
+                              >
+                                سند إلغاء
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col items-start gap-0.5">
+                                {v.sourceReceiptNumber && (
+                                  <span className="text-[10px] font-mono ltr-nums text-muted-foreground">
+                                    ألغى {v.sourceReceiptNumber}
+                                  </span>
+                                )}
+                                {v.reason && (
+                                  <span
+                                    className="text-[10px] text-muted-foreground max-w-[180px] truncate"
+                                    title={v.reason}
+                                  >
+                                    السبب: {v.reason}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-muted-foreground">—</span>
+                            </TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    disabled={generatingReceipt === `voucher-${v.id}`}
+                                    onClick={() => handlePrintCancellationVoucher(v.id, v.voucherNumber)}
+                                  >
+                                    {generatingReceipt === `voucher-${v.id}` ? (
+                                      <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                                    ) : (
+                                      <Receipt className="h-4 w-4 ml-2" />
+                                    )}
+                                    طباعة سند الإلغاء
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+                      const group = row.group;
+                      // A session row can mix payment methods (cash +
+                      // cheque + visa all handed over in one visit), so
+                      // use the combined label which dedupes types. A
+                      // single-method row falls back to "نقدي" / "شيك"
+                      // exactly as before.
+                      const paymentLabel = group.paymentTypes.length > 1
+                        ? getCombinedPaymentTypeLabel(group.payments)
+                        : getPaymentTypeLabel({
+                            payment_type: group.payment_type,
+                            locked: group.locked,
+                          });
+                      // Cheque-number column was removed from سجل الدفعات
+                      // per the user's request — the inline "N شيكات"
+                      // pill belongs in the details popup, not the list.
                       return (
                       <TableRow
                         key={group.id}
-                        className="cursor-pointer hover:bg-muted/40"
-                        onClick={() => {
+                        className={cn(
+                          'hover:bg-muted/40',
+                          !group.isPassthrough && 'cursor-pointer',
+                          // Passthrough rows render in a muted strip so
+                          // the bookkeeper can tell at a glance they're
+                          // informational (money the office never
+                          // actually collected — إلزامي / visa_external).
+                          group.isPassthrough && 'bg-muted/30 text-muted-foreground',
+                        )}
+                        onClick={group.isPassthrough ? undefined : () => {
                           setGroupDetailsGroup(group);
                           setGroupDetailsOpen(true);
                         }}
                       >
+                        <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                          {group.isPassthrough ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            group.receipt_number || '—'
+                          )}
+                        </TableCell>
                         <TableCell className="font-semibold">
                           <div className="flex items-center gap-1">
                             ₪{group.totalAmount.toLocaleString()}
-                            {group.payments.length > 1 && (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                {group.payments.length} دفعات
-                              </Badge>
-                            )}
                           </div>
                         </TableCell>
                         <TableCell>{formatDate(group.payment_date)}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <Badge variant="outline">{combinedLabel}</Badge>
-                            {group.paymentTypes.includes('visa') && group.card_last_four && (
+                            <Badge variant="outline">{paymentLabel}</Badge>
+                            {group.payment_type === 'visa' && group.card_last_four && (
                               <span className="text-xs text-muted-foreground font-mono">
                                 *{group.card_last_four}
                               </span>
@@ -2357,71 +3455,89 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {(() => {
-                              // Show every policy type in the package (via
-                              // group_id → packagePolicies). Payments are
-                              // attached to a single policy on the DB but a
-                              // package pay really covers the whole group.
-                              const seen = new Set<string>();
-                              const tags: { label: string; parent: string }[] = [];
-                              for (const p of group.packagePolicies) {
-                                const label = getInsuranceTypeLabel(p.policy_type_parent as any, p.policy_type_child as any);
-                                if (seen.has(label)) continue;
-                                seen.add(label);
-                                tags.push({ label, parent: p.policy_type_parent });
-                              }
-                              return tags.map((t) => (
-                                <Badge key={t.label} className={cn("border", policyTypeColors[t.parent])}>
-                                  {t.label}
-                                </Badge>
-                              ));
-                            })()}
-                          </div>
-                        </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          {(() => {
-                            // A package is one معاملة — show the same
-                            // doc number the card picks (THIRD_FULL >
-                            // ELZAMI > addons, smallest tiebreak) so
-                            // card / log / invoice all agree. Click
-                            // jumps to the owning policy card; we
-                            // resolve the id back by matching the
-                            // chosen doc against group.packagePolicies.
-                            const docNumber = pickPackageDocumentNumber(group.packagePolicies);
-                            if (!docNumber) {
-                              return <span className="text-muted-foreground text-xs">—</span>;
-                            }
-                            const owner = group.packagePolicies.find(p => p.document_number === docNumber)
-                              || group.packagePolicies[0];
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => scrollToPolicyCard(owner.id)}
-                                className="inline-flex items-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-medium px-2 py-0.5 ltr-nums transition-colors"
-                                title="عرض في المعاملات"
-                              >
-                                #{docNumber}
-                              </button>
-                            );
-                          })()}
-                        </TableCell>
-                        <TableCell>
-                          {group.refused ? (
-                            <Badge variant="destructive">راجع</Badge>
+                          {group.isPassthrough ? (
+                            <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground text-[10px]">
+                              إلزامي / فيزا خارجي
+                            </Badge>
+                          ) : group.refused ? (
+                            (() => {
+                              // For a cancelled row we surface the linked
+                              // سند الإلغاء number and the bookkeeper's
+                              // stated reason. We dedupe per session in
+                              // the fetch step, so every payment of the
+                              // same session lands on the same voucher
+                              // number — one receipt cancelled = one
+                              // voucher, not N.
+                              const info = group.payments
+                                .map((p) => cancellationInfo.get(p.id))
+                                .find((x) => x != null);
+                              return (
+                                <div className="flex flex-col items-start gap-0.5">
+                                  <Badge variant="destructive">ملغي</Badge>
+                                  {info?.voucherNumber != null && (
+                                    <span className="text-[10px] font-mono ltr-nums text-muted-foreground">
+                                      سند الإلغاء R{String(info.voucherNumber)}/{info.year}
+                                    </span>
+                                  )}
+                                  {info?.reason && (
+                                    <span
+                                      className="text-[10px] text-muted-foreground max-w-[180px] truncate"
+                                      title={info.reason}
+                                    >
+                                      السبب: {info.reason}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()
                           ) : (
                             <Badge variant="success">مقبول</Badge>
                           )}
                         </TableCell>
                         <TableCell>
-                          <ChequeImageGallery
-                            primaryImageUrl={group.cheque_image_url}
-                            paymentId={group.payments[0]?.id || group.id}
-                            batchPaymentIds={group.payments.map(p => p.id)}
-                            hasBatchImages={group.payments.some(p => p.has_images)}
-                          />
+                          {group.isPassthrough ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <ChequeImageGallery
+                              primaryImageUrl={group.cheque_image_url}
+                              paymentId={group.payments[0]?.id || group.id}
+                              batchPaymentIds={group.payments.map(p => p.id)}
+                              hasBatchImages={group.payments.some(p => p.has_images)}
+                            />
+                          )}
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
+                          {group.isPassthrough ? (
+                            // Passthrough rows (إلزامي / فيزا خارجي) skip
+                            // the receipt-cancellation flow — there's no
+                            // money in the office to refund, so a plain
+                            // delete is the right action. Gated on a
+                            // single row + not yet printed; multi-row
+                            // and printed passthroughs stay read-only.
+                            group.payments.length === 1 && !group.printed ? (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => {
+                                      setDeletePaymentId(group.payments[0].id);
+                                      setDeletePaymentDialogOpen(true);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4 ml-2" />
+                                    حذف
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )
+                          ) : (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -2441,54 +3557,123 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                 ) : (
                                   <Receipt className="h-4 w-4 ml-2" />
                                 )}
-                                {group.payments.length > 1 ? 'طباعة سندات القبض' : 'طباعة سند القبض'}
+                                طباعة سند القبض
                               </DropdownMenuItem>
 
-                              {group.payments.length === 1 ? (
-                                <>
-                                  <DropdownMenuItem onClick={() => handleEditPayment(group.payments[0], group)}>
+                              {/* إلغاء السند — customer-scope void. Scope
+                                  matches the printed كشف القبض so a
+                                  click here reverses every non-إلزامي
+                                  payment of this customer (incl. batch
+                                  siblings) and lets the trigger emit
+                                  paired cancellation vouchers. Hidden
+                                  on cancelled rows — re-cancelling has
+                                  no effect. */}
+                              {group.payments.some((p) => !p.refused) && (
+                                <DropdownMenuItem
+                                  className="text-amber-700 focus:text-amber-800"
+                                  disabled={cancelResolving}
+                                  onClick={openCancelPaymentDialog}
+                                >
+                                  <Ban className="h-4 w-4 ml-2" />
+                                  إلغاء السند
+                                </DropdownMenuItem>
+                              )}
+
+                              {/* "تعديل" — opens the existing
+                                  PaymentGroupDetailsDialog (same dialog
+                                  the row-click already opens) where the
+                                  user can edit each line of the session
+                                  via its own pencil button. Disabled
+                                  once any row in the session is printed
+                                  (printed_at set) — printed receipts
+                                  are immutable, only إلغاء stays open.
+                                  Cancelled rows hide the option entirely
+                                  since edit-on-cancelled doesn't apply. */}
+                              {!group.refused && (
+                                group.printed ? (
+                                  <TooltipProvider delayDuration={200}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        {/* span wrapper so Tooltip can hook
+                                            into the disabled item */}
+                                        <span>
+                                          <DropdownMenuItem
+                                            disabled
+                                            onSelect={(e) => e.preventDefault()}
+                                            className="opacity-50 cursor-not-allowed"
+                                          >
+                                            <Edit className="h-4 w-4 ml-2" />
+                                            تعديل
+                                          </DropdownMenuItem>
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="left" className="text-xs max-w-[220px]">
+                                        تمت طباعة السند — التعديل غير متاح. الإلغاء فقط.
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                ) : (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      // Unified edit flow: open the same
+                                      // DebtPaymentModal used for "دفع",
+                                      // but seeded with this session's
+                                      // existing rows so the user can
+                                      // re-allocate the same wallet room
+                                      // (or add/remove lines). On submit
+                                      // the old session is DELETEd and
+                                      // recreated — no per-row UPDATE.
+                                      setDebtModalEditingSession({
+                                        id: group.id,
+                                        paymentIds: group.payments.map((p) => p.id),
+                                        payments: group.payments.map((p) => ({
+                                          id: p.id,
+                                          amount: Number(p.amount || 0),
+                                          payment_type: p.payment_type,
+                                          payment_date: p.payment_date,
+                                          cheque_number: p.cheque_number,
+                                          cheque_date: (p as any).cheque_date ?? null,
+                                          cheque_issue_date: (p as any).cheque_issue_date ?? null,
+                                          bank_code: p.bank_code ?? null,
+                                          branch_code: p.branch_code ?? null,
+                                          cheque_image_url: p.cheque_image_url,
+                                          notes: p.notes,
+                                          batch_id: p.batch_id,
+                                          locked: p.locked,
+                                        })),
+                                        totalAmount: group.totalAmount,
+                                        receiptNumber: group.receipt_number,
+                                      });
+                                      setDebtPaymentModalOpen(true);
+                                    }}
+                                  >
                                     <Edit className="h-4 w-4 ml-2" />
                                     تعديل
                                   </DropdownMenuItem>
-                                  {!group.locked && (
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={() => {
-                                        setDeletePaymentId(group.payments[0].id);
-                                        setDeletePaymentDialogOpen(true);
-                                      }}
-                                    >
-                                      <Trash2 className="h-4 w-4 ml-2" />
-                                      حذف
-                                    </DropdownMenuItem>
-                                  )}
-                                </>
-                              ) : (
-                                <>
-                                  <DropdownMenuItem disabled className="text-muted-foreground text-xs">
-                                    دفعة مجمعة ({group.payments.length} سجلات)
+                                )
+                              )}
+                              {/* Delete stays available for single-row
+                                  manual receipts only — never for auto
+                                  rows (they go through إلغاء) and never
+                                  for already-refused/locked rows. */}
+                              {group.payments.length === 1 &&
+                                !group.locked &&
+                                !group.payments[0].refused &&
+                                !group.printed && (
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => {
+                                      setDeletePaymentId(group.payments[0].id);
+                                      setDeletePaymentDialogOpen(true);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4 ml-2" />
+                                    حذف
                                   </DropdownMenuItem>
-                                  {group.payments.map((payment) => (
-                                    <DropdownMenuItem
-                                      key={payment.id}
-                                      onClick={() => handleEditPayment(payment, group)}
-                                      className="text-sm"
-                                    >
-                                      <Edit className="h-3 w-3 ml-2" />
-                                      <span className="flex items-center gap-1.5">
-                                        تعديل: ₪{Number(payment.amount || 0).toLocaleString('en-US')}
-                                        {payment.refused && (
-                                          <span className="text-[10px] font-bold text-destructive border border-destructive/40 bg-destructive/10 rounded px-1 py-0">
-                                            مرفوضة
-                                          </span>
-                                        )}
-                                      </span>
-                                    </DropdownMenuItem>
-                                  ))}
-                                </>
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>
+                          )}
                         </TableCell>
                       </TableRow>
                       );
@@ -2740,8 +3925,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       {/* Policy Details Drawer */}
       <PolicyDetailsDrawer
         open={policyDetailsOpen}
-        onOpenChange={setPolicyDetailsOpen}
+        onOpenChange={(open) => {
+          setPolicyDetailsOpen(open);
+          // Reset to main when the drawer closes so the next opener
+          // gets the default landing tab (the ملفات button explicitly
+          // sets 'files' just before opening).
+          if (!open) setPolicyDetailsInitialSection('main');
+        }}
         policyId={selectedPolicyId}
+        initialSection={policyDetailsInitialSection}
         onUpdated={() => {
           fetchPolicies();
           fetchPaymentSummary();
@@ -2838,6 +4030,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 fetchPolicies(),
                 fetchPaymentSummary(),
                 fetchPayments(),
+                // Transfer can mint a brand-new car (the "+ إضافة
+                // سيارة جديدة" path); without refetching, the cars
+                // filter and the new transaction's car badge stay
+                // stuck on the prior list until the page is reloaded.
+                fetchCars(),
               ]);
               onRefresh();
             }}
@@ -2923,13 +4120,18 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       {/* Debt Payment Modal */}
       <DebtPaymentModal
         open={debtPaymentModalOpen}
-        onOpenChange={setDebtPaymentModalOpen}
+        onOpenChange={(open) => {
+          setDebtPaymentModalOpen(open);
+          if (!open) setDebtModalEditingSession(null);
+        }}
         clientId={client.id}
         clientName={client.full_name}
         clientPhone={client.phone_number}
         totalOwed={paymentSummary.total_remaining}
+        editingSession={debtModalEditingSession}
         onSuccess={async () => {
           setDebtPaymentModalOpen(false);
+          setDebtModalEditingSession(null);
           // Refresh all payment-related data
           await Promise.all([
             fetchPaymentSummary(),
@@ -2937,6 +4139,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             fetchPolicies(),
           ]);
         }}
+      />
+
+      {/* Shared print-progress overlay used by both handlePrintGroup-
+          Receipts (سند قبض) and handlePrintCancellationVoucher (سند
+          إلغاء). The title prop swaps based on which handler set it
+          so the spinner reflects the actual document being prepared. */}
+      <PrintProgressDialog
+        open={printProgress.open}
+        value={printProgress.value}
+        title={printProgress.title}
       />
 
       {/* Payment Edit Dialog */}
@@ -2977,9 +4189,37 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           }
         }}
         group={groupDetailsGroup}
-        onEdit={(payment) => {
-          setPendingReopenGroupKey(groupDetailsGroup?.id ?? null);
-          handleEditPayment(payment as any, groupDetailsGroup ?? undefined);
+        onEdit={() => {
+          // Pencil inside the details popup now routes to the same
+          // session-level edit flow as the "تعديل" dropdown — the
+          // accounting rule is "delete the whole unprinted draft and
+          // rewrite", so per-row UPDATE doesn't apply anymore. We
+          // ignore the clicked row and edit the entire session.
+          const g = groupDetailsGroup;
+          if (!g || g.printed || g.refused) return;
+          setDebtModalEditingSession({
+            id: g.id,
+            paymentIds: g.payments.map((p) => p.id),
+            payments: g.payments.map((p) => ({
+              id: p.id,
+              amount: Number(p.amount || 0),
+              payment_type: p.payment_type,
+              payment_date: p.payment_date,
+              cheque_number: p.cheque_number,
+              cheque_date: (p as any).cheque_date ?? null,
+              cheque_issue_date: (p as any).cheque_issue_date ?? null,
+              bank_code: p.bank_code ?? null,
+              branch_code: p.branch_code ?? null,
+              cheque_image_url: p.cheque_image_url,
+              notes: p.notes,
+              batch_id: p.batch_id,
+              locked: p.locked,
+            })),
+            totalAmount: g.totalAmount,
+            receiptNumber: g.receipt_number,
+          });
+          setGroupDetailsOpen(false);
+          setDebtPaymentModalOpen(true);
         }}
         onDelete={(payment) => {
           setPendingReopenGroupKey(groupDetailsGroup?.id ?? null);
@@ -2987,6 +4227,110 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           setDeletePaymentDialogOpen(true);
         }}
       />
+
+      {/* Cancel-payment reason prompt. Scope was pre-resolved in
+          openCancelPaymentDialog so the count + total reflect every
+          customer payment that will be voided (incl. batch siblings),
+          not just the row the user clicked. The bookkeeper sees what
+          they're about to do before confirming. */}
+      <Dialog
+        open={cancelReasonOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setCancelReasonOpen(false);
+            setCancelTargetIds([]);
+            setCancelTargetSum(0);
+            setCancelReasonText('');
+            setCancelReasonError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          {(() => {
+            // Decide the dialog's regime from the target rows' print
+            // state — same predicate as confirmCancelPayment. Printed
+            // → real إلغاء with reason + سند إلغاء; unprinted draft
+            // → clean DELETE, no reason needed.
+            const targetSet = new Set(cancelTargetIds);
+            const anyPrinted = payments.some(
+              (p) => targetSet.has(p.id) && p.printed_at != null,
+            );
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>
+                    {anyPrinted ? 'إلغاء سندات القبض' : 'حذف سندات القبض (لم تُطبع)'}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 pt-2">
+                  <p className="text-xs text-muted-foreground">
+                    {anyPrinted ? (
+                      <>
+                        سيُنشأ سند إلغاء لكل واحد من{' '}
+                        <span className="font-bold ltr-nums">{cancelTargetIds.length}</span>{' '}
+                        {cancelTargetIds.length === 1 ? 'سند' : 'سندات'} لهذا العميل بقيمة إجمالية{' '}
+                        <span className="font-bold ltr-nums">
+                          ₪{Math.round(cancelTargetSum).toLocaleString('en-US')}
+                        </span>
+                        . رصيد العميل سيرتد بالكامل كما لو لم يدفع.
+                      </>
+                    ) : (
+                      <>
+                        السند لم يُطبع بعد ولم يُسلَّم للعميل، لذا سيُحذف نهائياً بدون سند إلغاء.{' '}
+                        <span className="font-bold ltr-nums">{cancelTargetIds.length}</span>{' '}
+                        {cancelTargetIds.length === 1 ? 'سند' : 'سندات'} بقيمة إجمالية{' '}
+                        <span className="font-bold ltr-nums">
+                          ₪{Math.round(cancelTargetSum).toLocaleString('en-US')}
+                        </span>
+                        . رصيد العميل سيرتد بالكامل.
+                      </>
+                    )}
+                  </p>
+                  {anyPrinted && (
+                    <>
+                      <Label htmlFor="cancel-payment-reason">
+                        سبب الإلغاء<span className="text-destructive mr-1">*</span>
+                      </Label>
+                      <Textarea
+                        id="cancel-payment-reason"
+                        value={cancelReasonText}
+                        onChange={(e) => {
+                          setCancelReasonText(e.target.value);
+                          if (e.target.value.trim()) setCancelReasonError(null);
+                        }}
+                        placeholder="مثال: العميل طلب الإلغاء، خطأ في الإصدار، شيك مكرر..."
+                        rows={3}
+                        autoFocus
+                        disabled={cancelSubmitting}
+                      />
+                      {cancelReasonError && (
+                        <p className="text-sm text-destructive">{cancelReasonError}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setCancelReasonOpen(false)}
+                    disabled={cancelSubmitting}
+                  >
+                    تراجع
+                  </Button>
+                  <Button
+                    variant={anyPrinted ? 'default' : 'destructive'}
+                    onClick={confirmCancelPayment}
+                    disabled={cancelSubmitting || (anyPrinted && !cancelReasonText.trim())}
+                  >
+                    {cancelSubmitting ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+                    {anyPrinted ? 'تأكيد الإلغاء' : 'حذف نهائي'}
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* Super Admin: Delete Policy Confirmation Dialog */}
       <DeleteConfirmDialog

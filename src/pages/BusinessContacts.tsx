@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { ContactDrawer } from "@/components/contacts/ContactDrawer";
 import { Click2CallDialog } from "@/components/shared/Click2CallDialog";
+import { ClickablePhone } from "@/components/shared/ClickablePhone";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { toast } from "sonner";
 import {
@@ -343,11 +344,8 @@ export default function BusinessContacts() {
 
                     {/* Phone */}
                     {contact.phone && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                        <Phone className="h-4 w-4 text-primary" />
-                        <span className="font-mono ltr" dir="ltr">
-                          {contact.phone}
-                        </span>
+                      <div className="mb-1" onClick={(e) => e.stopPropagation()}>
+                        <ClickablePhone phone={contact.phone} />
                       </div>
                     )}
 
