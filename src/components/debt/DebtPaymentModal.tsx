@@ -1390,12 +1390,25 @@ export function DebtPaymentModal({
                         </Select>
                       </div>
                       <div>
+                        {/* Date on the primary row: cheque rows put
+                            تاريخ الإصدار here (the act of writing the
+                            cheque is what the cashier types together
+                            with amount+method), and تاريخ الاستحقاق
+                            moves to the cheque sub-row below — same
+                            information density, better field grouping
+                            per the user's revised rule. */}
                         <Label className="text-xs">
-                          {payment.paymentType === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
+                          {payment.paymentType === 'cheque' ? 'تاريخ الإصدار' : 'تاريخ الدفع'}
                         </Label>
                         <ArabicDatePicker
-                          value={payment.paymentDate}
-                          onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
+                          value={payment.paymentType === 'cheque'
+                            ? (payment.chequeIssueDate || new Date().toISOString().split('T')[0])
+                            : payment.paymentDate}
+                          onChange={(date) => updatePaymentLine(
+                            payment.id,
+                            payment.paymentType === 'cheque' ? 'chequeIssueDate' : 'paymentDate',
+                            date,
+                          )}
                           disabled={payment.tranzilaPaid}
                         />
                       </div>
@@ -1447,10 +1460,10 @@ export function DebtPaymentModal({
                           />
                         </div>
                         <div className="space-y-1.5 min-w-0">
-                          <Label className="text-xs">تاريخ الإصدار</Label>
+                          <Label className="text-xs">تاريخ الاستحقاق</Label>
                           <ArabicDatePicker
-                            value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
-                            onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
+                            value={payment.paymentDate}
+                            onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
                             disabled={payment.tranzilaPaid}
                           />
                         </div>

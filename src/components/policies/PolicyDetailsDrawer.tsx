@@ -905,24 +905,13 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                   <Shield className="h-4 w-4 inline-block ml-1.5" />
                   معلومات المعاملة
                 </button>
-                <button
-                  onClick={() => setActiveSection('payments')}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 shrink-0",
-                    activeSection === 'payments'
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted"
-                  )}
-                >
-                  <CreditCard className="h-4 w-4" />
-                  الدفعات
-                  <span className={cn(
-                    "px-1.5 py-0.5 rounded-full text-xs",
-                    activeSection === 'payments' ? "bg-white/20" : "bg-muted-foreground/20"
-                  )}>
-                    {hasPackage ? packagePayments.length : payments.length}
-                  </span>
-                </button>
+                {/* الدفعات tab removed from the معاملة details drawer
+                    per the user — the customer-level سجل الدفعات tab
+                    is the canonical place to view + edit payments,
+                    and surfacing them here too just duplicated the
+                    surface area. The activeSection state still
+                    accepts 'payments' for backwards compatibility but
+                    no entry point selects it anymore. */}
                 <button
                   onClick={() => setActiveSection('files')}
                   className={cn(
@@ -1546,21 +1535,9 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                   </div>
                 )}
 
-                {activeSection === 'payments' && (
-                  <div className="p-4 sm:p-6">
-                    <PolicyPaymentsSection
-                      policyId={policy.id}
-                      payments={hasPackage ? packagePayments : payments}
-                      insurancePrice={hasPackage ? packageTotalPrice : (policy.insurance_price + (policy.office_commission || 0))}
-                      branchId={policy.branch_id}
-                      onPaymentsChange={handlePaymentsChange}
-                      autoOpenAdd={showQuickPayment}
-                      onAutoOpenHandled={() => setShowQuickPayment(false)}
-                      packagePolicyIds={hasPackage ? [policy.id, ...relatedPolicies.map(rp => rp.id)] : undefined}
-                      packageTotalPrice={hasPackage ? packageTotalPrice : undefined}
-                    />
-                  </div>
-                )}
+                {/* الدفعات section content removed alongside the tab
+                    button — the surface is fully replaced by the
+                    customer-level سجل الدفعات tab on ClientDetails. */}
 
                 {activeSection === 'files' && (
                   <div className="p-4 sm:p-6">

@@ -857,12 +857,23 @@ export function PackagePaymentModal({
                         </Select>
                       </div>
                       <div>
+                        {/* Top-row date carries تاريخ الإصدار on
+                            cheque rows (cashier types it together
+                            with amount+method); تاريخ الاستحقاق moves
+                            to the cheque sub-row. Matches the
+                            DebtPaymentModal ordering. */}
                         <Label className="text-xs">
-                          {payment.paymentType === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ الدفع'}
+                          {payment.paymentType === 'cheque' ? 'تاريخ الإصدار' : 'تاريخ الدفع'}
                         </Label>
                         <ArabicDatePicker
-                          value={payment.paymentDate}
-                          onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
+                          value={payment.paymentType === 'cheque'
+                            ? (payment.chequeIssueDate || new Date().toISOString().split('T')[0])
+                            : payment.paymentDate}
+                          onChange={(date) => updatePaymentLine(
+                            payment.id,
+                            payment.paymentType === 'cheque' ? 'chequeIssueDate' : 'paymentDate',
+                            date,
+                          )}
                           disabled={payment.tranzilaPaid}
                         />
                       </div>
@@ -910,10 +921,10 @@ export function PackagePaymentModal({
                           />
                         </div>
                         <div className="space-y-1.5 min-w-0">
-                          <Label className="text-xs">تاريخ الإصدار</Label>
+                          <Label className="text-xs">تاريخ الاستحقاق</Label>
                           <ArabicDatePicker
-                            value={payment.chequeIssueDate || new Date().toISOString().split('T')[0]}
-                            onChange={(date) => updatePaymentLine(payment.id, 'chequeIssueDate', date)}
+                            value={payment.paymentDate}
+                            onChange={(date) => updatePaymentLine(payment.id, 'paymentDate', date)}
                             disabled={payment.tranzilaPaid}
                           />
                         </div>

@@ -2047,17 +2047,21 @@ function PolicyPackageCard({
                   </div>
                 );
               })()}
-              {/* Totals footer row */}
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onOpenPaymentDetails?.(pkg.allPolicyIds); }}
+              {/* Totals footer row — non-interactive. The previous
+                  click-to-open-details flow was removed at the user's
+                  request: the totals are read-only summary info and
+                  the dedicated سجل الدفعات tab already provides the
+                  detailed breakdown. The wrapper stays a flex row so
+                  the layout / hover affordance for the broker banner
+                  doesn't change visually. */}
+              <div
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 border-t border-border/60 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  "w-full flex items-center gap-3 px-3 py-2 border-t border-border/60",
                   hasBroker
-                    ? "justify-start bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-500/5 dark:hover:bg-amber-500/10 text-right"
-                    : "justify-end bg-muted/30 hover:bg-muted/50 text-right",
+                    ? "justify-start bg-amber-50/60 dark:bg-amber-500/5 text-right"
+                    : "justify-end bg-muted/30 text-right",
                 )}
-                title={hasBroker ? brokerNoteText : "عرض تفاصيل الدفعات"}
+                title={hasBroker ? brokerNoteText : undefined}
               >
                 {hasBroker ? (
                   <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
@@ -2096,7 +2100,7 @@ function PolicyPackageCard({
                     )}
                   </>
                 )}
-              </button>
+              </div>
             </div>
           </div>
         )}
@@ -2124,16 +2128,16 @@ function PolicyPackageCard({
               />
             </div>
             <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onOpenPaymentDetails?.([policy.id]); }}
+              {/* Standalone-policy totals footer — non-interactive,
+                  same change as the package version. */}
+              <div
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  "w-full flex items-center gap-3 px-3 py-2",
                   hasBroker
-                    ? "justify-start bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-500/5 dark:hover:bg-amber-500/10 text-right"
-                    : "justify-end hover:bg-muted/50 text-right",
+                    ? "justify-start bg-amber-50/60 dark:bg-amber-500/5 text-right"
+                    : "justify-end text-right",
                 )}
-                title={hasBroker ? brokerNoteText : "عرض تفاصيل الدفعات"}
+                title={hasBroker ? brokerNoteText : undefined}
               >
                 {hasBroker ? (
                   <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
@@ -2172,7 +2176,7 @@ function PolicyPackageCard({
                     )}
                   </>
                 )}
-              </button>
+              </div>
             </div>
           </div>
         )}
