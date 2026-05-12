@@ -819,7 +819,6 @@ export default function DebtTracking() {
                             clientName={client.client_name}
                             branchId={profile?.branch_id}
                           />
-                          <Badge variant="outline" className="shrink-0">{client.policies_count} معاملة</Badge>
                           <p className="font-bold text-base sm:text-lg text-destructive ltr-nums whitespace-nowrap">
                             {formatCurrency(client.total_remaining)}
                           </p>
