@@ -2375,6 +2375,125 @@ export type Database = {
           },
         ]
       }
+      client_settlements: {
+        Row: {
+          agent_id: string
+          bank_code: string | null
+          bank_reference: string | null
+          branch_code: string | null
+          branch_id: string | null
+          card_expiry: string | null
+          card_last_four: string | null
+          cheque_due_date: string | null
+          cheque_image_url: string | null
+          cheque_image_urls: string[] | null
+          cheque_issue_date: string | null
+          cheque_number: string | null
+          client_id: string
+          created_at: string
+          created_by_admin_id: string | null
+          customer_cheque_ids: string[] | null
+          id: string
+          notes: string | null
+          payment_type: string
+          policy_id: string | null
+          refused: boolean | null
+          settlement_date: string
+          settlement_session_id: string | null
+          status: string
+          total_amount: number
+          updated_at: string
+          voucher_number: string | null
+        }
+        Insert: {
+          agent_id: string
+          bank_code?: string | null
+          bank_reference?: string | null
+          branch_code?: string | null
+          branch_id?: string | null
+          card_expiry?: string | null
+          card_last_four?: string | null
+          cheque_due_date?: string | null
+          cheque_image_url?: string | null
+          cheque_image_urls?: string[] | null
+          cheque_issue_date?: string | null
+          cheque_number?: string | null
+          client_id: string
+          created_at?: string
+          created_by_admin_id?: string | null
+          customer_cheque_ids?: string[] | null
+          id?: string
+          notes?: string | null
+          payment_type?: string
+          policy_id?: string | null
+          refused?: boolean | null
+          settlement_date?: string
+          settlement_session_id?: string | null
+          status?: string
+          total_amount?: number
+          updated_at?: string
+          voucher_number?: string | null
+        }
+        Update: {
+          agent_id?: string
+          bank_code?: string | null
+          bank_reference?: string | null
+          branch_code?: string | null
+          branch_id?: string | null
+          card_expiry?: string | null
+          card_last_four?: string | null
+          cheque_due_date?: string | null
+          cheque_image_url?: string | null
+          cheque_image_urls?: string[] | null
+          cheque_issue_date?: string | null
+          cheque_number?: string | null
+          client_id?: string
+          created_at?: string
+          created_by_admin_id?: string | null
+          customer_cheque_ids?: string[] | null
+          id?: string
+          notes?: string | null
+          payment_type?: string
+          policy_id?: string | null
+          refused?: boolean | null
+          settlement_date?: string
+          settlement_session_id?: string | null
+          status?: string
+          total_amount?: number
+          updated_at?: string
+          voucher_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_settlements_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_settlements_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_settlements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_settlements_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "policies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           accident_notes: string | null
@@ -5644,6 +5763,7 @@ export type Database = {
           cheque_number: string | null
           client_id: string | null
           client_name: string | null
+          client_settlement_id: string | null
           created_at: string | null
           created_by: string | null
           id: string
@@ -5671,6 +5791,7 @@ export type Database = {
           cheque_number?: string | null
           client_id?: string | null
           client_name?: string | null
+          client_settlement_id?: string | null
           created_at?: string | null
           created_by?: string | null
           id?: string
@@ -5698,6 +5819,7 @@ export type Database = {
           cheque_number?: string | null
           client_id?: string | null
           client_name?: string | null
+          client_settlement_id?: string | null
           created_at?: string | null
           created_by?: string | null
           id?: string
@@ -5740,6 +5862,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_client_settlement_id_fkey"
+            columns: ["client_settlement_id"]
+            isOneToOne: false
+            referencedRelation: "client_settlements"
             referencedColumns: ["id"]
           },
           {
