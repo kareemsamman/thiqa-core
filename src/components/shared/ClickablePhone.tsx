@@ -1,4 +1,4 @@
-import { Phone, Copy, Check, PhoneCall } from "lucide-react";
+import { Phone, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -24,10 +24,10 @@ export function ClickablePhone({
 }: ClickablePhoneProps) {
   const [copied, setCopied] = useState(false);
   const [callDialogOpen, setCallDialogOpen] = useState(false);
-  // Call button only renders when the current worker has both an
-  // enabled config and at least one extension to place a call from.
-  // Anything less and we silently fall back to the existing tel:/copy
-  // behavior so non-Click2Call users see no UI change.
+  // When the worker has Click2Call ready (enabled + at least one
+  // extension), clicking the number opens the call dialog directly.
+  // Otherwise we fall back to the legacy tel:/copy behavior so
+  // non-Click2Call users see no UI change.
   const { ready: c2cReady } = useClick2Call();
 
   if (!phone) {
@@ -37,11 +37,14 @@ export function ClickablePhone({
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
 
+    if (c2cReady) {
+      setCallDialogOpen(true);
+      return;
+    }
+
     if (isMobile()) {
-      // Mobile: open phone dialer
       window.location.href = `tel:${phone}`;
     } else {
-      // Desktop: copy to clipboard
       navigator.clipboard.writeText(phone).then(() => {
         setCopied(true);
         toast.success("تم نسخ الرقم");
@@ -52,6 +55,12 @@ export function ClickablePhone({
     }
   };
 
+  const title = c2cReady
+    ? `اتصال ${phone}`
+    : isMobile()
+      ? `اتصال ${phone}`
+      : "نسخ الرقم";
+
   return (
     <span className="inline-flex items-center gap-1.5">
       <button
@@ -61,7 +70,7 @@ export function ClickablePhone({
           "inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors cursor-pointer group",
           className
         )}
-        title={isMobile() ? `اتصال ${phone}` : "نسخ الرقم"}
+        title={title}
       >
         {showIcon && (
           copied
@@ -72,20 +81,6 @@ export function ClickablePhone({
           {phone}
         </bdi>
       </button>
-      {c2cReady && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setCallDialogOpen(true);
-          }}
-          className="inline-flex items-center justify-center h-6 w-6 rounded-md text-primary hover:bg-primary/10 transition-colors shrink-0"
-          title="اتصال سريع"
-          aria-label="اتصال سريع"
-        >
-          <PhoneCall className="h-3.5 w-3.5" />
-        </button>
-      )}
       {c2cReady && callDialogOpen && (
         <Click2CallDialog
           open={callDialogOpen}

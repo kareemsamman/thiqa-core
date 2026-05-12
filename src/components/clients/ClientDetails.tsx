@@ -2330,7 +2330,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
                     <dt className="text-muted-foreground">رقم الهاتف</dt>
-                    <dd className="font-mono ltr-nums">{client.phone_number || '-'}</dd>
+                    <dd>
+                      {client.phone_number ? (
+                        <ClickablePhone phone={client.phone_number} />
+                      ) : (
+                        <span className="font-mono ltr-nums">-</span>
+                      )}
+                    </dd>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
                     <dt className="text-muted-foreground">رقم الملف</dt>

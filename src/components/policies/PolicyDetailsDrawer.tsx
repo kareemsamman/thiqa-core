@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { Lock as LockIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { ClickablePhone } from "@/components/shared/ClickablePhone";
 import { PolicyPaymentsSection } from "./PolicyPaymentsSection";
 import { PolicyFilesSection } from "./PolicyFilesSection";
 import { PackageComponentsTable } from "./PackageComponentsTable";
@@ -1386,7 +1387,11 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                           <Separator />
                           <div className="flex items-center justify-between">
                             <span className="text-sm text-muted-foreground">الهاتف</span>
-                            <span className="font-mono"><bdi>{policy.clients.phone_number || '-'}</bdi></span>
+                            {policy.clients.phone_number ? (
+                              <ClickablePhone phone={policy.clients.phone_number} />
+                            ) : (
+                              <span className="font-mono">-</span>
+                            )}
                           </div>
                           {policy.clients.file_number && (
                             <>
@@ -1461,7 +1466,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                                   </p>
                                 </div>
                                 {pc.child.phone && (
-                                  <span className="text-sm text-muted-foreground font-mono"><bdi>{pc.child.phone}</bdi></span>
+                                  <ClickablePhone phone={pc.child.phone} />
                                 )}
                               </div>
                             )

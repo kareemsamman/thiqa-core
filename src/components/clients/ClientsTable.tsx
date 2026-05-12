@@ -19,10 +19,10 @@ import {
   ChevronRight,
   Eye,
   MoreHorizontal,
-  Phone,
   FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ClickablePhone } from "@/components/shared/ClickablePhone";
 
 // Mock data for demonstration
 const mockClients = [
@@ -202,11 +202,12 @@ export function ClientsTable() {
                       {client.fileNumber}
                     </Badge>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground whitespace-nowrap">
-                      <Phone className="h-3 w-3 shrink-0" />
-                      <bdi>{client.phone}</bdi>
-                    </div>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    {client.phone ? (
+                      <ClickablePhone phone={client.phone} />
+                    ) : (
+                      "-"
+                    )}
                   </TableCell>
                   <TableCell className="text-center">
                     <div className="flex items-center justify-center gap-1">
