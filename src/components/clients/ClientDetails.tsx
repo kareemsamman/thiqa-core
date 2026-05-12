@@ -1119,26 +1119,62 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   };
 
   const confirmCancelPayment = async () => {
-    if (!cancelReasonText.trim()) {
-      setCancelReasonError('السبب مطلوب');
-      return;
-    }
     if (cancelTargetIds.length === 0) {
       toast.error('لا توجد سندات قابلة للإلغاء');
       return;
     }
+    // Determine whether the targeted سند قبض has ever been printed.
+    // The user's accounting rule splits cancellation into two regimes:
+    //   * Printed → the customer holds a physical copy. We can't
+    //     pretend it never happened, so refused=true + سند إلغاء +
+    //     reason gives the bookkeeper the audit trail. The reason
+    //     text is required here.
+    //   * Unprinted → the سند قبض is still a draft, never handed to
+    //     the customer. "Cancel" really means "throw the draft away":
+    //     DELETE the rows so nothing remains — no سند إلغاء, no
+    //     ghost rows in receipts. No reason is required since there
+    //     is no audit copy that would need explaining.
+    const targetSet = new Set(cancelTargetIds);
+    const anyPrinted = payments.some(
+      (p) => targetSet.has(p.id) && p.printed_at != null,
+    );
+
+    if (anyPrinted && !cancelReasonText.trim()) {
+      setCancelReasonError('السبب مطلوب');
+      return;
+    }
+
     setCancelSubmitting(true);
     try {
-      const { error } = await supabase
-        .from('policy_payments')
-        .update({
-          refused: true,
-          cheque_status: 'cancelled',
-          cancellation_reason: cancelReasonText.trim(),
-        })
-        .in('id', cancelTargetIds);
-      if (error) throw error;
-      toast.success(`تم إلغاء ${cancelTargetIds.length} سند${cancelTargetIds.length > 1 ? 'اً' : ''} وإصدار سند إلغاء`);
+      if (anyPrinted) {
+        const { error } = await supabase
+          .from('policy_payments')
+          .update({
+            refused: true,
+            cheque_status: 'cancelled',
+            cancellation_reason: cancelReasonText.trim(),
+          })
+          .in('id', cancelTargetIds);
+        if (error) throw error;
+        toast.success(`تم إلغاء ${cancelTargetIds.length} سند${cancelTargetIds.length > 1 ? 'اً' : ''} وإصدار سند إلغاء`);
+      } else {
+        // Unprinted draft → clean delete. Clear receipts first
+        // (receipts.payment_id FK is ON DELETE SET NULL so the row
+        // would otherwise linger as an orphan with null payment_id),
+        // then DELETE policy_payments (cascades to payment_images).
+        const { error: receiptsErr } = await supabase
+          .from('receipts')
+          .delete()
+          .in('payment_id', cancelTargetIds);
+        if (receiptsErr) throw receiptsErr;
+
+        const { error: payErr } = await supabase
+          .from('policy_payments')
+          .delete()
+          .in('id', cancelTargetIds);
+        if (payErr) throw payErr;
+        toast.success(`تم حذف ${cancelTargetIds.length} سند${cancelTargetIds.length > 1 ? 'اً' : ''}`);
+      }
       setCancelReasonOpen(false);
       setCancelTargetIds([]);
       setCancelTargetSum(0);
@@ -1699,6 +1735,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     };
 
     const filteredPayments = payments.filter((payment) => {
+      // Ghost rows from the legacy "cancel-while-unprinted" path: a
+      // row that was cancelled (refused=true) but never printed
+      // (printed_at=null) is, per the user's rule, a draft that
+      // should have been DELETEd rather than marked refused. The new
+      // confirmCancelPayment does the right thing going forward, but
+      // pre-fix data left these orphans behind. Skip them everywhere
+      // — the agent didn't give a copy to the customer, so there's
+      // nothing to audit.
+      if (payment.refused && payment.printed_at == null) return false;
       if (paymentSearch) {
         const search = paymentSearch.toLowerCase();
         if (!payment.cheque_number?.toLowerCase().includes(search) &&
@@ -3423,55 +3468,89 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         }}
       >
         <DialogContent className="sm:max-w-md" dir="rtl">
-          <DialogHeader>
-            <DialogTitle>إلغاء سندات القبض</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <p className="text-xs text-muted-foreground">
-              سيُنشأ سند إلغاء لكل واحد من{' '}
-              <span className="font-bold ltr-nums">{cancelTargetIds.length}</span>{' '}
-              {cancelTargetIds.length === 1 ? 'سند' : 'سندات'} لهذا العميل بقيمة إجمالية{' '}
-              <span className="font-bold ltr-nums">
-                ₪{Math.round(cancelTargetSum).toLocaleString('en-US')}
-              </span>
-              . رصيد العميل سيرتد بالكامل كما لو لم يدفع.
-            </p>
-            <Label htmlFor="cancel-payment-reason">
-              سبب الإلغاء<span className="text-destructive mr-1">*</span>
-            </Label>
-            <Textarea
-              id="cancel-payment-reason"
-              value={cancelReasonText}
-              onChange={(e) => {
-                setCancelReasonText(e.target.value);
-                if (e.target.value.trim()) setCancelReasonError(null);
-              }}
-              placeholder="مثال: العميل طلب الإلغاء، خطأ في الإصدار، شيك مكرر..."
-              rows={3}
-              autoFocus
-              disabled={cancelSubmitting}
-            />
-            {cancelReasonError && (
-              <p className="text-sm text-destructive">{cancelReasonError}</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setCancelReasonOpen(false)}
-              disabled={cancelSubmitting}
-            >
-              تراجع
-            </Button>
-            <Button
-              variant="default"
-              onClick={confirmCancelPayment}
-              disabled={cancelSubmitting || !cancelReasonText.trim()}
-            >
-              {cancelSubmitting ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
-              تأكيد الإلغاء
-            </Button>
-          </DialogFooter>
+          {(() => {
+            // Decide the dialog's regime from the target rows' print
+            // state — same predicate as confirmCancelPayment. Printed
+            // → real إلغاء with reason + سند إلغاء; unprinted draft
+            // → clean DELETE, no reason needed.
+            const targetSet = new Set(cancelTargetIds);
+            const anyPrinted = payments.some(
+              (p) => targetSet.has(p.id) && p.printed_at != null,
+            );
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>
+                    {anyPrinted ? 'إلغاء سندات القبض' : 'حذف سندات القبض (لم تُطبع)'}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 pt-2">
+                  <p className="text-xs text-muted-foreground">
+                    {anyPrinted ? (
+                      <>
+                        سيُنشأ سند إلغاء لكل واحد من{' '}
+                        <span className="font-bold ltr-nums">{cancelTargetIds.length}</span>{' '}
+                        {cancelTargetIds.length === 1 ? 'سند' : 'سندات'} لهذا العميل بقيمة إجمالية{' '}
+                        <span className="font-bold ltr-nums">
+                          ₪{Math.round(cancelTargetSum).toLocaleString('en-US')}
+                        </span>
+                        . رصيد العميل سيرتد بالكامل كما لو لم يدفع.
+                      </>
+                    ) : (
+                      <>
+                        السند لم يُطبع بعد ولم يُسلَّم للعميل، لذا سيُحذف نهائياً بدون سند إلغاء.{' '}
+                        <span className="font-bold ltr-nums">{cancelTargetIds.length}</span>{' '}
+                        {cancelTargetIds.length === 1 ? 'سند' : 'سندات'} بقيمة إجمالية{' '}
+                        <span className="font-bold ltr-nums">
+                          ₪{Math.round(cancelTargetSum).toLocaleString('en-US')}
+                        </span>
+                        . رصيد العميل سيرتد بالكامل.
+                      </>
+                    )}
+                  </p>
+                  {anyPrinted && (
+                    <>
+                      <Label htmlFor="cancel-payment-reason">
+                        سبب الإلغاء<span className="text-destructive mr-1">*</span>
+                      </Label>
+                      <Textarea
+                        id="cancel-payment-reason"
+                        value={cancelReasonText}
+                        onChange={(e) => {
+                          setCancelReasonText(e.target.value);
+                          if (e.target.value.trim()) setCancelReasonError(null);
+                        }}
+                        placeholder="مثال: العميل طلب الإلغاء، خطأ في الإصدار، شيك مكرر..."
+                        rows={3}
+                        autoFocus
+                        disabled={cancelSubmitting}
+                      />
+                      {cancelReasonError && (
+                        <p className="text-sm text-destructive">{cancelReasonError}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setCancelReasonOpen(false)}
+                    disabled={cancelSubmitting}
+                  >
+                    تراجع
+                  </Button>
+                  <Button
+                    variant={anyPrinted ? 'default' : 'destructive'}
+                    onClick={confirmCancelPayment}
+                    disabled={cancelSubmitting || (anyPrinted && !cancelReasonText.trim())}
+                  >
+                    {cancelSubmitting ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+                    {anyPrinted ? 'تأكيد الإلغاء' : 'حذف نهائي'}
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
