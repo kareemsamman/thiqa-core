@@ -1343,14 +1343,17 @@ export default function Cheques() {
                   تعديل الشيك
                 </DropdownMenuItem>
               )}
-              {/* Customer cheques: the three voiding actions are exposed —
-                  صرف, إلغاء, رجع — until the cheque is cancelled. Once
-                  cancelled the row is frozen (no صرف / no رجع back into
-                  active state) per the immutable-accounting rule, and
-                  the only remaining action is reprinting the سند إلغاء
-                  the cancellation generated. transferred_out is a
-                  terminal state (the cheque is already used as outgoing)
-                  so no actions show. */}
+              {/* Customer cheques: the voiding actions are exposed until
+                  the cheque reaches a terminal/near-terminal state.
+                    - pending:  صرف, إلغاء, رجع
+                    - cashed:   إلغاء, رجع (already cashed)
+                    - returned: إلغاء only — a bounced cheque can't be
+                      cashed; the only path forward is سند إلغاء, which
+                      adds the amount back to the customer's debt.
+                    - cancelled: frozen — only reprint سند إلغاء per
+                      the immutable-accounting rule.
+                  transferred_out is a terminal state (the cheque is
+                  already used as outgoing) so no actions show. */}
               {(cheque.source === 'customer' || !cheque.source) &&
                 cheque.cheque_status !== 'transferred_out' && (
                   cheque.cheque_status === 'cancelled' ? (
@@ -1367,7 +1370,8 @@ export default function Cheques() {
                     </DropdownMenuItem>
                   ) : (
                     <>
-                      {cheque.cheque_status !== 'cashed' && (
+                      {cheque.cheque_status !== 'cashed' &&
+                       cheque.cheque_status !== 'returned' && (
                         <DropdownMenuItem
                           onClick={() => handleStatusChange(cheque.id, 'cashed')}
                           className="text-green-600 focus:text-green-700"
