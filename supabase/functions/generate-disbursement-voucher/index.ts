@@ -151,22 +151,42 @@ function buildHtml(
   const accentBg = '#eef4fb';
 
   const anyNotes = lines.some((l) => typeof l.notes === 'string' && l.notes.trim().length > 0);
+  // Date-cell renderer. Cheques (both kinds) need the maturity date
+  // because that's what determines when the money actually settles,
+  // and the agency-written cheque additionally shows the issue date.
+  // Non-cheque rows keep the single-date layout.
+  const renderDateCell = (line: typeof lines[number]): string => {
+    if (line.payment_type === 'cheque') {
+      const issue = line.cheque_issue_date ? formatDate(line.cheque_issue_date) : '—';
+      const due = line.cheque_due_date ? formatDate(line.cheque_due_date) : '—';
+      return `
+        <div>
+          <div class="date-label">تاريخ الاستحقاق</div>
+          <div class="date-value">${due}</div>
+        </div>
+        <div style="margin-top: 5px;">
+          <div class="date-label">تاريخ الإصدار</div>
+          <div class="date-value">${issue}</div>
+        </div>`;
+    }
+    if (line.payment_type === 'customer_cheque') {
+      const due = line.cheque_due_date ? formatDate(line.cheque_due_date) : '—';
+      return `
+        <div class="date-label">تاريخ الاستحقاق</div>
+        <div class="date-value">${due}</div>`;
+    }
+    const dateValue = line.payment_date || '';
+    const dateLabel = line.payment_type === 'bank_transfer'
+      ? 'تاريخ التحويل'
+      : 'تاريخ الصرف';
+    return `
+      <div class="date-label">${dateLabel}</div>
+      <div class="date-value">${dateValue ? formatDate(dateValue) : '—'}</div>`;
+  };
   const linesHtml = lines.length
     ? lines.map((line) => {
         const methodLabel = PAYMENT_TYPE_LABELS[line.payment_type] || line.payment_type;
         const chequeExtra = line.cheque_number ? ` · ${escapeHtml(String(line.cheque_number))}` : '';
-        // Disbursement-side date semantics:
-        //   • cheque  → cheque_issue_date (when we wrote the cheque)
-        //   • bank_transfer → payment_date (when the transfer ran)
-        //   • cash / visa → payment_date (settlement date)
-        const dateValue = line.payment_type === 'cheque'
-          ? (line.cheque_issue_date || line.payment_date || '')
-          : (line.payment_date || '');
-        const dateLabel = line.payment_type === 'cheque'
-          ? 'تاريخ الإصدار'
-          : line.payment_type === 'bank_transfer'
-            ? 'تاريخ التحويل'
-            : 'تاريخ الصرف';
         const amount = Number(line.amount || 0).toLocaleString('en-US');
         const bankLabel = getBankLabel(line.bank_code);
         const branchLabel = line.branch_code ? `فرع ${escapeHtml(String(line.branch_code))}` : '';
@@ -190,10 +210,7 @@ function buildHtml(
               <div>${escapeHtml(methodLabel)}${chequeExtra}</div>
               ${bankLine}
             </td>
-            <td class="date">
-              <div class="date-label">${dateLabel}</div>
-              <div class="date-value">${dateValue ? formatDate(dateValue) : '—'}</div>
-            </td>
+            <td class="date">${renderDateCell(line)}</td>
             <td class="line-amount">₪${amount}</td>
             ${notesCell}
           </tr>`;
@@ -589,7 +606,8 @@ serve(async (req) => {
           .select(`
             payment_type, cheque_number, cheque_due_date,
             cheque_issue_date, settlement_date, bank_code,
-            branch_code, bank_reference, notes, total_amount
+            branch_code, bank_reference, notes, total_amount,
+            customer_cheque_ids
           `)
           .eq(filterCol, filterVal);
 
@@ -604,10 +622,88 @@ serve(async (req) => {
           bank_reference: string | null;
           notes: string | null;
           total_amount: number;
+          customer_cheque_ids: string[] | null;
         }>;
+
+        // Customer cheque expansion. When the agent picked several
+        // شيك عميل in a single payment line, we stored them as one
+        // settlement row with customer_cheque_ids = [id1, id2, ...]
+        // and total_amount = sum. The voucher needs to print each
+        // cheque on its own row (number / bank / due date / amount),
+        // so first we batch-fetch every referenced policy_payments
+        // row, then expand on the way into `lines`.
+        const allCustomerChequeIds: string[] = [];
+        for (const r of rows) {
+          if (
+            r.payment_type === 'customer_cheque' &&
+            Array.isArray(r.customer_cheque_ids)
+          ) {
+            allCustomerChequeIds.push(...r.customer_cheque_ids);
+          }
+        }
+        const customerChequeMap = new Map<
+          string,
+          {
+            cheque_number: string | null;
+            payment_date: string | null;
+            bank_code: string | null;
+            branch_code: string | null;
+            amount: number;
+          }
+        >();
+        if (allCustomerChequeIds.length > 0) {
+          const { data: pps } = await supabase
+            .from('policy_payments')
+            .select('id, cheque_number, payment_date, bank_code, branch_code, amount')
+            .in('id', allCustomerChequeIds);
+          for (const pp of (pps ?? []) as Array<{
+            id: string;
+            cheque_number: string | null;
+            payment_date: string | null;
+            bank_code: string | null;
+            branch_code: string | null;
+            amount: number | null;
+          }>) {
+            customerChequeMap.set(pp.id, {
+              cheque_number: pp.cheque_number,
+              payment_date: pp.payment_date,
+              bank_code: pp.bank_code,
+              branch_code: pp.branch_code,
+              amount: Number(pp.amount || 0),
+            });
+          }
+        }
 
         for (const r of rows) {
           if (!r.payment_type) continue;
+          if (
+            r.payment_type === 'customer_cheque' &&
+            Array.isArray(r.customer_cheque_ids) &&
+            r.customer_cheque_ids.length > 0
+          ) {
+            // Expand into one line per referenced cheque. payment_date
+            // on policy_payments is the cheque's due date (when it
+            // can be cashed), so we map it onto cheque_due_date for
+            // the template renderer.
+            for (const cid of r.customer_cheque_ids) {
+              const cheque = customerChequeMap.get(cid);
+              if (!cheque) continue;
+              voucherTotal += cheque.amount;
+              lines.push({
+                payment_type: 'customer_cheque',
+                cheque_number: cheque.cheque_number,
+                cheque_due_date: cheque.payment_date,
+                cheque_issue_date: null,
+                payment_date: cheque.payment_date,
+                bank_code: cheque.bank_code,
+                branch_code: cheque.branch_code,
+                bank_reference: null,
+                notes: r.notes,
+                amount: cheque.amount,
+              });
+            }
+            continue;
+          }
           const amt = Number(r.total_amount || 0);
           voucherTotal += amt;
           lines.push({

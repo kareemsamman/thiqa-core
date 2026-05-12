@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,18 +11,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
-import { Loader2, XCircle, Send, AlertTriangle, Wallet, Banknote } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Loader2, XCircle, Send, AlertTriangle, Wallet, Banknote, FolderOpen } from "lucide-react";
 import { Lock as LockIcon } from "@phosphor-icons/react";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { AddSettlementDialog } from "@/components/accounting/AddSettlementDialog";
+import {
+  AddSettlementDialog,
+  type StagedSettlement,
+} from "@/components/accounting/AddSettlementDialog";
+import { persistSettlementLines } from "@/components/accounting/persistSettlementLines";
 
 // Two ways to record a refund when cancelling a policy:
 //   credit_note  — the agency owes the client. Adds to the wallet
@@ -34,6 +38,17 @@ import { AddSettlementDialog } from "@/components/accounting/AddSettlementDialog
 // Both produce a numbered voucher on the receipts table that shows up
 // in /receipts under its own tab.
 type RefundKind = "credit_note" | "disbursement";
+
+// Arabic plural rendering for the "تم إدخال X دفعة" status line under
+// the فتح button. Standard form: 1 → مفرد, 2 → مثنى, 3–10 → جمع قلة,
+// 11+ → مفرد بصيغة العدد. Used only for display, never persisted.
+function formatStagedCount(n: number): string {
+  if (n <= 0) return "لا توجد دفعات";
+  if (n === 1) return "تم إدخال دفعة واحدة";
+  if (n === 2) return "تم إدخال دفعتين";
+  if (n >= 3 && n <= 10) return `تم إدخال ${n} دفعات`;
+  return `تم إدخال ${n} دفعة`;
+}
 
 interface CancelPolicyModalProps {
   open: boolean;
@@ -96,44 +111,57 @@ export function CancelPolicyModal({
   const [refundAmount, setRefundAmount] = useState("");
   // Default to credit_note — that mirrors today's "مرتجع" behavior
   // (wallet credit, no cash out) so unchanged user flows stay
-  // unchanged. Disbursement is wired into the UI but disabled until
-  // phase 2b ships its full payment-line picker.
+  // unchanged.
   const [refundKind, setRefundKind] = useState<RefundKind>("credit_note");
-  // When refundKind === 'disbursement', we open AddSettlementDialog
-  // before committing the cancel so the agent picks the actual payment
-  // method(s). The dialog's onSaved callback re-runs handleCancel to
-  // commit the policy update after the disbursement landed cleanly.
-  //
-  // disbursementSavedRef carries the "already disbursed" flag through
-  // the same-tick handleCancel re-run; a useState here would still
-  // read the old value via stale closure and re-open the dialog. The
-  // mirrored useState exists only to drive the on-screen status pill
-  // (refs don't trigger re-renders).
+  // Disbursement detour: the user picks سند صرف, opens AddSettlementDialog
+  // via the "فتح بوابة الدفع" button, fills in payment lines, and saves.
+  // The dialog runs in stageOnly mode — its Save returns the validated
+  // payload to us instead of writing to the DB. We keep it in
+  // stagedDisbursement until تأكيد الإلغاء fires, then persist
+  // everything atomically (policy update + settlement lines). Reopening
+  // the dialog rehydrates from this state so the agent can edit without
+  // losing prior entries.
   const [disbursementDialogOpen, setDisbursementDialogOpen] = useState(false);
-  const [disbursementSaved, setDisbursementSaved] = useState(false);
-  const disbursementSavedRef = useRef(false);
-  // After the AddSettlementDialog saves, look up the just-created
-  // voucher_number and store it so we can render a "تم الصرف —
-  // D{nn}/YYYY" confirmation pill next to the refund block, instead
-  // of leaving the agent guessing whether the payment actually went
-  // through.
-  const [disbursementVoucher, setDisbursementVoucher] = useState<string | null>(null);
+  const [stagedDisbursement, setStagedDisbursement] = useState<StagedSettlement | null>(null);
   const [sendSms, setSendSms] = useState(false);
 
   // Pre-flight validation for the confirm button. Mirrors what
   // handleCancel will re-check on submit (so the toast errors stay
   // as a safety net), but disables the button up-front so the user
-  // can see the issue without clicking. Three failure modes:
+  // can see the issue without clicking. Failure modes:
   //   • refund toggle on, amount blank or non-positive
   //   • refund toggle on, amount exceeds the policy's insurance_price
-  // hasRefund=false short-circuits both — a clean cancel with no
+  //   • disbursement picked but the agent never opened the payment
+  //     portal (stagedDisbursement still null)
+  //   • disbursement staged total ≠ refundAmount (agent changed the
+  //     amount after staging; needs to reopen and re-balance)
+  // hasRefund=false short-circuits all — a clean cancel with no
   // money movement is always valid.
   const refundAmountNum = parseFloat(refundAmount);
   const refundExceedsMax =
     hasRefund && !isNaN(refundAmountNum) && refundAmountNum > insurancePrice;
   const refundMissing =
     hasRefund && (!refundAmount || isNaN(refundAmountNum) || refundAmountNum <= 0);
-  const refundInvalid = refundExceedsMax || refundMissing;
+  const stagedTotal = stagedDisbursement
+    ? stagedDisbursement.lines.reduce((s, l) => {
+        if (l.payment_type === "customer_cheque" && l.selected_cheques) {
+          return s + l.selected_cheques.reduce((a, c) => a + Number(c.amount || 0), 0);
+        }
+        return s + Number(l.amount || 0);
+      }, 0)
+    : 0;
+  const needsDisbursement = hasRefund && refundKind === "disbursement";
+  const disbursementStagedMissing = needsDisbursement && stagedDisbursement === null;
+  const disbursementTotalMismatch =
+    needsDisbursement &&
+    stagedDisbursement !== null &&
+    !isNaN(refundAmountNum) &&
+    Math.round(stagedTotal * 100) !== Math.round(refundAmountNum * 100);
+  const refundInvalid =
+    refundExceedsMax ||
+    refundMissing ||
+    disbursementStagedMissing ||
+    disbursementTotalMismatch;
   const [smsMessage, setSmsMessage] = useState("");
   const [loadingTemplate, setLoadingTemplate] = useState(false);
 
@@ -207,23 +235,24 @@ export function CancelPolicyModal({
       return;
     }
 
-    // Disbursement gate: when the agent picks سند صرف, divert through
-    // AddSettlementDialog first so they can pick the actual payment
-    // method(s). The cancellation only commits once the dialog
-    // resolves successfully (disbursementSavedRef flips true).
-    // Closing the dialog without saving leaves the ref at false so
-    // the policy stays in its pre-cancel state — safe abort.
-    //
-    // We read the ref (not the state) here because handleCancel is
-    // re-invoked from inside the dialog's onSaved callback in the
-    // same tick — useState updates aren't visible yet.
-    if (
-      hasRefund &&
-      refundKind === "disbursement" &&
-      !disbursementSavedRef.current &&
-      primaryPolicyId
-    ) {
-      setDisbursementDialogOpen(true);
+    // Disbursement guards — the radio is set to سند صرف but the agent
+    // never staged a payment, OR the staged total drifted from the
+    // refund amount after the agent edited it. The confirm button is
+    // already disabled in these states; this is the safety net.
+    if (needsDisbursement && !stagedDisbursement) {
+      toast({
+        title: "خطأ",
+        description: "اضغط 'فتح بوابة الدفع' وأدخل دفعات السند قبل التأكيد",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (needsDisbursement && disbursementTotalMismatch) {
+      toast({
+        title: "خطأ",
+        description: "مجموع الدفعات لا يساوي مبلغ المرتجع — افتح البوابة وعدّل",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -250,9 +279,13 @@ export function CancelPolicyModal({
       //                  formal voucher row in receipts so it shows
       //                  up in /receipts under "اشعار دائن" with a
       //                  printable C{nn}/YYYY number.
-      //   disbursement → already committed via AddSettlementDialog +
-      //                  the client_settlements → receipts trigger
-      //                  by the time we get here. Nothing more to do.
+      //   disbursement → persist the staged client_settlements rows
+      //                  now (the BEFORE/AFTER INSERT triggers stamp
+      //                  voucher_number + mirror to receipts). Lines
+      //                  were collected via AddSettlementDialog in
+      //                  stageOnly mode so nothing hit the DB until
+      //                  this point — clean abort if the user closed
+      //                  the cancel modal without confirming.
       //
       // Both branches always operate on the primary policy id — for
       // a package cancel the client sees one cancellation, not many.
@@ -321,9 +354,24 @@ export function CancelPolicyModal({
           }
         }
       }
-      // refundKind === "disbursement" was already committed via the
-      // AddSettlementDialog detour before we reached this block, so
-      // there's nothing to do here on that branch.
+      if (
+        hasRefund &&
+        refundKind === "disbursement" &&
+        stagedDisbursement &&
+        primaryPolicyId
+      ) {
+        await persistSettlementLines({
+          mode: "client",
+          kind: "disbursement",
+          entityId: clientId,
+          policyId: primaryPolicyId,
+          branchId,
+          effective: stagedDisbursement.lines,
+          notes: stagedDisbursement.notes,
+          userId: user?.id ?? null,
+          agentId: agentId ?? null,
+        });
+      }
 
       // 3. Send SMS if enabled (and plan allows it — skip quietly
       // otherwise so the policy-cancel flow still completes).
@@ -370,9 +418,7 @@ export function CancelPolicyModal({
       setHasRefund(false);
       setRefundAmount("");
       setRefundKind("credit_note");
-      setDisbursementSaved(false);
-      disbursementSavedRef.current = false;
-      setDisbursementVoucher(null);
+      setStagedDisbursement(null);
       setSendSms(false);
       setSmsMessage("");
     } catch (error: any) {
@@ -390,11 +436,19 @@ export function CancelPolicyModal({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md" dir="rtl">
+      {/* w-[95vw] keeps the dialog from clipping on narrow phones (the
+          default fixed max-w-md leaves ~16px of breathing room on a
+          360px screen which still feels cramped). max-h + overflow-y
+          let the SMS + refund sections scroll independently instead of
+          pushing the action buttons off-screen. */}
+      <DialogContent
+        className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto"
+        dir="rtl"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <XCircle className="h-5 w-5" />
-            {isPackage ? "إلغاء الباقة" : "إلغاء المعاملة"}
+            إلغاء المعاملة
           </DialogTitle>
         </DialogHeader>
 
@@ -503,40 +557,53 @@ export function CancelPolicyModal({
                         <div className="flex items-center gap-1.5 font-medium text-sm">
                           <Banknote className="h-3.5 w-3.5" />
                           سند صرف
-                          {disbursementSaved && (
-                            <span className="ms-auto inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 bg-emerald-500/15 text-emerald-700 border border-emerald-500/30">
-                              ✓ تم الصرف
-                              {disbursementVoucher && (
-                                <span className="font-mono ltr-nums">{disbursementVoucher}</span>
-                              )}
-                            </span>
-                          )}
                         </div>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
                           المبلغ يخرج فعلياً من صندوق الشركة الآن (نقدي / شيك / تحويل / فيزا). لا يضيف للعميل أي رصيد.
                         </p>
-                        {disbursementSaved && (
-                          <div className="mt-2 flex items-center gap-2">
+                        {refundKind === "disbursement" && (
+                          <div className="mt-2 flex flex-col gap-1.5">
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="h-7 text-[11px] gap-1"
+                              className="h-8 gap-1.5 self-start"
                               onClick={(e) => {
+                                // Stop the label from also flipping the
+                                // radio (it's already selected) and open
+                                // the staged payment portal.
                                 e.preventDefault();
-                                // Reopen the dialog so the agent can review or
-                                // re-pick payment lines. The previous saved
-                                // rows stay in client_settlements; saving
-                                // again creates additional rows (rare path —
-                                // the agent should usually just print).
-                                disbursementSavedRef.current = false;
-                                setDisbursementSaved(false);
-                                setDisbursementVoucher(null);
                                 setDisbursementDialogOpen(true);
                               }}
                             >
-                              تعديل / إعادة فتح
+                              <FolderOpen className="h-3.5 w-3.5" />
+                              فتح
                             </Button>
+                            {stagedDisbursement ? (
+                              <p
+                                className={cn(
+                                  "text-[11px]",
+                                  disbursementTotalMismatch
+                                    ? "text-destructive"
+                                    : "text-emerald-700",
+                                )}
+                              >
+                                {disbursementTotalMismatch ? (
+                                  <>
+                                    ⚠ المجموع ₪{stagedTotal.toLocaleString("en-US")} لا يساوي المرتجع — اضغط فتح وعدّل
+                                  </>
+                                ) : (
+                                  <>
+                                    ✓ {formatStagedCount(stagedDisbursement.lines.length)} (₪
+                                    {stagedTotal.toLocaleString("en-US")})
+                                  </>
+                                )}
+                              </p>
+                            ) : (
+                              <p className="text-[11px] text-muted-foreground">
+                                اضغط فتح لإدخال الدفعات
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -610,7 +677,11 @@ export function CancelPolicyModal({
                 ? `المبلغ يتجاوز الحد الأقصى ₪${insurancePrice.toLocaleString("en-US")}`
                 : refundMissing
                   ? "أدخل مبلغ المرتجع"
-                  : undefined
+                  : disbursementStagedMissing
+                    ? "اضغط فتح وأدخل دفعات سند الصرف"
+                    : disbursementTotalMismatch
+                      ? "مجموع الدفعات لا يساوي مبلغ المرتجع"
+                      : undefined
             }
           >
             {saving ? (
@@ -629,11 +700,14 @@ export function CancelPolicyModal({
       </DialogContent>
     </Dialog>
 
-      {/* Disbursement detour. Opens when the agent picks سند صرف and
-          hits تأكيد الإلغاء; the cancellation only commits after the
-          dialog saves successfully (handleCancel re-runs with
-          disbursementSaved=true and skips the gate). Closing the
-          dialog without saving leaves the policy intact — safe abort. */}
+      {/* Disbursement detour, stageOnly mode. The agent opens the
+          payment portal via the "فتح" button, fills lines, and saves
+          — but no DB write happens here. The validated payload flows
+          back through onSaved into stagedDisbursement; the actual
+          insert runs from handleCancel when the agent hits تأكيد
+          الإلغاء. Closing the dialog without saving (or by hitting
+          إلغاء) preserves any prior staged data so the agent can
+          reopen and edit instead of starting over. */}
       <AddSettlementDialog
         open={disbursementDialogOpen}
         onOpenChange={setDisbursementDialogOpen}
@@ -644,41 +718,11 @@ export function CancelPolicyModal({
         policyId={primaryPolicyId}
         branchId={branchId}
         targetAmount={refundAmount ? parseFloat(refundAmount) : undefined}
-        onSaved={async () => {
-          // 1. Flip BOTH the ref (read inside the same-tick
-          //    handleCancel re-run, no closure staleness) AND the
-          //    mirrored state (drives the on-screen confirmation
-          //    pill rendered below).
-          disbursementSavedRef.current = true;
-          setDisbursementSaved(true);
-          setDisbursementDialogOpen(false);
-
-          // 2. Look up the just-created voucher_number so we can
-          //    show it on the cancel modal. The trigger stamps the
-          //    voucher on the receipts row mirrored from the
-          //    client_settlement we just inserted — newest matching
-          //    row for this client+policy. Best-effort; failing to
-          //    find it just leaves the pill on the generic "تم
-          //    الصرف بنجاح" text.
-          try {
-            const { data: latestVoucher } = await supabase
-              .from("receipts")
-              .select("voucher_number")
-              .eq("receipt_type", "disbursement")
-              .eq("client_id", clientId)
-              .eq("policy_id", primaryPolicyId)
-              .order("created_at", { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            const voucher = (latestVoucher as { voucher_number?: string } | null)?.voucher_number;
-            if (voucher) setDisbursementVoucher(voucher);
-          } catch (lookupErr) {
-            console.warn("[CancelPolicyModal] disbursement voucher lookup failed:", lookupErr);
-          }
-
-          // 3. Re-enter handleCancel — the gate now reads the ref as
-          //    true and falls through to commit the cancellation.
-          void handleCancel();
+        stageOnly
+        initialLines={stagedDisbursement?.lines}
+        initialNotes={stagedDisbursement?.notes}
+        onSaved={(staged) => {
+          if (staged) setStagedDisbursement(staged);
         }}
       />
     </>

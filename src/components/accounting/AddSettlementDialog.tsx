@@ -41,6 +41,7 @@ import { BankPicker } from '@/components/shared/BankPicker';
 import { MultiImagePicker } from '@/components/shared/MultiImagePicker';
 import { sanitizeChequeNumber, validateChequeNumber } from '@/lib/chequeUtils';
 import { cn } from '@/lib/utils';
+import { persistSettlementLines } from './persistSettlementLines';
 
 export type SettlementMode = 'company' | 'broker' | 'client';
 export type SettlementKind = 'disbursement' | 'receipt';
@@ -49,6 +50,13 @@ export type PaymentLineType = 'cash' | 'cheque' | 'customer_cheque' | 'bank_tran
 export interface SettlementEntity {
   id: string;
   name: string;
+}
+
+/** Payload returned to the parent when stageOnly is enabled — the parent
+ *  is responsible for calling persistSettlementLines at confirm time. */
+export interface StagedSettlement {
+  lines: PaymentLine[];
+  notes: string;
 }
 
 interface Props {
@@ -60,7 +68,11 @@ interface Props {
   /** Required for company / broker modes; ignored on client mode (the
    *  client is identified by defaultEntityId, no picker shown). */
   entities?: SettlementEntity[];
-  onSaved: () => void;
+  /** Called after the dialog's Save click resolves. When `stageOnly` is
+   *  off, this fires after the DB writes succeed (payload omitted). When
+   *  `stageOnly` is on, no DB write happens — the validated lines + notes
+   *  are handed back so the caller can persist them later. */
+  onSaved: (staged?: StagedSettlement) => void;
   // ── client-mode extras ─────────────────────────────────────────────
   /** Title-bar display name when mode === 'client'. */
   clientName?: string;
@@ -74,9 +86,20 @@ interface Props {
    *  this amount. Used by Cancel/Transfer modals to pin the
    *  disbursement to the refund value the user already typed. */
   targetAmount?: number;
+  // ── staged mode (cancel / transfer detour) ─────────────────────────
+  /** When true, Save validates but does NOT write to the DB. Instead the
+   *  validated lines + notes flow back through onSaved so the caller can
+   *  commit them atomically alongside the policy update. */
+  stageOnly?: boolean;
+  /** Seed the form with these lines when the dialog opens. Used by
+   *  staged-mode callers to restore a prior in-progress entry so the
+   *  agent can edit instead of starting over. */
+  initialLines?: PaymentLine[];
+  /** Seed the notes textarea on open — companion to initialLines. */
+  initialNotes?: string;
 }
 
-interface PaymentLine {
+export interface PaymentLine {
   id: string;
   payment_type: PaymentLineType;
   amount: number;
@@ -162,6 +185,9 @@ export function AddSettlementDialog({
   policyId,
   branchId,
   targetAmount,
+  stageOnly,
+  initialLines,
+  initialNotes,
 }: Props) {
   const { user } = useAuth();
   const { agentId } = useAgentContext();
@@ -185,14 +211,23 @@ export function AddSettlementDialog({
   }> | null>(null);
 
   // Reset whenever the dialog opens or mode/kind changes underneath.
+  // Staged callers (cancel/transfer) can hand us initialLines+initialNotes
+  // so reopening preserves the prior entry instead of starting fresh.
+  // initialLines/initialNotes deliberately stay out of the deps array —
+  // they're a seed for the open transition, not a live binding.
   useEffect(() => {
     if (!open) return;
     setEntityId(defaultEntityId ?? '');
-    setNotes('');
-    setLines([makeLine('cash')]);
+    setNotes(initialNotes ?? '');
+    setLines(
+      initialLines && initialLines.length > 0
+        ? initialLines.map((l) => ({ ...l }))
+        : [makeLine('cash')],
+    );
     setSplitAmount('');
     setSplitCount(2);
     setSplitType('cheque');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultEntityId, mode, kind]);
 
   const total = useMemo(
@@ -380,124 +415,29 @@ export function AddSettlementDialog({
     }
 
     setSaving(true);
-    // Multi-line client disbursements share one settlement_session_id
-    // so the BEFORE INSERT trigger reuses a single D{nn}/YYYY voucher
-    // across all lines instead of allocating a new number per row.
-    const clientSettlementSessionId =
-      mode === 'client' && effective.length > 0 ? crypto.randomUUID() : null;
     try {
-      for (const line of effective) {
-        const isCustomerCheque = line.payment_type === 'customer_cheque';
-        const customerChequeIds: string[] = isCustomerCheque
-          ? (line.selected_cheques ?? []).map((c) => c.id)
-          : [];
-        const amount = isCustomerCheque
-          ? (line.selected_cheques ?? []).reduce((s, c) => s + Number(c.amount || 0), 0)
-          : Number(line.amount || 0);
-
-        // Settlement_date: we use the issue date for cheques (when money
-        // logically left), and payment_date for everything else. The
-        // separate due date is persisted alongside in cheque_due_date.
-        const settlementDate =
-          line.payment_type === 'cheque'
-            ? line.cheque_issue_date ?? line.payment_date
-            : line.payment_date;
-
-        const shared = {
-          total_amount: amount,
-          settlement_date: settlementDate,
-          status: 'completed' as const,
-          notes: notes || null,
-          created_by_admin_id: user?.id ?? null,
-          agent_id: agentId ?? null,
-          payment_type: line.payment_type,
-          cheque_number: line.payment_type === 'cheque' ? line.cheque_number ?? null : null,
-          bank_code: line.payment_type === 'cheque' ? line.bank_code ?? null : null,
-          branch_code: line.payment_type === 'cheque' ? line.branch_code ?? null : null,
-          cheque_due_date:
-            line.payment_type === 'cheque'
-              ? line.cheque_due_date ?? line.cheque_issue_date ?? settlementDate
-              : null,
-          cheque_issue_date:
-            line.payment_type === 'cheque'
-              ? line.cheque_issue_date ?? settlementDate
-              : null,
-          cheque_image_url:
-            line.payment_type === 'cheque' ? line.cheque_image_urls?.[0] ?? null : null,
-          cheque_image_urls:
-            line.payment_type === 'cheque' ? line.cheque_image_urls ?? [] : [],
-          bank_reference:
-            line.payment_type === 'bank_transfer' ? line.bank_reference ?? null : null,
-          customer_cheque_ids: customerChequeIds,
-          refused: false,
-        };
-
-        let settlementId: string | null = null;
-        if (mode === 'company') {
-          const { data, error } = await supabase
-            .from('company_settlements')
-            .insert({
-              ...shared,
-              company_id: entityId,
-              direction: kind === 'disbursement' ? 'outgoing' : 'incoming',
-            } as never)
-            .select('id')
-            .single();
-          if (error) throw error;
-          settlementId = (data as { id: string }).id;
-        } else if (mode === 'broker') {
-          const { data, error } = await supabase
-            .from('broker_settlements')
-            .insert({
-              ...shared,
-              broker_id: entityId,
-              direction: kind === 'disbursement' ? 'we_owe' : 'broker_owes',
-            } as never)
-            .select('id')
-            .single();
-          if (error) throw error;
-          settlementId = (data as { id: string }).id;
-        } else {
-          // mode === 'client'
-          //
-          // Disbursement only (the dialog short-circuits 'receipt' at
-          // the open path — client payments go through policy_payments).
-          // The DB triggers handle voucher_number + receipts mirror
-          // automatically; we just send the raw line and let the
-          // BEFORE/AFTER triggers do their thing.
-          const { data, error } = await supabase
-            .from('client_settlements')
-            .insert({
-              ...shared,
-              client_id: entityId,
-              policy_id: policyId ?? null,
-              branch_id: branchId ?? null,
-              settlement_session_id: clientSettlementSessionId,
-            } as never)
-            .select('id')
-            .single();
-          if (error) throw error;
-          settlementId = (data as { id: string }).id;
-        }
-
-        if (isCustomerCheque && customerChequeIds.length > 0 && settlementId) {
-          const { error: updateError } = await supabase
-            .from('policy_payments')
-            .update({
-              cheque_status: 'transferred_out',
-              transferred_to_type: mode,
-              transferred_to_id: entityId,
-              transferred_payment_id: settlementId,
-              transferred_at: new Date().toISOString(),
-            })
-            .in('id', customerChequeIds);
-          if (updateError) throw updateError;
-        }
+      if (stageOnly) {
+        // Staged callers (cancel/transfer) need the validated payload
+        // back so they can persist it atomically alongside the policy
+        // update — no DB write happens here.
+        onSaved({ lines: effective, notes });
+        onOpenChange(false);
+      } else {
+        await persistSettlementLines({
+          mode,
+          kind,
+          entityId,
+          policyId,
+          branchId,
+          effective,
+          notes,
+          userId: user?.id ?? null,
+          agentId: agentId ?? null,
+        });
+        toast.success('تم الحفظ');
+        onSaved();
+        onOpenChange(false);
       }
-
-      toast.success('تم الحفظ');
-      onSaved();
-      onOpenChange(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'فشل الحفظ';
       toast.error(message);
