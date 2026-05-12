@@ -377,9 +377,7 @@ export function PolicySuccessDialog({
                   تم إنشاء المعاملة بنجاح
                 </DialogTitle>
                 <p className="text-xs text-white/70 mt-0.5">
-                  {hasReceipt
-                    ? "يمكنك طباعة أو إرسال المعاملة وسند القبض للعميل"
-                    : "يمكنك طباعة أو إرسال المعاملة للعميل"}
+                  يمكنك طباعة أو إرسال المعاملة وسند القبض للعميل
                 </p>
               </div>
             </div>
@@ -415,27 +413,29 @@ export function PolicySuccessDialog({
               smsLocked={smsLocked}
             />
 
-            {/* Receipt row — only shown when the user added a payment
-                beyond the auto-mandatory ELZAMI row. */}
-            {hasReceipt && (
-              <RowBlock
-                row="receipt"
-                icon={<Receipt className="h-6 w-6 text-blue-600" />}
-                iconBg="bg-blue-500/10"
-                active={activeRow === "receipt"}
-                onToggle={() => toggleRow("receipt")}
-                channelStates={{
-                  print: getCell("receipt", "print"),
-                  sms: getCell("receipt", "sms"),
-                  whatsapp: getCell("receipt", "whatsapp"),
-                }}
-                onPrint={handleReceiptPrint}
-                onSms={handleReceiptSms}
-                onWhatsapp={handleReceiptWhatsapp}
-                hasPhone={!!clientPhone}
-                smsLocked={smsLocked}
-              />
-            )}
+            {/* Receipt row — always shown so the user knows the option
+                exists. When there's no non-mandatory payment (hasReceipt
+                is false) the row stays disabled and surfaces a hint
+                explaining the gate, instead of disappearing. */}
+            <RowBlock
+              row="receipt"
+              icon={<Receipt className="h-6 w-6 text-blue-600" />}
+              iconBg="bg-blue-500/10"
+              active={activeRow === "receipt"}
+              onToggle={() => toggleRow("receipt")}
+              channelStates={{
+                print: getCell("receipt", "print"),
+                sms: getCell("receipt", "sms"),
+                whatsapp: getCell("receipt", "whatsapp"),
+              }}
+              onPrint={handleReceiptPrint}
+              onSms={handleReceiptSms}
+              onWhatsapp={handleReceiptWhatsapp}
+              hasPhone={!!clientPhone}
+              smsLocked={smsLocked}
+              disabled={!hasReceipt}
+              disabledHint="متاح فقط عند وجود دفعة غير الإلزامي"
+            />
           </TooltipProvider>
 
           {/* Close */}
@@ -468,6 +468,12 @@ interface RowBlockProps {
   onWhatsapp: () => void;
   hasPhone: boolean;
   smsLocked: boolean;
+  /** Locks the row entirely — main button can't expand its panel and a
+   *  small hint takes the place of the panel below. Used for سند القبض
+   *  when the user added no payment beyond the auto-mandatory row. */
+  disabled?: boolean;
+  /** Text shown under the disabled main button explaining the gate. */
+  disabledHint?: string;
 }
 
 function RowBlock({
@@ -482,17 +488,21 @@ function RowBlock({
   onWhatsapp,
   hasPhone,
   smsLocked,
+  disabled,
+  disabledHint,
 }: RowBlockProps) {
   const labels = ROW_LABELS[row];
+  const expanded = active && !disabled;
 
   return (
     <div className="space-y-2">
       {/* Action panel — collapses both height and opacity so the
-          row above slides up cleanly when the panel closes. */}
+          row above slides up cleanly when the panel closes. Hidden
+          entirely when the row is disabled. */}
       <div
         className={cn(
           "overflow-hidden transition-all duration-200 ease-out",
-          active ? "max-h-24 opacity-100" : "max-h-0 opacity-0",
+          expanded ? "max-h-24 opacity-100" : "max-h-0 opacity-0",
         )}
       >
         <div className="flex items-center justify-center gap-2 p-2 bg-muted/40 border border-border/60 rounded-xl">
@@ -526,10 +536,13 @@ function RowBlock({
       {/* Main row button */}
       <button
         type="button"
-        onClick={onToggle}
+        onClick={disabled ? undefined : onToggle}
+        disabled={disabled}
         className={cn(
           "w-full p-4 rounded-xl border-2 transition-all duration-200 text-right flex items-center gap-4",
-          active
+          disabled
+            ? "border-border/50 bg-muted/30 cursor-not-allowed opacity-60"
+            : active
             ? "border-primary/60 bg-primary/5"
             : "border-border hover:border-primary/50 hover:bg-primary/5",
         )}
@@ -562,6 +575,14 @@ function RowBlock({
           <div className="text-sm text-muted-foreground">{labels.desc}</div>
         </div>
       </button>
+
+      {/* Hint shown only when the row is gated. Sits directly under the
+          button so the user can read why the action is unavailable. */}
+      {disabled && disabledHint && (
+        <p className="text-xs text-muted-foreground text-right px-1">
+          {disabledHint}
+        </p>
+      )}
     </div>
   );
 }
