@@ -35,6 +35,7 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 );
 import { PolicyDetailsDrawer } from "@/components/policies/PolicyDetailsDrawer";
 import { DebtPaymentModal } from "@/components/debt/DebtPaymentModal";
+import { DebtPaymentSuccessDialog } from "@/components/debt/DebtPaymentSuccessDialog";
 import { ClientNotesPopover } from "@/components/clients/ClientNotesPopover";
 import { useAuth } from "@/hooks/useAuth";
 import { useSmsLock } from "@/hooks/useSmsLock";
@@ -295,6 +296,14 @@ export default function DebtTracking() {
   const [filterBranch, setFilterBranch] = useState<string | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentClient, setPaymentClient] = useState<ClientDebt | null>(null);
+
+  // Post-submit "طباعة / إرسال سند القبض" dialog. We stash phone +
+  // payment_ids when DebtPaymentModal's onSuccess fires so the user
+  // can hand-pick the channel — no more silent SMS auto-send on the
+  // way out.
+  const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
+  const [receiptPaymentIds, setReceiptPaymentIds] = useState<string[]>([]);
+  const [receiptClientPhone, setReceiptClientPhone] = useState<string | null>(null);
 
   // Bulk SMS state
   const [bulkSmsDialogOpen, setBulkSmsDialogOpen] = useState(false);
@@ -1145,12 +1154,32 @@ export default function DebtTracking() {
           clientName={paymentClient.client_name}
           clientPhone={paymentClient.phone_number}
           totalOwed={paymentClient.total_owed}
-          onSuccess={() => {
+          onSuccess={(paymentIds) => {
+            // Stash phone before clearing paymentClient — the success
+            // dialog reads it once mounted and we want it independent
+            // of the (now-unmounted) payment modal state.
+            const phone = paymentClient?.phone_number ?? null;
             setPaymentClient(null);
             fetchDebtData();
+            if (paymentIds.length > 0) {
+              setReceiptPaymentIds(paymentIds);
+              setReceiptClientPhone(phone);
+              setReceiptDialogOpen(true);
+            }
           }}
         />
       )}
+
+      <DebtPaymentSuccessDialog
+        open={receiptDialogOpen}
+        onOpenChange={setReceiptDialogOpen}
+        paymentIds={receiptPaymentIds}
+        clientPhone={receiptClientPhone}
+        onClose={() => {
+          setReceiptPaymentIds([]);
+          setReceiptClientPhone(null);
+        }}
+      />
     </MainLayout>
   );
 }

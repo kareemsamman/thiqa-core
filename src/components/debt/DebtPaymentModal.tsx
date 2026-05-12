@@ -13,7 +13,6 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2, CreditCard, Banknote, Wallet, AlertCircle, CheckCircle, DollarSign, Plus, Trash2, Split, Upload, X, ImageIcon, HelpCircle, Car, Package, FileText, Info, Scan, Handshake } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { TranzilaPaymentModal } from '@/components/payments/TranzilaPaymentModal';
@@ -21,7 +20,6 @@ import { ChequeScannerDialog } from '@/components/payments/ChequeScannerDialog';
 import { sanitizeChequeNumber, CHEQUE_NUMBER_MAX_LENGTH } from '@/lib/chequeUtils';
 import { BankPicker } from '@/components/shared/BankPicker';
 import { useToast } from '@/hooks/use-toast';
-import { useSmsLock } from '@/hooks/useSmsLock';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 
 // Represents each policy inside a debt item
@@ -126,7 +124,12 @@ interface DebtPaymentModalProps {
   clientName: string;
   clientPhone: string | null;
   totalOwed: number;
-  onSuccess: () => void;
+  // Receives the payment_ids created by this submit so the caller can
+  // open a "print / send سند قبض" dialog. The list is empty when the
+  // submit didn't create any rows (e.g. edit mode that only restamped
+  // existing payments) — callers should treat an empty array as "no
+  // receipt to send".
+  onSuccess: (paymentIds: string[]) => void;
   // Optional: when set, the modal switches into "edit a single سند قبض"
   // mode — title changes, the wallet ceiling treats the session's
   // existing total as available room, and submit replaces the session's
@@ -172,7 +175,6 @@ export function DebtPaymentModal({
   const isEditMode = !!editingSession;
   const { toast: uiToast } = useToast();
   const { hasFeature } = useAgentContext();
-  const { guardSend: guardSmsSend } = useSmsLock();
   const paymentTypes = useMemo(() => hasFeature('visa_payment') ? [...paymentTypesBase, paymentTypeVisa] : paymentTypesBase, [hasFeature]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -875,43 +877,6 @@ export function DebtPaymentModal({
     setActiveTranzilaPolicyId(null);
   };
 
-  const sendPaymentConfirmationSms = async (paidAmount: number, paymentIds: string[]) => {
-    if (!clientPhone || paymentIds.length === 0) return;
-    if (!guardSmsSend('auto')) return;
-
-    try {
-      // Use bulk receipt function to aggregate all payments into one receipt
-      const { data: receiptData, error: receiptError } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
-        body: { payment_ids: paymentIds, total_amount: paidAmount }
-      });
-      
-      if (receiptError) {
-        console.error('Error generating bulk payment receipt:', receiptError);
-        return;
-      }
-      
-      const receiptUrl = receiptData?.receipt_url;
-      
-      const message = `مرحباً ${clientName}، تم استلام دفعة بمبلغ ₪${paidAmount.toLocaleString()}. شكراً لك!\n\nلعرض وصل الدفع:\n${receiptUrl || 'غير متوفر'}`;
-      
-      const { error: smsError } = await supabase.functions.invoke('send-sms', {
-        body: {
-          phone: clientPhone,
-          message,
-          sms_type: 'payment_confirmation'
-        }
-      });
-
-      if (smsError) throw smsError;
-
-      toast.success('تم إرسال رسالة التأكيد للعميل');
-    } catch (error) {
-      console.error('Error sending payment confirmation SMS:', error);
-      const msg = await extractFunctionErrorMessage(error);
-      if (msg) toast.error(msg);
-    }
-  };
-
   const handleSubmit = async () => {
     if (!isValid) return;
 
@@ -1108,14 +1073,9 @@ export function DebtPaymentModal({
       }
 
       toast.success(isEditMode ? 'تم تحديث سند القبض' : 'تم تسديد الدفعات بنجاح');
-      
-      // Send bulk receipt SMS with all payment IDs
-      if (allCreatedPaymentIds.length > 0) {
-        await sendPaymentConfirmationSms(totalPaymentAmount, allCreatedPaymentIds);
-      }
-      
+
       onOpenChange(false);
-      onSuccess();
+      onSuccess(allCreatedPaymentIds);
     } catch (error: any) {
       console.error('Error saving payments:', error);
       toast.error(error.message || 'خطأ في حفظ الدفعات');
