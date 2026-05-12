@@ -763,16 +763,10 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
             // shared component, so any change to the file flow
             // automatically reflects in both modes.
             <div className="flex flex-col overflow-hidden">
+              {/* Header row — title on the right (start in RTL), X on
+                  the left (end in RTL). Standard RTL dialog layout
+                  the user prefers across the app. */}
               <div className="flex items-center justify-between px-4 py-3 border-b">
-                <button
-                  type="button"
-                  onClick={() => onOpenChange(false)}
-                  aria-label="إغلاق"
-                  title="إغلاق"
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition focus:outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  <X className="h-4 w-4" />
-                </button>
                 <div className="flex items-center gap-2 text-sm font-semibold">
                   <ImageIcon className="h-4 w-4 text-primary" />
                   <span>ملفات المعاملة</span>
@@ -782,6 +776,15 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                     </span>
                   )}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  aria-label="إغلاق"
+                  title="إغلاق"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
               <ScrollArea className="flex-1 max-h-[75vh]">
                 <div className="p-4 sm:p-5">
@@ -793,6 +796,7 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                     clientName={policy.clients.full_name}
                     onPolicyNumberSaved={() => fetchPolicyDetails()}
                     packagePolicyIds={hasPackage ? [policy.id, ...relatedPolicies.map(rp => rp.id)] : undefined}
+                    onFilesCountChanged={setPolicyFilesCount}
                   />
                 </div>
               </ScrollArea>
@@ -1605,14 +1609,15 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
 
                 {activeSection === 'files' && (
                   <div className="p-4 sm:p-6">
-                    <PolicyFilesSection 
-                      policyId={policy.id} 
+                    <PolicyFilesSection
+                      policyId={policy.id}
                       policyNumber={policy.policy_number}
                       clientId={policy.clients.id}
                       clientPhoneNumber={policy.clients.phone_number}
                       clientName={policy.clients.full_name}
                       onPolicyNumberSaved={() => fetchPolicyDetails()}
                       packagePolicyIds={hasPackage ? [policy.id, ...relatedPolicies.map(rp => rp.id)] : undefined}
+                      onFilesCountChanged={setPolicyFilesCount}
                     />
                   </div>
                 )}

@@ -39,16 +39,21 @@ interface PolicyFilesSectionProps {
   onPolicyNumberSaved?: (policyNumber: string) => void;
   // Package support - array of all policy IDs in package for unified file view
   packagePolicyIds?: string[];
+  // Lets the parent drawer keep its "ملفات (N)" badge in sync with
+  // uploads/deletes without remounting. Reports the insurance count
+  // (the same set the SMS button and badge care about).
+  onFilesCountChanged?: (count: number) => void;
 }
 
-export function PolicyFilesSection({ 
-  policyId, 
-  policyNumber: initialPolicyNumber, 
+export function PolicyFilesSection({
+  policyId,
+  policyNumber: initialPolicyNumber,
   clientId,
   clientPhoneNumber,
   clientName,
   onPolicyNumberSaved,
-  packagePolicyIds 
+  packagePolicyIds,
+  onFilesCountChanged
 }: PolicyFilesSectionProps) {
   const { toast } = useToast();
   const [insuranceFiles, setInsuranceFiles] = useState<MediaFile[]>([]);
@@ -106,6 +111,7 @@ export function PolicyFilesSection({
 
       if (insuranceError) throw insuranceError;
       setInsuranceFiles(insuranceData || []);
+      onFilesCountChanged?.(insuranceData?.length || 0);
 
       // Fetch CRM files (internal docs)
       const { data: crmData, error: crmError } = await supabase
@@ -730,7 +736,7 @@ export function PolicyFilesSection({
       {uploadProgress && (
         <Card className="p-3 mb-3 space-y-2 border-primary/40">
           <div className="flex items-center justify-between text-xs">
-            <span className="truncate max-w-[70%]">جاري رفع الفيديو: {uploadProgress.name}</span>
+            <span className="truncate max-w-[70%]">جاري رفع: {uploadProgress.name}</span>
             <span className="font-mono">{uploadProgress.pct}%</span>
           </div>
           <Progress value={uploadProgress.pct} className="h-2" />
