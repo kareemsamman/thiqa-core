@@ -975,6 +975,44 @@ export default function Receipts() {
         // سجل الدفعات. customer_scope=true is left in the function
         // signature for any caller that still wants the full كشف قبض,
         // but the receipts list no longer opts in.
+        //
+        // Tab branching: when the user is on the سندات الإلغاء tab,
+        // the row they clicked is a cancellation voucher (one of the
+        // receipts.receipt_type='cancellation' rows). That has its own
+        // printable template — generate-cancellation-voucher — which
+        // lives at a different CDN path and renders the "سند إلغاء"
+        // layout. Hitting generate-bulk-payment-receipt instead would
+        // print the cancelled-original سند قبض, which is the wrong
+        // document.
+        const isCancellationTab = activeTab === 'cancellation';
+        if (isCancellationTab) {
+          // The receipts group on the cancellation tab is keyed by the
+          // canonical voucher row; for our edge function we just need
+          // its receipts.id. Pick the smallest receipt_number row in
+          // the group as the canonical one (matches the dedupe we use
+          // everywhere else).
+          let canonical = group.receipts[0];
+          for (const r of group.receipts) {
+            const cur = (canonical as any).receipt_number ?? Number.MAX_SAFE_INTEGER;
+            const cand = (r as any).receipt_number ?? Number.MAX_SAFE_INTEGER;
+            if (cand < cur) canonical = r;
+          }
+          const { data, error } = await supabase.functions.invoke(
+            'generate-cancellation-voucher',
+            { body: { voucher_receipt_id: (canonical as any).id } },
+          );
+          if (error) throw error;
+          const url = (data as any)?.receipt_url;
+          if (url) {
+            closeOverlay(true);
+            window.open(url, '_blank');
+            return;
+          }
+          closeOverlay(false);
+          toast.error('لم يتم العثور على رابط سند الإلغاء');
+          return;
+        }
+
         const fn = "generate-bulk-payment-receipt";
         const body = { payment_ids: paymentIds };
         const { data, error } = await supabase.functions.invoke(fn, { body });

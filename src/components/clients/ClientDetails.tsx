@@ -1844,15 +1844,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     };
 
     const filteredPayments = payments.filter((payment) => {
-      // Ghost rows from the legacy "cancel-while-unprinted" path: a
-      // row that was cancelled (refused=true) but never printed
-      // (printed_at=null) is, per the user's rule, a draft that
-      // should have been DELETEd rather than marked refused. The new
-      // confirmCancelPayment does the right thing going forward, but
-      // pre-fix data left these orphans behind. Skip them everywhere
-      // — the agent didn't give a copy to the customer, so there's
-      // nothing to audit.
-      if (payment.refused && payment.printed_at == null) return false;
+      // Note: ghost rows (refused=true + printed_at=null from legacy
+      // cancel-while-unprinted) USED to be filtered out here, but the
+      // user revised the rule for سجل الدفعات: when a cancellation
+      // voucher row is shown above, the cancelled سند قبض below has
+      // to be visible too so the bookkeeper sees both sides of the
+      // event. Ghosts still get filtered out of the printed receipt
+      // in generate-bulk-payment-receipt (separate concern — printed
+      // copy must stay clean of orphan history).
       if (paymentSearch) {
         const search = paymentSearch.toLowerCase();
         if (!payment.cheque_number?.toLowerCase().includes(search) &&
