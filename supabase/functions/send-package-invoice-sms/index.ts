@@ -545,24 +545,15 @@ serve(async (req) => {
       );
     }
 
-    // Build SMS message with ALL files included
+    // Build SMS message — keep it short. The user's rule: the printed
+    // invoice already shows all the price + balance details, the SMS
+    // is just a delivery vehicle for the link. So we drop the "المبلغ
+    // الإجمالي / المتبقي / عمولة المكتب" lines that used to live in
+    // the message body and ship the URL alone alongside the greeting.
     let smsMessage = `مرحباً ${client.full_name}، تم إصدار معاملة التأمين`;
 
-    // Include a price summary so the customer sees what they owe, including
-    // office commission (the ELZAMI markup) rolled into the grand total.
-    const smsTotalCommission = policies.reduce(
-      (sum: number, p: any) => sum + (p.office_commission || 0),
-      0,
-    );
-    smsMessage += `\n\nالمبلغ الإجمالي: ₪${totalPrice.toLocaleString('en-US')}`;
-    if (smsTotalCommission > 0) {
-      smsMessage += `\nمنها عمولة المكتب: ₪${smsTotalCommission.toLocaleString('en-US')}`;
-    }
-    if (totalRemaining > 0) {
-      smsMessage += `\nالمتبقي: ₪${totalRemaining.toLocaleString('en-US')}`;
-    }
-
-    // Add policy files if available
+    // Add policy files if available (still wanted in the SMS body —
+    // they're individual attachment links, not redundant price info).
     if (allPolicyUrlsText) {
       smsMessage += `\n\n${allPolicyUrlsText}`;
     }
