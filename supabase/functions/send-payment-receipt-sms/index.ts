@@ -124,17 +124,46 @@ serve(async (req) => {
     }
 
     // Generate the receipt PDF by delegating to the existing function —
-    // do not duplicate the template logic here. We invoke via supabase
-    // client so auth/JWT propagation matches all other internal calls.
-    const receiptResult = await supabase.functions.invoke(
-      "generate-bulk-payment-receipt",
-      { body: { payment_ids } },
-    );
-    if (receiptResult.error) {
-      console.error("[send-payment-receipt-sms] generate-bulk-payment-receipt failed:", receiptResult.error);
+    // do not duplicate the template logic here. supabase.functions.invoke
+    // would send the service-role key as the bearer token, which
+    // generate-bulk-payment-receipt rejects (it calls auth.getUser to
+    // resolve a real user). Forward the original user's Authorization
+    // header via direct fetch so the target sees the same JWT the
+    // caller used.
+    let receiptData: any = null;
+    let receiptErrorText = "";
+    try {
+      const receiptResp = await fetch(
+        `${supabaseUrl}/functions/v1/generate-bulk-payment-receipt`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: authHeader,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ payment_ids }),
+        },
+      );
+      const text = await receiptResp.text();
+      try {
+        receiptData = JSON.parse(text);
+      } catch {
+        receiptErrorText = text;
+      }
+      if (!receiptResp.ok) {
+        console.error(
+          "[send-payment-receipt-sms] generate-bulk-payment-receipt non-2xx:",
+          receiptResp.status,
+          receiptData ?? receiptErrorText,
+        );
+        const detail = receiptData?.error || receiptErrorText || `status ${receiptResp.status}`;
+        return jsonResponse({ error: `فشل في توليد سند القبض: ${detail}` }, 500);
+      }
+    } catch (err) {
+      console.error("[send-payment-receipt-sms] receipt fetch failed:", err);
       return jsonResponse({ error: "فشل في توليد سند القبض" }, 500);
     }
-    const receipt_url = (receiptResult.data as any)?.receipt_url;
+    const receipt_url = receiptData?.receipt_url;
     if (!receipt_url) {
       return jsonResponse({ error: "لم يتم العثور على رابط السند" }, 500);
     }
