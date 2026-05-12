@@ -237,6 +237,7 @@ interface PaymentRecord {
   payment_session_id: string | null;
   receipt_number: string | null;
   printed_at: string | null;
+  created_at: string | null;
   policy: {
     id: string;
     policy_type_parent: string;
@@ -280,6 +281,12 @@ interface GroupedPayment {
   // scope resolvers still exclude these rows from the office's
   // كشف قبض.
   isPassthrough: boolean;
+  // Latest created_at across the group's rows — used to sort the
+  // payment log strictly by "when the bookkeeper added the entry".
+  // The user explicitly wants newest-on-top regardless of passthrough
+  // vs. real-collection status; payment_date alone is the user-entered
+  // value (which can be back-dated) and would not match that intent.
+  latestCreatedAt: string;
   payments: PaymentRecord[]; // Individual splits in this batch (or one row when not batched)
 }
 
@@ -844,7 +851,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // Get all payments for these policies (include batch_id for grouping)
       const { data: paymentsData, error } = await supabase
         .from('policy_payments')
-        .select('id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id, payment_session_id, receipt_number, printed_at')
+        .select('id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id, payment_session_id, receipt_number, printed_at, created_at')
         .in('policy_id', policyIds)
         .order('payment_date', { ascending: false });
 
@@ -1783,6 +1790,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           locked: payment.locked,
           printed: false,
           isPassthrough: false,
+          latestCreatedAt: payment.created_at || payment.payment_date,
           payments: [],
         });
       }
@@ -1808,6 +1816,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // Use earliest date if batched (typically all splits share a date).
       if (payment.payment_date < group.payment_date) {
         group.payment_date = payment.payment_date;
+      }
+
+      // Track the LATEST created_at across the group's rows. Sort uses
+      // this so newer additions (or recent edits via the unified flow,
+      // which re-INSERTs with a new created_at) bubble to the top.
+      const candidateCa = payment.created_at || payment.payment_date;
+      if (candidateCa > group.latestCreatedAt) {
+        group.latestCreatedAt = candidateCa;
       }
 
       // If any split is refused, mark whole batch — the cancel flow
@@ -1836,16 +1852,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       group.isPassthrough = group.payments.every(isPassthroughPayment);
     }
 
-    // Sort: passthrough rows (إلزامي / فيزا خارجي) always render last
-    // regardless of date — they're informational money the office didn't
-    // collect, and the bookkeeper wants the real receipts on top.
-    // Within each bucket sort by date descending (newest first).
-    return Array.from(groups.values()).sort((a, b) => {
-      if (a.isPassthrough !== b.isPassthrough) {
-        return a.isPassthrough ? 1 : -1;
-      }
-      return new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime();
-    });
+    // Sort by latest created_at descending — newest entry always on
+    // top, regardless of whether it's a real collection or an إلزامي
+    // / فيزا خارجي passthrough row. The user's rule (revised): order
+    // is purely by when the bookkeeper added the entry. The earlier
+    // "passthrough always last" behaviour was removed at the user's
+    // request — they want consistency with the chronological order of
+    // work, not a type-based segregation.
+    return Array.from(groups.values()).sort((a, b) =>
+      new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime()
+    );
   }, [payments, paymentSearch, paymentTypeFilter, policies]);
 
   // Re-open the PaymentGroupDetailsDialog with the freshest version of
