@@ -2495,14 +2495,21 @@ export default function Receipts() {
                                 onClick={() => handlePrintGroup(group)}
                               >
                                 <Printer className="h-4 w-4 ml-2" />
-                                {/* Cancellation rows are always one
-                                    voucher conceptually, even when the
-                                    group bundles multiple receipt rows
-                                    behind the scenes — keep the label
-                                    singular there. */}
-                                {activeTab === 'payment' && group.receipts.length > 1
-                                  ? "طباعة السندات"
-                                  : "طباعة السند"}
+                                {/* Label tracks the active tab's
+                                    document type. Cancellation / credit_
+                                    note / disbursement are conceptually
+                                    one voucher per row, so they stay
+                                    singular even when the underlying
+                                    group bundles multiple receipts. */}
+                                {activeTab === 'credit_note'
+                                  ? "طباعة الإشعار"
+                                  : activeTab === 'disbursement'
+                                    ? "طباعة سند الصرف"
+                                    : activeTab === 'cancellation'
+                                      ? "طباعة سند الإلغاء"
+                                      : group.receipts.length > 1
+                                        ? "طباعة السندات"
+                                        : "طباعة السند"}
                               </DropdownMenuItem>
                               {/* إلغاء السند — voids every underlying
                                   policy_payment in the group, which fires
