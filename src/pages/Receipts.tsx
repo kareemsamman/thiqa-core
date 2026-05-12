@@ -74,6 +74,10 @@ import { format } from "date-fns";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { PaymentEditDialog } from "@/components/clients/PaymentEditDialog";
 import {
+  DebtPaymentModal,
+  type DebtPaymentEditingSession,
+} from "@/components/debt/DebtPaymentModal";
+import {
   ReceiptGroupDetailsDialog,
   type ReceiptGroupView,
   type ReceiptRow,
@@ -602,6 +606,27 @@ export default function Receipts() {
   // as the cheques page — required field, dialog blocks until typed.
   const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
   const [reasonGroup, setReasonGroup] = useState<ReceiptGroupView | null>(null);
+  // True when at least one target row has been printed. Drives the
+  // dual-regime cancel rule the user set: printed → refused=true + سند
+  // إلغاء + reason required; unprinted → DELETE the row cleanly with
+  // no سند إلغاء, no reason needed. Same predicate as ClientDetails.
+  const [reasonAnyPrinted, setReasonAnyPrinted] = useState<boolean>(true);
+
+  // Unified edit modal — same DebtPaymentModal that ClientDetails uses.
+  // Editing an unprinted سند قبض from the receipts list opens this
+  // dialog seeded with the session's existing rows and replaces the
+  // session on submit (DELETE old + INSERT new). The legacy single-row
+  // PaymentEditDialog stays mounted for manual receipts that don't
+  // belong to any session.
+  const [debtModalOpen, setDebtModalOpen] = useState(false);
+  const [debtModalEditingSession, setDebtModalEditingSession] =
+    useState<DebtPaymentEditingSession | null>(null);
+  const [debtModalClient, setDebtModalClient] = useState<{
+    id: string;
+    full_name: string;
+    phone: string | null;
+  } | null>(null);
+  const [debtModalResolving, setDebtModalResolving] = useState(false);
   const [reasonText, setReasonText] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [reasonSubmitting, setReasonSubmitting] = useState(false);
@@ -1019,6 +1044,137 @@ export default function Receipts() {
     setDialogOpen(true);
   };
 
+  // Open the unified edit flow for an auto-source سند قبض group. Same
+  // DebtPaymentModal that ClientDetails uses, seeded with the session's
+  // existing payments so the user can re-allocate / add / remove lines
+  // and submit — that submit DELETEs the old session and INSERTs new
+  // rows (sharing the same payment_session_id) per the user's rule
+  // "edit on unprinted draft = tear up and rewrite, never UPDATE".
+  // Falls back to the legacy single-row PaymentEditDialog for manual
+  // receipts (no policy / no session).
+  const openSessionEditModal = async (group: ReceiptGroupView) => {
+    const firstReceipt = group.receipts[0];
+    if (!firstReceipt) {
+      toast.error('السند فارغ');
+      return;
+    }
+
+    setDebtModalResolving(true);
+    try {
+      // Resolve client info from the first receipt's policy join.
+      const rawPolicy = (firstReceipt as any).policy;
+      const policy = Array.isArray(rawPolicy) ? rawPolicy[0] : rawPolicy;
+      const rawClient = policy?.clients;
+      const client = Array.isArray(rawClient) ? rawClient[0] : rawClient;
+      const clientId = client?.id || policy?.client_id;
+      if (!clientId) {
+        toast.error('لم يمكن تحديد العميل من هذا الصف');
+        return;
+      }
+
+      // Need name + phone too — the join above only had id, refetch
+      // the rest for the DebtPaymentModal title and SMS path.
+      const { data: clientRow, error: clientErr } = await supabase
+        .from('clients')
+        .select('id, full_name, phone_number')
+        .eq('id', clientId)
+        .maybeSingle();
+      if (clientErr) throw clientErr;
+      if (!clientRow) {
+        toast.error('العميل غير موجود');
+        return;
+      }
+
+      // Pull every policy_payments row for this session so the modal
+      // can pre-load them. We use the session_id (preferred) or the
+      // batch_id resolved in the existing sessionByPaymentId map; for
+      // the rare manual receipts that have neither we fall back to
+      // the receipts' own payment_id list.
+      const paymentIds = group.receipts
+        .map((r) => r.payment_id)
+        .filter((x): x is string => !!x);
+      if (paymentIds.length === 0) {
+        toast.error('هذا السند يدوي ولا يدعم التعديل الموحد — استخدم النموذج التقليدي');
+        return;
+      }
+
+      const { data: payRows, error: payErr } = await supabase
+        .from('policy_payments')
+        .select(`
+          id, amount, payment_type, payment_date, cheque_number, cheque_date,
+          cheque_issue_date, bank_code, branch_code, cheque_image_url, notes,
+          batch_id, locked, refused, printed_at, receipt_number, payment_session_id
+        `)
+        .in('id', paymentIds);
+      if (payErr) throw payErr;
+      const rows = (payRows ?? []) as any[];
+      if (rows.length === 0) {
+        toast.error('الدفعات غير موجودة');
+        return;
+      }
+
+      // Same printed-locks-edit guard the ClientDetails dropdown uses.
+      const anyPrinted = rows.some((p) => p.printed_at != null);
+      if (anyPrinted) {
+        toast.error('السند مطبوع — لا يمكن تعديله. استخدم إلغاء بدلاً.');
+        return;
+      }
+      const anyRefused = rows.some((p) => p.refused === true);
+      if (anyRefused) {
+        toast.error('السند ملغى أصلاً');
+        return;
+      }
+
+      const totalAmount = rows.reduce((s, p) => s + Number(p.amount || 0), 0);
+      // Smallest R-number across the session is the canonical one
+      // (matches the display-dedupe logic in groupedPayments and the
+      // bulk-receipt template).
+      let receiptNumber: string | null = null;
+      for (const p of rows) {
+        if (!p.receipt_number) continue;
+        if (!receiptNumber || String(p.receipt_number) < receiptNumber) {
+          receiptNumber = String(p.receipt_number);
+        }
+      }
+
+      // Group key = same fallback chain as everywhere else.
+      const sessionKey = rows[0].payment_session_id || rows[0].batch_id || rows[0].id;
+
+      setDebtModalEditingSession({
+        id: sessionKey,
+        paymentIds: rows.map((p) => p.id),
+        payments: rows.map((p) => ({
+          id: p.id,
+          amount: Number(p.amount || 0),
+          payment_type: p.payment_type,
+          payment_date: p.payment_date,
+          cheque_number: p.cheque_number,
+          cheque_date: p.cheque_date,
+          cheque_issue_date: p.cheque_issue_date,
+          bank_code: p.bank_code ?? null,
+          branch_code: p.branch_code ?? null,
+          cheque_image_url: p.cheque_image_url,
+          notes: p.notes,
+          batch_id: p.batch_id,
+          locked: p.locked,
+        })),
+        totalAmount,
+        receiptNumber,
+      });
+      setDebtModalClient({
+        id: clientRow.id,
+        full_name: clientRow.full_name,
+        phone: clientRow.phone_number ?? null,
+      });
+      setDebtModalOpen(true);
+    } catch (err: any) {
+      console.error('[Receipts] openSessionEditModal:', err);
+      toast.error(err?.message || 'فشل تحضير التعديل');
+    } finally {
+      setDebtModalResolving(false);
+    }
+  };
+
   const handleEditReceipt = async (r: ReceiptRow) => {
     // Auto-source receipts mirror a policy_payment row via the DB
     // trigger, so edits on them have to go through PaymentEditDialog
@@ -1106,7 +1262,7 @@ export default function Receipts() {
 
       const { data: payments } = await supabase
         .from('policy_payments')
-        .select('id, amount, payment_type, batch_id, policy_id, refused, locked')
+        .select('id, amount, payment_type, batch_id, policy_id, refused, locked, printed_at')
         .in('policy_id', policyIds);
 
       const policyById = new Map<string, any>(
@@ -1158,6 +1314,9 @@ export default function Receipts() {
       setReasonTargetSum(
         finalRows.reduce((s: number, p: any) => s + Number(p.amount || 0), 0),
       );
+      setReasonAnyPrinted(
+        finalRows.some((p: any) => p.printed_at != null),
+      );
       setReasonText('');
       setReasonError(null);
       setReasonDialogOpen(true);
@@ -1171,32 +1330,51 @@ export default function Receipts() {
 
   const confirmCancelReceipt = async () => {
     if (!reasonGroup) return;
-    if (!reasonText.trim()) {
-      setReasonError('السبب مطلوب');
-      return;
-    }
     if (reasonTargetIds.length === 0) {
       toast.error('لا توجد سندات قابلة للإلغاء');
       return;
     }
+    // Dual-regime cancel, same rule as ClientDetails.confirmCancelPayment:
+    //   * printed → refused=true + سند إلغاء + reason required (audit).
+    //   * unprinted draft → DELETE the rows cleanly with no سند إلغاء.
+    // We resolved `reasonAnyPrinted` in openCancelDialog so the UI
+    // could swap copy/buttons accordingly; the same flag drives the
+    // server-side path here.
+    if (reasonAnyPrinted && !reasonText.trim()) {
+      setReasonError('السبب مطلوب');
+      return;
+    }
     setReasonSubmitting(true);
     try {
-      // Update every targeted policy_payment in one statement. The
-      // sync_receipt_from_policy_payment trigger then fires per row:
-      // marks each original receipt cancelled and inserts a paired
-      // cancellation voucher. The cheque_status flip is only
-      // meaningful for cheques but storing it on cash/transfer rows
-      // is harmless (cheques page filters by payment_type).
-      const { error } = await supabase
-        .from('policy_payments')
-        .update({
-          refused: true,
-          cheque_status: 'cancelled',
-          cancellation_reason: reasonText.trim(),
-        })
-        .in('id', reasonTargetIds);
-      if (error) throw error;
-      toast.success(`تم إلغاء ${reasonTargetIds.length} سند${reasonTargetIds.length > 1 ? 'اً' : ''} وإصدار سند إلغاء`);
+      if (reasonAnyPrinted) {
+        const { error } = await supabase
+          .from('policy_payments')
+          .update({
+            refused: true,
+            cheque_status: 'cancelled',
+            cancellation_reason: reasonText.trim(),
+          })
+          .in('id', reasonTargetIds);
+        if (error) throw error;
+        toast.success(`تم إلغاء ${reasonTargetIds.length} سند${reasonTargetIds.length > 1 ? 'اً' : ''} وإصدار سند إلغاء`);
+      } else {
+        // Unprinted draft → clean delete. receipts.payment_id is
+        // ON DELETE SET NULL, so the receipts rows would otherwise
+        // linger as orphans with null payment_id — drop them too.
+        // policy_payments delete cascades to payment_images via FK.
+        const { error: receiptsErr } = await supabase
+          .from('receipts')
+          .delete()
+          .in('payment_id', reasonTargetIds);
+        if (receiptsErr) throw receiptsErr;
+
+        const { error: payErr } = await supabase
+          .from('policy_payments')
+          .delete()
+          .in('id', reasonTargetIds);
+        if (payErr) throw payErr;
+        toast.success(`تم حذف ${reasonTargetIds.length} سند${reasonTargetIds.length > 1 ? 'اً' : ''}`);
+      }
       setReasonDialogOpen(false);
       setReasonGroup(null);
       setReasonTargetIds([]);
@@ -1828,8 +2006,47 @@ export default function Receipts() {
         }}
         group={detailsGroup}
         onPrint={(g) => handlePrintGroup(g as ReceiptGroup)}
-        onEdit={handleEditReceipt}
+        onEdit={(r) => {
+          // Route auto receipts through the unified session edit flow.
+          // The details dialog passes a single ReceiptRow; for auto
+          // rows we lift that to the group it belongs to so the edit
+          // operates at session granularity (matches the dropdown).
+          if (r.source === 'auto' && detailsGroup) {
+            setDetailsOpen(false);
+            openSessionEditModal(detailsGroup as ReceiptGroupView);
+            return;
+          }
+          handleEditReceipt(r);
+        }}
         onDelete={(r) => setDeleteReceipt(r)}
+      />
+
+      {/* Unified edit modal for auto سند قبض. clientId/name/phone come
+          from openSessionEditModal which resolved them from the clicked
+          group; totalOwed is 0 in edit mode (we re-use the modal's
+          `editingSession` path so the wallet ceiling is computed from
+          the customer's debt minus the session being edited — see
+          DebtPaymentModal). */}
+      <DebtPaymentModal
+        open={debtModalOpen}
+        onOpenChange={(open) => {
+          setDebtModalOpen(open);
+          if (!open) {
+            setDebtModalEditingSession(null);
+            setDebtModalClient(null);
+          }
+        }}
+        clientId={debtModalClient?.id || ''}
+        clientName={debtModalClient?.full_name || ''}
+        clientPhone={debtModalClient?.phone || null}
+        totalOwed={0}
+        editingSession={debtModalEditingSession}
+        onSuccess={async () => {
+          setDebtModalOpen(false);
+          setDebtModalEditingSession(null);
+          setDebtModalClient(null);
+          await fetchReceipts();
+        }}
       />
 
       <DeleteConfirmDialog
@@ -1902,48 +2119,68 @@ export default function Receipts() {
       }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>إلغاء السند</DialogTitle>
+            <DialogTitle>
+              {reasonAnyPrinted ? 'إلغاء السند' : 'حذف السند (لم يُطبع)'}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-2">
             {reasonGroup && (
               <p className="text-xs text-muted-foreground">
-                سيُنشأ سند إلغاء لكل واحد من{' '}
-                <span className="font-bold ltr-nums">{reasonTargetIds.length}</span>{' '}
-                {reasonTargetIds.length === 1 ? 'سند' : 'سندات'} لهذا العميل بقيمة إجمالية{' '}
-                <span className="font-bold ltr-nums">
-                  ₪{Math.round(reasonTargetSum).toLocaleString('en-US')}
-                </span>
-                . رصيد العميل سيرتد بالكامل كما لو لم يدفع.
+                {reasonAnyPrinted ? (
+                  <>
+                    سيُنشأ سند إلغاء لكل واحد من{' '}
+                    <span className="font-bold ltr-nums">{reasonTargetIds.length}</span>{' '}
+                    {reasonTargetIds.length === 1 ? 'سند' : 'سندات'} لهذا العميل بقيمة إجمالية{' '}
+                    <span className="font-bold ltr-nums">
+                      ₪{Math.round(reasonTargetSum).toLocaleString('en-US')}
+                    </span>
+                    . رصيد العميل سيرتد بالكامل كما لو لم يدفع.
+                  </>
+                ) : (
+                  <>
+                    السند لم يُطبع بعد ولم يُسلَّم للعميل، لذا سيُحذف نهائياً بدون سند إلغاء.{' '}
+                    <span className="font-bold ltr-nums">{reasonTargetIds.length}</span>{' '}
+                    {reasonTargetIds.length === 1 ? 'سند' : 'سندات'} بقيمة إجمالية{' '}
+                    <span className="font-bold ltr-nums">
+                      ₪{Math.round(reasonTargetSum).toLocaleString('en-US')}
+                    </span>
+                    . رصيد العميل سيرتد بالكامل.
+                  </>
+                )}
               </p>
             )}
-            <Label htmlFor="cancel-reason">
-              سبب الإلغاء<span className="text-destructive mr-1">*</span>
-            </Label>
-            <Textarea
-              id="cancel-reason"
-              value={reasonText}
-              onChange={(e) => {
-                setReasonText(e.target.value);
-                if (e.target.value.trim()) setReasonError(null);
-              }}
-              placeholder="مثال: العميل طلب الإلغاء، خطأ في الإصدار، شيك مكرر..."
-              rows={3}
-              autoFocus
-              disabled={reasonSubmitting}
-            />
-            {reasonError && <p className="text-sm text-destructive">{reasonError}</p>}
+            {reasonAnyPrinted && (
+              <>
+                <Label htmlFor="cancel-reason">
+                  سبب الإلغاء<span className="text-destructive mr-1">*</span>
+                </Label>
+                <Textarea
+                  id="cancel-reason"
+                  value={reasonText}
+                  onChange={(e) => {
+                    setReasonText(e.target.value);
+                    if (e.target.value.trim()) setReasonError(null);
+                  }}
+                  placeholder="مثال: العميل طلب الإلغاء، خطأ في الإصدار، شيك مكرر..."
+                  rows={3}
+                  autoFocus
+                  disabled={reasonSubmitting}
+                />
+                {reasonError && <p className="text-sm text-destructive">{reasonError}</p>}
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setReasonDialogOpen(false)} disabled={reasonSubmitting}>
               تراجع
             </Button>
             <Button
-              variant="default"
+              variant={reasonAnyPrinted ? 'default' : 'destructive'}
               onClick={confirmCancelReceipt}
-              disabled={reasonSubmitting || !reasonText.trim()}
+              disabled={reasonSubmitting || (reasonAnyPrinted && !reasonText.trim())}
             >
               {reasonSubmitting ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
-              تأكيد الإلغاء
+              {reasonAnyPrinted ? 'تأكيد الإلغاء' : 'حذف نهائي'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2270,27 +2507,48 @@ export default function Receipts() {
                                   إلغاء السند
                                 </DropdownMenuItem>
                               )}
-                              {/* Edit/Delete only for single-receipt manual
-                                  rows AND only when not cancelled — auto
-                                  rows go through PaymentEditDialog via the
-                                  group details, and cancelled receipts are
-                                  immutable historical records. */}
-                              {group.receipts.length === 1 && !allCancelled && (
-                                <>
-                                  <DropdownMenuItem
-                                    onClick={() => handleEditReceipt(group.receipts[0])}
-                                  >
-                                    <Pencil className="h-4 w-4 ml-2" />
-                                    تعديل
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={() => setDeleteReceipt(group.receipts[0])}
-                                  >
-                                    <Trash2 className="h-4 w-4 ml-2" />
-                                    حذف
-                                  </DropdownMenuItem>
-                                </>
+                              {/* Edit row:
+                                  - Auto-source groups (any size) open the
+                                    unified DebtPaymentModal in edit mode
+                                    — same dialog the customer page uses,
+                                    same DELETE-old-then-INSERT-new
+                                    semantics. The dialog itself checks
+                                    printed_at and refuses to open if the
+                                    session is already printed; we filter
+                                    cancelled here just to skip the round-
+                                    trip.
+                                  - Manual single-receipt rows still go
+                                    through the legacy in-page form. */}
+                              {!allCancelled && (
+                                firstReceipt.source === 'auto'
+                                  ? (
+                                    <DropdownMenuItem
+                                      disabled={debtModalResolving}
+                                      onClick={() => openSessionEditModal(group)}
+                                    >
+                                      <Pencil className="h-4 w-4 ml-2" />
+                                      تعديل
+                                    </DropdownMenuItem>
+                                  )
+                                  : group.receipts.length === 1
+                                    ? (
+                                      <DropdownMenuItem
+                                        onClick={() => handleEditReceipt(group.receipts[0])}
+                                      >
+                                        <Pencil className="h-4 w-4 ml-2" />
+                                        تعديل
+                                      </DropdownMenuItem>
+                                    )
+                                    : null
+                              )}
+                              {group.receipts.length === 1 && !allCancelled && firstReceipt.source !== 'auto' && (
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => setDeleteReceipt(group.receipts[0])}
+                                >
+                                  <Trash2 className="h-4 w-4 ml-2" />
+                                  حذف
+                                </DropdownMenuItem>
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>
