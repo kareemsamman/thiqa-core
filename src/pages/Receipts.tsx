@@ -967,17 +967,24 @@ export default function Receipts() {
       .filter((id): id is string => typeof id === "string" && id.length > 0);
     const allAuto = paymentIds.length === group.receipts.length;
 
-    // اشعار دائن — its own edge function. credit_note rows have no
-    // payment_id so they'd otherwise miss the auto-route below and
-    // fall to the bare-bones local HTML builder. Handle them first
-    // so we always invoke the dedicated renderer regardless of the
-    // group shape.
-    if (activeTab === 'credit_note') {
+    // اشعار دائن / سند صرف — each has its own dedicated edge
+    // function. Both row types lack a payment_id (they don't come
+    // from policy_payments), so the auto-route below would miss
+    // them entirely and fall to the bare-bones local HTML. Handle
+    // them up-front with the right renderer for each receipt_type.
+    if (activeTab === 'credit_note' || activeTab === 'disbursement') {
       const firstReceipt = group.receipts[0];
       if (!firstReceipt?.id) {
-        toast.error('لا يوجد إشعار للطباعة');
+        toast.error(
+          activeTab === 'credit_note' ? 'لا يوجد إشعار للطباعة' : 'لا يوجد سند صرف للطباعة',
+        );
         return;
       }
+      const fnName =
+        activeTab === 'credit_note'
+          ? 'generate-credit-note-voucher'
+          : 'generate-disbursement-voucher';
+      const docLabel = activeTab === 'credit_note' ? 'الإشعار' : 'سند الصرف';
       setPrintProgress({ open: true, value: 8 });
       const ticker = setInterval(() => {
         setPrintProgress((s) => {
@@ -997,7 +1004,7 @@ export default function Receipts() {
       };
       try {
         const { data, error } = await supabase.functions.invoke(
-          'generate-credit-note-voucher',
+          fnName,
           { body: { voucher_receipt_id: firstReceipt.id } },
         );
         if (error) throw error;
@@ -1008,11 +1015,11 @@ export default function Receipts() {
           return;
         }
         closeOverlay(false);
-        toast.error('لم يتم العثور على رابط الإشعار');
+        toast.error(`لم يتم العثور على رابط ${docLabel}`);
         return;
       } catch (err: any) {
         closeOverlay(false);
-        console.error('[Receipts] credit-note print failed:', err);
+        console.error(`[Receipts] ${activeTab} print failed:`, err);
         let detail = '';
         try {
           if (err?.context && typeof err.context.clone === 'function') {
@@ -1021,7 +1028,7 @@ export default function Receipts() {
           }
         } catch {}
         if (!detail) detail = err?.message || '';
-        toast.error(detail ? `فشل في توليد الإشعار: ${detail}` : 'فشل في توليد الإشعار');
+        toast.error(detail ? `فشل في توليد ${docLabel}: ${detail}` : `فشل في توليد ${docLabel}`);
         return;
       }
     }
