@@ -1867,8 +1867,8 @@ function PolicyPackageCard({
                     ₪{packageTotal.toLocaleString('en-US')}
                   </span>
                   {elzamiTotal > 0 && (
-                    <span className="text-[10px] text-muted-foreground ltr-nums mt-0.5">
-                      <span className="text-muted-foreground/70">+ </span>إلزامي: <span className="font-semibold">₪{elzamiTotal.toLocaleString('en-US')}</span>
+                    <span className="text-[10px] text-muted-foreground mt-0.5">
+                      <span className="text-muted-foreground/70">+ </span>إلزامي: <span className="font-semibold ltr-nums">₪{elzamiTotal.toLocaleString('en-US')}</span>
                     </span>
                   )}
                   {(() => {
