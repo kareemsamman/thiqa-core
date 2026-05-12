@@ -106,17 +106,17 @@ export function AnnouncementPopup() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-md" dir="rtl">
-        <DialogHeader>
+      <DialogContent className="max-w-md max-h-[90vh] flex flex-col gap-0 p-0" dir="rtl">
+        <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
           <DialogTitle className="flex items-center gap-2 text-primary">
             <Megaphone className="h-5 w-5" />
             {announcement.title}
           </DialogTitle>
         </DialogHeader>
-        <DialogDescription className="text-base text-foreground whitespace-pre-wrap leading-relaxed">
+        <DialogDescription className="text-base text-foreground whitespace-pre-wrap leading-relaxed overflow-y-auto px-6 flex-1 min-h-0">
           {announcement.content}
         </DialogDescription>
-        <DialogFooter>
+        <DialogFooter className="px-6 py-4 border-t shrink-0">
           <Button onClick={handleDismiss} className="w-full">
             فهمت
           </Button>
