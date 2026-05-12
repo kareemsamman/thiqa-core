@@ -22,19 +22,22 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { extractFunctionErrorMessage } from "@/lib/functionError";
-import { 
-  Loader2, 
-  ArrowLeftRight, 
-  Plus, 
-  Car, 
+import {
+  Loader2,
+  ArrowLeftRight,
+  Plus,
+  Car,
   Send,
   AlertTriangle,
   Package,
   CheckCircle2,
+  Wallet,
+  Banknote,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { useAuth } from "@/hooks/useAuth";
+import { useAgentContext } from "@/hooks/useAgentContext";
 import { Card } from "@/components/ui/card";
 import { CAR_TYPES } from "@/components/policies/wizard/types";
 import { cn } from "@/lib/utils";
@@ -90,6 +93,11 @@ const POLICY_TYPE_LABELS: Record<string, string> = {
 };
 
 type AdjustmentType = "none" | "customer_pays" | "refund";
+// When adjustmentType === 'refund' the user picks how the agency
+// settles up with the client. credit_note keeps the legacy behavior
+// (wallet credit, no cash out); disbursement (cash actually leaving
+// the agency) lands fully in phase 2b.
+type RefundKind = "credit_note" | "disbursement";
 
 export function TransferPolicyModal({
   open,
@@ -108,6 +116,7 @@ export function TransferPolicyModal({
 }: TransferPolicyModalProps) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { agentId } = useAgentContext();
   
   const [saving, setSaving] = useState(false);
   const [cars, setCars] = useState<CarOption[]>([]);
@@ -129,6 +138,7 @@ export function TransferPolicyModal({
   const [adjustmentType, setAdjustmentType] = useState<AdjustmentType>("none");
   const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [adjustmentNote, setAdjustmentNote] = useState("");
+  const [refundKind, setRefundKind] = useState<RefundKind>("credit_note");
   
   // SMS
   const [sendSms, setSendSms] = useState(true);
@@ -556,22 +566,71 @@ export function TransferPolicyModal({
         if (moveFilesError) throw moveFilesError;
       }
 
-      // 6. Create wallet transaction only for refunds (customer_pays is already added to insurance_price)
+      // 6. Refund settlement when transferring at a discount. Two
+      // flavors picked via refundKind:
+      //   credit_note  → wallet credit (existing transfer behavior)
+      //                  PLUS a numbered voucher in receipts so the
+      //                  agency has a printable record.
+      //   disbursement → cash out via AddSettlementDialog. Wired in
+      //                  phase 2b; falls through here.
+      // customer_pays doesn't apply — it just bumps insurance_price
+      // and is already handled above.
       if (adjustmentType === "refund" && adjustmentAmount && newPolicyIds.length > 0) {
-        const { error: walletError } = await supabase
-          .from("customer_wallet_transactions")
-          .insert({
-            client_id: clientId,
-            policy_id: newPolicyIds[0],
-            transaction_type: "transfer_refund_owed",
-            amount: parseFloat(adjustmentAmount),
-            description: `مرتجع تحويل معاملة ${policyNumber || ""} - مستحق للعميل`,
-            notes: adjustmentNote || null,
-            created_by_admin_id: user?.id,
-            branch_id: branchId,
-          });
+        const refundDescription = `مرتجع تحويل معاملة ${policyNumber || ""} - مستحق للعميل`;
+        if (refundKind === "credit_note") {
+          const { data: walletRow, error: walletError } = await supabase
+            .from("customer_wallet_transactions")
+            .insert({
+              client_id: clientId,
+              policy_id: newPolicyIds[0],
+              transaction_type: "transfer_refund_owed",
+              amount: parseFloat(adjustmentAmount),
+              description: refundDescription,
+              notes: adjustmentNote || null,
+              created_by_admin_id: user?.id,
+              branch_id: branchId,
+              agent_id: agentId,
+            })
+            .select("id")
+            .single();
 
-        if (walletError) throw walletError;
+          if (walletError) throw walletError;
+
+          // Same fail-soft strategy as CancelPolicyModal: the
+          // transfer already committed by this point, so a missing
+          // agent_id or a voucher-allocation hiccup logs and moves
+          // on rather than rolling back a successful transfer.
+          if (agentId) {
+            const year = new Date().getFullYear();
+            const { data: voucherNumber, error: voucherError } = await supabase.rpc(
+              "allocate_credit_note_number",
+              { p_agent_id: agentId, p_year: year },
+            );
+            if (voucherError) {
+              console.warn("[TransferPolicyModal] allocate_credit_note_number failed:", voucherError);
+            } else if (voucherNumber) {
+              const { error: receiptError } = await supabase.from("receipts").insert({
+                receipt_type: "credit_note",
+                source: "auto",
+                voucher_number: voucherNumber as unknown as string,
+                client_id: clientId,
+                client_name: clientName,
+                policy_id: newPolicyIds[0],
+                wallet_transaction_id: walletRow?.id ?? null,
+                amount: parseFloat(adjustmentAmount),
+                receipt_date: new Date().toISOString().split("T")[0],
+                notes: refundDescription,
+                agent_id: agentId,
+                branch_id: branchId,
+                created_by: user?.id || null,
+              });
+              if (receiptError) {
+                console.warn("[TransferPolicyModal] credit_note receipt insert failed:", receiptError);
+              }
+            }
+          }
+        }
+        // refundKind === "disbursement" falls through until phase 2b.
       }
 
       // 6. Send SMS if enabled
@@ -639,6 +698,7 @@ export function TransferPolicyModal({
     setAdjustmentType("none");
     setAdjustmentAmount("");
     setAdjustmentNote("");
+    setRefundKind("credit_note");
     setSendSms(true);
     setSmsMessage("");
     setShowNewCarForm(false);
@@ -966,6 +1026,56 @@ export function TransferPolicyModal({
                     placeholder="سبب الفرق..."
                   />
                 </div>
+
+                {/* Refund-kind picker only when the agency owes the
+                    client — customer_pays doesn't need it. Same UI
+                    treatment as CancelPolicyModal so the two flows
+                    feel like one feature. Disbursement is shown but
+                    disabled until phase 2b. */}
+                {adjustmentType === "refund" && (
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">طريقة إصدار المرتجع</Label>
+                    <RadioGroup
+                      value={refundKind}
+                      onValueChange={(v) => setRefundKind(v as RefundKind)}
+                      className="gap-2"
+                    >
+                      <label
+                        htmlFor="transfer-refund-kind-credit"
+                        className="flex items-start gap-2 p-2.5 border rounded-md cursor-pointer hover:bg-muted/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                      >
+                        <RadioGroupItem value="credit_note" id="transfer-refund-kind-credit" className="mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 font-medium text-sm">
+                            <Wallet className="h-3.5 w-3.5" />
+                            اشعار دائن
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            يبقى المبلغ رصيداً للعميل عندنا — لا يخرج كاش الآن، ويُحسم تلقائياً من أي دفعة قادمة.
+                          </p>
+                        </div>
+                      </label>
+
+                      <label
+                        htmlFor="transfer-refund-kind-disb"
+                        aria-disabled
+                        className="flex items-start gap-2 p-2.5 border rounded-md cursor-not-allowed opacity-60"
+                      >
+                        <RadioGroupItem value="disbursement" id="transfer-refund-kind-disb" disabled className="mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 font-medium text-sm">
+                            <Banknote className="h-3.5 w-3.5" />
+                            سند صرف
+                            <span className="text-[9px] px-1.5 py-0 rounded-full bg-muted text-muted-foreground">قريباً</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            المبلغ يخرج فعلياً من صندوق الشركة الآن (نقدي / شيك / تحويل / فيزا). لا يضيف للعميل أي رصيد.
+                          </p>
+                        </div>
+                      </label>
+                    </RadioGroup>
+                  </div>
+                )}
               </div>
             )}
           </div>
