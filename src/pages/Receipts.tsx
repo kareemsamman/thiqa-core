@@ -2468,19 +2468,12 @@ export default function Receipts() {
                                   إلغاء السند
                                 </DropdownMenuItem>
                               )}
-                              {/* Edit row:
-                                  - Auto-source groups (any size) open the
-                                    unified DebtPaymentModal in edit mode
-                                    — same dialog the customer page uses,
-                                    same DELETE-old-then-INSERT-new
-                                    semantics. The dialog itself checks
-                                    printed_at and refuses to open if the
-                                    session is already printed; we filter
-                                    cancelled here just to skip the round-
-                                    trip.
-                                  - Manual single-receipt rows still go
-                                    through the legacy in-page form. */}
-                              {!allCancelled && (
+                              {/* Edit / delete are only meaningful on
+                                  the payment tab. سندات الإلغاء rows are
+                                  cancellation vouchers — they're a
+                                  ledger of what was voided, not editable
+                                  records, so hide both actions there. */}
+                              {activeTab === 'payment' && !allCancelled && (
                                 firstReceipt.source === 'auto'
                                   ? (
                                     <DropdownMenuItem
@@ -2502,7 +2495,7 @@ export default function Receipts() {
                                     )
                                     : null
                               )}
-                              {group.receipts.length === 1 && !allCancelled && firstReceipt.source !== 'auto' && (
+                              {activeTab === 'payment' && group.receipts.length === 1 && !allCancelled && firstReceipt.source !== 'auto' && (
                                 <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
                                   onClick={() => setDeleteReceipt(group.receipts[0])}
