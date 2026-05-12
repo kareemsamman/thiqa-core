@@ -304,7 +304,8 @@ export default function ActivityLog() {
           policies(
             policy_type_parent, policy_type_child,
             insurance_companies(name, name_ar),
-            cars(car_number)
+            cars(car_number),
+            clients(id, full_name, file_number, deleted_at)
           ),
           payment:policy_payments!receipts_payment_id_fkey(locked, source),
           created_by_profile:profiles!receipts_created_by_fkey(full_name)
@@ -316,14 +317,23 @@ export default function ActivityLog() {
 
       if (receiptRows) {
         for (const r of receiptRows as any[]) {
-          if (r.clients?.deleted_at) continue;
+          // Cancellation + payment receipts often arrive with
+          // receipts.client_id = NULL — the row is only linked to the
+          // client via policy.client_id. Fall back to the policy's
+          // client so those events still cluster under the correct
+          // customer card instead of an "عميل" bucket.
+          const receiptClient = r.clients;
+          const policyClient = r.policies?.clients;
+          const client = receiptClient || policyClient;
+          if (client?.deleted_at) continue;
+
           // Skip the system/locked anchor rows (auto ELZAMI "external
           // visa") — those carried over via the mirror but aren't
           // real customer-facing receipts.
           if (r.payment?.locked === true || r.payment?.source === "system") continue;
 
-          const clientName = r.clients?.full_name || "عميل";
-          const fileNumber = r.clients?.file_number || "";
+          const clientName = client?.full_name || "عميل";
+          const fileNumber = client?.file_number || "";
           const policyType = POLICY_TYPE_LABELS[r.policies?.policy_type_parent] || "";
           const companyName = r.policies?.insurance_companies?.name_ar ||
                               r.policies?.insurance_companies?.name || "";
@@ -374,7 +384,7 @@ export default function ActivityLog() {
               policy_type: policyType,
               company_name: companyName,
               car_number: carNumber,
-              client_id: r.clients?.id,
+              client_id: client?.id,
               client_name: clientName,
               client_file_number: fileNumber,
               receipt_id: r.id,
@@ -812,22 +822,30 @@ export default function ActivityLog() {
                     </span>
                   </div>
 
-                  {/* Card-level paid/remaining totals — replaces the
-                      per-row badges. Sums across every policy event in
-                      the group so staff see the customer's overall
-                      balance in one place. Only shown when the group
-                      has at least one policy event with a price. */}
+                  {/* Card-level paid/remaining totals — computed from
+                      the actual events in this card so it reflects
+                      what the customer DID rather than what's stamped
+                      on individual policy rows (the per-policy
+                      paid_amount only sees payments tied to that one
+                      policy_id and misses standalone debt
+                      settlements). Invoiced = sum of new policy
+                      prices, paid = every payment/debt-settlement
+                      receipt minus any سند صرف refunded back to the
+                      customer. */}
                   {(() => {
                     let invoiced = 0;
                     let paid = 0;
-                    let remaining = 0;
                     for (const s of steps) {
-                      if (s.type !== "policy") continue;
-                      invoiced += s.details.insurance_price || 0;
-                      paid += s.details.paid_amount || 0;
-                      remaining += s.details.remaining_amount || 0;
+                      if (s.type === "policy") {
+                        invoiced += s.details.insurance_price || 0;
+                      } else if (s.type === "payment" || s.type === "debt_payment") {
+                        paid += s.details.amount || 0;
+                      } else if (s.type === "disbursement") {
+                        paid -= s.details.amount || 0;
+                      }
                     }
-                    if (invoiced === 0) return null;
+                    if (invoiced === 0 && paid === 0) return null;
+                    const remaining = Math.max(0, invoiced - paid);
                     return (
                       <div className="flex items-center gap-2 flex-wrap mb-4 -mt-2">
                         <Badge variant="outline" className="text-xs border-success/40 text-success bg-success/5">
