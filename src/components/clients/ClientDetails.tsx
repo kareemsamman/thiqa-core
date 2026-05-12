@@ -2078,7 +2078,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                       <Badge variant="outline" className="gap-1.5 bg-background text-[10px] sm:text-xs">
                         <Users className="h-3 w-3" />
                         الوسيط: {broker.name}
-                        {broker.phone && <span className="text-muted-foreground mr-1"><bdi>({broker.phone})</bdi></span>}
+                        {broker.phone && (
+                          <span className="mr-1">
+                            <ClickablePhone phone={broker.phone} showIcon={false} />
+                          </span>
+                        )}
                       </Badge>
                     )}
                   </div>

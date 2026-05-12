@@ -15,9 +15,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ClickablePhone } from "@/components/shared/ClickablePhone";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Save, X, Shield, Car, Truck, FileCheck, Package, Calculator, User, Plus, Check, Phone, Calendar } from "lucide-react";
+import { Loader2, Save, X, Shield, Car, Truck, FileCheck, Package, Calculator, User, Plus, Check, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { calculatePolicyProfit } from "@/lib/pricingCalculator";
 import { formatCurrency } from "@/lib/utils";
@@ -1539,10 +1540,7 @@ export function PackagePolicyEditModal({
                                     </span>
                                   )}
                                   {child.phone && (
-                                    <span className="flex items-center gap-1">
-                                      <Phone className="h-3 w-3" />
-                                      <span className="font-mono ltr-nums">{child.phone}</span>
-                                    </span>
+                                    <ClickablePhone phone={child.phone} />
                                   )}
                                 </div>
                               </div>

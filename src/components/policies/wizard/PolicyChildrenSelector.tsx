@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Check, User, Phone, Calendar } from "lucide-react";
+import { Plus, Check, User, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
 import { cn } from "@/lib/utils";
+import { ClickablePhone } from "@/components/shared/ClickablePhone";
 import { digitsOnly, isValidIsraeliId } from "@/lib/validation";
 import { ClientChild, NewChildForm, RELATION_OPTIONS, createEmptyChildForm } from "@/types/clientChildren";
 import { supabase } from "@/integrations/supabase/client";
@@ -247,10 +248,7 @@ export function PolicyChildrenSelector({
                       </span>
                     )}
                     {child.phone && (
-                      <span className="flex items-center gap-1">
-                        <Phone className="h-3 w-3" />
-                        <span className="font-mono ltr-nums">{child.phone}</span>
-                      </span>
+                      <ClickablePhone phone={child.phone} />
                     )}
                   </div>
                 </div>

@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { normalizeArabic } from '@/lib/arabicNormalize';
+import { ClickablePhone } from '@/components/shared/ClickablePhone';
 import { Search, User, ArrowRight, AlertTriangle, FileText } from 'lucide-react';
 import { PolicySelectionCards } from './PolicySelectionCards';
 
@@ -237,7 +238,7 @@ export function AccidentReportWizard({
                                 <span>ملف: #{client.file_number}</span>
                               )}
                               {client.phone_number && (
-                                <span>{client.phone_number}</span>
+                                <ClickablePhone phone={client.phone_number} />
                               )}
                             </div>
                           </div>
