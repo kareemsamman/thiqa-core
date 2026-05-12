@@ -1104,7 +1104,7 @@ export default function Receipts() {
 
       const { data: payments } = await supabase
         .from('policy_payments')
-        .select('id, amount, payment_type, batch_id, policy_id, refused')
+        .select('id, amount, payment_type, batch_id, policy_id, refused, locked')
         .in('policy_id', policyIds);
 
       const policyById = new Map<string, any>(
@@ -1114,9 +1114,13 @@ export default function Receipts() {
       // Stage 1: pick the live rows that survive the same filter the
       // print uses (skip already-refused, skip visa_external, skip
       // إلزامي passthrough — same rule from the edge function).
+      // إلزامي passthrough now also requires locked=true so a manual
+      // cash إلزامي premium the office actually collected isn't
+      // wrongly hidden / skipped from the cancel scope.
       const survivors = (payments ?? []).filter((p: any) => {
         if (p.refused) return false;
         if (p.payment_type === 'visa_external') return false;
+        if (p.locked !== true) return true;
         const pol = policyById.get(p.policy_id);
         if (!pol) return true;
         if (pol.policy_type_parent !== 'ELZAMI') return true;

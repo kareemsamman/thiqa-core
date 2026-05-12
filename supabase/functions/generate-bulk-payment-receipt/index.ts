@@ -871,14 +871,15 @@ serve(async (req) => {
     //     insurer directly via their own card. The row exists for
     //     accounting context but the money never passed through the
     //     office, so it has no business on a سند قبض.
-    //  2. ELZAMI policy + amount equals insurance_price — same idea
-    //     but covers the legacy/manual case of an إلزامي premium
-    //     recorded under any payment method (cash/cheque/transfer).
-    //     A partial-amount ELZAMI payment is kept since that could
-    //     mean the office is collecting a slice on the customer's
-    //     behalf to forward later.
+    //  2. ELZAMI premium recorded as cash/cheque/transfer with the
+    //     system-generated `locked=true` flag (legacy WP imports +
+    //     pre-visa_external auto rows). The `locked` gate is what
+    //     keeps a real cash إلزامي payment — collected by the office
+    //     via the "دفع" button — visible on the printed receipt; only
+    //     the system-stamped passthrough records are filtered out.
     payments = payments.filter((p: any) => {
       if (p.payment_type === 'visa_external') return false;
+      if (p.locked !== true) return true;
       const pol = Array.isArray(p.policy) ? p.policy[0] : p.policy;
       if (!pol || pol.policy_type_parent !== 'ELZAMI') return true;
       const price = Number(pol.insurance_price ?? 0);

@@ -1066,10 +1066,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       //   - skip already-refused rows (nothing to cancel)
       //   - skip payment_type='visa_external' (customer paid the
       //     insurer directly, never came through the office)
-      //   - skip ELZAMI passthrough (policy ELZAMI + amount == price)
+      //   - skip ELZAMI passthrough = locked system row + amount==price.
+      //     The `locked` gate is what makes this safe: a manual cash
+      //     payment the user collected via the "دفع" button is
+      //     unlocked, so it survives the filter and gets a real سند
+      //     قبض / إلغاء flow.
       const survivors = payments.filter((p) => {
         if (p.refused) return false;
         if (p.payment_type === 'visa_external') return false;
+        if (p.locked !== true) return true;
         const pol = policyById.get(p.policy_id);
         if (!pol) return true;
         if (pol.policy_type_parent !== 'ELZAMI') return true;
@@ -1671,6 +1676,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     // number, no edit / cancel actions).
     const isPassthroughPayment = (payment: PaymentRecord): boolean => {
       if (payment.payment_type === 'visa_external') return true;
+      // Legacy/import case: an إلزامي premium recorded as cash/cheque
+      // /transfer with the system-generated `locked` flag — money the
+      // office didn't actually collect, just a passthrough record. The
+      // `locked === true` check is what makes this safe; without it,
+      // a user-collected cash payment that happens to match the إلزامي
+      // price (e.g. customer pays the exact premium in cash via the
+      // "دفع" button) would incorrectly hide as passthrough.
+      if (payment.locked !== true) return false;
       const pol = policyById.get(payment.policy_id);
       if (!pol || pol.policy_type_parent !== 'ELZAMI') return false;
       const price = Number((pol as any).insurance_price ?? 0);
