@@ -140,10 +140,16 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { phone_number, extension_id, extension_number: legacyExtensionNumber } = body as {
+    const {
+      phone_number,
+      extension_id,
+      extension_number: legacyExtensionNumber,
+      agent_id: overrideAgentId,
+    } = body as {
       phone_number?: string;
       extension_id?: string;
       extension_number?: string;
+      agent_id?: string;
     };
 
     if (!phone_number) {
@@ -155,17 +161,38 @@ Deno.serve(async (req) => {
 
     const cleanPhone = phone_number.replace(/[-\s]/g, '');
 
-    // Figure out which agent this employee belongs to. user_roles is
-    // the source of truth — profiles.agent_id duplicates it but can
-    // drift; user_roles is what every RLS policy in the schema joins
-    // against, so we mirror that here.
-    const { data: roleRow } = await supabase
-      .from('user_roles')
-      .select('agent_id')
-      .eq('user_id', user.id)
-      .limit(1)
-      .maybeSingle();
-    const agentId = roleRow?.agent_id ?? null;
+    // Resolve the agent we're dialing on behalf of:
+    //   - Thiqa super-admin testing from the agent detail page passes
+    //     `agent_id` explicitly so they can verify the config without
+    //     belonging to that agency themselves. We accept it ONLY when
+    //     the caller is a super-admin (the thiqa_super_admins table is
+    //     the source of truth for that gate).
+    //   - Everyone else: derive from user_roles — the same join every
+    //     RLS policy in the schema uses, so this matches what the
+    //     employee would see in the call dialog.
+    let agentId: string | null = null;
+    if (overrideAgentId) {
+      const { data: superRow } = await supabase
+        .from('thiqa_super_admins')
+        .select('email')
+        .eq('email', (user.email ?? '').toLowerCase())
+        .maybeSingle();
+      if (!superRow) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'غير مصرح بتحديد وكيل آخر' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      agentId = overrideAgentId;
+    } else {
+      const { data: roleRow } = await supabase
+        .from('user_roles')
+        .select('agent_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+      agentId = roleRow?.agent_id ?? null;
+    }
 
     // ── per-agent config (Talkchief, future vendors) ─────────────────
     // Service role bypasses RLS so this works even though the worker

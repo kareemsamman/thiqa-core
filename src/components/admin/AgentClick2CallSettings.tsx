@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, Save, Plus, Trash2, Star, Phone } from "lucide-react";
+import { Loader2, Save, Plus, Trash2, Star, Phone, PhoneCall } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -107,6 +108,48 @@ export function AgentClick2CallSettings({ agentId }: Props) {
   const [newExtension, setNewExtension] = useState("");
   const [newLabel, setNewLabel] = useState("");
   const [adding, setAdding] = useState(false);
+
+  // Test-call dialog state. Opens when the admin clicks the phone
+  // icon on an extension row — lets them dial a real number through
+  // this agent's vendor config to verify api_key + extension before
+  // handing the line over to the agency's employees.
+  const [testExtension, setTestExtension] = useState<ExtensionRow | null>(null);
+  const [testNumber, setTestNumber] = useState("");
+  const [testing, setTesting] = useState(false);
+
+  const handleTestCall = async () => {
+    if (!testExtension) return;
+    const num = testNumber.trim();
+    if (!num) {
+      toast.error("أدخل رقم للاختبار");
+      return;
+    }
+    setTesting(true);
+    try {
+      // agent_id override lets the super-admin invoke the function
+      // for an agency they don't belong to. The edge function
+      // re-validates super-admin status before honoring it.
+      const { data, error } = await supabase.functions.invoke("click2call", {
+        body: {
+          phone_number: num,
+          extension_id: testExtension.id,
+          agent_id: agentId,
+        },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast.success(data.message || "تم بدء الاتصال");
+        setTestExtension(null);
+        setTestNumber("");
+      } else {
+        toast.error(data?.message || "فشل الاتصال");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "فشل الاتصال");
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const handleSaveSettings = async () => {
     if (!apiKey.trim()) {
@@ -299,7 +342,7 @@ export function AgentClick2CallSettings({ agentId }: Props) {
                             <TableHead className="text-right">رقم الخط</TableHead>
                             <TableHead className="text-right">الاسم</TableHead>
                             <TableHead className="text-center w-32">افتراضي</TableHead>
-                            <TableHead className="text-center w-16">حذف</TableHead>
+                            <TableHead className="text-center w-24">إجراءات</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -326,14 +369,30 @@ export function AgentClick2CallSettings({ agentId }: Props) {
                                 )}
                               </TableCell>
                               <TableCell className="text-center">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => handleDelete(ext.id)}
-                                  className="text-destructive hover:text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="flex items-center justify-center gap-1">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setTestExtension(ext);
+                                      setTestNumber("");
+                                    }}
+                                    disabled={!settings?.is_enabled}
+                                    className="text-primary hover:text-primary"
+                                    title={settings?.is_enabled ? "اختبار الاتصال" : "فعّل الإعدادات أولاً"}
+                                  >
+                                    <PhoneCall className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => handleDelete(ext.id)}
+                                    className="text-destructive hover:text-destructive"
+                                    title="حذف"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -378,6 +437,73 @@ export function AgentClick2CallSettings({ agentId }: Props) {
           </>
         )}
       </CardContent>
+
+      {/* Test call dialog — verifies api_key + extension actually
+          place a real call through the vendor before the agency's
+          employees ever try it. */}
+      <Dialog
+        open={!!testExtension}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTestExtension(null);
+            setTestNumber("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PhoneCall className="h-5 w-5 text-primary" />
+              اختبار الاتصال
+            </DialogTitle>
+            <DialogDescription>
+              {testExtension && (
+                <>
+                  سيتم الاتصال من الخط{" "}
+                  <strong>
+                    <bdi className="font-mono">{testExtension.extension}</bdi>
+                    {testExtension.label && ` - ${testExtension.label}`}
+                  </strong>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            <Label>الرقم للاختبار</Label>
+            <Input
+              value={testNumber}
+              onChange={(e) => setTestNumber(e.target.value)}
+              placeholder="0501234567"
+              dir="ltr"
+              type="tel"
+              inputMode="tel"
+            />
+            <p className="text-xs text-muted-foreground">
+              أدخل رقم حقيقي (موبايلك مثلاً) للتأكد من نجاح المكالمة.
+            </p>
+          </div>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setTestExtension(null);
+                setTestNumber("");
+              }}
+              disabled={testing}
+            >
+              إلغاء
+            </Button>
+            <Button onClick={handleTestCall} disabled={testing || !testNumber.trim()}>
+              {testing ? (
+                <Loader2 className="h-4 w-4 animate-spin ml-2" />
+              ) : (
+                <PhoneCall className="h-4 w-4 ml-2" />
+              )}
+              اتصال
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
