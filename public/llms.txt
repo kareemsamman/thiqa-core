@@ -1,0 +1,15 @@
+# Thiqa (ثقة)
+
+> Thiqa is an Arabic-first SaaS platform for managing insurance agencies — clients, vehicles, policies, accounting, claims, accidents, SMS, and reporting in one workspace.
+
+## Pages
+
+- [Home](/): Product overview and value proposition.
+- [Landing](/landing): Marketing landing page with features and screenshots.
+- [Pricing](/pricing): Subscription plans (monthly/yearly) for insurance agencies.
+- [FAQ](/faq): Frequently asked questions about Thiqa.
+- [Contact](/contact): Sales and support contact form.
+- [Register](/register): Create a new agent account (35-day free trial).
+- [Login](/login): Sign in to the CRM.
+- [Privacy](/privacy): Privacy policy.
+- [Terms](/terms): Terms of use.

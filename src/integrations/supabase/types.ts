@@ -2015,6 +2015,79 @@ export type Database = {
           },
         ]
       }
+      click2call_agent_extensions: {
+        Row: {
+          agent_id: string
+          created_at: string
+          extension: string
+          id: string
+          is_default: boolean
+          label: string | null
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          extension: string
+          id?: string
+          is_default?: boolean
+          label?: string | null
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          extension?: string
+          id?: string
+          is_default?: boolean
+          label?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "click2call_agent_extensions_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      click2call_agent_settings: {
+        Row: {
+          agent_id: string
+          api_key: string
+          created_at: string
+          id: string
+          is_enabled: boolean
+          provider: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          api_key: string
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          provider: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          api_key?: string
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          provider?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "click2call_agent_settings_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: true
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_children: {
         Row: {
           agent_id: string | null
@@ -2272,6 +2345,125 @@ export type Database = {
             columns: ["created_by_admin_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_settlements: {
+        Row: {
+          agent_id: string
+          bank_code: string | null
+          bank_reference: string | null
+          branch_code: string | null
+          branch_id: string | null
+          card_expiry: string | null
+          card_last_four: string | null
+          cheque_due_date: string | null
+          cheque_image_url: string | null
+          cheque_image_urls: string[] | null
+          cheque_issue_date: string | null
+          cheque_number: string | null
+          client_id: string
+          created_at: string
+          created_by_admin_id: string | null
+          customer_cheque_ids: string[] | null
+          id: string
+          notes: string | null
+          payment_type: string
+          policy_id: string | null
+          refused: boolean | null
+          settlement_date: string
+          settlement_session_id: string | null
+          status: string
+          total_amount: number
+          updated_at: string
+          voucher_number: string | null
+        }
+        Insert: {
+          agent_id: string
+          bank_code?: string | null
+          bank_reference?: string | null
+          branch_code?: string | null
+          branch_id?: string | null
+          card_expiry?: string | null
+          card_last_four?: string | null
+          cheque_due_date?: string | null
+          cheque_image_url?: string | null
+          cheque_image_urls?: string[] | null
+          cheque_issue_date?: string | null
+          cheque_number?: string | null
+          client_id: string
+          created_at?: string
+          created_by_admin_id?: string | null
+          customer_cheque_ids?: string[] | null
+          id?: string
+          notes?: string | null
+          payment_type?: string
+          policy_id?: string | null
+          refused?: boolean | null
+          settlement_date?: string
+          settlement_session_id?: string | null
+          status?: string
+          total_amount?: number
+          updated_at?: string
+          voucher_number?: string | null
+        }
+        Update: {
+          agent_id?: string
+          bank_code?: string | null
+          bank_reference?: string | null
+          branch_code?: string | null
+          branch_id?: string | null
+          card_expiry?: string | null
+          card_last_four?: string | null
+          cheque_due_date?: string | null
+          cheque_image_url?: string | null
+          cheque_image_urls?: string[] | null
+          cheque_issue_date?: string | null
+          cheque_number?: string | null
+          client_id?: string
+          created_at?: string
+          created_by_admin_id?: string | null
+          customer_cheque_ids?: string[] | null
+          id?: string
+          notes?: string | null
+          payment_type?: string
+          policy_id?: string | null
+          refused?: boolean | null
+          settlement_date?: string
+          settlement_session_id?: string | null
+          status?: string
+          total_amount?: number
+          updated_at?: string
+          voucher_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_settlements_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_settlements_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_settlements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_settlements_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "policies"
             referencedColumns: ["id"]
           },
         ]
@@ -4972,6 +5164,7 @@ export type Database = {
           batch_id: string | null
           branch_code: string | null
           branch_id: string | null
+          cancellation_reason: string | null
           card_expiry: string | null
           card_last_four: string | null
           cheque_date: string | null
@@ -4987,8 +5180,10 @@ export type Database = {
           locked: boolean | null
           notes: string | null
           payment_date: string
+          payment_session_id: string | null
           payment_type: Database["public"]["Enums"]["payment_type"]
           policy_id: string
+          printed_at: string | null
           provider: string | null
           receipt_number: string | null
           refused: boolean | null
@@ -5010,6 +5205,7 @@ export type Database = {
           batch_id?: string | null
           branch_code?: string | null
           branch_id?: string | null
+          cancellation_reason?: string | null
           card_expiry?: string | null
           card_last_four?: string | null
           cheque_date?: string | null
@@ -5025,8 +5221,10 @@ export type Database = {
           locked?: boolean | null
           notes?: string | null
           payment_date?: string
+          payment_session_id?: string | null
           payment_type: Database["public"]["Enums"]["payment_type"]
           policy_id: string
+          printed_at?: string | null
           provider?: string | null
           receipt_number?: string | null
           refused?: boolean | null
@@ -5048,6 +5246,7 @@ export type Database = {
           batch_id?: string | null
           branch_code?: string | null
           branch_id?: string | null
+          cancellation_reason?: string | null
           card_expiry?: string | null
           card_last_four?: string | null
           cheque_date?: string | null
@@ -5063,8 +5262,10 @@ export type Database = {
           locked?: boolean | null
           notes?: string | null
           payment_date?: string
+          payment_session_id?: string | null
           payment_type?: Database["public"]["Enums"]["payment_type"]
           policy_id?: string
+          printed_at?: string | null
           provider?: string | null
           receipt_number?: string | null
           refused?: boolean | null
@@ -5528,13 +5729,19 @@ export type Database = {
           agent_id: string
           amount: number
           branch_id: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancels_receipt_id: string | null
           car_number: string | null
           card_last_four: string | null
           cheque_number: string | null
+          client_id: string | null
           client_name: string | null
+          client_settlement_id: string | null
           created_at: string | null
           created_by: string | null
           id: string
+          is_imported: boolean
           notes: string | null
           payment_id: string | null
           payment_method: string | null
@@ -5543,18 +5750,26 @@ export type Database = {
           receipt_number: number
           receipt_type: string
           source: string
+          voucher_number: string | null
+          wallet_transaction_id: string | null
         }
         Insert: {
           agent_id: string
           amount?: number
           branch_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancels_receipt_id?: string | null
           car_number?: string | null
           card_last_four?: string | null
           cheque_number?: string | null
+          client_id?: string | null
           client_name?: string | null
+          client_settlement_id?: string | null
           created_at?: string | null
           created_by?: string | null
           id?: string
+          is_imported?: boolean
           notes?: string | null
           payment_id?: string | null
           payment_method?: string | null
@@ -5563,18 +5778,26 @@ export type Database = {
           receipt_number?: number
           receipt_type?: string
           source?: string
+          voucher_number?: string | null
+          wallet_transaction_id?: string | null
         }
         Update: {
           agent_id?: string
           amount?: number
           branch_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancels_receipt_id?: string | null
           car_number?: string | null
           card_last_four?: string | null
           cheque_number?: string | null
+          client_id?: string | null
           client_name?: string | null
+          client_settlement_id?: string | null
           created_at?: string | null
           created_by?: string | null
           id?: string
+          is_imported?: boolean
           notes?: string | null
           payment_id?: string | null
           payment_method?: string | null
@@ -5583,6 +5806,8 @@ export type Database = {
           receipt_number?: number
           receipt_type?: string
           source?: string
+          voucher_number?: string | null
+          wallet_transaction_id?: string | null
         }
         Relationships: [
           {
@@ -5600,6 +5825,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "receipts_cancels_receipt_id_fkey"
+            columns: ["cancels_receipt_id"]
+            isOneToOne: false
+            referencedRelation: "receipts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_client_settlement_id_fkey"
+            columns: ["client_settlement_id"]
+            isOneToOne: false
+            referencedRelation: "client_settlements"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "receipts_payment_id_fkey"
             columns: ["payment_id"]
             isOneToOne: false
@@ -5611,6 +5857,13 @@ export type Database = {
             columns: ["policy_id"]
             isOneToOne: false
             referencedRelation: "policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_wallet_transaction_id_fkey"
+            columns: ["wallet_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "customer_wallet_transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -6981,9 +7234,21 @@ export type Database = {
         Args: { _row_agent_id: string; _user_id: string }
         Returns: boolean
       }
+      allocate_credit_note_number: {
+        Args: { p_agent_id: string; p_year: number }
+        Returns: string
+      }
+      allocate_disbursement_number: {
+        Args: { p_agent_id: string; p_year: number }
+        Returns: string
+      }
       allocate_document_number: {
         Args: { p_agent_id: string; p_kind: string; p_year: number }
         Returns: number
+      }
+      allocate_receipt_number_for_policy: {
+        Args: { p_policy_id: string }
+        Returns: string
       }
       calculate_policy_company_payment: {
         Args: {
@@ -7288,6 +7553,17 @@ export type Database = {
       }
       get_my_agent_id: { Args: never; Returns: string }
       get_my_branch_id: { Args: never; Returns: string }
+      get_my_click2call_state: {
+        Args: never
+        Returns: {
+          extension_id: string
+          extension_is_default: boolean
+          extension_label: string
+          extension_number: string
+          is_enabled: boolean
+          provider: string
+        }[]
+      }
       get_otp_login_state: {
         Args: never
         Returns: {
@@ -7568,6 +7844,8 @@ export type Database = {
           group_key: string
           id: string
           insurance_price: number
+          is_cancelled: boolean
+          is_deleted: boolean
           is_package: boolean
           package_companies: string[]
           package_count: number
@@ -7858,6 +8136,7 @@ export type Database = {
         Args: { p_admin_id?: string; p_entry_id: string; p_reason?: string }
         Returns: string
       }
+      search_global: { Args: { p_term: string }; Returns: Json }
       set_features_for_plan: {
         Args: { p_agent_id: string; p_plan: string }
         Returns: undefined
@@ -7888,6 +8167,7 @@ export type Database = {
           id: string
         }[]
       }
+      user_has_all_branches: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       age_band: "UNDER_24" | "UP_24" | "ANY"
