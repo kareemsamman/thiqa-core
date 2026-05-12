@@ -108,7 +108,8 @@ import { DebtPaymentModal } from '@/components/debt/DebtPaymentModal';
 import { ClientNotesSection } from '@/components/clients/ClientNotesSection';
 import { PaymentEditDialog } from '@/components/clients/PaymentEditDialog';
 import { PaymentGroupDetailsDialog } from '@/components/clients/PaymentGroupDetailsDialog';
-import { getCombinedPaymentTypeLabel, getPaymentTypeLabel } from '@/lib/paymentLabels';
+import { getCombinedPaymentTypeLabel, getPaymentTypeLabel, PAYMENT_TYPE_LABELS } from '@/lib/paymentLabels';
+import { AccountingFilters, type AccountingFiltersValue } from '@/components/accounting/AccountingFilters';
 import { RefundsTab } from '@/components/clients/RefundsTab';
 import { ClientFilesTab, type ClientFilesPolicyRef } from '@/components/clients/ClientFilesTab';
 import { AccidentReportWizard } from '@/components/accident-reports/AccidentReportWizard';
@@ -573,7 +574,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
   // Payment filters
   const [paymentSearch, setPaymentSearch] = useState('');
-  const [paymentTypeFilter, setPaymentTypeFilter] = useState<string>('all');
+  // Date range + voucher kind + payment method filters live in the
+  // AccountingFilters popover (same UX as /receipts). companies stays
+  // unused here — the dynamic options below leave it hidden.
+  const [paymentFilters, setPaymentFilters] = useState<AccountingFiltersValue>({
+    dateFrom: '',
+    dateTo: '',
+    companies: [],
+    types: [],
+    paymentMethods: [],
+  });
   
   // Comprehensive invoice state
   
@@ -1942,9 +1952,9 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           return false;
         }
       }
-      if (paymentTypeFilter !== 'all' && payment.payment_type !== paymentTypeFilter) {
-        return false;
-      }
+      // Voucher-kind / date / payment-method filters apply at the
+      // session level (filteredDisplayRows) so a session with mixed
+      // methods doesn't get its splits dropped here.
       return true;
     });
 
@@ -2046,7 +2056,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     return Array.from(groups.values()).sort((a, b) =>
       new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime()
     );
-  }, [payments, paymentSearch, paymentTypeFilter, policies]);
+  }, [payments, paymentSearch, policies]);
 
   // Merged display list: payment groups AND cancellation voucher rows
   // (one per cancelled session). The voucher is its own row, sorted by
@@ -2067,6 +2077,62 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime(),
     );
   }, [groupedPayments, cancellationVouchers]);
+
+  // Filter options surfaced in the popover are derived from the rows
+  // actually present for this client — typing a filter that has no
+  // matching data is just noise. Only the 4 voucher families the user
+  // requested (سند قبض / سند صرف / سند الإلغاء / اشعار دائن) are
+  // candidates; the last two aren't fetched into سجل الدفعات yet, so
+  // they appear only once the rendering side adds them.
+  const paymentTypeOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [];
+    if (displayRows.some((r) => r.kind === 'payment')) {
+      opts.push({ value: 'payment', label: 'سند قبض' });
+    }
+    if (displayRows.some((r) => r.kind === 'voucher')) {
+      opts.push({ value: 'cancellation', label: 'سند الإلغاء' });
+    }
+    return opts;
+  }, [displayRows]);
+
+  const paymentMethodOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of displayRows) {
+      if (row.kind !== 'payment') continue;
+      for (const t of row.group.paymentTypes) {
+        if (t) set.add(t);
+      }
+    }
+    return Array.from(set).map((value) => ({
+      value,
+      label: PAYMENT_TYPE_LABELS[value] || value,
+    }));
+  }, [displayRows]);
+
+  const filteredDisplayRows = useMemo((): DisplayRow[] => {
+    const { dateFrom, dateTo, types, paymentMethods } = paymentFilters;
+    return displayRows.filter((row) => {
+      const date = row.kind === 'voucher' ? row.voucher.date : row.group.payment_date;
+      const dateOnly = (date || '').slice(0, 10);
+      if (dateFrom && dateOnly && dateOnly < dateFrom) return false;
+      if (dateTo && dateOnly && dateOnly > dateTo) return false;
+
+      if (types.length > 0) {
+        const kind = row.kind === 'voucher' ? 'cancellation' : 'payment';
+        if (!types.includes(kind)) return false;
+      }
+
+      if (paymentMethods.length > 0) {
+        // Voucher rows carry no payment method — they're filtered out
+        // whenever a method is selected.
+        if (row.kind === 'voucher') return false;
+        const methods = row.group.paymentTypes;
+        if (!methods.some((m) => paymentMethods.includes(m))) return false;
+      }
+
+      return true;
+    });
+  }, [displayRows, paymentFilters]);
 
   // Re-open the PaymentGroupDetailsDialog with the freshest version of
   // the group the user was drilled into. Runs whenever groupedPayments
@@ -2820,36 +2886,37 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
           {/* Payments Tab */}
           <TabsContent value="payments" className="mt-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-lg">سجل الدفعات</h3>
-            </div>
-            
-            {/* Payment Filters */}
-            <Card className="p-4">
-              <div className="flex flex-wrap gap-3">
-                <div className="relative flex-1 min-w-[200px]">
-                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold text-lg ml-2">سجل الدفعات</h3>
+              <div className="flex items-center gap-2 flex-wrap mr-auto">
+                <div className="relative w-full sm:w-72 md:w-96">
+                  <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                   <Input
-                    placeholder="بحث في الدفعات..."
+                    type="search"
                     value={paymentSearch}
                     onChange={(e) => setPaymentSearch(e.target.value)}
-                    className="pr-10"
+                    placeholder="بحث في الدفعات..."
+                    className="h-8 w-full pr-8 text-sm"
                   />
                 </div>
-                <Select value={paymentTypeFilter} onValueChange={setPaymentTypeFilter}>
-                  <SelectTrigger className="w-[160px]">
-                    <SelectValue placeholder="طريقة الدفع" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">كل الطرق</SelectItem>
-                    <SelectItem value="cash">نقدي</SelectItem>
-                    <SelectItem value="cheque">شيك</SelectItem>
-                    <SelectItem value="visa">بطاقة</SelectItem>
-                    <SelectItem value="transfer">تحويل</SelectItem>
-                  </SelectContent>
-                </Select>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {filteredDisplayRows.length} سند
+                </span>
+                <AccountingFilters
+                  value={paymentFilters}
+                  onChange={setPaymentFilters}
+                  companyOptions={[]}
+                  typeOptions={paymentTypeOptions}
+                  paymentMethodOptions={paymentMethodOptions}
+                  show={{
+                    dateRange: true,
+                    types: paymentTypeOptions.length > 0,
+                    paymentMethods: paymentMethodOptions.length > 0,
+                    companies: false,
+                  }}
+                />
               </div>
-            </Card>
+            </div>
 
             {loadingPayments ? (
               <div className="space-y-2">
@@ -2877,7 +2944,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {displayRows.map((row) => {
+                    {filteredDisplayRows.map((row) => {
                       if (row.kind === 'voucher') {
                         const v = row.voucher;
                         return (
