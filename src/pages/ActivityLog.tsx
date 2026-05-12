@@ -300,12 +300,12 @@ export default function ActivityLog() {
         .select(`
           id, created_at, receipt_type, voucher_number, amount, payment_method,
           cheque_number, client_id, policy_id, payment_id,
-          clients(id, full_name, file_number, deleted_at),
+          direct_client:clients(id, full_name, file_number, deleted_at),
           policies(
             policy_type_parent, policy_type_child,
             insurance_companies(name, name_ar),
             cars(car_number),
-            clients(id, full_name, file_number, deleted_at)
+            policy_client:clients(id, full_name, file_number, deleted_at)
           ),
           payment:policy_payments!receipts_payment_id_fkey(locked, source),
           created_by_profile:profiles!receipts_created_by_fkey(full_name)
@@ -321,9 +321,12 @@ export default function ActivityLog() {
           // receipts.client_id = NULL — the row is only linked to the
           // client via policy.client_id. Fall back to the policy's
           // client so those events still cluster under the correct
-          // customer card instead of an "عميل" bucket.
-          const receiptClient = r.clients;
-          const policyClient = r.policies?.clients;
+          // customer card instead of an "عميل" bucket. The two
+          // embeds are aliased (direct_client / policy_client)
+          // because PostgREST can't infer which clients embed is
+          // meant when both sit in the same select.
+          const receiptClient = r.direct_client;
+          const policyClient = r.policies?.policy_client;
           const client = receiptClient || policyClient;
           if (client?.deleted_at) continue;
 
@@ -378,7 +381,10 @@ export default function ActivityLog() {
             created_at: r.created_at,
             createdBy: r.created_by_profile?.full_name || undefined,
             details: {
-              amount: r.amount,
+              // numeric columns come back from PostgREST as strings;
+              // coerce up-front so downstream summations don't degrade
+              // into "0" + "1000" → "01000" string concatenations.
+              amount: Number(r.amount) || 0,
               payment_type: r.payment_method || undefined,
               cheque_number: r.cheque_number || undefined,
               policy_type: policyType,
