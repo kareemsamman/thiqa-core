@@ -2144,18 +2144,31 @@ function PolicyPackageCard({
                 )}
               </div>
             </div>
-            {/* Creator caption — small line at the bottom showing who
-                added the معاملة. Pulled off the policy.creator join
-                that ClientDetails populates. Falls back to the part
-                before "@" in the email when full_name is null (the
-                profiles row sometimes carries email only). */}
+            {/* Creator + creation timestamp — "أنشأها: <name> · <date>
+                <time>". Name falls back to email-username when
+                profiles.full_name is null. Date renders in dd/MM/yyyy
+                + HH:mm (en-GB locale) to match the rest of the app.
+                Both halves render only when their source is non-null
+                so old rows without a creator / created_at degrade
+                cleanly. */}
             {(() => {
               const c = pkg.mainPolicy?.creator;
-              const label = c?.full_name?.trim() || c?.email?.split('@')[0] || null;
-              if (!label) return null;
+              const who = c?.full_name?.trim() || c?.email?.split('@')[0] || null;
+              const when = pkg.mainPolicy?.created_at;
+              if (!who && !when) return null;
+              const ts = when ? new Date(when) : null;
               return (
-                <div className="text-[10px] text-muted-foreground mt-1.5 px-1">
-                  أنشأها: <span className="font-medium">{label}</span>
+                <div className="text-[10px] text-muted-foreground mt-1.5 px-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  {who && (
+                    <span>أنشأها: <span className="font-medium">{who}</span></span>
+                  )}
+                  {ts && (
+                    <span className="ltr-nums">
+                      · {ts.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      <span className="mx-1">·</span>
+                      {ts.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </span>
+                  )}
                 </div>
               );
             })()}
@@ -2235,15 +2248,26 @@ function PolicyPackageCard({
                 )}
               </div>
             </div>
-            {/* Same creator caption as the package version — full_name
-                with email-username fallback. */}
+            {/* Same caption as the package version — creator name with
+                email fallback plus the creation date+time. */}
             {(() => {
               const c = policy.creator;
-              const label = c?.full_name?.trim() || c?.email?.split('@')[0] || null;
-              if (!label) return null;
+              const who = c?.full_name?.trim() || c?.email?.split('@')[0] || null;
+              const when = policy.created_at;
+              if (!who && !when) return null;
+              const ts = when ? new Date(when) : null;
               return (
-                <div className="text-[10px] text-muted-foreground mt-1.5 px-1">
-                  أنشأها: <span className="font-medium">{label}</span>
+                <div className="text-[10px] text-muted-foreground mt-1.5 px-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  {who && (
+                    <span>أنشأها: <span className="font-medium">{who}</span></span>
+                  )}
+                  {ts && (
+                    <span className="ltr-nums">
+                      · {ts.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      <span className="mx-1">·</span>
+                      {ts.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </span>
+                  )}
                 </div>
               );
             })()}
