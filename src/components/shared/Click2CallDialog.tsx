@@ -170,7 +170,7 @@ export function Click2CallDialog({
           )}
         </div>
 
-        <DialogFooter className="flex gap-2 sm:gap-0">
+        <DialogFooter>
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
