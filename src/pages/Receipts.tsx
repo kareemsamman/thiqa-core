@@ -125,6 +125,25 @@ const PAYMENT_METHOD_OPTIONS = [
 
 const PAGE_SIZE = 50;
 
+// Display the receipts table's numeric receipt_number in the same
+// "R{seq}/{year}" form policy_payments uses, so سندات قبض and
+// تفاصيل الدفعات agree visually. Year is derived from the row's
+// receipt_date; strings that already start with "R" pass through
+// untouched (legacy auto-source rows that mirror policy_payments).
+const formatReceiptNumber = (
+  num: number | string | null | undefined,
+  dateStr: string | null | undefined,
+): string => {
+  if (num == null || num === "") return "-";
+  const s = String(num);
+  if (s.startsWith("R")) return s;
+  const n = Number(s);
+  if (Number.isNaN(n)) return s;
+  const year = dateStr ? new Date(dateStr).getFullYear() : new Date().getFullYear();
+  const seq = n < 10 ? `0${n}` : `${n}`;
+  return `R${seq}/${year}`;
+};
+
 // ─── Columns ─────────────────────────────────────────────────────────
 //
 // Schema for the manage-columns dropdown. actions is required (the row
@@ -247,7 +266,7 @@ function buildReceiptPrintHtml(
       return `
       <tr>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${i + 1}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${r.receipt_number || "-"}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${formatReceiptNumber(r.receipt_number, r.receipt_date)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${formatDate(r.receipt_date)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${pmLabel(r.payment_method)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${r.cheque_number || "-"}</td>
@@ -1708,7 +1727,7 @@ export default function Receipts() {
           : null;
         return {
           idx: i + 1,
-          receipt_number: r.receipt_number ?? "",
+          receipt_number: formatReceiptNumber(r.receipt_number, r.receipt_date),
           receipt_date: formatDate(r.receipt_date),
           client_name: r.client_name,
           client_id_number: client?.id_number ?? "",
@@ -2315,9 +2334,11 @@ export default function Receipts() {
                       className="hover:bg-muted/40"
                     >
                       {isCol("receipt_number") && (
-                        <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="font-semibold">{firstReceipt?.receipt_number ?? "-"}</span>
+                        <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap text-right">
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="font-semibold">
+                              {formatReceiptNumber(firstReceipt?.receipt_number, firstReceipt?.receipt_date)}
+                            </span>
                             {/* Cancellation indicators. Payment tab: red
                                 pill + the voucher number that cancelled
                                 it. Cancellation tab: amber pill + the
@@ -2328,7 +2349,9 @@ export default function Receipts() {
                                 <XCircle className="h-3 w-3" />
                                 <span>ملغي</span>
                                 {voucherRef != null && (
-                                  <span className="font-mono ltr-nums opacity-80">#{voucherRef}</span>
+                                  <span className="font-mono ltr-nums opacity-80">
+                                    {formatReceiptNumber(voucherRef, firstReceipt?.receipt_date)}
+                                  </span>
                                 )}
                               </Badge>
                             )}
@@ -2342,7 +2365,9 @@ export default function Receipts() {
                               <Badge variant="warning" className="gap-1 px-2 py-0 h-5 text-[10px] font-medium">
                                 <Ban className="h-3 w-3" />
                                 <span>إلغاء سند</span>
-                                <span className="font-mono ltr-nums opacity-80">#{voucherRef}</span>
+                                <span className="font-mono ltr-nums opacity-80">
+                                  {formatReceiptNumber(voucherRef, firstReceipt?.receipt_date)}
+                                </span>
                               </Badge>
                             )}
                           </div>
@@ -2350,18 +2375,7 @@ export default function Receipts() {
                       )}
                       {isCol("amount") && (
                         <TableCell className="font-semibold whitespace-nowrap">
-                          <div className="flex items-center gap-1">
-                            ₪
-                            {Math.round(group.total).toLocaleString("en-US")}
-                            {group.receipts.length > 1 && (
-                              <Badge
-                                variant="secondary"
-                                className="text-[10px] px-1.5 py-0"
-                              >
-                                {group.receipts.length} سندات
-                              </Badge>
-                            )}
-                          </div>
+                          ₪{Math.round(group.total).toLocaleString("en-US")}
                         </TableCell>
                       )}
                       {isCol("receipt_date") && (

@@ -100,6 +100,22 @@ const formatDate = (value: string | null) => {
   }
 };
 
+// Mirror Receipts.tsx so the dialog shows the same R{seq}/{year} form
+// the table uses; keeps the popup and the row in lockstep.
+const formatReceiptNumber = (
+  num: number | string | null | undefined,
+  dateStr: string | null | undefined,
+): string => {
+  if (num == null || num === "") return "-";
+  const s = String(num);
+  if (s.startsWith("R")) return s;
+  const n = Number(s);
+  if (Number.isNaN(n)) return s;
+  const year = dateStr ? new Date(dateStr).getFullYear() : new Date().getFullYear();
+  const seq = n < 10 ? `0${n}` : `${n}`;
+  return `R${seq}/${year}`;
+};
+
 export function ReceiptGroupDetailsDialog({
   open,
   onOpenChange,
@@ -199,7 +215,9 @@ export function ReceiptGroupDetailsDialog({
                         {r.receipt_number && (
                           <Badge variant="secondary" className="text-[10px] gap-1">
                             <span>رقم السند</span>
-                            <span className="font-mono ltr-nums">{r.receipt_number}</span>
+                            <span className="font-mono ltr-nums">
+                              {formatReceiptNumber(r.receipt_number, r.receipt_date)}
+                            </span>
                           </Badge>
                         )}
                       </div>
