@@ -155,42 +155,57 @@ Deno.serve(async (req) => {
 
     const cleanPhone = phone_number.replace(/[-\s]/g, '');
 
-    // ── per-user config (Talkchief, future vendors) ──────────────────
-    // Service role bypasses RLS so this works even though the worker
-    // doesn't have direct SELECT on click2call_user_settings.
-    const { data: userSettings } = await supabase
-      .from('click2call_user_settings')
-      .select('provider, api_key, is_enabled, user_id, agent_id')
+    // Figure out which agent this employee belongs to. user_roles is
+    // the source of truth — profiles.agent_id duplicates it but can
+    // drift; user_roles is what every RLS policy in the schema joins
+    // against, so we mirror that here.
+    const { data: roleRow } = await supabase
+      .from('user_roles')
+      .select('agent_id')
       .eq('user_id', user.id)
+      .limit(1)
       .maybeSingle();
+    const agentId = roleRow?.agent_id ?? null;
 
-    if (userSettings) {
-      if (!userSettings.is_enabled) {
+    // ── per-agent config (Talkchief, future vendors) ─────────────────
+    // Service role bypasses RLS so this works even though the worker
+    // doesn't have direct SELECT on click2call_agent_settings.
+    const { data: agentSettings } = agentId
+      ? await supabase
+          .from('click2call_agent_settings')
+          .select('provider, api_key, is_enabled, agent_id')
+          .eq('agent_id', agentId)
+          .maybeSingle()
+      : { data: null };
+
+    if (agentSettings) {
+      if (!agentSettings.is_enabled) {
         return new Response(
-          JSON.stringify({ success: false, message: 'خاصية الاتصال السريع غير مفعلة لهذا المستخدم' }),
+          JSON.stringify({ success: false, message: 'خاصية الاتصال السريع غير مفعلة لهذا الوكيل' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Resolve which extension to use. Caller can pass extension_id
-      // (the row's UUID in click2call_user_extensions) or extension_number
-      // (the raw vendor extension). Otherwise we pick the default row.
+      // Resolve which extension to use. Caller passes extension_id
+      // (the row's UUID in click2call_agent_extensions) when the
+      // user actively picked one in the dialog; otherwise we fall
+      // back to the agent's default row.
       let chosenExtension: string | null = null;
       if (extension_id) {
         const { data: ext } = await supabase
-          .from('click2call_user_extensions')
+          .from('click2call_agent_extensions')
           .select('extension')
           .eq('id', extension_id)
-          .eq('user_id', userSettings.user_id)
+          .eq('agent_id', agentSettings.agent_id)
           .maybeSingle();
         chosenExtension = ext?.extension ?? null;
       } else if (legacyExtensionNumber) {
         chosenExtension = legacyExtensionNumber;
       } else {
         const { data: defaultExt } = await supabase
-          .from('click2call_user_extensions')
+          .from('click2call_agent_extensions')
           .select('extension')
-          .eq('user_id', userSettings.user_id)
+          .eq('agent_id', agentSettings.agent_id)
           .eq('is_default', true)
           .maybeSingle();
         chosenExtension = defaultExt?.extension ?? null;
@@ -199,9 +214,9 @@ Deno.serve(async (req) => {
           // deterministically so calls aren't routed by row creation
           // race conditions.
           const { data: firstExt } = await supabase
-            .from('click2call_user_extensions')
+            .from('click2call_agent_extensions')
             .select('extension')
-            .eq('user_id', userSettings.user_id)
+            .eq('agent_id', agentSettings.agent_id)
             .order('extension', { ascending: true })
             .limit(1)
             .maybeSingle();
@@ -211,21 +226,21 @@ Deno.serve(async (req) => {
 
       if (!chosenExtension) {
         return new Response(
-          JSON.stringify({ success: false, message: 'لا توجد تحويلة مهيّأة لهذا المستخدم' }),
+          JSON.stringify({ success: false, message: 'لا توجد تحويلة مهيّأة لهذا الوكيل' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
       let result: CallResult;
-      if (userSettings.provider === 'talkchief') {
+      if (agentSettings.provider === 'talkchief') {
         result = await placeTalkchiefCall({
-          apiKey: userSettings.api_key,
+          apiKey: agentSettings.api_key,
           extension: chosenExtension,
           destination: cleanPhone,
         });
       } else {
         return new Response(
-          JSON.stringify({ success: false, message: `مزود الاتصال غير مدعوم: ${userSettings.provider}` }),
+          JSON.stringify({ success: false, message: `مزود الاتصال غير مدعوم: ${agentSettings.provider}` }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

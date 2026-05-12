@@ -22,12 +22,17 @@ const EMPTY_STATE: Click2CallState = {
 };
 
 /**
- * Surfaces the current user's Click2Call configuration to the UI.
+ * Surfaces the caller's agency Click2Call configuration to the UI.
  *
- * Reads via the get_my_click2call_state SECURITY DEFINER RPC, which
- * omits api_key. We cache it under the user's id so impersonation
- * (which swaps the auth.uid()) doesn't read another user's cached
- * state by accident.
+ * Click2Call is configured per-agent (one provider + api_key + a
+ * shared pool of extensions per agency, set by Thiqa super-admin).
+ * The RPC scopes the result to the caller's agent via the same
+ * get_my_agent_id() / get_impersonated_agent_id() helpers used in
+ * RLS, and omits api_key from the response.
+ *
+ * Cache key includes the user id so impersonation (which swaps
+ * auth.uid() AND get_my_agent_id) doesn't reuse a stale agency's
+ * state from a different tab.
  *
  * `enabled` is false until we know otherwise — call buttons stay
  * hidden during hydration rather than flashing in for a frame.

@@ -36,6 +36,7 @@ import { AgentDiscountManager } from "@/components/thiqa/AgentDiscountManager";
 import { AgentLimitOverrides } from "@/components/thiqa/AgentLimitOverrides";
 import { SmsProviderConfig, type SmsProviderChoice } from "@/components/sms/SmsProviderConfig";
 import { AgentWhatsAppSettings } from "@/components/admin/AgentWhatsAppSettings";
+import { AgentClick2CallSettings } from "@/components/admin/AgentClick2CallSettings";
 import { RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -1303,6 +1304,7 @@ export default function ThiqaAgentDetail() {
                 { v: 'branding', icon: Palette, label: 'العلامة' },
                 { v: 'sms', icon: MessageSquare, label: 'SMS' },
                 { v: 'whatsapp', icon: MessageSquare, label: 'WhatsApp' },
+                { v: 'click2call', icon: Phone, label: 'الاتصال' },
                 { v: 'auth', icon: Shield, label: 'المصادقة' },
                 { v: 'tranzila', icon: CreditCard, label: 'Tranzila' },
                 { v: 'features', icon: Settings, label: 'الميزات' },
@@ -1740,6 +1742,11 @@ export default function ThiqaAgentDetail() {
           {/* ═══════════ WHATSAPP TAB ═══════════ */}
           <TabsContent value="whatsapp">
             {agentId && <AgentWhatsAppSettings agentId={agentId} />}
+          </TabsContent>
+
+          {/* ═══════════ CLICK2CALL TAB ═══════════ */}
+          <TabsContent value="click2call">
+            {agentId && <AgentClick2CallSettings agentId={agentId} />}
           </TabsContent>
 
           {/* ═══════════ AUTH TAB ═══════════ */}

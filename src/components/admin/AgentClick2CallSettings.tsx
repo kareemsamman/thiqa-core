@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,10 +13,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2, Save, Plus, Trash2, Star, Phone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { useAgentContext } from "@/hooks/useAgentContext";
+import { toast } from "sonner";
 
 // Providers the system supports today. Add new entries here as we
 // onboard more vendors; the DB column is plain TEXT so no migration
@@ -24,14 +25,9 @@ const PROVIDERS: { value: string; label: string }[] = [
   { value: "talkchief", label: "Talkchief" },
 ];
 
-interface UserRow {
-  id: string;
-  full_name: string | null;
-  email: string;
-}
-
 interface SettingsRow {
   id: string;
+  agent_id: string;
   provider: string;
   api_key: string;
   is_enabled: boolean;
@@ -44,226 +40,186 @@ interface ExtensionRow {
   is_default: boolean;
 }
 
-interface Click2CallUserDialogProps {
-  user: UserRow | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+interface Props {
+  agentId: string;
 }
 
-export function Click2CallUserDialog({ user, open, onOpenChange }: Click2CallUserDialogProps) {
-  const { toast } = useToast();
-  const { agentId } = useAgentContext();
+/**
+ * Per-agent Click2Call configuration manager. Thiqa super-admin
+ * opens this from the agent detail page — picks the provider, drops
+ * in the agency's vendor api_key, and curates the shared pool of
+ * extensions. Every employee in this agent will then see the call
+ * button next to phone numbers across the app.
+ *
+ * Mirrors AgentWhatsAppSettings in shape so the agent detail page
+ * stays uniform; differs in that settings is a 1:1 row (not a list)
+ * because each agency holds a single vendor account.
+ */
+export function AgentClick2CallSettings({ agentId }: Props) {
+  const queryClient = useQueryClient();
 
-  const [loading, setLoading] = useState(false);
-  const [savingSettings, setSavingSettings] = useState(false);
-  const [settings, setSettings] = useState<SettingsRow | null>(null);
+  const { data: settings, isLoading: settingsLoading } = useQuery({
+    queryKey: ["click2call-agent-settings", agentId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("click2call_agent_settings")
+        .select("id, agent_id, provider, api_key, is_enabled")
+        .eq("agent_id", agentId)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as SettingsRow | null;
+    },
+  });
+
+  const { data: extensions, isLoading: extensionsLoading } = useQuery({
+    queryKey: ["click2call-agent-extensions", agentId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("click2call_agent_extensions")
+        .select("id, extension, label, is_default")
+        .eq("agent_id", agentId)
+        .order("is_default", { ascending: false })
+        .order("extension", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as ExtensionRow[];
+    },
+  });
+
+  // Form state mirrors the row so the admin sees current values on
+  // load and any edits land in local state until "حفظ" persists them.
   const [provider, setProvider] = useState<string>(PROVIDERS[0].value);
   const [apiKey, setApiKey] = useState("");
   const [isEnabled, setIsEnabled] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const [extensions, setExtensions] = useState<ExtensionRow[]>([]);
+  useEffect(() => {
+    if (settings) {
+      setProvider(settings.provider || PROVIDERS[0].value);
+      setApiKey(settings.api_key || "");
+      setIsEnabled(settings.is_enabled);
+    } else {
+      setProvider(PROVIDERS[0].value);
+      setApiKey("");
+      setIsEnabled(true);
+    }
+  }, [settings]);
+
   const [newExtension, setNewExtension] = useState("");
   const [newLabel, setNewLabel] = useState("");
-  const [addingExtension, setAddingExtension] = useState(false);
-
-  // Pulls fresh state every time the sheet opens so two admins editing
-  // the same user don't overwrite each other based on stale form state.
-  useEffect(() => {
-    if (!user || !open || !agentId) return;
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      try {
-        const sb = supabase as any;
-        const [settingsRes, extensionsRes] = await Promise.all([
-          sb
-            .from("click2call_user_settings")
-            .select("id, provider, api_key, is_enabled")
-            .eq("user_id", user.id)
-            .eq("agent_id", agentId)
-            .maybeSingle(),
-          sb
-            .from("click2call_user_extensions")
-            .select("id, extension, label, is_default")
-            .eq("user_id", user.id)
-            .eq("agent_id", agentId)
-            .order("is_default", { ascending: false })
-            .order("extension", { ascending: true }),
-        ]);
-        if (cancelled) return;
-        if (settingsRes.error) throw settingsRes.error;
-        if (extensionsRes.error) throw extensionsRes.error;
-
-        const row = (settingsRes.data ?? null) as SettingsRow | null;
-        setSettings(row);
-        setProvider(row?.provider || PROVIDERS[0].value);
-        setApiKey(row?.api_key || "");
-        setIsEnabled(row?.is_enabled ?? true);
-        setExtensions((extensionsRes.data ?? []) as ExtensionRow[]);
-      } catch (err) {
-        toast({
-          title: "خطأ",
-          description: err instanceof Error ? err.message : "فشل في تحميل الإعدادات",
-          variant: "destructive",
-        });
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, open, agentId, toast]);
+  const [adding, setAdding] = useState(false);
 
   const handleSaveSettings = async () => {
-    if (!user || !agentId) return;
     if (!apiKey.trim()) {
-      toast({ title: "خطأ", description: "مفتاح API مطلوب", variant: "destructive" });
+      toast.error("مفتاح API مطلوب");
       return;
     }
-    setSavingSettings(true);
+    setSaving(true);
     try {
-      const { data, error } = await (supabase as any)
-        .from("click2call_user_settings")
+      const { error } = await (supabase as any)
+        .from("click2call_agent_settings")
         .upsert(
           {
-            user_id: user.id,
             agent_id: agentId,
             provider,
             api_key: apiKey.trim(),
             is_enabled: isEnabled,
           },
-          { onConflict: "user_id,agent_id" }
-        )
-        .select("id, provider, api_key, is_enabled")
-        .single();
+          { onConflict: "agent_id" }
+        );
       if (error) throw error;
-      setSettings(data as SettingsRow);
-      toast({ title: "تم الحفظ", description: "تم حفظ إعدادات الاتصال السريع" });
+      await queryClient.invalidateQueries({ queryKey: ["click2call-agent-settings", agentId] });
+      toast.success("تم حفظ إعدادات الاتصال السريع");
     } catch (err) {
-      toast({
-        title: "خطأ",
-        description: err instanceof Error ? err.message : "فشل في حفظ الإعدادات",
-        variant: "destructive",
-      });
+      toast.error(err instanceof Error ? err.message : "فشل في حفظ الإعدادات");
     } finally {
-      setSavingSettings(false);
+      setSaving(false);
     }
   };
 
   const handleAddExtension = async () => {
-    if (!user || !agentId) return;
     const ext = newExtension.trim();
     if (!ext) return;
-    setAddingExtension(true);
+    setAdding(true);
     try {
-      // First extension auto-becomes the default so the worker always
-      // has something to call from without an extra "mark default" click.
-      const isFirst = extensions.length === 0;
-      const { data, error } = await (supabase as any)
-        .from("click2call_user_extensions")
+      // First extension auto-becomes the default so the employee call
+      // dialog always has something pre-selected.
+      const isFirst = (extensions?.length ?? 0) === 0;
+      const { error } = await (supabase as any)
+        .from("click2call_agent_extensions")
         .insert({
-          user_id: user.id,
           agent_id: agentId,
           extension: ext,
           label: newLabel.trim() || null,
           is_default: isFirst,
-        })
-        .select("id, extension, label, is_default")
-        .single();
+        });
       if (error) throw error;
-      setExtensions((prev) =>
-        [...prev, data as ExtensionRow].sort((a, b) => {
-          if (a.is_default !== b.is_default) return a.is_default ? -1 : 1;
-          return a.extension.localeCompare(b.extension);
-        })
-      );
       setNewExtension("");
       setNewLabel("");
+      await queryClient.invalidateQueries({ queryKey: ["click2call-agent-extensions", agentId] });
     } catch (err) {
-      toast({
-        title: "خطأ",
-        description: err instanceof Error ? err.message : "فشل في إضافة التحويلة",
-        variant: "destructive",
-      });
+      toast.error(err instanceof Error ? err.message : "فشل في إضافة الخط");
     } finally {
-      setAddingExtension(false);
+      setAdding(false);
     }
   };
 
-  const handleDeleteExtension = async (id: string) => {
+  const handleDelete = async (id: string) => {
     try {
-      const { error } = await (supabase as any).from("click2call_user_extensions").delete().eq("id", id);
+      const { error } = await (supabase as any)
+        .from("click2call_agent_extensions")
+        .delete()
+        .eq("id", id);
       if (error) throw error;
-      setExtensions((prev) => prev.filter((e) => e.id !== id));
+      await queryClient.invalidateQueries({ queryKey: ["click2call-agent-extensions", agentId] });
     } catch (err) {
-      toast({
-        title: "خطأ",
-        description: err instanceof Error ? err.message : "فشل في حذف التحويلة",
-        variant: "destructive",
-      });
+      toast.error(err instanceof Error ? err.message : "فشل في حذف الخط");
     }
   };
 
   const handleSetDefault = async (id: string) => {
-    if (!user || !agentId) return;
     try {
-      // Unset everyone else first — the partial unique index on
-      // (user_id, agent_id) WHERE is_default would reject a second
-      // default row otherwise. Two statements rather than a single
-      // upsert because we don't have a deterministic ordering of
-      // "unset then set" inside one Supabase call.
+      // Unset others first — the partial unique index on (agent_id)
+      // WHERE is_default would reject a second default row otherwise.
       const sb = supabase as any;
-      const { error: clearError } = await sb
-        .from("click2call_user_extensions")
+      const { error: clearErr } = await sb
+        .from("click2call_agent_extensions")
         .update({ is_default: false })
-        .eq("user_id", user.id)
         .eq("agent_id", agentId)
         .neq("id", id);
-      if (clearError) throw clearError;
-      const { error: setError } = await sb
-        .from("click2call_user_extensions")
+      if (clearErr) throw clearErr;
+      const { error: setErr } = await sb
+        .from("click2call_agent_extensions")
         .update({ is_default: true })
         .eq("id", id);
-      if (setError) throw setError;
-      setExtensions((prev) =>
-        prev
-          .map((e) => ({ ...e, is_default: e.id === id }))
-          .sort((a, b) => {
-            if (a.is_default !== b.is_default) return a.is_default ? -1 : 1;
-            return a.extension.localeCompare(b.extension);
-          })
-      );
+      if (setErr) throw setErr;
+      await queryClient.invalidateQueries({ queryKey: ["click2call-agent-extensions", agentId] });
     } catch (err) {
-      toast({
-        title: "خطأ",
-        description: err instanceof Error ? err.message : "فشل في تعيين التحويلة الافتراضية",
-        variant: "destructive",
-      });
+      toast.error(err instanceof Error ? err.message : "فشل في تعيين الخط الافتراضي");
     }
   };
 
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="left" className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Phone className="h-5 w-5 text-primary" />
-            الاتصال السريع
-          </SheetTitle>
-          <SheetDescription>
-            إعدادات الاتصال السريع للمستخدم{" "}
-            <strong>{user?.full_name || user?.email}</strong>
-          </SheetDescription>
-        </SheetHeader>
+  const loading = settingsLoading || extensionsLoading;
 
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Phone className="h-5 w-5" />
+          الاتصال السريع (Click2Call)
+        </CardTitle>
+        <CardDescription>
+          إعدادات الاتصال السريع لهذا الوكيل. كل الموظفين بهذا الوكيل بقدروا يستخدموا الخطوط المضافة هون.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
         {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
           </div>
         ) : (
-          <div className="space-y-6 mt-6">
-            {/* Settings section */}
+          <>
+            {/* Settings */}
             <div className="space-y-4 rounded-lg border p-4">
               <div className="flex items-center justify-between">
                 <Label htmlFor="c2c-enabled" className="font-medium">
@@ -297,18 +253,18 @@ export function Click2CallUserDialog({ user, open, onOpenChange }: Click2CallUse
                 <Input
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="api_key الخاص بحساب المستخدم"
+                  placeholder="api_key الخاص بحساب الوكيل لدى الشركة المزوّدة"
                   dir="ltr"
                   type="password"
                   autoComplete="off"
                 />
                 <p className="text-xs text-muted-foreground">
-                  لكل مستخدم مفتاحه الخاص — يحصل عليه من حسابه لدى الشركة المزوّدة.
+                  يحصل عليه الوكيل من حسابه لدى Talkchief (أو الشركة المزوّدة).
                 </p>
               </div>
 
-              <Button onClick={handleSaveSettings} disabled={savingSettings} className="w-full">
-                {savingSettings ? (
+              <Button onClick={handleSaveSettings} disabled={saving}>
+                {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin ml-2" />
                 ) : (
                   <Save className="h-4 w-4 ml-2" />
@@ -317,15 +273,15 @@ export function Click2CallUserDialog({ user, open, onOpenChange }: Click2CallUse
               </Button>
             </div>
 
-            {/* Extensions section. Hidden until the settings row exists
-                — we need a stable click2call_user_settings record before
-                attaching extensions, and it avoids the admin filling in
-                a list that they then have to re-confirm anyway. */}
+            {/* Extensions. Hidden until settings exist — we need a
+                stable agent_settings row before attaching extensions,
+                and it avoids the admin filling in a list that they
+                then have to re-confirm anyway. */}
             <div className="space-y-3 rounded-lg border p-4">
               <div>
                 <h4 className="font-medium">الخطوط (Extensions)</h4>
                 <p className="text-xs text-muted-foreground mt-1">
-                  أضف خطوط المستخدم. الخط الافتراضي هو الذي يُستخدم تلقائياً عند الاتصال.
+                  أضف خطوط الوكيل وسمِّها لتميزها (مثل "خط تامر"، "خط أحمد"). الخط الافتراضي هو الذي يُختار تلقائياً.
                 </p>
               </div>
 
@@ -335,8 +291,8 @@ export function Click2CallUserDialog({ user, open, onOpenChange }: Click2CallUse
                 </div>
               ) : (
                 <>
-                  {extensions.length > 0 && (
-                    <div className="border rounded-md">
+                  {extensions && extensions.length > 0 && (
+                    <div className="border rounded-md overflow-hidden">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -373,7 +329,7 @@ export function Click2CallUserDialog({ user, open, onOpenChange }: Click2CallUse
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  onClick={() => handleDeleteExtension(ext.id)}
+                                  onClick={() => handleDelete(ext.id)}
                                   className="text-destructive hover:text-destructive"
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -397,19 +353,19 @@ export function Click2CallUserDialog({ user, open, onOpenChange }: Click2CallUse
                       />
                     </div>
                     <div>
-                      <Label className="text-xs">الاسم (اختياري)</Label>
+                      <Label className="text-xs">الاسم</Label>
                       <Input
                         value={newLabel}
                         onChange={(e) => setNewLabel(e.target.value)}
-                        placeholder="مكتب"
+                        placeholder="خط تامر"
                       />
                     </div>
                     <Button
                       onClick={handleAddExtension}
-                      disabled={addingExtension || !newExtension.trim()}
+                      disabled={adding || !newExtension.trim()}
                       size="sm"
                     >
-                      {addingExtension ? (
+                      {adding ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Plus className="h-4 w-4" />
@@ -419,9 +375,9 @@ export function Click2CallUserDialog({ user, open, onOpenChange }: Click2CallUse
                 </>
               )}
             </div>
-          </div>
+          </>
         )}
-      </SheetContent>
-    </Sheet>
+      </CardContent>
+    </Card>
   );
 }
