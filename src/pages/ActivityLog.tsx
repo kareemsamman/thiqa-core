@@ -951,27 +951,10 @@ export default function ActivityLog() {
                                   </div>
                                 )}
 
-                                {/* Payment status — only on policy-creation rows.
-                                    "0 paid" reads as "لم يدفع شيئاً بعد"; otherwise
-                                    show paid + remaining. */}
-                                {activity.type === "policy" && activity.details.insurance_price ? (
-                                  <div className="flex items-center gap-x-2 gap-y-1 flex-wrap pt-0.5">
-                                    {(activity.details.paid_amount || 0) === 0 ? (
-                                      <Badge variant="outline" className="text-[11px] border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/5">
-                                        لم يدفع شيئاً بعد
-                                      </Badge>
-                                    ) : (
-                                      <Badge variant="outline" className="text-[11px] border-success/40 text-success bg-success/5">
-                                        مدفوع: ₪{(activity.details.paid_amount || 0).toLocaleString()}
-                                      </Badge>
-                                    )}
-                                    {(activity.details.remaining_amount || 0) > 0 && (
-                                      <Badge variant="outline" className="text-[11px] border-destructive/40 text-destructive bg-destructive/5">
-                                        متبقي: ₪{(activity.details.remaining_amount || 0).toLocaleString()}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                ) : null}
+                                {/* Per-row paid/remaining badges removed —
+                                    one combined "مدفوع / متبقي" summary
+                                    is rendered once at the foot of the
+                                    card below (see paidTotals). */}
 
                                 {activity.details.car_number && activity.type !== "transfer" && (
                                   <div className="flex items-center gap-2">
