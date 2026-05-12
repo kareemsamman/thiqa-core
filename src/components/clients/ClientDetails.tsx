@@ -103,6 +103,7 @@ import { ExpiryBadge } from '@/components/shared/ExpiryBadge';
 import { ClickablePhone } from '@/components/shared/ClickablePhone';
 import { DebtIndicator } from '@/components/shared/DebtIndicator';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
+import { PrintProgressDialog } from '@/components/shared/PrintProgressDialog';
 import { DebtPaymentModal } from '@/components/debt/DebtPaymentModal';
 import { ClientNotesSection } from '@/components/clients/ClientNotesSection';
 import { PaymentEditDialog } from '@/components/clients/PaymentEditDialog';
@@ -568,6 +569,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   
   // Individual payment receipt state
   const [generatingReceipt, setGeneratingReceipt] = useState<string | null>(null);
+  // Shared print-progress overlay state — same UX as the Receipts page.
+  // Ticker creeps the bar toward 90% while the edge function runs, then
+  // snaps to 100 just before window.open. Title swaps between the two
+  // print paths (سند قبض vs سند إلغاء) so the bookkeeper sees what's
+  // actually being prepared.
+  const [printProgress, setPrintProgress] = useState<{
+    open: boolean;
+    value: number;
+    title?: string;
+  }>({ open: false, value: 0 });
   
   // Accident report wizard state
   const [accidentWizardOpen, setAccidentWizardOpen] = useState(false);
@@ -1587,6 +1598,26 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const handlePrintGroupReceipts = async (groupKey: string, paymentIds: string[]) => {
     if (paymentIds.length === 0) return;
     setGeneratingReceipt(groupKey);
+    setPrintProgress({ open: true, value: 8, title: 'جاري إعداد سند القبض' });
+    // Fake-progress ticker (real progress isn't exposed by the edge
+    // function); creeps toward 90 so the bar has visible motion, then
+    // snaps to 100 once we have the URL. Identical UX to the receipts
+    // page so the bookkeeper sees the same spinner everywhere.
+    const ticker = setInterval(() => {
+      setPrintProgress((s) => {
+        if (!s.open || s.value >= 90) return s;
+        return { ...s, value: Math.min(90, s.value + 6) };
+      });
+    }, 220);
+    const closeOverlay = (success: boolean) => {
+      clearInterval(ticker);
+      if (success) {
+        setPrintProgress((s) => ({ ...s, value: 100 }));
+        setTimeout(() => setPrintProgress({ open: false, value: 0 }), 350);
+      } else {
+        setPrintProgress({ open: false, value: 0 });
+      }
+    };
     try {
       let url: string | undefined;
       if (paymentIds.length === 1) {
@@ -1603,6 +1634,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         url = data?.receipt_url;
       }
       if (!url) {
+        closeOverlay(false);
         toast.error(paymentIds.length === 1 ? 'لم يتم العثور على رابط السند' : 'لم يتم العثور على رابط السندات');
         return;
       }
@@ -1622,8 +1654,10 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         // without a manual reload.
         fetchPayments();
       }
+      closeOverlay(true);
       window.open(url, '_blank');
     } catch (e) {
+      closeOverlay(false);
       console.error('Print group receipts error:', e);
       toast.error('فشل في توليد سند القبض');
     } finally {
@@ -1641,6 +1675,22 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const handlePrintCancellationVoucher = async (voucherId: string, voucherNumber: string) => {
     const key = `voucher-${voucherId}`;
     setGeneratingReceipt(key);
+    setPrintProgress({ open: true, value: 8, title: 'جاري إعداد سند الإلغاء' });
+    const ticker = setInterval(() => {
+      setPrintProgress((s) => {
+        if (!s.open || s.value >= 90) return s;
+        return { ...s, value: Math.min(90, s.value + 6) };
+      });
+    }, 220);
+    const closeOverlay = (success: boolean) => {
+      clearInterval(ticker);
+      if (success) {
+        setPrintProgress((s) => ({ ...s, value: 100 }));
+        setTimeout(() => setPrintProgress({ open: false, value: 0 }), 350);
+      } else {
+        setPrintProgress({ open: false, value: 0 });
+      }
+    };
     try {
       const { data, error } = await supabase.functions.invoke(
         'generate-cancellation-voucher',
@@ -1649,11 +1699,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       if (error) throw error;
       const url = (data as { receipt_url?: string } | null)?.receipt_url;
       if (!url) {
+        closeOverlay(false);
         toast.error('لم يتم العثور على رابط سند الإلغاء');
         return;
       }
+      closeOverlay(true);
       window.open(url, '_blank');
     } catch (e) {
+      closeOverlay(false);
       console.error('Print cancellation voucher error:', e);
       toast.error(`فشل في طباعة سند الإلغاء ${voucherNumber}`);
     } finally {
@@ -3590,6 +3643,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             fetchPolicies(),
           ]);
         }}
+      />
+
+      {/* Shared print-progress overlay used by both handlePrintGroup-
+          Receipts (سند قبض) and handlePrintCancellationVoucher (سند
+          إلغاء). The title prop swaps based on which handler set it
+          so the spinner reflects the actual document being prepared. */}
+      <PrintProgressDialog
+        open={printProgress.open}
+        value={printProgress.value}
+        title={printProgress.title}
       />
 
       {/* Payment Edit Dialog */}

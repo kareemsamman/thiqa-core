@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
+import { PrintProgressDialog } from "@/components/shared/PrintProgressDialog";
 import {
   Table,
   TableBody,
@@ -2108,34 +2108,13 @@ export default function Receipts() {
         }}
       />
 
-      {/* Print progress overlay — visible while the bulk-receipt edge
-          function is preparing the PDF. The bar advances on a fake
-          ticker (real progress isn't exposed by the function) and
-          locks to 100% just before window.open fires, then dismisses.
-          Non-closable: ignore outside clicks / Esc so the user can't
-          accidentally lose the spinner before the new tab opens. */}
-      <Dialog open={printProgress.open}>
-        <DialogContent
-          className="sm:max-w-sm [&>button]:hidden"
-          onInteractOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
-        >
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              جاري إعداد السند
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <Progress value={printProgress.value} className="h-2" />
-            <p className="text-xs text-muted-foreground text-center ltr-nums">
-              {printProgress.value < 100
-                ? 'قد تستغرق العملية بضع ثوانٍ، يرجى الانتظار...'
-                : 'تم — جاري فتح السند'}
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Shared print-progress overlay (also reused by ClientDetails's
+          سجل الدفعات prints so the bookkeeper sees the same spinner
+          regardless of where they kicked off the print). */}
+      <PrintProgressDialog
+        open={printProgress.open}
+        value={printProgress.value}
+      />
 
       {/* Reason prompt for إلغاء السند. Reason is required by the
           immutable-accounting flow — the bookkeeper needs a written
