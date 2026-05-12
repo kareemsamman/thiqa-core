@@ -328,37 +328,76 @@ export function PolicyYearTimeline({
   // policy has transferred_from_policy_id set, so non-transfer clients
   // don't pay a round-trip cost.
   const [transferAdjustments, setTransferAdjustments] = useState<Record<string, TransferAdjustment>>({});
+  // Source-side notes — the same office_note / adjustment_note / note
+  // that already render on the target card need to surface on the
+  // transferred-OUT source card too, so staff reviewing the old
+  // transaction can see the reason without opening the target. Keyed
+  // by the source policy_id.
+  const [sourceTransferNotes, setSourceTransferNotes] = useState<Record<string, TransferAdjustment>>({});
   useEffect(() => {
-    const transferredIds = policies
-      .filter(p => p.transferred_from_policy_id)
-      .map(p => p.id);
-    if (transferredIds.length === 0) {
+    const sourceIds = policies.filter(p => p.transferred).map(p => p.id);
+    const targetIds = policies.filter(p => p.transferred_from_policy_id).map(p => p.id);
+    if (sourceIds.length === 0 && targetIds.length === 0) {
       setTransferAdjustments({});
+      setSourceTransferNotes({});
       return;
     }
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      // Fetch every transfer row where either end matches a policy in
+      // the current view. Most transfers have both ends visible (same
+      // year), but cross-year transfers are also handled — we just ask
+      // for both directions in one round-trip.
+      const orFilters: string[] = [];
+      if (sourceIds.length > 0) {
+        orFilters.push(`policy_id.in.(${sourceIds.join(',')})`);
+      }
+      if (targetIds.length > 0) {
+        orFilters.push(`new_policy_id.in.(${targetIds.join(',')})`);
+      }
+      let query = supabase
         .from('policy_transfers')
-        .select('new_policy_id, adjustment_amount, adjustment_type, note, office_note, adjustment_note')
-        .in('new_policy_id', transferredIds);
+        .select('policy_id, new_policy_id, adjustment_amount, adjustment_type, note, office_note, adjustment_note');
+      if (orFilters.length === 1) {
+        const [col, , raw] = orFilters[0].split('.');
+        query = query.in(col, raw.slice(1, -1).split(','));
+      } else {
+        query = query.or(orFilters.join(','));
+      }
+      const { data } = await query;
       if (cancelled) return;
-      const map: Record<string, TransferAdjustment> = {};
+      const targetMap: Record<string, TransferAdjustment> = {};
+      const sourceMap: Record<string, TransferAdjustment> = {};
       (data || []).forEach((row: any) => {
+        const info: TransferAdjustment = {
+          amount: Number(row.adjustment_amount || 0),
+          customerNote: typeof row.note === 'string' && row.note.trim() ? row.note.trim() : null,
+          officeNote: typeof row.office_note === 'string' && row.office_note.trim() ? row.office_note.trim() : null,
+          adjustmentNote: typeof row.adjustment_note === 'string' && row.adjustment_note.trim() ? row.adjustment_note.trim() : null,
+        };
+        // Target side keeps its existing rule — only "customer_pays"
+        // with a positive amount renders as a "عمولة التحويل" charge
+        // row on the new card.
         if (
           row?.new_policy_id &&
           row?.adjustment_type === 'customer_pays' &&
-          Number(row?.adjustment_amount) > 0
+          info.amount > 0
         ) {
-          map[row.new_policy_id] = {
-            amount: Number(row.adjustment_amount),
-            customerNote: typeof row.note === 'string' && row.note.trim() ? row.note.trim() : null,
-            officeNote: typeof row.office_note === 'string' && row.office_note.trim() ? row.office_note.trim() : null,
-            adjustmentNote: typeof row.adjustment_note === 'string' && row.adjustment_note.trim() ? row.adjustment_note.trim() : null,
-          };
+          targetMap[row.new_policy_id] = info;
+        }
+        // Source side surfaces whenever there is any note — office,
+        // adjustment, or customer-facing reason. Lets the agent see
+        // why the transfer happened by looking at the transferred-out
+        // row alone.
+        if (
+          row?.policy_id &&
+          (info.officeNote || info.adjustmentNote || info.customerNote)
+        ) {
+          sourceMap[row.policy_id] = info;
         }
       });
-      setTransferAdjustments(map);
+      setTransferAdjustments(targetMap);
+      setSourceTransferNotes(sourceMap);
     })();
     return () => {
       cancelled = true;
@@ -1061,6 +1100,7 @@ export function PolicyYearTimeline({
                         pkg={pkg}
                         sequence={pkgIndex + 1}
                         transferAdjustments={transferAdjustments}
+                        sourceTransferNotes={sourceTransferNotes}
                         paymentStatus={getPackagePaymentStatus(pkg)}
                         accidentCount={accidentCount}
                         childrenCount={childrenCount}
@@ -1186,6 +1226,7 @@ function PolicyPackageCard({
   pkg,
   sequence,
   transferAdjustments,
+  sourceTransferNotes,
   paymentStatus,
   accidentCount = 0,
   childrenCount = 0,
@@ -1232,6 +1273,11 @@ function PolicyPackageCard({
    *  + financial-adjustment note underneath it. Populated by the parent
    *  PolicyYearTimeline from policy_transfers. */
   transferAdjustments: Record<string, TransferAdjustment>;
+  /** source policy_id → the same three transfer notes, rendered as a
+   *  small footer block on the transferred-OUT card so staff reviewing
+   *  the old transaction see the reason without opening the target.
+   *  Amount lives only on the target side. */
+  sourceTransferNotes: Record<string, TransferAdjustment>;
   paymentStatus: { totalPaid: number; remaining: number; isPaid: boolean; profit: number };
   accidentCount?: number;
   childrenCount?: number;
@@ -1435,7 +1481,7 @@ function PolicyPackageCard({
           {wasTransferredFrom && !isTransferred && (
             <Badge variant="outline" className="gap-1 text-xs bg-blue-500/10 border-blue-500/30 text-blue-600">
               <ArrowRightLeft className="h-3 w-3" />
-              محول من <span className="font-mono ltr-nums">{wasTransferredFrom}</span>
+              محولة من سيارة <span className="font-mono ltr-nums">{wasTransferredFrom}</span>
             </Badge>
           )}
 
@@ -2298,8 +2344,71 @@ function PolicyPackageCard({
           </div>
         )}
 
+        {/* Transfer notes recap — only on transferred-out cards.
+            Aggregates the three notes recorded at تحويل time (سبب
+            التحويل / ملاحظات المكتب / سبب الفرق) so the agent can
+            review the old transaction without opening the target.
+            Deduped across siblings so an identical office note set
+            on every add-on in a package only renders once. */}
+        {(() => {
+          const transferredPolicies = isPkg
+            ? [pkg.mainPolicy, ...pkg.addons].filter(
+                (p): p is PolicyRecord => !!p && !!p.transferred,
+              )
+            : policy.transferred
+              ? [policy]
+              : [];
+          if (transferredPolicies.length === 0) return null;
+          const collected = transferredPolicies
+            .map((p) => sourceTransferNotes[p.id])
+            .filter((a): a is TransferAdjustment => !!a);
+          if (collected.length === 0) return null;
+          const dedupe = (vals: (string | null)[]) =>
+            Array.from(new Set(vals.filter((v): v is string => !!v)));
+          const customerNotes = dedupe(collected.map((a) => a.customerNote));
+          const officeNotes = dedupe(collected.map((a) => a.officeNote));
+          const adjustmentNotes = dedupe(collected.map((a) => a.adjustmentNote));
+          if (
+            customerNotes.length + officeNotes.length + adjustmentNotes.length === 0
+          ) {
+            return null;
+          }
+          return (
+            <div className="mt-3 pt-3 border-t border-border/50 space-y-1">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                <ArrowRightLeft className="h-3 w-3" />
+                تفاصيل التحويل
+              </p>
+              {customerNotes.map((n, i) => (
+                <div key={`c-${i}`} className="flex gap-1.5 text-[11px]">
+                  <span className="font-semibold text-foreground/80 shrink-0">
+                    سبب التحويل:
+                  </span>
+                  <span className="break-words">{n}</span>
+                </div>
+              ))}
+              {officeNotes.map((n, i) => (
+                <div key={`o-${i}`} className="flex gap-1.5 text-[11px]">
+                  <span className="font-semibold text-foreground/80 shrink-0">
+                    ملاحظات المكتب:
+                  </span>
+                  <span className="break-words">{n}</span>
+                </div>
+              ))}
+              {adjustmentNotes.map((n, i) => (
+                <div key={`a-${i}`} className="flex gap-1.5 text-[11px]">
+                  <span className="font-semibold text-foreground/80 shrink-0">
+                    سبب الفرق:
+                  </span>
+                  <span className="break-words">{n}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* Notes Section - Inline Edit */}
-        <div 
+        <div
           className="mt-3 pt-3 border-t border-border/50"
           onClick={(e) => e.stopPropagation()}
         >
