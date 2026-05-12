@@ -228,6 +228,9 @@ function paymentLabelShort(method: string): string {
     visa: "فيزا",
     visa_external: "فيزا خارجي",
     transfer: "تحويل",
+    // Mirrored from client_settlements when a multi-line disbursement
+    // mixes payment types (e.g. cheque + visa under one D{nn}/YYYY).
+    multiple: "متعدد",
   }[method] || method;
 }
 
