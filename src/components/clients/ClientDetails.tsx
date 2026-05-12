@@ -2688,6 +2688,29 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
               )}>
                 ₪{Math.max(0, paymentSummary.total_remaining - walletBalance.total_refunds).toLocaleString()}
               </p>
+              {/* Always say who owes whom on this card so staff don't have
+                  to do the subtraction in their head. Three states:
+                    • net > 0 → customer owes us this much
+                    • net == 0 with prior payments → fully settled
+                    • net == 0 with no movement → no debt yet */}
+              {(() => {
+                const net = paymentSummary.total_remaining - walletBalance.total_refunds;
+                if (net > 0) {
+                  return (
+                    <p className="text-[10px] sm:text-[11px] text-destructive/80 font-medium leading-tight mt-0.5">
+                      على العميل أن يدفع
+                    </p>
+                  );
+                }
+                if (paymentSummary.total_paid > 0 || paymentSummary.total_remaining > 0) {
+                  return (
+                    <p className="text-[10px] sm:text-[11px] text-success/80 font-medium leading-tight mt-0.5">
+                      مسدد ✓
+                    </p>
+                  );
+                }
+                return null;
+              })()}
               {walletBalance.total_refunds > 0 && paymentSummary.total_remaining > 0 && (
                 <div className="text-[9px] sm:text-[10px] text-muted-foreground space-y-0.5 mt-1">
                   <p className="truncate">المطلوب: ₪{paymentSummary.total_remaining.toLocaleString()}</p>
