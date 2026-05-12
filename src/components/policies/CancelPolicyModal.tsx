@@ -99,6 +99,21 @@ export function CancelPolicyModal({
   // phase 2b ships its full payment-line picker.
   const [refundKind, setRefundKind] = useState<RefundKind>("credit_note");
   const [sendSms, setSendSms] = useState(false);
+
+  // Pre-flight validation for the confirm button. Mirrors what
+  // handleCancel will re-check on submit (so the toast errors stay
+  // as a safety net), but disables the button up-front so the user
+  // can see the issue without clicking. Three failure modes:
+  //   • refund toggle on, amount blank or non-positive
+  //   • refund toggle on, amount exceeds the policy's insurance_price
+  // hasRefund=false short-circuits both — a clean cancel with no
+  // money movement is always valid.
+  const refundAmountNum = parseFloat(refundAmount);
+  const refundExceedsMax =
+    hasRefund && !isNaN(refundAmountNum) && refundAmountNum > insurancePrice;
+  const refundMissing =
+    hasRefund && (!refundAmount || isNaN(refundAmountNum) || refundAmountNum <= 0);
+  const refundInvalid = refundExceedsMax || refundMissing;
   const [smsMessage, setSmsMessage] = useState("");
   const [loadingTemplate, setLoadingTemplate] = useState(false);
 
@@ -395,10 +410,17 @@ export function CancelPolicyModal({
                     min="0"
                     max={insurancePrice}
                     dir="ltr"
+                    className={refundExceedsMax ? "border-destructive focus-visible:ring-destructive" : undefined}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    الحد الأقصى: ₪{insurancePrice.toLocaleString("en-US")}
-                  </p>
+                  {refundExceedsMax ? (
+                    <p className="text-xs text-destructive">
+                      المبلغ يتجاوز الحد الأقصى ₪{insurancePrice.toLocaleString("en-US")}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      الحد الأقصى: ₪{insurancePrice.toLocaleString("en-US")}
+                    </p>
+                  )}
                 </div>
 
                 {/* Two refund flavors with short explanations under
@@ -505,10 +527,17 @@ export function CancelPolicyModal({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             إلغاء
           </Button>
-          <Button 
-            variant="destructive" 
-            onClick={handleCancel} 
-            disabled={saving}
+          <Button
+            variant="destructive"
+            onClick={handleCancel}
+            disabled={saving || refundInvalid}
+            title={
+              refundExceedsMax
+                ? `المبلغ يتجاوز الحد الأقصى ₪${insurancePrice.toLocaleString("en-US")}`
+                : refundMissing
+                  ? "أدخل مبلغ المرتجع"
+                  : undefined
+            }
           >
             {saving ? (
               <>
