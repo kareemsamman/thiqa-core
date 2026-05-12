@@ -1358,7 +1358,8 @@ function LandingContent() {
               width={607}
               height={407}
               className="w-full h-auto block"
-              loading="lazy"
+              loading="eager"
+              fetchPriority="high"
             />
           </div>
         </div>
