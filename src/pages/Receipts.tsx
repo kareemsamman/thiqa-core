@@ -612,6 +612,10 @@ export default function Receipts() {
   // session_id (legacy data, or manual rows) fall back to the old
   // policy.group_id key.
   const [sessionByPaymentId, setSessionByPaymentId] = useState<Record<string, string>>({});
+  // Set of policy_payments.id that already have printed_at stamped.
+  // Used to lock the "تعديل" menu item — printed receipts are
+  // immutable per the accountant's rule (same as سجل الدفعات).
+  const [printedPaymentIds, setPrintedPaymentIds] = useState<Set<string>>(new Set());
 
   // Reason prompt for إلغاء السند on the receipts page. Same pattern
   // as the cheques page — required field, dialog blocks until typed.
@@ -695,8 +699,8 @@ export default function Receipts() {
       // foreignTable:"policy") resolve identically against either.
       // Inner-join only when company/type filters are active.
       const policyJoinFull = needsPolicyInnerJoin
-        ? "policy:policies!inner(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id_number))"
-        : "policy:policies(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id_number))";
+        ? "policy:policies!inner(id, client_id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id, id_number))"
+        : "policy:policies(id, client_id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id, id_number))";
       const policyJoinCount = needsPolicyInnerJoin
         ? "policy:policies!inner(id)"
         : "policy:policies(id)";
@@ -836,18 +840,23 @@ export default function Receipts() {
         .map((r) => r.payment_id)
         .filter((id): id is string => !!id);
       const sessionMap: Record<string, string> = {};
+      const printedSet = new Set<string>();
       if (autoPaymentIds.length > 0) {
         const { data: sessionRows } = await supabase
           .from('policy_payments')
-          .select('id, payment_session_id')
+          .select('id, payment_session_id, printed_at')
           .in('id', autoPaymentIds);
-        for (const row of (sessionRows ?? []) as Array<{ id: string; payment_session_id: string | null }>) {
+        for (const row of (sessionRows ?? []) as Array<{ id: string; payment_session_id: string | null; printed_at: string | null }>) {
           if (row.payment_session_id) {
             sessionMap[row.id] = row.payment_session_id;
+          }
+          if (row.printed_at) {
+            printedSet.add(row.id);
           }
         }
       }
       setSessionByPaymentId(sessionMap);
+      setPrintedPaymentIds(printedSet);
     } catch (err: any) {
       console.error("Error fetching receipts:", err);
       toast.error("خطأ في تحميل الإيصالات");
@@ -1593,8 +1602,8 @@ export default function Receipts() {
       const { dateFrom, dateTo, companies, types, paymentMethods } = filters;
       const needsPolicyInnerJoin = companies.length > 0 || types.length > 0;
       const policyJoin = needsPolicyInnerJoin
-        ? "policy:policies!inner(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id_number))"
-        : "policy:policies(id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id_number))";
+        ? "policy:policies!inner(id, client_id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id, id_number))"
+        : "policy:policies(id, client_id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id, id_number))";
 
       // Pull every matching row (not just the current page) so طباعة الكل
       // actually reflects "all" — pagination is a screen affordance, not
@@ -2238,39 +2247,21 @@ export default function Receipts() {
       );
     }
 
-    // Per-column widths so table-fixed has something stable to size to.
-    // Anything not listed gets `auto` (the client_name column flexes).
-    const colWidths: Record<string, string | undefined> = {
-      receipt_number: "160px",
-      amount: "180px",
-      receipt_date: "110px",
-      client_name: undefined,
-      client_id_number: "130px",
-      car_number: "120px",
-      company_name: "160px",
-      policy_type: "100px",
-      payment_method: "170px",
-      cheque_number: "110px",
-      notes: "180px",
-      actions: "90px",
-    };
     const visibleCols = RECEIPTS_COLUMNS.filter((c) => isCol(c.key));
+    // Equal-width columns. table-fixed + an identical width on every
+    // <col> hands every column the same slice of the table regardless
+    // of content. min-w guarantees readable cells when the page is
+    // narrow; wider viewports just stretch each column proportionally.
+    const equalColWidth = `${(100 / visibleCols.length).toFixed(4)}%`;
 
     return (
       <div className="space-y-4">
         <Card>
           <div className="overflow-x-auto">
-            {/* table-fixed + explicit widths on every column so the layout
-                stops flex-sizing on content. The colgroup is rebuilt from
-                visibleCols so toggling a column off in Manage Columns
-                actually shortens the table. */}
             <Table className="table-fixed w-full min-w-[1000px]">
               <colgroup>
                 {visibleCols.map((c) => (
-                  <col
-                    key={c.key}
-                    style={colWidths[c.key] ? { width: colWidths[c.key] } : undefined}
-                  />
+                  <col key={c.key} style={{ width: equalColWidth }} />
                 ))}
               </colgroup>
               <TableHeader>
@@ -2315,6 +2306,13 @@ export default function Receipts() {
                     activeTab === 'payment' &&
                     !allCancelled &&
                     group.receipts.some((r) => r.source === 'auto' && r.payment_id);
+                  // Lock تعديل once any underlying policy_payment has
+                  // been printed — matches the agent-side سجل الدفعات
+                  // rule. إلغاء is still permitted (it's the documented
+                  // out for printed receipts).
+                  const isPrinted = group.receipts.some(
+                    (r) => r.payment_id && printedPaymentIds.has(r.payment_id),
+                  );
                   // Cheque number for the row — only meaningful when the
                   // group is a single cheque receipt.
                   const chequeNumber =
@@ -2446,7 +2444,12 @@ export default function Receipts() {
                                 onClick={() => handlePrintGroup(group)}
                               >
                                 <Printer className="h-4 w-4 ml-2" />
-                                {group.receipts.length > 1
+                                {/* Cancellation rows are always one
+                                    voucher conceptually, even when the
+                                    group bundles multiple receipt rows
+                                    behind the scenes — keep the label
+                                    singular there. */}
+                                {activeTab === 'payment' && group.receipts.length > 1
                                   ? "طباعة السندات"
                                   : "طباعة السند"}
                               </DropdownMenuItem>
@@ -2477,20 +2480,29 @@ export default function Receipts() {
                                 firstReceipt.source === 'auto'
                                   ? (
                                     <DropdownMenuItem
-                                      disabled={debtModalResolving}
+                                      disabled={debtModalResolving || isPrinted}
                                       onClick={() => openSessionEditModal(group)}
+                                      title={isPrinted ? 'السند مطبوع — استخدم إلغاء بدلاً من التعديل' : undefined}
                                     >
                                       <Pencil className="h-4 w-4 ml-2" />
                                       تعديل
+                                      {isPrinted && (
+                                        <span className="ms-auto text-[10px] text-muted-foreground">مطبوع</span>
+                                      )}
                                     </DropdownMenuItem>
                                   )
                                   : group.receipts.length === 1
                                     ? (
                                       <DropdownMenuItem
+                                        disabled={isPrinted}
                                         onClick={() => handleEditReceipt(group.receipts[0])}
+                                        title={isPrinted ? 'السند مطبوع — استخدم إلغاء بدلاً من التعديل' : undefined}
                                       >
                                         <Pencil className="h-4 w-4 ml-2" />
                                         تعديل
+                                        {isPrinted && (
+                                          <span className="ms-auto text-[10px] text-muted-foreground">مطبوع</span>
+                                        )}
                                       </DropdownMenuItem>
                                     )
                                     : null
