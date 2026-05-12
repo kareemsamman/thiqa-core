@@ -28,6 +28,51 @@ const PAYMENT_TYPE_LABELS: Record<string, string> = {
   transfer: 'تحويل بنكي',
 };
 
+// Bank registry — mirrors the one in generate-bulk-payment-receipt so
+// the cheque rows on a سند إلغاء resolve bank codes to Arabic names
+// instead of leaving the bookkeeper with bare 2-digit codes.
+const BANK_LABELS: Record<string, string> = {
+  "01": "ماكس إت فايننشلز",
+  "02": "بنك بوعلي أغودات يسرائيل (فاغي)",
+  "04": "بنك يهاف",
+  "05": "يسراكارت",
+  "06": "بنك أدانيم",
+  "07": "كال - بطاقات ائتمان لإسرائيل",
+  "08": "بنك هسفنوت",
+  "09": "بنك البريد",
+  "10": "بنك لئومي",
+  "11": "بنك ديسكونت",
+  "12": "بنك هبوعليم",
+  "13": "بنك إيغود",
+  "14": "بنك أوتسار هحيال",
+  "17": "بنك مركنتيل ديسكونت",
+  "18": "وان زيرو - البنك الرقمي الأول",
+  "20": "بنك مزراحي طفحوت",
+  "22": "سيتي بنك",
+  "23": "HSBC",
+  "26": "يو بنك",
+  "31": "البنك الدولي الأول لإسرائيل",
+  "34": "البنك العربي الإسرائيلي",
+  "46": "بنك مسد",
+  "54": "بنك القدس (يروشلايم)",
+  "89": "بنك فلسطين",
+  "99": "بنك إسرائيل (البنك المركزي)",
+};
+
+const normalizeBankCode = (raw: string | null | undefined): string => {
+  if (!raw) return "";
+  const trimmed = String(raw).trim();
+  if (!trimmed) return "";
+  if (/^\d$/.test(trimmed)) return trimmed.padStart(2, "0");
+  return trimmed;
+};
+
+const getBankLabel = (code: string | null | undefined): string => {
+  const norm = normalizeBankCode(code);
+  if (!norm) return "";
+  return BANK_LABELS[norm] || norm;
+};
+
 interface PhoneLink {
   phone: string;
   href: string;
@@ -62,13 +107,18 @@ function buildHtml(
   },
   source: {
     receipt_number: string | null;
-    // Per-cancelled-row breakdown: shows method + cheque number + amount
-    // so the bookkeeper sees EXACTLY which cheques landed in this إلغاء
-    // (just "شيك + نقدي" hides the cheque numbers — the bookkeeper
-    // can't tell which physical paper got voided).
+    // Per-cancelled-row breakdown — same shape as the bulk-receipt
+    // table so the سند إلغاء reads like a stamped-cancelled copy of
+    // the original سند قبض: method + cheque number + dates +
+    // bank/branch + amount + notes per line.
     lines: Array<{
       payment_type: string;
       cheque_number: string | null;
+      cheque_date: string | null;       // due date for cheques
+      payment_date: string | null;      // receipt date for cash/transfer
+      bank_code: string | null;
+      branch_code: string | null;
+      notes: string | null;
       amount: number;
     }>;
   } | null,
@@ -94,19 +144,42 @@ function buildHtml(
     : '';
 
   const phoneDisplay = [client?.phone_number, client?.phone_number_2].filter(Boolean).join(' / ') || '-';
-  // Render each cancelled payment row in its own table line so cheque
-  // numbers stay visible. Cash / transfer rows render with a "—" cheque
-  // column so the layout stays aligned.
+  // Render each cancelled payment row with the same column set the
+  // سند قبض table uses (method + cheque #, date with sub-label, amount,
+  // notes when present). Bank + branch sit on a muted line below the
+  // method/cheque cell, matching the receipt-side rendering exactly.
+  const anyNotes = (source?.lines ?? []).some(
+    (l) => typeof l.notes === 'string' && l.notes.trim().length > 0,
+  );
   const linesHtml = source?.lines?.length
     ? source.lines.map((line) => {
         const methodLabel = PAYMENT_TYPE_LABELS[line.payment_type] || line.payment_type;
-        const chequeCell = line.cheque_number ? escapeHtml(String(line.cheque_number)) : '—';
+        const chequeExtra = line.cheque_number ? ` · ${escapeHtml(String(line.cheque_number))}` : '';
+        const dateValue = line.payment_type === 'cheque'
+          ? (line.cheque_date || line.payment_date || '')
+          : (line.payment_date || '');
+        const dateLabel = line.payment_type === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ القبض';
         const amount = Number(line.amount || 0).toLocaleString('en-US');
+        const bankLabel = getBankLabel(line.bank_code);
+        const branchLabel = line.branch_code ? `فرع ${escapeHtml(String(line.branch_code))}` : '';
+        const bankLine = (bankLabel || branchLabel)
+          ? `<div class="cheque-bank-line">${[escapeHtml(bankLabel), branchLabel].filter(Boolean).join(' · ')}</div>`
+          : '';
+        const notesCell = anyNotes
+          ? `<td class="notes">${escapeHtml(line.notes || '').replace(/\n/g, '<br>') || '—'}</td>`
+          : '';
         return `
           <tr>
-            <td class="method">${escapeHtml(methodLabel)}</td>
-            <td class="cheque-num">${chequeCell}</td>
+            <td>
+              <div>${escapeHtml(methodLabel)}${chequeExtra}</div>
+              ${bankLine}
+            </td>
+            <td class="date">
+              <div class="date-label">${dateLabel}</div>
+              <div class="date-value">${dateValue ? formatDate(dateValue) : '—'}</div>
+            </td>
             <td class="line-amount">₪${amount}</td>
+            ${notesCell}
           </tr>`;
       }).join('')
     : '';
@@ -218,10 +291,31 @@ function buildHtml(
     }
     .lines tbody td:last-child { border-left: none; }
     .lines tbody tr:first-child td { border-top: none; }
-    .lines td.cheque-num,
     .lines td.line-amount {
       direction: ltr; text-align: left;
       font-variant-numeric: tabular-nums; font-weight: 700;
+    }
+    .lines td.notes {
+      text-align: right; font-weight: 500; color: #1a1a1a;
+      max-width: 200px; white-space: normal; word-break: break-word;
+    }
+    /* Date cell carries a small caption (تاريخ الاستحقاق for cheques,
+       تاريخ القبض otherwise) above the actual date — same pattern as
+       the bulk-receipt template so the layouts read the same. */
+    .lines td.date {
+      text-align: right; font-weight: 500;
+    }
+    .lines td.date .date-label {
+      font-size: 10px; color: #6b7280; font-weight: 600;
+      margin-bottom: 2px; letter-spacing: 0.2px;
+    }
+    .lines td.date .date-value {
+      direction: ltr; text-align: left;
+      font-variant-numeric: tabular-nums; font-weight: 700; color: #1a1a1a;
+    }
+    /* Muted bank/branch line under the cheque's method cell. */
+    .lines .cheque-bank-line {
+      font-size: 10.5px; font-weight: 500; color: #6b7280; margin-top: 2px;
     }
 
     .total-row {
@@ -322,13 +416,14 @@ function buildHtml(
       <table class="lines">
         <thead>
           <tr>
-            <th>طريقة الدفع</th>
-            <th>رقم الشيك</th>
-            <th>المبلغ</th>
+            <th style="width: 150px;">طريقة الدفع</th>
+            <th style="width: 130px;">التاريخ</th>
+            <th style="width: 110px;">المبلغ</th>
+            ${anyNotes ? '<th>ملاحظات</th>' : ''}
           </tr>
         </thead>
         <tbody>
-          ${linesHtml || '<tr><td colspan="3" style="text-align:center;color:#6b7280;padding:14px;">لا توجد تفاصيل</td></tr>'}
+          ${linesHtml || `<tr><td colspan="${anyNotes ? 4 : 3}" style="text-align:center;color:#6b7280;padding:14px;">لا توجد تفاصيل</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -484,7 +579,7 @@ serve(async (req) => {
           : (src.batch_id ? 'batch_id' : 'id');
         const { data: siblings } = await supabase
           .from('policy_payments')
-          .select('id, receipt_number, payment_type, cheque_number, amount, batch_id, refused')
+          .select('id, receipt_number, payment_type, cheque_number, cheque_date, payment_date, bank_code, branch_code, notes, amount, batch_id, refused')
           .eq(filterCol, groupKey)
           .eq('refused', true);
         const rows = (siblings ?? []) as Array<{
@@ -492,6 +587,11 @@ serve(async (req) => {
           receipt_number: string | null;
           payment_type: string | null;
           cheque_number: string | null;
+          cheque_date: string | null;
+          payment_date: string | null;
+          bank_code: string | null;
+          branch_code: string | null;
+          notes: string | null;
           amount: number;
           batch_id: string | null;
         }>;
@@ -507,27 +607,39 @@ serve(async (req) => {
 
         // Collapse multi-policy splits of one physical cheque
         // (shared batch_id) into a single printed line at face value.
-        const groupedByBatch = new Map<string, { payment_type: string; cheque_number: string | null; amount: number }>();
-        const standalone: Array<{ payment_type: string; cheque_number: string | null; amount: number }> = [];
+        type Line = {
+          payment_type: string;
+          cheque_number: string | null;
+          cheque_date: string | null;
+          payment_date: string | null;
+          bank_code: string | null;
+          branch_code: string | null;
+          notes: string | null;
+          amount: number;
+        };
+        const groupedByBatch = new Map<string, Line>();
+        const standalone: Line[] = [];
         for (const r of rows) {
           if (!r.payment_type) continue;
+          const baseLine: Line = {
+            payment_type: r.payment_type,
+            cheque_number: r.cheque_number,
+            cheque_date: r.cheque_date,
+            payment_date: r.payment_date,
+            bank_code: r.bank_code,
+            branch_code: r.branch_code,
+            notes: r.notes,
+            amount: Number(r.amount || 0),
+          };
           if (r.batch_id) {
             const existing = groupedByBatch.get(r.batch_id);
             if (existing) {
               existing.amount += Number(r.amount || 0);
             } else {
-              groupedByBatch.set(r.batch_id, {
-                payment_type: r.payment_type,
-                cheque_number: r.cheque_number,
-                amount: Number(r.amount || 0),
-              });
+              groupedByBatch.set(r.batch_id, baseLine);
             }
           } else {
-            standalone.push({
-              payment_type: r.payment_type,
-              cheque_number: r.cheque_number,
-              amount: Number(r.amount || 0),
-            });
+            standalone.push(baseLine);
           }
         }
         const lines = [...Array.from(groupedByBatch.values()), ...standalone];
