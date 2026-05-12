@@ -877,10 +877,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
       // Cancellation voucher lookup for refused rows. The trigger inserts
       // one cancellation receipt per refused payment; on the UI we
-      // collapse to one voucher per session (smallest receipt_number)
-      // and assign that to every payment in the session, matching the
-      // bulk-receipt print rule. Legacy payments without a session_id
-      // keep their own voucher number.
+      // collapse to one voucher per سند قبض (smallest receipt_number)
+      // and assign that to every payment in the same سند. The
+      // accounting rule is absolute: one سند قبض = one سند إلغاء, no
+      // matter how many payment rows the سند groups. We use the same
+      // fallback chain as groupedPayments (`payment_session_id`
+      // → `batch_id` → `payment.id`) so both DebtPaymentModal sessions
+      // and PackagePaymentModal batches dedupe correctly.
       const refused = paymentsWithPolicy.filter((p) => p.refused);
       const refusedIds = refused.map((p) => p.id);
       const nextInfo = new Map<string, { voucherNumber: number | string; reason: string | null }>();
@@ -905,33 +908,28 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           }
         }
 
-        // Pick the canonical voucher per session: smallest numeric
-        // receipt_number among the session's refused payments.
+        // Pick the canonical voucher per سند قبض: smallest numeric
+        // receipt_number among the سند's refused payments.
         const sortKey = (v: number | string): string => {
           const n = typeof v === 'number' ? v : Number(v);
           return Number.isFinite(n) ? String(n).padStart(20, '0') : String(v);
         };
-        const sessionVoucher = new Map<string, { voucherNumber: number | string; reason: string | null }>();
+        const receiptGroupKey = (p: PaymentRecord): string =>
+          p.payment_session_id || p.batch_id || p.id;
+        const groupVoucher = new Map<string, { voucherNumber: number | string; reason: string | null }>();
         for (const p of refused) {
-          const sid = p.payment_session_id;
-          if (!sid) continue;
           const own = perPayment.get(p.id);
           if (!own) continue;
-          const existing = sessionVoucher.get(sid);
+          const key = receiptGroupKey(p);
+          const existing = groupVoucher.get(key);
           if (!existing || sortKey(own.voucherNumber) < sortKey(existing.voucherNumber)) {
-            sessionVoucher.set(sid, own);
+            groupVoucher.set(key, own);
           }
         }
 
         for (const p of refused) {
-          const sid = p.payment_session_id;
-          const v = sid ? sessionVoucher.get(sid) : undefined;
-          if (v) {
-            nextInfo.set(p.id, v);
-          } else {
-            const own = perPayment.get(p.id);
-            if (own) nextInfo.set(p.id, own);
-          }
+          const v = groupVoucher.get(receiptGroupKey(p));
+          if (v) nextInfo.set(p.id, v);
         }
       }
       setCancellationInfo(nextInfo);

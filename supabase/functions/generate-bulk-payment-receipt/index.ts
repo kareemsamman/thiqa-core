@@ -976,13 +976,16 @@ serve(async (req) => {
     // with receipt_type='cancellation'; we surface the voucher number
     // on the printed copy so the bookkeeper can cross-reference.
     //
-    // Display rule: one collection event (payment_session_id) = one
-    // cancellation voucher number. Trigger still creates a row per
-    // payment under the hood (immutable audit trail), but on the
-    // printed receipt every payment in the same session shows the
-    // SAME voucher number — the smallest receipt_number among the
-    // session's cancellation rows. Legacy payments without a
-    // session_id fall back to per-payment lookup.
+    // Display rule (absolute): one سند قبض = one سند إلغاء, no matter
+    // how many payment rows the سند groups. Trigger still creates a
+    // row per payment under the hood (immutable audit trail), but the
+    // printed receipt shows the SAME voucher number — the smallest
+    // receipt_number among the سند's cancellation rows — across
+    // every payment of the same سند. We use the same fallback chain
+    // as the client UI groupedPayments memo: `payment_session_id`
+    // → `batch_id` → `payment.id`. That keeps DebtPaymentModal
+    // sessions AND PackagePaymentModal batches (which set batch_id
+    // but no session_id) under the one-voucher rule.
     const cancellationVoucherMap: Record<string, number | string> = {};
     const refusedPayments = payments.filter((p: any) => p.refused);
     const refusedIds = refusedPayments.map((p: any) => p.id);
@@ -1001,36 +1004,29 @@ serve(async (req) => {
         }
       }
 
-      // Pick the canonical voucher per session: smallest numeric
-      // receipt_number among the session's refused payments. Strings
-      // are compared numerically when parseable, else lexicographically.
-      const sessionVoucher = new Map<string, number | string>();
+      // Pick the canonical voucher per سند: smallest numeric
+      // receipt_number among the سند's refused payments. Strings are
+      // compared numerically when parseable, else lexicographically.
       const sortKey = (v: number | string): string => {
         const n = typeof v === 'number' ? v : Number(v);
         return Number.isFinite(n) ? String(n).padStart(20, '0') : String(v);
       };
-      for (const p of refusedPayments as Array<{ id: string; payment_session_id: string | null }>) {
-        const sid = p.payment_session_id;
-        if (!sid) continue;
+      const receiptGroupKey = (p: any): string =>
+        p.payment_session_id || p.batch_id || p.id;
+      const groupVoucher = new Map<string, number | string>();
+      for (const p of refusedPayments as any[]) {
         const v = perPaymentVoucher.get(p.id);
         if (v == null) continue;
-        const existing = sessionVoucher.get(sid);
+        const key = receiptGroupKey(p);
+        const existing = groupVoucher.get(key);
         if (existing == null || sortKey(v) < sortKey(existing)) {
-          sessionVoucher.set(sid, v);
+          groupVoucher.set(key, v);
         }
       }
 
-      // Assign: session payments get the session's canonical voucher;
-      // legacy (no session_id) payments keep their own voucher.
-      for (const p of refusedPayments as Array<{ id: string; payment_session_id: string | null }>) {
-        const sid = p.payment_session_id;
-        const v = sid ? sessionVoucher.get(sid) : undefined;
-        if (v != null) {
-          cancellationVoucherMap[p.id] = v;
-        } else {
-          const own = perPaymentVoucher.get(p.id);
-          if (own != null) cancellationVoucherMap[p.id] = own;
-        }
+      for (const p of refusedPayments as any[]) {
+        const v = groupVoucher.get(receiptGroupKey(p));
+        if (v != null) cancellationVoucherMap[p.id] = v;
       }
     }
 
