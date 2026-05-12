@@ -52,6 +52,7 @@ import {
   Trash2,
   XCircle,
   Ban,
+  Wallet,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -509,7 +510,16 @@ export default function Receipts() {
   //                  a payment is voided)
   // Legacy accident_fee rows are filtered out by the .eq() in
   // fetchReceipts and don't have their own tab.
-  const [activeTab, setActiveTab] = useState<'payment' | 'cancellation'>('payment');
+  // Four receipt families in this page:
+  //   • payment      — سندات القبض      (R{n}/YYYY, money in)
+  //   • cancellation — سندات الإلغاء    (R{n}/YYYY voided)
+  //   • credit_note  — اشعار دائن       (C{n}/YYYY, wallet credit)
+  //   • disbursement — سند صرف          (D{n}/YYYY, money out)
+  // activeTab maps 1:1 to receipts.receipt_type so the existing
+  // .eq("receipt_type", activeTab) filter Just Works.
+  const [activeTab, setActiveTab] = useState<
+    'payment' | 'cancellation' | 'credit_note' | 'disbursement'
+  >('payment');
 
   // Filters — search stays inline in the toolbar; everything else lives
   // in the AccountingFilters popover so we get one canonical filter UI
@@ -1781,18 +1791,29 @@ export default function Receipts() {
       <div dir="rtl" className="min-h-screen">
         <Header
           title="إدارة الإيصالات"
-          subtitle={activeTab === 'cancellation'
-            ? 'سندات الإلغاء — كل عملية إلغاء تُنشئ سنداً مستقلاً يضمن التوثيق المحاسبي'
-            : 'سندات القبض — إيصالات الدفع الصادرة للعملاء'}
+          subtitle={
+            activeTab === 'cancellation'
+              ? 'سندات الإلغاء — كل عملية إلغاء تُنشئ سنداً مستقلاً يضمن التوثيق المحاسبي'
+              : activeTab === 'credit_note'
+                ? 'اشعار دائن — رصيد للعميل عندنا بدون خروج كاش، يُحسم تلقائياً من أي دفعة قادمة'
+                : activeTab === 'disbursement'
+                  ? 'سند صرف — مبالغ خرجت فعلياً من الشركة للعميل (نقدي / شيك / تحويل / فيزا)'
+                  : 'سندات القبض — إيصالات الدفع الصادرة للعملاء'
+          }
         />
 
         <div className="p-3 md:p-6 space-y-4">
-          {/* Tab switcher — receipt_type='payment' vs 'cancellation'.
-              Each tab applies the same filters/search but against its
-              own slice of the receipts table. Switching resets the
-              page cursor (useEffect on activeTab). */}
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'payment' | 'cancellation')}>
-            <TabsList className="grid w-full max-w-md grid-cols-2">
+          {/* Tab switcher — one slice of receipts.receipt_type per
+              tab. The filters/search apply identically across all four;
+              switching just resets the page cursor (useEffect on
+              activeTab). */}
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) =>
+              setActiveTab(v as 'payment' | 'cancellation' | 'credit_note' | 'disbursement')
+            }
+          >
+            <TabsList className="grid w-full max-w-3xl grid-cols-4">
               <TabsTrigger value="payment" className="gap-2">
                 <Receipt className="h-3.5 w-3.5" />
                 سندات القبض
@@ -1800,6 +1821,14 @@ export default function Receipts() {
               <TabsTrigger value="cancellation" className="gap-2">
                 <Ban className="h-3.5 w-3.5" />
                 سندات الإلغاء
+              </TabsTrigger>
+              <TabsTrigger value="credit_note" className="gap-2">
+                <Wallet className="h-3.5 w-3.5" />
+                اشعار دائن
+              </TabsTrigger>
+              <TabsTrigger value="disbursement" className="gap-2">
+                <Banknote className="h-3.5 w-3.5" />
+                سند صرف
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -2247,7 +2276,21 @@ export default function Receipts() {
       );
     }
 
-    const visibleCols = RECEIPTS_COLUMNS.filter((c) => isCol(c.key));
+    // Column header for the leading "number" column is tab-aware so
+    // the user reads "رقم اشعار الدائن" on the credit-note tab and
+    // "رقم سند الصرف" on the disbursement tab instead of the generic
+    // سند القبض label.
+    const receiptNumberLabel =
+      activeTab === 'credit_note'
+        ? 'رقم اشعار الدائن'
+        : activeTab === 'disbursement'
+          ? 'رقم سند الصرف'
+          : activeTab === 'cancellation'
+            ? 'رقم سند الإلغاء'
+            : 'رقم سند القبض';
+    const visibleCols = RECEIPTS_COLUMNS.filter((c) => isCol(c.key)).map((c) =>
+      c.key === 'receipt_number' ? { ...c, label: receiptNumberLabel } : c,
+    );
     // Equal-width columns. table-fixed + an identical width on every
     // <col> hands every column the same slice of the table regardless
     // of content. min-w guarantees readable cells when the page is
@@ -2335,7 +2378,15 @@ export default function Receipts() {
                         <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap text-right">
                           <div className="flex flex-col items-end gap-1">
                             <span className="font-semibold">
-                              {formatReceiptNumber(firstReceipt?.receipt_number, firstReceipt?.receipt_date)}
+                              {/* credit_note / disbursement carry their
+                                  own pre-formatted voucher_number
+                                  (C{nn}/YYYY, D{nn}/YYYY). Fall back to
+                                  the legacy R{n}/YYYY format derived
+                                  from receipt_number for the other
+                                  receipt families. */}
+                              {firstReceipt?.voucher_number
+                                ? firstReceipt.voucher_number
+                                : formatReceiptNumber(firstReceipt?.receipt_number, firstReceipt?.receipt_date)}
                             </span>
                             {/* Cancellation indicators. Payment tab: red
                                 pill + the voucher number that cancelled

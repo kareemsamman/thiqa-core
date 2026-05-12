@@ -22,6 +22,10 @@ import {
 export interface ReceiptRow {
   id: string;
   receipt_number: number | string | null;
+  // Pre-formatted voucher string for credit_note / disbursement
+  // rows (C{nn}/YYYY, D{nn}/YYYY). The legacy payment + cancellation
+  // families still use the integer receipt_number column.
+  voucher_number?: string | null;
   client_name: string;
   car_number: string | null;
   amount: number;
