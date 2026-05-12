@@ -548,6 +548,21 @@ export function PolicyFilesSection({
       await new Promise((r) => setTimeout(r, 300));
 
       toast({ title: "تم الحذف", description: "تم حذف الملف بنجاح" });
+      // Optimistically drop the row from local state so the badge on the
+      // parent drawer ticks down immediately instead of waiting for the
+      // refetch round-trip. fetchFiles below reconciles any drift.
+      const wasInsurance =
+        fileToDelete.entity_type === 'policy' ||
+        fileToDelete.entity_type === 'policy_insurance';
+      if (wasInsurance) {
+        setInsuranceFiles((prev) => {
+          const next = prev.filter((f) => f.id !== fileToDelete.id);
+          onFilesCountChanged?.(next.length);
+          return next;
+        });
+      } else {
+        setCrmFiles((prev) => prev.filter((f) => f.id !== fileToDelete.id));
+      }
       fetchFiles();
     } catch (error: any) {
       clearInterval(interval);
