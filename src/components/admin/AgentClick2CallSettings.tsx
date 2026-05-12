@@ -110,12 +110,47 @@ export function AgentClick2CallSettings({ agentId }: Props) {
   const [adding, setAdding] = useState(false);
 
   // Test-call dialog state. Opens when the admin clicks the phone
-  // icon on an extension row — lets them dial a real number through
-  // this agent's vendor config to verify api_key + extension before
+  // icon on a saved extension row — dials a real number through this
+  // agent's vendor config to verify api_key + extension before
   // handing the line over to the agency's employees.
   const [testExtension, setTestExtension] = useState<ExtensionRow | null>(null);
   const [testNumber, setTestNumber] = useState("");
   const [testing, setTesting] = useState(false);
+
+  // Standalone "ad-hoc" tester — admin types an extension number and
+  // a phone number directly without committing the extension to the
+  // pool first. Useful when sanity-checking a fresh api_key before
+  // the admin even knows which lines they want to expose.
+  const [quickExtension, setQuickExtension] = useState("");
+  const [quickPhone, setQuickPhone] = useState("");
+  const [quickTesting, setQuickTesting] = useState(false);
+
+  // Invokes the click2call edge function. The function accepts either
+  // `extension_id` (a saved row) or `extension_number` (ad-hoc); the
+  // standalone tester uses the latter so it works before any row is
+  // saved. `agent_id` override is honored only for super-admins, which
+  // the function re-validates server-side.
+  const placeTestCall = async (opts: {
+    extensionId?: string;
+    extensionNumber?: string;
+    phone: string;
+  }) => {
+    const { data, error } = await supabase.functions.invoke("click2call", {
+      body: {
+        phone_number: opts.phone,
+        extension_id: opts.extensionId,
+        extension_number: opts.extensionNumber,
+        agent_id: agentId,
+      },
+    });
+    if (error) throw error;
+    if (data?.success) {
+      toast.success(data.message || "تم بدء الاتصال");
+      return true;
+    }
+    toast.error(data?.message || "فشل الاتصال");
+    return false;
+  };
 
   const handleTestCall = async () => {
     if (!testExtension) return;
@@ -126,28 +161,36 @@ export function AgentClick2CallSettings({ agentId }: Props) {
     }
     setTesting(true);
     try {
-      // agent_id override lets the super-admin invoke the function
-      // for an agency they don't belong to. The edge function
-      // re-validates super-admin status before honoring it.
-      const { data, error } = await supabase.functions.invoke("click2call", {
-        body: {
-          phone_number: num,
-          extension_id: testExtension.id,
-          agent_id: agentId,
-        },
-      });
-      if (error) throw error;
-      if (data?.success) {
-        toast.success(data.message || "تم بدء الاتصال");
+      const ok = await placeTestCall({ extensionId: testExtension.id, phone: num });
+      if (ok) {
         setTestExtension(null);
         setTestNumber("");
-      } else {
-        toast.error(data?.message || "فشل الاتصال");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "فشل الاتصال");
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleQuickTest = async () => {
+    const ext = quickExtension.trim();
+    const num = quickPhone.trim();
+    if (!ext || !num) {
+      toast.error("أدخل رقم الخط والرقم المراد الاتصال به");
+      return;
+    }
+    if (!settings || !settings.is_enabled) {
+      toast.error("احفظ الإعدادات وفعّلها أولاً");
+      return;
+    }
+    setQuickTesting(true);
+    try {
+      await placeTestCall({ extensionNumber: ext, phone: num });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "فشل الاتصال");
+    } finally {
+      setQuickTesting(false);
     }
   };
 
@@ -199,6 +242,7 @@ export function AgentClick2CallSettings({ agentId }: Props) {
       setNewExtension("");
       setNewLabel("");
       await queryClient.invalidateQueries({ queryKey: ["click2call-agent-extensions", agentId] });
+      toast.success(`أُضيف الخط ${ext}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "فشل في إضافة الخط");
     } finally {
@@ -432,6 +476,70 @@ export function AgentClick2CallSettings({ agentId }: Props) {
                     </Button>
                   </div>
                 </>
+              )}
+            </div>
+
+            {/* Ad-hoc tester. Works without committing the extension to
+                the pool first, so the admin can sanity-check a fresh
+                api_key with any number/extension combination before
+                deciding what to expose to the agency. */}
+            <div className="space-y-3 rounded-lg border p-4 bg-muted/30">
+              <div>
+                <h4 className="font-medium flex items-center gap-2">
+                  <PhoneCall className="h-4 w-4 text-primary" />
+                  اختبار سريع
+                </h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  جرّب الاتصال مباشرة. أدخل رقم الخط ورقم الجوال الذي تريد الاتصال به، اضغط "اتصال".
+                </p>
+              </div>
+
+              <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                <div>
+                  <Label className="text-xs">رقم الخط</Label>
+                  <Input
+                    value={quickExtension}
+                    onChange={(e) => setQuickExtension(e.target.value)}
+                    placeholder="501"
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">رقم الجوال</Label>
+                  <Input
+                    value={quickPhone}
+                    onChange={(e) => setQuickPhone(e.target.value)}
+                    placeholder="0501234567"
+                    dir="ltr"
+                    type="tel"
+                    inputMode="tel"
+                  />
+                </div>
+                <Button
+                  onClick={handleQuickTest}
+                  disabled={
+                    quickTesting ||
+                    !quickExtension.trim() ||
+                    !quickPhone.trim() ||
+                    !settings ||
+                    !settings.is_enabled
+                  }
+                  size="sm"
+                  className="gap-1"
+                >
+                  {quickTesting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <PhoneCall className="h-4 w-4" />
+                  )}
+                  اتصال
+                </Button>
+              </div>
+
+              {(!settings || !settings.is_enabled) && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  احفظ الإعدادات وفعّل الاتصال السريع من القسم الأعلى أولاً.
+                </p>
               )}
             </div>
           </>
