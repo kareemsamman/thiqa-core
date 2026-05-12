@@ -1625,7 +1625,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       window.open(url, '_blank');
     } catch (e) {
       console.error('Print group receipts error:', e);
-      toast.error('فشل في توليد سندات القبض');
+      toast.error('فشل في توليد سند القبض');
     } finally {
       setGeneratingReceipt(null);
     }
@@ -2780,7 +2780,6 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                       <TableHead className="text-right">المبلغ</TableHead>
                       <TableHead className="text-right">التاريخ</TableHead>
                       <TableHead className="text-right">طريقة الدفع</TableHead>
-                      <TableHead className="text-right">رقم الشيك</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
                       <TableHead className="text-right">ملفات</TableHead>
                       <TableHead className="text-right w-[60px]">إجراءات</TableHead>
@@ -2817,9 +2816,6 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                               >
                                 سند إلغاء
                               </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-muted-foreground">—</span>
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-col items-start gap-0.5">
@@ -2878,11 +2874,9 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                             payment_type: group.payment_type,
                             locked: group.locked,
                           });
-                      // Cheque-number cell: when a session bundles
-                      // multiple cheques we'd be lying to print one of
-                      // them, so show a "N شيكات" pill. Click the row
-                      // to drill into the details dialog for specifics.
-                      const chequeCount = group.payments.filter((p) => p.payment_type === 'cheque' && p.cheque_number).length;
+                      // Cheque-number column was removed from سجل الدفعات
+                      // per the user's request — the inline "N شيكات"
+                      // pill belongs in the details popup, not the list.
                       return (
                       <TableRow
                         key={group.id}
@@ -2922,17 +2916,6 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                               </span>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs ltr-nums">
-                          {chequeCount === 0 ? (
-                            <span className="text-muted-foreground">—</span>
-                          ) : chequeCount === 1 ? (
-                            group.payments.find((p) => p.payment_type === 'cheque')?.cheque_number || '—'
-                          ) : (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                              {chequeCount} شيكات
-                            </Badge>
-                          )}
                         </TableCell>
                         <TableCell>
                           {group.isPassthrough ? (
@@ -3037,7 +3020,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                 ) : (
                                   <Receipt className="h-4 w-4 ml-2" />
                                 )}
-                                {group.payments.length > 1 ? 'طباعة سندات القبض' : 'طباعة سند القبض'}
+                                طباعة سند القبض
                               </DropdownMenuItem>
 
                               {/* إلغاء السند — customer-scope void. Scope

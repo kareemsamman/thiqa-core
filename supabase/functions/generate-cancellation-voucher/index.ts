@@ -62,7 +62,15 @@ function buildHtml(
   },
   source: {
     receipt_number: string | null;
-    payment_methods: string[];
+    // Per-cancelled-row breakdown: shows method + cheque number + amount
+    // so the bookkeeper sees EXACTLY which cheques landed in this إلغاء
+    // (just "شيك + نقدي" hides the cheque numbers — the bookkeeper
+    // can't tell which physical paper got voided).
+    lines: Array<{
+      payment_type: string;
+      cheque_number: string | null;
+      amount: number;
+    }>;
   } | null,
   client: { full_name: string; id_number: string | null; phone_number: string | null; phone_number_2: string | null },
   companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string },
@@ -86,9 +94,22 @@ function buildHtml(
     : '';
 
   const phoneDisplay = [client?.phone_number, client?.phone_number_2].filter(Boolean).join(' / ') || '-';
-  const methodsLine = source?.payment_methods?.length
-    ? source.payment_methods.map((m) => PAYMENT_TYPE_LABELS[m] || m).join(' + ')
-    : '—';
+  // Render each cancelled payment row in its own table line so cheque
+  // numbers stay visible. Cash / transfer rows render with a "—" cheque
+  // column so the layout stays aligned.
+  const linesHtml = source?.lines?.length
+    ? source.lines.map((line) => {
+        const methodLabel = PAYMENT_TYPE_LABELS[line.payment_type] || line.payment_type;
+        const chequeCell = line.cheque_number ? escapeHtml(String(line.cheque_number)) : '—';
+        const amount = Number(line.amount || 0).toLocaleString('en-US');
+        return `
+          <tr>
+            <td class="method">${escapeHtml(methodLabel)}</td>
+            <td class="cheque-num">${chequeCell}</td>
+            <td class="line-amount">₪${amount}</td>
+          </tr>`;
+      }).join('')
+    : '';
 
   return `
 <!DOCTYPE html>
@@ -177,6 +198,31 @@ function buildHtml(
     .body-section .label { flex: 0 0 140px; font-weight: 700; font-size: 12px; }
     .body-section .val { flex: 1; text-align: left; direction: ltr; font-weight: 600; font-variant-numeric: tabular-nums; }
     .body-section .val.reason { text-align: right; direction: rtl; font-weight: 500; color: #1a1a1a; }
+
+    .lines-section { margin-bottom: 22px; border: 1px solid #1a1a1a; }
+    .lines { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .lines thead th {
+      background: #fef2f2; color: #7f1d1d;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 1px; text-transform: uppercase;
+      padding: 9px 12px; text-align: right;
+      border-bottom: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+    }
+    .lines thead th:last-child { border-left: none; }
+    .lines tbody td {
+      padding: 10px 12px;
+      border-top: 1px solid #1a1a1a;
+      border-left: 1px solid #1a1a1a;
+      font-size: 12px; color: #1a1a1a; font-weight: 500;
+    }
+    .lines tbody td:last-child { border-left: none; }
+    .lines tbody tr:first-child td { border-top: none; }
+    .lines td.cheque-num,
+    .lines td.line-amount {
+      direction: ltr; text-align: left;
+      font-variant-numeric: tabular-nums; font-weight: 700;
+    }
 
     .total-row {
       display: flex; justify-content: flex-end;
@@ -271,18 +317,30 @@ function buildHtml(
       </div>
     </div>
 
+    <div class="lines-section">
+      <div class="section-title">الدفعات الملغاة</div>
+      <table class="lines">
+        <thead>
+          <tr>
+            <th>طريقة الدفع</th>
+            <th>رقم الشيك</th>
+            <th>المبلغ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${linesHtml || '<tr><td colspan="3" style="text-align:center;color:#6b7280;padding:14px;">لا توجد تفاصيل</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
+    ${voucher.reason ? `
     <div class="body-section">
-      <div class="row">
-        <div class="label">طرق الدفع الملغاة</div>
-        <div class="val">${escapeHtml(methodsLine)}</div>
-      </div>
-      ${voucher.reason ? `
       <div class="row">
         <div class="label">سبب الإلغاء</div>
         <div class="val reason">${escapeHtml(voucher.reason).replace(/\n/g, '<br>')}</div>
       </div>
-      ` : ''}
     </div>
+    ` : ''}
 
     <div class="total-row">
       <div class="box">
@@ -399,12 +457,20 @@ serve(async (req) => {
       }
     }
 
-    // Resolve the original session's R-number + payment methods. The
-    // session's payment rows all share a payment_session_id / batch_id;
-    // we look up the voucher's payment_id first to get those keys, then
-    // sweep up siblings. Refused rows are still in the table (we only
-    // mark them refused, never DELETE for printed cancellations).
-    let source: { receipt_number: string | null; payment_methods: string[] } | null = null;
+    // Resolve the original session's R-number + each cancelled row's
+    // detail (method, cheque number, amount). The session's payment
+    // rows all share a payment_session_id / batch_id; we look up the
+    // voucher's payment_id first to get those keys, then sweep
+    // siblings. Refused rows are still in the table (we only mark
+    // them refused, never DELETE for printed cancellations).
+    //
+    // To collapse multi-policy cheque splits — one physical cheque
+    // sliced across N policies via batch_id — we group siblings by
+    // batch_id (or by row id when batch_id is null) and sum amounts,
+    // so the printed line shows the cheque's face value once instead
+    // of N partial slices.
+    let source: { receipt_number: string | null; lines: Array<{ payment_type: string; cheque_number: string | null; amount: number }> } | null = null;
+    let totalAmount = Number(voucherRow.amount || 0);
     if (voucherRow.payment_id) {
       const { data: src } = await supabase
         .from('policy_payments')
@@ -413,16 +479,24 @@ serve(async (req) => {
         .maybeSingle();
       if (src) {
         const groupKey = src.payment_session_id || src.batch_id || src.id;
-        // Sweep siblings by the same group key.
         const filterCol = src.payment_session_id
           ? 'payment_session_id'
           : (src.batch_id ? 'batch_id' : 'id');
         const { data: siblings } = await supabase
           .from('policy_payments')
-          .select('receipt_number, payment_type')
-          .eq(filterCol, groupKey);
-        const rows = (siblings ?? []) as Array<{ receipt_number: string | null; payment_type: string | null }>;
-        // Canonical original سند number = smallest R-number across siblings.
+          .select('id, receipt_number, payment_type, cheque_number, amount, batch_id, refused')
+          .eq(filterCol, groupKey)
+          .eq('refused', true);
+        const rows = (siblings ?? []) as Array<{
+          id: string;
+          receipt_number: string | null;
+          payment_type: string | null;
+          cheque_number: string | null;
+          amount: number;
+          batch_id: string | null;
+        }>;
+
+        // Canonical original سند number = smallest R-number.
         let canonical: string | null = null;
         for (const r of rows) {
           if (!r.receipt_number) continue;
@@ -430,39 +504,41 @@ serve(async (req) => {
             canonical = r.receipt_number;
           }
         }
-        const methods = Array.from(new Set(rows.map((r) => r.payment_type).filter((m): m is string => !!m)));
-        source = {
-          receipt_number: canonical || src.receipt_number,
-          payment_methods: methods,
-        };
-      }
-    }
 
-    // Sum the cancelled amount across siblings — the voucher row's own
-    // amount only reflects ONE of them.
-    let totalAmount = Number(voucherRow.amount || 0);
-    if (source && voucherRow.payment_id) {
-      const { data: src } = await supabase
-        .from('policy_payments')
-        .select('payment_session_id, batch_id')
-        .eq('id', voucherRow.payment_id)
-        .maybeSingle();
-      if (src) {
-        const groupKey = src.payment_session_id || src.batch_id;
-        if (groupKey) {
-          const col = src.payment_session_id ? 'payment_session_id' : 'batch_id';
-          const { data: sums } = await supabase
-            .from('policy_payments')
-            .select('amount')
-            .eq(col, groupKey)
-            .eq('refused', true);
-          if (sums) {
-            totalAmount = (sums as Array<{ amount: number }>).reduce(
-              (s, r) => s + Number(r.amount || 0),
-              0,
-            );
+        // Collapse multi-policy splits of one physical cheque
+        // (shared batch_id) into a single printed line at face value.
+        const groupedByBatch = new Map<string, { payment_type: string; cheque_number: string | null; amount: number }>();
+        const standalone: Array<{ payment_type: string; cheque_number: string | null; amount: number }> = [];
+        for (const r of rows) {
+          if (!r.payment_type) continue;
+          if (r.batch_id) {
+            const existing = groupedByBatch.get(r.batch_id);
+            if (existing) {
+              existing.amount += Number(r.amount || 0);
+            } else {
+              groupedByBatch.set(r.batch_id, {
+                payment_type: r.payment_type,
+                cheque_number: r.cheque_number,
+                amount: Number(r.amount || 0),
+              });
+            }
+          } else {
+            standalone.push({
+              payment_type: r.payment_type,
+              cheque_number: r.cheque_number,
+              amount: Number(r.amount || 0),
+            });
           }
         }
+        const lines = [...Array.from(groupedByBatch.values()), ...standalone];
+
+        source = {
+          receipt_number: canonical || src.receipt_number,
+          lines,
+        };
+
+        // Total = sum of collapsed lines (matches the visible body).
+        totalAmount = lines.reduce((s, l) => s + l.amount, 0);
       }
     }
 
