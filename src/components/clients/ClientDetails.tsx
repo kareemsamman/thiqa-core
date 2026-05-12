@@ -426,6 +426,19 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     date: string;               // cancellation receipt's date
     sortDate: string;           // for chronological merge with payment groups
   }>>([]);
+  // اشعار دائن (credit notes): formal voucher rows created by
+  // CancelPolicyModal / TransferPolicyModal when the agency owes the
+  // client money. Shown inline in سجل الدفعات alongside payments and
+  // cancellation vouchers so the bookkeeper sees the full picture of
+  // the customer's account in one place.
+  const [creditNotes, setCreditNotes] = useState<Array<{
+    id: string;            // receipts.id of the credit_note row
+    voucherNumber: string; // C{nn}/YYYY pre-formatted
+    amount: number;
+    date: string;          // receipt_date
+    sortDate: string;      // created_at, drives newest-first merge
+    description: string | null;  // notes column (e.g. "مرتجع إلغاء معاملة 12/2026")
+  }>>([]);
   const [broker, setBroker] = useState<Broker | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary>({ total_paid: 0, total_remaining: 0, total_profit: 0 });
   const [brokerDebts, setBrokerDebts] = useState<BrokerDebtInfo[]>([]);
@@ -1060,6 +1073,35 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       }
       setCancellationInfo(nextInfo);
       setCancellationVouchers(nextVouchers);
+
+      // اشعار دائن rows for this client — independent fetch since
+      // they live in receipts (not policy_payments). Failure here
+      // just leaves the section without credit notes; we don't fail
+      // the whole payment-log load over it.
+      try {
+        const { data: creditRows } = await supabase
+          .from('receipts')
+          .select('id, voucher_number, amount, receipt_date, created_at, notes')
+          .eq('receipt_type', 'credit_note')
+          .eq('client_id', client.id)
+          .is('cancelled_at', null)
+          .order('created_at', { ascending: false });
+
+        const nextCreditNotes = (creditRows ?? [])
+          .filter((r: any) => r.voucher_number)
+          .map((r: any) => ({
+            id: r.id as string,
+            voucherNumber: r.voucher_number as string,
+            amount: Number(r.amount || 0),
+            date: (r.receipt_date as string) || (r.created_at as string),
+            sortDate: (r.created_at as string) || (r.receipt_date as string),
+            description: (r.notes as string | null) ?? null,
+          }));
+        setCreditNotes(nextCreditNotes);
+      } catch (creditErr) {
+        console.warn('[ClientDetails] credit_note fetch failed:', creditErr);
+        setCreditNotes([]);
+      }
     } catch (error) {
       console.error('Error fetching payments:', error);
     } finally {
@@ -2058,13 +2100,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     );
   }, [payments, paymentSearch, policies]);
 
-  // Merged display list: payment groups AND cancellation voucher rows
-  // (one per cancelled session). The voucher is its own row, sorted by
-  // its own date so it can sit above the cancelled source سند when the
-  // cancellation happened later (the usual case in newest-first order).
+  // Merged display list: payment groups + cancellation vouchers +
+  // اشعار دائن (credit_note) rows. Each carries its own sortDate so
+  // newest-first merge naturally lets a cancellation or credit note
+  // sit above the source سند when those documents were issued later.
   type DisplayRow =
     | { kind: 'payment'; group: GroupedPayment; sortDate: string }
-    | { kind: 'voucher'; voucher: (typeof cancellationVouchers)[number]; sortDate: string };
+    | { kind: 'voucher'; voucher: (typeof cancellationVouchers)[number]; sortDate: string }
+    | { kind: 'credit_note'; note: (typeof creditNotes)[number]; sortDate: string };
   const displayRows = useMemo((): DisplayRow[] => {
     const rows: DisplayRow[] = [];
     for (const group of groupedPayments) {
@@ -2073,10 +2116,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     for (const voucher of cancellationVouchers) {
       rows.push({ kind: 'voucher', voucher, sortDate: voucher.sortDate });
     }
+    for (const note of creditNotes) {
+      rows.push({ kind: 'credit_note', note, sortDate: note.sortDate });
+    }
     return rows.sort((a, b) =>
       new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime(),
     );
-  }, [groupedPayments, cancellationVouchers]);
+  }, [groupedPayments, cancellationVouchers, creditNotes]);
 
   // Filter options surfaced in the popover are derived from the rows
   // actually present for this client — typing a filter that has no
@@ -2091,6 +2137,9 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     }
     if (displayRows.some((r) => r.kind === 'voucher')) {
       opts.push({ value: 'cancellation', label: 'سند الإلغاء' });
+    }
+    if (displayRows.some((r) => r.kind === 'credit_note')) {
+      opts.push({ value: 'credit_note', label: 'اشعار دائن' });
     }
     return opts;
   }, [displayRows]);
@@ -2112,20 +2161,30 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const filteredDisplayRows = useMemo((): DisplayRow[] => {
     const { dateFrom, dateTo, types, paymentMethods } = paymentFilters;
     return displayRows.filter((row) => {
-      const date = row.kind === 'voucher' ? row.voucher.date : row.group.payment_date;
+      const date =
+        row.kind === 'voucher'
+          ? row.voucher.date
+          : row.kind === 'credit_note'
+            ? row.note.date
+            : row.group.payment_date;
       const dateOnly = (date || '').slice(0, 10);
       if (dateFrom && dateOnly && dateOnly < dateFrom) return false;
       if (dateTo && dateOnly && dateOnly > dateTo) return false;
 
       if (types.length > 0) {
-        const kind = row.kind === 'voucher' ? 'cancellation' : 'payment';
+        const kind =
+          row.kind === 'voucher'
+            ? 'cancellation'
+            : row.kind === 'credit_note'
+              ? 'credit_note'
+              : 'payment';
         if (!types.includes(kind)) return false;
       }
 
       if (paymentMethods.length > 0) {
-        // Voucher rows carry no payment method — they're filtered out
-        // whenever a method is selected.
-        if (row.kind === 'voucher') return false;
+        // Voucher / credit_note rows carry no payment method — they're
+        // filtered out whenever a method is selected.
+        if (row.kind === 'voucher' || row.kind === 'credit_note') return false;
         const methods = row.group.paymentTypes;
         if (!methods.some((m) => paymentMethods.includes(m))) return false;
       }
@@ -2945,6 +3004,56 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   </TableHeader>
                   <TableBody>
                     {filteredDisplayRows.map((row) => {
+                      if (row.kind === 'credit_note') {
+                        const n = row.note;
+                        return (
+                          <TableRow
+                            key={`credit-${n.id}`}
+                            className="hover:bg-muted/40 bg-emerald-50/40 dark:bg-emerald-950/10"
+                          >
+                            <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                              <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                                {n.voucherNumber}
+                              </span>
+                            </TableCell>
+                            <TableCell className="font-semibold">
+                              <span className="text-emerald-700 dark:text-emerald-300">
+                                ₪{Math.round(n.amount).toLocaleString()}
+                              </span>
+                            </TableCell>
+                            <TableCell>{formatDate(n.date)}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30"
+                              >
+                                اشعار دائن
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col items-start gap-0.5">
+                                {n.description && (
+                                  <span
+                                    className="text-[10px] text-muted-foreground max-w-[220px] truncate"
+                                    title={n.description}
+                                  >
+                                    {n.description}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-muted-foreground">
+                                  رصيد للعميل — يُحسم تلقائياً من أي دفعة قادمة
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-muted-foreground">—</span>
+                            </TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <span className="text-muted-foreground text-xs">—</span>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
                       if (row.kind === 'voucher') {
                         const v = row.voucher;
                         return (
