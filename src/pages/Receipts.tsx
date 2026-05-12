@@ -942,14 +942,16 @@ export default function Receipts() {
       };
 
       try {
-        // Always go through the bulk endpoint here. customer_scope=true
-        // tells the function to expand from "the receipts of whatever
-        // row was clicked" to "every non-إلزامي payment this customer
-        // ever made" — the canonical كشف قبض the user wants. The
-        // single-receipt endpoint stays the per-payment view used
-        // elsewhere.
+        // Print the clicked سند قبض only, NOT the customer's whole
+        // history. The user's revised rule (after seeing the
+        // customer-scope output mix the new session with old cancelled
+        // ones) is: one click = one printed سند, scoped to the rows of
+        // that session — same scope as printing from ClientDetails →
+        // سجل الدفعات. customer_scope=true is left in the function
+        // signature for any caller that still wants the full كشف قبض,
+        // but the receipts list no longer opts in.
         const fn = "generate-bulk-payment-receipt";
-        const body = { payment_ids: paymentIds, customer_scope: true };
+        const body = { payment_ids: paymentIds };
         const { data, error } = await supabase.functions.invoke(fn, { body });
         if (error) throw error;
         const url = (data as any)?.receipt_url;

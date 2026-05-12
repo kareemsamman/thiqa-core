@@ -256,6 +256,22 @@ function buildBulkReceiptHtml(
       canonicalReceiptByGroup.set(key, String(p.receipt_number));
     }
   }
+  // When the print is scoped to a single سند قبض (the common case
+  // after Receipts.tsx stopped opting into customer_scope), every row
+  // shares one R-number. That number lives prominently in the header
+  // meta block, so repeating it in a "رقم سند القبض" body column on
+  // every line is just noise. We hide the column when there's one
+  // unique canonical R-number across the payments, and show it when
+  // multiple sessions are bundled (the kept-for-now customer-scope
+  // path used by callers that still pass isCustomerLevel=true).
+  const uniqueCanonicals = new Set<string>(canonicalReceiptByGroup.values());
+  const showReceiptNumberColumn = uniqueCanonicals.size > 1;
+  // Session R-number for the header row — only meaningful when the
+  // print is one سند. Falls back to the only entry in the map.
+  const headerReceiptNumber = uniqueCanonicals.size === 1
+    ? Array.from(uniqueCanonicals)[0]
+    : null;
+
   const receiptRows = payments.map((p: any) => {
     const num = canonicalReceiptByGroup.get(receiptGroupKey(p)) || p.receipt_number || '—';
     const typeLbl = paymentTypeLabel(p);
@@ -315,7 +331,7 @@ function buildBulkReceiptHtml(
 
     return `
       <tr${rowClass}>
-        <td class="num">${escapeHtml(num)}</td>
+        ${showReceiptNumberColumn ? `<td class="num">${escapeHtml(num)}</td>` : ''}
         <td>
           <div>${escapeHtml(typeLbl)}${extra}${refusedBadge}</div>
           ${bankLine}
@@ -643,13 +659,17 @@ function buildBulkReceiptHtml(
           : (companySettings.company_location ? `<div class="address">${escapeHtml(companySettings.company_location)}</div>` : '')}
       </div>
       <div class="invoice-meta">
-        <div class="doc-title">سندات قبض</div>
-        <div class="subtitle">${payments.length} ${payments.length === 1 ? 'سند قبض' : 'سندات قبض'}</div>
+        <div class="doc-title">${headerReceiptNumber ? 'سند قبض' : 'سندات قبض'}</div>
+        ${headerReceiptNumber
+          ? ''
+          : `<div class="subtitle">${payments.length} ${payments.length === 1 ? 'سند قبض' : 'سندات قبض'}</div>`}
         <div class="meta-rows">
-          <div class="row">
-            <div class="label">رقم المعاملة</div>
-            <div class="val">${escapeHtml(primaryDocumentNumber)}</div>
-          </div>
+          ${headerReceiptNumber
+            ? `<div class="row">
+                 <div class="label">رقم السند</div>
+                 <div class="val">${escapeHtml(headerReceiptNumber)}</div>
+               </div>`
+            : ''}
           <div class="row">
             <div class="label">التاريخ</div>
             <div class="val">${formatDate(today.toISOString())}</div>
@@ -683,7 +703,7 @@ function buildBulkReceiptHtml(
       <table class="receipts">
         <thead>
           <tr>
-            <th style="width: 110px;">رقم سند القبض</th>
+            ${showReceiptNumberColumn ? '<th style="width: 110px;">رقم سند القبض</th>' : ''}
             <th style="width: 150px;">طريقة الدفع</th>
             <th style="width: 130px;">التاريخ</th>
             <th style="width: 110px;">المبلغ</th>
@@ -710,13 +730,11 @@ function buildBulkReceiptHtml(
       </div>
     </div>
 
-    ${isCustomerLevel ? '' : `
-    <!-- Policy-link note — hidden on customer-level receipts since
-         those are deliberately not scoped to a single transaction. -->
-    <div class="policy-note">
-      هذه السندات تخص المعاملة رقم <strong>${escapeHtml(primaryDocumentNumber)}</strong>.
-    </div>
-    `}
+    <!-- The legacy "هذه السندات تخص المعاملة رقم N/2026" note was
+         removed per the user's rule: a printed سند قبض carries one
+         R-number at the top and nothing else; there's no separate
+         "transaction number" concept on the printed copy. -->
+
 
     <!-- Footer -->
     <div class="footer">
