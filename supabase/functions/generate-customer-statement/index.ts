@@ -259,7 +259,9 @@ serve(async (req: Request) => {
       .select(`
         id, policy_number, document_number, policy_type_parent, policy_type_child,
         start_date, end_date, insurance_price, office_commission, profit,
-        cancelled, transferred, group_id, notes, transferred_from_policy_id,
+        cancelled, transferred, group_id, notes,
+        cancellation_note, cancellation_date,
+        transferred_from_policy_id, transferred_car_number, transferred_to_car_number,
         car:cars(id, car_number, manufacturer_name, model),
         company:insurance_companies(name, name_ar)
       `)
@@ -289,21 +291,30 @@ serve(async (req: Request) => {
       paidByPolicy.set(p.policy_id, (paidByPolicy.get(p.policy_id) || 0) + Number(p.amount || 0));
     }
 
-    // Transfer adjustments riding on these policies (when one of
-    // them is the destination of a transfer). Used to surface
-    // customer-facing transfer notes under the affected card.
-    const newPolicyIds = policies
-      .filter((p) => p.transferred_from_policy_id)
-      .map((p) => p.id);
-    const { data: transfersRaw } = newPolicyIds.length
+    // Transfer adjustments touching these policies — either as the
+    // destination (new_policy_id) or the origin (policy_id). The
+    // origin case lets us surface "محوّلة إلى سيارة X" + reason on a
+    // transferred-out policy that's still rendered above, and the
+    // destination case carries any fee owed by the customer plus its
+    // notes onto the new policy.
+    const { data: transfersRaw } = policyIds.length
       ? await userClient
           .from('policy_transfers')
-          .select('new_policy_id, adjustment_amount, adjustment_type, note, office_note, adjustment_note')
-          .in('new_policy_id', newPolicyIds)
+          .select(`
+            policy_id, new_policy_id, adjustment_amount, adjustment_type,
+            note, office_note, adjustment_note,
+            from_car:cars!policy_transfers_from_car_id_fkey(car_number),
+            to_car:cars!policy_transfers_to_car_id_fkey(car_number)
+          `)
+          .or(`policy_id.in.(${policyIds.join(',')}),new_policy_id.in.(${policyIds.join(',')})`)
       : { data: [] as any[] } as any;
-    const transfersByPolicy = new Map<string, any>();
+    // Index transfers by both the destination (where the fee + notes
+    // attach) and the origin (where we surface the destination car).
+    const transfersByDestPolicy = new Map<string, any>();
+    const transfersByOriginPolicy = new Map<string, any>();
     for (const t of (transfersRaw || []) as any[]) {
-      if (t.new_policy_id) transfersByPolicy.set(t.new_policy_id, t);
+      if (t.new_policy_id) transfersByDestPolicy.set(t.new_policy_id, t);
+      if (t.policy_id) transfersByOriginPolicy.set(t.policy_id, t);
     }
 
     // Cancelled policies — pull cancellation reasons too. Reason
@@ -326,20 +337,65 @@ serve(async (req: Request) => {
     }
 
     // ── Year-scoped ledger (receipts by receipt_date) ─────────
-    const { data: ledgerRaw } = await userClient
-      .from('receipts')
-      .select(`
-        id, receipt_number, voucher_number, receipt_type, receipt_date,
-        amount, payment_method, cheque_number, card_last_four, notes,
-        cancellation_reason, cancels_receipt_id, car_number,
-        policy_id, payment_id, client_settlement_id, wallet_transaction_id
-      `)
+    // The auto-create trigger on policy_payments (per migration
+    // 20260511160000) inserts receipts WITHOUT setting client_id —
+    // only policy_id is populated. So filtering by client_id alone
+    // misses every legacy auto-created payment receipt for this
+    // customer. We union two queries:
+    //   1. Direct client_id match (covers credit notes, disbursements,
+    //      and any backfilled rows).
+    //   2. Fallback by policy_id IN client's policies (covers the
+    //      auto-created payment + cancellation rows).
+    // Deduped by id so a row that satisfies both filters appears once.
+    const selectCols = `
+      id, receipt_number, voucher_number, receipt_type, receipt_date,
+      amount, payment_method, cheque_number, card_last_four, notes,
+      cancellation_reason, cancels_receipt_id, car_number,
+      policy_id, payment_id, client_settlement_id, wallet_transaction_id,
+      client_id
+    `;
+
+    // Fetch the FULL set of policy ids ever owned by this client
+    // (not just the year-scoped ones) so receipts paid in the year
+    // against an out-of-year policy still surface. Same client, same
+    // money — the kashf shouldn't drop them just because the policy
+    // started in a different year.
+    const { data: allClientPolicyRows } = await userClient
+      .from('policies')
+      .select('id')
       .eq('client_id', client_id)
-      .gte('receipt_date', yearStart)
-      .lte('receipt_date', yearEnd)
-      .order('receipt_date', { ascending: true })
-      .order('receipt_number', { ascending: true });
-    const ledger = (ledgerRaw || []) as any[];
+      .is('deleted_at', null);
+    const allClientPolicyIds = (allClientPolicyRows || []).map((p: any) => p.id);
+
+    const [byClientIdRes, byPolicyIdRes] = await Promise.all([
+      userClient
+        .from('receipts')
+        .select(selectCols)
+        .eq('client_id', client_id)
+        .gte('receipt_date', yearStart)
+        .lte('receipt_date', yearEnd),
+      allClientPolicyIds.length
+        ? userClient
+            .from('receipts')
+            .select(selectCols)
+            .in('policy_id', allClientPolicyIds)
+            .gte('receipt_date', yearStart)
+            .lte('receipt_date', yearEnd)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const seenReceiptIds = new Set<string>();
+    const ledger: any[] = [];
+    for (const row of [...(byClientIdRes.data || []), ...((byPolicyIdRes as any).data || [])]) {
+      if (seenReceiptIds.has(row.id)) continue;
+      seenReceiptIds.add(row.id);
+      ledger.push(row);
+    }
+    ledger.sort((a, b) => {
+      const dateCmp = new Date(a.receipt_date).getTime() - new Date(b.receipt_date).getTime();
+      if (dateCmp !== 0) return dateCmp;
+      return Number(a.receipt_number || 0) - Number(b.receipt_number || 0);
+    });
 
     // Lookup table: bank/branch on the underlying cheque row for any
     // cheque-method receipt in the ledger. The receipts row itself
@@ -374,13 +430,13 @@ serve(async (req: Request) => {
       .filter((p) => !p.cancelled && !p.transferred)
       .reduce((s, p) => s + Number(p.insurance_price || 0) + Number(p.office_commission || 0), 0);
 
-    // Paid in the year = every non-cancellation, non-disbursement
-    // receipt for this year. A cancellation receipt zeroes out an
-    // earlier payment (the running balance accounts for that), but
-    // it's NOT itself a collection event.
-    const totalYearPaid = ledger
-      .filter((r) => r.receipt_type === 'payment' || r.receipt_type === 'accident_fee')
-      .reduce((s, r) => s + Number(r.amount || 0), 0);
+    // Paid in the year — sum non-refused policy_payments for the
+    // year's policies. We deliberately compute from policy_payments
+    // (not from the ledger of receipts) so the number matches the
+    // in-app "إجمالي المدفوع" tile exactly: net of refused rows, and
+    // unaffected by the cancellation-receipt double-entries that
+    // sit in the ledger for audit purposes.
+    const totalYearPaid = Array.from(paidByPolicy.values()).reduce((s, v) => s + v, 0);
 
     const totalYearRemaining = Math.max(0, totalYearAmount - totalYearPaid);
 
@@ -439,8 +495,8 @@ serve(async (req: Request) => {
       client,
       year,
       policies,
-      paidByPolicy,
-      transfersByPolicy,
+      transfersByDestPolicy,
+      transfersByOriginPolicy,
       cancellationReasonByPolicy,
       ledger,
       chequeMeta,
@@ -527,8 +583,8 @@ interface BuildArgs {
   client: any;
   year: number;
   policies: any[];
-  paidByPolicy: Map<string, number>;
-  transfersByPolicy: Map<string, any>;
+  transfersByDestPolicy: Map<string, any>;
+  transfersByOriginPolicy: Map<string, any>;
   cancellationReasonByPolicy: Map<string, string>;
   ledger: any[];
   chequeMeta: Map<string, { bank_code: string | null; branch_code: string | null; cheque_date: string | null }>;
@@ -539,13 +595,37 @@ interface BuildArgs {
   branding: AgentBranding;
 }
 
+// Mirrors src/lib/packageDocumentNumber.ts — picks the canonical
+// رقم المعاملة for a group of policies. THIRD_FULL wins over ELZAMI
+// wins over addons. Ties break on the smallest document_number so
+// repeated calls return the same value.
+function pickPackageDocumentNumber(
+  policies: { document_number?: string | null; policy_type_parent?: string | null }[],
+): string | null {
+  const TYPE_RANK: Record<string, number> = { THIRD_FULL: 0, ELZAMI: 1 };
+  const stamped = policies
+    .filter((p): p is { document_number: string; policy_type_parent: string | null } =>
+      typeof p.document_number === 'string' && p.document_number.trim().length > 0,
+    )
+    .map((p) => ({
+      doc: p.document_number.trim(),
+      rank: TYPE_RANK[p.policy_type_parent ?? ''] ?? 99,
+    }));
+  if (stamped.length === 0) return null;
+  stamped.sort((a, b) => {
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    return a.doc.localeCompare(b.doc, 'en', { numeric: true });
+  });
+  return stamped[0].doc;
+}
+
 function buildStatementHtml(args: BuildArgs): string {
   const {
     client,
     year,
     policies,
-    paidByPolicy,
-    transfersByPolicy,
+    transfersByDestPolicy,
+    transfersByOriginPolicy,
     cancellationReasonByPolicy,
     ledger,
     chequeMeta,
@@ -582,72 +662,174 @@ function buildStatementHtml(args: BuildArgs): string {
     byCar.get(key)!.items.push(p);
   }
 
+  // Within each car bucket, collapse policies that share a group_id
+  // into ONE row (a "package" / "معاملة"). Standalone policies stay
+  // as a single-policy package. This matches how the in-app UI shows
+  // a معاملة card — one row per رقم المعاملة, with the included
+  // policies listed inside the description cell.
+  type PackageRow = {
+    docNumber: string;
+    policies: any[];
+    mainPolicy: any;
+    period: { start: string; end: string };
+    totalPrice: number;
+  };
+
   const carsHtml = Array.from(byCar.values()).map((group) => {
-    const rowsHtml = group.items.map((p) => {
-      const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
-      const companyName = p.company?.name_ar || p.company?.name || '—';
-      const totalPrice = Number(p.insurance_price || 0) + Number(p.office_commission || 0);
-      const paid = paidByPolicy.get(p.id) || 0;
-      const remaining = Math.max(0, totalPrice - paid);
-      const transfer = transfersByPolicy.get(p.id);
-      const cancelReason = cancellationReasonByPolicy.get(p.id);
-
-      let statusBadge = '';
-      let statusReasonHtml = '';
-      if (p.cancelled) {
-        statusBadge = `<span class="status status-cancelled">ملغية</span>`;
-        if (cancelReason) {
-          statusReasonHtml = `<div class="row-reason"><strong>سبب الإلغاء:</strong> ${escapeHtml(cancelReason)}</div>`;
-        }
-      } else if (p.transferred) {
-        statusBadge = `<span class="status status-transferred">محوّلة</span>`;
-      } else if (new Date(p.end_date) < new Date()) {
-        statusBadge = `<span class="status status-ended">منتهية</span>`;
+    const packageMap = new Map<string, any[]>();
+    const singletons: any[] = [];
+    for (const p of group.items) {
+      if (p.group_id) {
+        if (!packageMap.has(p.group_id)) packageMap.set(p.group_id, []);
+        packageMap.get(p.group_id)!.push(p);
       } else {
-        statusBadge = `<span class="status status-active">سارية</span>`;
+        singletons.push(p);
+      }
+    }
+    const rows: PackageRow[] = [];
+    for (const [, pkg] of packageMap) {
+      const docNumber =
+        pickPackageDocumentNumber(pkg) ||
+        pkg[0].document_number ||
+        pkg[0].policy_number ||
+        '—';
+      const mainPolicy =
+        pkg.find((p) => p.policy_type_parent === 'THIRD_FULL') ||
+        pkg.find((p) => p.policy_type_parent === 'ELZAMI') ||
+        pkg[0];
+      const totalPrice = pkg.reduce(
+        (s, p) => s + Number(p.insurance_price || 0) + Number(p.office_commission || 0),
+        0,
+      );
+      rows.push({
+        docNumber: String(docNumber),
+        policies: pkg,
+        mainPolicy,
+        period: { start: mainPolicy.start_date, end: mainPolicy.end_date },
+        totalPrice,
+      });
+    }
+    for (const p of singletons) {
+      rows.push({
+        docNumber: String(p.document_number || p.policy_number || '—'),
+        policies: [p],
+        mainPolicy: p,
+        period: { start: p.start_date, end: p.end_date },
+        totalPrice: Number(p.insurance_price || 0) + Number(p.office_commission || 0),
+      });
+    }
+    // Newest transaction first — matches the in-app order the user
+    // showed (149 → 140 → 138 → 139 → 137).
+    rows.sort((a, b) => b.docNumber.localeCompare(a.docNumber, 'en', { numeric: true }));
+
+    const rowsHtml = rows.map((row) => {
+      const main = row.mainPolicy;
+      // Status badges — a policy can be BOTH transferred and cancelled
+      // (transferred then later cancelled), so we collect every state
+      // that applies instead of returning the first match.
+      const badges: string[] = [];
+      if (main.cancelled) badges.push(`<span class="status status-cancelled">ملغية</span>`);
+      if (main.transferred) badges.push(`<span class="status status-transferred">محوّلة</span>`);
+      if (!main.cancelled && !main.transferred) {
+        if (new Date(main.end_date) < new Date()) {
+          badges.push(`<span class="status status-ended">منتهية</span>`);
+        } else {
+          badges.push(`<span class="status status-active">سارية</span>`);
+        }
       }
 
-      // Transfer-into-this-policy adjustment block.
-      let transferBlock = '';
-      if (transfer && Number(transfer.adjustment_amount || 0) > 0) {
-        const isCustomerPays = transfer.adjustment_type === 'customer_pays';
-        const directionLabel = isCustomerPays
-          ? 'فرق على العميل'
-          : 'فرق للعميل';
-        const parts: string[] = [];
-        parts.push(`<div class="row-reason"><strong>تحويل من بوليصة سابقة</strong> · ${directionLabel}: ${formatMoney(Number(transfer.adjustment_amount))}</div>`);
-        if (transfer.note) {
-          parts.push(`<div class="row-reason"><strong>سبب التحويل:</strong> ${escapeHtml(transfer.note)}</div>`);
-        }
-        if (transfer.adjustment_note) {
-          parts.push(`<div class="row-reason"><strong>تفاصيل الفرق:</strong> ${escapeHtml(transfer.adjustment_note)}</div>`);
-        }
-        transferBlock = parts.join('');
+      // Policy-type list: "إلزامي + ثالث" with each company name in
+      // the sub-line so the customer sees who the insurer is per piece.
+      const typeList = row.policies
+        .map((p) => getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child))
+        .join(' + ');
+      const companyNames = Array.from(
+        new Set(
+          row.policies
+            .map((p) => p.company?.name_ar || p.company?.name)
+            .filter((x): x is string => !!x),
+        ),
+      );
+      const companyLine = companyNames.length ? companyNames.join(' · ') : '—';
+
+      // Reason blocks: cancellation, transfer-out (to car X), transfer-in
+      // (from car Y), and any monetary adjustment with its customer note.
+      const reasonBlocks: string[] = [];
+
+      if (main.cancelled) {
+        const reason =
+          main.cancellation_note ||
+          cancellationReasonByPolicy.get(main.id) ||
+          'بدون سبب محدد';
+        const cancelDate = main.cancellation_date ? ` · ${formatDate(main.cancellation_date)}` : '';
+        reasonBlocks.push(
+          `<div class="row-reason"><strong>سبب الإلغاء${cancelDate}:</strong> ${escapeHtml(reason)}</div>`,
+        );
       }
 
-      const docNum = p.document_number || p.policy_number || '—';
-      const period = `${formatDate(p.start_date)} ← ${formatDate(p.end_date)}`;
+      // Transferred OUT — destination car from policy_transfers (origin
+      // side). transferred_to_car_number on the policy itself is a
+      // denormalized fallback.
+      if (main.transferred) {
+        const transferOut = transfersByOriginPolicy.get(main.id);
+        const toCar =
+          transferOut?.to_car?.car_number ||
+          main.transferred_to_car_number ||
+          null;
+        const carLabel = toCar ? ` (سيارة ${escapeHtml(toCar)})` : '';
+        reasonBlocks.push(
+          `<div class="row-reason row-reason-warn"><strong>محوّلة إلى:</strong>${carLabel}</div>`,
+        );
+        if (transferOut?.note) {
+          reasonBlocks.push(
+            `<div class="row-reason row-reason-warn"><strong>سبب التحويل:</strong> ${escapeHtml(transferOut.note)}</div>`,
+          );
+        }
+      }
 
-      // Hide remaining cell for non-active rows — a cancelled or
-      // transferred policy has no "remaining" by definition.
-      const isInactive = p.cancelled || p.transferred;
-      const remainingCell = isInactive
-        ? '—'
-        : (remaining === 0 ? `<span class="paid-pill">مسدّدة</span>` : formatMoney(remaining));
+      // Transferred IN — origin car from any policy in this package
+      // that has transferred_from_policy_id. Same data, viewed from
+      // the destination side.
+      for (const p of row.policies) {
+        if (!p.transferred_from_policy_id) continue;
+        const adj = transfersByDestPolicy.get(p.id);
+        const fromCar = adj?.from_car?.car_number || p.transferred_car_number || null;
+        const carLabel = fromCar ? ` (سيارة ${escapeHtml(fromCar)})` : '';
+        reasonBlocks.push(
+          `<div class="row-reason row-reason-info"><strong>محوّلة من:</strong>${carLabel}</div>`,
+        );
+        if (adj?.note) {
+          reasonBlocks.push(
+            `<div class="row-reason row-reason-info"><strong>سبب التحويل:</strong> ${escapeHtml(adj.note)}</div>`,
+          );
+        }
+        if (adj && Number(adj.adjustment_amount || 0) > 0) {
+          const isCustomerPays = adj.adjustment_type === 'customer_pays';
+          const dir = isCustomerPays ? 'فرق على العميل' : 'فرق للعميل';
+          reasonBlocks.push(
+            `<div class="row-reason row-reason-info"><strong>${dir}:</strong> ${formatMoney(Number(adj.adjustment_amount))}</div>`,
+          );
+          if (adj.adjustment_note) {
+            reasonBlocks.push(
+              `<div class="row-reason row-reason-info"><strong>تفاصيل الفرق:</strong> ${escapeHtml(adj.adjustment_note)}</div>`,
+            );
+          }
+        }
+      }
+
+      const isInactive = main.cancelled || main.transferred;
+      const period = `${formatDate(row.period.start)} ← ${formatDate(row.period.end)}`;
 
       return `
         <tr class="${isInactive ? 'inactive-row' : ''}">
           <td class="policy-type">
-            <div class="type-line"><strong>${escapeHtml(typeLabel)}</strong> ${statusBadge}</div>
-            <div class="type-sub">${escapeHtml(companyName)}</div>
-            ${statusReasonHtml}
-            ${transferBlock}
+            <div class="type-line"><strong>${escapeHtml(typeList)}</strong> ${badges.join('')}</div>
+            <div class="type-sub">${escapeHtml(companyLine)}</div>
+            ${reasonBlocks.join('')}
           </td>
-          <td class="doc">${escapeHtml(String(docNum))}</td>
+          <td class="doc">${escapeHtml(row.docNumber)}</td>
           <td class="period">${period}</td>
-          <td class="amount">${formatMoney(totalPrice)}</td>
-          <td class="amount">${formatMoney(paid)}</td>
-          <td class="amount">${remainingCell}</td>
+          <td class="amount">${formatMoney(row.totalPrice)}</td>
         </tr>
       `;
     }).join('');
@@ -662,8 +844,6 @@ function buildStatementHtml(args: BuildArgs): string {
               <th>رقم المعاملة</th>
               <th>فترة التأمين</th>
               <th>الإجمالي</th>
-              <th>المدفوع</th>
-              <th>المتبقي</th>
             </tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
@@ -912,6 +1092,12 @@ function buildStatementHtml(args: BuildArgs): string {
       background: #fef2f2; border-right: 3px solid #b91c1c;
       padding: 4px 8px; margin-top: 4px;
       border-radius: 0 4px 4px 0;
+    }
+    .policies-table .row-reason-warn {
+      color: #7c2d12; background: #fff7ed; border-right-color: #ea580c;
+    }
+    .policies-table .row-reason-info {
+      color: #1e3a8a; background: #eff6ff; border-right-color: #2563eb;
     }
     .status {
       display: inline-block; font-size: 10px; font-weight: 700;
