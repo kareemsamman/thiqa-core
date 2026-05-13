@@ -962,6 +962,13 @@ function buildStatementHtml(args: BuildArgs): string {
     subLines: string[];
     debit: number;
     credit: number;
+    // Signed contribution to the running balance, computed at event
+    // build time. For most events balanceDelta = debit − credit, but
+    // for إشعار دائن the row sits in the مدين column visually (per
+    // the user's rule "same column as سند صرف") while still
+    // SUBTRACTING from the customer's outstanding — the office owes
+    // him that amount, so the balance has to dip.
+    balanceDelta: number;
     rowClass: string;
     directionHint: string;
   };
@@ -1098,6 +1105,7 @@ function buildStatementHtml(args: BuildArgs): string {
       subLines,
       debit: totalDebit,
       credit: 0,
+      balanceDelta: totalDebit, // bill the customer
       rowClass: 'event-transaction',
       directionHint: 'مستحق على العميل',
     });
@@ -1178,6 +1186,7 @@ function buildStatementHtml(args: BuildArgs): string {
         subLines: reasonSubLines,
         debit: 0,
         credit: unpaidPortion,
+        balanceDelta: -unpaidPortion, // forgives the unpaid portion of the bill
         rowClass: 'event-reversal',
         directionHint: 'إلغاء التزام',
       });
@@ -1299,6 +1308,22 @@ function buildStatementHtml(args: BuildArgs): string {
     const receiptTimestamp = r.created_at
       ? new Date(r.created_at).getTime()
       : new Date(r.receipt_date).getTime();
+    // Per-event balance contribution, decoupled from the display
+    // column. credit_note sits in the مدين column visually (per
+    // user's "same family as سند صرف" rule) but SUBTRACTS from the
+    // running balance — the office owes the customer this amount,
+    // so the balance has to dip when it lands. Disbursement adds
+    // back (cash actually paid out fulfils a refund obligation).
+    const balanceDelta = (() => {
+      switch (r.receipt_type) {
+        case 'payment':       return -displayedAmount; // customer paid
+        case 'accident_fee':  return -displayedAmount; // billed as payment-like
+        case 'cancellation':  return +displayedAmount; // refused cheque puts debt back
+        case 'disbursement':  return +displayedAmount; // cash paid out settles a prior credit
+        case 'credit_note':   return -displayedAmount; // office owes customer
+        default:              return isDebit ? +displayedAmount : -displayedAmount;
+      }
+    })();
     events.push({
       date: r.receipt_date,
       timestamp: Number.isNaN(receiptTimestamp) ? 0 : receiptTimestamp,
@@ -1309,6 +1334,7 @@ function buildStatementHtml(args: BuildArgs): string {
       subLines: detailLines,
       debit: isDebit ? displayedAmount : 0,
       credit: isDebit ? 0 : displayedAmount,
+      balanceDelta,
       rowClass,
       directionHint,
     });
@@ -1343,7 +1369,7 @@ function buildStatementHtml(args: BuildArgs): string {
   // 5. Render unified table with running balance
   let running = 0;
   const unifiedRowsHtml = events.map((e) => {
-    running += e.debit - e.credit;
+    running += e.balanceDelta;
     const debitCell = e.debit > 0
       ? `<span class="amt-debit">${formatMoney(e.debit)}</span>`
       : '';
