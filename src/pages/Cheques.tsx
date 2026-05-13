@@ -744,18 +744,8 @@ export default function Cheques() {
           )
         : collapsed;
 
-      // Auto-expand all groups when there's a small number of them so
-      // the user lands in a useful state without having to click around.
-      const groupIds = [
-        ...new Set(formattedCheques.map((c) => c.policy?.client?.id).filter(Boolean) as string[]),
-      ];
-
       setCheques(filtered);
       setTotalCount(count || 0);
-
-      if (groupIds.length <= 10) {
-        setExpandedCustomers(new Set(groupIds));
-      }
     } catch (error) {
       console.error('Error fetching cheques:', error);
       toast({ title: "خطأ", description: "فشل في تحميل الشيكات", variant: "destructive" });
