@@ -602,67 +602,47 @@ serve(async (req: Request) => {
 
     // ── Year totals ───────────────────────────────────────────
     // The "إجمالي معاملات السنة" follows the same rule the in-app
-    // money-card uses: insurance_price + office_commission for
-    // every non-cancelled, non-transferred policy in the year. The
-    // cancelled / transferred ones are still rendered above but
-    // excluded from the totals so the customer reads "تم تسديد X
-    // من Y" against the active obligations only.
-    // Per the user's rule: إلزامي base price is excluded from the
-    // kashf entirely (paid directly to the company via external Visa).
-    // Only the office_commission on an إلزامي policy enters totals.
-    // Non-إلزامي policies contribute their full (price + commission).
-    const totalYearAmount = policies
-      .filter((p) => !p.cancelled && !p.transferred)
-      .reduce((s, p) => {
-        const commission = Number(p.office_commission || 0);
-        if (p.policy_type_parent === 'ELZAMI') return s + commission;
-        return s + Number(p.insurance_price || 0) + commission;
-      }, 0);
+    // إجمالي معاملات — ALL transactions for the year, including
+    // cancelled and transferred ones. Per the user: "بشطبش اشي لما
+    // الغي" — cancelling is an agreement, not a deletion. The
+    // cancelled transaction stays on the books at its original price
+    // and the refund row (إشعار دائن / سند صرف) is what reverses it.
+    // إلزامي base price is still excluded (paid directly to the
+    // insurance company); only its office_commission contributes.
+    const totalYearAmount = policies.reduce((s, p) => {
+      const commission = Number(p.office_commission || 0);
+      if (p.policy_type_parent === 'ELZAMI') return s + commission;
+      return s + Number(p.insurance_price || 0) + commission;
+    }, 0);
 
-    // Two paid totals.
-    //
-    // totalYearPaidActive — what the customer actually applied to
-    // his outstanding (non-cancelled) obligations. This is the
-    // number we use in the متبقي math, because payments that landed
-    // on a now-cancelled transaction stay with the office as
-    // revenue for the used portion of that transaction — they
-    // can't be re-applied to active policies.
-    //
-    // totalYearPaid — gross cash collected from the customer
-    // (excluding refused rows and إلزامي pass-through). This is what
-    // the user actually paid and wants to see on the kashf. It's
-    // displayed but not summed into the متبقي formula.
-    const totalYearPaidActive = policies
-      .filter((p) => !p.cancelled && !p.transferred)
-      .reduce((s, p) => s + (paidByPolicy.get(p.id) || 0), 0);
+    // إجمالي المدفوع — gross cash collected from the customer
+    // (excluding refused rows and إلزامي pass-through). Since the
+    // cancelled transactions stay in totalYearAmount above, payments
+    // that landed on them stay in totalYearPaid too — the balance
+    // math nets them out symmetrically.
     const totalYearPaid = Array.from(paidByPolicy.values()).reduce((s, v) => s + v, 0);
-    const totalYearPaidOnCancelled = Math.max(0, totalYearPaid - totalYearPaidActive);
 
-    // Year-scoped customer credit (مرتجع) — net of any disbursements
-    // already settled in the same year. credit_note receipts represent
-    // money the office owes the customer (the customer's claim).
-    // disbursement receipts are the office paying that claim back out.
-    // If both happened in the year, the net is what's still owed. We
-    // clamp at zero so an over-disbursed wallet (rare) doesn't subtract
-    // from المتبقي below.
+    // إجمالي المرتجع — every refund the office issued back to the
+    // customer this year, whether as a credit balance (إشعار دائن)
+    // or actual cash out (سند صرف). Both subtract from what the
+    // customer owes because both represent value returned.
     const yearCreditNoteAmount = ledger
       .filter((r) => r.receipt_type === 'credit_note')
       .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
     const yearDisbursementAmount = ledger
       .filter((r) => r.receipt_type === 'disbursement')
       .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
-    const yearCustomerCredit = Math.max(0, yearCreditNoteAmount - yearDisbursementAmount);
+    const yearCustomerCredit = yearCreditNoteAmount + yearDisbursementAmount;
 
     // Year balance — signed so the kashf can flip direction:
     //   positive → customer still owes the office
-    //   negative → office still owes the customer (e.g. cancellation
-    //     with a credit_note that hasn't been fully disbursed yet)
+    //   negative → office still owes the customer
     //   zero     → settled
-    // Math intentionally uses ACTIVE paid (not gross) so payments
-    // that landed on a now-cancelled transaction don't leak into the
-    // outstanding-obligation tile. The gross مدفوع stays on the
-    // kashf for transparency but rides outside this equation.
-    const yearBalance = totalYearAmount - totalYearPaidActive - yearCustomerCredit;
+    // Everything is gross now: every transaction (cancelled or not),
+    // every payment, every refund. The cancellation/transfer rows
+    // themselves are notation-only on the ledger, so the math has to
+    // close out via the refund rows.
+    const yearBalance = totalYearAmount - totalYearPaid - yearCustomerCredit;
     const totalYearRemaining = Math.max(0, yearBalance);
     const totalYearOwedToCustomer = Math.max(0, -yearBalance);
 
@@ -758,7 +738,6 @@ serve(async (req: Request) => {
       voucherUrlByReceipt,
       totalYearAmount,
       totalYearPaid,
-      totalYearPaidOnCancelled,
       yearCustomerCredit,
       totalYearRemaining,
       totalYearOwedToCustomer,
@@ -858,7 +837,6 @@ interface BuildArgs {
   voucherUrlByReceipt: Map<string, string>;
   totalYearAmount: number;
   totalYearPaid: number;
-  totalYearPaidOnCancelled: number;
   yearCustomerCredit: number;
   totalYearRemaining: number;
   totalYearOwedToCustomer: number;
@@ -904,7 +882,6 @@ function buildStatementHtml(args: BuildArgs): string {
     voucherUrlByReceipt,
     totalYearAmount,
     totalYearPaid,
-    totalYearPaidOnCancelled,
     yearCustomerCredit,
     totalYearRemaining,
     totalYearOwedToCustomer,
@@ -1458,12 +1435,7 @@ function buildStatementHtml(args: BuildArgs): string {
           <span class="totals-value">${formatMoney(totalYearAmount)}</span>
         </div>
         <div class="totals-row">
-          <span class="totals-label">
-            إجمالي المدفوع لسنة ${year}
-            ${totalYearPaidOnCancelled > 0.01
-              ? `<span class="totals-hint">— منها ${formatMoney(totalYearPaidOnCancelled)} على معاملات ملغاة (لا تُحسم من المتبقي)</span>`
-              : ''}
-          </span>
+          <span class="totals-label">إجمالي المدفوع لسنة ${year}</span>
           <span class="totals-value paid">+${formatMoney(totalYearPaid)}</span>
         </div>
         ${creditRowHtml}
