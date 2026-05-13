@@ -1206,19 +1206,18 @@ function buildStatementHtml(args: BuildArgs): string {
   // instrument by keying on (session, method, cheque#-or-card-last4).
   type ReceiptGroupKey = string;
   const groupKeyFor = (r: any): ReceiptGroupKey | null => {
-    // Only payment-type rows get bucketed — cancellations / credit
-    // notes / disbursements stay as their own events because each
-    // represents a distinct accounting transaction.
+    // Only payment-type rows get bucketed. Every payment row in the
+    // same session collapses into ONE ledger entry — one سند قبض =
+    // one row, regardless of how many cheques / cash splits / cards
+    // it contains. The user doesn't want per-payment-instrument
+    // detail on the kashf; the bulk receipt voucher carries those.
+    // Cancellations / credit notes / disbursements stay as their
+    // own events because each represents a distinct accounting
+    // transaction.
     if (r.receipt_type !== 'payment') return null;
     const meta = r.payment_id ? chequeMeta.get(r.payment_id) : null;
     const sessionKey = meta?.payment_session_id || meta?.batch_id || r.payment_id || r.id;
-    const physicalKey =
-      r.payment_method === 'cheque'
-        ? `chq:${r.cheque_number || ''}`
-        : r.payment_method === 'visa' || r.payment_method === 'credit_card' || r.payment_method === 'visa_external'
-          ? `card:${r.card_last_four || ''}`
-          : 'misc';
-    return `${sessionKey}::${r.payment_method}::${physicalKey}`;
+    return `session:${sessionKey}`;
   };
 
   type ReceiptGroup = { representative: any; rows: any[]; totalAmount: number };
@@ -1250,7 +1249,7 @@ function buildStatementHtml(args: BuildArgs): string {
     }
   }
 
-  const emitReceiptEvent = (r: any, displayedAmount: number) => {
+  const emitReceiptEvent = (r: any, displayedAmount: number, isMergedGroup = false) => {
     const isDebit = isDebitForCustomer(r.receipt_type);
     let typeLabel = RECEIPT_TYPE_LABELS[r.receipt_type] || r.receipt_type;
     if (r.receipt_type === 'credit_note' && Number(r.amount) < 0) {
@@ -1265,17 +1264,26 @@ function buildStatementHtml(args: BuildArgs): string {
       sharedReceiptText ||
       formatVoucherNumber(r.receipt_type, r.voucher_number, r.receipt_number, r.receipt_date);
 
+    // Per the user: a سند قبض that bundles several instruments
+    // (cheque + cash, two cheques, etc.) prints ONE line with the
+    // total — no per-instrument detail. The bulk receipt voucher
+    // (R…/year) linked from the row carries those if needed. We
+    // only surface cheque metadata / card last4 for SINGLE-row
+    // payments and for non-payment receipts (cancellation, credit
+    // note, disbursement) — each of which is its own document.
     const detailLines: string[] = [];
-    if (r.payment_method === 'cheque') {
-      const meta = r.payment_id ? chequeMeta.get(r.payment_id) : null;
-      const chequeNumStr = r.cheque_number ? `شيك #${escapeHtml(r.cheque_number)}` : '';
-      const bankLabel = getBankLabel(meta?.bank_code);
-      const branchLabel = meta?.branch_code ? `فرع ${escapeHtml(meta.branch_code)}` : '';
-      const dueDate = meta?.cheque_date ? `استحقاق: ${formatDate(meta.cheque_date)}` : '';
-      const chequeLine = [chequeNumStr, bankLabel, branchLabel, dueDate].filter(Boolean).join(' · ');
-      if (chequeLine) detailLines.push(`<div class="ledger-detail">${chequeLine}</div>`);
-    } else if (r.payment_method === 'visa' || r.payment_method === 'credit_card' || r.payment_method === 'visa_external') {
-      if (r.card_last_four) detailLines.push(`<div class="ledger-detail">بطاقة تنتهي بـ ${escapeHtml(r.card_last_four)}</div>`);
+    if (!isMergedGroup) {
+      if (r.payment_method === 'cheque') {
+        const meta = r.payment_id ? chequeMeta.get(r.payment_id) : null;
+        const chequeNumStr = r.cheque_number ? `شيك #${escapeHtml(r.cheque_number)}` : '';
+        const bankLabel = getBankLabel(meta?.bank_code);
+        const branchLabel = meta?.branch_code ? `فرع ${escapeHtml(meta.branch_code)}` : '';
+        const dueDate = meta?.cheque_date ? `استحقاق: ${formatDate(meta.cheque_date)}` : '';
+        const chequeLine = [chequeNumStr, bankLabel, branchLabel, dueDate].filter(Boolean).join(' · ');
+        if (chequeLine) detailLines.push(`<div class="ledger-detail">${chequeLine}</div>`);
+      } else if (r.payment_method === 'visa' || r.payment_method === 'credit_card' || r.payment_method === 'visa_external') {
+        if (r.card_last_four) detailLines.push(`<div class="ledger-detail">بطاقة تنتهي بـ ${escapeHtml(r.card_last_four)}</div>`);
+      }
     }
     if (r.cancellation_reason) {
       detailLines.push(`<div class="reason-line reason-cancel"><strong>سبب الإلغاء:</strong> ${escapeHtml(r.cancellation_reason)}</div>`);
@@ -1284,7 +1292,11 @@ function buildStatementHtml(args: BuildArgs): string {
       detailLines.push(`<div class="ledger-detail">${escapeHtml(r.notes)}</div>`);
     }
 
-    const description = `<div class="event-headline"><strong>${escapeHtml(typeLabel)}</strong>${methodLabel ? ` · ${escapeHtml(methodLabel)}` : ''}</div>`;
+    // Description: when a payment session merged multiple methods
+    // we drop the specific method label — "سند قبض" alone with the
+    // bundled total. For everything else show "<type> · <method>"
+    // as before.
+    const description = `<div class="event-headline"><strong>${escapeHtml(typeLabel)}</strong>${(!isMergedGroup && methodLabel) ? ` · ${escapeHtml(methodLabel)}` : ''}</div>`;
 
     const directionHint = (() => {
       switch (r.receipt_type) {
@@ -1345,7 +1357,7 @@ function buildStatementHtml(args: BuildArgs): string {
   // captures one note per instrument), so the representative's
   // notes cell carries the full text without losing information.
   for (const group of paymentGroups.values()) {
-    emitReceiptEvent(group.representative, group.totalAmount);
+    emitReceiptEvent(group.representative, group.totalAmount, group.rows.length > 1);
   }
   // Non-payment receipts (cancellation / credit_note / disbursement
   // / accident_fee) emit per-row because each one represents a
