@@ -1081,7 +1081,9 @@ function buildStatementHtml(args: BuildArgs): string {
     } else if (r.payment_method === 'visa' || r.payment_method === 'credit_card' || r.payment_method === 'visa_external') {
       if (r.card_last_four) detailLines.push(`<div class="ledger-detail">بطاقة تنتهي بـ ${escapeHtml(r.card_last_four)}</div>`);
     }
-    if (r.car_number) detailLines.push(`<div class="ledger-detail">سيارة: ${escapeHtml(r.car_number)}</div>`);
+    // Car number is intentionally NOT surfaced under a سند قبض row:
+    // the parent transaction header already shows the car, and
+    // repeating it here clutters the receipt for no information gain.
     if (r.cancellation_reason) {
       detailLines.push(`<div class="reason-line reason-cancel"><strong>سبب الإلغاء:</strong> ${escapeHtml(r.cancellation_reason)}</div>`);
     }
