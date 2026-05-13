@@ -259,7 +259,7 @@ serve(async (req: Request) => {
       .select(`
         id, policy_number, document_number, policy_type_parent, policy_type_child,
         start_date, end_date, insurance_price, office_commission, profit,
-        cancelled, transferred, group_id, notes,
+        cancelled, transferred, group_id, notes, created_at,
         cancellation_note, cancellation_date,
         transferred_from_policy_id, transferred_car_number, transferred_to_car_number,
         car:cars(id, car_number, manufacturer_name, model),
@@ -367,7 +367,7 @@ serve(async (req: Request) => {
       amount, payment_method, cheque_number, card_last_four, notes,
       cancellation_reason, cancels_receipt_id, car_number,
       policy_id, payment_id, client_settlement_id, wallet_transaction_id,
-      client_id
+      client_id, created_at
     `;
 
     // Fetch the FULL set of policy ids ever owned by this client
@@ -886,7 +886,14 @@ function buildStatementHtml(args: BuildArgs): string {
   // reconciles with the in-app debt tile.
   type LedgerEvent = {
     date: string;
-    sortKey: number; // tiebreaker: 0=transaction, 1=reversal, 2=receipt
+    // Fine-grained timestamp (ms-since-epoch) from the underlying
+    // row's created_at. We use this as the PRIMARY tiebreaker when
+    // multiple events share the same calendar date, so a payment
+    // posted between two same-day transactions actually lands
+    // between them in the printed kashf instead of getting bumped
+    // to the bottom by the type-bucket sortKey.
+    timestamp: number;
+    sortKey: number; // last-resort tiebreaker: 0=transaction, 1=reversal, 2=receipt
     voucherNumber: string;
     voucherUrl: string | null;
     description: string;
@@ -1013,8 +1020,21 @@ function buildStatementHtml(args: BuildArgs): string {
     const subLines: string[] = [...lineItems];
     for (const r of reasonLines) subLines.push(`<div class="reason-line">${r}</div>`);
 
+    // Earliest creation timestamp in the package — this is when the
+    // package was actually entered in the system, so events stamped
+    // a few seconds later (the customer's same-day payment) sort
+    // correctly after the transaction row.
+    const pkgCreatedAt = pkg.reduce<number>((min, p) => {
+      const t = p.created_at ? new Date(p.created_at).getTime() : Number.MAX_SAFE_INTEGER;
+      return Number.isNaN(t) ? min : Math.min(min, t);
+    }, Number.MAX_SAFE_INTEGER);
+    const pkgTimestamp = Number.isFinite(pkgCreatedAt) && pkgCreatedAt !== Number.MAX_SAFE_INTEGER
+      ? pkgCreatedAt
+      : new Date(mainPolicy.start_date).getTime();
+
     events.push({
       date: mainPolicy.start_date,
+      timestamp: pkgTimestamp,
       sortKey: 0,
       voucherNumber: String(docNumber),
       voucherUrl: null, // transactions don't have a printable HTML voucher yet
@@ -1031,9 +1051,10 @@ function buildStatementHtml(args: BuildArgs): string {
       const reversalDate =
         (mainPolicy.cancelled && mainPolicy.cancellation_date) ||
         mainPolicy.start_date;
-      const what = mainPolicy.cancelled ? 'إلغاء معاملة' : 'تحويل معاملة';
+      const reversalTimestamp = new Date(reversalDate).getTime();
       events.push({
         date: reversalDate,
+        timestamp: Number.isNaN(reversalTimestamp) ? pkgTimestamp : reversalTimestamp,
         sortKey: 1,
         voucherNumber: String(docNumber),
         voucherUrl: null,
@@ -1107,8 +1128,12 @@ function buildStatementHtml(args: BuildArgs): string {
       ? r.receipt_type === 'cancellation' ? 'event-cancel-receipt' : 'event-disbursement'
       : r.receipt_type === 'credit_note' ? 'event-credit-note' : 'event-payment';
 
+    const receiptTimestamp = r.created_at
+      ? new Date(r.created_at).getTime()
+      : new Date(r.receipt_date).getTime();
     events.push({
       date: r.receipt_date,
+      timestamp: Number.isNaN(receiptTimestamp) ? 0 : receiptTimestamp,
       sortKey: 2,
       voucherNumber,
       voucherUrl: voucherUrlByReceipt.get(r.id) || null,
@@ -1121,10 +1146,15 @@ function buildStatementHtml(args: BuildArgs): string {
     });
   }
 
-  // 4. Sort by date, then by kind (transaction → reversal → receipt)
+  // 4. Sort by actual created_at timestamp (fine-grained), then by
+  // displayed date (fallback when timestamps are missing/equal), then
+  // by event kind (last-resort tiebreaker). Putting timestamp first
+  // ensures a payment posted between two same-day transactions sorts
+  // between them — not bumped to the bottom by the type bucket.
   events.sort((a, b) => {
-    const cmp = new Date(a.date).getTime() - new Date(b.date).getTime();
-    if (cmp !== 0) return cmp;
+    if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+    const dCmp = new Date(a.date).getTime() - new Date(b.date).getTime();
+    if (dCmp !== 0) return dCmp;
     return a.sortKey - b.sortKey;
   });
 
