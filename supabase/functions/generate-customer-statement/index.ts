@@ -976,26 +976,20 @@ function buildStatementHtml(args: BuildArgs): string {
     const carNumber = mainPolicy.car?.car_number;
     const period = `${formatDate(mainPolicy.start_date)} ← ${formatDate(mainPolicy.end_date)}`;
 
-    // Status + reason blocks (cancellation / transfer)
+    // The transaction row stays "clean" — exactly as it was when
+    // first entered. Cancellation, transfer-out, refused-cheque
+    // cancellation, credit notes, and disbursements all surface as
+    // their OWN rows further down the ledger. Per the user's rule:
+    // "ما لازم تعدل على نفس ال ROW" — don't mutate the original row,
+    // append new ones. This reads chronologically like a story:
+    // "transaction created → paid → cancelled → refund issued →
+    // refund paid out".
+    //
+    // The one annotation we keep is "محوّلة من سيارة X" when THIS
+    // package is the destination of a transfer — that's how the
+    // customer recognizes the new policy as a continuation of the
+    // previous one.
     const reasonLines: string[] = [];
-    let isInactive = false;
-    if (mainPolicy.cancelled) {
-      isInactive = true;
-      const reason =
-        mainPolicy.cancellation_note ||
-        cancellationReasonByPolicy.get(mainPolicy.id) ||
-        'بدون سبب محدد';
-      reasonLines.push(`<span class="reason-cancel"><strong>ملغاة:</strong> ${escapeHtml(reason)}</span>`);
-    }
-    if (mainPolicy.transferred) {
-      isInactive = true;
-      const transferOut = transfersByOriginPolicy.get(mainPolicy.id);
-      const toCar = transferOut?.to_car?.car_number || mainPolicy.transferred_to_car_number;
-      reasonLines.push(
-        `<span class="reason-transfer"><strong>محوّلة${toCar ? ` إلى سيارة ${escapeHtml(toCar)}` : ''}</strong>${transferOut?.note ? ` — ${escapeHtml(transferOut.note)}` : ''}</span>`,
-      );
-    }
-    // Was-transferred-in note (annotated even on active rows)
     for (const p of pkg) {
       if (!p.transferred_from_policy_id) continue;
       const adj = transfersByDestPolicy.get(p.id);
@@ -1042,57 +1036,69 @@ function buildStatementHtml(args: BuildArgs): string {
       subLines,
       debit: totalDebit,
       credit: 0,
-      rowClass: isInactive ? 'event-transaction event-inactive' : 'event-transaction',
+      rowClass: 'event-transaction',
       directionHint: 'مستحق على العميل',
     });
 
-    // 2. Reversal event for the UNPAID portion of a cancelled or
-    // transferred package.
+    // 2. Reversal event for cancelled / transferred packages.
     //
     // Per the user's rule: cancelling a transaction does NOT mean
     // returning the full amount. The customer USED part of the
     // insurance up to the cancellation date — that "used" portion
     // is legitimately owed to the office and stays. Only the
     // unpaid-and-unused part is forgiven here; the paid-but-unused
-    // part is represented by a separate إشعار دائن (credit_note) row
-    // from the receipts ledger.
+    // part is represented by a separate إشعار دائن (credit_note) row.
     //
-    // So:
-    //   unpaid_portion = max(0, transaction_total − amount_paid_for_it)
-    // We reverse THAT as دائن. If the customer paid in full, no
-    // reversal is emitted (the credit_note alone handles the refund).
-    // If they paid nothing, the full transaction is reversed (correct
-    // — nothing owed since nothing was used or collected).
-    if (isInactive) {
+    // The reversal row also carries the cancellation/transfer
+    // REASON — those used to clutter the transaction row above, but
+    // the user wants the original transaction row to stay clean. So
+    // every "what happened" detail now lives here, in chronological
+    // order beneath the original.
+    const packageInactive = mainPolicy.cancelled || mainPolicy.transferred;
+    if (packageInactive) {
       const paidForPackage = pkg.reduce(
         (s, p) => s + (paidByPolicy.get(p.id) || 0),
         0,
       );
       const unpaidPortion = Math.max(0, totalDebit - paidForPackage);
-      if (unpaidPortion > 0.01) {
-        const reversalDate =
-          (mainPolicy.cancelled && mainPolicy.cancellation_date) ||
-          mainPolicy.start_date;
-        const reversalTimestamp = new Date(reversalDate).getTime();
-        const reversalLabel = mainPolicy.cancelled
-          ? 'إلغاء الجزء غير المدفوع'
-          : 'تحويل الجزء غير المدفوع';
-        events.push({
-          date: reversalDate,
-          timestamp: Number.isNaN(reversalTimestamp) ? pkgTimestamp : reversalTimestamp,
-          sortKey: 1,
-          voucherNumber: String(docNumber),
-          voucherUrl: null,
-          description: `<div class="event-headline"><strong>${reversalLabel}</strong> · رقم ${escapeHtml(String(docNumber))}</div>`,
-          subLines: [
-            `<div class="reason-line">يُلغى الجزء غير المدفوع من المعاملة (${formatMoney(unpaidPortion)} من أصل ${formatMoney(totalDebit)})</div>`,
-          ],
-          debit: 0,
-          credit: unpaidPortion,
-          rowClass: 'event-reversal',
-          directionHint: 'يلغي الجزء غير المستلم',
-        });
+      const reversalDate =
+        (mainPolicy.cancelled && mainPolicy.cancellation_date) ||
+        mainPolicy.start_date;
+      const reversalTimestamp = new Date(reversalDate).getTime();
+
+      const reasonSubLines: string[] = [];
+      if (mainPolicy.cancelled) {
+        const reason =
+          mainPolicy.cancellation_note ||
+          cancellationReasonByPolicy.get(mainPolicy.id) ||
+          'بدون سبب محدد';
+        reasonSubLines.push(`<div class="reason-line reason-cancel"><strong>سبب الإلغاء:</strong> ${escapeHtml(reason)}</div>`);
       }
+      if (mainPolicy.transferred) {
+        const transferOut = transfersByOriginPolicy.get(mainPolicy.id);
+        const toCar = transferOut?.to_car?.car_number || mainPolicy.transferred_to_car_number;
+        reasonSubLines.push(
+          `<div class="reason-line reason-transfer"><strong>محوّلة${toCar ? ` إلى سيارة ${escapeHtml(toCar)}` : ''}</strong>${transferOut?.note ? ` — ${escapeHtml(transferOut.note)}` : ''}</div>`,
+        );
+      }
+      reasonSubLines.push(
+        `<div class="reason-line">يُلغى الجزء غير المدفوع: ${formatMoney(unpaidPortion)} من أصل ${formatMoney(totalDebit)} (المُستخدم يبقى على العميل)</div>`,
+      );
+
+      const reversalLabel = mainPolicy.cancelled ? 'إلغاء معاملة' : 'تحويل معاملة';
+      events.push({
+        date: reversalDate,
+        timestamp: Number.isNaN(reversalTimestamp) ? pkgTimestamp : reversalTimestamp,
+        sortKey: 1,
+        voucherNumber: String(docNumber),
+        voucherUrl: null,
+        description: `<div class="event-headline"><strong>${reversalLabel}</strong> · رقم ${escapeHtml(String(docNumber))}</div>`,
+        subLines: reasonSubLines,
+        debit: 0,
+        credit: unpaidPortion,
+        rowClass: 'event-reversal',
+        directionHint: 'إلغاء التزام',
+      });
     }
   }
 
