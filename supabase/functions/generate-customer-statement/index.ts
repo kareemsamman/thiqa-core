@@ -174,16 +174,25 @@ const getPolicyTypeLabel = (parent: string, child: string | null): string => {
   return POLICY_TYPE_LABELS[parent] || parent;
 };
 
-// Direction rules for the ledger:
-//   • payment, accident_fee, credit_note (positive)  → دائن (the
-//     customer paid us / we created credit for him).
-//   • cancellation, disbursement                     → مدين (we
-//     reversed money to him).
-// This matches how the in-app Receipts page calculates running
-// balance — keep them in lockstep so the customer's printed kashf
-// can be sanity-checked against the screen.
+// Direction rules for the ledger.
+//
+// Per the user's mental model, the "مدين / للعميل" column collects
+// every event where money / credit goes TO the customer (whether
+// cash actually moved or just a promise was recorded). The
+// "دائن / من العميل" column collects every event where money came
+// FROM the customer.
+//
+// • payment, accident_fee  → دائن (customer paid us / charge owed)
+// • cancellation           → مدين (refused cheque → we owe him back)
+// • disbursement           → مدين (we paid cash to customer)
+// • credit_note            → مدين (we OWE / credited the customer —
+//   same intent as سند صرف, just not yet paid out)
 const isDebitForCustomer = (receiptType: string): boolean => {
-  return receiptType === 'cancellation' || receiptType === 'disbursement';
+  return (
+    receiptType === 'cancellation' ||
+    receiptType === 'disbursement' ||
+    receiptType === 'credit_note'
+  );
 };
 
 // ──────────────────────────────────────────────────────────────
@@ -1240,19 +1249,24 @@ function buildStatementHtml(args: BuildArgs): string {
 
     const description = `<div class="event-headline"><strong>${escapeHtml(typeLabel)}</strong>${methodLabel ? ` · ${escapeHtml(methodLabel)}` : ''}</div>`;
 
-    const directionHint = isDebit
-      ? r.receipt_type === 'cancellation'
-        ? 'إلغاء سند قبض سابق'
-        : r.receipt_type === 'disbursement'
-          ? 'استلمه العميل'
-          : 'استحق على العميل'
-      : r.receipt_type === 'credit_note'
-        ? 'رصيد للعميل'
-        : 'دفعه العميل';
+    const directionHint = (() => {
+      switch (r.receipt_type) {
+        case 'cancellation': return 'إلغاء سند قبض سابق';
+        case 'disbursement': return 'استلمه العميل';
+        case 'credit_note': return 'رصيد للعميل';
+        case 'accident_fee': return 'استحق على العميل';
+        default: return 'دفعه العميل';
+      }
+    })();
 
-    const rowClass = isDebit
-      ? r.receipt_type === 'cancellation' ? 'event-cancel-receipt' : 'event-disbursement'
-      : r.receipt_type === 'credit_note' ? 'event-credit-note' : 'event-payment';
+    const rowClass = (() => {
+      switch (r.receipt_type) {
+        case 'cancellation': return 'event-cancel-receipt';
+        case 'disbursement': return 'event-disbursement';
+        case 'credit_note': return 'event-credit-note';
+        default: return 'event-payment';
+      }
+    })();
 
     const receiptTimestamp = r.created_at
       ? new Date(r.created_at).getTime()
