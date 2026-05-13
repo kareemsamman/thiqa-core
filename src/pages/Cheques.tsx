@@ -1766,7 +1766,7 @@ export default function Cheques() {
                                   <div className="flex items-center gap-3">
                                     <ChevronDown className={cn(
                                       "h-4 w-4 transition-transform",
-                                      !isExpanded && "-rotate-90"
+                                      isExpanded && "rotate-180"
                                     )} />
                                     {/* Outgoing groups (company/broker/expense recipients)
                                         get a building icon + a typed badge so they're
