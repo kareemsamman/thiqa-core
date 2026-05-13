@@ -397,16 +397,60 @@ serve(async (req: Request) => {
       return Number(a.receipt_number || 0) - Number(b.receipt_number || 0);
     });
 
-    // ── Per-row voucher URLs (each receipt → its standalone HTML) ─
-    // For every ledger row we call the matching voucher generator
-    // (generate-payment-receipt / generate-cancellation-voucher /
-    // generate-credit-note-voucher / generate-disbursement-voucher)
-    // in parallel and embed the returned CDN URL on the voucher
-    // number anchor. accident_fee rows have no dedicated voucher
-    // function yet, so they stay plain-text. The user JWT rides
-    // through so RLS still gates which receipts each function will
-    // serve — the customer-facing kashf can only ever link to
-    // receipts the caller is already entitled to see.
+    // ── policy_payments metadata (shared R-number + session key) ──
+    // The user-facing R-number lives on policy_payments.receipt_number
+    // (text like "R162/2026") and is SHARED across every payment row
+    // in the same collection session — so a bulk سند قبض covering 3
+    // cheques shows ONE number even though three policy_payments rows
+    // exist. The receipts table by contrast has its own per-row SERIAL
+    // (R786, R787, R788...) which is internal bookkeeping, not what
+    // the customer expects to see.
+    //
+    // We also pull payment_session_id / batch_id here so the URL
+    // resolver below can group rows from the same session under one
+    // bulk receipt link instead of generating three single-row
+    // receipts for one logical bulk.
+    type PaymentMeta = {
+      receipt_number_text: string | null;
+      payment_session_id: string | null;
+      batch_id: string | null;
+      bank_code: string | null;
+      branch_code: string | null;
+      cheque_date: string | null;
+    };
+    const allPaymentIds = ledger
+      .filter((r: any) => r.payment_id)
+      .map((r: any) => r.payment_id as string);
+    const paymentMeta = new Map<string, PaymentMeta>();
+    if (allPaymentIds.length > 0) {
+      const { data: payMeta } = await userClient
+        .from('policy_payments')
+        .select('id, receipt_number, payment_session_id, batch_id, bank_code, branch_code, cheque_date')
+        .in('id', allPaymentIds);
+      for (const p of (payMeta || []) as any[]) {
+        paymentMeta.set(p.id, {
+          receipt_number_text: p.receipt_number ?? null,
+          payment_session_id: p.payment_session_id ?? null,
+          batch_id: p.batch_id ?? null,
+          bank_code: p.bank_code ?? null,
+          branch_code: p.branch_code ?? null,
+          cheque_date: p.cheque_date ?? null,
+        });
+      }
+    }
+    // Back-compat alias — the renderer still calls this `chequeMeta`
+    // for the cheque bank/branch/maturity sub-line. Same map, narrower
+    // shape, no behavior change there.
+    const chequeMeta = paymentMeta;
+
+    // ── Per-row voucher URLs ──────────────────────────────────────
+    // payment rows: group by (payment_session_id || batch_id ||
+    //   payment_id) and call generate-bulk-payment-receipt ONCE for
+    //   the whole session. Every row in the group shares that URL,
+    //   so clicking R162/2026 on any of the 3 rows opens the same
+    //   bulk سند the user knows from the receipts page.
+    // cancellation / credit_note / disbursement: each is its own
+    //   document — call the matching single-row generator.
     const functionsBase = `${supabaseUrl}/functions/v1`;
     const fnHeaders: Record<string, string> = {
       Authorization: authHeader,
@@ -428,11 +472,40 @@ serve(async (req: Request) => {
       }
     };
 
-    const voucherUrlPromises = ledger.map(async (r: any) => {
+    // Session key for a payment row — same fallback chain the bulk
+    // receipt code uses, so we pin to identical groupings.
+    const sessionKeyForPayment = (paymentId: string): string => {
+      const meta = paymentMeta.get(paymentId);
+      return meta?.payment_session_id || meta?.batch_id || paymentId;
+    };
+
+    // Group payment rows by session and gather payment_ids.
+    const sessionToPaymentIds = new Map<string, string[]>();
+    for (const r of ledger as any[]) {
+      if (r.receipt_type !== 'payment' || !r.payment_id) continue;
+      const key = sessionKeyForPayment(r.payment_id);
+      if (!sessionToPaymentIds.has(key)) sessionToPaymentIds.set(key, []);
+      const arr = sessionToPaymentIds.get(key)!;
+      if (!arr.includes(r.payment_id)) arr.push(r.payment_id);
+    }
+
+    // One bulk-receipt fetch per session, in parallel.
+    const bulkUrlBySession = new Map<string, string>();
+    const bulkPromises = Array.from(sessionToPaymentIds.entries()).map(async ([key, ids]) => {
+      const url = await fetchVoucherUrl('generate-bulk-payment-receipt', { payment_ids: ids });
+      return { key, url };
+    });
+    const bulkResults = await Promise.allSettled(bulkPromises);
+    for (const r of bulkResults) {
+      if (r.status === 'fulfilled' && r.value.url) {
+        bulkUrlBySession.set(r.value.key, r.value.url);
+      }
+    }
+
+    // Non-payment rows still resolve to their own single-row docs.
+    const otherUrlPromises = (ledger as any[]).map(async (r) => {
       let url: string | null = null;
-      if (r.receipt_type === 'payment' && r.payment_id) {
-        url = await fetchVoucherUrl('generate-payment-receipt', { payment_id: r.payment_id });
-      } else if (r.receipt_type === 'cancellation') {
+      if (r.receipt_type === 'cancellation') {
         url = await fetchVoucherUrl('generate-cancellation-voucher', { voucher_receipt_id: r.id });
       } else if (r.receipt_type === 'credit_note') {
         url = await fetchVoucherUrl('generate-credit-note-voucher', { voucher_receipt_id: r.id });
@@ -441,33 +514,19 @@ serve(async (req: Request) => {
       }
       return { id: r.id as string, url };
     });
-    const voucherUrlResults = await Promise.allSettled(voucherUrlPromises);
+    const otherResults = await Promise.allSettled(otherUrlPromises);
+
     const voucherUrlByReceipt = new Map<string, string>();
-    for (const result of voucherUrlResults) {
-      if (result.status === 'fulfilled' && result.value.url) {
-        voucherUrlByReceipt.set(result.value.id, result.value.url);
+    // Stamp every payment row with its session's bulk URL.
+    for (const r of ledger as any[]) {
+      if (r.receipt_type === 'payment' && r.payment_id) {
+        const url = bulkUrlBySession.get(sessionKeyForPayment(r.payment_id));
+        if (url) voucherUrlByReceipt.set(r.id, url);
       }
     }
-
-    // Lookup table: bank/branch on the underlying cheque row for any
-    // cheque-method receipt in the ledger. The receipts row itself
-    // only carries the cheque_number, so we fetch the matched
-    // policy_payments row to enrich the "البيان" cell with bank info.
-    const chequePaymentIds = ledger
-      .filter((r) => r.payment_method === 'cheque' && r.payment_id)
-      .map((r) => r.payment_id);
-    const chequeMeta = new Map<string, { bank_code: string | null; branch_code: string | null; cheque_date: string | null }>();
-    if (chequePaymentIds.length > 0) {
-      const { data: payMeta } = await userClient
-        .from('policy_payments')
-        .select('id, bank_code, branch_code, cheque_date')
-        .in('id', chequePaymentIds);
-      for (const p of (payMeta || []) as any[]) {
-        chequeMeta.set(p.id, {
-          bank_code: p.bank_code ?? null,
-          branch_code: p.branch_code ?? null,
-          cheque_date: p.cheque_date ?? null,
-        });
+    for (const res of otherResults) {
+      if (res.status === 'fulfilled' && res.value.url) {
+        voucherUrlByReceipt.set(res.value.id, res.value.url);
       }
     }
 
@@ -662,7 +721,14 @@ interface BuildArgs {
   transfersByOriginPolicy: Map<string, any>;
   cancellationReasonByPolicy: Map<string, string>;
   ledger: any[];
-  chequeMeta: Map<string, { bank_code: string | null; branch_code: string | null; cheque_date: string | null }>;
+  chequeMeta: Map<string, {
+    bank_code: string | null;
+    branch_code: string | null;
+    cheque_date: string | null;
+    receipt_number_text: string | null;
+    payment_session_id: string | null;
+    batch_id: string | null;
+  }>;
   voucherUrlByReceipt: Map<string, string>;
   totalYearAmount: number;
   totalYearPaid: number;
@@ -951,7 +1017,19 @@ function buildStatementHtml(args: BuildArgs): string {
   // kashf against their phone screen sees identical cues.
   let running = 0;
   const ledgerRowsHtml = ledger.map((r) => {
-    const num = formatVoucherNumber(r.receipt_type, r.voucher_number, r.receipt_number, r.receipt_date);
+    // For payment rows, prefer the SHARED text receipt_number from
+    // policy_payments (e.g. "R162/2026") so three rows from one bulk
+    // session all show the same سند number, matching what's printed
+    // on the bulk receipt itself. The receipts table's per-row SERIAL
+    // (R786, R787…) is internal bookkeeping and confuses the
+    // customer. Cancellation rows can't reuse this — each cancellation
+    // gets its own R-number — so they fall back to the standard
+    // formatter.
+    const sharedReceiptText = (r.receipt_type === 'payment' && r.payment_id)
+      ? chequeMeta.get(r.payment_id)?.receipt_number_text ?? null
+      : null;
+    const num = sharedReceiptText
+      || formatVoucherNumber(r.receipt_type, r.voucher_number, r.receipt_number, r.receipt_date);
     let typeLabel = RECEIPT_TYPE_LABELS[r.receipt_type] || r.receipt_type;
     if (r.receipt_type === 'credit_note' && Number(r.amount) < 0) {
       typeLabel = 'إشعار مدين';
