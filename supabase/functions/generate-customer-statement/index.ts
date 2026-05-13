@@ -1496,10 +1496,31 @@ function buildStatementHtml(args: BuildArgs): string {
     </div>
   </div>
 
-  <div class="actions no-print">
+  <div class="actions no-print" id="floating-actions">
     <button onclick="window.print()">🖨️ طباعة</button>
-    <button onclick="window.close()">✕ إغلاق</button>
+    <button onclick="tryCloseWindow()">✕ إغلاق</button>
   </div>
+  <script>
+    // When the kashf is loaded inside the modal iframe, the host
+    // already provides its own print/close/SMS/WhatsApp bar — the
+    // floating duplicate at the bottom just gets in the way (and
+    // its window.close() is blocked by the browser for iframes).
+    // Drop it entirely in that context.
+    if (window.self !== window.top) {
+      var bar = document.getElementById('floating-actions');
+      if (bar) bar.remove();
+    }
+    // Standalone tab: window.close() works only if this tab was
+    // script-opened. As a fallback we hide the bar so the user
+    // gets visual feedback instead of nothing.
+    function tryCloseWindow() {
+      try { window.close(); } catch (_) {}
+      setTimeout(function () {
+        var bar = document.getElementById('floating-actions');
+        if (bar) bar.style.display = 'none';
+      }, 100);
+    }
+  </script>
 </body>
 </html>`;
 }
