@@ -806,27 +806,55 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       }
 
       const allPolicyIds = policiesData.map(p => p.id);
-      // Build a per-policy lookup so we can detect إلزامي pass-through
-      // payments (customer paid the insurance company directly via
-      // external Visa — that money never touches the office's books
-      // and must not inflate the "إجمالي المدفوع" tile).
-      const policyById = new Map(policiesData.map(p => [p.id, p as any]));
+
+      // We also need every NON-DELETED policy (including cancelled
+      // and transferred ones) so the "gross paid" tile shows what
+      // the customer actually handed over — cancelling a transaction
+      // doesn't refund the cash the customer already paid for it.
+      // The kashf does the same; without this the page tile and the
+      // kashf disagree by exactly the cancelled-side payments.
+      const { data: everyPolicyRow } = await supabase
+        .from('policies')
+        .select('id, policy_type_parent, office_commission')
+        .eq('client_id', client.id)
+        .is('deleted_at', null);
+      const everyPolicyById = new Map<string, any>(
+        (everyPolicyRow || []).map(p => [p.id, p]),
+      );
       const isElzamiPassthrough = (payment: { payment_type?: string | null; policy_id: string }) => {
         if (payment.payment_type !== 'visa_external') return false;
-        const pol = policyById.get(payment.policy_id);
+        const pol = everyPolicyById.get(payment.policy_id);
         if (!pol) return false;
         return pol.policy_type_parent === 'ELZAMI' && Number(pol.office_commission || 0) <= 0;
       };
+
+      // paymentsMap is keyed by active policy id and feeds the
+      // outstanding-debt math below (paidTowardClient). It only
+      // accepts payments tied to ACTIVE policies — payments on
+      // cancelled/transferred policies don't reduce the active
+      // obligation.
       let paymentsMap: Record<string, number> = {};
-      if (allPolicyIds.length > 0) {
+      // grossPaid is the customer's TOTAL cash collected, across
+      // every non-deleted policy (active + cancelled + transferred)
+      // minus إلزامي pass-through. This is what we display as
+      // "إجمالي المدفوع" so the customer reads what he actually paid.
+      let grossPaid = 0;
+      const everyPolicyId = (everyPolicyRow || []).map(p => p.id);
+      if (everyPolicyId.length > 0) {
         const { data: paymentsData } = await supabase
           .from('policy_payments')
           .select('policy_id, amount, refused, payment_type')
-          .in('policy_id', allPolicyIds);
+          .in('policy_id', everyPolicyId);
         (paymentsData || []).forEach(p => {
           if (p.refused) return;
           if (isElzamiPassthrough(p as any)) return;
-          paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + (p.amount || 0);
+          grossPaid += Number(p.amount || 0);
+          // Only contribute to the active-only map when the policy
+          // is currently in the active set — otherwise the cancelled
+          // payment would leak into the outstanding-debt math.
+          if (allPolicyIds.includes(p.policy_id)) {
+            paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + (p.amount || 0);
+          }
         });
       }
 
@@ -899,7 +927,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       });
 
       setPaymentSummary({
-        total_paid: clientPaid,
+        // Display the gross cash collected from the customer (matches
+        // the kashf). total_remaining still uses the active-only
+        // clientPaid so the outstanding-debt math doesn't get fooled
+        // by payments that landed on a now-cancelled transaction.
+        total_paid: grossPaid,
         total_remaining: Math.max(0, clientOwed - clientPaid),
         total_profit: totalProfit,
       });
