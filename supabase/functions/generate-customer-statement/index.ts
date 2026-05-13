@@ -610,10 +610,18 @@ serve(async (req: Request) => {
     // إلزامي base price is still excluded (paid directly to the
     // insurance company); only its office_commission contributes.
     const totalYearAmount = policies.reduce((s, p) => {
+      if (p.transferred_from_policy_id) return s; // destination of a transfer — folded into source's تحويل row
       const commission = Number(p.office_commission || 0);
       if (p.policy_type_parent === 'ELZAMI') return s + commission;
       return s + Number(p.insurance_price || 0) + commission;
-    }, 0);
+    }, 0)
+      // Add transfer adjustments that fall on the customer — the
+      // تكلفة التحويل the agent set when moving a policy.
+      + Array.from(transfersByOriginPolicy.values()).reduce((s, t: any) => {
+        const amt = Number(t?.adjustment_amount || 0);
+        if (amt <= 0.01) return s;
+        return t.adjustment_type === 'customer_pays' ? s + amt : s;
+      }, 0);
 
     // إجمالي المدفوع — gross cash collected from the customer
     // (excluding refused rows and إلزامي pass-through). Since the
@@ -632,7 +640,13 @@ serve(async (req: Request) => {
     const yearDisbursementAmount = ledger
       .filter((r) => r.receipt_type === 'disbursement')
       .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
-    const yearCustomerCredit = yearCreditNoteAmount + yearDisbursementAmount;
+    const yearTransferOfficeOwes = Array.from(transfersByOriginPolicy.values())
+      .reduce((s, t: any) => {
+        const amt = Number(t?.adjustment_amount || 0);
+        if (amt <= 0.01) return s;
+        return t.adjustment_type === 'customer_pays' ? s : s + amt;
+      }, 0);
+    const yearCustomerCredit = yearCreditNoteAmount + yearDisbursementAmount + yearTransferOfficeOwes;
 
     // Year balance — signed so the kashf can flip direction:
     //   positive → customer still owes the office
@@ -979,6 +993,15 @@ function buildStatementHtml(args: BuildArgs): string {
       pkg.find((p) => p.policy_type_parent === 'ELZAMI') ||
       pkg[0];
 
+    // A package whose every policy was created by a transfer is the
+    // DESTINATION side — the same "event" already shows on the
+    // source's تحويل row (with "إلى سيارة X" + تكلفة التحويل). Per
+    // the user: rendering both halves makes the kashf read as if the
+    // customer bought a second policy, which is wrong — it's a
+    // continuation of the original. Skip it here.
+    const isDestinationOnly = pkg.every((p) => p.transferred_from_policy_id);
+    if (isDestinationOnly) continue;
+
     // Each policy in the package gets its own line under البيان so
     // the customer sees exactly what he bought. For إلزامي rows we
     // still display the policy and its base price (so a glance at
@@ -1141,12 +1164,30 @@ function buildStatementHtml(args: BuildArgs): string {
           'بدون سبب محدد';
         reasonSubLines.push(`<div class="reason-line reason-cancel"><strong>سبب الإلغاء:</strong> ${escapeHtml(reason)}</div>`);
       }
+      let transferAdjAmount = 0;
+      let transferAdjIsCustomerPays = false;
       if (mainPolicy.transferred) {
         const transferOut = transfersByOriginPolicy.get(mainPolicy.id);
+        const fromCar = transferOut?.from_car?.car_number || mainPolicy.car?.car_number;
         const toCar = transferOut?.to_car?.car_number || mainPolicy.transferred_to_car_number;
+        const fromTo = fromCar && toCar
+          ? `من سيارة ${escapeHtml(fromCar)} إلى سيارة ${escapeHtml(toCar)}`
+          : toCar
+            ? `إلى سيارة ${escapeHtml(toCar)}`
+            : '';
         reasonSubLines.push(
-          `<div class="reason-line reason-transfer"><strong>محوّلة${toCar ? ` إلى سيارة ${escapeHtml(toCar)}` : ''}</strong>${transferOut?.note ? ` — ${escapeHtml(transferOut.note)}` : ''}</div>`,
+          `<div class="reason-line reason-transfer"><strong>محوّلة</strong>${fromTo ? ` ${fromTo}` : ''}${transferOut?.note ? ` — ${escapeHtml(transferOut.note)}` : ''}</div>`,
         );
+        const adjAmount = Number(transferOut?.adjustment_amount || 0);
+        if (adjAmount > 0.01) {
+          transferAdjAmount = adjAmount;
+          transferAdjIsCustomerPays = transferOut.adjustment_type === 'customer_pays';
+          const dirLabel = transferAdjIsCustomerPays ? 'على الزبون' : 'للعميل';
+          const noteSuffix = transferOut.adjustment_note ? ` — ${escapeHtml(transferOut.adjustment_note)}` : '';
+          reasonSubLines.push(
+            `<div class="reason-line"><strong>تكلفة التحويل:</strong> ${formatMoney(adjAmount)} ${dirLabel}${noteSuffix}</div>`,
+          );
+        }
       }
       // The original transaction price stays informational on the
       // reversal row so a customer reading the kashf sees the value
@@ -1167,14 +1208,19 @@ function buildStatementHtml(args: BuildArgs): string {
           ? `<div class="reason-line"><strong>المرتجع:</strong> ${formatMoney(refundTotal)}</div>`
           : `<div class="reason-line"><strong>المرتجع:</strong> لا يوجد</div>`,
       );
-      // Cancellation/transfer is a NOTATION ONLY — no balance impact,
-      // no debit/credit. The actual money movement is carried by the
-      // linked إشعار دائن (credit_note) and/or سند صرف (disbursement)
-      // rows that follow. The original transaction row stays as-is in
-      // the customer's debt, and the refund row(s) subtract from it
-      // separately — that's how the office's real-world workflow runs:
-      // cancellation is an agreement, refund is the cash event.
+      // Cancellation: NOTATION ONLY — no balance impact. Refund rows
+      // (إشعار دائن / سند صرف) handle the money side.
+      // Transfer: NOTATION + adjustment. The "تكلفة التحويل" the user
+      // sets when moving a policy is real money owed in one direction
+      // or the other, so it lands on this row directly:
+      //   customer_pays → +adjustment   (debit, customer owes more)
+      //   office_pays   → −adjustment   (credit, office owes refund)
       const reversalLabel = mainPolicy.cancelled ? 'إلغاء معاملة' : 'تحويل معاملة';
+      const reversalDebit = transferAdjIsCustomerPays ? transferAdjAmount : 0;
+      const reversalCredit = !transferAdjIsCustomerPays && transferAdjAmount > 0 ? transferAdjAmount : 0;
+      const reversalDeltaSigned = transferAdjAmount > 0
+        ? (transferAdjIsCustomerPays ? +transferAdjAmount : -transferAdjAmount)
+        : 0;
       events.push({
         date: reversalDate,
         timestamp: Number.isNaN(reversalTimestamp) ? pkgTimestamp : reversalTimestamp,
@@ -1183,11 +1229,11 @@ function buildStatementHtml(args: BuildArgs): string {
         voucherUrl: null,
         description: `<div class="event-headline"><strong>${reversalLabel}</strong> · رقم ${escapeHtml(String(docNumber))}</div>`,
         subLines: reasonSubLines,
-        debit: 0,
-        credit: 0,
-        balanceDelta: 0,
+        debit: reversalDebit,
+        credit: reversalCredit,
+        balanceDelta: reversalDeltaSigned,
         rowClass: 'event-reversal',
-        directionHint: 'ملاحظة',
+        directionHint: reversalDeltaSigned > 0 ? 'مستحق على العميل' : reversalDeltaSigned < 0 ? 'للعميل' : 'ملاحظة',
       });
     }
   }
