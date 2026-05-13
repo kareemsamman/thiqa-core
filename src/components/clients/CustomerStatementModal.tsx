@@ -90,6 +90,9 @@ export function CustomerStatementModal({
     if (year === null && availableYears.length > 0) {
       setYear(availableYears[0]);
     }
+    // We intentionally exclude `year` so the latest-year default
+    // only fires on initial open, not on every year selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, availableYears]);
 
   // Re-fetch whenever the year changes.
@@ -107,7 +110,7 @@ export function CustomerStatementModal({
         body: { client_id: clientId, year: selectedYear },
       });
       if (response.error) throw response.error;
-      const url = (response.data as any)?.statement_url;
+      const url = (response.data as { statement_url?: string } | null)?.statement_url;
       if (!url) throw new Error('Failed to generate statement URL');
       setStatementUrl(url);
     } catch (error) {
@@ -150,7 +153,7 @@ export function CustomerStatementModal({
       });
       if (smsResponse.error) throw smsResponse.error;
 
-      await (supabase.from('sms_logs') as any).insert([
+      await supabase.from('sms_logs').insert([
         {
           phone_number: clientPhone,
           message,

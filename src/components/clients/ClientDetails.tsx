@@ -97,7 +97,7 @@ import { PackagePolicyEditModal } from '@/components/policies/PackagePolicyEditM
 import { ClientDrawer } from '@/components/clients/ClientDrawer';
 import { ClientSignatureSection } from '@/components/clients/ClientSignatureSection';
 import { PolicyYearTimeline } from '@/components/clients/PolicyYearTimeline';
-import { ClientReportModal } from '@/components/clients/ClientReportModal';
+import { CustomerStatementModal } from '@/components/clients/CustomerStatementModal';
 import { CarFilterChips } from '@/components/clients/CarFilterChips';
 import { ExpiryBadge } from '@/components/shared/ExpiryBadge';
 import { ClickablePhone } from '@/components/shared/ClickablePhone';
@@ -2598,7 +2598,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   onClick={() => setReportModalOpen(true)}
                 >
                   <FileText className="h-4 w-4" />
-                  <span>تقرير</span>
+                  <span>كشف حساب</span>
                 </Button>
                 <Button
                   variant="gradient"
@@ -3985,17 +3985,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         }}
       />
 
-      {/* Client Report Modal */}
-      <ClientReportModal
+      {/* Customer Statement Modal — per-year كشف حساب */}
+      <CustomerStatementModal
         open={reportModalOpen}
         onOpenChange={setReportModalOpen}
-        client={client}
-        cars={cars}
-        policies={policies}
-        paymentSummary={paymentSummary}
-        walletBalance={walletBalance}
-        broker={broker}
-        branchName={client.branch_id ? getBranchName(client.branch_id) : null}
+        clientId={client.id}
+        clientName={client.full_name}
+        clientPhone={client.phone_number}
+        policies={policies.map((p) => ({ start_date: p.start_date }))}
       />
 
       {/* Transfer Policy Modal - for package/policy transfer from timeline */}
