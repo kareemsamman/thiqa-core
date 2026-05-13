@@ -1046,28 +1046,53 @@ function buildStatementHtml(args: BuildArgs): string {
       directionHint: 'مستحق على العميل',
     });
 
-    // 2. Reversal event for cancelled / transferred packages
+    // 2. Reversal event for the UNPAID portion of a cancelled or
+    // transferred package.
+    //
+    // Per the user's rule: cancelling a transaction does NOT mean
+    // returning the full amount. The customer USED part of the
+    // insurance up to the cancellation date — that "used" portion
+    // is legitimately owed to the office and stays. Only the
+    // unpaid-and-unused part is forgiven here; the paid-but-unused
+    // part is represented by a separate إشعار دائن (credit_note) row
+    // from the receipts ledger.
+    //
+    // So:
+    //   unpaid_portion = max(0, transaction_total − amount_paid_for_it)
+    // We reverse THAT as دائن. If the customer paid in full, no
+    // reversal is emitted (the credit_note alone handles the refund).
+    // If they paid nothing, the full transaction is reversed (correct
+    // — nothing owed since nothing was used or collected).
     if (isInactive) {
-      const reversalDate =
-        (mainPolicy.cancelled && mainPolicy.cancellation_date) ||
-        mainPolicy.start_date;
-      const reversalTimestamp = new Date(reversalDate).getTime();
-      const reversalLabel = mainPolicy.cancelled ? 'إلغاء معاملة' : 'تحويل معاملة';
-      events.push({
-        date: reversalDate,
-        timestamp: Number.isNaN(reversalTimestamp) ? pkgTimestamp : reversalTimestamp,
-        sortKey: 1,
-        voucherNumber: String(docNumber),
-        voucherUrl: null,
-        description: `<div class="event-headline"><strong>${reversalLabel}</strong> · رقم ${escapeHtml(String(docNumber))}</div>`,
-        subLines: [
-          `<div class="reason-line">إلغاء الالتزام الأصلي البالغ ${formatMoney(totalDebit)}</div>`,
-        ],
-        debit: 0,
-        credit: totalDebit,
-        rowClass: 'event-reversal',
-        directionHint: 'يلغي المعاملة',
-      });
+      const paidForPackage = pkg.reduce(
+        (s, p) => s + (paidByPolicy.get(p.id) || 0),
+        0,
+      );
+      const unpaidPortion = Math.max(0, totalDebit - paidForPackage);
+      if (unpaidPortion > 0.01) {
+        const reversalDate =
+          (mainPolicy.cancelled && mainPolicy.cancellation_date) ||
+          mainPolicy.start_date;
+        const reversalTimestamp = new Date(reversalDate).getTime();
+        const reversalLabel = mainPolicy.cancelled
+          ? 'إلغاء الجزء غير المدفوع'
+          : 'تحويل الجزء غير المدفوع';
+        events.push({
+          date: reversalDate,
+          timestamp: Number.isNaN(reversalTimestamp) ? pkgTimestamp : reversalTimestamp,
+          sortKey: 1,
+          voucherNumber: String(docNumber),
+          voucherUrl: null,
+          description: `<div class="event-headline"><strong>${reversalLabel}</strong> · رقم ${escapeHtml(String(docNumber))}</div>`,
+          subLines: [
+            `<div class="reason-line">يُلغى الجزء غير المدفوع من المعاملة (${formatMoney(unpaidPortion)} من أصل ${formatMoney(totalDebit)})</div>`,
+          ],
+          debit: 0,
+          credit: unpaidPortion,
+          rowClass: 'event-reversal',
+          directionHint: 'يلغي الجزء غير المستلم',
+        });
+      }
     }
   }
 
