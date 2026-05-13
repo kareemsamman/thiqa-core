@@ -1067,7 +1067,27 @@ function buildStatementHtml(args: BuildArgs): string {
       const reversalDate =
         (mainPolicy.cancelled && mainPolicy.cancellation_date) ||
         mainPolicy.start_date;
-      const reversalTimestamp = new Date(reversalDate).getTime();
+
+      // policies.cancellation_date is a DATE column (no time), so
+      // parsing it gives midnight 00:00:00 — which sorts BEFORE every
+      // payment of the same day. To keep the cancellation row in its
+      // natural chronological place (right alongside the إشعار دائن /
+      // سند صرف it produced), pair it with the linked credit_note or
+      // disbursement and use that row's created_at minus a tick.
+      // Fall back to end-of-day for cancellations that haven't (yet)
+      // produced a paired receipt.
+      const linkedNote = ledger.find((r: any) => {
+        if (r.receipt_type !== 'credit_note' && r.receipt_type !== 'disbursement') return false;
+        return pkg.some((p) => p.id === r.policy_id);
+      });
+      const reversalTimestamp = linkedNote?.created_at
+        ? new Date(linkedNote.created_at).getTime() - 1
+        : (() => {
+            const d = new Date(reversalDate);
+            if (Number.isNaN(d.getTime())) return pkgTimestamp;
+            d.setHours(23, 59, 59, 999);
+            return d.getTime();
+          })();
 
       const reasonSubLines: string[] = [];
       if (mainPolicy.cancelled) {
