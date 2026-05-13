@@ -610,13 +610,17 @@ serve(async (req: Request) => {
         return s + Number(p.insurance_price || 0) + commission;
       }, 0);
 
-    // Paid in the year — sum non-refused policy_payments for the
-    // year's policies. We deliberately compute from policy_payments
-    // (not from the ledger of receipts) so the number matches the
-    // in-app "إجمالي المدفوع" tile exactly: net of refused rows, and
-    // unaffected by the cancellation-receipt double-entries that
-    // sit in the ledger for audit purposes.
-    const totalYearPaid = Array.from(paidByPolicy.values()).reduce((s, v) => s + v, 0);
+    // Paid AGAINST ACTIVE policies in the year. Payments that landed
+    // on a now-cancelled or transferred policy are deliberately
+    // excluded here — they don't apply to outstanding obligations
+    // (the cancellation reversal + إشعار دائن together cover what
+    // was paid for the cancelled side). Without this filter the
+    // arithmetic breaks: a customer who paid mostly toward a
+    // cancelled transaction would show "تم التسديد بالكامل" even
+    // though he still owes the active ones.
+    const totalYearPaid = policies
+      .filter((p) => !p.cancelled && !p.transferred)
+      .reduce((s, p) => s + (paidByPolicy.get(p.id) || 0), 0);
 
     // Year-scoped customer credit (مرتجع) — net of any disbursements
     // already settled in the same year. credit_note receipts represent
