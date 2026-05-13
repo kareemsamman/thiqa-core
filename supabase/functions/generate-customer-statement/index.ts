@@ -1643,7 +1643,7 @@ function buildStatementHtml(args: BuildArgs): string {
     .ledger-table .event-inactive td          { background: #fafafa; opacity: 0.78; }
     .ledger-table .event-reversal td          { background: #fff7ed; }
     .ledger-table .event-payment td           { background: #f0fdf4; }
-    .ledger-table .event-credit-note td       { background: #ecfdf5; }
+    .ledger-table .event-credit-note td       { background: #fef2f2; }
     .ledger-table .event-disbursement td      { background: #fef2f2; }
     .ledger-table .event-cancel-receipt td    { background: #fef2f2; }
     .ledger-table .event-headline {
