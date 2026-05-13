@@ -562,9 +562,17 @@ export function DebtPaymentModal({
 
         // Client components = non-broker only. Broker siblings only
         // contribute payments into the pool below.
+        //
+        // إلزامي base price is paid to the insurance company directly
+        // via external Visa and never enters the office's books — so
+        // it shouldn't appear as something the cashier collects from
+        // the customer. Only the (rare) office commission on an إلزامي
+        // line stays as a payable debt. Mirrors the kashf rule.
         const policyComponents: PolicyComponent[] = nonBrokerPolicies.map(p => {
           const commission = (p as any).office_commission || 0;
-          const effectivePrice = p.insurance_price + commission;
+          const effectivePrice = p.policy_type_parent === 'ELZAMI'
+            ? commission
+            : p.insurance_price + commission;
           return {
             policyId: p.id,
             policyType: p.policy_type_parent,
