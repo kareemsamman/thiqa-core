@@ -1087,7 +1087,7 @@ function buildStatementHtml(args: BuildArgs): string {
     // notes / disbursements stay as their own events because each
     // represents a distinct accounting transaction.
     if (r.receipt_type !== 'payment') return null;
-    const meta = r.payment_id ? paymentMeta.get(r.payment_id) : null;
+    const meta = r.payment_id ? chequeMeta.get(r.payment_id) : null;
     const sessionKey = meta?.payment_session_id || meta?.batch_id || r.payment_id || r.id;
     const physicalKey =
       r.payment_method === 'cheque'
