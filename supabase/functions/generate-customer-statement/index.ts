@@ -285,9 +285,22 @@ serve(async (req: Request) => {
       : { data: [] as any[] } as any;
     const payments = (paymentsRaw || []) as any[];
 
+    // Lookup: policy_id → policy type + office commission. Used to
+    // exclude إلزامي base-price payments from the kashf totals (they
+    // pass through to the company directly; the office never keeps
+    // that money so it can't appear under "المدفوع").
+    const policyById = new Map<string, any>();
+    for (const p of policies) policyById.set(p.id, p);
+    const isElzamiPolicyPassthrough = (policyId: string): boolean => {
+      const pol = policyById.get(policyId);
+      if (!pol) return false;
+      return pol.policy_type_parent === 'ELZAMI' && Number(pol.office_commission || 0) <= 0;
+    };
+
     const paidByPolicy = new Map<string, number>();
     for (const p of payments) {
       if (p.refused) continue;
+      if (isElzamiPolicyPassthrough(p.policy_id)) continue;
       paidByPolicy.set(p.policy_id, (paidByPolicy.get(p.policy_id) || 0) + Number(p.amount || 0));
     }
 
@@ -417,6 +430,13 @@ serve(async (req: Request) => {
       bank_code: string | null;
       branch_code: string | null;
       cheque_date: string | null;
+      // The linked policy's type + commission. We need both to decide
+      // whether a payment for an ELZAMI policy should land in the
+      // kashf (only when there's office_commission attached — the
+      // base price is paid externally and never enters the office's
+      // books).
+      policy_type_parent: string | null;
+      policy_office_commission: number;
     };
     const allPaymentIds = ledger
       .filter((r: any) => r.payment_id)
@@ -425,9 +445,14 @@ serve(async (req: Request) => {
     if (allPaymentIds.length > 0) {
       const { data: payMeta } = await userClient
         .from('policy_payments')
-        .select('id, receipt_number, payment_session_id, batch_id, bank_code, branch_code, cheque_date')
+        .select(`
+          id, receipt_number, payment_session_id, batch_id,
+          bank_code, branch_code, cheque_date,
+          policy:policies(policy_type_parent, office_commission)
+        `)
         .in('id', allPaymentIds);
       for (const p of (payMeta || []) as any[]) {
+        const linkedPolicy: any = Array.isArray(p.policy) ? p.policy[0] : p.policy;
         paymentMeta.set(p.id, {
           receipt_number_text: p.receipt_number ?? null,
           payment_session_id: p.payment_session_id ?? null,
@@ -435,9 +460,36 @@ serve(async (req: Request) => {
           bank_code: p.bank_code ?? null,
           branch_code: p.branch_code ?? null,
           cheque_date: p.cheque_date ?? null,
+          policy_type_parent: linkedPolicy?.policy_type_parent ?? null,
+          policy_office_commission: Number(linkedPolicy?.office_commission ?? 0),
         });
       }
     }
+
+    // Identify ledger receipts whose underlying payment_id ties to an
+    // ELZAMI policy with zero office commission. Those payments are
+    // pure pass-through (customer paid the company directly via Visa,
+    // even if the office recorded a receipt for tracking) and have
+    // no place in the office's kashf. We strip them BEFORE building
+    // events so both مدين and دائن sides stay consistent.
+    const isElzamiPassthrough = (paymentId: string | null | undefined): boolean => {
+      if (!paymentId) return false;
+      const meta = paymentMeta.get(paymentId);
+      if (!meta) return false;
+      return meta.policy_type_parent === 'ELZAMI' && meta.policy_office_commission <= 0;
+    };
+    const filteredLedger = ledger.filter((r: any) => {
+      if (r.receipt_type === 'payment' || r.receipt_type === 'cancellation') {
+        return !isElzamiPassthrough(r.payment_id);
+      }
+      return true;
+    });
+    // Rebind so the rest of the function works against the filtered
+    // view. The outer year-totals computation below still uses the
+    // unfiltered `ledger` because it gates on receipt_type, not
+    // on payment linkage — refused-cheque cancellations and credit
+    // notes against إلزامي are rare enough that we let them through.
+    const ledgerForEvents = filteredLedger;
     // Back-compat alias — the renderer still calls this `chequeMeta`
     // for the cheque bank/branch/maturity sub-line. Same map, narrower
     // shape, no behavior change there.
@@ -481,7 +533,7 @@ serve(async (req: Request) => {
 
     // Group payment rows by session and gather payment_ids.
     const sessionToPaymentIds = new Map<string, string[]>();
-    for (const r of ledger as any[]) {
+    for (const r of ledgerForEvents as any[]) {
       if (r.receipt_type !== 'payment' || !r.payment_id) continue;
       const key = sessionKeyForPayment(r.payment_id);
       if (!sessionToPaymentIds.has(key)) sessionToPaymentIds.set(key, []);
@@ -503,7 +555,7 @@ serve(async (req: Request) => {
     }
 
     // Non-payment rows still resolve to their own single-row docs.
-    const otherUrlPromises = (ledger as any[]).map(async (r) => {
+    const otherUrlPromises = (ledgerForEvents as any[]).map(async (r) => {
       let url: string | null = null;
       if (r.receipt_type === 'cancellation') {
         url = await fetchVoucherUrl('generate-cancellation-voucher', { voucher_receipt_id: r.id });
@@ -518,7 +570,7 @@ serve(async (req: Request) => {
 
     const voucherUrlByReceipt = new Map<string, string>();
     // Stamp every payment row with its session's bulk URL.
-    for (const r of ledger as any[]) {
+    for (const r of ledgerForEvents as any[]) {
       if (r.receipt_type === 'payment' && r.payment_id) {
         const url = bulkUrlBySession.get(sessionKeyForPayment(r.payment_id));
         if (url) voucherUrlByReceipt.set(r.id, url);
@@ -537,9 +589,17 @@ serve(async (req: Request) => {
     // cancelled / transferred ones are still rendered above but
     // excluded from the totals so the customer reads "تم تسديد X
     // من Y" against the active obligations only.
+    // Per the user's rule: إلزامي base price is excluded from the
+    // kashf entirely (paid directly to the company via external Visa).
+    // Only the office_commission on an إلزامي policy enters totals.
+    // Non-إلزامي policies contribute their full (price + commission).
     const totalYearAmount = policies
       .filter((p) => !p.cancelled && !p.transferred)
-      .reduce((s, p) => s + Number(p.insurance_price || 0) + Number(p.office_commission || 0), 0);
+      .reduce((s, p) => {
+        const commission = Number(p.office_commission || 0);
+        if (p.policy_type_parent === 'ELZAMI') return s + commission;
+        return s + Number(p.insurance_price || 0) + commission;
+      }, 0);
 
     // Paid in the year — sum non-refused policy_payments for the
     // year's policies. We deliberately compute from policy_payments
@@ -630,7 +690,7 @@ serve(async (req: Request) => {
       transfersByDestPolicy,
       transfersByOriginPolicy,
       cancellationReasonByPolicy,
-      ledger,
+      ledger: ledgerForEvents,
       chequeMeta,
       voucherUrlByReceipt,
       totalYearAmount,
@@ -857,14 +917,13 @@ function buildStatementHtml(args: BuildArgs): string {
       pkg.find((p) => p.policy_type_parent === 'ELZAMI') ||
       pkg[0];
 
-    // Split the package total into "office portion" vs "إلزامي base"
-    // so the customer sees the breakdown the user asked for:
-    //   "ثالث 3000 + إلزامي 1500"
-    // Both contribute to مدين because the in-app إجمالي tile sums
-    // them too; the إلزامي base is annotated as "تدفع للشركة" so the
-    // customer understands where his Visa charge went.
+    // إلزامي is completely OUT of the office's books per the user's
+    // rule: the customer pays the إلزامي base directly via external
+    // Visa to the company, so the office never bills or collects it.
+    // Only the office_commission on an إلزامي policy (when the agent
+    // adds one — rare) appears in the kashf. Pure-إلزامي policies
+    // with zero commission don't appear at all.
     let officePart = 0;
-    let elzamiBase = 0;
     const lineItems: string[] = [];
     for (const p of pkg) {
       const insurancePrice = Number(p.insurance_price || 0);
@@ -873,13 +932,12 @@ function buildStatementHtml(args: BuildArgs): string {
       const companyName = p.company?.name_ar || p.company?.name || '';
       const companyTag = companyName ? ` · ${escapeHtml(companyName)}` : '';
       if (p.policy_type_parent === 'ELZAMI') {
-        elzamiBase += insurancePrice;
-        officePart += commission; // commission stays in the office's books
-        const commissionNote = commission > 0
-          ? ` <span class="commission-note">(+ ${formatMoney(commission)} عمولة مكتب)</span>`
-          : '';
+        // إلزامي base price never enters the kashf. Skip the line
+        // entirely when there's no office commission attached.
+        if (commission <= 0) continue;
+        officePart += commission;
         lineItems.push(
-          `<div class="line-item"><span class="line-amount">${formatMoney(insurancePrice)}</span> · <strong>${escapeHtml(typeLabel)}</strong>${companyTag}<span class="elzami-tag">تدفع للشركة مباشرة</span>${commissionNote}</div>`,
+          `<div class="line-item"><span class="line-amount">${formatMoney(commission)}</span> · <strong>عمولة مكتب على ${escapeHtml(typeLabel)}</strong>${companyTag}</div>`,
         );
       } else {
         officePart += insurancePrice + commission;
@@ -892,7 +950,15 @@ function buildStatementHtml(args: BuildArgs): string {
       }
     }
 
-    const totalDebit = officePart + elzamiBase;
+    // If after stripping إلزامي base prices nothing is left on the
+    // office's books for this package (e.g. a customer who bought
+    // only إلزامي with no commission), skip emitting the row entirely
+    // — there's nothing for the kashf to track.
+    if (officePart === 0 && lineItems.length === 0) {
+      continue;
+    }
+
+    const totalDebit = officePart;
     const carNumber = mainPolicy.car?.car_number;
     const period = `${formatDate(mainPolicy.start_date)} ← ${formatDate(mainPolicy.end_date)}`;
 
@@ -938,11 +1004,6 @@ function buildStatementHtml(args: BuildArgs): string {
     const description = `<div class="event-headline">${headlineParts.join(' · ')}</div>`;
 
     const subLines: string[] = [...lineItems];
-    if (elzamiBase > 0 && officePart > 0) {
-      subLines.push(
-        `<div class="elzami-summary">إجمالي إلزامي خارجي: ${formatMoney(elzamiBase)} · إجمالي على المكتب: ${formatMoney(officePart)}</div>`,
-      );
-    }
     for (const r of reasonLines) subLines.push(`<div class="reason-line">${r}</div>`);
 
     events.push({
