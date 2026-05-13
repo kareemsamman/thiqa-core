@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -63,16 +63,24 @@ export function CustomerStatementModal({
 
   // Years derived from policy start_dates — sorted desc so the
   // freshest year is the natural default. Invalid/missing dates are
-  // skipped so a corrupt row can't push 1970 into the list.
-  const availableYears = useMemo(() => {
+  // skipped so a corrupt row can't push 1970 into the list. The
+  // memo keys on a stable comma-joined string so a parent re-render
+  // that hands us a new policies array with identical content
+  // doesn't cascade-clear the iframe (which is what made the kashf
+  // disappear every time the tab regained focus).
+  const availableYearsKey = useMemo(() => {
     const set = new Set<number>();
     for (const p of policies) {
       if (!p.start_date) continue;
       const y = new Date(p.start_date).getFullYear();
       if (!Number.isNaN(y) && y > 1990) set.add(y);
     }
-    return Array.from(set).sort((a, b) => b - a);
+    return Array.from(set).sort((a, b) => b - a).join(',');
   }, [policies]);
+  const availableYears = useMemo(
+    () => (availableYearsKey ? availableYearsKey.split(',').map(Number) : []),
+    [availableYearsKey],
+  );
 
   const [year, setYear] = useState<number | null>(null);
   const [statementUrl, setStatementUrl] = useState<string | null>(null);
@@ -80,20 +88,32 @@ export function CustomerStatementModal({
   const [sendingSms, setSendingSms] = useState(false);
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
 
-  // Default the picker to the latest available year on first open,
-  // and clear any stale URL when the modal reopens for a different
-  // client (otherwise the iframe would briefly show the previous
-  // customer's statement before the new fetch lands).
+  // Only reset the iframe URL on a TRUE open transition or a client
+  // switch — not on every render where the parent recomputes its
+  // policies array. The previous version cleared statementUrl on the
+  // availableYears effect, which fired during the re-render that
+  // happens when the browser tab regains focus.
+  const wasOpenRef = useRef(false);
+  const lastClientIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!open) return;
-    setStatementUrl(null);
-    if (year === null && availableYears.length > 0) {
-      setYear(availableYears[0]);
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
     }
-    // We intentionally exclude `year` so the latest-year default
-    // only fires on initial open, not on every year selection.
+    const reopened = !wasOpenRef.current;
+    const clientChanged = lastClientIdRef.current !== clientId;
+    wasOpenRef.current = true;
+    lastClientIdRef.current = clientId;
+    if (reopened || clientChanged) {
+      setStatementUrl(null);
+      if (availableYears.length > 0) {
+        setYear(availableYears[0]);
+      } else {
+        setYear(null);
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, availableYears]);
+  }, [open, clientId, availableYearsKey]);
 
   // Re-fetch whenever the year changes.
   useEffect(() => {

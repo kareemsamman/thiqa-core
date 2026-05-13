@@ -238,7 +238,7 @@ serve(async (req: Request) => {
       .from('clients')
       .select(`
         id, full_name, id_number, phone_number, file_number, branch_id,
-        branch:branches(name)
+        branch:branches(name, name_ar)
       `)
       .eq('id', client_id)
       .maybeSingle();
@@ -397,6 +397,58 @@ serve(async (req: Request) => {
       return Number(a.receipt_number || 0) - Number(b.receipt_number || 0);
     });
 
+    // ── Per-row voucher URLs (each receipt → its standalone HTML) ─
+    // For every ledger row we call the matching voucher generator
+    // (generate-payment-receipt / generate-cancellation-voucher /
+    // generate-credit-note-voucher / generate-disbursement-voucher)
+    // in parallel and embed the returned CDN URL on the voucher
+    // number anchor. accident_fee rows have no dedicated voucher
+    // function yet, so they stay plain-text. The user JWT rides
+    // through so RLS still gates which receipts each function will
+    // serve — the customer-facing kashf can only ever link to
+    // receipts the caller is already entitled to see.
+    const functionsBase = `${supabaseUrl}/functions/v1`;
+    const fnHeaders: Record<string, string> = {
+      Authorization: authHeader,
+      apikey: anonKey,
+      'Content-Type': 'application/json',
+    };
+    const fetchVoucherUrl = async (fn: string, body: Record<string, unknown>): Promise<string | null> => {
+      try {
+        const resp = await fetch(`${functionsBase}/${fn}`, {
+          method: 'POST',
+          headers: fnHeaders,
+          body: JSON.stringify(body),
+        });
+        if (!resp.ok) return null;
+        const data = await resp.json().catch(() => null);
+        return data?.receipt_url || data?.statement_url || null;
+      } catch {
+        return null;
+      }
+    };
+
+    const voucherUrlPromises = ledger.map(async (r: any) => {
+      let url: string | null = null;
+      if (r.receipt_type === 'payment' && r.payment_id) {
+        url = await fetchVoucherUrl('generate-payment-receipt', { payment_id: r.payment_id });
+      } else if (r.receipt_type === 'cancellation') {
+        url = await fetchVoucherUrl('generate-cancellation-voucher', { voucher_receipt_id: r.id });
+      } else if (r.receipt_type === 'credit_note') {
+        url = await fetchVoucherUrl('generate-credit-note-voucher', { voucher_receipt_id: r.id });
+      } else if (r.receipt_type === 'disbursement') {
+        url = await fetchVoucherUrl('generate-disbursement-voucher', { voucher_receipt_id: r.id });
+      }
+      return { id: r.id as string, url };
+    });
+    const voucherUrlResults = await Promise.allSettled(voucherUrlPromises);
+    const voucherUrlByReceipt = new Map<string, string>();
+    for (const result of voucherUrlResults) {
+      if (result.status === 'fulfilled' && result.value.url) {
+        voucherUrlByReceipt.set(result.value.id, result.value.url);
+      }
+    }
+
     // Lookup table: bank/branch on the underlying cheque row for any
     // cheque-method receipt in the ledger. The receipts row itself
     // only carries the cheque_number, so we fetch the matched
@@ -500,6 +552,7 @@ serve(async (req: Request) => {
       cancellationReasonByPolicy,
       ledger,
       chequeMeta,
+      voucherUrlByReceipt,
       totalYearAmount,
       totalYearPaid,
       totalYearRemaining,
@@ -588,6 +641,7 @@ interface BuildArgs {
   cancellationReasonByPolicy: Map<string, string>;
   ledger: any[];
   chequeMeta: Map<string, { bank_code: string | null; branch_code: string | null; cheque_date: string | null }>;
+  voucherUrlByReceipt: Map<string, string>;
   totalYearAmount: number;
   totalYearPaid: number;
   totalYearRemaining: number;
@@ -629,6 +683,7 @@ function buildStatementHtml(args: BuildArgs): string {
     cancellationReasonByPolicy,
     ledger,
     chequeMeta,
+    voucherUrlByReceipt,
     totalYearAmount,
     totalYearPaid,
     totalYearRemaining,
@@ -637,7 +692,9 @@ function buildStatementHtml(args: BuildArgs): string {
   } = args;
 
   // ── Header meta block ────────────────────────────────────────
-  const branchName = client.branch?.name || '—';
+  // Prefer the Arabic branch name so a customer reading the kashf
+  // doesn't see "Al-Tireh Insurance" next to their Arabic data.
+  const branchName = client.branch?.name_ar || client.branch?.name || '—';
   const logoHtml = buildLogoHtml(branding);
   const phonesHtml = (branding.invoicePhones || [])
     .filter(Boolean)
@@ -904,9 +961,17 @@ function buildStatementHtml(args: BuildArgs): string {
       ${detailLines.length ? `<div class="ledger-detail">${detailLines.join('<br>')}</div>` : ''}
     `;
 
+    // Wrap the voucher number in an anchor when we resolved a CDN
+    // URL for this receipt. accident_fee + any failed fetch keeps
+    // the plain-text fallback so the row still renders.
+    const vUrl = voucherUrlByReceipt.get(r.id);
+    const numCell = vUrl
+      ? `<a href="${vUrl}" target="_blank" rel="noopener noreferrer" class="vnum-link">${escapeHtml(num)}</a>`
+      : escapeHtml(num);
+
     return `
       <tr>
-        <td class="vnum">${escapeHtml(num)}</td>
+        <td class="vnum">${numCell}</td>
         <td class="date">${formatDate(r.receipt_date)}</td>
         <td class="ledger-cell">${description}</td>
         <td class="amount debit">${debitCell}</td>
@@ -1140,6 +1205,16 @@ function buildStatementHtml(args: BuildArgs): string {
     }
     .ledger-table td.amount { white-space: nowrap; }
     .ledger-table td.balance { font-weight: 800; }
+    .ledger-table .vnum-link {
+      color: #1d4ed8; text-decoration: none;
+      border-bottom: 1px dashed #1d4ed8;
+    }
+    .ledger-table .vnum-link:hover { color: #1e40af; border-bottom-style: solid; }
+    @media print {
+      .ledger-table .vnum-link {
+        color: #1a1a1a; border-bottom: none;
+      }
+    }
     .ledger-table .ledger-type { font-size: 12px; font-weight: 700; }
     .ledger-table .ledger-detail {
       font-size: 10.5px; color: #555; margin-top: 3px;
