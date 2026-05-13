@@ -610,17 +610,24 @@ serve(async (req: Request) => {
         return s + Number(p.insurance_price || 0) + commission;
       }, 0);
 
-    // Paid AGAINST ACTIVE policies in the year. Payments that landed
-    // on a now-cancelled or transferred policy are deliberately
-    // excluded here — they don't apply to outstanding obligations
-    // (the cancellation reversal + إشعار دائن together cover what
-    // was paid for the cancelled side). Without this filter the
-    // arithmetic breaks: a customer who paid mostly toward a
-    // cancelled transaction would show "تم التسديد بالكامل" even
-    // though he still owes the active ones.
-    const totalYearPaid = policies
+    // Two paid totals.
+    //
+    // totalYearPaidActive — what the customer actually applied to
+    // his outstanding (non-cancelled) obligations. This is the
+    // number we use in the متبقي math, because payments that landed
+    // on a now-cancelled transaction stay with the office as
+    // revenue for the used portion of that transaction — they
+    // can't be re-applied to active policies.
+    //
+    // totalYearPaid — gross cash collected from the customer
+    // (excluding refused rows and إلزامي pass-through). This is what
+    // the user actually paid and wants to see on the kashf. It's
+    // displayed but not summed into the متبقي formula.
+    const totalYearPaidActive = policies
       .filter((p) => !p.cancelled && !p.transferred)
       .reduce((s, p) => s + (paidByPolicy.get(p.id) || 0), 0);
+    const totalYearPaid = Array.from(paidByPolicy.values()).reduce((s, v) => s + v, 0);
+    const totalYearPaidOnCancelled = Math.max(0, totalYearPaid - totalYearPaidActive);
 
     // Year-scoped customer credit (مرتجع) — net of any disbursements
     // already settled in the same year. credit_note receipts represent
@@ -642,7 +649,11 @@ serve(async (req: Request) => {
     //   negative → office still owes the customer (e.g. cancellation
     //     with a credit_note that hasn't been fully disbursed yet)
     //   zero     → settled
-    const yearBalance = totalYearAmount - totalYearPaid - yearCustomerCredit;
+    // Math intentionally uses ACTIVE paid (not gross) so payments
+    // that landed on a now-cancelled transaction don't leak into the
+    // outstanding-obligation tile. The gross مدفوع stays on the
+    // kashf for transparency but rides outside this equation.
+    const yearBalance = totalYearAmount - totalYearPaidActive - yearCustomerCredit;
     const totalYearRemaining = Math.max(0, yearBalance);
     const totalYearOwedToCustomer = Math.max(0, -yearBalance);
 
@@ -710,6 +721,7 @@ serve(async (req: Request) => {
       voucherUrlByReceipt,
       totalYearAmount,
       totalYearPaid,
+      totalYearPaidOnCancelled,
       yearCustomerCredit,
       totalYearRemaining,
       totalYearOwedToCustomer,
@@ -809,6 +821,7 @@ interface BuildArgs {
   voucherUrlByReceipt: Map<string, string>;
   totalYearAmount: number;
   totalYearPaid: number;
+  totalYearPaidOnCancelled: number;
   yearCustomerCredit: number;
   totalYearRemaining: number;
   totalYearOwedToCustomer: number;
@@ -854,6 +867,7 @@ function buildStatementHtml(args: BuildArgs): string {
     voucherUrlByReceipt,
     totalYearAmount,
     totalYearPaid,
+    totalYearPaidOnCancelled,
     yearCustomerCredit,
     totalYearRemaining,
     totalYearOwedToCustomer,
@@ -1353,7 +1367,12 @@ function buildStatementHtml(args: BuildArgs): string {
           <span class="totals-value">${formatMoney(totalYearAmount)}</span>
         </div>
         <div class="totals-row">
-          <span class="totals-label">إجمالي المدفوع لسنة ${year}</span>
+          <span class="totals-label">
+            إجمالي المدفوع لسنة ${year}
+            ${totalYearPaidOnCancelled > 0.01
+              ? `<span class="totals-hint">— منها ${formatMoney(totalYearPaidOnCancelled)} على معاملات ملغاة (لا تُحسم من المتبقي)</span>`
+              : ''}
+          </span>
           <span class="totals-value paid">+${formatMoney(totalYearPaid)}</span>
         </div>
         ${creditRowHtml}
