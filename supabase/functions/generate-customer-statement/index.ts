@@ -1169,6 +1169,15 @@ function buildStatementHtml(args: BuildArgs): string {
           `<div class="reason-line reason-transfer"><strong>محوّلة${toCar ? ` إلى سيارة ${escapeHtml(toCar)}` : ''}</strong>${transferOut?.note ? ` — ${escapeHtml(transferOut.note)}` : ''}</div>`,
         );
       }
+      // The original transaction price stays informational on the
+      // reversal row so a customer reading the kashf sees the value
+      // of "what was cancelled" without scrolling back to the
+      // معاملة جديدة line above. Balance is still unaffected.
+      if (totalDebit > 0.01) {
+        reasonSubLines.push(
+          `<div class="reason-line"><strong>سعر الإلغاء:</strong> ${formatMoney(totalDebit)}</div>`,
+        );
+      }
       // Cancellation/transfer is a NOTATION ONLY — no balance impact,
       // no debit/credit. The actual money movement is carried by the
       // linked إشعار دائن (credit_note) and/or سند صرف (disbursement)

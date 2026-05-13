@@ -954,8 +954,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // "transfer_adjustment_due" = Customer owes us
       // "refund", "transfer_refund_owed", "manual_refund" = We owe customer
       const weOweCustomer = (data || [])
-        .filter(t => 
-          t.transaction_type === 'refund' || 
+        .filter(t =>
+          t.transaction_type === 'refund' ||
           t.transaction_type === 'transfer_refund_owed' ||
           t.transaction_type === 'manual_refund'
         )
@@ -965,8 +965,23 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         .filter(t => t.transaction_type === 'transfer_adjustment_due')
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
+      // The wallet table only records the PROMISED refund (إشعار دائن
+      // entries). Once the office actually hands cash back via سند صرف,
+      // that obligation is settled — but no row gets deducted from the
+      // wallet today. So net it manually against the disbursement
+      // receipts; otherwise "مرتجع للعميل" shows a balance the office
+      // already paid out.
+      const { data: disbursementRows } = await supabase
+        .from('receipts')
+        .select('amount')
+        .eq('client_id', client.id)
+        .eq('receipt_type', 'disbursement')
+        .is('cancelled_at', null);
+      const totalDisbursed = (disbursementRows || [])
+        .reduce((sum, r) => sum + Math.abs(Number(r.amount || 0)), 0);
+
       setWalletBalance({
-        total_refunds: weOweCustomer - customerOwesUs, // Net amount we owe
+        total_refunds: Math.max(0, weOweCustomer - customerOwesUs - totalDisbursed),
         transaction_count: data?.length || 0,
       });
     } catch (error) {
