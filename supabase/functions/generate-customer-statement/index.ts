@@ -490,7 +490,28 @@ serve(async (req: Request) => {
     // sit in the ledger for audit purposes.
     const totalYearPaid = Array.from(paidByPolicy.values()).reduce((s, v) => s + v, 0);
 
-    const totalYearRemaining = Math.max(0, totalYearAmount - totalYearPaid);
+    // Year-scoped customer credit (مرتجع) — net of any disbursements
+    // already settled in the same year. credit_note receipts represent
+    // money the office owes the customer (the customer's claim).
+    // disbursement receipts are the office paying that claim back out.
+    // If both happened in the year, the net is what's still owed. We
+    // clamp at zero so an over-disbursed wallet (rare) doesn't subtract
+    // from المتبقي below.
+    const yearCreditNoteAmount = ledger
+      .filter((r) => r.receipt_type === 'credit_note')
+      .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
+    const yearDisbursementAmount = ledger
+      .filter((r) => r.receipt_type === 'disbursement')
+      .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
+    const yearCustomerCredit = Math.max(0, yearCreditNoteAmount - yearDisbursementAmount);
+
+    // المتبقي = الإجمالي − المدفوع − المرتجع. The credit reduces
+    // what the customer still owes because the office holds it on
+    // their behalf — same arithmetic the in-app debt tile uses.
+    const totalYearRemaining = Math.max(
+      0,
+      totalYearAmount - totalYearPaid - yearCustomerCredit,
+    );
 
     // ── Overall remaining (across ALL years) ──────────────────
     // Pulled to render the "ملاحظة: العميل عليه إجمالاً ₪X" line at
@@ -555,6 +576,7 @@ serve(async (req: Request) => {
       voucherUrlByReceipt,
       totalYearAmount,
       totalYearPaid,
+      yearCustomerCredit,
       totalYearRemaining,
       overallNet,
       branding,
@@ -644,6 +666,7 @@ interface BuildArgs {
   voucherUrlByReceipt: Map<string, string>;
   totalYearAmount: number;
   totalYearPaid: number;
+  yearCustomerCredit: number;
   totalYearRemaining: number;
   overallNet: number;
   branding: AgentBranding;
@@ -686,6 +709,7 @@ function buildStatementHtml(args: BuildArgs): string {
     voucherUrlByReceipt,
     totalYearAmount,
     totalYearPaid,
+    yearCustomerCredit,
     totalYearRemaining,
     overallNet,
     branding,
@@ -910,10 +934,21 @@ function buildStatementHtml(args: BuildArgs): string {
   }).join('');
 
   // ── Ledger ──────────────────────────────────────────────────
-  // Running balance: positive = customer owes us, negative = we owe
-  // customer. Starts at 0 because the kashf is scoped to ONE year —
-  // mixing in prior years' carry-overs would make the printed
-  // running balance disagree with what the receipts page shows.
+  // Running balance from the office's books — positive = customer
+  // owes us, negative = we owe customer. The kashf is scoped to ONE
+  // year so we start at 0 (no prior-year carryover) to keep the
+  // printed running total consistent with what the in-app receipts
+  // page shows for the same window.
+  //
+  // Direction rules per receipt_type (customer-facing labels):
+  //   • سند قبض / accident_fee  → دفع العميل (دائن) → +amount
+  //   • سند صرف                  → استلم العميل  (مدين) → −amount
+  //   • إشعار دائن               → رصيد للعميل  (مدين) → −amount
+  //   • سند إلغاء                → إلغاء قبض   (مدين) → −amount
+  // Plus sign + green for "what the customer paid us", minus sign +
+  // red for "what we owe or returned to the customer". Same color
+  // language the in-app cards use, so a customer cross-checking the
+  // kashf against their phone screen sees identical cues.
   let running = 0;
   const ledgerRowsHtml = ledger.map((r) => {
     const num = formatVoucherNumber(r.receipt_type, r.voucher_number, r.receipt_number, r.receipt_date);
@@ -924,14 +959,28 @@ function buildStatementHtml(args: BuildArgs): string {
     const methodLabel = PAYMENT_TYPE_LABELS[r.payment_method] || r.payment_method || '';
     const amt = Math.abs(Number(r.amount || 0));
     const isDebit = isDebitForCustomer(r.receipt_type);
-    const debitCell = isDebit ? formatMoney(amt) : '';
-    const creditCell = !isDebit ? formatMoney(amt) : '';
+    const debitCell = isDebit
+      ? `<span class="amt-debit">−${formatMoney(amt)}</span>`
+      : '';
+    const creditCell = !isDebit
+      ? `<span class="amt-credit">+${formatMoney(amt)}</span>`
+      : '';
     running += isDebit ? -amt : amt;
     const balanceCell = running === 0
       ? '0'
       : running > 0
-        ? formatMoney(running)
-        : `(${formatMoney(running)})`;
+        ? `<span class="amt-balance-debt">${formatMoney(running)}</span>`
+        : `<span class="amt-balance-credit">(${formatMoney(Math.abs(running))})</span>`;
+
+    // One-line direction hint surfaced inside البيان so the customer
+    // can read "what does this row mean" without learning مدين / دائن.
+    const directionHint = isDebit
+      ? r.receipt_type === 'cancellation'
+        ? 'إلغاء سند قبض سابق'
+        : r.receipt_type === 'disbursement'
+          ? 'استلمه العميل من المكتب'
+          : 'رصيد للعميل عند المكتب'
+      : 'دفعه العميل للمكتب';
 
     // Detail lines — cheque bank+branch+maturity, refund/transfer
     // adjustments, plus the cancellation reason. Each is added only
@@ -957,7 +1006,10 @@ function buildStatementHtml(args: BuildArgs): string {
     }
 
     const description = `
-      <div class="ledger-type"><strong>${escapeHtml(typeLabel)}</strong>${methodLabel ? ` · ${escapeHtml(methodLabel)}` : ''}</div>
+      <div class="ledger-type">
+        <strong>${escapeHtml(typeLabel)}</strong>${methodLabel ? ` · ${escapeHtml(methodLabel)}` : ''}
+        <span class="ledger-direction ${isDebit ? 'direction-debit' : 'direction-credit'}">${escapeHtml(directionHint)}</span>
+      </div>
       ${detailLines.length ? `<div class="ledger-detail">${detailLines.join('<br>')}</div>` : ''}
     `;
 
@@ -986,6 +1038,22 @@ function buildStatementHtml(args: BuildArgs): string {
     : '';
 
   // ── Totals + overall note ───────────────────────────────────
+  // Layout matches the in-app debt tile so a customer cross-checking
+  // sees identical arithmetic: إجمالي معاملات − المدفوع − المرتجع =
+  // المتبقي. The "مرتجع" line only renders when there's actually a
+  // customer credit for the year — otherwise the row is suppressed
+  // so the totals stay compact for the common case.
+  const showCreditLine = yearCustomerCredit > 0.01;
+  const creditRowHtml = showCreditLine
+    ? `
+        <div class="totals-row totals-credit-row">
+          <span class="totals-label">
+            المرتجع (رصيد للعميل)
+            <span class="totals-hint">— مبلغ أصدره المكتب باسمك من إلغاءات / تحويلات</span>
+          </span>
+          <span class="totals-value credit">−${formatMoney(yearCustomerCredit)}</span>
+        </div>`
+    : '';
   const totalsHtml = `
     <div class="totals">
       <div class="totals-box">
@@ -995,10 +1063,11 @@ function buildStatementHtml(args: BuildArgs): string {
         </div>
         <div class="totals-row">
           <span class="totals-label">إجمالي المدفوع لسنة ${year}</span>
-          <span class="totals-value paid">${formatMoney(totalYearPaid)}</span>
+          <span class="totals-value paid">+${formatMoney(totalYearPaid)}</span>
         </div>
+        ${creditRowHtml}
         <div class="totals-row totals-final">
-          <span class="totals-label">المتبقي لسنة ${year}</span>
+          <span class="totals-label">المتبقي على العميل لسنة ${year}</span>
           <span class="totals-value ${totalYearRemaining === 0 ? 'cleared' : 'owed'}">${totalYearRemaining === 0 ? 'تم التسديد بالكامل' : formatMoney(totalYearRemaining)}</span>
         </div>
       </div>
@@ -1205,6 +1274,34 @@ function buildStatementHtml(args: BuildArgs): string {
     }
     .ledger-table td.amount { white-space: nowrap; }
     .ledger-table td.balance { font-weight: 800; }
+    .ledger-table .amt-credit {
+      color: #15803d; font-weight: 800;
+    }
+    .ledger-table .amt-debit {
+      color: #b91c1c; font-weight: 800;
+    }
+    .ledger-table .amt-balance-debt { color: #b91c1c; }
+    .ledger-table .amt-balance-credit { color: #15803d; }
+    .ledger-table .th-main {
+      display: block; font-size: 11px; font-weight: 800;
+      letter-spacing: 0.4px; color: #1a1a1a;
+    }
+    .ledger-table .th-sub {
+      display: block; font-size: 9.5px; font-weight: 600;
+      color: #6b7280; margin-top: 1px;
+    }
+    .ledger-table .ledger-direction {
+      display: inline-block; margin-right: 6px;
+      font-size: 9.5px; font-weight: 600;
+      padding: 1px 7px; border-radius: 8px;
+      letter-spacing: 0.2px;
+    }
+    .ledger-table .direction-credit {
+      background: #dcfce7; color: #166534; border: 1px solid #86efac;
+    }
+    .ledger-table .direction-debit {
+      background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;
+    }
     .ledger-table .vnum-link {
       color: #1d4ed8; text-decoration: none;
       border-bottom: 1px dashed #1d4ed8;
@@ -1223,6 +1320,24 @@ function buildStatementHtml(args: BuildArgs): string {
     .ledger-table .ledger-empty {
       text-align: center; padding: 24px 12px;
       color: #6b7280; font-style: italic;
+    }
+    .ledger-legend {
+      display: flex; flex-wrap: wrap; gap: 14px;
+      padding: 8px 14px; background: #fafafa;
+      border-bottom: 1px solid #1a1a1a;
+      font-size: 11px; font-weight: 600; color: #1a1a1a;
+    }
+    .ledger-legend .legend-item {
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+    .ledger-legend .legend-dot {
+      width: 9px; height: 9px; border-radius: 50%; display: inline-block;
+    }
+    .ledger-legend .legend-credit { background: #16a34a; }
+    .ledger-legend .legend-debit { background: #dc2626; }
+    .ledger-legend .legend-note {
+      color: #6b7280; font-weight: 500;
+      margin-right: auto;
     }
 
     /* Totals */
@@ -1247,9 +1362,15 @@ function buildStatementHtml(args: BuildArgs): string {
       direction: ltr; font-variant-numeric: tabular-nums;
     }
     .totals-value.paid { color: #166534; }
+    .totals-value.credit { color: #b45309; }
     .totals-row.totals-final .totals-value { font-size: 15px; }
     .totals-value.cleared { color: #86efac; }
     .totals-value.owed { color: #fca5a5; }
+    .totals-row.totals-credit-row { background: #fffbeb; }
+    .totals-hint {
+      display: block; font-size: 10px; font-weight: 500;
+      color: #6b7280; margin-top: 2px;
+    }
 
     /* Overall note */
     .overall-note {
@@ -1338,15 +1459,26 @@ function buildStatementHtml(args: BuildArgs): string {
 
     <div class="ledger">
       <div class="section-title">سجل الدفعات والسندات (${year})</div>
+      <div class="ledger-legend">
+        <span class="legend-item"><span class="legend-dot legend-credit"></span>دفعه العميل للمكتب (+)</span>
+        <span class="legend-item"><span class="legend-dot legend-debit"></span>للعميل أو رصيد لديه (−)</span>
+        <span class="legend-item legend-note">اضغط على رقم السند لعرض الوثيقة الأصلية</span>
+      </div>
       <table class="ledger-table">
         <thead>
           <tr>
             <th style="width:90px">رقم السند</th>
             <th style="width:85px">التاريخ</th>
             <th>البيان</th>
-            <th style="width:90px">مدين</th>
-            <th style="width:90px">دائن</th>
-            <th style="width:100px">الرصيد</th>
+            <th style="width:100px">
+              <span class="th-main">للعميل</span>
+              <span class="th-sub">مدين (−)</span>
+            </th>
+            <th style="width:100px">
+              <span class="th-main">من العميل</span>
+              <span class="th-sub">دائن (+)</span>
+            </th>
+            <th style="width:110px">الرصيد</th>
           </tr>
         </thead>
         <tbody>${ledgerRowsHtml}${emptyLedgerHtml}</tbody>
