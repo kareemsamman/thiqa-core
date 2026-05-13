@@ -198,11 +198,17 @@ const getPolicyStatus = (policy: PolicyRecord): PolicyStatus => {
 };
 
 const getStatusPriority = (status: PolicyStatus): number => {
+  // active / ended / cancelled share the top tier so the actual
+  // ordering inside them falls to isNewest + start_date. Per the
+  // user: cancelling a transaction shouldn't push it to the bottom
+  // of the customer's card — "اضلها الاولى عبال ما نضيف معاملة
+  // جديدة". transferred stays one tier lower so the source of a
+  // transfer doesn't outrank the active destination package.
   switch (status) {
     case 'active': return 1;
-    case 'ended': return 2;
-    case 'transferred': return 3;
-    case 'cancelled': return 4;
+    case 'ended': return 1;
+    case 'cancelled': return 1;
+    case 'transferred': return 2;
   }
 };
 

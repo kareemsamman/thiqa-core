@@ -1116,10 +1116,12 @@ function buildStatementHtml(args: BuildArgs): string {
       // Fall back to end-of-day for cancellations that haven't (yet)
       // produced a paired receipt.
       let linkedNote: any = null;
+      let refundTotal = 0;
       for (const r of ledger as any[]) {
         if (!pkg.some((p) => p.id === r.policy_id)) continue;
         if (r.receipt_type === 'credit_note' || r.receipt_type === 'disbursement') {
-          if (!linkedNote) { linkedNote = r; break; }
+          if (!linkedNote) linkedNote = r;
+          refundTotal += Math.abs(Number(r.amount || 0));
         }
       }
       const reversalTimestamp = linkedNote?.created_at
@@ -1155,6 +1157,16 @@ function buildStatementHtml(args: BuildArgs): string {
           `<div class="reason-line"><strong>سعر الإلغاء:</strong> ${formatMoney(totalDebit)}</div>`,
         );
       }
+      // Refund summary: spell out whether the office returned any
+      // money for this cancellation/transfer (via إشعار دائن or سند
+      // صرف) and how much. When nothing was returned we still show
+      // the line so the customer can confirm "yes, this was zero,
+      // not just missing."
+      reasonSubLines.push(
+        refundTotal > 0.01
+          ? `<div class="reason-line"><strong>المرتجع:</strong> ${formatMoney(refundTotal)}</div>`
+          : `<div class="reason-line"><strong>المرتجع:</strong> لا يوجد</div>`,
+      );
       // Cancellation/transfer is a NOTATION ONLY — no balance impact,
       // no debit/credit. The actual money movement is carried by the
       // linked إشعار دائن (credit_note) and/or سند صرف (disbursement)
