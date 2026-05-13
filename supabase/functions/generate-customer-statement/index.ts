@@ -1071,17 +1071,70 @@ function buildStatementHtml(args: BuildArgs): string {
   }
 
   // 3. Receipt events (from receipts table)
+  //
+  // The تسديد المبلغ flow saves ONE physical instrument (one cheque,
+  // one cash collection, one Visa charge) as N policy_payments rows
+  // — one per policy the money is allocated across. The auto-trigger
+  // then mirrors each policy_payment into a receipts row. Without
+  // grouping, a single ₪1,000 cheque covering two policies (e.g.
+  // ₪750 ثالث + ₪250 خدمات الطريق) would print as TWO separate
+  // ₪750 + ₪250 cheque rows in the kashf, which is exactly what the
+  // user flagged. We collapse rows back into one event per physical
+  // instrument by keying on (session, method, cheque#-or-card-last4).
+  type ReceiptGroupKey = string;
+  const groupKeyFor = (r: any): ReceiptGroupKey | null => {
+    // Only payment-type rows get bucketed — cancellations / credit
+    // notes / disbursements stay as their own events because each
+    // represents a distinct accounting transaction.
+    if (r.receipt_type !== 'payment') return null;
+    const meta = r.payment_id ? paymentMeta.get(r.payment_id) : null;
+    const sessionKey = meta?.payment_session_id || meta?.batch_id || r.payment_id || r.id;
+    const physicalKey =
+      r.payment_method === 'cheque'
+        ? `chq:${r.cheque_number || ''}`
+        : r.payment_method === 'visa' || r.payment_method === 'credit_card' || r.payment_method === 'visa_external'
+          ? `card:${r.card_last_four || ''}`
+          : 'misc';
+    return `${sessionKey}::${r.payment_method}::${physicalKey}`;
+  };
+
+  type ReceiptGroup = { representative: any; rows: any[]; totalAmount: number };
+  const paymentGroups = new Map<ReceiptGroupKey, ReceiptGroup>();
+  const standaloneReceipts: any[] = [];
   for (const r of ledger) {
+    const key = groupKeyFor(r);
+    if (!key) {
+      standaloneReceipts.push(r);
+      continue;
+    }
+    const existing = paymentGroups.get(key);
+    if (existing) {
+      existing.rows.push(r);
+      existing.totalAmount += Math.abs(Number(r.amount || 0));
+      // Earliest created_at wins as the representative — that's the
+      // moment the physical instrument hit the office's books.
+      const cur = existing.representative.created_at
+        ? new Date(existing.representative.created_at).getTime()
+        : Infinity;
+      const cand = r.created_at ? new Date(r.created_at).getTime() : Infinity;
+      if (cand < cur) existing.representative = r;
+    } else {
+      paymentGroups.set(key, {
+        representative: r,
+        rows: [r],
+        totalAmount: Math.abs(Number(r.amount || 0)),
+      });
+    }
+  }
+
+  const emitReceiptEvent = (r: any, displayedAmount: number) => {
     const isDebit = isDebitForCustomer(r.receipt_type);
-    const amt = Math.abs(Number(r.amount || 0));
     let typeLabel = RECEIPT_TYPE_LABELS[r.receipt_type] || r.receipt_type;
     if (r.receipt_type === 'credit_note' && Number(r.amount) < 0) {
       typeLabel = 'إشعار مدين';
     }
     const methodLabel = PAYMENT_TYPE_LABELS[r.payment_method] || r.payment_method || '';
 
-    // Shared R-number for bulk payment sessions (same R162/2026 across
-    // every payment row collected in one bulk سند).
     const sharedReceiptText = (r.receipt_type === 'payment' && r.payment_id)
       ? chequeMeta.get(r.payment_id)?.receipt_number_text ?? null
       : null;
@@ -1089,7 +1142,6 @@ function buildStatementHtml(args: BuildArgs): string {
       sharedReceiptText ||
       formatVoucherNumber(r.receipt_type, r.voucher_number, r.receipt_number, r.receipt_date);
 
-    // Detail sub-lines (cheque info, refund reason, notes)
     const detailLines: string[] = [];
     if (r.payment_method === 'cheque') {
       const meta = r.payment_id ? chequeMeta.get(r.payment_id) : null;
@@ -1102,9 +1154,6 @@ function buildStatementHtml(args: BuildArgs): string {
     } else if (r.payment_method === 'visa' || r.payment_method === 'credit_card' || r.payment_method === 'visa_external') {
       if (r.card_last_four) detailLines.push(`<div class="ledger-detail">بطاقة تنتهي بـ ${escapeHtml(r.card_last_four)}</div>`);
     }
-    // Car number is intentionally NOT surfaced under a سند قبض row:
-    // the parent transaction header already shows the car, and
-    // repeating it here clutters the receipt for no information gain.
     if (r.cancellation_reason) {
       detailLines.push(`<div class="reason-line reason-cancel"><strong>سبب الإلغاء:</strong> ${escapeHtml(r.cancellation_reason)}</div>`);
     }
@@ -1139,11 +1188,25 @@ function buildStatementHtml(args: BuildArgs): string {
       voucherUrl: voucherUrlByReceipt.get(r.id) || null,
       description,
       subLines: detailLines,
-      debit: isDebit ? amt : 0,
-      credit: isDebit ? 0 : amt,
+      debit: isDebit ? displayedAmount : 0,
+      credit: isDebit ? 0 : displayedAmount,
       rowClass,
       directionHint,
     });
+  };
+
+  // Emit one event per physical-instrument group, using the SUM of
+  // its split rows as the amount. Sub-row notes vary rarely (the UI
+  // captures one note per instrument), so the representative's
+  // notes cell carries the full text without losing information.
+  for (const group of paymentGroups.values()) {
+    emitReceiptEvent(group.representative, group.totalAmount);
+  }
+  // Non-payment receipts (cancellation / credit_note / disbursement
+  // / accident_fee) emit per-row because each one represents a
+  // distinct accounting transaction.
+  for (const r of standaloneReceipts) {
+    emitReceiptEvent(r, Math.abs(Number(r.amount || 0)));
   }
 
   // 4. Sort by actual created_at timestamp (fine-grained), then by
