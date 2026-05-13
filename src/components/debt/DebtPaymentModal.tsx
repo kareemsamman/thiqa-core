@@ -181,6 +181,11 @@ export function DebtPaymentModal({
   const [debtItems, setDebtItems] = useState<DebtItem[]>([]);
   const [brokerDebts, setBrokerDebts] = useState<BrokerDebtInfo[]>([]);
   const [creditBalance, setCreditBalance] = useState(0);
+  // Gross cash collected from the customer (across every non-deleted
+  // policy, minus إلزامي visa_external pass-through). The kashf and
+  // the ClientDetails debt tile show the same number — keeping the
+  // modal in sync so all three surfaces agree.
+  const [grossPaidAmount, setGrossPaidAmount] = useState(0);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
   const [tranzilaModalOpen, setTranzilaModalOpen] = useState(false);
   const [activeVisaPaymentIndex, setActiveVisaPaymentIndex] = useState<number | null>(null);
@@ -453,12 +458,35 @@ export function DebtPaymentModal({
 
       const allPolicyIds = (policiesData || []).map(p => p.id);
 
+      // Pull every non-deleted policy of the client (including
+      // cancelled / transferred) so the "المدفوع" tile can show
+      // GROSS cash the customer actually paid, matching the kashf
+      // and the ClientDetails debt card. The active-only set
+      // (allPolicyIds + paymentsMap) still drives the
+      // outstanding-debt math below.
+      const { data: everyPolicyRow } = await supabase
+        .from('policies')
+        .select('id, policy_type_parent, office_commission')
+        .eq('client_id', clientId)
+        .is('deleted_at', null);
+      const everyPolicyById = new Map<string, any>(
+        (everyPolicyRow || []).map(p => [p.id, p]),
+      );
+      const isElzamiPassthrough = (payment: { payment_type?: string | null; policy_id: string }) => {
+        if (payment.payment_type !== 'visa_external') return false;
+        const pol = everyPolicyById.get(payment.policy_id);
+        if (!pol) return false;
+        return pol.policy_type_parent === 'ELZAMI' && Number(pol.office_commission || 0) <= 0;
+      };
+
       let paymentsMap: Record<string, number> = {};
-      if (allPolicyIds.length > 0) {
+      let grossPaid = 0;
+      const everyPolicyId = (everyPolicyRow || []).map(p => p.id);
+      if (everyPolicyId.length > 0) {
         const { data: paymentsData, error: paymentsError } = await supabase
           .from('policy_payments')
-          .select('id, policy_id, amount, refused')
-          .in('policy_id', allPolicyIds);
+          .select('id, policy_id, amount, refused, payment_type')
+          .in('policy_id', everyPolicyId);
 
         if (paymentsError) throw paymentsError;
 
@@ -470,13 +498,21 @@ export function DebtPaymentModal({
         const excluded = new Set<string>(
           isEditMode && editingSession ? editingSession.paymentIds : [],
         );
+        const activeIds = new Set(allPolicyIds);
 
         (paymentsData || []).forEach(p => {
           if (p.refused) return;
           if (excluded.has((p as any).id)) return;
-          paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + p.amount;
+          if (isElzamiPassthrough(p as any)) return;
+          grossPaid += Number(p.amount || 0);
+          if (activeIds.has(p.policy_id)) {
+            paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + p.amount;
+          }
         });
       }
+      // Expose grossPaid to the JSX layer via a ref-like state setter
+      // below — fetchDebtItems is the only place we know it from.
+      setGrossPaidAmount(grossPaid);
 
       // Transfer adjustments — customer_pays fee amounts live on
       // policy_transfers but are already folded into the target
@@ -526,9 +562,17 @@ export function DebtPaymentModal({
 
         // Client components = non-broker only. Broker siblings only
         // contribute payments into the pool below.
+        //
+        // إلزامي base price is paid to the insurance company directly
+        // via external Visa and never enters the office's books — so
+        // it shouldn't appear as something the cashier collects from
+        // the customer. Only the (rare) office commission on an إلزامي
+        // line stays as a payable debt. Mirrors the kashf rule.
         const policyComponents: PolicyComponent[] = nonBrokerPolicies.map(p => {
           const commission = (p as any).office_commission || 0;
-          const effectivePrice = p.insurance_price + commission;
+          const effectivePrice = p.policy_type_parent === 'ELZAMI'
+            ? commission
+            : p.insurance_price + commission;
           return {
             policyId: p.id,
             policyType: p.policy_type_parent,
@@ -1133,7 +1177,7 @@ export function DebtPaymentModal({
                 <div className="bg-green-500/10 rounded-lg p-2 sm:p-3 text-center">
                   <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">المدفوع</p>
                   <p className="text-sm sm:text-lg font-bold text-green-600 tabular-nums leading-tight mt-0.5">
-                    ₪{(totalPaidAmount + paidVisaTotal).toLocaleString('en-US')}
+                    ₪{(grossPaidAmount + paidVisaTotal).toLocaleString('en-US')}
                   </p>
                 </div>
                 <div className="bg-destructive/10 rounded-lg p-2 sm:p-3 text-center">

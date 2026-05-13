@@ -97,7 +97,7 @@ import { PackagePolicyEditModal } from '@/components/policies/PackagePolicyEditM
 import { ClientDrawer } from '@/components/clients/ClientDrawer';
 import { ClientSignatureSection } from '@/components/clients/ClientSignatureSection';
 import { PolicyYearTimeline } from '@/components/clients/PolicyYearTimeline';
-import { ClientReportModal } from '@/components/clients/ClientReportModal';
+import { CustomerStatementModal } from '@/components/clients/CustomerStatementModal';
 import { CarFilterChips } from '@/components/clients/CarFilterChips';
 import { ExpiryBadge } from '@/components/shared/ExpiryBadge';
 import { ClickablePhone } from '@/components/shared/ClickablePhone';
@@ -806,14 +806,53 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       }
 
       const allPolicyIds = policiesData.map(p => p.id);
+
+      // We also need every NON-DELETED policy (including cancelled
+      // and transferred ones) so the "gross paid" tile shows what
+      // the customer actually handed over — cancelling a transaction
+      // doesn't refund the cash the customer already paid for it.
+      // The kashf does the same; without this the page tile and the
+      // kashf disagree by exactly the cancelled-side payments.
+      const { data: everyPolicyRow } = await supabase
+        .from('policies')
+        .select('id, policy_type_parent, office_commission')
+        .eq('client_id', client.id)
+        .is('deleted_at', null);
+      const everyPolicyById = new Map<string, any>(
+        (everyPolicyRow || []).map(p => [p.id, p]),
+      );
+      const isElzamiPassthrough = (payment: { payment_type?: string | null; policy_id: string }) => {
+        if (payment.payment_type !== 'visa_external') return false;
+        const pol = everyPolicyById.get(payment.policy_id);
+        if (!pol) return false;
+        return pol.policy_type_parent === 'ELZAMI' && Number(pol.office_commission || 0) <= 0;
+      };
+
+      // paymentsMap is keyed by active policy id and feeds the
+      // outstanding-debt math below (paidTowardClient). It only
+      // accepts payments tied to ACTIVE policies — payments on
+      // cancelled/transferred policies don't reduce the active
+      // obligation.
       let paymentsMap: Record<string, number> = {};
-      if (allPolicyIds.length > 0) {
+      // grossPaid is the customer's TOTAL cash collected, across
+      // every non-deleted policy (active + cancelled + transferred)
+      // minus إلزامي pass-through. This is what we display as
+      // "إجمالي المدفوع" so the customer reads what he actually paid.
+      let grossPaid = 0;
+      const everyPolicyId = (everyPolicyRow || []).map(p => p.id);
+      if (everyPolicyId.length > 0) {
         const { data: paymentsData } = await supabase
           .from('policy_payments')
-          .select('policy_id, amount, refused')
-          .in('policy_id', allPolicyIds);
+          .select('policy_id, amount, refused, payment_type')
+          .in('policy_id', everyPolicyId);
         (paymentsData || []).forEach(p => {
-          if (!p.refused) {
+          if (p.refused) return;
+          if (isElzamiPassthrough(p as any)) return;
+          grossPaid += Number(p.amount || 0);
+          // Only contribute to the active-only map when the policy
+          // is currently in the active set — otherwise the cancelled
+          // payment would leak into the outstanding-debt math.
+          if (allPolicyIds.includes(p.policy_id)) {
             paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + (p.amount || 0);
           }
         });
@@ -835,12 +874,22 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       let clientPaid = 0;
       const brokerTotals = new Map<string, { brokerId: string; brokerName: string; amount: number }>();
 
+      // إلزامي base price is paid directly to the insurance company
+      // via external Visa and never enters the office's books. The
+      // policy itself records the base price for historical/regulatory
+      // reasons, but the office's claim is only the (rare) commission
+      // on it — and for non-إلزامي the full price + commission.
+      const officeClaimFor = (p: any) => {
+        const commission = Number(p.office_commission || 0);
+        if (p.policy_type_parent === 'ELZAMI') return commission;
+        return Number(p.insurance_price || 0) + commission;
+      };
       groupMap.forEach(groupPolicies => {
         const nonBrokerInGroup = groupPolicies.filter(p => !(p as any).broker_id);
         const brokerInGroup = groupPolicies.filter(p => (p as any).broker_id);
 
         const nonBrokerClaim = nonBrokerInGroup.reduce(
-          (sum, p) => sum + (p.insurance_price || 0) + ((p as any).office_commission || 0),
+          (sum, p) => sum + officeClaimFor(p),
           0,
         );
         const groupPool = groupPolicies.reduce(
@@ -855,7 +904,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
         if (brokerInGroup.length > 0) {
           const brokerOwed = brokerInGroup.reduce(
-            (sum, p) => sum + (p.insurance_price || 0) + ((p as any).office_commission || 0),
+            (sum, p) => sum + officeClaimFor(p),
             0,
           );
           const brokerRemaining = Math.max(0, brokerOwed - paidTowardBroker);
@@ -878,7 +927,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       });
 
       setPaymentSummary({
-        total_paid: clientPaid,
+        // Display the gross cash collected from the customer (matches
+        // the kashf). total_remaining still uses the active-only
+        // clientPaid so the outstanding-debt math doesn't get fooled
+        // by payments that landed on a now-cancelled transaction.
+        total_paid: grossPaid,
         total_remaining: Math.max(0, clientOwed - clientPaid),
         total_profit: totalProfit,
       });
@@ -1494,11 +1547,18 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
     setDeletingPolicy(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      // Force a session refresh first — the cached access_token can be
+      // expired moments before the JS client's auto-refresh fires,
+      // which surfaced as a sporadic "Invalid token" from the edge
+      // function when the user clicked delete after sitting idle on
+      // the page for a while. refreshSession() pulls a fresh JWT
+      // synchronously so the subsequent invoke() always carries a
+      // live token.
+      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+      const token = refreshed?.session?.access_token;
 
-      if (!token) {
-        toast.error('يرجى تسجيل الدخول مرة أخرى');
+      if (refreshError || !token) {
+        toast.error('انتهت الجلسة، يرجى تسجيل الدخول مرة أخرى');
         return;
       }
 
@@ -2598,7 +2658,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                   onClick={() => setReportModalOpen(true)}
                 >
                   <FileText className="h-4 w-4" />
-                  <span>تقرير</span>
+                  <span>كشف حساب</span>
                 </Button>
                 <Button
                   variant="gradient"
@@ -3985,17 +4045,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         }}
       />
 
-      {/* Client Report Modal */}
-      <ClientReportModal
+      {/* Customer Statement Modal — per-year كشف حساب */}
+      <CustomerStatementModal
         open={reportModalOpen}
         onOpenChange={setReportModalOpen}
-        client={client}
-        cars={cars}
-        policies={policies}
-        paymentSummary={paymentSummary}
-        walletBalance={walletBalance}
-        broker={broker}
-        branchName={client.branch_id ? getBranchName(client.branch_id) : null}
+        clientId={client.id}
+        clientName={client.full_name}
+        clientPhone={client.phone_number}
+        policies={policies.map((p) => ({ start_date: p.start_date }))}
       />
 
       {/* Transfer Policy Modal - for package/policy transfer from timeline */}
