@@ -744,18 +744,8 @@ export default function Cheques() {
           )
         : collapsed;
 
-      // Auto-expand all groups when there's a small number of them so
-      // the user lands in a useful state without having to click around.
-      const groupIds = [
-        ...new Set(formattedCheques.map((c) => c.policy?.client?.id).filter(Boolean) as string[]),
-      ];
-
       setCheques(filtered);
       setTotalCount(count || 0);
-
-      if (groupIds.length <= 10) {
-        setExpandedCustomers(new Set(groupIds));
-      }
     } catch (error) {
       console.error('Error fetching cheques:', error);
       toast({ title: "خطأ", description: "فشل في تحميل الشيكات", variant: "destructive" });
@@ -1776,7 +1766,7 @@ export default function Cheques() {
                                   <div className="flex items-center gap-3">
                                     <ChevronDown className={cn(
                                       "h-4 w-4 transition-transform",
-                                      !isExpanded && "-rotate-90"
+                                      isExpanded && "rotate-180"
                                     )} />
                                     {/* Outgoing groups (company/broker/expense recipients)
                                         get a building icon + a typed badge so they're

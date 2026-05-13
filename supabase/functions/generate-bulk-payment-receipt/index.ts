@@ -160,11 +160,6 @@ function buildBulkReceiptHtml(
   _paymentType: string,
   companySettings: { company_email?: string; company_phone_links?: PhoneLink[]; company_location?: string },
   branding: AgentBranding = DEFAULT_BRANDING,
-  // payment_id → cancellation voucher receipt_number, populated by the
-  // caller after the payments fetch. Lets a voided row print
-  // "ملغية → سند الإلغاء #19" so the printed copy carries the same
-  // audit-trail reference the receipts page shows on screen.
-  cancellationVoucherMap: Record<string, number | string> = {},
   // When true the receipt is a customer-level كشف قبض (every non-إلزامي
   // payment the customer ever made) and the "هذه السندات تخص المعاملة"
   // note is hidden — the receipt isn't scoped to a single transaction
@@ -276,34 +271,15 @@ function buildBulkReceiptHtml(
     const num = canonicalReceiptByGroup.get(receiptGroupKey(p)) || p.receipt_number || '—';
     const typeLbl = paymentTypeLabel(p);
     const extra = p.cheque_number ? ` · ${escapeHtml(String(p.cheque_number))}` : '';
-    const refused = !!p.refused;
-    // Distinguish ملغي (customer-initiated, cheque_status='cancelled')
-    // from مرتجع (bank-bounced, cheque_status='returned'). Both flip
-    // refused=true and both spawn a cancellation voucher via the
-    // sync_receipt_from_policy_payment trigger, but the bookkeeper
-    // wants the printed copy to say which one happened. Anything
-    // refused without a recognised status falls back to "مرفوضة"
-    // so legacy data (pre-cancellation-voucher migration) still
-    // renders cleanly.
-    const isCancelled = refused && p.cheque_status === 'cancelled';
-    const isReturned = refused && p.cheque_status === 'returned';
-    const rowClass = refused ? ' class="refused"' : '';
-    const voucherNo = cancellationVoucherMap[p.id];
-    // Same R{N}/{YYYY} shape as the سند قبض numbering so the printed
-    // copy reads consistently — "سند الإلغاء R655/2026" not the bare
-    // SERIAL "#655". Year derived from the printed-on date (today)
-    // since the voucher itself was struck against the current period.
-    const voucherYear = new Date().getFullYear();
-    const voucherRef = voucherNo != null
-      ? ` <span class="voucher-ref">سند الإلغاء R${escapeHtml(String(voucherNo))}/${voucherYear}</span>`
-      : '';
-    const refusedBadge = refused
-      ? ` <span class="refused-tag">${isCancelled ? 'ملغية' : isReturned ? 'مرتجع' : 'مرفوضة'}</span>${voucherRef}`
-      : '';
+    // A سند قبض is a frozen historical document — like a paper
+    // receipt that was already handed to the customer, it can't
+    // retroactively show "cancelled" / "partially cancelled" /
+    // strikethrough / red styling after the fact. Any subsequent
+    // cancellation lives in a separate سند إلغاء document, not on
+    // the original receipt. So we render refused rows identically
+    // to active ones here.
     const amount = Number(p.amount || 0).toLocaleString('en-US');
-    const amountCell = refused
-      ? `<span class="struck">₪${amount}</span>`
-      : `₪${amount}`;
+    const amountCell = `₪${amount}`;
 
     // Per-row date label: a cheque carries a maturity date (when the
     // bank will honour it) so "تاريخ الاستحقاق" is the accurate term;
@@ -335,10 +311,10 @@ function buildBulkReceiptHtml(
       : '';
 
     return `
-      <tr${rowClass}>
+      <tr>
         ${showReceiptNumberColumn ? `<td class="num">${escapeHtml(num)}</td>` : ''}
         <td>
-          <div>${escapeHtml(typeLbl)}${extra}${refusedBadge}</div>
+          <div>${escapeHtml(typeLbl)}${extra}</div>
           ${bankLine}
         </td>
         <td class="date">${dateCell}</td>
@@ -506,39 +482,9 @@ function buildBulkReceiptHtml(
       font-weight: 700;
       color: #1a1a1a;
     }
-    .receipts tbody tr.refused td.date .date-value { color: #7f1d1d; }
     .receipts tbody td.notes {
       text-align: right; font-weight: 500; color: #1a1a1a;
       max-width: 200px; white-space: normal; word-break: break-word;
-    }
-    .receipts tbody tr.refused td { background: #fef2f2; color: #7f1d1d; }
-    .voucher-ref {
-      display: inline-block;
-      margin-right: 6px;
-      padding: 1px 6px;
-      background: #fef3c7;
-      color: #78350f;
-      font-size: 10px;
-      font-weight: 700;
-      border-radius: 3px;
-      direction: ltr;
-      unicode-bidi: embed;
-    }
-    .receipts tbody tr.refused .struck {
-      text-decoration: line-through;
-      text-decoration-thickness: 1.5px;
-      color: #7f1d1d;
-    }
-    .refused-tag {
-      display: inline-block;
-      margin-right: 4px;
-      padding: 1px 6px;
-      border: 1px solid #7f1d1d;
-      border-radius: 10px;
-      background: #fee2e2;
-      color: #7f1d1d;
-      font-size: 10px;
-      font-weight: 700;
     }
 
     .total-row {
@@ -704,7 +650,7 @@ function buildBulkReceiptHtml(
 
     <!-- Receipts table -->
     <div class="receipts-section">
-      <div class="section-title">سندات القبض</div>
+      <div class="section-title">الدفعات المستلمة</div>
       <table class="receipts">
         <thead>
           <tr>
@@ -979,13 +925,12 @@ serve(async (req) => {
       );
     }
 
-    // Calculate total from payments — refused payments are excluded
-    // entirely (neither added nor subtracted), since they represent
-    // money the client never actually paid. The collapse already
-    // turned each batch into one row at face value, so this sums
-    // physical cheque face values (post-ELZAMI-filter).
+    // Calculate total from payments — refused rows ARE included
+    // because a سند قبض is a frozen historical document. It must
+    // reflect the original collection event (the moment money
+    // changed hands), not the current refused state. The matching
+    // سند إلغاء carries the reversal separately.
     const calculatedTotal = payments.reduce((sum, p: any) => {
-      if (p.refused) return sum;
       return sum + Number(p.amount || 0);
     }, 0);
     // Ignore the caller's total_amount hint — after collapse + ELZAMI
@@ -1024,66 +969,6 @@ serve(async (req) => {
 
     console.log(`[generate-bulk-payment-receipt] Total: ${finalTotal}, Policy types: ${policyTypes.join(', ')}`);
 
-    // Look up cancellation voucher receipt_numbers for any voided
-    // payment in this batch. The sync_receipt_from_policy_payment
-    // trigger inserts one cancellation row per refused policy_payment
-    // with receipt_type='cancellation'; we surface the voucher number
-    // on the printed copy so the bookkeeper can cross-reference.
-    //
-    // Display rule (absolute): one سند قبض = one سند إلغاء, no matter
-    // how many payment rows the سند groups. Trigger still creates a
-    // row per payment under the hood (immutable audit trail), but the
-    // printed receipt shows the SAME voucher number — the smallest
-    // receipt_number among the سند's cancellation rows — across
-    // every payment of the same سند. We use the same fallback chain
-    // as the client UI groupedPayments memo: `payment_session_id`
-    // → `batch_id` → `payment.id`. That keeps DebtPaymentModal
-    // sessions AND PackagePaymentModal batches (which set batch_id
-    // but no session_id) under the one-voucher rule.
-    const cancellationVoucherMap: Record<string, number | string> = {};
-    const refusedPayments = payments.filter((p: any) => p.refused);
-    const refusedIds = refusedPayments.map((p: any) => p.id);
-    if (refusedIds.length > 0) {
-      const { data: vouchers } = await supabase
-        .from('receipts')
-        .select('payment_id, receipt_number')
-        .eq('receipt_type', 'cancellation')
-        .in('payment_id', refusedIds);
-
-      // Per-payment voucher: refused_payment.id → its own cancellation receipt_number
-      const perPaymentVoucher = new Map<string, number | string>();
-      for (const v of (vouchers ?? []) as Array<{ payment_id: string | null; receipt_number: number | string | null }>) {
-        if (v.payment_id && v.receipt_number != null) {
-          perPaymentVoucher.set(v.payment_id, v.receipt_number);
-        }
-      }
-
-      // Pick the canonical voucher per سند: smallest numeric
-      // receipt_number among the سند's refused payments. Strings are
-      // compared numerically when parseable, else lexicographically.
-      const sortKey = (v: number | string): string => {
-        const n = typeof v === 'number' ? v : Number(v);
-        return Number.isFinite(n) ? String(n).padStart(20, '0') : String(v);
-      };
-      const receiptGroupKey = (p: any): string =>
-        p.payment_session_id || p.batch_id || p.id;
-      const groupVoucher = new Map<string, number | string>();
-      for (const p of refusedPayments as any[]) {
-        const v = perPaymentVoucher.get(p.id);
-        if (v == null) continue;
-        const key = receiptGroupKey(p);
-        const existing = groupVoucher.get(key);
-        if (existing == null || sortKey(v) < sortKey(existing)) {
-          groupVoucher.set(key, v);
-        }
-      }
-
-      for (const p of refusedPayments as any[]) {
-        const v = groupVoucher.get(receiptGroupKey(p));
-        if (v != null) cancellationVoucherMap[p.id] = v;
-      }
-    }
-
     // Generate receipt HTML
     const receiptHtml = buildBulkReceiptHtml(
       payments,
@@ -1095,7 +980,6 @@ serve(async (req) => {
       paymentType,
       companySettings,
       branding,
-      cancellationVoucherMap,
       !!customer_scope,
     );
 

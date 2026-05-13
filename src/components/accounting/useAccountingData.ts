@@ -24,6 +24,23 @@ export interface BrokerOption {
   name: string;
 }
 
+export interface ClientReceiptRow {
+  id: string;
+  receipt_date: string;
+  amount: number;
+  payment_method: string | null;
+  voucher_number: string | null;
+  receipt_number: number | null;
+  cheque_number: string | null;
+  notes: string | null;
+  client_id: string | null;
+  client_name: string | null;
+  policy_id: string | null;
+  policy_document_number: string | null;
+  policy_number: string | null;
+  cancelled_at: string | null;
+}
+
 interface UseAccountingDataReturn {
   loading: boolean;
   companies: CompanyOption[];
@@ -35,6 +52,14 @@ interface UseAccountingDataReturn {
   companySettlements: SettlementRow[];
   companyReceipts: SettlementRow[];
   brokerSettlements: SettlementRow[];
+  /** سند الصرف rows — actual cash leaving the agency to a client
+   *  (refunds on cancel/transfer or manual disbursements). One row per
+   *  voucher (multi-method sessions are already aggregated by the
+   *  client_settlements → receipts mirror trigger). */
+  clientDisbursements: ClientReceiptRow[];
+  /** إشعار دائن rows — credit balance issued to a client (wallet
+   *  credit, no cash out). Counts as money the agency owes the client. */
+  clientCreditNotes: ClientReceiptRow[];
   /** Filtered total expense amount — used by the net-profit pill. */
   expensesTotal: number;
   refresh: () => Promise<void>;
@@ -112,6 +137,22 @@ interface RawCompanySettlement {
   insurance_companies: { name: string; name_ar: string | null } | null;
 }
 
+interface RawClientReceipt {
+  id: string;
+  receipt_date: string;
+  amount: number | null;
+  payment_method: string | null;
+  voucher_number: string | null;
+  receipt_number: number | null;
+  cheque_number: string | null;
+  notes: string | null;
+  client_id: string | null;
+  client_name: string | null;
+  policy_id: string | null;
+  cancelled_at: string | null;
+  policies: { document_number: string | null; policy_number: string | null } | null;
+}
+
 interface RawBrokerSettlement {
   id: string;
   settlement_date: string;
@@ -162,6 +203,8 @@ export function useAccountingData(
     (SettlementRow & { direction?: 'outgoing' | 'incoming' })[]
   >([]);
   const [brokerSettlements, setBrokerSettlements] = useState<SettlementRow[]>([]);
+  const [clientDisbursementsRaw, setClientDisbursementsRaw] = useState<ClientReceiptRow[]>([]);
+  const [clientCreditNotesRaw, setClientCreditNotesRaw] = useState<ClientReceiptRow[]>([]);
   const [expenses, setExpenses] = useState<RawExpense[]>([]);
 
   const fetchAll = useCallback(async () => {
@@ -438,7 +481,58 @@ export function useAccountingData(
       }));
       setBrokerSettlements(bsRows);
 
-      // 6. Expenses — only the sum is needed by the pills, but the full
+      // 6. Client receipts — fetch the two outflow flavors that hit a
+      //    client's account from the agency's side. We read both in
+      //    one query and split client-side by receipt_type so the
+      //    accounting page can show سند صرف and إشعار دائن totals
+      //    next to the company/broker views. Cancelled receipts are
+      //    excluded from totals downstream; we keep them in the raw
+      //    list for surface display.
+      let crQuery = supabase
+        .from('receipts')
+        .select(
+          `id, receipt_date, amount, payment_method, voucher_number,
+           receipt_number, cheque_number, notes, client_id, client_name,
+           policy_id, cancelled_at, receipt_type,
+           policies(document_number, policy_number)`,
+        )
+        .in('receipt_type', ['disbursement', 'credit_note'])
+        .eq('is_imported', false)
+        .order('receipt_date', { ascending: false });
+      if (agentId) crQuery = crQuery.eq('agent_id', agentId);
+      if (branchId) crQuery = crQuery.eq('branch_id', branchId);
+      const { data: crData } = await crQuery;
+      const mapClientReceipt = (r: RawClientReceipt): ClientReceiptRow => ({
+        id: r.id,
+        receipt_date: r.receipt_date,
+        amount: Number(r.amount ?? 0),
+        payment_method: r.payment_method,
+        voucher_number: r.voucher_number,
+        receipt_number: r.receipt_number,
+        cheque_number: r.cheque_number,
+        notes: r.notes,
+        client_id: r.client_id,
+        client_name: r.client_name,
+        policy_id: r.policy_id,
+        policy_document_number: r.policies?.document_number ?? null,
+        policy_number: r.policies?.policy_number ?? null,
+        cancelled_at: r.cancelled_at,
+      });
+      const crRows = (crData ?? []) as unknown as (RawClientReceipt & {
+        receipt_type: string;
+      })[];
+      setClientDisbursementsRaw(
+        crRows
+          .filter((r) => r.receipt_type === 'disbursement')
+          .map(mapClientReceipt),
+      );
+      setClientCreditNotesRaw(
+        crRows
+          .filter((r) => r.receipt_type === 'credit_note')
+          .map(mapClientReceipt),
+      );
+
+      // 7. Expenses — only the sum is needed by the pills, but the full
       //    rows are required to apply the date filter client-side.
       let exQuery = supabase.from('expenses').select('expense_date, amount');
       if (agentId) exQuery = exQuery.eq('agent_id', agentId);
@@ -540,6 +634,19 @@ export function useAccountingData(
     [brokerSettlements, filters],
   );
 
+  // Client receipt filters reuse the date + payment-method slice of
+  // the same AccountingFiltersValue used for company / broker tables.
+  // Company / type filters don't apply (a client receipt isn't tied
+  // to a single insurance company or policy type).
+  const filteredClientDisbursements = useMemo(
+    () => applyClientReceiptFilters(clientDisbursementsRaw, filters),
+    [clientDisbursementsRaw, filters],
+  );
+  const filteredClientCreditNotes = useMemo(
+    () => applyClientReceiptFilters(clientCreditNotesRaw, filters),
+    [clientCreditNotesRaw, filters],
+  );
+
   const expensesTotal = useMemo(() => {
     let rows = expenses;
     if (filters.dateFrom) {
@@ -564,10 +671,55 @@ export function useAccountingData(
     companySettlements: companyDisbursements,
     companyReceipts,
     brokerSettlements: filteredBrokerSettlements,
+    clientDisbursements: filteredClientDisbursements,
+    clientCreditNotes: filteredClientCreditNotes,
     expensesTotal,
     refresh: fetchAll,
     patchSubPolicy,
   };
+}
+
+/** Date + payment-method filter for client receipts. Mirrors the
+ *  company/broker filter shape so all settlement-like tables behave
+ *  consistently on the accounting page. */
+function applyClientReceiptFilters(
+  rows: ClientReceiptRow[],
+  filters: AccountingFiltersValue,
+): ClientReceiptRow[] {
+  let out = rows;
+  if (filters.dateFrom) {
+    const from = new Date(filters.dateFrom).getTime();
+    out = out.filter((r) => new Date(r.receipt_date).getTime() >= from);
+  }
+  if (filters.dateTo) {
+    const to = new Date(filters.dateTo);
+    to.setHours(23, 59, 59, 999);
+    const toMs = to.getTime();
+    out = out.filter((r) => new Date(r.receipt_date).getTime() <= toMs);
+  }
+  if (filters.paymentMethods.length > 0) {
+    const set = new Set(filters.paymentMethods);
+    out = out.filter((r) => r.payment_method != null && set.has(r.payment_method));
+  }
+  return out;
+}
+
+/** Free-text search over a client receipt's identifiers — client
+ *  name, voucher number, cheque number, notes. */
+export function matchesClientReceiptSearch(
+  row: ClientReceiptRow,
+  q: string,
+): boolean {
+  const term = q.trim().toLowerCase();
+  if (!term) return true;
+  const fields: (string | null | undefined)[] = [
+    row.client_name,
+    row.voucher_number,
+    row.cheque_number,
+    row.policy_document_number,
+    row.notes,
+  ];
+  return fields.some((v) => v != null && v.toLowerCase().includes(term));
 }
 
 function applyFilters(rows: IssuanceRow[], filters: AccountingFiltersValue): IssuanceRow[] {
