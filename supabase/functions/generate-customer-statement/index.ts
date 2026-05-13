@@ -696,7 +696,16 @@ serve(async (req: Request) => {
     }
 
     // Wallet balance (refunds owed vs adjustments due) — used to
-    // net the overall remaining number, same as the in-app card.
+    // net the overall remaining number.
+    //
+    // weOweCustomer = (refund-type wallet entries) − (disbursements
+    // already paid out). Without the disbursement subtraction, a
+    // cancellation that was followed by a سند صرف still leaves
+    // the wallet credit "outstanding" in the bottom-note math, so
+    // the kashf advertises "office owes customer ₪500" long after
+    // the office has actually settled it. The user's mental model
+    // is one global wallet: every disbursement reduces what we
+    // owe, regardless of which cancellation it was tagged against.
     const { data: walletRows } = await userClient
       .from('customer_wallet_transactions')
       .select('amount, transaction_type')
@@ -712,6 +721,25 @@ serve(async (req: Request) => {
         customerOwesUs += amt;
       }
     }
+    // Subtract every disbursement (سند صرف) the office has issued
+    // — those are cash payouts that fulfill refund obligations.
+    const { data: allDisbursements } = await userClient
+      .from('receipts')
+      .select('id, amount, client_id, policy_id')
+      .eq('receipt_type', 'disbursement')
+      .or(
+        allClientPolicyIds.length
+          ? `client_id.eq.${client_id},policy_id.in.(${allClientPolicyIds.join(',')})`
+          : `client_id.eq.${client_id}`,
+      );
+    const seenDisbIds = new Set<string>();
+    let totalDisbursed = 0;
+    for (const d of (allDisbursements || []) as any[]) {
+      if (seenDisbIds.has(d.id)) continue;
+      seenDisbIds.add(d.id);
+      totalDisbursed += Math.abs(Number(d.amount || 0));
+    }
+    weOweCustomer = Math.max(0, weOweCustomer - totalDisbursed);
     const overallRemaining = Math.max(0, totalAllOwed - totalAllPaid);
     const overallNet = overallRemaining + customerOwesUs - weOweCustomer;
     // Positive → customer owes us. Negative → we owe customer.
