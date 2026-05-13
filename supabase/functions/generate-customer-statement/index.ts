@@ -1052,13 +1052,14 @@ function buildStatementHtml(args: BuildArgs): string {
         (mainPolicy.cancelled && mainPolicy.cancellation_date) ||
         mainPolicy.start_date;
       const reversalTimestamp = new Date(reversalDate).getTime();
+      const reversalLabel = mainPolicy.cancelled ? 'إلغاء معاملة' : 'تحويل معاملة';
       events.push({
         date: reversalDate,
         timestamp: Number.isNaN(reversalTimestamp) ? pkgTimestamp : reversalTimestamp,
         sortKey: 1,
         voucherNumber: String(docNumber),
         voucherUrl: null,
-        description: `<div class="event-headline"><strong>${what}</strong> · رقم ${escapeHtml(String(docNumber))}</div>`,
+        description: `<div class="event-headline"><strong>${reversalLabel}</strong> · رقم ${escapeHtml(String(docNumber))}</div>`,
         subLines: [
           `<div class="reason-line">إلغاء الالتزام الأصلي البالغ ${formatMoney(totalDebit)}</div>`,
         ],
