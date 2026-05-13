@@ -797,272 +797,210 @@ function buildStatementHtml(args: BuildArgs): string {
     ? `<div class="contact">${contactLines.join(' · ')}</div>`
     : '';
 
-  // ── Policies grouped by car ─────────────────────────────────
-  type PolicyGroup = { carKey: string; carLabel: string; items: any[] };
-  const byCar = new Map<string, PolicyGroup>();
-  for (const p of policies) {
-    const key = p.car?.id || '__nocar__';
-    const label = p.car
-      ? [p.car.car_number, p.car.manufacturer_name, p.car.model].filter(Boolean).join(' · ')
-      : 'بدون سيارة';
-    if (!byCar.has(key)) byCar.set(key, { carKey: key, carLabel: label, items: [] });
-    byCar.get(key)!.items.push(p);
-  }
-
-  // Within each car bucket, collapse policies that share a group_id
-  // into ONE row (a "package" / "معاملة"). Standalone policies stay
-  // as a single-policy package. This matches how the in-app UI shows
-  // a معاملة card — one row per رقم المعاملة, with the included
-  // policies listed inside the description cell.
-  type PackageRow = {
-    docNumber: string;
-    policies: any[];
-    mainPolicy: any;
-    period: { start: string; end: string };
-    totalPrice: number;
+  // ── Build unified event ledger ─────────────────────────────
+  // The accountant's request: ONE table that follows صندوق rules —
+  // money flows in (مدين), money flows out (دائن), running balance.
+  // Each event is a row:
+  //   • Transaction created (active policy/package)            → مدين
+  //   • Transaction reversed (cancellation or transfer of a
+  //     previously billed package)                              → دائن
+  //   • Payment received (سند قبض)                              → دائن
+  //   • Payment voided (refused cheque → سند إلغاء)             → مدين
+  //   • Credit note issued (إشعار دائن)                         → دائن
+  //   • Disbursement paid out (سند صرف)                         → مدين
+  //   • Accident fee billed                                     → مدين
+  //
+  // For mixed packages (ثالث + إلزامي), the كشف shows the office's
+  // share AND the إلزامي share inside the same row but keeps the
+  // total math intact — the customer reads "ثالث 3000 + إلزامي 1500"
+  // separately, but مدين still totals 4500 so adding everything up
+  // reconciles with the in-app debt tile.
+  type LedgerEvent = {
+    date: string;
+    sortKey: number; // tiebreaker: 0=transaction, 1=reversal, 2=receipt
+    voucherNumber: string;
+    voucherUrl: string | null;
+    description: string;
+    subLines: string[];
+    debit: number;
+    credit: number;
+    rowClass: string;
+    directionHint: string;
   };
 
-  const carsHtml = Array.from(byCar.values()).map((group) => {
-    const packageMap = new Map<string, any[]>();
-    const singletons: any[] = [];
-    for (const p of group.items) {
-      if (p.group_id) {
-        if (!packageMap.has(p.group_id)) packageMap.set(p.group_id, []);
-        packageMap.get(p.group_id)!.push(p);
+  const events: LedgerEvent[] = [];
+
+  // 1. Transaction events from policies (one per group_id package)
+  const packageMap = new Map<string, any[]>();
+  const singletons: any[] = [];
+  for (const p of policies) {
+    if (p.group_id) {
+      if (!packageMap.has(p.group_id)) packageMap.set(p.group_id, []);
+      packageMap.get(p.group_id)!.push(p);
+    } else {
+      singletons.push(p);
+    }
+  }
+  const allPackages: any[][] = [
+    ...Array.from(packageMap.values()),
+    ...singletons.map((p) => [p]),
+  ];
+
+  for (const pkg of allPackages) {
+    const docNumber =
+      pickPackageDocumentNumber(pkg) ||
+      pkg[0].document_number ||
+      pkg[0].policy_number ||
+      '—';
+    const mainPolicy =
+      pkg.find((p) => p.policy_type_parent === 'THIRD_FULL') ||
+      pkg.find((p) => p.policy_type_parent === 'ELZAMI') ||
+      pkg[0];
+
+    // Split the package total into "office portion" vs "إلزامي base"
+    // so the customer sees the breakdown the user asked for:
+    //   "ثالث 3000 + إلزامي 1500"
+    // Both contribute to مدين because the in-app إجمالي tile sums
+    // them too; the إلزامي base is annotated as "تدفع للشركة" so the
+    // customer understands where his Visa charge went.
+    let officePart = 0;
+    let elzamiBase = 0;
+    const lineItems: string[] = [];
+    for (const p of pkg) {
+      const insurancePrice = Number(p.insurance_price || 0);
+      const commission = Number(p.office_commission || 0);
+      const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
+      const companyName = p.company?.name_ar || p.company?.name || '';
+      const companyTag = companyName ? ` · ${escapeHtml(companyName)}` : '';
+      if (p.policy_type_parent === 'ELZAMI') {
+        elzamiBase += insurancePrice;
+        officePart += commission; // commission stays in the office's books
+        const commissionNote = commission > 0
+          ? ` <span class="commission-note">(+ ${formatMoney(commission)} عمولة مكتب)</span>`
+          : '';
+        lineItems.push(
+          `<div class="line-item"><span class="line-amount">${formatMoney(insurancePrice)}</span> · <strong>${escapeHtml(typeLabel)}</strong>${companyTag}<span class="elzami-tag">تدفع للشركة مباشرة</span>${commissionNote}</div>`,
+        );
       } else {
-        singletons.push(p);
+        officePart += insurancePrice + commission;
+        const breakdownTag = commission > 0
+          ? ` <span class="commission-note">(منها ${formatMoney(commission)} عمولة مكتب)</span>`
+          : '';
+        lineItems.push(
+          `<div class="line-item"><span class="line-amount">${formatMoney(insurancePrice + commission)}</span> · <strong>${escapeHtml(typeLabel)}</strong>${companyTag}${breakdownTag}</div>`,
+        );
       }
     }
-    const rows: PackageRow[] = [];
-    for (const [, pkg] of packageMap) {
-      const docNumber =
-        pickPackageDocumentNumber(pkg) ||
-        pkg[0].document_number ||
-        pkg[0].policy_number ||
-        '—';
-      const mainPolicy =
-        pkg.find((p) => p.policy_type_parent === 'THIRD_FULL') ||
-        pkg.find((p) => p.policy_type_parent === 'ELZAMI') ||
-        pkg[0];
-      const totalPrice = pkg.reduce(
-        (s, p) => s + Number(p.insurance_price || 0) + Number(p.office_commission || 0),
-        0,
+
+    const totalDebit = officePart + elzamiBase;
+    const carNumber = mainPolicy.car?.car_number;
+    const period = `${formatDate(mainPolicy.start_date)} ← ${formatDate(mainPolicy.end_date)}`;
+
+    // Status + reason blocks (cancellation / transfer)
+    const reasonLines: string[] = [];
+    let isInactive = false;
+    if (mainPolicy.cancelled) {
+      isInactive = true;
+      const reason =
+        mainPolicy.cancellation_note ||
+        cancellationReasonByPolicy.get(mainPolicy.id) ||
+        'بدون سبب محدد';
+      reasonLines.push(`<span class="reason-cancel"><strong>ملغاة:</strong> ${escapeHtml(reason)}</span>`);
+    }
+    if (mainPolicy.transferred) {
+      isInactive = true;
+      const transferOut = transfersByOriginPolicy.get(mainPolicy.id);
+      const toCar = transferOut?.to_car?.car_number || mainPolicy.transferred_to_car_number;
+      reasonLines.push(
+        `<span class="reason-transfer"><strong>محوّلة${toCar ? ` إلى سيارة ${escapeHtml(toCar)}` : ''}</strong>${transferOut?.note ? ` — ${escapeHtml(transferOut.note)}` : ''}</span>`,
       );
-      rows.push({
-        docNumber: String(docNumber),
-        policies: pkg,
-        mainPolicy,
-        period: { start: mainPolicy.start_date, end: mainPolicy.end_date },
-        totalPrice,
+    }
+    // Was-transferred-in note (annotated even on active rows)
+    for (const p of pkg) {
+      if (!p.transferred_from_policy_id) continue;
+      const adj = transfersByDestPolicy.get(p.id);
+      const fromCar = adj?.from_car?.car_number || p.transferred_car_number;
+      reasonLines.push(
+        `<span class="reason-transfer-in"><strong>محوّلة${fromCar ? ` من سيارة ${escapeHtml(fromCar)}` : ''}</strong>${adj?.note ? ` — ${escapeHtml(adj.note)}` : ''}</span>`,
+      );
+      if (adj && Number(adj.adjustment_amount || 0) > 0) {
+        const dir = adj.adjustment_type === 'customer_pays' ? 'فرق على العميل' : 'فرق للعميل';
+        reasonLines.push(
+          `<span class="reason-adjust"><strong>${dir}:</strong> ${formatMoney(Number(adj.adjustment_amount))}${adj.adjustment_note ? ` — ${escapeHtml(adj.adjustment_note)}` : ''}</span>`,
+        );
+      }
+    }
+
+    const headlineParts: string[] = [];
+    headlineParts.push('<strong>معاملة جديدة</strong>');
+    if (carNumber) headlineParts.push(`سيارة ${escapeHtml(carNumber)}`);
+    headlineParts.push(period);
+    const description = `<div class="event-headline">${headlineParts.join(' · ')}</div>`;
+
+    const subLines: string[] = [...lineItems];
+    if (elzamiBase > 0 && officePart > 0) {
+      subLines.push(
+        `<div class="elzami-summary">إجمالي إلزامي خارجي: ${formatMoney(elzamiBase)} · إجمالي على المكتب: ${formatMoney(officePart)}</div>`,
+      );
+    }
+    for (const r of reasonLines) subLines.push(`<div class="reason-line">${r}</div>`);
+
+    events.push({
+      date: mainPolicy.start_date,
+      sortKey: 0,
+      voucherNumber: String(docNumber),
+      voucherUrl: null, // transactions don't have a printable HTML voucher yet
+      description,
+      subLines,
+      debit: totalDebit,
+      credit: 0,
+      rowClass: isInactive ? 'event-transaction event-inactive' : 'event-transaction',
+      directionHint: 'مستحق على العميل',
+    });
+
+    // 2. Reversal event for cancelled / transferred packages
+    if (isInactive) {
+      const reversalDate =
+        (mainPolicy.cancelled && mainPolicy.cancellation_date) ||
+        mainPolicy.start_date;
+      const what = mainPolicy.cancelled ? 'إلغاء معاملة' : 'تحويل معاملة';
+      events.push({
+        date: reversalDate,
+        sortKey: 1,
+        voucherNumber: String(docNumber),
+        voucherUrl: null,
+        description: `<div class="event-headline"><strong>${what}</strong> · رقم ${escapeHtml(String(docNumber))}</div>`,
+        subLines: [
+          `<div class="reason-line">إلغاء الالتزام الأصلي البالغ ${formatMoney(totalDebit)}</div>`,
+        ],
+        debit: 0,
+        credit: totalDebit,
+        rowClass: 'event-reversal',
+        directionHint: 'يلغي المعاملة',
       });
     }
-    for (const p of singletons) {
-      rows.push({
-        docNumber: String(p.document_number || p.policy_number || '—'),
-        policies: [p],
-        mainPolicy: p,
-        period: { start: p.start_date, end: p.end_date },
-        totalPrice: Number(p.insurance_price || 0) + Number(p.office_commission || 0),
-      });
-    }
-    // Newest transaction first — matches the in-app order the user
-    // showed (149 → 140 → 138 → 139 → 137).
-    rows.sort((a, b) => b.docNumber.localeCompare(a.docNumber, 'en', { numeric: true }));
+  }
 
-    const rowsHtml = rows.map((row) => {
-      const main = row.mainPolicy;
-      // Status badges — a policy can be BOTH transferred and cancelled
-      // (transferred then later cancelled), so we collect every state
-      // that applies instead of returning the first match.
-      const badges: string[] = [];
-      if (main.cancelled) badges.push(`<span class="status status-cancelled">ملغية</span>`);
-      if (main.transferred) badges.push(`<span class="status status-transferred">محوّلة</span>`);
-      if (!main.cancelled && !main.transferred) {
-        if (new Date(main.end_date) < new Date()) {
-          badges.push(`<span class="status status-ended">منتهية</span>`);
-        } else {
-          badges.push(`<span class="status status-active">سارية</span>`);
-        }
-      }
-
-      // Policy-type list: "إلزامي + ثالث" with each company name in
-      // the sub-line so the customer sees who the insurer is per piece.
-      const typeList = row.policies
-        .map((p) => getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child))
-        .join(' + ');
-      const companyNames = Array.from(
-        new Set(
-          row.policies
-            .map((p) => p.company?.name_ar || p.company?.name)
-            .filter((x): x is string => !!x),
-        ),
-      );
-      const companyLine = companyNames.length ? companyNames.join(' · ') : '—';
-
-      // Reason blocks: cancellation, transfer-out (to car X), transfer-in
-      // (from car Y), and any monetary adjustment with its customer note.
-      const reasonBlocks: string[] = [];
-
-      if (main.cancelled) {
-        const reason =
-          main.cancellation_note ||
-          cancellationReasonByPolicy.get(main.id) ||
-          'بدون سبب محدد';
-        const cancelDate = main.cancellation_date ? ` · ${formatDate(main.cancellation_date)}` : '';
-        reasonBlocks.push(
-          `<div class="row-reason"><strong>سبب الإلغاء${cancelDate}:</strong> ${escapeHtml(reason)}</div>`,
-        );
-      }
-
-      // Transferred OUT — destination car from policy_transfers (origin
-      // side). transferred_to_car_number on the policy itself is a
-      // denormalized fallback.
-      if (main.transferred) {
-        const transferOut = transfersByOriginPolicy.get(main.id);
-        const toCar =
-          transferOut?.to_car?.car_number ||
-          main.transferred_to_car_number ||
-          null;
-        const carLabel = toCar ? ` (سيارة ${escapeHtml(toCar)})` : '';
-        reasonBlocks.push(
-          `<div class="row-reason row-reason-warn"><strong>محوّلة إلى:</strong>${carLabel}</div>`,
-        );
-        if (transferOut?.note) {
-          reasonBlocks.push(
-            `<div class="row-reason row-reason-warn"><strong>سبب التحويل:</strong> ${escapeHtml(transferOut.note)}</div>`,
-          );
-        }
-      }
-
-      // Transferred IN — origin car from any policy in this package
-      // that has transferred_from_policy_id. Same data, viewed from
-      // the destination side.
-      for (const p of row.policies) {
-        if (!p.transferred_from_policy_id) continue;
-        const adj = transfersByDestPolicy.get(p.id);
-        const fromCar = adj?.from_car?.car_number || p.transferred_car_number || null;
-        const carLabel = fromCar ? ` (سيارة ${escapeHtml(fromCar)})` : '';
-        reasonBlocks.push(
-          `<div class="row-reason row-reason-info"><strong>محوّلة من:</strong>${carLabel}</div>`,
-        );
-        if (adj?.note) {
-          reasonBlocks.push(
-            `<div class="row-reason row-reason-info"><strong>سبب التحويل:</strong> ${escapeHtml(adj.note)}</div>`,
-          );
-        }
-        if (adj && Number(adj.adjustment_amount || 0) > 0) {
-          const isCustomerPays = adj.adjustment_type === 'customer_pays';
-          const dir = isCustomerPays ? 'فرق على العميل' : 'فرق للعميل';
-          reasonBlocks.push(
-            `<div class="row-reason row-reason-info"><strong>${dir}:</strong> ${formatMoney(Number(adj.adjustment_amount))}</div>`,
-          );
-          if (adj.adjustment_note) {
-            reasonBlocks.push(
-              `<div class="row-reason row-reason-info"><strong>تفاصيل الفرق:</strong> ${escapeHtml(adj.adjustment_note)}</div>`,
-            );
-          }
-        }
-      }
-
-      const isInactive = main.cancelled || main.transferred;
-      const period = `${formatDate(row.period.start)} ← ${formatDate(row.period.end)}`;
-
-      return `
-        <tr class="${isInactive ? 'inactive-row' : ''}">
-          <td class="policy-type">
-            <div class="type-line"><strong>${escapeHtml(typeList)}</strong> ${badges.join('')}</div>
-            <div class="type-sub">${escapeHtml(companyLine)}</div>
-            ${reasonBlocks.join('')}
-          </td>
-          <td class="doc">${escapeHtml(row.docNumber)}</td>
-          <td class="period">${period}</td>
-          <td class="amount">${formatMoney(row.totalPrice)}</td>
-        </tr>
-      `;
-    }).join('');
-
-    return `
-      <div class="car-section">
-        <div class="car-header">${escapeHtml(group.carLabel)}</div>
-        <table class="policies-table">
-          <thead>
-            <tr>
-              <th>التغطية / الحالة</th>
-              <th>رقم المعاملة</th>
-              <th>فترة التأمين</th>
-              <th>الإجمالي</th>
-            </tr>
-          </thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      </div>
-    `;
-  }).join('');
-
-  // ── Ledger ──────────────────────────────────────────────────
-  // Running balance from the office's books — positive = customer
-  // owes us, negative = we owe customer. The kashf is scoped to ONE
-  // year so we start at 0 (no prior-year carryover) to keep the
-  // printed running total consistent with what the in-app receipts
-  // page shows for the same window.
-  //
-  // Direction rules per receipt_type (customer-facing labels):
-  //   • سند قبض / accident_fee  → دفع العميل (دائن) → +amount
-  //   • سند صرف                  → استلم العميل  (مدين) → −amount
-  //   • إشعار دائن               → رصيد للعميل  (مدين) → −amount
-  //   • سند إلغاء                → إلغاء قبض   (مدين) → −amount
-  // Plus sign + green for "what the customer paid us", minus sign +
-  // red for "what we owe or returned to the customer". Same color
-  // language the in-app cards use, so a customer cross-checking the
-  // kashf against their phone screen sees identical cues.
-  let running = 0;
-  const ledgerRowsHtml = ledger.map((r) => {
-    // For payment rows, prefer the SHARED text receipt_number from
-    // policy_payments (e.g. "R162/2026") so three rows from one bulk
-    // session all show the same سند number, matching what's printed
-    // on the bulk receipt itself. The receipts table's per-row SERIAL
-    // (R786, R787…) is internal bookkeeping and confuses the
-    // customer. Cancellation rows can't reuse this — each cancellation
-    // gets its own R-number — so they fall back to the standard
-    // formatter.
-    const sharedReceiptText = (r.receipt_type === 'payment' && r.payment_id)
-      ? chequeMeta.get(r.payment_id)?.receipt_number_text ?? null
-      : null;
-    const num = sharedReceiptText
-      || formatVoucherNumber(r.receipt_type, r.voucher_number, r.receipt_number, r.receipt_date);
+  // 3. Receipt events (from receipts table)
+  for (const r of ledger) {
+    const isDebit = isDebitForCustomer(r.receipt_type);
+    const amt = Math.abs(Number(r.amount || 0));
     let typeLabel = RECEIPT_TYPE_LABELS[r.receipt_type] || r.receipt_type;
     if (r.receipt_type === 'credit_note' && Number(r.amount) < 0) {
       typeLabel = 'إشعار مدين';
     }
     const methodLabel = PAYMENT_TYPE_LABELS[r.payment_method] || r.payment_method || '';
-    const amt = Math.abs(Number(r.amount || 0));
-    const isDebit = isDebitForCustomer(r.receipt_type);
-    const debitCell = isDebit
-      ? `<span class="amt-debit">−${formatMoney(amt)}</span>`
-      : '';
-    const creditCell = !isDebit
-      ? `<span class="amt-credit">+${formatMoney(amt)}</span>`
-      : '';
-    running += isDebit ? -amt : amt;
-    const balanceCell = running === 0
-      ? '0'
-      : running > 0
-        ? `<span class="amt-balance-debt">${formatMoney(running)}</span>`
-        : `<span class="amt-balance-credit">(${formatMoney(Math.abs(running))})</span>`;
 
-    // One-line direction hint surfaced inside البيان so the customer
-    // can read "what does this row mean" without learning مدين / دائن.
-    const directionHint = isDebit
-      ? r.receipt_type === 'cancellation'
-        ? 'إلغاء سند قبض سابق'
-        : r.receipt_type === 'disbursement'
-          ? 'استلمه العميل من المكتب'
-          : 'رصيد للعميل عند المكتب'
-      : 'دفعه العميل للمكتب';
+    // Shared R-number for bulk payment sessions (same R162/2026 across
+    // every payment row collected in one bulk سند).
+    const sharedReceiptText = (r.receipt_type === 'payment' && r.payment_id)
+      ? chequeMeta.get(r.payment_id)?.receipt_number_text ?? null
+      : null;
+    const voucherNumber =
+      sharedReceiptText ||
+      formatVoucherNumber(r.receipt_type, r.voucher_number, r.receipt_number, r.receipt_date);
 
-    // Detail lines — cheque bank+branch+maturity, refund/transfer
-    // adjustments, plus the cancellation reason. Each is added only
-    // when populated so the cell stays compact for ordinary rows.
+    // Detail sub-lines (cheque info, refund reason, notes)
     const detailLines: string[] = [];
     if (r.payment_method === 'cheque') {
       const meta = r.payment_id ? chequeMeta.get(r.payment_id) : null;
@@ -1071,39 +1009,85 @@ function buildStatementHtml(args: BuildArgs): string {
       const branchLabel = meta?.branch_code ? `فرع ${escapeHtml(meta.branch_code)}` : '';
       const dueDate = meta?.cheque_date ? `استحقاق: ${formatDate(meta.cheque_date)}` : '';
       const chequeLine = [chequeNumStr, bankLabel, branchLabel, dueDate].filter(Boolean).join(' · ');
-      if (chequeLine) detailLines.push(chequeLine);
+      if (chequeLine) detailLines.push(`<div class="ledger-detail">${chequeLine}</div>`);
     } else if (r.payment_method === 'visa' || r.payment_method === 'credit_card' || r.payment_method === 'visa_external') {
-      if (r.card_last_four) detailLines.push(`بطاقة تنتهي بـ ${escapeHtml(r.card_last_four)}`);
+      if (r.card_last_four) detailLines.push(`<div class="ledger-detail">بطاقة تنتهي بـ ${escapeHtml(r.card_last_four)}</div>`);
     }
-    if (r.car_number) detailLines.push(`سيارة: ${escapeHtml(r.car_number)}`);
+    if (r.car_number) detailLines.push(`<div class="ledger-detail">سيارة: ${escapeHtml(r.car_number)}</div>`);
     if (r.cancellation_reason) {
-      detailLines.push(`<strong>سبب الإلغاء:</strong> ${escapeHtml(r.cancellation_reason)}`);
+      detailLines.push(`<div class="reason-line reason-cancel"><strong>سبب الإلغاء:</strong> ${escapeHtml(r.cancellation_reason)}</div>`);
     }
     if (r.notes) {
-      detailLines.push(escapeHtml(r.notes));
+      detailLines.push(`<div class="ledger-detail">${escapeHtml(r.notes)}</div>`);
     }
 
-    const description = `
-      <div class="ledger-type">
-        <strong>${escapeHtml(typeLabel)}</strong>${methodLabel ? ` · ${escapeHtml(methodLabel)}` : ''}
-        <span class="ledger-direction ${isDebit ? 'direction-debit' : 'direction-credit'}">${escapeHtml(directionHint)}</span>
-      </div>
-      ${detailLines.length ? `<div class="ledger-detail">${detailLines.join('<br>')}</div>` : ''}
-    `;
+    const description = `<div class="event-headline"><strong>${escapeHtml(typeLabel)}</strong>${methodLabel ? ` · ${escapeHtml(methodLabel)}` : ''}</div>`;
 
-    // Wrap the voucher number in an anchor when we resolved a CDN
-    // URL for this receipt. accident_fee + any failed fetch keeps
-    // the plain-text fallback so the row still renders.
-    const vUrl = voucherUrlByReceipt.get(r.id);
-    const numCell = vUrl
-      ? `<a href="${vUrl}" target="_blank" rel="noopener noreferrer" class="vnum-link">${escapeHtml(num)}</a>`
-      : escapeHtml(num);
+    const directionHint = isDebit
+      ? r.receipt_type === 'cancellation'
+        ? 'إلغاء سند قبض سابق'
+        : r.receipt_type === 'disbursement'
+          ? 'استلمه العميل'
+          : 'استحق على العميل'
+      : r.receipt_type === 'credit_note'
+        ? 'رصيد للعميل'
+        : 'دفعه العميل';
+
+    const rowClass = isDebit
+      ? r.receipt_type === 'cancellation' ? 'event-cancel-receipt' : 'event-disbursement'
+      : r.receipt_type === 'credit_note' ? 'event-credit-note' : 'event-payment';
+
+    events.push({
+      date: r.receipt_date,
+      sortKey: 2,
+      voucherNumber,
+      voucherUrl: voucherUrlByReceipt.get(r.id) || null,
+      description,
+      subLines: detailLines,
+      debit: isDebit ? amt : 0,
+      credit: isDebit ? 0 : amt,
+      rowClass,
+      directionHint,
+    });
+  }
+
+  // 4. Sort by date, then by kind (transaction → reversal → receipt)
+  events.sort((a, b) => {
+    const cmp = new Date(a.date).getTime() - new Date(b.date).getTime();
+    if (cmp !== 0) return cmp;
+    return a.sortKey - b.sortKey;
+  });
+
+  // 5. Render unified table with running balance
+  let running = 0;
+  const unifiedRowsHtml = events.map((e) => {
+    running += e.debit - e.credit;
+    const debitCell = e.debit > 0
+      ? `<span class="amt-debit">${formatMoney(e.debit)}</span>`
+      : '';
+    const creditCell = e.credit > 0
+      ? `<span class="amt-credit">${formatMoney(e.credit)}</span>`
+      : '';
+    const balanceCell = running === 0
+      ? '<span class="amt-balance-zero">0</span>'
+      : running > 0
+        ? `<span class="amt-balance-debt">${formatMoney(running)}</span>`
+        : `<span class="amt-balance-credit">(${formatMoney(Math.abs(running))})</span>`;
+
+    const numCell = e.voucherUrl
+      ? `<a href="${e.voucherUrl}" target="_blank" rel="noopener noreferrer" class="vnum-link">${escapeHtml(e.voucherNumber)}</a>`
+      : escapeHtml(e.voucherNumber);
+
+    const subLinesHtml = e.subLines.length ? `<div class="event-sublines">${e.subLines.join('')}</div>` : '';
 
     return `
-      <tr>
+      <tr class="${e.rowClass}">
         <td class="vnum">${numCell}</td>
-        <td class="date">${formatDate(r.receipt_date)}</td>
-        <td class="ledger-cell">${description}</td>
+        <td class="date">${formatDate(e.date)}</td>
+        <td class="event-cell">
+          ${e.description}
+          ${subLinesHtml}
+        </td>
         <td class="amount debit">${debitCell}</td>
         <td class="amount credit">${creditCell}</td>
         <td class="amount balance">${balanceCell}</td>
@@ -1111,8 +1095,11 @@ function buildStatementHtml(args: BuildArgs): string {
     `;
   }).join('');
 
-  const emptyLedgerHtml = ledger.length === 0
-    ? `<tr><td colspan="6" class="ledger-empty">لا توجد حركات مالية لهذه السنة</td></tr>`
+  const carsHtml = ''; // packages now live in the unified ledger above
+  const ledgerRowsHtml = unifiedRowsHtml;
+
+  const emptyLedgerHtml = events.length === 0
+    ? `<tr><td colspan="6" class="ledger-empty">لا توجد حركات في هذه السنة</td></tr>`
     : '';
 
   // ── Totals + overall note ───────────────────────────────────
@@ -1380,6 +1367,69 @@ function buildStatementHtml(args: BuildArgs): string {
     .ledger-table .direction-debit {
       background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;
     }
+    /* Unified event ledger — per-row tint so the customer scans by color */
+    .ledger-table .event-transaction td       { background: #fffefb; }
+    .ledger-table .event-inactive td          { background: #fafafa; opacity: 0.78; }
+    .ledger-table .event-reversal td          { background: #fff7ed; }
+    .ledger-table .event-payment td           { background: #f0fdf4; }
+    .ledger-table .event-credit-note td       { background: #ecfdf5; }
+    .ledger-table .event-disbursement td      { background: #fef2f2; }
+    .ledger-table .event-cancel-receipt td    { background: #fef2f2; }
+    .ledger-table .event-headline {
+      font-size: 12.5px; font-weight: 700; color: #1a1a1a;
+      line-height: 1.5;
+    }
+    .ledger-table .event-sublines {
+      margin-top: 4px; font-size: 11px; color: #374151;
+      line-height: 1.6; font-weight: 500;
+    }
+    .ledger-table .line-item {
+      padding: 2px 0; display: flex; gap: 6px;
+      align-items: baseline; flex-wrap: wrap;
+    }
+    .ledger-table .line-item .line-amount {
+      display: inline-block; min-width: 70px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700; color: #1a1a1a;
+      direction: ltr; text-align: left;
+    }
+    .ledger-table .elzami-tag {
+      display: inline-block; font-size: 9.5px; font-weight: 700;
+      padding: 1px 6px; border-radius: 8px;
+      background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
+    }
+    .ledger-table .commission-note {
+      font-size: 10px; color: #6b7280; font-weight: 500;
+    }
+    .ledger-table .elzami-summary {
+      font-size: 10.5px; color: #6b7280; font-weight: 600;
+      padding: 4px 8px; background: #fafafa;
+      border-right: 2px solid #d1d5db; margin-top: 4px;
+      border-radius: 0 4px 4px 0;
+    }
+    .ledger-table .reason-line {
+      font-size: 10.5px; padding: 3px 8px; margin-top: 3px;
+      border-radius: 0 4px 4px 0; line-height: 1.55;
+    }
+    .ledger-table .reason-cancel {
+      background: #fef2f2; color: #7f1d1d;
+      border-right: 3px solid #b91c1c;
+    }
+    .ledger-table .reason-transfer {
+      background: #fff7ed; color: #7c2d12;
+      border-right: 3px solid #ea580c;
+    }
+    .ledger-table .reason-transfer-in {
+      background: #eff6ff; color: #1e3a8a;
+      border-right: 3px solid #2563eb;
+    }
+    .ledger-table .reason-adjust {
+      background: #f5f3ff; color: #5b21b6;
+      border-right: 3px solid #7c3aed;
+    }
+    .ledger-table .amt-balance-zero {
+      color: #6b7280; font-weight: 700;
+    }
     .ledger-table .vnum-link {
       color: #1d4ed8; text-decoration: none;
       border-bottom: 1px dashed #1d4ed8;
@@ -1530,16 +1580,11 @@ function buildStatementHtml(args: BuildArgs): string {
       </div>
     </div>
 
-    <div class="section-title" style="border:1px solid #1a1a1a;border-bottom:none;margin-bottom:0">المعاملات والسيارات لسنة ${year}</div>
-    ${policies.length === 0
-      ? `<div style="border:1px solid #1a1a1a;border-top:none;padding:24px;text-align:center;color:#6b7280;font-style:italic;margin-bottom:22px">لا توجد معاملات بدأت في هذه السنة</div>`
-      : `<div style="border:1px solid #1a1a1a;border-top:none;padding:14px;margin-bottom:22px">${carsHtml}</div>`}
-
     <div class="ledger">
-      <div class="section-title">سجل الدفعات والسندات (${year})</div>
+      <div class="section-title">كشف الحركة (${year})</div>
       <div class="ledger-legend">
-        <span class="legend-item"><span class="legend-dot legend-credit"></span>دفعه العميل للمكتب (+)</span>
-        <span class="legend-item"><span class="legend-dot legend-debit"></span>للعميل أو رصيد لديه (−)</span>
+        <span class="legend-item"><span class="legend-dot legend-debit"></span>مدين — يضاف لما على العميل (معاملة جديدة / سند صرف)</span>
+        <span class="legend-item"><span class="legend-dot legend-credit"></span>دائن — يطرح من ما على العميل (سند قبض / إشعار دائن / إلغاء معاملة)</span>
         <span class="legend-item legend-note">اضغط على رقم السند لعرض الوثيقة الأصلية</span>
       </div>
       <table class="ledger-table">
