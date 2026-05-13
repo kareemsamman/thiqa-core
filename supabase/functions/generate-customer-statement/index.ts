@@ -280,19 +280,21 @@ serve(async (req: Request) => {
     const { data: paymentsRaw } = policyIds.length
       ? await userClient
           .from('policy_payments')
-          .select('id, policy_id, amount, refused')
+          .select('id, policy_id, amount, refused, payment_type')
           .in('policy_id', policyIds)
       : { data: [] as any[] } as any;
     const payments = (paymentsRaw || []) as any[];
 
-    // Lookup: policy_id → policy type + office commission. Used to
-    // exclude إلزامي base-price payments from the kashf totals (they
-    // pass through to the company directly; the office never keeps
-    // that money so it can't appear under "المدفوع").
+    // Lookup: policy_id → policy type + office commission. Same
+    // signature the ledger filter uses, so إجمالي المدفوع and the
+    // ledger دائن totals stay in lockstep: only visa_external rows
+    // tied to a zero-commission إلزامي policy are stripped (those
+    // are the customer-paid-the-company-directly cases).
     const policyById = new Map<string, any>();
     for (const p of policies) policyById.set(p.id, p);
-    const isElzamiPolicyPassthrough = (policyId: string): boolean => {
-      const pol = policyById.get(policyId);
+    const isPaymentElzamiPassthrough = (p: any): boolean => {
+      if (p.payment_type !== 'visa_external') return false;
+      const pol = policyById.get(p.policy_id);
       if (!pol) return false;
       return pol.policy_type_parent === 'ELZAMI' && Number(pol.office_commission || 0) <= 0;
     };
@@ -300,7 +302,7 @@ serve(async (req: Request) => {
     const paidByPolicy = new Map<string, number>();
     for (const p of payments) {
       if (p.refused) continue;
-      if (isElzamiPolicyPassthrough(p.policy_id)) continue;
+      if (isPaymentElzamiPassthrough(p)) continue;
       paidByPolicy.set(p.policy_id, (paidByPolicy.get(p.policy_id) || 0) + Number(p.amount || 0));
     }
 
@@ -466,13 +468,20 @@ serve(async (req: Request) => {
       }
     }
 
-    // Identify ledger receipts whose underlying payment_id ties to an
-    // ELZAMI policy with zero office commission. Those payments are
-    // pure pass-through (customer paid the company directly via Visa,
-    // even if the office recorded a receipt for tracking) and have
-    // no place in the office's kashf. We strip them BEFORE building
-    // events so both مدين and دائن sides stay consistent.
-    const isElzamiPassthrough = (paymentId: string | null | undefined): boolean => {
+    // Strip ledger rows that represent an إلزامي pass-through — the
+    // customer paid the insurance company directly via external Visa
+    // and the office only recorded the row for tracking. Those have
+    // no place on the office's kashf. The signature is BOTH:
+    //   • payment_method === 'visa_external' (the explicit
+    //     marker the in-app receipts page tags as "فيزا خارجي"), AND
+    //   • the linked policy is إلزامي with zero office commission.
+    // Cash/cheque/transfer payments are NEVER stripped even if the
+    // backend linked them to the package's إلزامي row by happenstance
+    // (which happens when the bulk-payment flow attaches one cash
+    // payment to a single policy_id picked from the package).
+    const isElzamiPassthrough = (r: any): boolean => {
+      if (r.payment_method !== 'visa_external') return false;
+      const paymentId = r.payment_id;
       if (!paymentId) return false;
       const meta = paymentMeta.get(paymentId);
       if (!meta) return false;
@@ -480,7 +489,7 @@ serve(async (req: Request) => {
     };
     const filteredLedger = ledger.filter((r: any) => {
       if (r.receipt_type === 'payment' || r.receipt_type === 'cancellation') {
-        return !isElzamiPassthrough(r.payment_id);
+        return !isElzamiPassthrough(r);
       }
       return true;
     });
