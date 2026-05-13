@@ -699,6 +699,7 @@ serve(async (req: Request) => {
       transfersByDestPolicy,
       transfersByOriginPolicy,
       cancellationReasonByPolicy,
+      paidByPolicy,
       ledger: ledgerForEvents,
       chequeMeta,
       voucherUrlByReceipt,
@@ -789,6 +790,7 @@ interface BuildArgs {
   transfersByDestPolicy: Map<string, any>;
   transfersByOriginPolicy: Map<string, any>;
   cancellationReasonByPolicy: Map<string, string>;
+  paidByPolicy: Map<string, number>;
   ledger: any[];
   chequeMeta: Map<string, {
     bank_code: string | null;
@@ -839,6 +841,7 @@ function buildStatementHtml(args: BuildArgs): string {
     transfersByDestPolicy,
     transfersByOriginPolicy,
     cancellationReasonByPolicy,
+    paidByPolicy,
     ledger,
     chequeMeta,
     voucherUrlByReceipt,
