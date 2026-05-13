@@ -704,7 +704,7 @@ function buildBulkReceiptHtml(
 
     <!-- Receipts table -->
     <div class="receipts-section">
-      <div class="section-title">سندات القبض</div>
+      <div class="section-title">الدفعات المستلمة</div>
       <table class="receipts">
         <thead>
           <tr>
