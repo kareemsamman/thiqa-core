@@ -637,13 +637,14 @@ serve(async (req: Request) => {
       .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
     const yearCustomerCredit = Math.max(0, yearCreditNoteAmount - yearDisbursementAmount);
 
-    // المتبقي = الإجمالي − المدفوع − المرتجع. The credit reduces
-    // what the customer still owes because the office holds it on
-    // their behalf — same arithmetic the in-app debt tile uses.
-    const totalYearRemaining = Math.max(
-      0,
-      totalYearAmount - totalYearPaid - yearCustomerCredit,
-    );
+    // Year balance — signed so the kashf can flip direction:
+    //   positive → customer still owes the office
+    //   negative → office still owes the customer (e.g. cancellation
+    //     with a credit_note that hasn't been fully disbursed yet)
+    //   zero     → settled
+    const yearBalance = totalYearAmount - totalYearPaid - yearCustomerCredit;
+    const totalYearRemaining = Math.max(0, yearBalance);
+    const totalYearOwedToCustomer = Math.max(0, -yearBalance);
 
     // ── Overall remaining (across ALL years) ──────────────────
     // Pulled to render the "ملاحظة: العميل عليه إجمالاً ₪X" line at
@@ -711,6 +712,7 @@ serve(async (req: Request) => {
       totalYearPaid,
       yearCustomerCredit,
       totalYearRemaining,
+      totalYearOwedToCustomer,
       overallNet,
       branding,
     });
@@ -809,6 +811,7 @@ interface BuildArgs {
   totalYearPaid: number;
   yearCustomerCredit: number;
   totalYearRemaining: number;
+  totalYearOwedToCustomer: number;
   overallNet: number;
   branding: AgentBranding;
 }
@@ -853,6 +856,7 @@ function buildStatementHtml(args: BuildArgs): string {
     totalYearPaid,
     yearCustomerCredit,
     totalYearRemaining,
+    totalYearOwedToCustomer,
     overallNet,
     branding,
   } = args;
@@ -1354,8 +1358,20 @@ function buildStatementHtml(args: BuildArgs): string {
         </div>
         ${creditRowHtml}
         <div class="totals-row totals-final">
-          <span class="totals-label">المتبقي على العميل لسنة ${year}</span>
-          <span class="totals-value ${totalYearRemaining === 0 ? 'cleared' : 'owed'}">${totalYearRemaining === 0 ? 'تم التسديد بالكامل' : formatMoney(totalYearRemaining)}</span>
+          ${totalYearRemaining > 0.01
+            ? `
+              <span class="totals-label">المتبقي على العميل لسنة ${year}</span>
+              <span class="totals-value owed">${formatMoney(totalYearRemaining)}</span>
+            `
+            : totalYearOwedToCustomer > 0.01
+              ? `
+                <span class="totals-label">للعميل عند المكتب لسنة ${year}</span>
+                <span class="totals-value owed-to-customer">${formatMoney(totalYearOwedToCustomer)}</span>
+              `
+              : `
+                <span class="totals-label">المتبقي على العميل لسنة ${year}</span>
+                <span class="totals-value cleared">تم التسديد بالكامل</span>
+              `}
         </div>
       </div>
     </div>
@@ -1716,6 +1732,7 @@ function buildStatementHtml(args: BuildArgs): string {
     .totals-row.totals-final .totals-value { font-size: 15px; }
     .totals-value.cleared { color: #86efac; }
     .totals-value.owed { color: #fca5a5; }
+    .totals-value.owed-to-customer { color: #fcd34d; }
     .totals-row.totals-credit-row { background: #fffbeb; }
     .totals-hint {
       display: block; font-size: 10px; font-weight: 500;
