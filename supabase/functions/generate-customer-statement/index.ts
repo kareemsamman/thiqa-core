@@ -1126,11 +1126,6 @@ function buildStatementHtml(args: BuildArgs): string {
     // order beneath the original.
     const packageInactive = mainPolicy.cancelled || mainPolicy.transferred;
     if (packageInactive) {
-      const paidForPackage = pkg.reduce(
-        (s, p) => s + (paidByPolicy.get(p.id) || 0),
-        0,
-      );
-      const unpaidPortion = Math.max(0, totalDebit - paidForPackage);
       const reversalDate =
         (mainPolicy.cancelled && mainPolicy.cancellation_date) ||
         mainPolicy.start_date;
@@ -1143,25 +1138,13 @@ function buildStatementHtml(args: BuildArgs): string {
       // disbursement and use that row's created_at minus a tick.
       // Fall back to end-of-day for cancellations that haven't (yet)
       // produced a paired receipt.
-      // Linked refund: the amount the office promised back to the
-      // customer when cancelling. Prefer the credit_note total if
-      // present; otherwise fall back to the disbursement total.
-      // Both come from receipts rows attached to this package's
-      // policies.
-      let linkedCreditTotal = 0;
-      let linkedDisbursementTotal = 0;
       let linkedNote: any = null;
       for (const r of ledger as any[]) {
         if (!pkg.some((p) => p.id === r.policy_id)) continue;
-        if (r.receipt_type === 'credit_note') {
-          linkedCreditTotal += Math.abs(Number(r.amount || 0));
-          if (!linkedNote) linkedNote = r;
-        } else if (r.receipt_type === 'disbursement') {
-          linkedDisbursementTotal += Math.abs(Number(r.amount || 0));
-          if (!linkedNote) linkedNote = r;
+        if (r.receipt_type === 'credit_note' || r.receipt_type === 'disbursement') {
+          if (!linkedNote) { linkedNote = r; break; }
         }
       }
-      const refundAmount = linkedCreditTotal > 0 ? linkedCreditTotal : linkedDisbursementTotal;
       const reversalTimestamp = linkedNote?.created_at
         ? new Date(linkedNote.created_at).getTime() - 1
         : (() => {
@@ -1186,27 +1169,13 @@ function buildStatementHtml(args: BuildArgs): string {
           `<div class="reason-line reason-transfer"><strong>محوّلة${toCar ? ` إلى سيارة ${escapeHtml(toCar)}` : ''}</strong>${transferOut?.note ? ` — ${escapeHtml(transferOut.note)}` : ''}</div>`,
         );
       }
-      if (unpaidPortion > 0.01) {
-        reasonSubLines.push(
-          `<div class="reason-line">شُطب الجزء غير المدفوع: ${formatMoney(unpaidPortion)} من أصل ${formatMoney(totalDebit)} (المُستخدم يبقى على العميل)</div>`,
-        );
-      }
-      if (refundAmount > 0.01) {
-        reasonSubLines.push(
-          `<div class="reason-line">مرتجع للعميل: ${formatMoney(refundAmount)}</div>`,
-        );
-      }
-
-      // Cancellation reversal: forgives the unpaid portion of the
-      // bill AND records the refund obligation owed to the customer.
-      //   balanceDelta = −(T − P + R)
-      // Displayed amount = R (what the user set as the refund). The
-      // sub-line spells out the breakdown. Linked credit_notes are
-      // suppressed below so we don't double-count the refund — but
-      // the matching disbursement still appears as the cash payment
-      // that fulfills the obligation (+amount on balance).
-      const reversalBalance = unpaidPortion + refundAmount;
-      const reversalDisplay = refundAmount > 0 ? refundAmount : unpaidPortion;
+      // Cancellation/transfer is a NOTATION ONLY — no balance impact,
+      // no debit/credit. The actual money movement is carried by the
+      // linked إشعار دائن (credit_note) and/or سند صرف (disbursement)
+      // rows that follow. The original transaction row stays as-is in
+      // the customer's debt, and the refund row(s) subtract from it
+      // separately — that's how the office's real-world workflow runs:
+      // cancellation is an agreement, refund is the cash event.
       const reversalLabel = mainPolicy.cancelled ? 'إلغاء معاملة' : 'تحويل معاملة';
       events.push({
         date: reversalDate,
@@ -1217,10 +1186,10 @@ function buildStatementHtml(args: BuildArgs): string {
         description: `<div class="event-headline"><strong>${reversalLabel}</strong> · رقم ${escapeHtml(String(docNumber))}</div>`,
         subLines: reasonSubLines,
         debit: 0,
-        credit: reversalDisplay,
-        balanceDelta: -reversalBalance,
+        credit: 0,
+        balanceDelta: 0,
         rowClass: 'event-reversal',
-        directionHint: 'إلغاء التزام',
+        directionHint: 'ملاحظة',
       });
     }
   }
@@ -1251,22 +1220,6 @@ function buildStatementHtml(args: BuildArgs): string {
     const sessionKey = meta?.payment_session_id || meta?.batch_id || r.payment_id || r.id;
     return `session:${sessionKey}`;
   };
-
-  // Credit_notes that are already represented inside a cancellation
-  // reversal event must not emit their own balance-changing row, or
-  // we'd double-count the refund obligation. We still display them
-  // (the user wants to see C…/year as evidence) but with zero
-  // balance impact — they're informational, like a duplicate copy.
-  const cancelledPolicyIdSet = new Set<string>();
-  for (const p of policies) {
-    if (p.cancelled || p.transferred) cancelledPolicyIdSet.add(p.id);
-  }
-  const suppressedReceiptIds = new Set<string>();
-  for (const r of ledger as any[]) {
-    if (r.receipt_type === 'credit_note' && r.policy_id && cancelledPolicyIdSet.has(r.policy_id)) {
-      suppressedReceiptIds.add(r.id);
-    }
-  }
 
   type ReceiptGroup = { representative: any; rows: any[]; totalAmount: number };
   const paymentGroups = new Map<ReceiptGroupKey, ReceiptGroup>();
@@ -1369,29 +1322,22 @@ function buildStatementHtml(args: BuildArgs): string {
       ? new Date(r.created_at).getTime()
       : new Date(r.receipt_date).getTime();
     // Per-event balance contribution, decoupled from the display
-    // column. credit_note sits in the مدين column visually (per
-    // user's "same family as سند صرف" rule) but SUBTRACTS from the
-    // running balance — the office owes the customer this amount,
-    // so the balance has to dip when it lands. Disbursement adds
-    // back (cash actually paid out fulfils a refund obligation).
-    //
-    // Suppression: a credit_note attached to a cancelled policy is
-    // already counted inside that cancellation's reversal event, so
-    // it must not move the balance again — shown as informational
-    // only.
-    const isSuppressed = suppressedReceiptIds.has(r.id);
-    const balanceDelta = isSuppressed
-      ? 0
-      : (() => {
-          switch (r.receipt_type) {
-            case 'payment':       return -displayedAmount; // customer paid
-            case 'accident_fee':  return -displayedAmount; // billed as payment-like
-            case 'cancellation':  return +displayedAmount; // refused cheque puts debt back
-            case 'disbursement':  return +displayedAmount; // cash paid out settles a prior credit
-            case 'credit_note':   return -displayedAmount; // office owes customer
-            default:              return isDebit ? +displayedAmount : -displayedAmount;
-          }
-        })();
+    // column. Both credit_note and disbursement sit in the مدين column
+    // visually but SUBTRACT from the running balance — the office is
+    // giving value back to the customer (a paper credit or cash out),
+    // so the balance has to dip when it lands. Cancellation rows
+    // (إلغاء معاملة) carry no balance impact themselves — the refund
+    // row that follows them is what actually moves the number.
+    const balanceDelta = (() => {
+      switch (r.receipt_type) {
+        case 'payment':       return -displayedAmount; // customer paid
+        case 'accident_fee':  return -displayedAmount; // billed as payment-like
+        case 'cancellation':  return +displayedAmount; // refused cheque puts debt back
+        case 'disbursement':  return -displayedAmount; // cash paid out to customer
+        case 'credit_note':   return -displayedAmount; // office owes customer
+        default:              return isDebit ? +displayedAmount : -displayedAmount;
+      }
+    })();
     events.push({
       date: r.receipt_date,
       timestamp: Number.isNaN(receiptTimestamp) ? 0 : receiptTimestamp,
