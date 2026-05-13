@@ -806,16 +806,27 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       }
 
       const allPolicyIds = policiesData.map(p => p.id);
+      // Build a per-policy lookup so we can detect إلزامي pass-through
+      // payments (customer paid the insurance company directly via
+      // external Visa — that money never touches the office's books
+      // and must not inflate the "إجمالي المدفوع" tile).
+      const policyById = new Map(policiesData.map(p => [p.id, p as any]));
+      const isElzamiPassthrough = (payment: { payment_type?: string | null; policy_id: string }) => {
+        if (payment.payment_type !== 'visa_external') return false;
+        const pol = policyById.get(payment.policy_id);
+        if (!pol) return false;
+        return pol.policy_type_parent === 'ELZAMI' && Number(pol.office_commission || 0) <= 0;
+      };
       let paymentsMap: Record<string, number> = {};
       if (allPolicyIds.length > 0) {
         const { data: paymentsData } = await supabase
           .from('policy_payments')
-          .select('policy_id, amount, refused')
+          .select('policy_id, amount, refused, payment_type')
           .in('policy_id', allPolicyIds);
         (paymentsData || []).forEach(p => {
-          if (!p.refused) {
-            paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + (p.amount || 0);
-          }
+          if (p.refused) return;
+          if (isElzamiPassthrough(p as any)) return;
+          paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + (p.amount || 0);
         });
       }
 
@@ -835,12 +846,22 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       let clientPaid = 0;
       const brokerTotals = new Map<string, { brokerId: string; brokerName: string; amount: number }>();
 
+      // إلزامي base price is paid directly to the insurance company
+      // via external Visa and never enters the office's books. The
+      // policy itself records the base price for historical/regulatory
+      // reasons, but the office's claim is only the (rare) commission
+      // on it — and for non-إلزامي the full price + commission.
+      const officeClaimFor = (p: any) => {
+        const commission = Number(p.office_commission || 0);
+        if (p.policy_type_parent === 'ELZAMI') return commission;
+        return Number(p.insurance_price || 0) + commission;
+      };
       groupMap.forEach(groupPolicies => {
         const nonBrokerInGroup = groupPolicies.filter(p => !(p as any).broker_id);
         const brokerInGroup = groupPolicies.filter(p => (p as any).broker_id);
 
         const nonBrokerClaim = nonBrokerInGroup.reduce(
-          (sum, p) => sum + (p.insurance_price || 0) + ((p as any).office_commission || 0),
+          (sum, p) => sum + officeClaimFor(p),
           0,
         );
         const groupPool = groupPolicies.reduce(
@@ -855,7 +876,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
         if (brokerInGroup.length > 0) {
           const brokerOwed = brokerInGroup.reduce(
-            (sum, p) => sum + (p.insurance_price || 0) + ((p as any).office_commission || 0),
+            (sum, p) => sum + officeClaimFor(p),
             0,
           );
           const brokerRemaining = Math.max(0, brokerOwed - paidTowardBroker);
