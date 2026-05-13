@@ -917,12 +917,15 @@ function buildStatementHtml(args: BuildArgs): string {
       pkg.find((p) => p.policy_type_parent === 'ELZAMI') ||
       pkg[0];
 
-    // إلزامي is completely OUT of the office's books per the user's
-    // rule: the customer pays the إلزامي base directly via external
-    // Visa to the company, so the office never bills or collects it.
-    // Only the office_commission on an إلزامي policy (when the agent
-    // adds one — rare) appears in the kashf. Pure-إلزامي policies
-    // with zero commission don't appear at all.
+    // Each policy in the package gets its own line under البيان so
+    // the customer sees exactly what he bought. For إلزامي rows we
+    // still display the policy and its base price (so a glance at
+    // the kashf tells the customer that إلزامي is part of the deal),
+    // but the base price is NOT added to officePart — the customer
+    // paid that to the insurance company directly via external Visa,
+    // so it never enters the office's books. Office commission on
+    // an إلزامي row (rare, e.g. when the agent charges for handling
+    // إلزامي-only) does enter officePart.
     let officePart = 0;
     const lineItems: string[] = [];
     for (const p of pkg) {
@@ -932,13 +935,16 @@ function buildStatementHtml(args: BuildArgs): string {
       const companyName = p.company?.name_ar || p.company?.name || '';
       const companyTag = companyName ? ` · ${escapeHtml(companyName)}` : '';
       if (p.policy_type_parent === 'ELZAMI') {
-        // إلزامي base price never enters the kashf. Skip the line
-        // entirely when there's no office commission attached.
-        if (commission <= 0) continue;
-        officePart += commission;
+        // Show the إلزامي line item with its base price + a "خارج
+        // الكشف" tag so the customer reads what it covers. Office
+        // commission (if any) joins the office's books inline.
+        const commissionNote = commission > 0
+          ? ` <span class="commission-note">(+ ${formatMoney(commission)} عمولة مكتب)</span>`
+          : '';
         lineItems.push(
-          `<div class="line-item"><span class="line-amount">${formatMoney(commission)}</span> · <strong>عمولة مكتب على ${escapeHtml(typeLabel)}</strong>${companyTag}</div>`,
+          `<div class="line-item"><span class="line-amount">${formatMoney(insurancePrice)}</span> · <strong>${escapeHtml(typeLabel)}</strong>${companyTag}<span class="elzami-tag">تدفع للشركة — خارج الكشف</span>${commissionNote}</div>`,
         );
+        officePart += commission;
       } else {
         officePart += insurancePrice + commission;
         const breakdownTag = commission > 0
@@ -948,14 +954,6 @@ function buildStatementHtml(args: BuildArgs): string {
           `<div class="line-item"><span class="line-amount">${formatMoney(insurancePrice + commission)}</span> · <strong>${escapeHtml(typeLabel)}</strong>${companyTag}${breakdownTag}</div>`,
         );
       }
-    }
-
-    // If after stripping إلزامي base prices nothing is left on the
-    // office's books for this package (e.g. a customer who bought
-    // only إلزامي with no commission), skip emitting the row entirely
-    // — there's nothing for the kashf to track.
-    if (officePart === 0 && lineItems.length === 0) {
-      continue;
     }
 
     const totalDebit = officePart;
