@@ -1494,11 +1494,18 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
     setDeletingPolicy(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      // Force a session refresh first — the cached access_token can be
+      // expired moments before the JS client's auto-refresh fires,
+      // which surfaced as a sporadic "Invalid token" from the edge
+      // function when the user clicked delete after sitting idle on
+      // the page for a while. refreshSession() pulls a fresh JWT
+      // synchronously so the subsequent invoke() always carries a
+      // live token.
+      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+      const token = refreshed?.session?.access_token;
 
-      if (!token) {
-        toast.error('يرجى تسجيل الدخول مرة أخرى');
+      if (refreshError || !token) {
+        toast.error('انتهت الجلسة، يرجى تسجيل الدخول مرة أخرى');
         return;
       }
 
