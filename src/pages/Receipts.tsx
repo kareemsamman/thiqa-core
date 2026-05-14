@@ -2260,6 +2260,60 @@ export default function Receipts() {
         return;
       }
 
+      // Collapse rows into one-line-per-سند, mirroring the on-screen
+      // grouping ([Receipts.tsx:1090-1149]). A bulk سند قبض whose
+      // session contains 10 policy_payments must print as ONE row
+      // showing the total — not 10 fanned-out rows of the same
+      // voucher number. Same session-id resolution as fetchReceipts
+      // (lines 1039-1058), refetched locally because handlePrintAll
+      // queries beyond what's been paginated into the on-screen state.
+      const printPaymentIds = allReceipts
+        .map((r) => r.payment_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0);
+      const printSessionMap: Record<string, string> = {};
+      if (printPaymentIds.length > 0) {
+        const { data: sessionRows } = await supabase
+          .from("policy_payments")
+          .select("id, payment_session_id")
+          .in("id", printPaymentIds);
+        for (const row of (sessionRows ?? []) as Array<{ id: string; payment_session_id: string | null }>) {
+          if (row.payment_session_id) printSessionMap[row.id] = row.payment_session_id;
+        }
+      }
+
+      type PrintGroup = {
+        representative: ReceiptRecord;
+        receipts: ReceiptRecord[];
+        total: number;
+      };
+      const groupMap = new Map<string, PrintGroup>();
+      for (const r of allReceipts) {
+        const rawPolicy = (r as any).policy;
+        const policy = Array.isArray(rawPolicy)
+          ? rawPolicy[0] ?? null
+          : rawPolicy ?? null;
+        const sessionId = r.payment_id ? printSessionMap[r.payment_id] : null;
+        const typePrefix = (r as any).receipt_type || "payment";
+        let key: string;
+        if (sessionId) {
+          key = `${typePrefix}:sess:${sessionId}`;
+        } else if (policy?.group_id) {
+          key = `${typePrefix}:grp:${policy.group_id}`;
+        } else if (policy?.id) {
+          key = `${typePrefix}:pol:${policy.id}`;
+        } else {
+          const minute = roundToMinute(r.created_at);
+          key = `${typePrefix}:manual:${r.client_name}||${r.car_number || ""}||${minute}`;
+        }
+        if (!groupMap.has(key)) {
+          groupMap.set(key, { representative: r, receipts: [], total: 0 });
+        }
+        const g = groupMap.get(key)!;
+        g.receipts.push(r);
+        g.total += Number(r.amount || 0);
+      }
+      const printGroups = Array.from(groupMap.values());
+
       const allTotal = allReceipts.reduce((s, r) => s + Number(r.amount || 0), 0);
       const cashTotal = allReceipts
         .filter((r) => r.payment_method === "cash")
@@ -2315,10 +2369,20 @@ export default function Receipts() {
         cheque_number: "رقم الشيك",
         notes: "ملاحظات",
       };
+      // Per-row payment details (طريقة الدفع / رقم الشيك) don't make
+      // sense once rows are collapsed to one-per-سند — a single سند
+      // may bundle نقدي + شيك + شيك. The kpi strip above still breaks
+      // down cash vs cheque vs other across the WHOLE filtered set,
+      // which is the meaningful summary. So drop those columns from
+      // the printed table even if they're toggled on for the screen.
       const printColumns = [
         { key: "idx", label: "#", align: "center" as const },
         ...tabColumns.filter(
-          (c) => c.key !== "actions" && isCol(c.key),
+          (c) =>
+            c.key !== "actions" &&
+            c.key !== "payment_method" &&
+            c.key !== "cheque_number" &&
+            isCol(c.key),
         ).map((c) => ({
           key: c.key,
           label: PRINT_LABELS[c.key] ?? c.label,
@@ -2326,7 +2390,8 @@ export default function Receipts() {
         })),
       ];
 
-      const rows = allReceipts.map((r, i) => {
+      const rows = printGroups.map((g, i) => {
+        const r = g.representative;
         const rawPolicy = (r as any).policy;
         const policy = Array.isArray(rawPolicy)
           ? rawPolicy[0] ?? null
@@ -2348,6 +2413,16 @@ export default function Receipts() {
         const rtLabel = rt && RECEIPT_TYPE_BADGE[rt]
           ? RECEIPT_TYPE_BADGE[rt].label
           : '';
+        // Notes column for a grouped سند: union of distinct, non-empty
+        // notes across the session's rows. Same session almost always
+        // means one shared note, so this stays clean; mixed cases get
+        // separated by " · " so the operator can still read each.
+        const noteSet = new Set<string>();
+        for (const x of g.receipts) {
+          const note = (x.notes ?? "").trim();
+          if (note) noteSet.add(note);
+        }
+        const notesJoined = Array.from(noteSet).join(" · ");
         return {
           idx: i + 1,
           receipt_number: r.voucher_number ?? formatReceiptNumber(r.receipt_number, r.receipt_date),
@@ -2358,10 +2433,8 @@ export default function Receipts() {
           car_number: r.car_number ?? "",
           company_name: company?.name_ar || company?.name || "",
           policy_type: typeKey ? POLICY_TYPE_DISPLAY[typeKey] || typeKey : "",
-          payment_method: paymentLabelShort(r.payment_method),
-          cheque_number: r.cheque_number ?? "",
-          notes: r.notes ?? "",
-          amount: fmtMoney(r.amount),
+          notes: notesJoined,
+          amount: fmtMoney(g.total),
         };
       });
 
@@ -2369,7 +2442,7 @@ export default function Receipts() {
         title: "تقرير الإيصالات",
         subtitle: filterBits.length > 0 ? filterBits.join(" · ") : undefined,
         stats: [
-          { label: "عدد الإيصالات", value: String(allReceipts.length), tone: "primary" },
+          { label: "عدد الإيصالات", value: String(printGroups.length), tone: "primary" },
           { label: "المجموع", value: fmtMoney(allTotal), tone: "emerald" },
           { label: "نقدي", value: fmtMoney(cashTotal), tone: "success" },
           { label: "شيك", value: fmtMoney(chequeTotal), tone: "amber" },
