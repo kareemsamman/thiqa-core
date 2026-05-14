@@ -446,12 +446,19 @@ export function DebtPaymentModal({
   const fetchDebtItems = async () => {
     setLoading(true);
     try {
+      // Per "إلغاء المعاملة ≠ إلغاء الدين": a cancelled package the
+      // customer never paid for is still collectable — the customer
+      // used the insurance up to the cancellation date. Only the
+      // refund flow (إشعار دائن / سند صرف) reduces the obligation,
+      // and that surfaces as paid via paymentsMap below. So include
+      // every non-destination policy regardless of cancel/transfer
+      // status; payablePolicies (remaining > 0) still filters out
+      // anything already fully covered.
       const { data: policiesData, error: policiesError } = await supabase
         .from('policies')
         .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, branch_id, group_id, broker_id, transferred_from_policy_id, broker:brokers(id, name), car:cars(car_number)')
         .eq('client_id', clientId)
-        .eq('cancelled', false)
-        .eq('transferred', false)
+        .is('transferred_from_policy_id', null)
         .is('deleted_at', null);
 
       if (policiesError) throw policiesError;
