@@ -88,3 +88,9 @@ verify_jwt = false
 
 [functions.green-api-webhook]
 verify_jwt = false
+
+[functions.send-credit-note-sms]
+verify_jwt = false
+
+[functions.send-disbursement-sms]
+verify_jwt = false

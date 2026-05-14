@@ -19,8 +19,20 @@ interface PersistArgs {
  * AddSettlementDialog so the cancel/transfer modals can stage payment
  * lines in memory and persist them atomically at confirm time — keeping
  * the DB-shape logic in one place instead of duplicating it.
+ *
+ * Returns the IDs of every settlement row created plus the shared
+ * settlement_session_id (when mode === 'client' with at least one line).
+ * Callers that need to surface the auto-mirrored receipts row (e.g. the
+ * post-cancel "send سند صرف" dialog) use these to look up the matching
+ * receipts.id without re-querying by timestamp.
  */
-export async function persistSettlementLines(args: PersistArgs): Promise<void> {
+export interface PersistSettlementResult {
+  settlementIds: string[];
+  clientSettlementSessionId: string | null;
+}
+export async function persistSettlementLines(
+  args: PersistArgs,
+): Promise<PersistSettlementResult> {
   const { mode, kind, entityId, policyId, branchId, effective, notes, userId, agentId } = args;
 
   // Multi-line client disbursements share one settlement_session_id so
@@ -28,6 +40,8 @@ export async function persistSettlementLines(args: PersistArgs): Promise<void> {
   // all lines instead of allocating a new number per row.
   const clientSettlementSessionId =
     mode === 'client' && effective.length > 0 ? crypto.randomUUID() : null;
+
+  const settlementIds: string[] = [];
 
   for (const line of effective) {
     const isCustomerCheque = line.payment_type === 'customer_cheque';
@@ -134,5 +148,9 @@ export async function persistSettlementLines(args: PersistArgs): Promise<void> {
         .in('id', customerChequeIds);
       if (updateError) throw updateError;
     }
+
+    if (settlementId) settlementIds.push(settlementId);
   }
+
+  return { settlementIds, clientSettlementSessionId };
 }

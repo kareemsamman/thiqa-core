@@ -71,7 +71,15 @@ interface CancelPolicyModalProps {
   clientPhone: string | null;
   branchId: string | null;
   insurancePrice: number;
-  onCancelled: () => void;
+  // Optional callback payload tells the parent which sendable voucher
+  // (if any) the cancel produced — credit_note when the agent picked
+  // "إشعار دائن" or disbursement when "سند صرف" was used. The parent
+  // opens a print/SMS/WhatsApp dialog when the payload is present so
+  // the agent can hand the voucher off to the customer without going
+  // back to /receipts. Missing payload = clean cancel with no refund.
+  onCancelled: (
+    voucher?: { kind: 'credit_note' | 'disbursement'; receiptId: string } | null,
+  ) => void;
 }
 
 export function CancelPolicyModal({
@@ -289,6 +297,11 @@ export function CancelPolicyModal({
       //
       // Both branches always operate on the primary policy id — for
       // a package cancel the client sees one cancellation, not many.
+      // Track which voucher (if any) the cancel produced so we can
+      // hand the receipt id back to the parent for the post-success
+      // send dialog. Empty = no refund / agent skipped the toggle.
+      let createdVoucher: { kind: 'credit_note' | 'disbursement'; receiptId: string } | null = null;
+
       if (hasRefund && refundAmount && primaryPolicyId && refundKind === "credit_note") {
         const refundDescription = isPackage
           ? `مرتجع إلغاء باقة ${policyNumber || ""}`
@@ -329,27 +342,33 @@ export function CancelPolicyModal({
           if (voucherError) {
             console.warn("[CancelPolicyModal] allocate_credit_note_number failed:", voucherError);
           } else if (voucherNumber) {
-            const { error: receiptError } = await supabase.from("receipts").insert({
-              receipt_type: "credit_note",
-              source: "auto",
-              voucher_number: voucherNumber as unknown as string,
-              client_id: clientId,
-              client_name: clientName,
-              policy_id: primaryPolicyId,
-              wallet_transaction_id: walletRow?.id ?? null,
-              amount: parseFloat(refundAmount),
-              receipt_date: cancellationDate,
-              // payment_method stays at the table default ('cash').
-              // No real method applies here — the /receipts tab for
-              // credit notes filters by receipt_type and never
-              // surfaces this column.
-              notes: refundDescription,
-              agent_id: agentId,
-              branch_id: branchId,
-              created_by: user?.id || null,
-            });
+            const { data: receiptRow, error: receiptError } = await supabase
+              .from("receipts")
+              .insert({
+                receipt_type: "credit_note",
+                source: "auto",
+                voucher_number: voucherNumber as unknown as string,
+                client_id: clientId,
+                client_name: clientName,
+                policy_id: primaryPolicyId,
+                wallet_transaction_id: walletRow?.id ?? null,
+                amount: parseFloat(refundAmount),
+                receipt_date: cancellationDate,
+                // payment_method stays at the table default ('cash').
+                // No real method applies here — the /receipts tab for
+                // credit notes filters by receipt_type and never
+                // surfaces this column.
+                notes: refundDescription,
+                agent_id: agentId,
+                branch_id: branchId,
+                created_by: user?.id || null,
+              })
+              .select("id")
+              .single();
             if (receiptError) {
               console.warn("[CancelPolicyModal] credit_note receipt insert failed:", receiptError);
+            } else if (receiptRow?.id) {
+              createdVoucher = { kind: "credit_note", receiptId: receiptRow.id };
             }
           }
         }
@@ -360,7 +379,7 @@ export function CancelPolicyModal({
         stagedDisbursement &&
         primaryPolicyId
       ) {
-        await persistSettlementLines({
+        const { settlementIds } = await persistSettlementLines({
           mode: "client",
           kind: "disbursement",
           entityId: clientId,
@@ -371,6 +390,28 @@ export function CancelPolicyModal({
           userId: user?.id ?? null,
           agentId: agentId ?? null,
         });
+        // The AFTER INSERT trigger on client_settlements mirrors every
+        // line into a receipts row sharing one D{nn}/YYYY voucher_number.
+        // Any of those receipts ids is a valid anchor for the
+        // generate-disbursement-voucher function — it resolves siblings
+        // via settlement_session_id — so we grab the first one.
+        if (settlementIds.length > 0) {
+          const { data: mirrorRow, error: mirrorError } = await supabase
+            .from("receipts")
+            .select("id")
+            .eq("receipt_type", "disbursement")
+            .in("client_settlement_id", settlementIds)
+            .limit(1)
+            .maybeSingle();
+          if (mirrorError) {
+            console.warn(
+              "[CancelPolicyModal] disbursement receipt lookup failed:",
+              mirrorError,
+            );
+          } else if (mirrorRow?.id) {
+            createdVoucher = { kind: "disbursement", receiptId: mirrorRow.id };
+          }
+        }
       }
 
       // 3. Send SMS if enabled (and plan allows it — skip quietly
@@ -409,7 +450,7 @@ export function CancelPolicyModal({
 
 
       toast({ title: "تم", description: "تم إلغاء المعاملة بنجاح" });
-      onCancelled();
+      onCancelled(createdVoucher);
       onOpenChange(false);
       
       // Reset form

@@ -74,7 +74,14 @@ interface TransferPolicyModalProps {
     year: number | null;
     manufacturer_name: string | null;
   } | null;
-  onTransferred: () => void;
+  // Optional callback payload tells the parent which sendable voucher
+  // (if any) the transfer produced — credit_note for a customer
+  // refund booked to the wallet, disbursement for cash actually paid
+  // out. Same pattern as CancelPolicyModal so the parent can open one
+  // post-success dialog for both flows.
+  onTransferred: (
+    voucher?: { kind: 'credit_note' | 'disbursement'; receiptId: string } | null,
+  ) => void;
 }
 
 interface CarOption {
@@ -699,6 +706,11 @@ export function TransferPolicyModal({
       //                  leaves no orphan rows.
       // customer_pays doesn't apply — it just bumps insurance_price
       // and is already handled above.
+      // Track which voucher (if any) the transfer produced so we can
+      // hand the receipt id back to the parent for the post-success
+      // send dialog. Empty = no refund leg / "customer_pays" path.
+      let createdVoucher: { kind: 'credit_note' | 'disbursement'; receiptId: string } | null = null;
+
       if (adjustmentType === "refund" && adjustmentAmount && newPolicyIds.length > 0 && refundKind === "credit_note") {
         const refundDescription = `مرتجع تحويل معاملة ${policyNumber || ""} - مستحق للعميل`;
         const { data: walletRow, error: walletError } = await supabase
@@ -732,23 +744,29 @@ export function TransferPolicyModal({
           if (voucherError) {
             console.warn("[TransferPolicyModal] allocate_credit_note_number failed:", voucherError);
           } else if (voucherNumber) {
-            const { error: receiptError } = await supabase.from("receipts").insert({
-              receipt_type: "credit_note",
-              source: "auto",
-              voucher_number: voucherNumber as unknown as string,
-              client_id: clientId,
-              client_name: clientName,
-              policy_id: newPolicyIds[0],
-              wallet_transaction_id: walletRow?.id ?? null,
-              amount: parseFloat(adjustmentAmount),
-              receipt_date: new Date().toISOString().split("T")[0],
-              notes: refundDescription,
-              agent_id: agentId,
-              branch_id: branchId,
-              created_by: user?.id || null,
-            });
+            const { data: receiptRow, error: receiptError } = await supabase
+              .from("receipts")
+              .insert({
+                receipt_type: "credit_note",
+                source: "auto",
+                voucher_number: voucherNumber as unknown as string,
+                client_id: clientId,
+                client_name: clientName,
+                policy_id: newPolicyIds[0],
+                wallet_transaction_id: walletRow?.id ?? null,
+                amount: parseFloat(adjustmentAmount),
+                receipt_date: new Date().toISOString().split("T")[0],
+                notes: refundDescription,
+                agent_id: agentId,
+                branch_id: branchId,
+                created_by: user?.id || null,
+              })
+              .select("id")
+              .single();
             if (receiptError) {
               console.warn("[TransferPolicyModal] credit_note receipt insert failed:", receiptError);
+            } else if (receiptRow?.id) {
+              createdVoucher = { kind: "credit_note", receiptId: receiptRow.id };
             }
           }
         }
@@ -764,7 +782,7 @@ export function TransferPolicyModal({
         stagedDisbursement &&
         newPolicyIds.length > 0
       ) {
-        await persistSettlementLines({
+        const { settlementIds } = await persistSettlementLines({
           mode: "client",
           kind: "disbursement",
           entityId: clientId,
@@ -775,6 +793,26 @@ export function TransferPolicyModal({
           userId: user?.id ?? null,
           agentId: agentId ?? null,
         });
+        // Same lookup pattern as CancelPolicyModal — any one mirror
+        // receipt is fine since generate-disbursement-voucher resolves
+        // siblings via settlement_session_id.
+        if (settlementIds.length > 0) {
+          const { data: mirrorRow, error: mirrorError } = await supabase
+            .from("receipts")
+            .select("id")
+            .eq("receipt_type", "disbursement")
+            .in("client_settlement_id", settlementIds)
+            .limit(1)
+            .maybeSingle();
+          if (mirrorError) {
+            console.warn(
+              "[TransferPolicyModal] disbursement receipt lookup failed:",
+              mirrorError,
+            );
+          } else if (mirrorRow?.id) {
+            createdVoucher = { kind: "disbursement", receiptId: mirrorRow.id };
+          }
+        }
       }
 
       // 6. Send SMS if enabled
@@ -819,7 +857,7 @@ export function TransferPolicyModal({
         title: "تم التحويل بنجاح",
         description: "تم تحويل المعاملة — المعاملة القديمة انتهت بتاريخ التحويل ومعاملة جديدة تم إنشاؤها للسيارة الجديدة",
       });
-      onTransferred();
+      onTransferred(createdVoucher);
       onOpenChange(false);
       
       // Reset form

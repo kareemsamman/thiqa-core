@@ -92,6 +92,7 @@ import { CarDrawer } from '@/components/cars/CarDrawer';
 import { PolicyDetailsDrawer } from '@/components/policies/PolicyDetailsDrawer';
 import { TransferPolicyModal } from '@/components/policies/TransferPolicyModal';
 import { CancelPolicyModal } from '@/components/policies/CancelPolicyModal';
+import { VoucherSendDialog, type VoucherKind } from '@/components/policies/VoucherSendDialog';
 import { PolicyWizard } from '@/components/policies/PolicyWizard';
 import { PackagePolicyEditModal } from '@/components/policies/PackagePolicyEditModal';
 import { ClientDrawer } from '@/components/clients/ClientDrawer';
@@ -517,6 +518,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   // dialog since there's no new receipt to send.
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [receiptPaymentIds, setReceiptPaymentIds] = useState<string[]>([]);
+  // Same flow but for إشعار دائن / سند صرف vouchers produced by
+  // cancel/transfer. Either modal's success callback hands us
+  // { kind, receiptId } when a refund leg actually wrote a voucher,
+  // and we open VoucherSendDialog to let the agent print / SMS /
+  // WhatsApp it to the customer.
+  const [voucherDialogOpen, setVoucherDialogOpen] = useState(false);
+  const [voucherDialogPayload, setVoucherDialogPayload] = useState<
+    { kind: VoucherKind; receiptId: string } | null
+  >(null);
   // Cancel policy/package modal — opened directly from the dropdown on
   // PolicyYearTimeline instead of going through the details drawer.
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -4098,7 +4108,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
               year: selectedCar.year || null,
               manufacturer_name: selectedCar.manufacturer_name || null,
             } : null}
-            onTransferred={async () => {
+            onTransferred={async (voucher) => {
               setTransferOpen(false);
               // Small delay to ensure DB commits are complete
               await new Promise(resolve => setTimeout(resolve, 100));
@@ -4113,6 +4123,10 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 fetchCars(),
               ]);
               onRefresh();
+              if (voucher) {
+                setVoucherDialogPayload(voucher);
+                setVoucherDialogOpen(true);
+              }
             }}
           />
         );
@@ -4174,7 +4188,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         clientPhone={client.phone_number}
         branchId={client.branch_id}
         insurancePrice={cancelInsurancePrice}
-        onCancelled={async () => {
+        onCancelled={async (voucher) => {
           setCancelModalOpen(false);
           setCancelPolicyIds([]);
           setCancelInsurancePrice(0);
@@ -4190,6 +4204,10 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             fetchWalletBalance(),
             fetchPayments(),
           ]);
+          if (voucher) {
+            setVoucherDialogPayload(voucher);
+            setVoucherDialogOpen(true);
+          }
         }}
       />
 
@@ -4230,6 +4248,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         paymentIds={receiptPaymentIds}
         clientPhone={client.phone_number}
         onClose={() => setReceiptPaymentIds([])}
+      />
+
+      <VoucherSendDialog
+        open={voucherDialogOpen}
+        onOpenChange={setVoucherDialogOpen}
+        voucher={voucherDialogPayload}
+        clientPhone={client.phone_number}
+        onClose={() => setVoucherDialogPayload(null)}
       />
 
       {/* Shared print-progress overlay used by both handlePrintGroup-
