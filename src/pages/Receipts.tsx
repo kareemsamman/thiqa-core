@@ -1778,11 +1778,15 @@ export default function Receipts() {
     setDetailsOpen(true);
   };
 
-  // Picker → sub-modal router. We close the picker first, then open
-  // the matching follow-up on the next tick so Radix UI's focus-trap
-  // doesn't get confused by two open Dialog components simultaneously.
+  // Picker → sub-modal router. We KEEP the picker open behind the
+  // follow-up so closing the sub-modal returns the user to their
+  // previous picks (which AddVoucherDialog preserves as long as it
+  // stays mounted). Before opening the new sub-modal we close any
+  // sibling that may be open — this handles the case where the user
+  // already picked, opened a sub-modal, closed it, changed a pick,
+  // and clicked متابعة again. Without the reset, two sub-modals
+  // could end up stacked.
   const handleVoucherPicked = (result: VoucherPickResult) => {
-    setAddVoucherOpen(false);
     if (result.counterparty !== 'client' || !result.client) {
       // Phase 1 ships customer routes only — the picker prevents
       // selecting non-customer counterparties via its disabled state,
@@ -1791,6 +1795,9 @@ export default function Receipts() {
       return;
     }
     const c = result.client;
+    setDebtModalOpen(false);
+    setDisburseClient(null);
+    setCreditNoteClient(null);
     setTimeout(() => {
       if (result.kind === 'payment') {
         setDebtModalClient({ id: c.id, full_name: c.full_name, phone: c.phone_number });
@@ -2392,6 +2399,11 @@ export default function Receipts() {
           setDebtModalOpen(false);
           setDebtModalEditingSession(null);
           setDebtModalClient(null);
+          // Voucher saved → close the picker too. (When the user
+          // cancels via X, onOpenChange runs but onSuccess does NOT,
+          // so the picker stays open and the user lands back on
+          // their previous picks — that's the "back" affordance.)
+          setAddVoucherOpen(false);
           await fetchReceipts();
         }}
       />
@@ -2419,6 +2431,9 @@ export default function Receipts() {
           clientName={disburseClient.full_name}
           onSaved={() => {
             setDisburseClient(null);
+            // Saved → close the picker too. Cancel via X leaves the
+            // picker open behind so the user can revise their choice.
+            setAddVoucherOpen(false);
             fetchReceipts();
           }}
         />
@@ -2434,6 +2449,7 @@ export default function Receipts() {
           client={creditNoteClient}
           onSaved={() => {
             setCreditNoteClient(null);
+            setAddVoucherOpen(false);
             fetchReceipts();
           }}
         />
