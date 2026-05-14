@@ -228,24 +228,36 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
     const receivedSum = receipts
       .filter((r) => !r.refused)
       .reduce((s, r) => s + Number(r.total_amount || 0), 0);
+    // إشعار مدين للوسطاء — paper credits the office issued against
+    // broker debts. Per the user's model these write down what
+    // brokers still owe us, so they subtract from remainingFromBrokersSum
+    // just like a سند قبض would. Cancelled rows drop out.
+    const brokerCreditNotesSum = data.brokerCreditNotes
+      .filter((r) => !r.cancelled_at)
+      .reduce((s, r) => s + Number(r.amount || 0), 0);
     // المتبقي على الوسطاء — gross broker debt from to_broker policies
     // (broker sold our policy, owes us insurance_price), less سند قبض
-    // already collected. Capped at 0 so an over-collection reads as
-    // settled, not as the broker owing us a negative amount.
+    // already collected, less إشعار مدين paper credits. Capped at 0
+    // so an over-collection / over-credit reads as settled, not as
+    // the broker owing us a negative amount.
     const grossDueFromBrokers = overlayed.reduce((s, r) => {
       if (r.main.broker_direction !== 'to_broker') return s;
       return s + Number(r.insurance_price || 0);
     }, 0);
-    const remainingFromBrokersSum = Math.max(0, grossDueFromBrokers - receivedSum);
+    const remainingFromBrokersSum = Math.max(
+      0,
+      grossDueFromBrokers - receivedSum - brokerCreditNotesSum,
+    );
     return {
       sellSum,
       profitSum,
       receivedSum,
       remainingFromBrokersSum,
       grossDueFromBrokers,
+      brokerCreditNotesSum,
       activeCount: overlayed.length,
     };
-  }, [issuancesActive, receipts, editLocal]);
+  }, [issuancesActive, receipts, editLocal, data.brokerCreditNotes]);
 
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 

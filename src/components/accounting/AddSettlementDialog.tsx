@@ -232,10 +232,15 @@ export function AddSettlementDialog({
     }
     let cancelled = false;
     (async () => {
-      // Two parallel queries: every policy on this broker (to compute
-      // the gross debt on each side) and every broker_settlements row
-      // (to subtract what's already been paid/collected).
-      const [{ data: policies }, { data: settlements }] = await Promise.all([
+      // Three parallel queries: every policy on this broker (gross
+      // debt on each side), every broker_settlements row (cash
+      // movements), and every broker إشعار مدين (paper credits the
+      // office issued to write down what the broker still owes us).
+      const [
+        { data: policies },
+        { data: settlements },
+        { data: brokerCreditNotes },
+      ] = await Promise.all([
         supabase
           .from('policies')
           .select('insurance_price, broker_buy_price, broker_direction, cancelled, transferred')
@@ -245,6 +250,11 @@ export function AddSettlementDialog({
           .from('broker_settlements')
           .select('total_amount, direction, refused')
           .eq('broker_id', entityId),
+        supabase
+          .from('receipts')
+          .select('amount, cancelled_at')
+          .eq('broker_id', entityId)
+          .eq('receipt_type', 'credit_note'),
       ]);
       if (cancelled) return;
 
@@ -274,8 +284,16 @@ export function AddSettlementDialog({
         .filter((s: any) => s.direction === 'we_owe' && !s.refused)
         .reduce((s: number, x: any) => s + Number(x.total_amount || 0), 0);
 
+      // إشعار مدين للوسيط — paper credit. Per the user's
+      // accounting model these write down what the broker still
+      // owes us; the relationship is one-sided (only reduces the
+      // owesUs side, never adds to weOwe).
+      const brokerCreditNotesSum = (brokerCreditNotes ?? [])
+        .filter((r: any) => !r.cancelled_at)
+        .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+
       setBrokerBalance({
-        owesUs: Math.max(0, toBrokerGross - collectedFromBroker),
+        owesUs: Math.max(0, toBrokerGross - collectedFromBroker - brokerCreditNotesSum),
         weOwe: Math.max(0, fromBrokerGross - paidToBroker),
       });
     })();

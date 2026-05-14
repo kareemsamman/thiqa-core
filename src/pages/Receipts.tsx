@@ -85,6 +85,7 @@ import {
   type VoucherPickResult,
 } from "@/components/receipts/AddVoucherDialog";
 import { AddCreditNoteDialog } from "@/components/receipts/AddCreditNoteDialog";
+import { AddBrokerCreditNoteDialog } from "@/components/receipts/AddBrokerCreditNoteDialog";
 import { AddSettlementDialog } from "@/components/accounting/AddSettlementDialog";
 import { DebtPaymentSuccessDialog } from "@/components/debt/DebtPaymentSuccessDialog";
 import { VoucherSendDialog, type VoucherKind as VoucherSendKind } from "@/components/policies/VoucherSendDialog";
@@ -749,6 +750,12 @@ export default function Receipts() {
     broker: BrokerLite;
     kind: 'disbursement' | 'receipt';
   } | null>(null);
+  // Broker "إشعار مدين" — credits the broker's account at the
+  // office without moving cash. Lands as a receipts row with
+  // broker_id + receipt_type='credit_note'; the broker balance
+  // computation in AddSettlementDialog and BrokersSection
+  // subtracts these from "بدنا منه".
+  const [brokerCreditNoteTarget, setBrokerCreditNoteTarget] = useState<BrokerLite | null>(null);
 
   // After a voucher is created, hand the agent the print / SMS / WhatsApp
   // popup the rest of the app already uses. Two flavours:
@@ -2061,6 +2068,7 @@ export default function Receipts() {
     setDisburseClient(null);
     setCreditNoteClient(null);
     setBrokerSettlement(null);
+    setBrokerCreditNoteTarget(null);
 
     if (result.counterparty === 'client' && result.client) {
       const c = result.client;
@@ -2079,19 +2087,20 @@ export default function Receipts() {
     }
 
     if (result.counterparty === 'broker' && result.broker) {
-      // إشعار دائن for brokers has no infrastructure yet (no
-      // broker_wallet equivalent of customer_wallet_transactions),
-      // so explicitly bounce that case rather than open a half-
-      // working dialog. سند قبض / سند صرف map cleanly to
-      // broker_settlements.direction ('broker_owes' / 'we_owe').
-      if (result.kind === 'credit_note') {
-        toast.info('إشعار الدائن للوسطاء غير مفعّل بعد — استخدم سند صرف عادي');
-        return;
-      }
       const broker = result.broker;
-      const kind = result.kind === 'payment' ? 'receipt' : 'disbursement';
       setTimeout(() => {
-        setBrokerSettlement({ broker, kind });
+        if (result.kind === 'credit_note') {
+          // "إشعار مدين" — paper credit that nets against the
+          // broker's outstanding debt. No settlement row, no cash
+          // movement; just a receipts entry the accounting balance
+          // reads back to subtract from "بدنا منه".
+          setBrokerCreditNoteTarget(broker);
+        } else {
+          // سند قبض / سند صرف map to broker_settlements via the
+          // existing AddSettlementDialog path.
+          const kind = result.kind === 'payment' ? 'receipt' : 'disbursement';
+          setBrokerSettlement({ broker, kind });
+        }
       }, 100);
       return;
     }
@@ -2822,6 +2831,30 @@ export default function Receipts() {
                   : `تم تسجيل سند قبض من الوسيط ${b.name}`,
               );
             }
+          }}
+        />
+      )}
+
+      {/* Broker + إشعار مدين — paper credit against the broker's
+          outstanding debt. Lands as a receipts row (no settlement,
+          no cash movement); the accounting balance reads back to
+          subtract from "بدنا منه". */}
+      {brokerCreditNoteTarget && (
+        <AddBrokerCreditNoteDialog
+          open={!!brokerCreditNoteTarget}
+          onOpenChange={(o) => !o && setBrokerCreditNoteTarget(null)}
+          broker={brokerCreditNoteTarget}
+          cancelLabel="رجوع"
+          onSaved={({ receiptId }) => {
+            const b = brokerCreditNoteTarget;
+            setBrokerCreditNoteTarget(null);
+            setAddVoucherOpen(false);
+            fetchReceipts();
+            setVoucherSend({
+              kind: 'credit_note',
+              receiptId,
+              clientPhone: b.phone,
+            });
           }}
         />
       )}

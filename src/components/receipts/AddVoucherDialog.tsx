@@ -368,8 +368,8 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
               />
               {kind === 'credit_note' && (
                 <p className="text-[11px] text-amber-700 dark:text-amber-400 pt-1">
-                  إشعار الدائن للوسطاء غير مفعّل حالياً — استخدم سند صرف عادي
-                  لتسجيل المبلغ الذي يحتفظ به الوسيط على حسابك.
+                  للوسطاء يُسمى <strong>إشعار مدين</strong> — يُسجَّل بحسابه ويُخصم من
+                  رصيده عليك. لا يُصرف نقداً.
                 </p>
               )}
             </section>

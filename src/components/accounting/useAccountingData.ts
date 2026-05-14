@@ -60,6 +60,12 @@ interface UseAccountingDataReturn {
   /** إشعار دائن rows — credit balance issued to a client (wallet
    *  credit, no cash out). Counts as money the agency owes the client. */
   clientCreditNotes: ClientReceiptRow[];
+  /** إشعار مدين للوسطاء — paper credits the office issued against
+   *  brokers' outstanding debt. Subtracted from the broker debt
+   *  pill ('المتبقي على الوسطاء') and from the broker balance pills
+   *  inside AddSettlementDialog. No cash movement; effectively a
+   *  write-down of what the broker owes us. */
+  brokerCreditNotes: ClientReceiptRow[];
   /** Filtered total expense amount — used by the net-profit pill. */
   expensesTotal: number;
   refresh: () => Promise<void>;
@@ -205,6 +211,7 @@ export function useAccountingData(
   const [brokerSettlements, setBrokerSettlements] = useState<SettlementRow[]>([]);
   const [clientDisbursementsRaw, setClientDisbursementsRaw] = useState<ClientReceiptRow[]>([]);
   const [clientCreditNotesRaw, setClientCreditNotesRaw] = useState<ClientReceiptRow[]>([]);
+  const [brokerCreditNotesRaw, setBrokerCreditNotesRaw] = useState<ClientReceiptRow[]>([]);
   const [expenses, setExpenses] = useState<RawExpense[]>([]);
 
   const fetchAll = useCallback(async () => {
@@ -493,7 +500,7 @@ export function useAccountingData(
         .select(
           `id, receipt_date, amount, payment_method, voucher_number,
            receipt_number, cheque_number, notes, client_id, client_name,
-           policy_id, cancelled_at, receipt_type,
+           broker_id, policy_id, cancelled_at, receipt_type,
            policies(document_number, policy_number)`,
         )
         .in('receipt_type', ['disbursement', 'credit_note'])
@@ -502,7 +509,7 @@ export function useAccountingData(
       if (agentId) crQuery = crQuery.eq('agent_id', agentId);
       if (branchId) crQuery = crQuery.eq('branch_id', branchId);
       const { data: crData } = await crQuery;
-      const mapClientReceipt = (r: RawClientReceipt): ClientReceiptRow => ({
+      const mapClientReceipt = (r: RawClientReceipt & { broker_id?: string | null }): ClientReceiptRow => ({
         id: r.id,
         receipt_date: r.receipt_date,
         amount: Number(r.amount ?? 0),
@@ -520,16 +527,31 @@ export function useAccountingData(
       });
       const crRows = (crData ?? []) as unknown as (RawClientReceipt & {
         receipt_type: string;
+        broker_id?: string | null;
       })[];
+      // disbursement rows: client-only (the broker disbursement
+      // path uses the broker_settlements table directly, not the
+      // receipts mirror).
       setClientDisbursementsRaw(
         crRows
           .filter((r) => r.receipt_type === 'disbursement')
           .map(mapClientReceipt),
       );
+      // credit_note rows: split by broker_id so the broker pill
+      // and the client tile each see their own bucket. A row with
+      // both client_id and broker_id NULL ends up on the customer
+      // side (shouldn't happen in practice — every credit_note row
+      // sets exactly one).
+      const creditNoteRows = crRows.filter((r) => r.receipt_type === 'credit_note');
       setClientCreditNotesRaw(
-        crRows
-          .filter((r) => r.receipt_type === 'credit_note')
+        creditNoteRows
+          .filter((r) => !r.broker_id)
           .map(mapClientReceipt),
+      );
+      setBrokerCreditNotesRaw(
+        creditNoteRows
+          .filter((r) => !!r.broker_id)
+          .map((r) => ({ ...mapClientReceipt(r), broker_id: r.broker_id ?? null }) as ClientReceiptRow & { broker_id: string | null }),
       );
 
       // 7. Expenses — only the sum is needed by the pills, but the full
@@ -646,6 +668,10 @@ export function useAccountingData(
     () => applyClientReceiptFilters(clientCreditNotesRaw, filters),
     [clientCreditNotesRaw, filters],
   );
+  const filteredBrokerCreditNotes = useMemo(
+    () => applyClientReceiptFilters(brokerCreditNotesRaw, filters),
+    [brokerCreditNotesRaw, filters],
+  );
 
   const expensesTotal = useMemo(() => {
     let rows = expenses;
@@ -673,6 +699,7 @@ export function useAccountingData(
     brokerSettlements: filteredBrokerSettlements,
     clientDisbursements: filteredClientDisbursements,
     clientCreditNotes: filteredClientCreditNotes,
+    brokerCreditNotes: filteredBrokerCreditNotes,
     expensesTotal,
     refresh: fetchAll,
     patchSubPolicy,
