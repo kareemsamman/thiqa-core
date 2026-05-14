@@ -202,11 +202,20 @@ function buildAccountingReportHtml(
     (c) => `<th class="align-${c.align ?? 'right'}">${escapeHtml(c.label)}</th>`,
   ).join('');
 
+  // Per-cell linking: rows with a `<key>_url` value get wrapped in
+  // an <a target="_blank">. Link styling is reset under @media print
+  // so the printed paper shows plain text only.
   const tableBodyHtml = payload.rows.map((row) => {
     const cells = payload.columns.map((c) => {
       const raw = row[c.key];
       const val = raw === null || raw === undefined || raw === '' ? '—' : raw;
-      return `<td class="align-${c.align ?? 'right'}">${escapeHtml(val)}</td>`;
+      const urlRaw = row[`${c.key}_url`];
+      const href = typeof urlRaw === 'string' && urlRaw.length > 0 ? urlRaw : null;
+      const inner = escapeHtml(val);
+      const content = href
+        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="cell-link">${inner}</a>`
+        : inner;
+      return `<td class="align-${c.align ?? 'right'}">${content}</td>`;
     }).join('');
     return `<tr>${cells}</tr>`;
   }).join('');
@@ -292,6 +301,9 @@ function buildAccountingReportHtml(
     table.data .align-center { text-align: center; }
     table.data tr.totals-row td { background: #1a1a1a !important; color: #ffffff; font-weight: 800; font-size: 13px; padding: 10px 12px; }
     table.data tr.totals-row .total-cell { direction: ltr; text-align: left; }
+    table.data .cell-link { color: #1d4ed8; text-decoration: none; border-bottom: 1px dashed #1d4ed8; }
+    table.data .cell-link:hover { border-bottom-style: solid; }
+    @media print { table.data .cell-link { color: inherit; border-bottom: none; } }
     .empty { padding: 40px 20px; text-align: center; border: 1px solid #1a1a1a; border-top: 0; font-size: 13px; opacity: 0.6; }
     .footer { padding-top: 16px; border-top: 1px solid #1a1a1a; margin-top: 22px; font-size: 12px; text-align: center; }
     .footer .contact { line-height: 1.8; }

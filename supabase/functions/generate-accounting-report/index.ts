@@ -102,13 +102,24 @@ function buildAccountingReportHtml(
     )
     .join('');
 
+  // Per-cell linking: when a row has `<key>_url` set to a non-empty
+  // string, wrap that cell in an <a target="_blank">. The .cell-link
+  // class shows the link in the browser (dashed blue underline) but
+  // is reset to plain text under @media print, so the printed paper
+  // doesn't reveal it as a hyperlink.
   const tableBodyHtml = payload.rows
     .map((row) => {
       const cells = payload.columns
         .map((c) => {
           const raw = row[c.key];
           const val = raw === null || raw === undefined || raw === '' ? '—' : raw;
-          return `<td class="align-${c.align ?? 'right'}">${escapeHtml(val)}</td>`;
+          const urlRaw = row[`${c.key}_url`];
+          const href = typeof urlRaw === 'string' && urlRaw.length > 0 ? urlRaw : null;
+          const inner = escapeHtml(val);
+          const content = href
+            ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="cell-link">${inner}</a>`
+            : inner;
+          return `<td class="align-${c.align ?? 'right'}">${content}</td>`;
         })
         .join('');
       return `<tr>${cells}</tr>`;
@@ -338,6 +349,21 @@ function buildAccountingReportHtml(
     table.data tr.totals-row .total-cell {
       direction: ltr;
       text-align: left;
+    }
+    /* In-cell clickable voucher numbers — visible only on screen.
+       On paper the link styling is reset so the cell prints as plain
+       text and nothing hints at it being a hyperlink. */
+    table.data .cell-link {
+      color: #1d4ed8;
+      text-decoration: none;
+      border-bottom: 1px dashed #1d4ed8;
+    }
+    table.data .cell-link:hover { border-bottom-style: solid; }
+    @media print {
+      table.data .cell-link {
+        color: inherit;
+        border-bottom: none;
+      }
     }
 
     .empty {

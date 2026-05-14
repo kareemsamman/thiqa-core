@@ -2374,6 +2374,52 @@ export default function Receipts() {
       }
       const printGroups = Array.from(groupMap.values());
 
+      // Resolve a CDN voucher URL for every group, in parallel. Each
+      // resolves via the same edge function the row-level print menu
+      // uses, so the rendered document the user lands on is identical
+      // to what "طباعة" from the kebab menu would have produced:
+      //   • payment       → generate-bulk-payment-receipt(payment_ids)
+      //   • cancellation  → generate-cancellation-voucher(receipt_id)
+      //   • credit_note / disbursement → generate-voucher(receipt_id)
+      // URLs that fail to resolve silently fall back to plain text in
+      // the printed cell — the report still renders, just without the
+      // hyperlink for that one row.
+      const resolveVoucherUrl = async (g: PrintGroup): Promise<string | null> => {
+        const rep = g.representative;
+        const rType = (rep as any).receipt_type;
+        try {
+          if (rType === 'payment') {
+            const paymentIds = g.receipts
+              .map((x) => x.payment_id)
+              .filter((id): id is string => typeof id === 'string' && id.length > 0);
+            if (paymentIds.length === 0) return null;
+            const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
+              body: { payment_ids: paymentIds },
+            });
+            if (error) return null;
+            return (data as any)?.receipt_url ?? null;
+          }
+          if (rType === 'cancellation') {
+            const { data, error } = await supabase.functions.invoke('generate-cancellation-voucher', {
+              body: { voucher_receipt_id: rep.id },
+            });
+            if (error) return null;
+            return (data as any)?.receipt_url ?? null;
+          }
+          if (rType === 'credit_note' || rType === 'disbursement') {
+            const { data, error } = await supabase.functions.invoke('generate-voucher', {
+              body: { voucher_receipt_id: rep.id },
+            });
+            if (error) return null;
+            return (data as any)?.receipt_url ?? null;
+          }
+          return null;
+        } catch {
+          return null;
+        }
+      };
+      const voucherUrls = await Promise.all(printGroups.map(resolveVoucherUrl));
+
       const allTotal = allReceipts.reduce((s, r) => s + Number(r.amount || 0), 0);
       const cashTotal = allReceipts
         .filter((r) => r.payment_method === "cash")
@@ -2483,9 +2529,14 @@ export default function Receipts() {
           if (note) noteSet.add(note);
         }
         const notesJoined = Array.from(noteSet).join(" · ");
+        const voucherUrl = voucherUrls[i] ?? null;
         return {
           idx: i + 1,
           receipt_number: r.voucher_number ?? formatReceiptNumber(r.receipt_number, r.receipt_date),
+          // generate-accounting-report wraps the cell in <a target="_blank">
+          // when a `<key>_url` field is present, so رقم السند becomes a
+          // clickable link on screen but prints as plain text on paper.
+          receipt_number_url: voucherUrl,
           receipt_type: rtLabel,
           receipt_date: formatDate(r.receipt_date),
           client_name: r.client_name,
