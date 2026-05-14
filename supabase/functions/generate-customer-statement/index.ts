@@ -703,18 +703,19 @@ serve(async (req: Request) => {
     // Wallet balance (refunds owed vs adjustments due) — used to
     // net the overall remaining number.
     //
-    // weOweCustomer = (refund-type wallet entries) − (disbursements
-    // already paid out). Without the disbursement subtraction, a
-    // cancellation that was followed by a سند صرف still leaves
-    // the wallet credit "outstanding" in the bottom-note math, so
-    // the kashf advertises "office owes customer ₪500" long after
-    // the office has actually settled it. The user's mental model
-    // is one global wallet: every disbursement reduces what we
-    // owe, regardless of which cancellation it was tagged against.
+    // Only outstanding rows (settled_at IS NULL) count. The prior
+    // auto-offset against ALL disbursements assumed every سند صرف
+    // was the cash payout of a prior إشعار دائن, but the user
+    // clarified each voucher is independent: a سند صرف can be a
+    // standalone expense (e.g. paid the customer's tow fee out-of-
+    // pocket) and shouldn't silently zero out a live credit note.
+    // Settlement is now explicit via customer_wallet_transactions
+    // .settled_at (migration 20260514130000).
     const { data: walletRows } = await userClient
       .from('customer_wallet_transactions')
-      .select('amount, transaction_type')
-      .eq('client_id', client_id);
+      .select('amount, transaction_type, settled_at')
+      .eq('client_id', client_id)
+      .is('settled_at', null);
     let weOweCustomer = 0;
     let customerOwesUs = 0;
     for (const w of (walletRows || []) as any[]) {
@@ -726,25 +727,6 @@ serve(async (req: Request) => {
         customerOwesUs += amt;
       }
     }
-    // Subtract every disbursement (سند صرف) the office has issued
-    // — those are cash payouts that fulfill refund obligations.
-    const { data: allDisbursements } = await userClient
-      .from('receipts')
-      .select('id, amount, client_id, policy_id')
-      .eq('receipt_type', 'disbursement')
-      .or(
-        allClientPolicyIds.length
-          ? `client_id.eq.${client_id},policy_id.in.(${allClientPolicyIds.join(',')})`
-          : `client_id.eq.${client_id}`,
-      );
-    const seenDisbIds = new Set<string>();
-    let totalDisbursed = 0;
-    for (const d of (allDisbursements || []) as any[]) {
-      if (seenDisbIds.has(d.id)) continue;
-      seenDisbIds.add(d.id);
-      totalDisbursed += Math.abs(Number(d.amount || 0));
-    }
-    weOweCustomer = Math.max(0, weOweCustomer - totalDisbursed);
     const overallRemaining = Math.max(0, totalAllOwed - totalAllPaid);
     const overallNet = overallRemaining + customerOwesUs - weOweCustomer;
     // Positive → customer owes us. Negative → we owe customer.

@@ -970,16 +970,25 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
   const fetchWalletBalance = async () => {
     try {
+      // Only outstanding rows count toward "نحن مدينون للعميل". A
+      // row with settled_at != NULL has been explicitly resolved
+      // (e.g. paid out via a سند صرف the user linked, or manually
+      // reconciled), so it's no longer a live debt. Prior to the
+      // 20260514130000 migration we inferred settlement by subtracting
+      // every disbursement receipt — that produced false-zero
+      // balances when a سند صرف was issued for an UNRELATED expense
+      // (the agency rule per the user: every voucher is independent;
+      // disbursements don't auto-settle credit notes).
       const { data, error } = await supabase
         .from('customer_wallet_transactions')
-        .select('amount, transaction_type')
-        .eq('client_id', client.id);
+        .select('amount, transaction_type, settled_at')
+        .eq('client_id', client.id)
+        .is('settled_at', null);
 
       if (error) throw error;
 
-      // "refund" and "transfer_refund_owed" = We owe customer
-      // "transfer_adjustment_due" = Customer owes us
-      // "refund", "transfer_refund_owed", "manual_refund" = We owe customer
+      // "refund" / "transfer_refund_owed" / "manual_refund" = We owe customer
+      // "transfer_adjustment_due"                            = Customer owes us
       const weOweCustomer = (data || [])
         .filter(t =>
           t.transaction_type === 'refund' ||
@@ -992,23 +1001,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         .filter(t => t.transaction_type === 'transfer_adjustment_due')
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-      // The wallet table only records the PROMISED refund (إشعار دائن
-      // entries). Once the office actually hands cash back via سند صرف,
-      // that obligation is settled — but no row gets deducted from the
-      // wallet today. So net it manually against the disbursement
-      // receipts; otherwise "مرتجع للعميل" shows a balance the office
-      // already paid out.
-      const { data: disbursementRows } = await supabase
-        .from('receipts')
-        .select('amount')
-        .eq('client_id', client.id)
-        .eq('receipt_type', 'disbursement')
-        .is('cancelled_at', null);
-      const totalDisbursed = (disbursementRows || [])
-        .reduce((sum, r) => sum + Math.abs(Number(r.amount || 0)), 0);
-
       setWalletBalance({
-        total_refunds: Math.max(0, weOweCustomer - customerOwesUs - totalDisbursed),
+        total_refunds: Math.max(0, weOweCustomer - customerOwesUs),
         transaction_count: data?.length || 0,
       });
     } catch (error) {
