@@ -1156,6 +1156,22 @@ export default function Receipts() {
   // still fall back to the local HTML builder for now because the
   // edge function can't fetch them from policy_payments.
 
+  // Optimistic local-state update — once generate-voucher confirms
+  // the CDN upload + stamps receipts.printed_at server-side, we
+  // mirror the same on the local `receipts` array so the row's
+  // isPrinted flips IMMEDIATELY (the dropdown reopens with تعديل
+  // disabled instead of waiting for the next fetchReceipts to land).
+  // Patches every passed-in id; the printed_at value only matters
+  // as a truthy stamp for the UI's group.receipts.some(r => !!r.printed_at) check.
+  const markPrintedLocally = (receiptIds: string[]) => {
+    if (receiptIds.length === 0) return;
+    const idSet = new Set(receiptIds);
+    const nowIso = new Date().toISOString();
+    setReceipts((prev) =>
+      prev.map((r) => (idSet.has(r.id) ? { ...r, printed_at: nowIso } : r)),
+    );
+  };
+
   const handlePrintGroup = async (group: ReceiptGroup) => {
     const paymentIds = group.receipts
       .map((r) => (r as any).payment_id)
@@ -1207,6 +1223,7 @@ export default function Receipts() {
         const url = (data as any)?.receipt_url;
         if (url) {
           closeOverlay(true);
+          markPrintedLocally(group.receipts.map((r) => r.id));
           window.open(url, '_blank');
           return;
         }
@@ -1266,6 +1283,7 @@ export default function Receipts() {
         const url = (data as any)?.receipt_url;
         if (url) {
           closeOverlay(true);
+          markPrintedLocally(group.receipts.map((r) => r.id));
           window.open(url, '_blank');
           return;
         }
@@ -1343,6 +1361,7 @@ export default function Receipts() {
           const url = (data as any)?.receipt_url;
           if (url) {
             closeOverlay(true);
+            markPrintedLocally(group.receipts.map((r) => r.id));
             window.open(url, '_blank');
             return;
           }
@@ -1367,6 +1386,16 @@ export default function Receipts() {
             .update({ printed_at: new Date().toISOString() })
             .in('id', paymentIds)
             .is('printed_at', null);
+          // Optimistic local update so the row's تعديل flips to
+          // disabled immediately. The DB-side stamp above is what
+          // the next fetchReceipts will read; this keeps the UI
+          // honest in between.
+          setPrintedPaymentIds((prev) => {
+            const next = new Set(prev);
+            paymentIds.forEach((id) => next.add(id));
+            return next;
+          });
+          markPrintedLocally(group.receipts.map((r) => r.id));
           closeOverlay(true);
           window.open(url, "_blank");
           return;
@@ -3392,34 +3421,44 @@ export default function Receipts() {
                                   إلغاء السند
                                 </DropdownMenuItem>
                               )}
-                              {/* تعديل — only available on UNPRINTED
-                                  customer سند قبض. The moment the
-                                  voucher is printed (either via the
-                                  legacy policy_payments stamp or the
-                                  new receipts.printed_at column) we
-                                  hide it entirely, leaving إلغاء as
-                                  the only path forward. سندات الإلغاء
-                                  / إشعار دائن / سند صرف rows aren't
-                                  editable in-place either; cancel +
-                                  re-issue is the supported flow. */}
-                              {rowType === 'payment' && !allCancelled && !isPrinted && (
+                              {/* تعديل — stays visible on customer
+                                  سند قبض rows even after print, but
+                                  flips to disabled + tooltip once
+                                  delivered (print / SMS / WhatsApp).
+                                  Hiding outright pulled the rug from
+                                  under users who were looking for the
+                                  affordance; the locked state with
+                                  hover explanation surfaces WHY they
+                                  can't edit instead of making them
+                                  guess. إلغاء stays available next to
+                                  it as the supported follow-up. */}
+                              {rowType === 'payment' && !allCancelled && (
                                 firstReceipt.source === 'auto'
                                   ? (
                                     <DropdownMenuItem
-                                      disabled={debtModalResolving}
+                                      disabled={debtModalResolving || isPrinted}
                                       onClick={() => openSessionEditModal(group)}
+                                      title={isPrinted ? 'السند مطبوع — استخدم إلغاء بدلاً من التعديل' : undefined}
                                     >
                                       <Pencil className="h-4 w-4 ml-2" />
                                       تعديل
+                                      {isPrinted && (
+                                        <span className="ms-auto text-[10px] text-muted-foreground">مطبوع</span>
+                                      )}
                                     </DropdownMenuItem>
                                   )
                                   : group.receipts.length === 1
                                     ? (
                                       <DropdownMenuItem
+                                        disabled={isPrinted}
                                         onClick={() => handleEditReceipt(group.receipts[0])}
+                                        title={isPrinted ? 'السند مطبوع — استخدم إلغاء بدلاً من التعديل' : undefined}
                                       >
                                         <Pencil className="h-4 w-4 ml-2" />
                                         تعديل
+                                        {isPrinted && (
+                                          <span className="ms-auto text-[10px] text-muted-foreground">مطبوع</span>
+                                        )}
                                       </DropdownMenuItem>
                                     )
                                     : null

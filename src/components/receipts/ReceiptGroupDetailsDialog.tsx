@@ -47,6 +47,11 @@ export interface ReceiptRow {
   cancelled_at?: string | null;
   cancellation_reason?: string | null;
   cancels_receipt_id?: string | null;
+  // Set when the voucher has been delivered (print / SMS / WhatsApp)
+  // via the generate-voucher / send-voucher pipeline. Drives the
+  // edit lock on /receipts. Optional + nullable since legacy rows
+  // pre-migration 20260514160000 have it NULL.
+  printed_at?: string | null;
   policy?: {
     id: string;
     document_number: string | null;
