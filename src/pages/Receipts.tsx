@@ -1038,13 +1038,19 @@ export default function Receipts() {
         const policy = Array.isArray(rawPolicy) ? rawPolicy[0] ?? null : rawPolicy ?? null;
         const sessionId = r.payment_id ? aggSessionMap[r.payment_id] : null;
         const typePrefix = (r as any).receipt_type || 'payment';
+        // Same per-event split for cancellation rows as the main
+        // groups memo below — keeps the "عدد الإيصالات" tile in sync
+        // with what the user actually sees on the page.
+        const cancellationEventKey = typePrefix === 'cancellation'
+          ? `:evt:${Math.floor(new Date((r as any).created_at).getTime() / 10000)}`
+          : '';
         let key: string;
-        if (sessionId) key = `${typePrefix}:sess:${sessionId}`;
-        else if (policy?.group_id) key = `${typePrefix}:grp:${policy.group_id}`;
-        else if (policy?.id) key = `${typePrefix}:pol:${policy.id}`;
+        if (sessionId) key = `${typePrefix}:sess:${sessionId}${cancellationEventKey}`;
+        else if (policy?.group_id) key = `${typePrefix}:grp:${policy.group_id}${cancellationEventKey}`;
+        else if (policy?.id) key = `${typePrefix}:pol:${policy.id}${cancellationEventKey}`;
         else {
           const minute = roundToMinute(r.created_at);
-          key = `${typePrefix}:manual:${r.client_name}||${r.car_number || ""}||${minute}`;
+          key = `${typePrefix}:manual:${r.client_name}||${r.car_number || ""}||${minute}${cancellationEventKey}`;
         }
         aggGroupKeys.add(key);
       }
@@ -1176,16 +1182,31 @@ export default function Receipts() {
       // get the prefix too — it's a no-op since every row in the
       // result set already shares the same type.
       const typePrefix = (r as any).receipt_type || 'payment';
+      // For cancellation rows we also split by the cancellation event
+      // (rounded created_at). Each إلغاء action — whether one cheque
+      // from the cheques page or the entire سند from receipts — fires
+      // its own multi-row UPDATE on policy_payments. The trigger
+      // creates one cancellation receipt per refused row, all within
+      // microseconds of each other. Rounding the created_at to 10
+      // seconds is a comfortable bucket: same event = same bucket;
+      // separate actions (even seconds apart) get separate buckets.
+      // Without this, partial-then-full cancellations bundle into ONE
+      // row showing the original سند's full amount — confusing because
+      // each action should read as its own إلغاء event with its own
+      // amount and its own printable voucher.
+      const cancellationEventKey = typePrefix === 'cancellation'
+        ? `:evt:${Math.floor(new Date((r as any).created_at).getTime() / 10000)}`
+        : '';
       let key: string;
       if (sessionId) {
-        key = `${typePrefix}:sess:${sessionId}`;
+        key = `${typePrefix}:sess:${sessionId}${cancellationEventKey}`;
       } else if (policy?.group_id) {
-        key = `${typePrefix}:grp:${policy.group_id}`;
+        key = `${typePrefix}:grp:${policy.group_id}${cancellationEventKey}`;
       } else if (policy?.id) {
-        key = `${typePrefix}:pol:${policy.id}`;
+        key = `${typePrefix}:pol:${policy.id}${cancellationEventKey}`;
       } else {
         const minute = roundToMinute(r.created_at);
-        key = `${typePrefix}:manual:${r.client_name}||${r.car_number || ""}||${minute}`;
+        key = `${typePrefix}:manual:${r.client_name}||${r.car_number || ""}||${minute}${cancellationEventKey}`;
       }
 
       if (!map.has(key)) {
@@ -2330,16 +2351,22 @@ export default function Receipts() {
           : rawPolicy ?? null;
         const sessionId = r.payment_id ? printSessionMap[r.payment_id] : null;
         const typePrefix = (r as any).receipt_type || "payment";
+        // Same per-event split for cancellation rows as the on-screen
+        // groups — keeps the printed accounting report's row count and
+        // amounts in sync with the user's list view.
+        const cancellationEventKey = typePrefix === 'cancellation'
+          ? `:evt:${Math.floor(new Date((r as any).created_at).getTime() / 10000)}`
+          : '';
         let key: string;
         if (sessionId) {
-          key = `${typePrefix}:sess:${sessionId}`;
+          key = `${typePrefix}:sess:${sessionId}${cancellationEventKey}`;
         } else if (policy?.group_id) {
-          key = `${typePrefix}:grp:${policy.group_id}`;
+          key = `${typePrefix}:grp:${policy.group_id}${cancellationEventKey}`;
         } else if (policy?.id) {
-          key = `${typePrefix}:pol:${policy.id}`;
+          key = `${typePrefix}:pol:${policy.id}${cancellationEventKey}`;
         } else {
           const minute = roundToMinute(r.created_at);
-          key = `${typePrefix}:manual:${r.client_name}||${r.car_number || ""}||${minute}`;
+          key = `${typePrefix}:manual:${r.client_name}||${r.car_number || ""}||${minute}${cancellationEventKey}`;
         }
         if (!groupMap.has(key)) {
           groupMap.set(key, { representative: r, receipts: [], total: 0 });
