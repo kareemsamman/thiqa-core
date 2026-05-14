@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
-import { Plus, Trash2, CreditCard, AlertCircle, Loader2, Split, Upload, X, ImageIcon, Sparkles, Scan, Info, FileText } from "lucide-react";
+import { Plus, Trash2, CreditCard, AlertCircle, Loader2, Split, Upload, X, ImageIcon, Sparkles, Scan, Info, FileText, Wallet } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { PaymentSummaryBar } from "./PaymentSummaryBar";
@@ -33,6 +33,12 @@ interface Step4Props {
   tempPolicyId: string | null;
   /** If true, this is an ELZAMI policy - hide split button */
   isElzami?: boolean;
+  /** Customer's outstanding wallet credit (إشعار دائن balance not yet
+   *  consumed). When > 0 the wizard automatically subtracts it from
+   *  the cash المتبقي, and on save records a credit_consumed wallet
+   *  entry equal to min(credit, displayTotal). 0 when the customer
+   *  has no open credits. */
+  outstandingCredit?: number;
 }
 
 interface PreviewItem {
@@ -57,6 +63,7 @@ export function Step4Payments({
   onDeleteTempPolicy,
   tempPolicyId,
   isElzami = false,
+  outstandingCredit = 0,
 }: Step4Props) {
   const { toast } = useToast();
   const [showTranzilaModal, setShowTranzilaModal] = useState(false);
@@ -245,6 +252,33 @@ export function Step4Payments({
 
   return (
     <div className="space-y-6">
+      {/* Outstanding wallet credit banner — only when the customer
+          has a live إشعار دائن balance. Tells the agent why المتبقي
+          is lower than إجمالي المعاملة, and that on save we'll
+          consume up to displayTotal of that credit automatically. */}
+      {outstandingCredit > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-400/60 bg-amber-50 dark:bg-amber-950/20 p-3">
+          <div className="h-9 w-9 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center shrink-0">
+            <Wallet className="h-4.5 w-4.5 text-amber-700 dark:text-amber-400" />
+          </div>
+          <div className="flex-1 text-sm leading-relaxed">
+            <div className="font-semibold text-amber-800 dark:text-amber-300">
+              العميل عنده رصيد دائن بقيمة{' '}
+              <span className="font-bold tabular-nums">
+                ₪{Math.round(outstandingCredit).toLocaleString('en-US')}
+              </span>
+            </div>
+            <p className="text-xs text-amber-700/80 dark:text-amber-300/80 mt-0.5">
+              تم خصمه تلقائياً من قيمة المعاملة — حدّ الدفعات أصبح{' '}
+              <span className="font-mono ltr-nums">
+                ₪{Math.round(Math.max(0, (pricing.totalPrice + pricing.officeCommission) - outstandingCredit)).toLocaleString('en-US')}
+              </span>
+              . الرصيد بيتقفل تلقائياً عند حفظ المعاملة.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Payment Summary Bar */}
       <PaymentSummaryBar
         totalPrice={pricing.totalPrice + pricing.officeCommission}

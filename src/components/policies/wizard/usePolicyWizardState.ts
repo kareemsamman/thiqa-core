@@ -372,6 +372,50 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
   const [newChildren, setNewChildren] = useState<NewChildForm[]>([]);
 
+  // Outstanding wallet credit for the selected customer (إشعار دائن
+  // balance that hasn't been consumed yet). When > 0 we surface a
+  // banner on Step 4 and subtract it from the cash المتبقي — the
+  // user can only add payments to cover what's left after the credit
+  // is applied. On wizard save we INSERT a customer_wallet_transactions
+  // row of transaction_type='credit_consumed' for the consumed amount,
+  // so the credit is properly netted out across the system.
+  const [outstandingCredit, setOutstandingCredit] = useState(0);
+
+  useEffect(() => {
+    if (!selectedClient?.id) {
+      setOutstandingCredit(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('customer_wallet_transactions')
+        .select('amount, transaction_type')
+        .eq('client_id', selectedClient.id)
+        .is('settled_at', null);
+      if (cancelled) return;
+      let weOwe = 0;
+      let custOwes = 0;
+      for (const t of (data ?? []) as Array<{ amount: number | string | null; transaction_type: string }>) {
+        const amt = Number(t.amount || 0);
+        if (
+          t.transaction_type === 'refund' ||
+          t.transaction_type === 'transfer_refund_owed' ||
+          t.transaction_type === 'manual_refund'
+        ) {
+          weOwe += amt;
+        } else if (
+          t.transaction_type === 'transfer_adjustment_due' ||
+          t.transaction_type === 'credit_consumed'
+        ) {
+          custOwes += amt;
+        }
+      }
+      setOutstandingCredit(Math.max(0, weOwe - custOwes));
+    })();
+    return () => { cancelled = true; };
+  }, [selectedClient?.id]);
+
   // Pricing calculation - updated to support ELZAMI and THIRD_FULL in package
   const pricing: PricingBreakdown = useMemo(() => {
     const basePrice = parseFloat(policy.insurance_price) || 0;
@@ -421,8 +465,20 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
   // Payment validation
   const totalPaidPayments = payments.filter((p) => !p.refused).reduce((sum, p) => sum + (p.amount || 0), 0);
   const displayTotal = pricing.totalPrice + pricing.officeCommission;
-  const remainingToPay = displayTotal - totalPaidPayments;
-  const paymentsExceedPrice = totalPaidPayments > displayTotal && displayTotal > 0;
+  // Effective amount the customer actually has to settle in cash. An
+  // outstanding wallet credit (إشعار دائن minus any earlier
+  // credit_consumed offsets) gets applied automatically — the
+  // remaining cash due is what's left after that. Capped at 0 so a
+  // customer whose credit exceeds the new transaction can save
+  // without entering any payment.
+  const effectiveTotal = Math.max(0, displayTotal - outstandingCredit);
+  const remainingToPay = effectiveTotal - totalPaidPayments;
+  // Block save when payments overshoot the EFFECTIVE total — i.e. the
+  // user typed more than the customer actually needs to hand over
+  // (because we're netting their wallet credit). effectiveTotal=0
+  // means the credit covers everything, so any payment > 0 is an
+  // overpayment.
+  const paymentsExceedPrice = totalPaidPayments > effectiveTotal;
 
   // Per-row payment health. Locked system rows (ELZAMI auto) are
   // skipped — the user can't edit their amount, so validating them
@@ -1130,6 +1186,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     totalPaidPayments,
     remainingToPay,
     paymentsExceedPrice,
+    outstandingCredit,
 
     // Files
     insuranceFiles,

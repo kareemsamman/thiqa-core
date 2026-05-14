@@ -988,7 +988,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       if (error) throw error;
 
       // "refund" / "transfer_refund_owed" / "manual_refund" = We owe customer
-      // "transfer_adjustment_due"                            = Customer owes us
+      // "transfer_adjustment_due"                            = Customer owes us (transfer fee)
+      // "credit_consumed"                                    = Credit was applied to a new policy
       const weOweCustomer = (data || [])
         .filter(t =>
           t.transaction_type === 'refund' ||
@@ -998,7 +999,10 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
       const customerOwesUs = (data || [])
-        .filter(t => t.transaction_type === 'transfer_adjustment_due')
+        .filter(t =>
+          t.transaction_type === 'transfer_adjustment_due' ||
+          t.transaction_type === 'credit_consumed'
+        )
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
       setWalletBalance({

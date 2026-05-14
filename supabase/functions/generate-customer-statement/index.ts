@@ -653,9 +653,26 @@ serve(async (req: Request) => {
         if (amt <= 0.01) return s;
         return t.adjustment_type === 'customer_pays' ? s : s + amt;
       }, 0);
-    const yearOutstandingRefund = (ledger as any[])
+    const yearCreditNotesIssued = (ledger as any[])
       .filter((r) => r.receipt_type === 'credit_note')
       .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
+    // Credit applied to a new policy during the same year (the
+    // PolicyWizard inserts customer_wallet_transactions rows of type
+    // 'credit_consumed' when the agent uses an outstanding credit to
+    // settle a new transaction). We subtract those here so the kashf
+    // doesn't double-count: the new policy's price is already in
+    // totalYearAmount, and the credit has been applied — the
+    // المرتجع line should only carry what's still on the books.
+    const { data: consumedRows } = await userClient
+      .from('customer_wallet_transactions')
+      .select('amount, created_at')
+      .eq('client_id', client_id)
+      .eq('transaction_type', 'credit_consumed')
+      .gte('created_at', `${year}-01-01`)
+      .lte('created_at', `${year}-12-31T23:59:59`);
+    const yearCreditConsumed = (consumedRows || [])
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const yearOutstandingRefund = Math.max(0, yearCreditNotesIssued - yearCreditConsumed);
     const yearCustomerCredit = yearOutstandingRefund + yearTransferOfficeOwes;
 
     // Year balance — signed so the kashf can flip direction:

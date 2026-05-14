@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
+import { useAgentContext } from "@/hooks/useAgentContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Save, ArrowRight, ArrowLeft, Minus, X } from "lucide-react";
 import type { WizardDraftSummary } from "@/hooks/usePolicyWizardController";
@@ -77,6 +78,7 @@ export function PolicyWizard({
   const { toast } = useToast();
   const { handleLimitError } = useUpgradePrompt();
   const navigate = useNavigate();
+  const { agentId } = useAgentContext();
 
   // Use the centralized wizard state hook. In the multi-instance model
   // this wizard stays mounted while it is minimized, so we always pass
@@ -195,6 +197,7 @@ export function PolicyWizard({
     totalPaidPayments,
     remainingToPay,
     paymentsExceedPrice,
+    outstandingCredit,
     resetCarData,
     resetPolicyData,
     resetPayments,
@@ -1727,6 +1730,46 @@ export function PolicyWizard({
         .filter((p: any) => !p.refused && !(p.source === 'system' && p.locked))
         .map((p: any) => p.id);
 
+      // Consume the customer's outstanding wallet credit toward this
+      // new policy. The wizard already netted it visually against
+      // المتبقي (so the agent only entered cash for the leftover);
+      // here we make the netting durable by recording a debit-shaped
+      // wallet entry. We use transaction_type='credit_consumed' (a
+      // new type added by this feature) so the customer-page tile
+      // and the kashf can count it as "credit applied" and stop
+      // showing the original إشعار دائن as outstanding.
+      //
+      // Amount = min(credit, displayTotal). If the customer's
+      // credit exceeded the new transaction total, only that much
+      // is consumed — the rest stays outstanding for next time.
+      // Failure is non-fatal: the policy and payments already saved,
+      // so we surface a toast and continue rather than rolling back.
+      if (outstandingCredit > 0 && selectedClient?.id) {
+        const consumed = Math.min(outstandingCredit, pricing.totalPrice + pricing.officeCommission);
+        if (consumed > 0.01) {
+          const { error: walletErr } = await supabase
+            .from('customer_wallet_transactions')
+            .insert({
+              client_id: selectedClient.id,
+              policy_id: policyIdToUse,
+              transaction_type: 'credit_consumed',
+              amount: consumed,
+              description: `استُخدم لتغطية معاملة ${policyIdToUse}`,
+              created_by_admin_id: user?.id || null,
+              branch_id: effectiveBranchId || null,
+              agent_id: agentId,
+            });
+          if (walletErr) {
+            console.error('[PolicyWizard] credit_consumed insert failed:', walletErr);
+            toast({
+              title: 'تنبيه',
+              description: 'تم حفظ المعاملة لكن فشل تسجيل خصم رصيد العميل — راجع المحفظة',
+              variant: 'destructive',
+            });
+          }
+        }
+      }
+
       // Show success dialog instead of closing immediately
       setSuccessPolicyData({
         policyId: policyIdToUse,
@@ -2116,6 +2159,7 @@ export function PolicyWizard({
                 onDeleteTempPolicy={handleDeleteTempPolicy}
                 tempPolicyId={tempPolicyId}
                 isElzami={policy.policy_type_parent === 'ELZAMI'}
+                outstandingCredit={outstandingCredit}
               />
             )}
           </div>
