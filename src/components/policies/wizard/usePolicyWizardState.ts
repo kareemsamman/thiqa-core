@@ -891,6 +891,14 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
             newErrors.payments = "كل شيك يجب أن يكون له مبلغ";
             break;
           }
+          if (!p.cheque_number || !p.cheque_number.trim()) {
+            newErrors.payments = "كل شيك يجب أن يكون له رقم شيك";
+            break;
+          }
+          if (!p.bank_code) {
+            newErrors.payments = "كل شيك يجب أن يكون له بنك";
+            break;
+          }
           if (!p.payment_date) {
             newErrors.payments = "كل شيك يجب أن يكون له تاريخ استحقاق";
             break;

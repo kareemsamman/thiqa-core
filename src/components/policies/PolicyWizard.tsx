@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -214,6 +214,30 @@ export function PolicyWizard({
     loadingBranches,
     refetchBranches,
   } = wizardState;
+
+  // Live reason that blocks the final حفظ المعاملة button. Drives both
+  // the disabled state and the small hint underneath, so the agent
+  // sees exactly which row is incomplete instead of clicking a dead
+  // button. Stays in sync with validateStep('payments') in the hook —
+  // when adding a new rule, mirror it there too so the same message
+  // fires if the user somehow bypasses the disable.
+  const saveBlockReason = useMemo<string | null>(() => {
+    if (paymentsExceedPrice) return "مجموع الدفعات يتجاوز سعر التأمين";
+    const hasUnpaidVisa = payments.some(
+      (p) => !p.locked && p.payment_type === "visa" && !p.tranzila_paid && (p.amount || 0) > 0,
+    );
+    if (hasUnpaidVisa) return "يجب الدفع بالفيزا قبل حفظ المعاملة";
+    for (const p of payments) {
+      if (p.locked) continue;
+      if (p.payment_type !== "cheque") continue;
+      if (!p.amount || p.amount <= 0) return "كل شيك يجب أن يكون له مبلغ";
+      if (!p.cheque_number || !p.cheque_number.trim()) return "كل شيك يجب أن يكون له رقم شيك";
+      if (!p.bank_code) return "كل شيك يجب أن يكون له بنك";
+      if (!p.payment_date) return "كل شيك يجب أن يكون له تاريخ استحقاق";
+      if (!p.cheque_issue_date) return "كل شيك يجب أن يكون له تاريخ إصدار";
+    }
+    return null;
+  }, [payments, paymentsExceedPrice]);
 
   // signingCheckOpen and signingDialogState now live in usePolicyWizardState
   // so they're persisted in the form snapshot — see the hook for setters.
@@ -2201,25 +2225,32 @@ export function PolicyWizard({
                     )}
                   </>
                 ) : (
-                  <Button
-                    onClick={handleSave}
-                    disabled={saving || paymentsExceedPrice || payments.some(p => !p.locked && p.payment_type === 'visa' && !p.tranzila_paid && (p.amount || 0) > 0)}
-                    className="min-w-24 sm:min-w-32"
-                    size="sm"
-                  >
-                    {saving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin ml-1 sm:ml-2" />
-                        <span className="hidden sm:inline">جاري الحفظ...</span>
-                        <span className="sm:hidden">حفظ...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 ml-1 sm:ml-2" />
-                        حفظ المعاملة
-                      </>
+                  <>
+                    <Button
+                      onClick={handleSave}
+                      disabled={saving || !!saveBlockReason}
+                      className="min-w-24 sm:min-w-32"
+                      size="sm"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin ml-1 sm:ml-2" />
+                          <span className="hidden sm:inline">جاري الحفظ...</span>
+                          <span className="sm:hidden">حفظ...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 ml-1 sm:ml-2" />
+                          حفظ المعاملة
+                        </>
+                      )}
+                    </Button>
+                    {saveBlockReason && !saving && (
+                      <p className="text-[10px] sm:text-xs text-destructive text-right max-w-[260px] leading-tight">
+                        {saveBlockReason}
+                      </p>
                     )}
-                  </Button>
+                  </>
                 )}
               </div>
             </div>
