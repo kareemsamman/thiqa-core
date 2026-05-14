@@ -268,7 +268,7 @@ serve(async (req: Request) => {
       .select(`
         id, policy_number, document_number, policy_type_parent, policy_type_child,
         start_date, end_date, insurance_price, office_commission, profit,
-        cancelled, transferred, group_id, notes, created_at,
+        cancelled, transferred, group_id, notes, created_at, updated_at,
         cancellation_note, cancellation_date,
         transferred_from_policy_id, transferred_car_number, transferred_to_car_number,
         car:cars(id, car_number, manufacturer_name, model),
@@ -1155,12 +1155,17 @@ function buildStatementHtml(args: BuildArgs): string {
 
       // policies.cancellation_date is a DATE column (no time), so
       // parsing it gives midnight 00:00:00 — which sorts BEFORE every
-      // payment of the same day. To keep the cancellation row in its
-      // natural chronological place (right alongside the إشعار دائن /
-      // سند صرف it produced), pair it with the linked credit_note or
-      // disbursement and use that row's created_at minus a tick.
-      // Fall back to end-of-day for cancellations that haven't (yet)
-      // produced a paired receipt.
+      // payment of the same day. We pick the best available real
+      // timestamp instead:
+      //   1. If there's a linked إشعار دائن / سند صرف, pin to its
+      //      created_at − 1 so the cancellation sits right above the
+      //      refund row (they read as one event).
+      //   2. Otherwise use the policy's updated_at — the cancellation
+      //      flow UPDATEs the row, so updated_at is when "cancelled"
+      //      flipped to true. This places the إلغاء row in its actual
+      //      chronological slot relative to other same-day events
+      //      (e.g. a later سند قبض).
+      //   3. Last resort: end-of-day on cancellation_date.
       let linkedNote: any = null;
       let refundTotal = 0;
       for (const r of ledger as any[]) {
@@ -1172,12 +1177,14 @@ function buildStatementHtml(args: BuildArgs): string {
       }
       const reversalTimestamp = linkedNote?.created_at
         ? new Date(linkedNote.created_at).getTime() - 1
-        : (() => {
-            const d = new Date(reversalDate);
-            if (Number.isNaN(d.getTime())) return pkgTimestamp;
-            d.setHours(23, 59, 59, 999);
-            return d.getTime();
-          })();
+        : mainPolicy.updated_at
+          ? new Date(mainPolicy.updated_at).getTime()
+          : (() => {
+              const d = new Date(reversalDate);
+              if (Number.isNaN(d.getTime())) return pkgTimestamp;
+              d.setHours(23, 59, 59, 999);
+              return d.getTime();
+            })();
 
       const reasonSubLines: string[] = [];
       if (mainPolicy.cancelled) {

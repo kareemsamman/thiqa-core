@@ -1008,21 +1008,33 @@ export function PolicyYearTimeline({
   };
 
   const getPackagePaymentStatus = (pkg: PolicyPackage) => {
-    // Sum total paid across all package policies
+    // Office-only paid/remaining: إلزامي is paid directly to the
+    // insurance company via external Visa and never enters the
+    // office's books. The "المبلغ" card already subtracts إلزامي
+    // base; mirror that here so المدفوع and المتبقي للدفع reflect
+    // only what the office actually collects (or is still owed).
     let totalPaid = 0;
     let profit = 0;
+    let elzamiBase = 0;
+    let elzamiPaid = 0;
 
     pkg.allPolicyIds.forEach(id => {
-      totalPaid += paymentInfo[id]?.paid || 0;
-      profit += policyById.get(id)?.profit || 0;
+      const p = policyById.get(id);
+      const paid = paymentInfo[id]?.paid || 0;
+      totalPaid += paid;
+      profit += p?.profit || 0;
+      if (p?.policy_type_parent === 'ELZAMI') {
+        elzamiBase += Number(p.insurance_price || 0);
+        elzamiPaid += paid;
+      }
     });
 
-    // Calculate remaining as package total - all payments
-    // This is the correct way for packages (same as drawer)
-    const remaining = Math.max(0, pkg.totalPrice - totalPaid);
-    const isPaid = remaining <= 0 && pkg.totalPrice > 0;
+    const officePaid = Math.max(0, totalPaid - elzamiPaid);
+    const officePrice = Math.max(0, pkg.totalPrice - elzamiBase);
+    const remaining = Math.max(0, officePrice - officePaid);
+    const isPaid = remaining <= 0 && officePrice > 0;
 
-    return { totalPaid, remaining, isPaid, profit };
+    return { totalPaid: officePaid, remaining, isPaid, profit };
   };
 
   if (policies.length === 0) {
