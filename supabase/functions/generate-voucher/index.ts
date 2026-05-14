@@ -934,7 +934,15 @@ serve(async (req) => {
           .eq(filterCol, filterVal);
         voucherTotal = 0;
         for (const r of (siblings ?? []) as any[]) {
-          if (r.refused) continue;
+          // سند قبض هو وثيقة تاريخية مجمّدة — لازم يطبع زي ما انكتب،
+          // الشيك الملغى يضل ظاهر بنفس الشكل والقيمة، الإلغاء يُعالج
+          // بسند إلغاء منفصل (feedback_payment_receipt_immutable).
+          //
+          // سند الإلغاء هو الوجه المعاكس: ما بيظهر إلا اللي انلغى فعلاً.
+          // كنا قبل هيك نطبع الصفوف الـ refused=false في سند الإلغاء،
+          // فكان يطلع الكاش والتحويل اللي ما انلغوا كأنهم تم إلغاؤهم —
+          // وهاد بالظبط اللي اشتكى منه المستخدم.
+          if (receiptType === 'cancellation' && !r.refused) continue;
           const amt = Number(r.amount || 0);
           voucherTotal += amt;
           // For cheques the wizard stores due date in three places that
