@@ -473,12 +473,24 @@ export function Step4Payments({
                       <Select
                         value={payment.payment_type}
                         onValueChange={(v) => {
+                          const today = new Date().toISOString().split('T')[0];
                           if (v === 'cash') {
-                            const today = new Date().toISOString().split('T')[0];
                             setPayments(
                               payments.map((p) =>
                                 p.id === payment.id
                                   ? { ...p, payment_type: v, payment_date: today }
+                                  : p,
+                              ),
+                            );
+                          } else if (v === 'cheque') {
+                            // The cheque sub-row falls back to today in the
+                            // UI, but state stayed empty — so validation
+                            // ("كل شيك يجب أن يكون له تاريخ إصدار") fired
+                            // even though the agent saw a date. Commit it.
+                            setPayments(
+                              payments.map((p) =>
+                                p.id === payment.id
+                                  ? { ...p, payment_type: v, cheque_issue_date: p.cheque_issue_date || today }
                                   : p,
                               ),
                             );
@@ -758,11 +770,13 @@ export function Step4Payments({
 
           for (const cheque of detectedCheques) {
             const paymentId = crypto.randomUUID();
+            const today = new Date().toISOString().split('T')[0];
             const payment: PaymentLine = {
               id: paymentId,
               payment_type: 'cheque',
               amount: cheque.amount || 0,
-              payment_date: cheque.payment_date || new Date().toISOString().split('T')[0],
+              payment_date: cheque.payment_date || today,
+              cheque_issue_date: today,
               cheque_number: cheque.cheque_number || '',
               bank_code: (cheque as any).bank_code || null,
               branch_code: (cheque as any).branch_code || (cheque as any).branch_number || null,
