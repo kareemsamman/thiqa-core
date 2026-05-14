@@ -3494,17 +3494,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                         key={group.id}
                         className={cn(
                           'hover:bg-muted/40',
-                          !group.isPassthrough && 'cursor-pointer',
                           // Passthrough rows render in a muted strip so
                           // the bookkeeper can tell at a glance they're
                           // informational (money the office never
                           // actually collected — إلزامي / visa_external).
                           group.isPassthrough && 'bg-muted/30 text-muted-foreground',
                         )}
-                        onClick={group.isPassthrough ? undefined : () => {
-                          setGroupDetailsGroup(group);
-                          setGroupDetailsOpen(true);
-                        }}
                       >
                         <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
                           {group.isPassthrough ? (
