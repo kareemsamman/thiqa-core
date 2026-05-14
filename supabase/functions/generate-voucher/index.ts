@@ -696,6 +696,7 @@ serve(async (req) => {
         id, voucher_number, receipt_number, receipt_type, receipt_date,
         amount, payment_method, cheque_number, card_last_four, notes,
         client_id, client_name, broker_id, broker_settlement_id,
+        company_id, company_settlement_id,
         policy_id, payment_id, client_settlement_id, created_at
       `)
       .eq('id', voucher_receipt_id)
@@ -794,6 +795,51 @@ serve(async (req) => {
             }
             continue;
           }
+          const amt = Number(r.total_amount || 0);
+          voucherTotal += amt;
+          lines.push({
+            payment_type: (r.payment_type as string) || 'cash',
+            cheque_number: r.cheque_number ?? null,
+            cheque_due_date: r.cheque_due_date ?? null,
+            cheque_issue_date: r.cheque_issue_date ?? null,
+            payment_date: r.settlement_date ?? null,
+            bank_code: r.bank_code ?? null,
+            branch_code: r.branch_code ?? null,
+            bank_reference: r.bank_reference ?? null,
+            notes: r.notes ?? null,
+            amount: amt,
+          });
+        }
+        if (voucherTotal === 0) voucherTotal = Number(receiptRow.amount || 0);
+      }
+    } else if (receiptRow.company_settlement_id) {
+      // Company مرآة — same shape as the client_settlement branch:
+      // company_settlements has settlement_session_id (added in
+      // migration 20260514170000) so multi-line saves share one
+      // anchor. Single-line settlements (legacy /company-settlement
+      // page inserts) leave session_id NULL and resolve via the
+      // settlement's own id.
+      const { data: anchor } = await supabase
+        .from('company_settlements')
+        .select('id, settlement_session_id, settlement_date, notes, voucher_number')
+        .eq('id', receiptRow.company_settlement_id)
+        .maybeSingle();
+      if (anchor) {
+        voucherNumber = (anchor.voucher_number as string) || voucherNumber;
+        voucherDate = (anchor.settlement_date as string) || voucherDate;
+        voucherNotes = (anchor.notes as string | null) ?? voucherNotes;
+        const filterCol = anchor.settlement_session_id ? 'settlement_session_id' : 'id';
+        const filterVal = anchor.settlement_session_id ?? receiptRow.company_settlement_id;
+        const { data: siblings } = await supabase
+          .from('company_settlements')
+          .select(`
+            payment_type, cheque_number, cheque_due_date,
+            cheque_issue_date, settlement_date, bank_code,
+            branch_code, bank_reference, notes, total_amount
+          `)
+          .eq(filterCol, filterVal);
+        voucherTotal = 0;
+        for (const r of (siblings ?? []) as any[]) {
           const amt = Number(r.total_amount || 0);
           voucherTotal += amt;
           lines.push({

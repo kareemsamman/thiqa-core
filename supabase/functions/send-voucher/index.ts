@@ -112,18 +112,22 @@ serve(async (req) => {
     const agentId = await resolveAgentId(supabase, user.id);
     if (!agentId) return jsonResponse({ error: "Could not resolve agent" }, 404);
 
-    // Pull the receipt + the two possible counterparty rows in one
-    // shot. Either client_id or broker_id will be set; the policy
-    // join is a defensive fallback for legacy receipts that lack
-    // client_id but still belong to a policy.
+    // Pull the receipt + every possible counterparty row in one
+    // shot. Exactly one of client_id / broker_id / company_id is set
+    // per voucher; the policy join is a defensive fallback for
+    // legacy receipts that lack client_id but still belong to a
+    // policy. Companies have no phone, so they only use the print
+    // branch — SMS/WhatsApp branches surface "no phone" the same
+    // way they would for a phoneless broker.
     const { data: voucherRow, error: voucherErr } = await supabase
       .from("receipts")
       .select(`
         id, receipt_type, receipt_number, voucher_number,
-        client_id, client_name, broker_id, policy_id, branch_id,
+        client_id, client_name, broker_id, company_id, policy_id, branch_id,
         amount, receipt_date,
         client:clients(id, full_name, phone_number),
         broker:brokers(id, name, phone),
+        company:insurance_companies(id, name, name_ar),
         policy:policies(id, branch_id, client:clients(id, full_name, phone_number))
       `)
       .eq("id", voucher_receipt_id)
@@ -148,6 +152,9 @@ serve(async (req) => {
     const directBroker = Array.isArray((voucherRow as any).broker)
       ? (voucherRow as any).broker[0]
       : (voucherRow as any).broker;
+    const directCompany = Array.isArray((voucherRow as any).company)
+      ? (voucherRow as any).company[0]
+      : (voucherRow as any).company;
     const policyWrap = Array.isArray((voucherRow as any).policy)
       ? (voucherRow as any).policy[0]
       : (voucherRow as any).policy;
@@ -165,6 +172,11 @@ serve(async (req) => {
     } else if (directBroker) {
       recipientName = directBroker.name || null;
       recipientPhone = directBroker.phone || null;
+    } else if (directCompany) {
+      recipientName = directCompany.name_ar || directCompany.name || null;
+      // Companies have no per-entity phone — print works, SMS/WhatsApp
+      // will surface "no phone" downstream (intentional).
+      recipientPhone = null;
     } else if (policyClient) {
       recipientName = policyClient.full_name || null;
       recipientPhone = policyClient.phone_number || null;
