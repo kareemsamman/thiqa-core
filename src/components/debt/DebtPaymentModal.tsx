@@ -1426,7 +1426,7 @@ export function DebtPaymentModal({
                             payment.paymentType === 'cheque' ? 'chequeIssueDate' : 'paymentDate',
                             date,
                           )}
-                          disabled={payment.tranzilaPaid}
+                          disabled={payment.tranzilaPaid || payment.paymentType === 'cash'}
                         />
                       </div>
                     </div>
