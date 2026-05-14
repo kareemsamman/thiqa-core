@@ -667,13 +667,11 @@ export default function Receipts() {
   const isCol = (key: string) => colsState.visible.includes(key);
   // Per-tab column list — "النوع" only appears on الكل (and only there
   // does the Manage Columns dropdown surface it as a toggle).
-  const tabColumns = useMemo(
-    () =>
-      activeTab === 'all'
-        ? RECEIPTS_COLUMNS
-        : RECEIPTS_COLUMNS.filter((c) => c.key !== 'receipt_type'),
-    [activeTab],
-  );
+  // The "receipt_type" column doubles as the counterparty badge
+  // (سند صرف لعميل / سند قبض من وسيط), so we keep it visible on every
+  // tab — on single-type tabs the badge reads as just "من عميل" /
+  // "لوسيط" since the tab title already states the receipt type.
+  const tabColumns = useMemo(() => RECEIPTS_COLUMNS, []);
 
   // Pagination
   const [page, setPage] = useState(0);
@@ -3274,18 +3272,16 @@ export default function Receipts() {
                           </div>
                         </TableCell>
                       )}
-                      {isCol("receipt_type") && activeTab === 'all' && (
+                      {isCol("receipt_type") && (
                         <TableCell className="whitespace-nowrap">
                           {(() => {
                             const cfg = RECEIPT_TYPE_BADGE[rowType] ?? RECEIPT_TYPE_BADGE.payment;
                             const TypeIcon = cfg.icon;
-                            // Append the counterparty so the agent reads
-                            // "سند قبض من عميل" / "سند صرف لوسيط" at a
-                            // glance. Direction word depends on type:
-                            // payments come FROM the counterparty,
-                            // disbursements / credit_notes go TO them.
-                            // Cancellations stay bare — they refer to a
-                            // prior receipt, not a counterparty event.
+                            // Counterparty suffix: payments come FROM
+                            // the counterparty, disbursements /
+                            // credit_notes go TO them. Cancellations
+                            // stay bare (they refer to a prior receipt,
+                            // not a counterparty event).
                             const cp = getCounterparty(group);
                             let suffix = '';
                             if (cp && rowType !== 'cancellation') {
@@ -3293,10 +3289,19 @@ export default function Receipts() {
                               const prep = rowType === 'payment' ? 'من' : 'لـ';
                               suffix = ` ${prep}${who}`;
                             }
+                            // On single-type tabs the type prefix is
+                            // redundant (the tab title already states
+                            // it), so we show ONLY the counterparty
+                            // suffix. The "الكل" tab keeps the full
+                            // "سند قبض من عميل" form because the table
+                            // mixes every receipt type.
+                            const text = activeTab === 'all'
+                              ? `${cfg.label}${suffix}`
+                              : (suffix.trim() || cfg.label);
                             return (
                               <Badge variant={cfg.variant} className="gap-1">
                                 <TypeIcon className="h-3 w-3" />
-                                <span>{cfg.label}{suffix}</span>
+                                <span>{text}</span>
                               </Badge>
                             );
                           })()}
