@@ -1204,6 +1204,57 @@ export default function Receipts() {
       }
     }
 
+    // Broker receipts (no payment_id, but a broker_id on the
+    // receipts row) get routed through the unified generate-voucher
+    // edge function so they print with the same template family as
+    // every other voucher kind. We pass voucher_receipt_id = the
+    // canonical row's id and let the function resolve everything
+    // (broker info, settlement siblings, etc.) from that single
+    // pivot. Same fake-progress ticker as the bulk-receipt path so
+    // the user gets visible feedback while the CDN upload completes.
+    const firstRow = group.receipts[0] as any;
+    const isBrokerRow = !!firstRow?.broker_id;
+    if (isBrokerRow && firstRow?.id) {
+      setPrintProgress({ open: true, value: 8 });
+      const ticker = setInterval(() => {
+        setPrintProgress((s) => {
+          if (!s.open) return s;
+          if (s.value >= 90) return s;
+          return { ...s, value: Math.min(90, s.value + 6) };
+        });
+      }, 220);
+      const closeOverlay = (success: boolean) => {
+        clearInterval(ticker);
+        if (success) {
+          setPrintProgress({ open: true, value: 100 });
+          setTimeout(() => setPrintProgress({ open: false, value: 0 }), 350);
+        } else {
+          setPrintProgress({ open: false, value: 0 });
+        }
+      };
+      try {
+        const { data, error } = await supabase.functions.invoke(
+          'generate-voucher',
+          { body: { voucher_receipt_id: firstRow.id } },
+        );
+        if (error) throw error;
+        const url = (data as any)?.receipt_url;
+        if (url) {
+          closeOverlay(true);
+          window.open(url, '_blank');
+          return;
+        }
+        closeOverlay(false);
+        toast.error('لم يتم العثور على رابط السند');
+        return;
+      } catch (err: any) {
+        closeOverlay(false);
+        console.error('[Receipts] broker voucher print failed:', err);
+        toast.error(err?.message || 'فشل في توليد السند');
+        return;
+      }
+    }
+
     if (allAuto && paymentIds.length > 0) {
       // Open the progress overlay and start a fake-progress ticker.
       // The edge function call doesn't expose real progress so we just
@@ -2564,24 +2615,25 @@ export default function Receipts() {
               .order('created_at', { ascending: false })
               .limit(1)
               .maybeSingle();
-            if (latest?.id && kind === 'disbursement') {
-              // VoucherSendDialog covers disbursement out of the box
-              // (generate-disbursement-voucher reads the receipts row
-              // directly — no policy join required).
+            if (latest?.id) {
+              // Both broker سند قبض and سند صرف now ride the unified
+              // generate-voucher pipeline through VoucherSendDialog
+              // (kind='payment' or 'disbursement'). The dialog hides
+              // SMS/WhatsApp for the printOnly 'payment' kind since
+              // there's no send-broker-payment-sms wrapper yet.
               setVoucherSend({
-                kind: 'disbursement',
+                kind: kind === 'disbursement' ? 'disbursement' : 'payment',
                 receiptId: latest.id,
                 clientPhone: b.phone,
               });
             } else {
-              // سند قبض من وسيط — no edge function tailored for the
-              // print/SMS path yet (generate-bulk-payment-receipt
-              // requires payment_ids from policy_payments, which a
-              // broker receipt doesn't have). The voucher is visible
-              // on /receipts and printable from the row's dropdown
-              // via the local HTML fallback; surface a confirmation
-              // toast for now.
-              toast.success(`تم تسجيل سند قبض من الوسيط ${b.name}`);
+              // Mirror lookup miss — should be rare; surface a
+              // success toast so the user still gets confirmation.
+              toast.success(
+                kind === 'disbursement'
+                  ? `تم تسجيل سند صرف للوسيط ${b.name}`
+                  : `تم تسجيل سند قبض من الوسيط ${b.name}`,
+              );
             }
           }}
         />

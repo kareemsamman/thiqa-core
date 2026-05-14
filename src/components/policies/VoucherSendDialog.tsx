@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
 // callbacks so the agent can hand the voucher off without going
 // back to /receipts.
 
-export type VoucherKind = "credit_note" | "disbursement";
+export type VoucherKind = "credit_note" | "disbursement" | "payment";
 
 type ChannelKey = "print" | "sms" | "whatsapp";
 type ChannelState = "idle" | "loading" | "sent";
@@ -68,6 +68,11 @@ const COPY: Record<VoucherKind, {
   errorSms: string;
   errorWhatsapp: string;
   edgeFunction: string;
+  /** When true, only print is supported — SMS / WhatsApp buttons
+   *  are hidden. Used for the broker سند قبض path, which prints via
+   *  the unified generate-voucher edge function but doesn't have a
+   *  send-broker-payment-sms wrapper yet. */
+  printOnly?: boolean;
 }> = {
   credit_note: {
     title: "تم إصدار إشعار دائن بنجاح",
@@ -94,6 +99,20 @@ const COPY: Record<VoucherKind, {
     errorSms: "فشل في إرسال SMS",
     errorWhatsapp: "فشل في تجهيز رسالة واتساب",
     edgeFunction: "send-disbursement-sms",
+  },
+  payment: {
+    title: "تم تسجيل سند القبض بنجاح",
+    subtitle: "يمكنك طباعة السند للجهة",
+    cardTitle: "طباعة سند القبض",
+    cardDescription: "إثبات استلام المبلغ من الجهة",
+    tooltip: "سند قبض يثبت أن المكتب استلم المبلغ من الجهة.",
+    successPrint: "تم فتح سند القبض",
+    successSms: "",
+    errorPrint: "فشل في تحميل سند القبض",
+    errorSms: "",
+    errorWhatsapp: "فشل في تجهيز رسالة واتساب",
+    edgeFunction: "generate-voucher",
+    printOnly: true,
   },
 };
 
@@ -282,6 +301,7 @@ export function VoucherSendDialog({
                   icon={<Printer className="h-5 w-5" />}
                   colorIdle="text-emerald-600"
                 />
+                {!copy.printOnly && (
                 <ChannelButton
                   label={clientPhone ? "إرسال SMS" : "لا يوجد رقم هاتف"}
                   state={cellState.sms}
@@ -291,6 +311,8 @@ export function VoucherSendDialog({
                   icon={<MessageSquare className="h-5 w-5" />}
                   colorIdle="text-blue-600"
                 />
+                )}
+                {!copy.printOnly && (
                 <ChannelButton
                   label={clientPhone ? "إرسال واتساب" : "لا يوجد رقم هاتف"}
                   state={cellState.whatsapp}
@@ -299,6 +321,7 @@ export function VoucherSendDialog({
                   icon={<WhatsappLogo className="h-5 w-5" weight="fill" />}
                   colorIdle="text-green-600"
                 />
+                )}
               </div>
 
               <div className="w-full p-4 rounded-xl border-2 border-border bg-background text-right flex items-center gap-4">
