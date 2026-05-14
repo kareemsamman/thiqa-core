@@ -436,31 +436,13 @@ export function Step4Payments({
                     </div>
                   )}
 
-                  {/* Main row: Type / Amount / Date / (Actions only when relevant). */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 items-end pl-8">
-                    {/* Payment Type — editable even on locked rows so
-                        the agent can switch the auto ELZAMI payment to
-                        cash / فيزا / تحويل instead of فيزا خارجي. */}
-                    <div>
-                      <Label className="text-[10px] mb-1 block text-muted-foreground">نوع الدفع</Label>
-                      <Select
-                        value={payment.payment_type}
-                        onValueChange={(v) => updatePayment(payment.id, 'payment_type', v)}
-                        disabled={isMetaDisabled}
-                      >
-                        <SelectTrigger className="h-10">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {paymentTypes.map((type) => (
-                            <SelectItem key={type.value} value={type.value}>
-                              {type.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
+                  {/* Main row: Amount | Type | Date. Matches the
+                      DebtPaymentModal / PackagePaymentModal pattern —
+                      cash/transfer/card show تاريخ الدفع here;
+                      cheques show تاريخ الإصدار (cashier writes it
+                      together with amount+method) and move تاريخ
+                      الاستحقاق to the cheque sub-row below. */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end pl-8">
                     {/* Amount — editable even on locked rows so the
                         agent can set 0 when the customer hasn't paid
                         the company portal yet (the agency collects
@@ -480,76 +462,84 @@ export function Step4Payments({
                       />
                     </div>
 
-                    {/* Date — for cheques this is تاريخ الاستحقاق
-                        (when the cheque can be cashed); the separate
-                        issue date sits in the cheque-identifiers grid
-                        below. */}
-                    <div className={cn("col-span-2 lg:col-span-1", !hasActionsColumn && "lg:col-span-2")}>
-                      <Label className="text-[10px] mb-1 block text-muted-foreground">
-                        {payment.payment_type === 'cheque' ? 'تاريخ الاستحقاق' : 'التاريخ'}
-                      </Label>
-                      <ArabicDatePicker
-                        value={payment.payment_date}
-                        onChange={(date) => updatePayment(payment.id, 'payment_date', date)}
-                        className="h-10"
+                    {/* Payment Type — editable even on locked rows so
+                        the agent can switch the auto ELZAMI payment to
+                        cash / فيزا / تحويل instead of فيزا خارجي.
+                        Switching to cash pins the date to today (cash
+                        means "paid now") so the agent can't backdate a
+                        cash collection. */}
+                    <div>
+                      <Label className="text-[10px] mb-1 block text-muted-foreground">نوع الدفع</Label>
+                      <Select
+                        value={payment.payment_type}
+                        onValueChange={(v) => {
+                          if (v === 'cash') {
+                            const today = new Date().toISOString().split('T')[0];
+                            setPayments(
+                              payments.map((p) =>
+                                p.id === payment.id
+                                  ? { ...p, payment_type: v, payment_date: today }
+                                  : p,
+                              ),
+                            );
+                          } else {
+                            updatePayment(payment.id, 'payment_type', v);
+                          }
+                        }}
                         disabled={isMetaDisabled}
-                      />
+                      >
+                        <SelectTrigger className="h-10">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {paymentTypes.map((type) => (
+                            <SelectItem key={type.value} value={type.value}>
+                              {type.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
-                    {/* Actions — visa pay / paid / locked badge. The cheque
-                        # / bank / branch trio now lives on its own row
-                        under the grid so the three identifiers share one
-                        visual line like the rest of the app. */}
-                    {hasActionsColumn && (
-                      <div className="col-span-2 lg:col-span-1 flex items-center gap-2">
-                        {isVisa && !visaPaid && !isLocked && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => handleVisaPayClick(index)}
-                            disabled={visaAmount <= 0 || isProcessing}
-                            className="gap-1.5 bg-primary hover:bg-primary/90 flex-1 lg:flex-initial"
-                          >
-                            {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                            {isProcessing ? 'جاري التحضير...' : 'ادفع'}
-                          </Button>
+                    {/* Top-row date — cash/transfer/card → تاريخ الدفع
+                        (locked to today for cash since the cashier is
+                        collecting it right now); cheque → تاريخ الإصدار
+                        (تاريخ الاستحقاق lives on the cheque sub-row). */}
+                    <div>
+                      <Label className="text-[10px] mb-1 block text-muted-foreground">
+                        {payment.payment_type === 'cheque' ? 'تاريخ الإصدار' : 'تاريخ الدفع'}
+                      </Label>
+                      <ArabicDatePicker
+                        value={payment.payment_type === 'cheque'
+                          ? (payment.cheque_issue_date || new Date().toISOString().split('T')[0])
+                          : payment.payment_date}
+                        onChange={(date) => updatePayment(
+                          payment.id,
+                          payment.payment_type === 'cheque' ? 'cheque_issue_date' : 'payment_date',
+                          date,
                         )}
-
-                        {isVisa && visaPaid && (
-                          <span className="text-xs text-green-600 font-medium flex items-center gap-1 flex-1">
-                            <CreditCard className="h-3.5 w-3.5" />
-                            تم الدفع
-                          </span>
-                        )}
-                      </div>
-                    )}
+                        className="h-10"
+                        disabled={isMetaDisabled || payment.payment_type === 'cash'}
+                      />
+                    </div>
                   </div>
 
-                  {/* Cheque identifiers — bank / branch / رقم الشيك.
-                      Uses its own 3-col grid (independent of the main
-                      payment row above) so each field gets ~33% width
-                      instead of the cramped ~25% it had when forced
-                      into the main row's 4-col layout. Bank is weighted
-                      slightly wider since it holds the searchable
-                      combobox with the longest content. */}
+                  {/* Cheque sub-row: 4 equal columns —
+                      البنك | الفرع | رقم الشيك | تاريخ الاستحقاق.
+                      Same layout as DebtPaymentModal / PackagePaymentModal
+                      so the wizard reads identical to the other pay flows. */}
                   {payment.payment_type === 'cheque' && (
-                    <div
-                      className="mt-2 grid gap-2 items-end pl-8"
-                      style={{
-                        gridTemplateColumns:
-                          "minmax(0,1.4fr) minmax(0,0.8fr) minmax(0,1fr)",
-                      }}
-                    >
-                      <div>
-                        <Label className="text-[10px] mb-1 block text-muted-foreground">البنك</Label>
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end pl-8">
+                      <div className="space-y-1.5 min-w-0">
+                        <Label className="text-[10px] block text-muted-foreground">البنك</Label>
                         <BankPicker
                           value={payment.bank_code}
                           onChange={(code) => updatePayment(payment.id, 'bank_code', code)}
                           disabled={isMetaDisabled}
                         />
                       </div>
-                      <div>
-                        <Label className="text-[10px] mb-1 block text-muted-foreground">الفرع</Label>
+                      <div className="space-y-1.5 min-w-0">
+                        <Label className="text-[10px] block text-muted-foreground">الفرع</Label>
                         <Input
                           type="text"
                           inputMode="numeric"
@@ -565,8 +555,8 @@ export function Step4Payments({
                           disabled={isMetaDisabled}
                         />
                       </div>
-                      <div>
-                        <Label className="text-[10px] mb-1 block text-muted-foreground">رقم الشيك</Label>
+                      <div className="space-y-1.5 min-w-0">
+                        <Label className="text-[10px] block text-muted-foreground">رقم الشيك</Label>
                         <Input
                           value={payment.cheque_number || ''}
                           onChange={(e) => updatePayment(payment.id, 'cheque_number', sanitizeChequeNumber(e.target.value))}
@@ -576,20 +566,43 @@ export function Step4Payments({
                           disabled={isMetaDisabled}
                         />
                       </div>
+                      <div className="space-y-1.5 min-w-0">
+                        <Label className="text-[10px] block text-muted-foreground">تاريخ الاستحقاق</Label>
+                        <ArabicDatePicker
+                          value={payment.payment_date}
+                          onChange={(date) => updatePayment(payment.id, 'payment_date', date)}
+                          className="h-10"
+                          disabled={isMetaDisabled}
+                        />
+                      </div>
                     </div>
                   )}
 
-                  {/* Cheque issue date — separate from due date so the
-                      Cheques page can display the right "تاريخ الاستحقاق". */}
-                  {payment.payment_type === 'cheque' && (
-                    <div className="mt-2 pl-8">
-                      <Label className="text-[10px] mb-1 block text-muted-foreground">تاريخ الإصدار</Label>
-                      <ArabicDatePicker
-                        value={payment.cheque_issue_date || new Date().toISOString().split('T')[0]}
-                        onChange={(date) => updatePayment(payment.id, 'cheque_issue_date', date)}
-                        className="h-10"
-                        disabled={isMetaDisabled}
-                      />
+                  {/* Visa action — Pay button / paid badge. Its own row
+                      under the inputs so the cheque sub-row stays clean
+                      and the button can stretch full-width on narrow
+                      screens. */}
+                  {hasActionsColumn && (
+                    <div className="mt-2 flex items-center gap-2 pl-8">
+                      {isVisa && !visaPaid && !isLocked && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => handleVisaPayClick(index)}
+                          disabled={visaAmount <= 0 || isProcessing}
+                          className="gap-1.5 bg-primary hover:bg-primary/90"
+                        >
+                          {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                          {isProcessing ? 'جاري التحضير...' : 'ادفع'}
+                        </Button>
+                      )}
+
+                      {isVisa && visaPaid && (
+                        <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                          <CreditCard className="h-3.5 w-3.5" />
+                          تم الدفع
+                        </span>
+                      )}
                     </div>
                   )}
 
@@ -682,11 +695,21 @@ export function Step4Payments({
           </div>
         )}
 
-        {/* Error Message */}
+        {/* Error Message — paymentsExceedPrice is computed in the hook
+            and may not have triggered validateStep yet, so we render it
+            independently. errors.payments covers cheque validation
+            (missing amount / تاريخ استحقاق / تاريخ إصدار) raised the
+            last time the user tried to advance / save. */}
         {paymentsExceedPrice && (
           <div className="flex items-center gap-2 text-destructive text-sm p-3 bg-destructive/10 rounded-lg">
             <AlertCircle className="h-4 w-4" />
             <span>مجموع الدفعات يتجاوز سعر التأمين</span>
+          </div>
+        )}
+        {!paymentsExceedPrice && errors.payments && (
+          <div className="flex items-center gap-2 text-destructive text-sm p-3 bg-destructive/10 rounded-lg">
+            <AlertCircle className="h-4 w-4" />
+            <span>{errors.payments}</span>
           </div>
         )}
       </div>

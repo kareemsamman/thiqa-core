@@ -281,20 +281,30 @@ function buildBulkReceiptHtml(
     const amount = Number(p.amount || 0).toLocaleString('en-US');
     const amountCell = `₪${amount}`;
 
-    // Per-row date label: a cheque carries a maturity date (when the
-    // bank will honour it) so "تاريخ الاستحقاق" is the accurate term;
-    // cash / transfer / card are collected on the spot, so the date
-    // IS the receipt date — labelled "تاريخ القبض". The column header
-    // stays generic ("التاريخ") so the table reads consistently while
-    // each cell carries its own precise sub-label.
-    const dateValue = p.payment_type === 'cheque'
-      ? (p.cheque_date || p.payment_date)
-      : p.payment_date;
-    const dateLabelText = p.payment_type === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ القبض';
-    const dateCell = `
-      <div class="date-label">${dateLabelText}</div>
-      <div class="date-value">${formatDate(dateValue)}</div>
-    `;
+    // Per-row date cell. Cheques carry two distinct dates:
+    //   • تاريخ الاستحقاق (when the bank will honour it) — stored on
+    //     cheque_due_date now; legacy rows used cheque_date.
+    //   • تاريخ الإصدار (when the cheque was written) — cheque_issue_date.
+    // Both are rendered stacked so the customer can verify maturity
+    // and issue independently. Cash / transfer / card collapse to a
+    // single "تاريخ القبض" row — those payments are on-the-spot, so
+    // there's only one relevant date.
+    const dateCell = (() => {
+      if (p.payment_type !== 'cheque') {
+        return `
+          <div class="date-label">تاريخ القبض</div>
+          <div class="date-value">${formatDate(p.payment_date)}</div>
+        `;
+      }
+      const dueDate = p.cheque_due_date || p.cheque_date || p.payment_date;
+      const issueDate = p.cheque_issue_date || null;
+      return `
+        <div class="date-label">تاريخ الاستحقاق</div>
+        <div class="date-value">${dueDate ? formatDate(dueDate) : '—'}</div>
+        <div class="date-label" style="margin-top:6px">تاريخ الإصدار</div>
+        <div class="date-value">${issueDate ? formatDate(issueDate) : '—'}</div>
+      `;
+    })();
     const notesCell = anyNotes
       ? `<td class="notes">${escapeHtml(p.notes || '').replace(/\n/g, '<br>') || '—'}</td>`
       : '';
@@ -787,6 +797,8 @@ serve(async (req) => {
         payment_date,
         cheque_number,
         cheque_date,
+        cheque_due_date,
+        cheque_issue_date,
         bank_code,
         branch_code,
         card_last_four,

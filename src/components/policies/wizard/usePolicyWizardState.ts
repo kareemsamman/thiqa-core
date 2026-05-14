@@ -879,6 +879,27 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
         if (paymentsExceedPrice) {
           newErrors.payments = "مجموع الدفعات يتجاوز سعر التأمين";
         }
+        // Cheques must carry both dates (تاريخ الاستحقاق + تاريخ الإصدار)
+        // and a non-zero amount — otherwise the printed سند قبض ends up
+        // with empty cells and the Cheques page can't sort/track them.
+        // Locked auto rows are excluded; those are system-generated and
+        // don't pass through the cheque flow.
+        for (const p of payments) {
+          if (p.locked) continue;
+          if (p.payment_type !== 'cheque') continue;
+          if (!p.amount || p.amount <= 0) {
+            newErrors.payments = "كل شيك يجب أن يكون له مبلغ";
+            break;
+          }
+          if (!p.payment_date) {
+            newErrors.payments = "كل شيك يجب أن يكون له تاريخ استحقاق";
+            break;
+          }
+          if (!p.cheque_issue_date) {
+            newErrors.payments = "كل شيك يجب أن يكون له تاريخ إصدار";
+            break;
+          }
+        }
         break;
     }
 
@@ -888,7 +909,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     steps, selectedCategory, selectedClient, createNewClient, newClient,
     selectedCar, existingCar, createNewCar, newCar, carConflict,
     policy, policyBrokerId, brokerDirection, paymentsExceedPrice,
-    packageMode, packageAddons, errors,
+    packageMode, packageAddons, errors, payments,
   ]);
 
   // Navigate to step

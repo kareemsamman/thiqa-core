@@ -695,10 +695,21 @@ function buildPaymentReceiptHtml(
           <div class="label">طريقة الدفع</div>
           <div class="val">${escapeHtml(paymentMethodLabel)}</div>
         </div>
-        <div class="row">
-          <div class="label">${payment.payment_type === 'cheque' ? 'تاريخ الاستحقاق' : 'تاريخ القبض'}</div>
-          <div class="val">${formatDate(payment.payment_type === 'cheque' ? (payment.cheque_date || payment.payment_date) : payment.payment_date)}</div>
-        </div>
+        ${payment.payment_type === 'cheque' ? `
+          <div class="row">
+            <div class="label">تاريخ الاستحقاق</div>
+            <div class="val">${formatDate(payment.cheque_due_date || payment.cheque_date || payment.payment_date)}</div>
+          </div>
+          <div class="row">
+            <div class="label">تاريخ الإصدار</div>
+            <div class="val">${payment.cheque_issue_date ? formatDate(payment.cheque_issue_date) : '—'}</div>
+          </div>
+        ` : `
+          <div class="row">
+            <div class="label">تاريخ القبض</div>
+            <div class="val">${formatDate(payment.payment_date)}</div>
+          </div>
+        `}
         ${extraDetailsHtml}
       </div>
     </div>
@@ -808,6 +819,8 @@ serve(async (req) => {
         payment_date,
         cheque_number,
         cheque_date,
+        cheque_due_date,
+        cheque_issue_date,
         bank_code,
         branch_code,
         card_last_four,
