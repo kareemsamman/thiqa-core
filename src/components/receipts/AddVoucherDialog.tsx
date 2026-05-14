@@ -60,6 +60,7 @@ import {
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
+import { useCompaniesOutstanding } from '@/hooks/useCompaniesOutstanding';
 
 export type VoucherKind = 'payment' | 'disbursement' | 'credit_note';
 export type CounterpartyKind = 'client' | 'broker' | 'company' | 'other';
@@ -77,11 +78,18 @@ export interface BrokerLite {
   phone: string | null;
 }
 
+export interface CompanyLite {
+  id: string;
+  name: string;
+  name_ar: string | null;
+}
+
 export interface VoucherPickResult {
   kind: VoucherKind;
   counterparty: CounterpartyKind;
   client?: ClientLite;
   broker?: BrokerLite;
+  company?: CompanyLite;
 }
 
 interface Props {
@@ -164,7 +172,7 @@ const COUNTERPARTY_OPTIONS: Array<{
     label: 'شركة تأمين',
     description: 'تسوية مع شركة',
     icon: Building,
-    enabled: false,
+    enabled: true,
   },
   {
     value: 'other',
@@ -181,6 +189,7 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
   const [counterparty, setCounterparty] = useState<CounterpartyKind | null>(null);
   const [selectedClient, setSelectedClient] = useState<ClientLite | null>(null);
   const [selectedBroker, setSelectedBroker] = useState<BrokerLite | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<CompanyLite | null>(null);
 
   // Reset all picks when the modal closes so the next opening starts
   // fresh. Without this, switching tabs and re-opening would carry
@@ -193,18 +202,21 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
       setCounterparty(null);
       setSelectedClient(null);
       setSelectedBroker(null);
+      setSelectedCompany(null);
     }
   }, [open]);
 
   // Continue enabled when the (kind, counterparty, entity) tuple is
   // complete. Counterparty-specific check:
-  //   • client → need selectedClient
-  //   • broker → need selectedBroker
-  //   • company / other → still disabled (next iterations)
+  //   • client  → need selectedClient
+  //   • broker  → need selectedBroker
+  //   • company → need selectedCompany
+  //   • other   → still disabled (next iterations)
   const canContinue =
     !!kind &&
     ((counterparty === 'client' && !!selectedClient) ||
-      (counterparty === 'broker' && !!selectedBroker));
+      (counterparty === 'broker' && !!selectedBroker) ||
+      (counterparty === 'company' && !!selectedCompany));
 
   const handleContinue = () => {
     if (!kind || !counterparty) return;
@@ -213,6 +225,7 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
       counterparty,
       client: counterparty === 'client' ? selectedClient ?? undefined : undefined,
       broker: counterparty === 'broker' ? selectedBroker ?? undefined : undefined,
+      company: counterparty === 'company' ? selectedCompany ?? undefined : undefined,
     });
   };
 
@@ -370,6 +383,24 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
                 <p className="text-[11px] text-amber-700 dark:text-amber-400 pt-1">
                   للوسطاء يُسمى <strong>إشعار مدين</strong> — يُسجَّل بحسابه ويُخصم من
                   رصيده عليك. لا يُصرف نقداً.
+                </p>
+              )}
+            </section>
+          )}
+          {kind && counterparty === 'company' && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground">
+                ٣. اختيار الشركة
+              </h3>
+              <CompanyPicker
+                agentId={agentId}
+                value={selectedCompany}
+                onChange={setSelectedCompany}
+              />
+              {kind === 'credit_note' && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 pt-1">
+                  للشركات <strong>إشعار دائن</strong> يُضاف على الحساب المفتوح — يزيد
+                  المستحق للشركة بدون كاش. أي معاملة بتولّد إيصال.
                 </p>
               )}
             </section>
@@ -655,6 +686,171 @@ function BrokerPicker({ agentId, value, onChange }: BrokerPickerProps) {
                             {b.phone}
                           </div>
                         )}
+                      </div>
+                      {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
+                    </CommandItem>
+                  );
+                })}
+              </ScrollArea>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ─── CompanyPicker ─────────────────────────────────────────────
+//
+// Insurance-company combobox. Two filtering rules baked in:
+//   1. Only companies that have at least one non-ELZAMI policy are
+//      shown — pure إلزامي companies don't have an open accounting
+//      relationship with the office (customer pays them directly
+//      via visa_external, the office never touches the money).
+//   2. The outstanding balance ("المستحق للشركة") prints next to
+//      each row so the agent picks the right counterparty without
+//      bouncing to /company-settlement to check.
+//
+// We preload the full filtered list (companies per agent are
+// typically <100, unlike clients) and let the Command primitive
+// fuzzy-filter client-side. No debounce needed.
+
+interface CompanyPickerProps {
+  agentId: string | null;
+  value: CompanyLite | null;
+  onChange: (company: CompanyLite | null) => void;
+}
+
+interface CompanyRow extends CompanyLite {
+  outstanding: number;
+}
+
+function CompanyPicker({ agentId, value, onChange }: CompanyPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<CompanyRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { outstandingByCompany } = useCompaniesOutstanding();
+
+  useEffect(() => {
+    if (!agentId) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      // Two queries:
+      //   • Active companies the agent has (insurance_companies.agent_id)
+      //   • DISTINCT company_ids of non-ELZAMI policies the agent owns
+      // Intersect on company id, then merge in the outstanding from
+      // the shared hook. Avoiding a server-side join keeps this
+      // generic — same shape works whether the agent has 5 or 500
+      // companies.
+      const [companiesRes, nonElzamiRes] = await Promise.all([
+        supabase
+          .from('insurance_companies')
+          .select('id, name, name_ar')
+          .eq('agent_id', agentId)
+          .eq('active', true)
+          .order('name_ar', { ascending: true }),
+        supabase
+          .from('policies')
+          .select('company_id')
+          .eq('agent_id', agentId)
+          .neq('policy_type_parent', 'ELZAMI')
+          .is('deleted_at', null)
+          .not('company_id', 'is', null),
+      ]);
+      if (cancelled) return;
+      const nonElzamiSet = new Set<string>();
+      for (const p of nonElzamiRes.data ?? []) {
+        if (p.company_id) nonElzamiSet.add(p.company_id as string);
+      }
+      const filtered = (companiesRes.data ?? [])
+        .filter((c) => nonElzamiSet.has(c.id))
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          name_ar: c.name_ar,
+          outstanding: outstandingByCompany.get(c.id)?.outstanding ?? 0,
+        }));
+      setRows(filtered);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, outstandingByCompany]);
+
+  const displayName = (c: CompanyLite) => c.name_ar || c.name;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          {value ? (
+            <span className="flex items-center gap-2 truncate">
+              <span className="font-semibold">{displayName(value)}</span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground inline-flex items-center gap-2">
+              <Search className="h-3.5 w-3.5" />
+              ابحث عن شركة...
+            </span>
+          )}
+          <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" dir="rtl">
+        <Command>
+          <CommandInput placeholder="ابحث عن شركة..." />
+          <CommandList>
+            {loading && (
+              <div className="py-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                جاري التحميل...
+              </div>
+            )}
+            {!loading && rows.length === 0 && (
+              <CommandEmpty>لا توجد شركات (ما عندك بوليصات غير الإلزامي بعد)</CommandEmpty>
+            )}
+            {!loading && rows.length > 0 && (
+              <ScrollArea className="max-h-72">
+                {rows.map((c) => {
+                  const isSelected = value?.id === c.id;
+                  // Three balance flavours:
+                  //   positive → agent owes company (red pill)
+                  //   negative → company owes agent (green pill)
+                  //   ~zero    → settled (muted)
+                  const out = c.outstanding;
+                  const settled = Math.abs(out) < 0.01;
+                  return (
+                    <CommandItem
+                      key={c.id}
+                      value={`${c.name} ${c.name_ar ?? ''}`}
+                      onSelect={() => {
+                        onChange({ id: c.id, name: c.name, name_ar: c.name_ar });
+                        setOpen(false);
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 data-[selected=true]:bg-muted/60 data-[selected=true]:text-foreground"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold truncate">{displayName(c)}</div>
+                        <div className="text-xs mt-0.5">
+                          {settled ? (
+                            <span className="text-muted-foreground">مسوّى</span>
+                          ) : out > 0 ? (
+                            <span className="text-rose-600 dark:text-rose-400 ltr-nums">
+                              مستحق للشركة: ₪{Math.round(out).toLocaleString('en-US')}
+                            </span>
+                          ) : (
+                            <span className="text-emerald-600 dark:text-emerald-400 ltr-nums">
+                              للشركة عندك رصيد: ₪{Math.round(Math.abs(out)).toLocaleString('en-US')}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
                     </CommandItem>
