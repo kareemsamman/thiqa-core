@@ -1,29 +1,22 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAgentContext } from './useAgentContext';
 
 // Outstanding balance the agent owes each insurance company — the
 // "المستحق للشركة" pill the receipts wizard shows next to every
-// company name. Computed directly from policies.payed_for_company so
-// the value reacts immediately when the agent edits a policy's
-// company-net (CompanySettlement uses the same source of truth, so
-// the two screens stay in lockstep without the ab_ledger middleware
-// that goes stale on policy edits).
+// company name. Reads from get_company_outstanding_summary RPC
+// (SECURITY DEFINER) so branch-scoped users still see the full
+// agency view that the receipts wizard needs to make a decision —
+// same pattern report_company_settlement uses on /company-settlement.
 //
-// Formula:
-//   outstanding =
-//       SUM(payed_for_company)   ← live debt from non-cancelled policies
-//     − SUM(outgoing settlements) ← cash we paid the company
-//     − SUM(incoming settlements) ← cash the company paid us (refunds, commission)
-//     + SUM(company credit notes) ← إشعار دائن paper, ADDS to debt because
-//                                    crediting the company's account in our
-//                                    books means our liability to them grew
-//                                    (opposite sign convention from customer
-//                                    + broker credit notes — see PHASE 1
-//                                    migration header for why)
+// Formula (mirrored in the RPC body):
+//   outstanding = Σ payed_for_company         ← gross from issued policies
+//               + Σ credit_notes for company   ← paper, ADDS to debt
+//               − Σ outgoing settlements       ← cash we paid the company
+//               − Σ incoming settlements       ← cash the company paid us
 //
-// Refused settlements are excluded — the matching trigger restores
-// the ledger entry and the receipts mirror surfaces a cancellation
-// row, so a refused سند صرف has no net effect on what's owed.
+// Cancelled / transferred policies and refused settlements are
+// excluded by the RPC.
 
 export interface CompanyOutstanding {
   /** Σ payed_for_company across active (non-cancelled, non-transferred) policies. */
@@ -59,6 +52,7 @@ const emptyRow = (): CompanyOutstanding => ({
 });
 
 export function useCompaniesOutstanding(): UseCompaniesOutstandingResult {
+  const { agentId } = useAgentContext();
   const [outstandingByCompany, setOutstandingByCompany] = useState<
     Map<string, CompanyOutstanding>
   >(new Map());
@@ -67,79 +61,43 @@ export function useCompaniesOutstanding(): UseCompaniesOutstandingResult {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
+    if (!agentId) {
+      setOutstandingByCompany(new Map());
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
 
     (async () => {
       try {
-        const [policiesRes, settlementsRes, creditNotesRes] = await Promise.all([
-          supabase
-            .from('policies')
-            .select('company_id, payed_for_company, cancelled, transferred')
-            .is('deleted_at', null),
-          supabase
-            .from('company_settlements')
-            .select('company_id, total_amount, direction, refused'),
-          supabase
-            .from('receipts')
-            .select('company_id, amount, cancelled_at')
-            .eq('receipt_type', 'credit_note')
-            .not('company_id', 'is', null),
-        ]);
-
+        const { data, error: rpcErr } = await supabase.rpc(
+          'get_company_outstanding_summary',
+          { p_agent_id: agentId } as never,
+        );
         if (cancelled) return;
-        if (policiesRes.error) throw policiesRes.error;
-        if (settlementsRes.error) throw settlementsRes.error;
-        if (creditNotesRes.error) throw creditNotesRes.error;
+        if (rpcErr) throw rpcErr;
 
         const map = new Map<string, CompanyOutstanding>();
-        const get = (id: string) => {
-          let row = map.get(id);
-          if (!row) {
-            row = emptyRow();
-            map.set(id, row);
-          }
-          return row;
-        };
-
-        // Policy-side debt — drop cancelled / transferred rows (their
-        // company_payable ledger entries get reversed by the existing
-        // policy_cancelled / policy_transferred triggers).
-        for (const p of policiesRes.data ?? []) {
-          if (!p.company_id) continue;
-          if (p.cancelled || p.transferred) continue;
-          const row = get(p.company_id);
-          row.totalPayable += Number(p.payed_for_company || 0);
-          row.policiesCount += 1;
+        for (const row of (data ?? []) as Array<{
+          company_id: string;
+          total_payable: number | string;
+          total_paid_out: number | string;
+          total_paid_in: number | string;
+          total_credit_notes: number | string;
+          policies_count: number | string;
+          outstanding: number | string;
+        }>) {
+          map.set(row.company_id, {
+            totalPayable: Number(row.total_payable),
+            totalPaidOut: Number(row.total_paid_out),
+            totalPaidIn: Number(row.total_paid_in),
+            totalCreditNotes: Number(row.total_credit_notes),
+            policiesCount: Number(row.policies_count),
+            outstanding: Number(row.outstanding),
+          });
         }
-
-        // Settlements split by direction so the picker can show both
-        // sides of the running account separately.
-        for (const s of settlementsRes.data ?? []) {
-          if (!s.company_id || s.refused) continue;
-          const row = get(s.company_id);
-          const amt = Number(s.total_amount || 0);
-          if (s.direction === 'incoming') row.totalPaidIn += amt;
-          else row.totalPaidOut += amt;
-        }
-
-        // إشعار دائن ADDS to debt.
-        for (const r of creditNotesRes.data ?? []) {
-          if (!r.company_id || r.cancelled_at) continue;
-          const row = get(r.company_id);
-          row.totalCreditNotes += Number(r.amount || 0);
-        }
-
-        // Final signed balance.
-        for (const row of map.values()) {
-          row.outstanding =
-            row.totalPayable
-            + row.totalCreditNotes
-            - row.totalPaidOut
-            - row.totalPaidIn;
-        }
-
         setOutstandingByCompany(map);
         setLoading(false);
       } catch (e) {
@@ -152,7 +110,7 @@ export function useCompaniesOutstanding(): UseCompaniesOutstandingResult {
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [agentId, refreshKey]);
 
   return {
     outstandingByCompany,
