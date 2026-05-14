@@ -551,14 +551,21 @@ export function AddSettlementDialog({
               />
             </div>
 
-            {/* Toolbar — type-specific quick adds + split + scanner */}
+            {/* Toolbar — type-specific quick adds + split + scanner.
+                'customer_cheque' is only meaningful for OUTGOING
+                payments (we hand a cheque the customer gave us to a
+                broker/company/etc). On سند قبض (kind='receipt') it
+                doesn't apply — the counterparty wouldn't pay us with
+                cheques we already hold. Hide it on that side. */}
             <div className="space-y-2">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <span className="text-sm font-semibold">الدفعات</span>
                 <div className="flex items-center gap-2 flex-wrap">
                   <QuickAddButton type="cash" onClick={() => addLineOfType('cash')} />
                   <QuickAddButton type="cheque" onClick={() => addLineOfType('cheque')} />
-                  <QuickAddButton type="customer_cheque" onClick={() => addLineOfType('customer_cheque')} />
+                  {kind === 'disbursement' && (
+                    <QuickAddButton type="customer_cheque" onClick={() => addLineOfType('customer_cheque')} />
+                  )}
                   <QuickAddButton type="bank_transfer" onClick={() => addLineOfType('bank_transfer')} />
                   <QuickAddButton type="visa" onClick={() => addLineOfType('visa')} />
                   <Popover open={splitOpen} onOpenChange={setSplitOpen}>
@@ -579,11 +586,13 @@ export function AddSettlementDialog({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {(Object.keys(PAYMENT_TYPE_LABEL) as PaymentLineType[]).map((t) => (
-                              <SelectItem key={t} value={t}>
-                                {PAYMENT_TYPE_LABEL[t]}
-                              </SelectItem>
-                            ))}
+                            {(Object.keys(PAYMENT_TYPE_LABEL) as PaymentLineType[])
+                              .filter((t) => kind === 'disbursement' || t !== 'customer_cheque')
+                              .map((t) => (
+                                <SelectItem key={t} value={t}>
+                                  {PAYMENT_TYPE_LABEL[t]}
+                                </SelectItem>
+                              ))}
                           </SelectContent>
                         </Select>
                       </div>
