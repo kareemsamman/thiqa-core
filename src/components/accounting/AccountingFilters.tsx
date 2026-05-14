@@ -15,7 +15,7 @@ export interface FilterOption {
   label: string;
 }
 
-export type CounterpartyFilter = 'all' | 'broker' | 'client';
+export type CounterpartyFilter = 'all' | 'broker' | 'client' | 'company';
 
 export interface AccountingFiltersValue {
   /** First day of selected range (or month), ISO yyyy-MM-dd. */
@@ -276,6 +276,7 @@ export function AccountingFilters({
                   { v: 'all', l: 'الكل' },
                   { v: 'client', l: 'عميل' },
                   { v: 'broker', l: 'وسيط' },
+                  { v: 'company', l: 'شركة' },
                 ] as Array<{ v: CounterpartyFilter; l: string }>).map((opt) => (
                   <button
                     key={opt.v}

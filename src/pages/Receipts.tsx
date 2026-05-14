@@ -82,10 +82,12 @@ import {
   AddVoucherDialog,
   type ClientLite,
   type BrokerLite,
+  type CompanyLite,
   type VoucherPickResult,
 } from "@/components/receipts/AddVoucherDialog";
 import { AddCreditNoteDialog } from "@/components/receipts/AddCreditNoteDialog";
 import { AddBrokerCreditNoteDialog } from "@/components/receipts/AddBrokerCreditNoteDialog";
+import { AddCompanyCreditNoteDialog } from "@/components/receipts/AddCompanyCreditNoteDialog";
 import { AddSettlementDialog } from "@/components/accounting/AddSettlementDialog";
 import { DebtPaymentSuccessDialog } from "@/components/debt/DebtPaymentSuccessDialog";
 import { VoucherSendDialog, type VoucherKind as VoucherSendKind } from "@/components/policies/VoucherSendDialog";
@@ -756,6 +758,17 @@ export default function Receipts() {
   // computation in AddSettlementDialog and BrokersSection
   // subtracts these from "بدنا منه".
   const [brokerCreditNoteTarget, setBrokerCreditNoteTarget] = useState<BrokerLite | null>(null);
+  // Company routes — قبض/صرف ride through AddSettlementDialog
+  // (mode='company') which already wires to company_settlements;
+  // the new DB trigger (migration 20260514170000) auto-mirrors the
+  // row into receipts. إشعار دائن uses its own paper-only dialog
+  // because it lands DIRECTLY on receipts (no settlement row) and
+  // INCREASES المستحق للشركة rather than reducing it.
+  const [companySettlement, setCompanySettlement] = useState<{
+    company: CompanyLite;
+    kind: 'disbursement' | 'receipt';
+  } | null>(null);
+  const [companyCreditNoteTarget, setCompanyCreditNoteTarget] = useState<CompanyLite | null>(null);
 
   // After a voucher is created, hand the agent the print / SMS / WhatsApp
   // popup the rest of the app already uses. Two flavours:
@@ -1135,11 +1148,16 @@ export default function Receipts() {
     return Array.from(map.values());
   }, [receipts, sessionByPaymentId]);
 
-  // Identify the counterparty (broker vs client) for a group from its
-  // first row. Used by both the badge label and the filter dropdown.
-  const getCounterparty = useCallback((group: ReceiptGroup): 'broker' | 'client' | null => {
+  // Identify the counterparty (company / broker / client) for a
+  // group from its first row. Used by both the badge label and the
+  // filter dropdown. Order matters: company_id is checked first so a
+  // legacy row with both company_id + policy_id (theoretically
+  // possible if a future migration cross-stamps) still classifies as
+  // a company voucher.
+  const getCounterparty = useCallback((group: ReceiptGroup): 'broker' | 'client' | 'company' | null => {
     const r = group.receipts[0] as any;
     if (!r) return null;
+    if (r.company_id) return 'company';
     if (r.broker_id) return 'broker';
     if (r.client_id || r.policy_id) return 'client';
     return null;
@@ -2069,6 +2087,8 @@ export default function Receipts() {
     setCreditNoteClient(null);
     setBrokerSettlement(null);
     setBrokerCreditNoteTarget(null);
+    setCompanySettlement(null);
+    setCompanyCreditNoteTarget(null);
 
     if (result.counterparty === 'client' && result.client) {
       const c = result.client;
@@ -2100,6 +2120,24 @@ export default function Receipts() {
           // existing AddSettlementDialog path.
           const kind = result.kind === 'payment' ? 'receipt' : 'disbursement';
           setBrokerSettlement({ broker, kind });
+        }
+      }, 100);
+      return;
+    }
+
+    if (result.counterparty === 'company' && result.company) {
+      const company = result.company;
+      setTimeout(() => {
+        if (result.kind === 'credit_note') {
+          // "إشعار دائن" for company — paper acknowledgment that
+          // ADDS to المستحق للشركة. No settlement row, no cash.
+          setCompanyCreditNoteTarget(company);
+        } else {
+          // سند قبض / سند صرف ride AddSettlementDialog (mode='company'),
+          // which writes to company_settlements; the new DB trigger
+          // (20260514170000) mirrors the row into receipts.
+          const kind = result.kind === 'payment' ? 'receipt' : 'disbursement';
+          setCompanySettlement({ company, kind });
         }
       }, 100);
       return;
@@ -2859,6 +2897,80 @@ export default function Receipts() {
         />
       )}
 
+      {/* Company + سند قبض/صرف — rides AddSettlementDialog
+          (mode='company') which writes to company_settlements; the
+          DB trigger from migration 20260514170000 auto-mirrors the
+          row into receipts so it surfaces on /receipts immediately. */}
+      {companySettlement && (
+        <AddSettlementDialog
+          open={!!companySettlement}
+          onOpenChange={(o) => !o && setCompanySettlement(null)}
+          mode="company"
+          kind={companySettlement.kind}
+          entities={[{
+            id: companySettlement.company.id,
+            name: companySettlement.company.name_ar || companySettlement.company.name,
+          }]}
+          defaultEntityId={companySettlement.company.id}
+          cancelLabel="رجوع"
+          onSaved={async () => {
+            const c = companySettlement.company;
+            const kind = companySettlement.kind;
+            setCompanySettlement(null);
+            setAddVoucherOpen(false);
+            await fetchReceipts();
+            // Look up the receipts mirror row — same pattern as the
+            // broker flow. Companies are agency-wide (no branch_id),
+            // so we scope solely by company_id + receipt_type.
+            const { data: latest } = await supabase
+              .from('receipts')
+              .select('id')
+              .eq('company_id', c.id)
+              .eq('receipt_type', kind === 'disbursement' ? 'disbursement' : 'payment')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (latest?.id) {
+              setVoucherSend({
+                kind: kind === 'disbursement' ? 'disbursement' : 'payment',
+                receiptId: latest.id,
+                clientPhone: null,
+              });
+            } else {
+              const name = c.name_ar || c.name;
+              toast.success(
+                kind === 'disbursement'
+                  ? `تم تسجيل سند صرف لشركة ${name}`
+                  : `تم تسجيل سند قبض من شركة ${name}`,
+              );
+            }
+          }}
+        />
+      )}
+
+      {/* Company + إشعار دائن — paper credit on the open account
+          between the agent and the company. ADDS to المستحق للشركة
+          (opposite sign convention from customer/broker credit notes
+          because the office holds the payable, not the receivable). */}
+      {companyCreditNoteTarget && (
+        <AddCompanyCreditNoteDialog
+          open={!!companyCreditNoteTarget}
+          onOpenChange={(o) => !o && setCompanyCreditNoteTarget(null)}
+          company={companyCreditNoteTarget}
+          cancelLabel="رجوع"
+          onSaved={({ receiptId }) => {
+            setCompanyCreditNoteTarget(null);
+            setAddVoucherOpen(false);
+            fetchReceipts();
+            setVoucherSend({
+              kind: 'credit_note',
+              receiptId,
+              clientPhone: null,
+            });
+          }}
+        />
+      )}
+
       {/* Customer + إشعار دائن — standalone credit note (not tied to
           a cancellation). Inserts wallet transaction + receipt with
           a C{nn}/{year} voucher_number from the shared allocator. */}
@@ -3318,7 +3430,10 @@ export default function Receipts() {
                             const cp = getCounterparty(group);
                             let suffix = '';
                             if (cp && rowType !== 'cancellation') {
-                              const who = cp === 'broker' ? 'وسيط' : 'عميل';
+                              const who =
+                                cp === 'broker' ? 'وسيط'
+                                : cp === 'company' ? 'شركة'
+                                : 'عميل';
                               const prep = rowType === 'payment' ? 'من' : 'لـ';
                               suffix = ` ${prep}${who}`;
                             }
