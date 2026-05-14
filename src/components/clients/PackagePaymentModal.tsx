@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card } from '@/components/ui/card';
-import { Loader2, CreditCard, Banknote, Wallet, AlertCircle, CheckCircle, Package, Plus, Trash2, Split, Upload, X, ImageIcon, Scan, FileText } from 'lucide-react';
+import { Loader2, CreditCard, Banknote, Wallet, AlertCircle, CheckCircle, Package, Plus, Trash2, Copy, Split, Upload, X, ImageIcon, Scan, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -402,6 +402,24 @@ export function PackagePaymentModal({
       });
       setPaymentLines(paymentLines.filter(p => p.id !== id));
     }
+  };
+
+  // Clone — copy editable fields, drop state markers (tranzilaPaid)
+  // and per-instrument attachments (pendingImages / chequeImageUrl)
+  // so the second cheque doesn't inherit the first one's scan.
+  const duplicatePaymentLine = (id: string) => {
+    const source = paymentLines.find(p => p.id === id);
+    if (!source) return;
+    setPaymentLines([
+      ...paymentLines,
+      {
+        ...source,
+        id: crypto.randomUUID(),
+        tranzilaPaid: undefined,
+        pendingImages: undefined,
+        chequeImageUrl: undefined,
+      },
+    ]);
   };
 
   const updatePaymentLine = (id: string, field: keyof PaymentLine, value: any) => {
@@ -800,15 +818,30 @@ export function PackagePaymentModal({
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-muted-foreground">دفعة {index + 1}</span>
-                      {paymentLines.length > 1 && !payment.tranzilaPaid && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => removePaymentLine(payment.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                      {!payment.tranzilaPaid && (
+                        <div className="flex items-center gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                            onClick={() => duplicatePaymentLine(payment.id)}
+                            aria-label="تكرار الدفعة"
+                            title="تكرار الدفعة"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          {paymentLines.length > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => removePaymentLine(payment.id)}
+                              aria-label="حذف الدفعة"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       )}
                       {payment.tranzilaPaid && (
                         <Badge variant="success" className="gap-1">

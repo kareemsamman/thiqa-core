@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArabicDatePicker } from "@/components/ui/arabic-date-picker";
-import { Plus, Trash2, CreditCard, AlertCircle, Loader2, Split, Upload, X, ImageIcon, Sparkles, Scan, Info, FileText, Wallet } from "lucide-react";
+import { Plus, Trash2, Copy, CreditCard, AlertCircle, Loader2, Split, Upload, X, ImageIcon, Sparkles, Scan, Info, FileText, Wallet } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { PaymentSummaryBar } from "./PaymentSummaryBar";
@@ -167,6 +167,30 @@ export function Step4Payments({
 
   const removePayment = (id: string) => {
     setPayments(payments.filter(p => p.id !== id));
+  };
+
+  // Clone an existing payment line. Form fields copy verbatim — the
+  // agent triggers this when entering a series of similar entries
+  // (same amount, same bank, consecutive cheque numbers etc.) and
+  // wants to avoid re-typing. We strip:
+  //   • locked / locked_label   → system-managed ELZAMI auto-row
+  //   • tranzila_paid           → a paid row can't auto-clone its paid state
+  //   • pendingImages / cheque_image_url → binary attachments belong
+  //     to a specific physical instrument; copying them would create
+  //     misleading duplicate evidence on a second cheque.
+  const duplicatePayment = (id: string) => {
+    const source = payments.find(p => p.id === id);
+    if (!source) return;
+    const clone: PaymentLine = {
+      ...source,
+      id: crypto.randomUUID(),
+      locked: undefined,
+      locked_label: undefined,
+      tranzila_paid: undefined,
+      pendingImages: undefined,
+      cheque_image_url: undefined,
+    };
+    setPayments([...payments, clone]);
   };
 
   // Split remaining amount into equal installments (keeps locked payments)
@@ -428,18 +452,34 @@ export function Step4Payments({
                     visaPaid && "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
                   )}
                 >
-                  {/* Delete button — absolute top-left so it never claims its own row on mobile */}
+                  {/* Row actions — absolute top-left so they never claim
+                      their own row on mobile. Duplicate sits left of
+                      delete so the muscle memory for "trash = corner"
+                      stays intact. */}
                   {!visaPaid && !isLocked && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removePayment(payment.id)}
-                      className="absolute top-1.5 left-1.5 h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10 z-10"
-                      aria-label="حذف الدفعة"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="absolute top-1.5 left-1.5 flex gap-0.5 z-10">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => duplicatePayment(payment.id)}
+                        className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                        aria-label="تكرار الدفعة"
+                        title="تكرار الدفعة"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removePayment(payment.id)}
+                        className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        aria-label="حذف الدفعة"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   )}
 
                   {/* Elzami feature tag — subtle pill, not a disabled-looking header */}
@@ -464,7 +504,7 @@ export function Step4Payments({
                       cheques show تاريخ الإصدار (cashier writes it
                       together with amount+method) and move تاريخ
                       الاستحقاق to the cheque sub-row below. */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end pl-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end pl-16">
                     {/* Amount — editable even on locked rows so the
                         agent can set 0 when the customer hasn't paid
                         the company portal yet (the agency collects
@@ -563,7 +603,7 @@ export function Step4Payments({
                       Same layout as DebtPaymentModal / PackagePaymentModal
                       so the wizard reads identical to the other pay flows. */}
                   {payment.payment_type === 'cheque' && (
-                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end pl-8">
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end pl-16">
                       <div className="space-y-1.5 min-w-0">
                         <Label className="text-[10px] block text-muted-foreground">البنك</Label>
                         <BankPicker
@@ -617,7 +657,7 @@ export function Step4Payments({
                       and the button can stretch full-width on narrow
                       screens. */}
                   {hasActionsColumn && (
-                    <div className="mt-2 flex items-center gap-2 pl-8">
+                    <div className="mt-2 flex items-center gap-2 pl-16">
                       {isVisa && !visaPaid && !isLocked && (
                         <Button
                           type="button"

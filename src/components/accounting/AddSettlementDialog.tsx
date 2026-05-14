@@ -31,7 +31,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
-import { Banknote, CreditCard, FileText, Loader2, Plus, Receipt, Scan, Split, Trash2, Wallet } from 'lucide-react';
+import { Banknote, Copy, CreditCard, FileText, Loader2, Plus, Receipt, Scan, Split, Trash2, Wallet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAgentContext } from '@/hooks/useAgentContext';
@@ -425,6 +425,25 @@ export function AddSettlementDialog({
 
   const removeLine = (id: string) =>
     setLines((prev) => (prev.length === 1 ? prev : prev.filter((l) => l.id !== id)));
+
+  // Clone — copy editable fields, drop attachments (cheque_image_urls
+  // belongs to a specific physical cheque) and selected_cheques (each
+  // customer-cheque can only sit in one settlement, so the picker on
+  // the new card opens empty for a fresh selection).
+  const duplicateLine = (id: string) =>
+    setLines((prev) => {
+      const source = prev.find((l) => l.id === id);
+      if (!source) return prev;
+      return [
+        ...prev,
+        {
+          ...source,
+          id: crypto.randomUUID(),
+          cheque_image_urls: undefined,
+          selected_cheques: undefined,
+        },
+      ];
+    });
 
   // Drop the seeded empty cash line when the user adds a different
   // payment — otherwise the dialog would keep that placeholder row
@@ -882,6 +901,7 @@ export function AddSettlementDialog({
                     line={line}
                     onChange={(patch) => updateLine(line.id, patch)}
                     onRemove={lines.length > 1 ? () => removeLine(line.id) : undefined}
+                    onDuplicate={() => duplicateLine(line.id)}
                   />
                 ))}
             </div>
@@ -1013,11 +1033,13 @@ function PaymentLineCard({
   line,
   onChange,
   onRemove,
+  onDuplicate,
 }: {
   index: number;
   line: PaymentLine;
   onChange: (patch: Partial<PaymentLine>) => void;
   onRemove?: () => void;
+  onDuplicate?: () => void;
 }) {
   const Icon = PAYMENT_TYPE_ICON[line.payment_type];
   return (
@@ -1029,11 +1051,25 @@ function PaymentLineCard({
             دفعة {index + 1} · {PAYMENT_TYPE_LABEL[line.payment_type]}
           </span>
         </div>
-        {onRemove && (
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRemove}>
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </Button>
-        )}
+        <div className="flex items-center gap-0.5">
+          {onDuplicate && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+              onClick={onDuplicate}
+              aria-label="تكرار الدفعة"
+              title="تكرار الدفعة"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {onRemove && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRemove} aria-label="حذف الدفعة">
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* CASH + BANK_TRANSFER row layout. Source order: payment_type
