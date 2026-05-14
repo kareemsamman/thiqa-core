@@ -126,6 +126,25 @@ const PAYMENT_METHOD_OPTIONS = [
 
 const PAGE_SIZE = 50;
 
+// Tiny coloured pill rendered under the voucher number on the "الكل"
+// tab so the user can tell سند قبض from سند إلغاء at a glance — both
+// share the R-prefix in the receipt_number column. On single-type
+// tabs the badge is redundant (the tab itself is the type indicator),
+// so it's gated to activeTab === 'all' below.
+const RECEIPT_TYPE_BADGE: Record<
+  string,
+  {
+    label: string;
+    variant: 'success' | 'destructive' | 'warning' | 'outline';
+    icon: typeof Receipt;
+  }
+> = {
+  payment: { label: 'سند قبض', variant: 'success', icon: Receipt },
+  cancellation: { label: 'سند إلغاء', variant: 'destructive', icon: Ban },
+  credit_note: { label: 'إشعار دائن', variant: 'warning', icon: Wallet },
+  disbursement: { label: 'سند صرف', variant: 'outline', icon: Banknote },
+};
+
 // Display the receipts table's numeric receipt_number in the same
 // "R{seq}/{year}" form policy_payments uses, so سندات قبض and
 // تفاصيل الدفعات agree visually. Year is derived from the row's
@@ -2466,6 +2485,19 @@ export default function Receipts() {
                                 ? firstReceipt.voucher_number
                                 : formatReceiptNumber(firstReceipt?.receipt_number, firstReceipt?.receipt_date)}
                             </span>
+                            {/* Type badge — only on the "الكل" tab,
+                                where the R-prefix alone can't tell
+                                سند قبض from سند إلغاء. */}
+                            {activeTab === 'all' && (() => {
+                              const cfg = RECEIPT_TYPE_BADGE[rowType] ?? RECEIPT_TYPE_BADGE.payment;
+                              const TypeIcon = cfg.icon;
+                              return (
+                                <Badge variant={cfg.variant} className="gap-1 px-2 py-0 h-5 text-[10px] font-medium">
+                                  <TypeIcon className="h-3 w-3" />
+                                  <span>{cfg.label}</span>
+                                </Badge>
+                              );
+                            })()}
                             {/* Cancellation indicators. Payment tab: red
                                 pill + the voucher number that cancelled
                                 it. Cancellation tab: amber pill + the
