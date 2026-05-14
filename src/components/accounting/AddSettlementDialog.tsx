@@ -475,10 +475,20 @@ export function AddSettlementDialog({
         onSaved({ lines: effective, notes });
         onOpenChange(false);
       } else {
+        // Resolve the entity's display name from the entities prop
+        // (broker/company modes) or the clientName prop (client mode).
+        // persistSettlementLines uses it for the broker mirror's
+        // receipts.client_name column, so /receipts shows "كريم
+        // السمان" instead of a UUID in the customer column.
+        const entityName =
+          mode === 'client'
+            ? clientName ?? null
+            : entities?.find((e) => e.id === entityId)?.name ?? null;
         await persistSettlementLines({
           mode,
           kind,
           entityId,
+          entityName,
           policyId,
           branchId,
           effective,

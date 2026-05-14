@@ -2533,8 +2533,9 @@ export default function Receipts() {
           page's BrokersSection opens, but with the entities list
           pinned to the wizard's picked broker so the user can't
           accidentally switch entities mid-flow. Writes to
-          broker_settlements; the ab_ledger trigger handles
-          accounting downstream. */}
+          broker_settlements; persistSettlementLines also mirrors a
+          row into the receipts table (migration 20260514150000) so
+          the new voucher surfaces on /receipts immediately. */}
       {brokerSettlement && (
         <AddSettlementDialog
           open={!!brokerSettlement}
@@ -2544,19 +2545,44 @@ export default function Receipts() {
           entities={[{ id: brokerSettlement.broker.id, name: brokerSettlement.broker.name }]}
           defaultEntityId={brokerSettlement.broker.id}
           cancelLabel="رجوع"
-          onSaved={() => {
+          onSaved={async () => {
+            const b = brokerSettlement.broker;
+            const kind = brokerSettlement.kind;
             setBrokerSettlement(null);
             setAddVoucherOpen(false);
-            // Receipts page table doesn't show broker settlements
-            // today (no receipts-row mirror); refresh is harmless
-            // but won't produce a new row. The accounting page is
-            // the canonical surface for broker vouchers.
-            fetchReceipts();
-            toast.success(
-              brokerSettlement.kind === 'disbursement'
-                ? 'تم تسجيل سند صرف للوسيط'
-                : 'تم تسجيل سند قبض من الوسيط',
-            );
+            await fetchReceipts();
+            // Look up the receipts mirror row we just created
+            // (persistSettlementLines.brokerReceiptId would be nicer,
+            // but AddSettlementDialog doesn't pipe it through onSaved
+            // yet — querying by broker_id + receipt_type and ordering
+            // by created_at is good enough for an interactive flow).
+            const { data: latest } = await supabase
+              .from('receipts')
+              .select('id')
+              .eq('broker_id', b.id)
+              .eq('receipt_type', kind === 'disbursement' ? 'disbursement' : 'payment')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (latest?.id && kind === 'disbursement') {
+              // VoucherSendDialog covers disbursement out of the box
+              // (generate-disbursement-voucher reads the receipts row
+              // directly — no policy join required).
+              setVoucherSend({
+                kind: 'disbursement',
+                receiptId: latest.id,
+                clientPhone: b.phone,
+              });
+            } else {
+              // سند قبض من وسيط — no edge function tailored for the
+              // print/SMS path yet (generate-bulk-payment-receipt
+              // requires payment_ids from policy_payments, which a
+              // broker receipt doesn't have). The voucher is visible
+              // on /receipts and printable from the row's dropdown
+              // via the local HTML fallback; surface a confirmation
+              // toast for now.
+              toast.success(`تم تسجيل سند قبض من الوسيط ${b.name}`);
+            }
           }}
         />
       )}
