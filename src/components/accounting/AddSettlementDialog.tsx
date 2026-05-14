@@ -216,6 +216,74 @@ export function AddSettlementDialog({
     title?: string;
   }> | null>(null);
 
+  // Broker balance — only fetched when mode='broker' so the dialog
+  // can surface the two-sided summary (broker owes us / we owe
+  // broker) the user wants to see before recording a سند قبض or
+  // سند صرف. Same math BrokersSection uses for its pills.
+  const [brokerBalance, setBrokerBalance] = useState<{
+    owesUs: number;
+    weOwe: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (mode !== 'broker' || !entityId) {
+      setBrokerBalance(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      // Two parallel queries: every policy on this broker (to compute
+      // the gross debt on each side) and every broker_settlements row
+      // (to subtract what's already been paid/collected).
+      const [{ data: policies }, { data: settlements }] = await Promise.all([
+        supabase
+          .from('policies')
+          .select('insurance_price, broker_buy_price, broker_direction, cancelled, transferred')
+          .eq('broker_id', entityId)
+          .is('deleted_at', null),
+        supabase
+          .from('broker_settlements')
+          .select('total_amount, direction, refused')
+          .eq('broker_id', entityId),
+      ]);
+      if (cancelled) return;
+
+      // to_broker: broker sold our policy → owes us the insurance_price.
+      //   Cancelled / transferred policies drop out — the obligation
+      //   was reversed.
+      // from_broker: broker brought us a customer → we owe broker the
+      //   agreed buy price (broker_buy_price). Cancelled drops out
+      //   for the same reason.
+      const toBrokerGross = (policies ?? [])
+        .filter(
+          (p: any) =>
+            p.broker_direction === 'to_broker' && !p.cancelled && !p.transferred,
+        )
+        .reduce((s: number, p: any) => s + Number(p.insurance_price || 0), 0);
+      const fromBrokerGross = (policies ?? [])
+        .filter(
+          (p: any) =>
+            p.broker_direction === 'from_broker' && !p.cancelled && !p.transferred,
+        )
+        .reduce((s: number, p: any) => s + Number(p.broker_buy_price || 0), 0);
+
+      const collectedFromBroker = (settlements ?? [])
+        .filter((s: any) => s.direction === 'broker_owes' && !s.refused)
+        .reduce((s: number, x: any) => s + Number(x.total_amount || 0), 0);
+      const paidToBroker = (settlements ?? [])
+        .filter((s: any) => s.direction === 'we_owe' && !s.refused)
+        .reduce((s: number, x: any) => s + Number(x.total_amount || 0), 0);
+
+      setBrokerBalance({
+        owesUs: Math.max(0, toBrokerGross - collectedFromBroker),
+        weOwe: Math.max(0, fromBrokerGross - paidToBroker),
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, entityId]);
+
   // Reset whenever the dialog opens or mode/kind changes underneath.
   // Staged callers (cancel/transfer) can hand us initialLines+initialNotes
   // so reopening preserves the prior entry instead of starting fresh.
@@ -548,6 +616,60 @@ export function AddSettlementDialog({
                 <span className="font-semibold ltr-nums">
                   ₪{targetAmount.toLocaleString('en-US')}
                 </span>
+              </div>
+            )}
+
+            {/* Broker balance summary — two pills showing both
+                directions of the running ledger:
+                  • بدنا منه: what the broker still owes us from
+                    to_broker policies (he sold our books) minus سند
+                    قبض already collected
+                  • بده مني: what we still owe the broker from
+                    from_broker policies (he brought us customers)
+                    minus سند صرف already paid out
+                Both are independent — a broker can be owing us on
+                one set of policies and owed money on another. Always
+                shown when mode='broker' so the agent has the same
+                situational awareness regardless of which voucher
+                they're entering. */}
+            {mode === 'broker' && brokerBalance && (
+              <div className="grid grid-cols-2 gap-2">
+                <div
+                  className={cn(
+                    'rounded-lg border p-3 transition-colors',
+                    kind === 'receipt'
+                      ? 'border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/20 ring-1 ring-emerald-500/30'
+                      : 'border-border bg-muted/20',
+                  )}
+                >
+                  <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold mb-1">
+                    بدنا منه (الوسيط)
+                  </div>
+                  <div className="text-lg font-bold text-emerald-800 dark:text-emerald-300 tabular-nums">
+                    ₪{Math.round(brokerBalance.owesUs).toLocaleString('en-US')}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    من معاملات الوسيط بعد خصم السنود المقبوضة
+                  </div>
+                </div>
+                <div
+                  className={cn(
+                    'rounded-lg border p-3 transition-colors',
+                    kind === 'disbursement'
+                      ? 'border-amber-500/40 bg-amber-50 dark:bg-amber-950/20 ring-1 ring-amber-500/30'
+                      : 'border-border bg-muted/20',
+                  )}
+                >
+                  <div className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold mb-1">
+                    بده مني (للمكتب)
+                  </div>
+                  <div className="text-lg font-bold text-amber-800 dark:text-amber-300 tabular-nums">
+                    ₪{Math.round(brokerBalance.weOwe).toLocaleString('en-US')}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    سعر شراء معاملات الوسيط بعد خصم سندات الصرف
+                  </div>
+                </div>
               </div>
             )}
 
