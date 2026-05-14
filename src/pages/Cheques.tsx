@@ -390,11 +390,29 @@ export default function Cheques() {
   // Add customer cheque modal
   const [addChequeModalOpen, setAddChequeModalOpen] = useState(false);
 
+  // Client-side search filter. The DB fetch returns ALL cheques on
+  // the current page (no name filter server-side), and the user's
+  // search box just narrows what's displayed — so we filter here in
+  // a memo instead of inside fetchCheques. Without this split, every
+  // keystroke triggered a refetch, which cleared the table to the
+  // skeleton and then re-populated it — looking like "results show,
+  // then disappear, then come back." Filtering here is synchronous,
+  // so results pop in immediately as the user types.
+  const visibleCheques = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return cheques;
+    return cheques.filter((c) =>
+      c.policy?.client?.full_name?.toLowerCase().includes(q) ||
+      c.cheque_number?.toLowerCase().includes(q) ||
+      c.policy?.client?.phone_number?.includes(q)
+    );
+  }, [cheques, searchQuery]);
+
   // Group cheques by customer
   const customerGroups = useMemo((): CustomerGroup[] => {
     const groups: Record<string, CustomerGroup> = {};
-    
-    cheques.forEach(cheque => {
+
+    visibleCheques.forEach(cheque => {
       const customerId = cheque.policy?.client?.id || 'unknown';
       const customerName = cheque.policy?.client?.full_name || 'غير معروف';
       const phone = cheque.policy?.client?.phone_number || null;
@@ -425,7 +443,7 @@ export default function Cheques() {
     
     // Sort by customer name
     return Object.values(groups).sort((a, b) => a.customerName.localeCompare(b.customerName, 'ar'));
-  }, [cheques]);
+  }, [visibleCheques]);
 
   // Fetch summary stats separately (not affected by filters). The page
   // counts cheques across all surfaces — customer cheques (in-bound) +
@@ -735,16 +753,10 @@ export default function Cheques() {
       // passed through unchanged.
       const collapsed = collapseCustomerChequesByBatch(formattedCheques);
 
-      // Search filter (includes customer name search)
-      const filtered = searchQuery
-        ? collapsed.filter(c =>
-            c.policy?.client?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            c.cheque_number?.includes(searchQuery) ||
-            c.policy?.client?.phone_number?.includes(searchQuery)
-          )
-        : collapsed;
-
-      setCheques(filtered);
+      // Note: the search box filter lives in the `visibleCheques`
+      // memo, NOT here — so typing in the search input doesn't
+      // refetch from the DB.
+      setCheques(collapsed);
       setTotalCount(count || 0);
     } catch (error) {
       console.error('Error fetching cheques:', error);
@@ -752,7 +764,7 @@ export default function Cheques() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, statusFilter, overdueOnly, dueTodayOnly, searchQuery, filterBranch, toast]);
+  }, [currentPage, statusFilter, overdueOnly, dueTodayOnly, filterBranch, toast]);
 
   useEffect(() => { fetchSummaryStats(); }, [fetchSummaryStats]);
   useEffect(() => { fetchCheques(); }, [fetchCheques]);
@@ -1100,10 +1112,10 @@ export default function Cheques() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedCheques.size === cheques.length) {
+    if (selectedCheques.size === visibleCheques.length) {
       setSelectedCheques(new Set());
     } else {
-      setSelectedCheques(new Set(cheques.map(c => c.id)));
+      setSelectedCheques(new Set(visibleCheques.map(c => c.id)));
     }
   };
 
@@ -1710,7 +1722,7 @@ export default function Cheques() {
                     <TableRow className="border-border/50 hover:bg-transparent">
                       <TableHead className="w-[56px] [&:has([role=checkbox])]:!pr-4 [&:has([role=checkbox])]:!pl-2">
                         <Checkbox
-                          checked={selectedCheques.size === cheques.length && cheques.length > 0}
+                          checked={selectedCheques.size === visibleCheques.length && visibleCheques.length > 0}
                           onCheckedChange={toggleSelectAll}
                         />
                       </TableHead>
@@ -1838,7 +1850,7 @@ export default function Cheques() {
               {/* Pagination */}
               <div className="flex items-center justify-between border-t border-border/30 px-4 py-3">
                 <p className="text-sm text-muted-foreground">
-                  {customerGroups.length} عميل، {cheques.length} شيك
+                  {customerGroups.length} عميل، {visibleCheques.length} شيك
                 </p>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>
