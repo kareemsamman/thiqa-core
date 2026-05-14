@@ -968,12 +968,77 @@ serve(async (req) => {
         const { data: siblings } = await supabase
           .from('policy_payments')
           .select(`
-            id, batch_id, payment_type, cheque_number, cheque_due_date, cheque_date, cheque_issue_date,
+            id, batch_id, payment_session_id, created_at,
+            payment_type, cheque_number, cheque_due_date, cheque_date, cheque_issue_date,
             payment_date, bank_code, branch_code, notes, amount, refused
           `)
           .eq(filterCol, filterVal);
+
+        // ─── Physical-instrument collapse ──────────────────────────
+        // قاعدة مطلقة من المستخدم (memory: feedback_no_splits_on_receipt):
+        // أي وسيلة دفع واحدة (شيك، كاش، تحويل، بطاقة) = صف واحد
+        // بقيمتها الكاملة، مهما اتقسمت على عدة بوالص في الـ DB.
+        //
+        // الـ DebtPaymentModal / PackagePaymentModal بيكتبوا N صفوف
+        // بـ policy_payments لكل instrument واحد لما يكون موزّع على
+        // كذا بوليصة (واحد لكل بوليصة + share من المبلغ). الـ صفوف
+        // بتتجمّع تحت `batch_id` مشترك، أو لو راحت في path قديم ما
+        // ختم batch_id، بنرجع نلمها بـ fingerprint:
+        //   • cheque  → (cheque_number + bank + branch + dates + session)
+        //   • cash/transfer/card → (session + type + created_at + payment_date)
+        //
+        // النتيجة: شيك 444 الي اتقسم على بوليصتين (500 + 50 = 550)
+        // بيطلع على سند القبض بصف واحد فقط = ₪550.
+        type RawRow = {
+          id: string;
+          batch_id: string | null;
+          payment_session_id: string | null;
+          created_at: string | null;
+          payment_type: string | null;
+          cheque_number: string | null;
+          cheque_due_date: string | null;
+          cheque_date: string | null;
+          cheque_issue_date: string | null;
+          payment_date: string | null;
+          bank_code: string | null;
+          branch_code: string | null;
+          notes: string | null;
+          amount: number;
+          refused: boolean | null;
+        };
+        const physicalKey = (r: RawRow): string => {
+          if (r.batch_id) return `b:${r.batch_id}`;
+          if (r.payment_type === 'cheque' && r.cheque_number) {
+            const sess = r.payment_session_id || 'no-session';
+            const due = r.cheque_due_date || r.cheque_date || '';
+            const issue = r.cheque_issue_date || '';
+            return `c:${sess}:${r.cheque_number}:${r.bank_code || ''}:${r.branch_code || ''}:${due}:${issue}`;
+          }
+          if (r.payment_session_id && r.created_at && r.payment_type !== 'cheque') {
+            return `s:${r.payment_session_id}:${r.payment_type}:${r.created_at}:${r.payment_date || ''}`;
+          }
+          return `id:${r.id}`;
+        };
+        const collapseByPhysical = (rows: RawRow[]): RawRow[] => {
+          const out: RawRow[] = [];
+          const idxByKey = new Map<string, number>();
+          for (const r of rows) {
+            const key = physicalKey(r);
+            const amt = Number(r.amount ?? 0);
+            const existing = idxByKey.get(key);
+            if (existing === undefined) {
+              idxByKey.set(key, out.length);
+              out.push({ ...r, amount: amt });
+            } else {
+              out[existing].amount += amt;
+            }
+          }
+          return out;
+        };
+        const collapsedSiblings = collapseByPhysical((siblings ?? []) as RawRow[]);
+
         voucherTotal = 0;
-        for (const r of (siblings ?? []) as any[]) {
+        for (const r of collapsedSiblings) {
           // سند الإلغاء حصراً يظهر الشيك المُلغى. الـ scope فوق ضيّق
           // الاستعلام أصلاً، بس defensive guard خفيف بحال صار split
           // وبعض الـ rows ضلوا refused=false (ما بصير عادةً).
@@ -1002,17 +1067,6 @@ serve(async (req) => {
             notes: r.notes ?? null,
             amount: amt,
           });
-        }
-
-        // سند إلغاء + شيك مقسوم: نجمع الـ splits بصف واحد بقيمة
-        // الشيك الكاملة (face value). من غير هاي الخطوة، شيك مقسوم
-        // على 3 بوالص بيطلع 3 صفوف على سند الإلغاء — نفس الـ collapse
-        // الي بنعمله على سند القبض، بس هون مطلوب عشان السند يطلع
-        // فيه صف واحد فقط للشيك المُلغى.
-        if (receiptType === 'cancellation' && lines.length > 1) {
-          const totalAmt = lines.reduce((s, l) => s + l.amount, 0);
-          lines = [{ ...lines[0], amount: totalAmt }];
-          voucherTotal = totalAmt;
         }
 
         if (voucherTotal === 0) voucherTotal = Number(receiptRow.amount || 0);
