@@ -632,31 +632,30 @@ serve(async (req: Request) => {
     // math nets them out symmetrically.
     const totalYearPaid = Array.from(paidByPolicy.values()).reduce((s, v) => s + v, 0);
 
-    // إجمالي المرتجع — OUTSTANDING refund the office still owes the
-    // customer. Per the user's rule, a cancellation with "يوجد مرتجع"
-    // creates an obligation (إشعار دائن credit OR a wallet entry);
-    // when the office pays it out via سند صرف, the obligation is
-    // settled — "الحساب مسكر". So the customer-facing مرتجع line
-    // shows only the *unpaid* portion, not the gross amount cycled
-    // through. Computing per-policy avoids cross-canceling a credit
-    // for one policy with a disbursement for another.
+    // إجمالي المرتجع — outstanding credit the office still owes the
+    // customer this year. Per the user's rule (and the customer-page
+    // tile that mirrors it): each voucher is an INDEPENDENT event.
+    // إشعار دائن creates a live obligation; سند صرف is a separate
+    // cash-out that doesn't silently zero out a credit note. The
+    // wallet's settled_at column (migration 20260514130000) is the
+    // explicit settlement signal — until that's set, the credit
+    // stays on the customer's books.
+    //
+    // We pull the matching wallet rows directly so the kashf agrees
+    // with what ClientDetails shows on the same customer. The credit
+    // notes inserted by AddCreditNoteDialog / CancelPolicyModal
+    // always stamp the receipt's wallet_transaction_id, so the wallet
+    // is the canonical source — and the filter "settled_at IS NULL"
+    // makes future settlement (when the UI lands) just work.
     const yearTransferOfficeOwes = Array.from(transfersByOriginPolicy.values())
       .reduce((s, t: any) => {
         const amt = Number(t?.adjustment_amount || 0);
         if (amt <= 0.01) return s;
         return t.adjustment_type === 'customer_pays' ? s : s + amt;
       }, 0);
-    const refundByBucket = new Map<string, { c: number; d: number }>();
-    for (const r of ledger as any[]) {
-      if (r.receipt_type !== 'credit_note' && r.receipt_type !== 'disbursement') continue;
-      const key = r.policy_id || '__standalone__';
-      const entry = refundByBucket.get(key) || { c: 0, d: 0 };
-      if (r.receipt_type === 'credit_note') entry.c += Math.abs(Number(r.amount || 0));
-      else entry.d += Math.abs(Number(r.amount || 0));
-      refundByBucket.set(key, entry);
-    }
-    const yearOutstandingRefund = Array.from(refundByBucket.values())
-      .reduce((s, { c, d }) => s + Math.max(0, c - d), 0);
+    const yearOutstandingRefund = (ledger as any[])
+      .filter((r) => r.receipt_type === 'credit_note')
+      .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
     const yearCustomerCredit = yearOutstandingRefund + yearTransferOfficeOwes;
 
     // Year balance — signed so the kashf can flip direction:
