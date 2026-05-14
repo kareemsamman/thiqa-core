@@ -900,28 +900,53 @@ serve(async (req) => {
     // split across N policies (handleSubmit assigns the same batch_id
     // to all rows), we want ONE row on the printed receipt at the
     // cheque's true face value (= sum of every sibling's amount), not
-    // N rows showing the per-policy slices. Single-row payments
-    // (batch_id null) and outgoing-style rows pass through unchanged.
-    const collapseByBatchId = (rows: any[]): any[] => {
+    // N rows showing the per-policy slices. Per the user's rule,
+    // cheques MUST NEVER appear split on the printed سند.
+    //
+    // Grouping signal, in priority order:
+    //   1. batch_id — the canonical key DebtPaymentModal stamps when
+    //      splits.length > 1. New data with proper splits hits this.
+    //   2. Cheque physical identity — same cheque_number + bank +
+    //      branch + maturity + issue within the same session HAS to be
+    //      the same physical cheque. This is the safety net for any
+    //      path that didn't stamp batch_id (legacy data, pre-allocate
+    //      RPC fallback, edits, or any other code path that touches
+    //      policy_payments without going through DebtPaymentModal).
+    //   3. Standalone — non-cheque rows without batch_id render as
+    //      one row each. We deliberately do NOT merge cash / transfer
+    //      / card by session, because a user can legitimately enter
+    //      two cash lines in one submit.
+    const physicalInstrumentKey = (p: any): string => {
+      if (p.batch_id) return `b:${p.batch_id}`;
+      if (p.payment_type === 'cheque' && p.cheque_number) {
+        const session = p.payment_session_id || 'no-session';
+        const due = p.cheque_due_date || p.cheque_date || '';
+        const issue = p.cheque_issue_date || '';
+        return `c:${session}:${p.cheque_number}:${p.bank_code || ''}:${p.branch_code || ''}:${due}:${issue}`;
+      }
+      return `id:${p.id}`;
+    };
+    const collapsePhysicalInstrument = (rows: any[]): any[] => {
       const out: any[] = [];
-      const idxByBatch = new Map<string, number>();
+      const idxByKey = new Map<string, number>();
       for (const p of rows) {
+        const key = physicalInstrumentKey(p);
         const amt = Number(p.amount ?? 0);
-        if (!p.batch_id) {
-          out.push({ ...p, amount: amt });
-          continue;
-        }
-        const i = idxByBatch.get(p.batch_id);
-        if (i === undefined) {
-          idxByBatch.set(p.batch_id, out.length);
+        const existing = idxByKey.get(key);
+        if (existing === undefined) {
+          idxByKey.set(key, out.length);
           out.push({ ...p, amount: amt });
         } else {
-          out[i].amount += amt;
+          out[existing].amount += amt;
         }
       }
       return out;
     };
-    payments = collapseByBatchId(payments);
+    const beforeCount = payments.length;
+    payments = collapsePhysicalInstrument(payments);
+    if (beforeCount !== payments.length) {
+      console.log(`[generate-bulk-payment-receipt] Collapsed ${beforeCount} → ${payments.length} rows (merged physical instruments)`);
+    }
 
     if (payments.length === 0) {
       // The seed survived the SELECT but everything got filtered as
