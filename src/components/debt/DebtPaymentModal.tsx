@@ -192,6 +192,16 @@ export function DebtPaymentModal({
   // the ClientDetails debt tile show the same number — keeping the
   // modal in sync so all three surfaces agree.
   const [grossPaidAmount, setGrossPaidAmount] = useState(0);
+  // Kashf-aligned outstanding: every non-destination policy's office
+  // claim + transfer customer_pays − gross_paid − credit_consumed.
+  // This is the SAME number the kashf totals box and the
+  // ClientDetails debt tile show. The per-package items[] above can
+  // sum to a different value (it uses per-package clamping which
+  // loses payments to transferred-destination policies); we override
+  // the summary tile and the payment ceiling with this kashf value so
+  // the agent never sees "أدفع 3,500" while the kashf and the client
+  // page say 1,750.
+  const [kashfOutstanding, setKashfOutstanding] = useState(0);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
   // One-shot slide-up animation on freshly-duplicated rows.
   const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
@@ -234,9 +244,20 @@ export function DebtPaymentModal({
   }, [filteredItems]);
 
   // Summary calculations
+  // totalRemaining drives the summary tile + payment ceiling +
+  // installment split. We use kashfOutstanding (set in fetchDebtItems)
+  // so all three surfaces — kashf, ClientDetails debt tile, this
+  // modal — converge on the same المتبقي. items[].remainingTotal
+  // stays in the per-package breakdown for the agent's reference
+  // (which transactions still have unpaid lines), but the user-
+  // visible "أدفع X" amount is the kashf number.
+  // When a car filter is active, fall back to the filtered items sum
+  // so the user can pay against a subset; otherwise the global kashf
+  // outstanding wins.
   const totalFullPrice = filteredItems.reduce((sum, item) => sum + item.fullPrice, 0);
   const totalPaidAmount = filteredItems.reduce((sum, item) => sum + item.paidTotal, 0);
-  const totalRemaining = filteredItems.reduce((sum, item) => sum + item.remainingTotal, 0);
+  const filteredItemsRemaining = filteredItems.reduce((sum, item) => sum + item.remainingTotal, 0);
+  const totalRemaining = selectedCars.length === 0 ? kashfOutstanding : filteredItemsRemaining;
   
   // Calculate total payments - count paid visa payments as already completed
   const paidVisaTotal = paymentLines
@@ -674,6 +695,42 @@ export function DebtPaymentModal({
 
       // Sort by remaining (highest first)
       items.sort((a, b) => b.remainingTotal - a.remainingTotal);
+
+      // ─── Kashf-aligned outstanding ──────────────────────────────
+      // The items[] sum can drift from the kashf number for two
+      // reasons:
+      //   • per-package clamping loses payments mirrored onto a
+      //     transfer destination (those don't reach policiesData),
+      //   • cancellation refunds (credit_note / disbursement) and
+      //     credit_consumed wallet entries aren't subtracted here.
+      // Recompute the customer's true outstanding using the same
+      // formula the kashf totals box uses — sum every non-destination
+      // policy's office_claim, add customer_pays transfer fees, then
+      // subtract gross paid + credit_consumed. The number lands in
+      // kashfOutstanding state and overrides totalRemaining for the
+      // summary tile and the payment ceiling below.
+      const officeClaimSum = (policiesData || [])
+        .filter((p: any) => !p.broker_id)
+        .reduce((sum: number, p: any) => {
+          const commission = Number(p.office_commission || 0);
+          if (p.policy_type_parent === 'ELZAMI') return sum + commission;
+          return sum + Number(p.insurance_price || 0) + commission;
+        }, 0);
+      const transferCustomerPaysSum = Object.values(transferAmountByPolicy)
+        .reduce((s: number, v: number) => s + v, 0);
+      const { data: consumedRows } = await supabase
+        .from('customer_wallet_transactions')
+        .select('amount')
+        .eq('client_id', clientId)
+        .eq('transaction_type', 'credit_consumed')
+        .is('settled_at', null);
+      const creditConsumedTotal = (consumedRows || [])
+        .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+      const kashfTotal = Math.max(
+        0,
+        officeClaimSum + transferCustomerPaysSum - grossPaid - creditConsumedTotal,
+      );
+      setKashfOutstanding(kashfTotal);
 
       setDebtItems(items);
 

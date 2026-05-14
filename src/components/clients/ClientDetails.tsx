@@ -934,32 +934,18 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         if (p.policy_type_parent === 'ELZAMI') return commission;
         return Number(p.insurance_price || 0) + commission;
       };
-      // Mirror the kashf skip rule per package: skip transferred
-      // packages (they only contribute via the transfer fee, added
-      // below) and cancelled packages with NO refund (no money owed
-      // either way — neither the customer nor the office). Cancelled
-      // with refund stays in the claim and the refund nets it out
-      // through totalCreditConsumed / disbursement accounting.
-      const refundTotalForPackage = (pkg: any[]): number =>
-        pkg.reduce((s, p) => s + (refundByPolicy.get(p.id) || 0), 0);
+      // Match the kashf formula exactly: every non-destination,
+      // non-broker policy contributes its office_claim to clientOwed.
+      // Cancellation/transfer status doesn't matter at this step —
+      // the refunds (credit_note + disbursement) and transfer
+      // adjustments net out separately via the wallet/transfer
+      // queries below. Without this consistency the in-app debt tile
+      // drifts from the printed kashf.
       groupMap.forEach(groupPolicies => {
         const nonBrokerInGroup = groupPolicies.filter(p => !(p as any).broker_id);
         const brokerInGroup = groupPolicies.filter(p => (p as any).broker_id);
 
-        // Skip-test against the package's main policy (THIRD_FULL >
-        // ELZAMI > first), same key the kashf uses. Transferred
-        // mains → skip entire package (transfer fee handled below).
-        // Cancelled-no-refund mains → skip too.
-        const mainPolicy =
-          groupPolicies.find((p: any) => p.policy_type_parent === 'THIRD_FULL') ||
-          groupPolicies.find((p: any) => p.policy_type_parent === 'ELZAMI') ||
-          groupPolicies[0];
-        const pkgRefund = refundTotalForPackage(groupPolicies);
-        const skipPackage =
-          (mainPolicy as any)?.transferred ||
-          ((mainPolicy as any)?.cancelled && pkgRefund <= 0.01);
-
-        const nonBrokerClaim = skipPackage ? 0 : nonBrokerInGroup.reduce(
+        const nonBrokerClaim = nonBrokerInGroup.reduce(
           (sum, p) => sum + officeClaimFor(p),
           0,
         );
@@ -973,7 +959,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         clientOwed += nonBrokerClaim;
         clientPaid += paidTowardClient;
 
-        if (brokerInGroup.length > 0 && !skipPackage) {
+        if (brokerInGroup.length > 0) {
           const brokerOwed = brokerInGroup.reduce(
             (sum, p) => sum + officeClaimFor(p),
             0,
@@ -1027,15 +1013,21 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       const totalCreditConsumed = (consumedRows || [])
         .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
 
+      // Outstanding = the kashf's exact formula. Pulling grossPaid
+      // (not clientPaid clamped per package) is the crucial change:
+      // payments mirrored onto a transfer DESTINATION policy (e.g.
+      // 226 in a 224→226 ELZAMI transfer) sit outside policiesData
+      // because we filter destinations out, so clientPaid's per-
+      // package clamp loses them. The kashf's totalYearPaid sweeps
+      // every policy_payments row of the customer (refused/إلزامي
+      // passthrough excluded) — grossPaid already does the same.
+      const grossPaidEffective = grossPaid;
       setPaymentSummary({
-        // Display only what the CUSTOMER paid — broker-channel
-        // payments live on the broker's account and don't belong in
-        // the customer's إجمالي المدفوع (per user's rule "هادا بخص
-        // الوسيط"). clientPaid is the sum of paidTowardClient across
-        // groups, so broker portions and إلزامي pass-through are
-        // already excluded.
-        total_paid: clientPaid,
-        total_remaining: Math.max(0, clientOwed - clientPaid + transferCustomerPaysTotal - totalCreditConsumed),
+        total_paid: grossPaidEffective,
+        total_remaining: Math.max(
+          0,
+          clientOwed - grossPaidEffective + transferCustomerPaysTotal - totalCreditConsumed,
+        ),
         total_profit: totalProfit,
       });
       setBrokerDebts(Array.from(brokerTotals.values()));
