@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Search, X } from "lucide-react";
+import { Search, X, Car, IdCard } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,6 +18,7 @@ interface ClientResult {
   phone_number: string | null;
   cars: string[];
   matchedCarId?: string;
+  matchedCarNumber?: string;
 }
 
 interface PolicyResult {
@@ -144,6 +145,7 @@ export function BottomToolbarInlineSearch({
           phone_number: string | null;
           cars: string[];
           matched_car_id: string | null;
+          matched_car_number: string | null;
         }>;
         policies: Array<{
           id: string;
@@ -169,6 +171,7 @@ export function BottomToolbarInlineSearch({
           phone_number: c.phone_number,
           cars: c.cars ?? [],
           matchedCarId: c.matched_car_id ?? undefined,
+          matchedCarNumber: c.matched_car_number ?? undefined,
         })),
       );
 
@@ -370,8 +373,18 @@ export function BottomToolbarInlineSearch({
                 <div className="font-medium text-sm text-foreground truncate">
                   {r.full_name}
                 </div>
-                <div className="text-xs text-muted-foreground ltr-nums mt-0.5">
-                  {r.id_number}
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                  {r.matchedCarNumber ? (
+                    <>
+                      <Car className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span className="ltr-nums">{r.matchedCarNumber}</span>
+                    </>
+                  ) : (
+                    <>
+                      <IdCard className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span className="ltr-nums">{r.id_number}</span>
+                    </>
+                  )}
                 </div>
               </button>
             ))}
