@@ -794,17 +794,18 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
   const fetchPaymentSummary = async () => {
     try {
-      // Fetch every active policy (broker + non-broker) in one shot so
-      // we can split the view into "client debt" and "related to broker"
-      // without a second round-trip. Broker rows live alongside their
-      // non-broker siblings in a package so their payments still get
-      // pooled into the group's paid total.
+      // Fetch every policy the customer signed up for (active +
+      // cancelled + transferred-source) so the debt math matches the
+      // kashf. Per the user's rule "إلغاء المعاملة ≠ إلغاء الدين" —
+      // cancellation alone doesn't remove what the customer owes;
+      // only the إشعار دائن / سند صرف refund flow does. Transferred
+      // DESTINATIONS (`transferred_from_policy_id` set) are excluded
+      // because they double-count the source.
       const { data: policiesData } = await supabase
         .from('policies')
         .select('id, insurance_price, office_commission, profit, policy_type_parent, cancelled, transferred, group_id, broker_id, broker:brokers(id, name)')
         .eq('client_id', client.id)
-        .eq('cancelled', false)
-        .eq('transferred', false)
+        .is('transferred_from_policy_id', null)
         .is('deleted_at', null);
 
       if (!policiesData || policiesData.length === 0) {
