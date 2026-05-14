@@ -36,7 +36,10 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   client: ClientLite;
-  onSaved: () => void;
+  /** Fires after the receipt is inserted. Receives the new receipts.id
+   *  so the caller can hand it off to VoucherSendDialog for print/SMS/
+   *  WhatsApp routing. */
+  onSaved: (info: { receiptId: string }) => void;
   /** Label for the secondary footer button. Defaults to "إلغاء"; the
    *  AddVoucher wizard passes "رجوع" because closing this dialog
    *  returns to the still-mounted picker instead of cancelling. */
@@ -137,24 +140,28 @@ export function AddCreditNoteDialog({
       //    tied to a specific policy. The kashf / wallet UIs handle
       //    null policy_id by attributing the credit to the customer
       //    as a whole.
-      const { error: receiptErr } = await supabase.from('receipts').insert({
-        receipt_type: 'credit_note',
-        source: 'auto',
-        voucher_number: voucherNumber,
-        client_id: client.id,
-        client_name: client.full_name,
-        wallet_transaction_id: walletRow?.id,
-        amount: amt,
-        receipt_date: issueDate,
-        notes: description.trim(),
-        agent_id: agentId,
-        branch_id: branchId,
-        created_by: user?.id ?? null,
-      });
+      const { data: receiptRow, error: receiptErr } = await supabase
+        .from('receipts')
+        .insert({
+          receipt_type: 'credit_note',
+          source: 'auto',
+          voucher_number: voucherNumber,
+          client_id: client.id,
+          client_name: client.full_name,
+          wallet_transaction_id: walletRow?.id,
+          amount: amt,
+          receipt_date: issueDate,
+          notes: description.trim(),
+          agent_id: agentId,
+          branch_id: branchId,
+          created_by: user?.id ?? null,
+        })
+        .select('id')
+        .single();
       if (receiptErr) throw receiptErr;
 
       toast.success(`تم إصدار إشعار دائن ${voucherNumber}`);
-      onSaved();
+      onSaved({ receiptId: receiptRow!.id });
       onOpenChange(false);
     } catch (err: any) {
       console.error('[AddCreditNoteDialog] save failed:', err);

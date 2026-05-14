@@ -85,6 +85,8 @@ import {
 } from "@/components/receipts/AddVoucherDialog";
 import { AddCreditNoteDialog } from "@/components/receipts/AddCreditNoteDialog";
 import { AddSettlementDialog } from "@/components/accounting/AddSettlementDialog";
+import { DebtPaymentSuccessDialog } from "@/components/debt/DebtPaymentSuccessDialog";
+import { VoucherSendDialog, type VoucherKind as VoucherSendKind } from "@/components/policies/VoucherSendDialog";
 import { printAccountingReport } from "@/components/accounting/printAccountingReport";
 import {
   AccountingFilters,
@@ -740,6 +742,25 @@ export default function Receipts() {
   const [addVoucherOpen, setAddVoucherOpen] = useState(false);
   const [disburseClient, setDisburseClient] = useState<ClientLite | null>(null);
   const [creditNoteClient, setCreditNoteClient] = useState<ClientLite | null>(null);
+
+  // After a voucher is created, hand the agent the print / SMS / WhatsApp
+  // popup the rest of the app already uses. Two flavours:
+  //   • paymentSuccess  → DebtPaymentSuccessDialog (payload: payment_ids
+  //     from policy_payments, which the print path stamps with
+  //     printed_at to lock subsequent edits).
+  //   • voucherSend     → VoucherSendDialog (payload: receipts.id of the
+  //     credit_note / disbursement row).
+  // Both dialogs are unaware of the receipts page — they just hand off
+  // to edge functions, which is exactly what we want here.
+  const [paymentSuccess, setPaymentSuccess] = useState<{
+    paymentIds: string[];
+    clientPhone: string | null;
+  } | null>(null);
+  const [voucherSend, setVoucherSend] = useState<{
+    kind: VoucherSendKind;
+    receiptId: string;
+    clientPhone: string | null;
+  } | null>(null);
   const [reasonText, setReasonText] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [reasonSubmitting, setReasonSubmitting] = useState(false);
@@ -2401,7 +2422,10 @@ export default function Receipts() {
         // existing receipt rows — that path doesn't sit behind a
         // picker, so "إلغاء" stays accurate there.
         cancelLabel={addVoucherOpen ? 'رجوع' : 'إلغاء'}
-        onSuccess={async () => {
+        onSuccess={async (paymentIds) => {
+          // Capture the client phone BEFORE we null debtModalClient
+          // out — the success dialog needs it for SMS/WhatsApp.
+          const phone = debtModalClient?.phone ?? null;
           setDebtModalOpen(false);
           setDebtModalEditingSession(null);
           setDebtModalClient(null);
@@ -2411,6 +2435,12 @@ export default function Receipts() {
           // previous picks — that's the "back" affordance.)
           setAddVoucherOpen(false);
           await fetchReceipts();
+          // Empty paymentIds → edit-session case (existing rows were
+          // re-stamped, nothing new to print/SMS); skip the popup so
+          // the user doesn't see a "nothing to send" dialog.
+          if (paymentIds.length > 0) {
+            setPaymentSuccess({ paymentIds, clientPhone: phone });
+          }
         }}
       />
 
@@ -2436,12 +2466,35 @@ export default function Receipts() {
           defaultEntityId={disburseClient.id}
           clientName={disburseClient.full_name}
           cancelLabel="رجوع"
-          onSaved={() => {
+          onSaved={async () => {
+            const c = disburseClient;
             setDisburseClient(null);
             // Saved → close the picker too. رجوع / X leaves the
             // picker open behind so the user can revise their choice.
             setAddVoucherOpen(false);
-            fetchReceipts();
+            await fetchReceipts();
+            // AddSettlementDialog doesn't expose the persisted
+            // receipts.id directly (the row is created by the
+            // client_settlements AFTER INSERT trigger), so look it
+            // up by querying the most recent disbursement for this
+            // client. Tight ordering: created_at DESC, limit 1.
+            // Done after fetchReceipts so the new row is definitely
+            // in the DB by the time we query.
+            const { data: latest } = await supabase
+              .from('receipts')
+              .select('id')
+              .eq('client_id', c.id)
+              .eq('receipt_type', 'disbursement')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (latest?.id) {
+              setVoucherSend({
+                kind: 'disbursement',
+                receiptId: latest.id,
+                clientPhone: c.phone_number,
+              });
+            }
           }}
         />
       )}
@@ -2455,11 +2508,41 @@ export default function Receipts() {
           onOpenChange={(o) => !o && setCreditNoteClient(null)}
           client={creditNoteClient}
           cancelLabel="رجوع"
-          onSaved={() => {
+          onSaved={({ receiptId }) => {
+            const c = creditNoteClient;
             setCreditNoteClient(null);
             setAddVoucherOpen(false);
             fetchReceipts();
+            setVoucherSend({
+              kind: 'credit_note',
+              receiptId,
+              clientPhone: c.phone_number,
+            });
           }}
+        />
+      )}
+
+      {/* Post-save action popups — same components the customer page
+          and policy cancel/transfer flows already use, so the user
+          sees one familiar "what next?" UI everywhere. The print path
+          of DebtPaymentSuccessDialog stamps printed_at on
+          policy_payments, which locks تعديل on those receipts. */}
+      {paymentSuccess && (
+        <DebtPaymentSuccessDialog
+          open={!!paymentSuccess}
+          onOpenChange={(o) => !o && setPaymentSuccess(null)}
+          paymentIds={paymentSuccess.paymentIds}
+          clientPhone={paymentSuccess.clientPhone}
+          onClose={() => setPaymentSuccess(null)}
+        />
+      )}
+      {voucherSend && (
+        <VoucherSendDialog
+          open={!!voucherSend}
+          onOpenChange={(o) => !o && setVoucherSend(null)}
+          voucher={{ kind: voucherSend.kind, receiptId: voucherSend.receiptId }}
+          clientPhone={voucherSend.clientPhone}
+          onClose={() => setVoucherSend(null)}
         />
       )}
 
