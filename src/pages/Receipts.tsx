@@ -36,7 +36,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Search,
-  Plus,
   Printer,
   Receipt,
   Banknote,
@@ -53,6 +52,7 @@ import {
   XCircle,
   Ban,
   Wallet,
+  Layers,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -519,10 +519,12 @@ export default function Receipts() {
   //   • credit_note  — اشعار دائن       (C{n}/YYYY, wallet credit)
   //   • disbursement — سند صرف          (D{n}/YYYY, money out)
   // activeTab maps 1:1 to receipts.receipt_type so the existing
-  // .eq("receipt_type", activeTab) filter Just Works.
+  // .eq("receipt_type", activeTab) filter Just Works. 'all' is the
+  // combined view — receipt_type filter is dropped and per-row logic
+  // takes over (labels, print routing, action visibility).
   const [activeTab, setActiveTab] = useState<
-    'payment' | 'cancellation' | 'credit_note' | 'disbursement'
-  >('payment');
+    'all' | 'payment' | 'cancellation' | 'credit_note' | 'disbursement'
+  >('all');
 
   // Filters — search stays inline in the toolbar; everything else lives
   // in the AccountingFilters popover so we get one canonical filter UI
@@ -724,18 +726,18 @@ export default function Receipts() {
         .from("receipts")
         .select(`*, ${policyJoinFull}`)
         .eq("agent_id", agentId)
-        .eq("receipt_type", activeTab)
         .eq("is_imported", false)
         .order("created_at", { ascending: false })
         .order("receipt_date", { ascending: false })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+      if (activeTab !== 'all') query = query.eq("receipt_type", activeTab);
 
       let countQuery = (supabase as any)
         .from("receipts")
         .select(`id, ${policyJoinCount}`, { count: "exact", head: true })
         .eq("agent_id", agentId)
-        .eq("receipt_type", activeTab)
         .eq("is_imported", false);
+      if (activeTab !== 'all') countQuery = countQuery.eq("receipt_type", activeTab);
 
       const applyShared = (q: any) => {
         // Hide ₪0 receipts — they have no print value and only confuse
@@ -798,46 +800,45 @@ export default function Receipts() {
       setReceipts(trimmed);
       setTotalCount(total ?? 0);
 
-      // Build the cancellation cross-reference: each cancelled
-      // payment receipt links to a voucher (cancels_receipt_id =
-      // original.id) and we want the voucher's receipt_number for
-      // display, not its UUID. Same the other way around for the
-      // cancellation tab. One extra round-trip; would only get
-      // expensive if the page had hundreds of cancelled rows.
+      // Build the cancellation cross-reference. Two relationships,
+      // both keyed by receipt.id → the OTHER side's receipt_number:
+      //   • cancelled payment row → its cancellation voucher #
+      //   • cancellation voucher  → the original receipt #
+      // The 'all' tab can have both kinds of rows on screen at once,
+      // so we always run both lookups. Single-type tabs naturally
+      // short-circuit because only one set has matching rows.
       const xref: Record<string, number | string> = {};
-      if (activeTab === 'payment') {
-        const cancelledIds = trimmed
-          .filter((r) => r.cancelled_at)
-          .map((r) => r.id);
-        if (cancelledIds.length > 0) {
-          const { data: vouchers } = await supabase
-            .from('receipts')
-            .select('receipt_number, cancels_receipt_id')
-            .eq('receipt_type', 'cancellation')
-            .in('cancels_receipt_id', cancelledIds);
-          for (const v of (vouchers ?? []) as Array<{ receipt_number: number | string | null; cancels_receipt_id: string | null }>) {
-            if (v.cancels_receipt_id && v.receipt_number != null) {
-              xref[v.cancels_receipt_id] = v.receipt_number;
-            }
+      const cancelledPaymentIds = trimmed
+        .filter((r) => (r as any).receipt_type === 'payment' && r.cancelled_at)
+        .map((r) => r.id);
+      if (cancelledPaymentIds.length > 0) {
+        const { data: vouchers } = await supabase
+          .from('receipts')
+          .select('receipt_number, cancels_receipt_id')
+          .eq('receipt_type', 'cancellation')
+          .in('cancels_receipt_id', cancelledPaymentIds);
+        for (const v of (vouchers ?? []) as Array<{ receipt_number: number | string | null; cancels_receipt_id: string | null }>) {
+          if (v.cancels_receipt_id && v.receipt_number != null) {
+            xref[v.cancels_receipt_id] = v.receipt_number;
           }
         }
-      } else {
-        const originalIds = trimmed
-          .map((r) => r.cancels_receipt_id)
-          .filter((id): id is string => !!id);
-        if (originalIds.length > 0) {
-          const { data: originals } = await supabase
-            .from('receipts')
-            .select('id, receipt_number')
-            .in('id', originalIds);
-          const byId = new Map<string, number | string>();
-          for (const o of (originals ?? []) as Array<{ id: string; receipt_number: number | string | null }>) {
-            if (o.receipt_number != null) byId.set(o.id, o.receipt_number);
-          }
-          for (const r of trimmed) {
-            if (r.cancels_receipt_id && byId.has(r.cancels_receipt_id)) {
-              xref[r.id] = byId.get(r.cancels_receipt_id)!;
-            }
+      }
+      const voucherOriginalIds = trimmed
+        .filter((r) => (r as any).receipt_type === 'cancellation')
+        .map((r) => r.cancels_receipt_id)
+        .filter((id): id is string => !!id);
+      if (voucherOriginalIds.length > 0) {
+        const { data: originals } = await supabase
+          .from('receipts')
+          .select('id, receipt_number')
+          .in('id', voucherOriginalIds);
+        const byId = new Map<string, number | string>();
+        for (const o of (originals ?? []) as Array<{ id: string; receipt_number: number | string | null }>) {
+          if (o.receipt_number != null) byId.set(o.id, o.receipt_number);
+        }
+        for (const r of trimmed) {
+          if ((r as any).receipt_type === 'cancellation' && r.cancels_receipt_id && byId.has(r.cancels_receipt_id)) {
+            xref[r.id] = byId.get(r.cancels_receipt_id)!;
           }
         }
       }
@@ -916,16 +917,22 @@ export default function Receipts() {
         ? rawClient[0] ?? null
         : rawClient ?? null;
       const sessionId = r.payment_id ? sessionByPaymentId[r.payment_id] : null;
+      // Prefix every key with the row's receipt_type so the "الكل" tab
+      // never collapses a payment row and its cancellation voucher into
+      // one line (they can share policies.group_id). Single-type tabs
+      // get the prefix too — it's a no-op since every row in the
+      // result set already shares the same type.
+      const typePrefix = (r as any).receipt_type || 'payment';
       let key: string;
       if (sessionId) {
-        key = `sess:${sessionId}`;
+        key = `${typePrefix}:sess:${sessionId}`;
       } else if (policy?.group_id) {
-        key = `grp:${policy.group_id}`;
+        key = `${typePrefix}:grp:${policy.group_id}`;
       } else if (policy?.id) {
-        key = `pol:${policy.id}`;
+        key = `${typePrefix}:pol:${policy.id}`;
       } else {
         const minute = roundToMinute(r.created_at);
-        key = `manual:${r.client_name}||${r.car_number || ""}||${minute}`;
+        key = `${typePrefix}:manual:${r.client_name}||${r.car_number || ""}||${minute}`;
       }
 
       if (!map.has(key)) {
@@ -969,25 +976,29 @@ export default function Receipts() {
       .map((r) => (r as any).payment_id)
       .filter((id): id is string => typeof id === "string" && id.length > 0);
     const allAuto = paymentIds.length === group.receipts.length;
+    // Routing key is the row's own receipt_type, not the active tab —
+    // on the "الكل" tab a single result set mixes all four types and
+    // each row needs its own printable template.
+    const groupType = (group.receipts[0] as any)?.receipt_type ?? 'payment';
 
     // اشعار دائن / سند صرف — each has its own dedicated edge
     // function. Both row types lack a payment_id (they don't come
     // from policy_payments), so the auto-route below would miss
     // them entirely and fall to the bare-bones local HTML. Handle
     // them up-front with the right renderer for each receipt_type.
-    if (activeTab === 'credit_note' || activeTab === 'disbursement') {
+    if (groupType === 'credit_note' || groupType === 'disbursement') {
       const firstReceipt = group.receipts[0];
       if (!firstReceipt?.id) {
         toast.error(
-          activeTab === 'credit_note' ? 'لا يوجد إشعار للطباعة' : 'لا يوجد سند صرف للطباعة',
+          groupType === 'credit_note' ? 'لا يوجد إشعار للطباعة' : 'لا يوجد سند صرف للطباعة',
         );
         return;
       }
       const fnName =
-        activeTab === 'credit_note'
+        groupType === 'credit_note'
           ? 'generate-credit-note-voucher'
           : 'generate-disbursement-voucher';
-      const docLabel = activeTab === 'credit_note' ? 'الإشعار' : 'سند الصرف';
+      const docLabel = groupType === 'credit_note' ? 'الإشعار' : 'سند الصرف';
       setPrintProgress({ open: true, value: 8 });
       const ticker = setInterval(() => {
         setPrintProgress((s) => {
@@ -1022,7 +1033,7 @@ export default function Receipts() {
         return;
       } catch (err: any) {
         closeOverlay(false);
-        console.error(`[Receipts] ${activeTab} print failed:`, err);
+        console.error(`[Receipts] ${groupType} print failed:`, err);
         let detail = '';
         try {
           if (err?.context && typeof err.context.clone === 'function') {
@@ -1078,8 +1089,8 @@ export default function Receipts() {
         // layout. Hitting generate-bulk-payment-receipt instead would
         // print the cancelled-original سند قبض, which is the wrong
         // document.
-        const isCancellationTab = activeTab === 'cancellation';
-        if (isCancellationTab) {
+        const isCancellationRow = groupType === 'cancellation';
+        if (isCancellationRow) {
           // The receipts group on the cancellation tab is keyed by the
           // canonical voucher row; for our edge function we just need
           // its receipts.id. Pick the smallest receipt_number row in
@@ -1168,12 +1179,6 @@ export default function Receipts() {
       cheque_number: "",
       notes: "",
     });
-  };
-
-  const handleOpenDialog = () => {
-    setEditingId(null);
-    resetForm();
-    setDialogOpen(true);
   };
 
   // Open the unified edit flow for an auto-source سند قبض group. Same
@@ -1692,11 +1697,11 @@ export default function Receipts() {
         .from("receipts")
         .select(`*, ${policyJoin}`)
         .eq("agent_id", agentId)
-        .eq("receipt_type", activeTab)
         .eq("is_imported", false)
         .gt("amount", 0)
         .order("created_at", { ascending: false })
         .order("receipt_date", { ascending: false });
+      if (activeTab !== 'all') q = q.eq("receipt_type", activeTab);
       if (dateFrom) q = q.gte("receipt_date", dateFrom);
       if (dateTo) q = q.lte("receipt_date", dateTo);
       if (paymentMethods.length > 0) q = q.in("payment_method", paymentMethods);
@@ -1861,13 +1866,15 @@ export default function Receipts() {
         <Header
           title="إدارة الإيصالات"
           subtitle={
-            activeTab === 'cancellation'
-              ? 'سندات الإلغاء — كل عملية إلغاء تُنشئ سنداً مستقلاً يضمن التوثيق المحاسبي'
-              : activeTab === 'credit_note'
-                ? 'اشعار دائن — رصيد للعميل عندنا بدون خروج كاش، يُحسم تلقائياً من أي دفعة قادمة'
-                : activeTab === 'disbursement'
-                  ? 'سند صرف — مبالغ خرجت فعلياً من الشركة للعميل (نقدي / شيك / تحويل / فيزا)'
-                  : 'سندات القبض — إيصالات الدفع الصادرة للعملاء'
+            activeTab === 'all'
+              ? 'الكل — سندات القبض والإلغاء وإشعار الدائن وسند الصرف في قائمة واحدة'
+              : activeTab === 'cancellation'
+                ? 'سندات الإلغاء — كل عملية إلغاء تُنشئ سنداً مستقلاً يضمن التوثيق المحاسبي'
+                : activeTab === 'credit_note'
+                  ? 'اشعار دائن — رصيد للعميل عندنا بدون خروج كاش، يُحسم تلقائياً من أي دفعة قادمة'
+                  : activeTab === 'disbursement'
+                    ? 'سند صرف — مبالغ خرجت فعلياً من الشركة للعميل (نقدي / شيك / تحويل / فيزا)'
+                    : 'سندات القبض — إيصالات الدفع الصادرة للعملاء'
           }
         />
 
@@ -1879,10 +1886,14 @@ export default function Receipts() {
           <Tabs
             value={activeTab}
             onValueChange={(v) =>
-              setActiveTab(v as 'payment' | 'cancellation' | 'credit_note' | 'disbursement')
+              setActiveTab(v as 'all' | 'payment' | 'cancellation' | 'credit_note' | 'disbursement')
             }
           >
-            <TabsList className="grid w-full max-w-3xl grid-cols-4">
+            <TabsList className="grid w-full max-w-3xl grid-cols-5">
+              <TabsTrigger value="all" className="gap-2">
+                <Layers className="h-3.5 w-3.5" />
+                الكل
+              </TabsTrigger>
               <TabsTrigger value="payment" className="gap-2">
                 <Receipt className="h-3.5 w-3.5" />
                 سندات القبض
@@ -1906,16 +1917,6 @@ export default function Receipts() {
               search + count + manage columns + filter on the left, same
               pattern as /accounting. */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* "إضافة إيصال" is for manual payment receipts only —
-                cancellation vouchers are always auto-generated by the
-                sync trigger, never typed by hand, so hide the button
-                when the cancellation tab is active. */}
-            {activeTab === 'payment' && (
-              <Button size="sm" onClick={handleOpenDialog} className="h-8 gap-1.5">
-                <Plus className="h-3.5 w-3.5" />
-                إضافة إيصال
-              </Button>
-            )}
             <Button
               size="sm"
               variant="outline"
@@ -2348,15 +2349,18 @@ export default function Receipts() {
     // Column header for the leading "number" column is tab-aware so
     // the user reads "رقم اشعار الدائن" on the credit-note tab and
     // "رقم سند الصرف" on the disbursement tab instead of the generic
-    // سند القبض label.
+    // سند القبض label. The "الكل" tab mixes types, so it falls back
+    // to a neutral "رقم السند".
     const receiptNumberLabel =
-      activeTab === 'credit_note'
-        ? 'رقم اشعار الدائن'
-        : activeTab === 'disbursement'
-          ? 'رقم سند الصرف'
-          : activeTab === 'cancellation'
-            ? 'رقم سند الإلغاء'
-            : 'رقم سند القبض';
+      activeTab === 'all'
+        ? 'رقم السند'
+        : activeTab === 'credit_note'
+          ? 'رقم اشعار الدائن'
+          : activeTab === 'disbursement'
+            ? 'رقم سند الصرف'
+            : activeTab === 'cancellation'
+              ? 'رقم سند الإلغاء'
+              : 'رقم سند القبض';
     const visibleCols = RECEIPTS_COLUMNS.filter((c) => isCol(c.key)).map((c) =>
       c.key === 'receipt_number' ? { ...c, label: receiptNumberLabel } : c,
     );
@@ -2403,19 +2407,24 @@ export default function Receipts() {
                   //    (for cancellation tab) — sourced from cancelXref.
                   //  - canCancel: only auto-source rows in the payment
                   //    tab that aren't already cancelled.
+                  // Effective receipt type for this row's group — drives
+                  // every per-row branch below. On single-type tabs this
+                  // equals activeTab; on the "الكل" tab it varies row by
+                  // row because the result set mixes all four families.
+                  const rowType = (firstReceipt as any)?.receipt_type ?? 'payment';
                   const allCancelled =
-                    activeTab === 'payment' &&
+                    rowType === 'payment' &&
                     group.receipts.length > 0 &&
                     group.receipts.every((r) => !!r.cancelled_at);
                   const partiallyCancelled =
-                    activeTab === 'payment' &&
+                    rowType === 'payment' &&
                     !allCancelled &&
                     group.receipts.some((r) => !!r.cancelled_at);
-                  const voucherRef = activeTab === 'payment'
+                  const voucherRef = rowType === 'payment'
                     ? cancelXref[group.receipts.find((r) => r.cancelled_at)?.id ?? '']
                     : cancelXref[firstReceipt?.id ?? ''];
                   const canCancel =
-                    activeTab === 'payment' &&
+                    rowType === 'payment' &&
                     !allCancelled &&
                     group.receipts.some((r) => r.source === 'auto' && r.payment_id);
                   // Lock تعديل once any underlying policy_payment has
@@ -2479,7 +2488,7 @@ export default function Receipts() {
                                 <span>ملغي جزئياً</span>
                               </Badge>
                             )}
-                            {activeTab === 'cancellation' && voucherRef != null && (
+                            {rowType === 'cancellation' && voucherRef != null && (
                               <Badge variant="warning" className="gap-1 px-2 py-0 h-5 text-[10px] font-medium">
                                 <Ban className="h-3 w-3" />
                                 <span>إلغاء سند</span>
@@ -2570,11 +2579,11 @@ export default function Receipts() {
                                     one voucher per row, so they stay
                                     singular even when the underlying
                                     group bundles multiple receipts. */}
-                                {activeTab === 'credit_note'
+                                {rowType === 'credit_note'
                                   ? "طباعة الإشعار"
-                                  : activeTab === 'disbursement'
+                                  : rowType === 'disbursement'
                                     ? "طباعة سند الصرف"
-                                    : activeTab === 'cancellation'
+                                    : rowType === 'cancellation'
                                       ? "طباعة سند الإلغاء"
                                       : group.receipts.length > 1
                                         ? "طباعة السندات"
@@ -2603,7 +2612,7 @@ export default function Receipts() {
                                   cancellation vouchers — they're a
                                   ledger of what was voided, not editable
                                   records, so hide both actions there. */}
-                              {activeTab === 'payment' && !allCancelled && (
+                              {rowType === 'payment' && !allCancelled && (
                                 firstReceipt.source === 'auto'
                                   ? (
                                     <DropdownMenuItem
@@ -2634,7 +2643,7 @@ export default function Receipts() {
                                     )
                                     : null
                               )}
-                              {activeTab === 'payment' && group.receipts.length === 1 && !allCancelled && firstReceipt.source !== 'auto' && (
+                              {rowType === 'payment' && group.receipts.length === 1 && !allCancelled && firstReceipt.source !== 'auto' && (
                                 <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
                                   onClick={() => setDeleteReceipt(group.receipts[0])}
