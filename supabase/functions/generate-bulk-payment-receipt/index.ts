@@ -811,6 +811,7 @@ serve(async (req) => {
         receipt_number,
         batch_id,
         payment_session_id,
+        created_at,
         policy:policies(
           id,
           policy_type_parent,
@@ -896,26 +897,29 @@ serve(async (req) => {
       return Math.abs(Number(p.amount ?? 0) - price) >= 0.005;
     });
 
-    // Collapse multi-split rows: when a single physical cheque was
-    // split across N policies (handleSubmit assigns the same batch_id
-    // to all rows), we want ONE row on the printed receipt at the
-    // cheque's true face value (= sum of every sibling's amount), not
-    // N rows showing the per-policy slices. Per the user's rule,
-    // cheques MUST NEVER appear split on the printed سند.
+    // Collapse multi-split rows: when one physical instrument (cheque,
+    // cash collection, transfer) was split across N policies,
+    // DebtPaymentModal stamps every row with the same batch_id so we
+    // can merge them back into ONE row on the printed receipt. Per
+    // the user's rule, NOTHING should ever appear split on سند القبض
+    // — neither cheques nor cash nor transfer.
     //
     // Grouping signal, in priority order:
-    //   1. batch_id — the canonical key DebtPaymentModal stamps when
-    //      splits.length > 1. New data with proper splits hits this.
+    //   1. batch_id — the canonical key. DebtPaymentModal sets it
+    //      whenever splits.length > 1. Single-row paymentLines have
+    //      batch_id=null (correctly, nothing to merge).
     //   2. Cheque physical identity — same cheque_number + bank +
-    //      branch + maturity + issue within the same session HAS to be
-    //      the same physical cheque. This is the safety net for any
-    //      path that didn't stamp batch_id (legacy data, pre-allocate
-    //      RPC fallback, edits, or any other code path that touches
-    //      policy_payments without going through DebtPaymentModal).
-    //   3. Standalone — non-cheque rows without batch_id render as
-    //      one row each. We deliberately do NOT merge cash / transfer
-    //      / card by session, because a user can legitimately enter
-    //      two cash lines in one submit.
+    //      branch + maturity + issue within the same session HAS to
+    //      be the same physical cheque. Safety net for any path that
+    //      somehow dropped batch_id.
+    //   3. Insert-batch identity for cash/transfer/card — a single
+    //      .insert(paymentsToInsert) call writes every split row with
+    //      the SAME created_at down to the microsecond. Separately-
+    //      entered paymentLines run as separate .insert() calls inside
+    //      the for loop, so they get distinct timestamps. Grouping by
+    //      (session + type + created_at + payment_date) catches a
+    //      dropped batch_id without merging genuinely separate inputs.
+    //   4. Standalone — anything else renders as its own row.
     const physicalInstrumentKey = (p: any): string => {
       if (p.batch_id) return `b:${p.batch_id}`;
       if (p.payment_type === 'cheque' && p.cheque_number) {
@@ -923,6 +927,9 @@ serve(async (req) => {
         const due = p.cheque_due_date || p.cheque_date || '';
         const issue = p.cheque_issue_date || '';
         return `c:${session}:${p.cheque_number}:${p.bank_code || ''}:${p.branch_code || ''}:${due}:${issue}`;
+      }
+      if (p.payment_session_id && p.created_at && p.payment_type !== 'cheque') {
+        return `s:${p.payment_session_id}:${p.payment_type}:${p.created_at}:${p.payment_date || ''}`;
       }
       return `id:${p.id}`;
     };
