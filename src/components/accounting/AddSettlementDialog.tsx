@@ -97,6 +97,11 @@ interface Props {
   initialLines?: PaymentLine[];
   /** Seed the notes textarea on open — companion to initialLines. */
   initialNotes?: string;
+  /** Label for the secondary footer button. Defaults to "إلغاء" — the
+   *  /receipts AddVoucher wizard overrides this to "رجوع" because the
+   *  picker stays mounted behind, so closing this dialog returns the
+   *  user to their picks instead of cancelling the whole flow. */
+  cancelLabel?: string;
 }
 
 export interface PaymentLine {
@@ -188,6 +193,7 @@ export function AddSettlementDialog({
   stageOnly,
   initialLines,
   initialNotes,
+  cancelLabel = 'إلغاء',
 }: Props) {
   const { user } = useAuth();
   const { agentId } = useAgentContext();
@@ -679,7 +685,7 @@ export function AddSettlementDialog({
 
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-              إلغاء
+              {cancelLabel}
             </Button>
             <Button
               onClick={handleSave}

@@ -37,9 +37,19 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   client: ClientLite;
   onSaved: () => void;
+  /** Label for the secondary footer button. Defaults to "إلغاء"; the
+   *  AddVoucher wizard passes "رجوع" because closing this dialog
+   *  returns to the still-mounted picker instead of cancelling. */
+  cancelLabel?: string;
 }
 
-export function AddCreditNoteDialog({ open, onOpenChange, client, onSaved }: Props) {
+export function AddCreditNoteDialog({
+  open,
+  onOpenChange,
+  client,
+  onSaved,
+  cancelLabel = 'إلغاء',
+}: Props) {
   const { agentId } = useAgentContext();
   const { user } = useAuth();
   const [amount, setAmount] = useState('');
@@ -230,7 +240,7 @@ export function AddCreditNoteDialog({ open, onOpenChange, client, onSaved }: Pro
             onClick={() => onOpenChange(false)}
             disabled={saving}
           >
-            إلغاء
+            {cancelLabel}
           </Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin ms-2" /> : null}

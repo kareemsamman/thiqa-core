@@ -2395,14 +2395,20 @@ export default function Receipts() {
         clientPhone={debtModalClient?.phone || null}
         totalOwed={0}
         editingSession={debtModalEditingSession}
+        // Only relabel the secondary button when this modal was
+        // launched from the AddVoucher wizard (addVoucherOpen=true).
+        // The same modal is also opened from the edit-session flow on
+        // existing receipt rows — that path doesn't sit behind a
+        // picker, so "إلغاء" stays accurate there.
+        cancelLabel={addVoucherOpen ? 'رجوع' : 'إلغاء'}
         onSuccess={async () => {
           setDebtModalOpen(false);
           setDebtModalEditingSession(null);
           setDebtModalClient(null);
-          // Voucher saved → close the picker too. (When the user
-          // cancels via X, onOpenChange runs but onSuccess does NOT,
-          // so the picker stays open and the user lands back on
-          // their previous picks — that's the "back" affordance.)
+          // Voucher saved → close the picker too. (When the user hits
+          // رجوع / X, onOpenChange runs but onSuccess does NOT, so the
+          // picker stays mounted and the user lands back on their
+          // previous picks — that's the "back" affordance.)
           setAddVoucherOpen(false);
           await fetchReceipts();
         }}
@@ -2429,9 +2435,10 @@ export default function Receipts() {
           kind="disbursement"
           defaultEntityId={disburseClient.id}
           clientName={disburseClient.full_name}
+          cancelLabel="رجوع"
           onSaved={() => {
             setDisburseClient(null);
-            // Saved → close the picker too. Cancel via X leaves the
+            // Saved → close the picker too. رجوع / X leaves the
             // picker open behind so the user can revise their choice.
             setAddVoucherOpen(false);
             fetchReceipts();
@@ -2447,6 +2454,7 @@ export default function Receipts() {
           open={!!creditNoteClient}
           onOpenChange={(o) => !o && setCreditNoteClient(null)}
           client={creditNoteClient}
+          cancelLabel="رجوع"
           onSaved={() => {
             setCreditNoteClient(null);
             setAddVoucherOpen(false);

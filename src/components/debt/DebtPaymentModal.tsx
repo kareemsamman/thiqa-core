@@ -135,6 +135,11 @@ interface DebtPaymentModalProps {
   // existing total as available room, and submit replaces the session's
   // rows instead of adding new ones.
   editingSession?: DebtPaymentEditingSession | null;
+  // Label for the secondary footer button. Defaults to "إلغاء" — the
+  // /receipts wizard overrides this to "رجوع" because closing the
+  // modal there returns to the AddVoucher picker (the picker stays
+  // mounted behind), so "back" matches what actually happens.
+  cancelLabel?: string;
 }
 
 const policyTypeLabels: Record<string, string> = {
@@ -171,6 +176,7 @@ export function DebtPaymentModal({
   totalOwed,
   onSuccess,
   editingSession,
+  cancelLabel = 'إلغاء',
 }: DebtPaymentModalProps) {
   const isEditMode = !!editingSession;
   const { toast: uiToast } = useToast();
@@ -1604,7 +1610,7 @@ export function DebtPaymentModal({
           )}
           <div className="flex justify-end gap-3 pt-1">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              إلغاء
+              {cancelLabel}
             </Button>
             <Button onClick={handleSubmit} disabled={!isValid || saving || debtItems.length === 0}>
               {saving && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
