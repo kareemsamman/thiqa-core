@@ -1510,29 +1510,77 @@ export function PolicyWizard({
       const paymentsToInsert = insertablePayments.filter(p => p.payment_type !== 'visa' || p.locked);
       if (paymentsToInsert.length > 0 && !skipPaymentInsert) {
         const todayIso = new Date().toISOString().split('T')[0];
-        const paymentInserts = paymentsToInsert.map(p => ({
-          policy_id: policyIdToUse,
-          payment_type: p.payment_type as PaymentType,
-          amount: p.amount,
-          payment_date: p.payment_date,
-          // Cheques carry both تاريخ الاستحقاق (= payment_date) and
-          // تاريخ الإصدار (= cheque_issue_date, defaults to today).
-          cheque_due_date: p.payment_type === 'cheque' ? p.payment_date : null,
-          cheque_issue_date:
-            p.payment_type === 'cheque'
-              ? (p.cheque_issue_date || todayIso)
-              : null,
-          cheque_number: p.cheque_number || null,
-          cheque_status: p.payment_type === 'cheque' ? 'pending' : null,
-          bank_code: p.payment_type === 'cheque' ? (p.bank_code || null) : null,
-          branch_code: p.payment_type === 'cheque' ? (p.branch_code || null) : null,
-          refused: p.refused || false,
-          branch_id: effectiveBranchId || null,
-          created_by_admin_id: user?.id || null,
-          // Pass locked and source flags for ELZAMI system-generated payments
-          locked: p.locked || false,
-          source: p.source || 'user',
-        }));
+
+        // One سند قبض per wizard submit: every user-entered payment (cash
+        // + cheque + transfer + internal visa, in any combination) shares
+        // a single payment_session_id AND a single pre-allocated
+        // receipt_number, so the auto-create receipts trigger collapses
+        // them into ONE سند on the receipts page / kashf / success
+        // dialog's bulk-receipt voucher. Mirrors the DebtPaymentModal
+        // "تسديد المبلغ" flow — same fix, same RPC.
+        //
+        // The ELZAMI external-visa passthrough row (locked, source=system)
+        // is deliberately excluded: it's filtered out of the kashf and
+        // never lands on a customer-facing سند, so giving it a session
+        // would just confuse the trigger's lookup.
+        const userPaymentsForSession = paymentsToInsert.filter(
+          p => !(p.locked && (p.source ?? 'user') === 'system'),
+        );
+        const sessionId =
+          userPaymentsForSession.length > 0 ? crypto.randomUUID() : null;
+        let sessionReceiptNumber: string | null = null;
+        if (sessionId) {
+          const { data: rNum, error: rNumErr } = await supabase.rpc(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            'allocate_receipt_number_for_policy' as any,
+            { p_policy_id: policyIdToUse },
+          );
+          if (rNumErr) {
+            // Trigger will fall back to its per-row allocator. The
+            // payment_session_id is still set, so the trigger's
+            // same-session lookup may still unify the rows (works for
+            // separate INSERT statements). Worst case: per-row R-numbers
+            // again — same behavior as before this fix.
+            console.warn('[PolicyWizard] receipt_number pre-allocate failed; trigger will fall back', rNumErr);
+          } else if (typeof rNum === 'string') {
+            sessionReceiptNumber = rNum;
+          }
+        }
+
+        const paymentInserts = paymentsToInsert.map(p => {
+          const isSystemLocked = p.locked && (p.source ?? 'user') === 'system';
+          return {
+            policy_id: policyIdToUse,
+            payment_type: p.payment_type as PaymentType,
+            amount: p.amount,
+            payment_date: p.payment_date,
+            // Cheques carry both تاريخ الاستحقاق (= payment_date) and
+            // تاريخ الإصدار (= cheque_issue_date, defaults to today).
+            cheque_due_date: p.payment_type === 'cheque' ? p.payment_date : null,
+            cheque_issue_date:
+              p.payment_type === 'cheque'
+                ? (p.cheque_issue_date || todayIso)
+                : null,
+            cheque_number: p.cheque_number || null,
+            cheque_status: p.payment_type === 'cheque' ? 'pending' : null,
+            bank_code: p.payment_type === 'cheque' ? (p.bank_code || null) : null,
+            branch_code: p.payment_type === 'cheque' ? (p.branch_code || null) : null,
+            refused: p.refused || false,
+            branch_id: effectiveBranchId || null,
+            created_by_admin_id: user?.id || null,
+            // Pass locked and source flags for ELZAMI system-generated payments
+            locked: p.locked || false,
+            source: p.source || 'user',
+            // Session + shared receipt_number for user-entered rows only.
+            // batch_id stays null on purpose — Cheques.tsx collapses by
+            // batch_id, and the user wants each cheque to remain its own
+            // row there even when they share a سند.
+            payment_session_id: !isSystemLocked && sessionId ? sessionId : null,
+            ...(!isSystemLocked && sessionReceiptNumber
+              ? { receipt_number: sessionReceiptNumber }
+              : {}),
+          };
+        });
 
         if (paymentInserts.length > 0) {
           const { data: insertedPayments, error: paymentsError } = await supabase
