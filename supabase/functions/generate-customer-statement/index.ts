@@ -1563,11 +1563,19 @@ function buildStatementHtml(args: BuildArgs): string {
     const creditCell = e.credit > 0
       ? `<span class="amt-credit">${formatMoney(e.credit)}</span>`
       : '';
-    const balanceCell = running === 0
-      ? '<span class="amt-balance-zero">0</span>'
-      : running > 0
-        ? `<span class="amt-balance-debt">${formatMoney(running)}</span>`
-        : `<span class="amt-balance-credit">(${formatMoney(Math.abs(running))})</span>`;
+    // Notation rows (إلغاء معاملة / تحويل معاملة بدون تكلفة، أو
+    // معاملة جديدة الي اتلغت ومستحقاتها انرجعت بسند صرف/إشعار دائن
+    // منفصل) ما بيغيروا الرصيد. تكرار نفس الرقم بخانة الرصيد على
+    // الصف الجديد بيوهم المستخدم إنه السند تأثّر برصيد، لهيك بنخليها
+    // فاضية. الـ delta=0 = ما في تأثير = خانة فاضية، السطر الي بعدها
+    // (إشعار دائن أو سند صرف) هو الي بيحرّك الرصيد.
+    const balanceCell = e.balanceDelta === 0
+      ? ''
+      : running === 0
+        ? '<span class="amt-balance-zero">0</span>'
+        : running > 0
+          ? `<span class="amt-balance-debt">${formatMoney(running)}</span>`
+          : `<span class="amt-balance-credit">(${formatMoney(Math.abs(running))})</span>`;
 
     const numCell = e.voucherUrl
       ? `<a href="${e.voucherUrl}" target="_blank" rel="noopener noreferrer" class="vnum-link">${escapeHtml(e.voucherNumber)}</a>`
