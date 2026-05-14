@@ -105,6 +105,7 @@ import { DebtIndicator } from '@/components/shared/DebtIndicator';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 import { PrintProgressDialog } from '@/components/shared/PrintProgressDialog';
 import { DebtPaymentModal } from '@/components/debt/DebtPaymentModal';
+import { DebtPaymentSuccessDialog } from '@/components/debt/DebtPaymentSuccessDialog';
 import { ClientNotesSection } from '@/components/clients/ClientNotesSection';
 import { PaymentEditDialog } from '@/components/clients/PaymentEditDialog';
 import { PaymentGroupDetailsDialog } from '@/components/clients/PaymentGroupDetailsDialog';
@@ -509,6 +510,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   // closes so the next plain "دفع" click goes back to add mode.
   const [debtModalEditingSession, setDebtModalEditingSession] =
     useState<import('@/components/debt/DebtPaymentModal').DebtPaymentEditingSession | null>(null);
+  // Post-submit "طباعة / إرسال سند القبض" dialog — same flow as
+  // DebtTracking page: capture payment_ids from DebtPaymentModal's
+  // onSuccess so the user picks the channel (print/SMS/WhatsApp)
+  // instead of an auto-send. Empty paymentIds (edit mode) skip the
+  // dialog since there's no new receipt to send.
+  const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
+  const [receiptPaymentIds, setReceiptPaymentIds] = useState<string[]>([]);
   // Cancel policy/package modal — opened directly from the dropdown on
   // PolicyYearTimeline instead of going through the details drawer.
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -4196,16 +4204,31 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         clientPhone={client.phone_number}
         totalOwed={paymentSummary.total_remaining}
         editingSession={debtModalEditingSession}
-        onSuccess={async () => {
+        onSuccess={async (paymentIds) => {
+          const wasEditMode = debtModalEditingSession !== null;
           setDebtPaymentModalOpen(false);
           setDebtModalEditingSession(null);
-          // Refresh all payment-related data
           await Promise.all([
             fetchPaymentSummary(),
             fetchPayments(),
             fetchPolicies(),
           ]);
+          // Surface the print/SMS/WhatsApp dialog only for newly
+          // created سند قبض sessions — edit mode restamps existing
+          // rows and returns an empty list.
+          if (!wasEditMode && paymentIds.length > 0) {
+            setReceiptPaymentIds(paymentIds);
+            setReceiptDialogOpen(true);
+          }
         }}
+      />
+
+      <DebtPaymentSuccessDialog
+        open={receiptDialogOpen}
+        onOpenChange={setReceiptDialogOpen}
+        paymentIds={receiptPaymentIds}
+        clientPhone={client.phone_number}
+        onClose={() => setReceiptPaymentIds([])}
       />
 
       {/* Shared print-progress overlay used by both handlePrintGroup-
