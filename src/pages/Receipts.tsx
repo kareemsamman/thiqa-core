@@ -172,6 +172,10 @@ const formatReceiptNumber = (
 // they can opt in via the dropdown.
 const RECEIPTS_COLUMNS: ColumnOption[] = [
   { key: "receipt_number", label: "رقم سند القبض" },
+  // "النوع" is only meaningful on the "الكل" tab — single-type tabs
+  // are filtered out of the column list below so the option doesn't
+  // even appear in the Manage Columns dropdown there.
+  { key: "receipt_type", label: "النوع" },
   { key: "amount", label: "المبلغ" },
   { key: "receipt_date", label: "التاريخ" },
   { key: "client_name", label: "اسم العميل" },
@@ -187,6 +191,7 @@ const RECEIPTS_COLUMNS: ColumnOption[] = [
 
 const RECEIPTS_DEFAULT_VISIBLE = [
   "receipt_number",
+  "receipt_type",
   "amount",
   "receipt_date",
   "client_name",
@@ -608,15 +613,24 @@ export default function Receipts() {
     [],
   );
 
-  // Column visibility for the receipts table. Bumped to v1 so existing
-  // localStorage from earlier (no manage-columns dropdown) starts fresh
-  // with the documented defaults.
+  // Column visibility for the receipts table. Bumped to v2 when the
+  // "النوع" column was added so existing users get a fresh default
+  // set that includes it instead of inheriting the pre-feature one.
   const colsState = useTableColumnVisibility(
-    "receipts-table-v1",
+    "receipts-table-v2",
     RECEIPTS_DEFAULT_VISIBLE,
     RECEIPTS_COLUMN_KEYS,
   );
   const isCol = (key: string) => colsState.visible.includes(key);
+  // Per-tab column list — "النوع" only appears on الكل (and only there
+  // does the Manage Columns dropdown surface it as a toggle).
+  const tabColumns = useMemo(
+    () =>
+      activeTab === 'all'
+        ? RECEIPTS_COLUMNS
+        : RECEIPTS_COLUMNS.filter((c) => c.key !== 'receipt_type'),
+    [activeTab],
+  );
 
   // Pagination
   const [page, setPage] = useState(0);
@@ -1797,6 +1811,7 @@ export default function Receipts() {
       // toggles it in print too — one knob, both surfaces.
       const PRINT_LABELS: Record<string, string> = {
         receipt_number: "رقم السند",
+        receipt_type: "النوع",
         amount: "المبلغ",
         receipt_date: "التاريخ",
         client_name: "العميل",
@@ -1810,7 +1825,7 @@ export default function Receipts() {
       };
       const printColumns = [
         { key: "idx", label: "#", align: "center" as const },
-        ...RECEIPTS_COLUMNS.filter(
+        ...tabColumns.filter(
           (c) => c.key !== "actions" && isCol(c.key),
         ).map((c) => ({
           key: c.key,
@@ -1837,9 +1852,14 @@ export default function Receipts() {
             ? policy.policy_type_child
             : policy.policy_type_parent
           : null;
+        const rt = (r as any).receipt_type as string | undefined;
+        const rtLabel = rt && RECEIPT_TYPE_BADGE[rt]
+          ? RECEIPT_TYPE_BADGE[rt].label
+          : '';
         return {
           idx: i + 1,
-          receipt_number: formatReceiptNumber(r.receipt_number, r.receipt_date),
+          receipt_number: r.voucher_number ?? formatReceiptNumber(r.receipt_number, r.receipt_date),
+          receipt_type: rtLabel,
           receipt_date: formatDate(r.receipt_date),
           client_name: r.client_name,
           client_id_number: client?.id_number ?? "",
@@ -1967,7 +1987,7 @@ export default function Receipts() {
                 {loading ? "..." : `${totalCount} إيصال`}
               </span>
               <ManageColumnsDropdown
-                columns={RECEIPTS_COLUMNS}
+                columns={tabColumns}
                 visible={colsState.visible}
                 onToggle={colsState.toggle}
                 onReset={colsState.reset}
@@ -2380,7 +2400,7 @@ export default function Receipts() {
             : activeTab === 'cancellation'
               ? 'رقم سند الإلغاء'
               : 'رقم سند القبض';
-    const visibleCols = RECEIPTS_COLUMNS.filter((c) => isCol(c.key)).map((c) =>
+    const visibleCols = tabColumns.filter((c) => isCol(c.key)).map((c) =>
       c.key === 'receipt_number' ? { ...c, label: receiptNumberLabel } : c,
     );
     // Equal-width columns. table-fixed + an identical width on every
@@ -2485,19 +2505,6 @@ export default function Receipts() {
                                 ? firstReceipt.voucher_number
                                 : formatReceiptNumber(firstReceipt?.receipt_number, firstReceipt?.receipt_date)}
                             </span>
-                            {/* Type badge — only on the "الكل" tab,
-                                where the R-prefix alone can't tell
-                                سند قبض from سند إلغاء. */}
-                            {activeTab === 'all' && (() => {
-                              const cfg = RECEIPT_TYPE_BADGE[rowType] ?? RECEIPT_TYPE_BADGE.payment;
-                              const TypeIcon = cfg.icon;
-                              return (
-                                <Badge variant={cfg.variant} className="gap-1 px-2 py-0 h-5 text-[10px] font-medium">
-                                  <TypeIcon className="h-3 w-3" />
-                                  <span>{cfg.label}</span>
-                                </Badge>
-                              );
-                            })()}
                             {/* Cancellation indicators. Payment tab: red
                                 pill + the voucher number that cancelled
                                 it. Cancellation tab: amber pill + the
@@ -2530,6 +2537,20 @@ export default function Receipts() {
                               </Badge>
                             )}
                           </div>
+                        </TableCell>
+                      )}
+                      {isCol("receipt_type") && activeTab === 'all' && (
+                        <TableCell className="whitespace-nowrap">
+                          {(() => {
+                            const cfg = RECEIPT_TYPE_BADGE[rowType] ?? RECEIPT_TYPE_BADGE.payment;
+                            const TypeIcon = cfg.icon;
+                            return (
+                              <Badge variant={cfg.variant} className="gap-1">
+                                <TypeIcon className="h-3 w-3" />
+                                <span>{cfg.label}</span>
+                              </Badge>
+                            );
+                          })()}
                         </TableCell>
                       )}
                       {isCol("amount") && (
